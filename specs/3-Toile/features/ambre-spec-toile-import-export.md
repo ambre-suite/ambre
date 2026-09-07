@@ -18,30 +18,92 @@ and what it drops is the subject of this document. The deck's own page format is
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TOILE-IO-001` | An import MUST be atomic: the whole file becomes one undoable batch, and a parse failure MUST import nothing. | this spec section 3 | `ambre_toile::logic::state::import::tests::import_is_one_undo_group`, `::a_broken_file_fails_without_touching_the_board`, `::svg_import_takes_the_fast_path`, `ambre_toile::logic::interop::tests::malformed_svg_fails_to_parse`, `::empty_svg_reports_empty`, `::too_many_elements_aborts_atomically`, `::too_deep_nesting_aborts_atomically` | verified |
-| `TOILE-IO-002` | An import MUST NOT trust foreign geometry: coordinates MUST be clamped, and counts, depth and image dimensions MUST be bounded. | this spec section 3 | `ambre_toile::logic::interop::limits::tests::coord_clamp_bounds_and_sanitizes`, `::rect_clamp_keeps_non_negative_extent`, `::element_count_guard`, `::depth_guard`, `::image_dim_guard`, `ambre_toile::logic::interop::tests::coordinates_are_clamped_to_the_world_bound` | verified |
-| `TOILE-IO-003` | Every mapped SVG node MUST land as its element kind, keeping text bodies editable and per-slot styles. | this spec section 3 | `ambre_toile::logic::interop::tests::rect_maps_to_shape_rect`, `::ellipse_maps_to_shape_path`, `::path_maps_to_shape_path_with_geometry`, `::text_maps_to_text_element_preserving_body`, `::nested_groups_are_rebuilt_innermost_first`, `::rect_import_preserves_fill_and_stroke_style`, `::unstyled_kinds_keep_the_default_style`, `ambre_toile::logic::state::import::tests::import_applies_styles_per_slot`, `::import_rebuilds_nested_groups` | verified |
-| `TOILE-IO-004` | An export MUST be deterministic: the same board yields a byte-stable structure. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::export_is_deterministic`, `::rect_serializes_with_fixed_attrs`, `::text_body_is_escaped`, `::float_formatter_trims`, `ambre_toile::logic::interop::tests::round_trip_rect_is_stable`, `::round_trip_path_geometry_survives` | verified |
-| `TOILE-IO-010` | An `.ambre` export and import round trip MUST preserve the document state, byte for byte on a bare board. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::round_trip_is_byte_identical_on_a_bare_document`, `::round_trip_preserves_the_document_state`, `::the_header_names_toile_and_the_document` | verified |
-| `TOILE-IO-011` | A rejected file MUST leave both the input bytes and the current board untouched, and MUST fail typed rather than panic. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone`, `::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic` | verified |
-| `TOILE-IO-012` | A `.ambre` file belonging to another app MUST be re-dispatched to that app, never coerced into Toile. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::a_trame_file_is_re_dispatched_not_coerced` | verified |
-| `TOILE-IO-022` | An import report MUST reach the user: a construct dropped in silence MUST NOT be the outcome. | this spec section 4 | none, and **the rule fails today**: the event carries the report and the view writes it to the diagnostic log, where no user reads it -- section 6 | unverified |
-| `TOILE-IO-023` | An imported file MUST land where the user put it, never at a fixed point of the world. | this spec section 4 | none, and **the rule fails today**: a raster lands at the world origin and an SVG at its own coordinates, and no command carries a drop point -- section 6 | unverified |
-| `TOILE-IO-024` | An export MUST NOT change the board: it MUST emit no CRDT delta. | this spec section 3 | none. Both serializers take a read-only view and neither is driven from a live board, so no test can assert the empty outcome yet | unverified |
-| `TOILE-IO-025` | An element the SVG serializer cannot express MUST be reported, never dropped in silence. | this spec section 3 | none, and **the rule fails today**: a sticky, a connector, a group, an embed and a stroke each serialize to nothing, and the export has no report at all -- section 6 | unverified |
-| `TOILE-IO-026` | An exported element MUST carry its rotation. | this spec section 3 | none, and **the rule fails today**: the serializer reads the rotation field and writes no transform, so every element leaves axis-aligned -- section 6 | unverified |
-| `TOILE-IO-027` | An SVG import MUST keep the source paint order, and a text node inside a group MUST stay in that group. | this spec section 3 | none, and **the rule fails today**: text is read in a second pass and appended after every vector node -- section 6 | unverified |
-| `TOILE-IO-028` | A large import MUST NOT freeze the Logic thread: it MUST apply in bounded batches that yield. | this spec section 3; `ambre-spec-budgets.md` | none, and **the rule fails today**: the whole batch is applied in one synchronous pass, and no progress event exists -- section 6 | unverified |
-| `TOILE-IO-020` | A user MUST be able to bring a file onto the board, by a drop or by a picker. | this spec section 4 | not built -- lands with the "The Toile interop surface" Story (`ambre-roadmap.md` E4); the commands exist and nothing emits them | unimplemented |
-| `TOILE-IO-021` | A user MUST be able to take the board out as a file, and the bytes MUST reach the browser download path. | this spec section 4 | not built -- lands with the "The Toile interop surface" Story (`ambre-roadmap.md` E4); no export command exists on the bus | unimplemented |
-| `TOILE-IO-014` | A Figma or Miro import MUST map every construct it recognises, and MUST list every construct it drops. | this spec section 3 | not built -- lands with the "Figma and Miro import" Story (`ambre-roadmap.md` E6); `ambre-toile` declares no JSON parser | unimplemented |
-| `TOILE-IO-015` | A foreign import MUST obey the same safety limits and the same atomicity as the SVG path. | this spec section 3 | not built -- lands with the "Figma and Miro import" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TOILE-IO-016` | A Figma auto-layout frame MUST import as a plain frame with children at resolved absolute positions. | this spec section 3 | not built -- lands with the "Figma and Miro import" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TOILE-IO-017` | The PNG render-back MUST run offscreen on the UI thread's own surface and MUST NOT block the visible frame. | this spec section 3 | not built -- lands with the "PNG export" Story (`ambre-roadmap.md` E6); it needs a real GPU adapter, so its belt is wasm-tier | unimplemented |
-| `TOILE-IO-018` | A showcase bundle MUST embed its board snapshot and MUST NOT contact the relay to render. | this spec section 3 | not built -- lands with the "The standalone showcase bundle" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TOILE-IO-019` | A showcase bundle MUST carry plaintext content and MUST say so at export time. | this spec section 3; `ZK-001` | not built -- lands with the "The standalone showcase bundle" Story (`ambre-roadmap.md` E6) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-IO-068` | INV | A conversion MUST run on the user's own machine, and MUST NOT reach the network. | README pillar "E2EE"; this spec section 5 | structural, and the absence is the proof: no interop module names a network client, and the one blob that leaves rides `ToileRequest::UploadMedia`, which Sync encrypts before it goes | verified |
+| `TOILE-IO-010` | IO | An `.ambre` export and import round trip MUST preserve the document state, byte for byte on a bare board. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::round_trip_is_byte_identical_on_a_bare_document`, `::round_trip_preserves_the_document_state`, `::the_header_names_toile_and_the_document` | verified |
+| `TOILE-IO-069` | IO | A board the export could not read MUST NOT become a file: a valid header over an empty payload MUST NOT be written. | this spec section 3 | none, and **the rule fails today**: a failed snapshot logs an error and writes the header alone, so the file opens as an empty board -- section 6 | unverified |
+
+### 1.2 Bring a file onto the board
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-IO-020` | POST | A user MUST be able to bring a file onto the board, by a drop or by a picker. | this spec section 4 | not built -- lands with the "The Toile interop surface" Story (`ambre-roadmap.md` E4); the commands exist and nothing emits them | unimplemented |
+| `TOILE-IO-001` | POST | The whole file MUST become one undoable batch: one undo MUST take the import back. | this spec section 3 | `ambre_toile::logic::state::import::tests::import_is_one_undo_group` undoes a five-element import in one step, `::import_rebuilds_nested_groups` a three-element one carrying two groups, `::svg_import_takes_the_fast_path` asserts the single delta | verified |
+| `TOILE-IO-002` | POST | An import MUST NOT trust foreign geometry: every coordinate MUST be clamped to the world. | this spec section 3 | `ambre_toile::logic::interop::limits::tests::coord_clamp_bounds_and_sanitizes`, `::rect_clamp_keeps_non_negative_extent`, `ambre_toile::logic::interop::tests::coordinates_are_clamped_to_the_world_bound` | verified |
+| `TOILE-IO-072` | POST | A coordinate that is not a number MUST become zero, never poison the geometry it lands in. | this spec section 3 | `ambre_toile::logic::interop::limits::tests::coord_clamp_bounds_and_sanitizes` asserts a NaN and an infinity both collapse to zero | verified |
+| `TOILE-IO-070` | POST | An import MUST say how many elements it created. | this spec section 3 | `ambre_toile::logic::state::import::tests::import_is_one_undo_group` asserts the count matches the file; `::import_rebuilds_nested_groups` that it counts the three elements and not the two groups the import rebuilt | verified |
+| `TOILE-IO-022` | POST | An import report MUST reach the user: a construct dropped in silence MUST NOT be the outcome. | this spec section 4 | none, and **the rule fails today**: the event carries the report and the view writes it to the diagnostic log, where no user reads it -- section 6 | unverified |
+| `TOILE-IO-023` | POST | An imported file MUST land where the user put it, never at a fixed point of the world. | this spec section 4 | none, and **the rule fails today**: a raster lands at the world origin and an SVG at its own coordinates, and no command carries a drop point -- section 6 | unverified |
+| `TOILE-IO-028` | POST | A large import MUST NOT freeze the Logic thread: it MUST apply in bounded batches that yield. | this spec section 3; `ambre-spec-budgets.md` | none, and **the rule fails today**: the whole batch is applied in one synchronous pass, and no progress event exists -- section 6 | unverified |
+| `TOILE-IO-071` | FRAME | An import MUST NOT change an element the board already held. | this spec section 3 | none. Every test of the apply pass starts from an empty board, so nothing holds the rule on a populated one -- section 6 | unverified |
+| `TOILE-IO-073` | FAIL | A file the converter cannot read MUST import nothing, and MUST leave the board as it was. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_broken_file_fails_without_touching_the_board`, `ambre_toile::logic::interop::tests::malformed_svg_fails_to_parse` | verified |
+| `TOILE-IO-074` | FAIL | A file past the count, the depth or the picture-size bound MUST be refused whole, never in part. | this spec section 3 | `ambre_toile::logic::interop::limits::tests::element_count_guard`, `::depth_guard`, `::image_dim_guard`, `ambre_toile::logic::interop::tests::too_many_elements_aborts_atomically`, `::too_deep_nesting_aborts_atomically` | verified |
+| `TOILE-IO-084` | FAIL | A file that maps to no element MUST be refused, never applied as an empty import. | this spec section 3 | `ambre_toile::logic::interop::tests::empty_svg_reports_empty` | verified |
+
+### 1.3 Bring an SVG drawing onto the board
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-IO-003` | POST | Every shape the drawing carries MUST land as the same kind of element on the board. | this spec section 3 | `ambre_toile::logic::interop::tests::rect_maps_to_shape_rect`, `::ellipse_maps_to_shape_path`, `::path_maps_to_shape_path_with_geometry` | verified |
+| `TOILE-IO-075` | POST | A text node MUST land as text the user can still edit, never as a picture of a word. | this spec section 3 | `ambre_toile::logic::interop::tests::text_maps_to_text_element_preserving_body` | verified |
+| `TOILE-IO-076` | POST | Every node MUST keep the fill and the stroke the drawing gave it. | this spec section 3 | `ambre_toile::logic::interop::tests::rect_import_preserves_fill_and_stroke_style`, `::unstyled_kinds_keep_the_default_style`, `ambre_toile::logic::state::import::tests::import_applies_styles_per_slot` | verified |
+| `TOILE-IO-077` | POST | A group MUST come back as a group, nested as the drawing nested it, and MUST NOT be flattened. | this spec section 3 | `ambre_toile::logic::interop::tests::nested_groups_are_rebuilt_innermost_first` asserts the two groups and the baked transforms, `ambre_toile::logic::state::import::tests::import_rebuilds_nested_groups` that both survive the apply pass | verified |
+| `TOILE-IO-078` | POST | A picture inside the drawing MUST come in with its pixels, never as an empty box. | this spec section 3 | `ambre_toile::logic::interop::tests::embedded_png_maps_to_image_and_media_blob` | verified |
+| `TOILE-IO-027` | POST | An SVG import MUST keep the paint order the drawing had. | this spec section 3 | none, and **the rule fails today**: text is read in a second pass and appended after every vector node -- section 6 | unverified |
+| `TOILE-IO-083` | POST | A text node inside a group MUST stay in that group. | this spec section 3 | none, and **the rule fails today**: the text pass walks the source, not the tree, so it can name no group -- section 6 | unverified |
+| `TOILE-IO-080` | POST | A text node MUST land where the drawing put it, the transforms above it included. | this spec section 3 | none, and **the rule fails today**: the text pass reads the top-level coordinates alone, so text under a moved group lands where the group is not -- section 6 | unverified |
+| `TOILE-IO-082` | FRAME | Reading the drawing MUST NOT touch the board: a file refused halfway MUST leave nothing behind. | this spec section 3 | structural, and the construction is the proof: a converter is a pure function returning a batch, so a refusal carries no command; `ambre_toile::logic::interop::tests::too_many_elements_aborts_atomically` and `::too_deep_nesting_aborts_atomically` refuse a file whose first nodes had already mapped | verified |
+| `TOILE-IO-079` | FAIL | A group the board cannot rebuild MUST be reported, never dropped without a word. | this spec section 3 | none, and **the rule fails today**: a group of a single member builds nothing and reports nothing, so the drawing's structure leaves in silence -- section 6 | unverified |
+| `TOILE-IO-081` | FAIL | A drawing whose text the reader cannot parse MUST say the text was lost. | this spec section 3 | none, and **the rule fails today**: a body that is not valid XML, or not UTF-8, yields no text and no notice, and the shapes import as though the file carried none -- section 6 | unverified |
+
+### 1.4 Take the board out as a file
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-IO-021` | POST | A user MUST be able to take the board out as a file. | this spec section 4 | not built -- lands with the "The Toile interop surface" Story (`ambre-roadmap.md` E4); no export command exists on the bus | unimplemented |
+| `TOILE-IO-085` | POST | The exported bytes MUST reach the browser's download path. | this spec section 4 | not built -- lands with the "The Toile interop surface" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `TOILE-IO-004` | POST | An export MUST be deterministic: the same board yields a byte-stable structure. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::export_is_deterministic`, `::rect_serializes_with_fixed_attrs`, `::text_body_is_escaped`, `::float_formatter_trims`, `ambre_toile::logic::interop::tests::round_trip_rect_is_stable`, `::round_trip_path_geometry_survives` | verified |
+| `TOILE-IO-025` | POST | An element the SVG serializer cannot express MUST be reported, never dropped in silence. | this spec section 3 | none, and **the rule fails today**: a sticky, a connector, a group, an embed and a stroke each serialize to nothing, and the export has no report at all -- section 6 | unverified |
+| `TOILE-IO-026` | POST | An exported element MUST carry its rotation. | this spec section 3 | none, and **the rule fails today**: the serializer reads the rotation field and writes no transform, so every element leaves axis-aligned -- section 6 | unverified |
+| `TOILE-IO-086` | POST | An export MUST hold every element the board holds: one placed left of or above the origin MUST NOT fall outside the frame. | this spec section 3 | none, and **the rule fails today**: the frame spans the origin to the far corner, so a negative coordinate leaves the element outside it -- section 6 | unverified |
+| `TOILE-IO-087` | POST | An exported picture MUST leave with its pixels, never with an address no reader can resolve. | this spec section 3 | none, and **the rule fails today**: a picture exports as a reference to its content address, which no reader outside Ambre can follow -- section 6 | unverified |
+| `TOILE-IO-088` | POST | Exported text MUST carry the size and the colour it was drawn with. | this spec section 3 | none, and **the rule fails today**: text exports as a body at a point, with neither a size nor a paint, so it comes back in the default of whatever opens it -- section 6 | unverified |
+| `TOILE-IO-017` | POST | The PNG render-back MUST run offscreen, on the UI thread's own surface. | this spec section 3 | not built -- lands with the "PNG export" Story (`ambre-roadmap.md` E6); it needs a real GPU adapter, so its belt is wasm-tier | unimplemented |
+| `TOILE-IO-024` | FRAME | An export MUST NOT change the board: it MUST emit no CRDT delta. | this spec section 3 | none. Both serializers take a read-only view and neither is driven from a live board, so no test can assert the empty outcome yet | unverified |
+| `TOILE-IO-097` | FRAME | A PNG export MUST NOT block the visible frame. | this spec section 3 | not built -- lands with the "PNG export" Story (`ambre-roadmap.md` E6); it needs a real GPU adapter, so its belt is wasm-tier | unimplemented |
+
+### 1.5 Open an `.ambre` file
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-IO-090` | POST | Opening a file MUST repaint the board once, not once per element it carries. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::round_trip_preserves_the_document_state` asserts one repaint event, the rebuilt paint order and the element count | verified |
+| `TOILE-IO-011` | FRAME | A rejected file MUST leave both the input bytes and the current board untouched. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone` walks five rejection shapes and asserts the bytes and the open board after each | verified |
+| `TOILE-IO-089` | FAIL | A file the engine refuses MUST fail by name, never by a panic. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic` | verified |
+| `TOILE-IO-012` | FAIL | A `.ambre` file belonging to another app MUST be re-dispatched to that app, never coerced into Toile. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::a_trame_file_is_re_dispatched_not_coerced` | verified |
+
+### 1.6 Import a Figma or a Miro document
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-IO-014` | POST | A Figma or Miro import MUST map every construct it recognises. | this spec section 3 | not built -- lands with the "Figma and Miro import" Story (`ambre-roadmap.md` E6); `ambre-toile` declares no JSON parser | unimplemented |
+| `TOILE-IO-091` | POST | A Figma or Miro import MUST list every construct it drops. | this spec section 3 | not built -- lands with the "Figma and Miro import" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TOILE-IO-016` | POST | A Figma auto-layout frame MUST import as a plain frame with children at resolved absolute positions. | this spec section 3 | not built -- lands with the "Figma and Miro import" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TOILE-IO-015` | POST | A foreign import MUST be as atomic as the SVG path: one batch, one undo. | this spec section 3 | not built -- lands with the "Figma and Miro import" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TOILE-IO-093` | FRAME | A foreign import MUST NOT touch the board until the whole file has mapped. | this spec section 3 | not built -- lands with the "Figma and Miro import" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TOILE-IO-092` | FAIL | A foreign import MUST refuse a file that breaches a safety bound, exactly as the SVG path does. | this spec section 3 | not built -- lands with the "Figma and Miro import" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TOILE-IO-094` | FAIL | A format the converter does not support MUST be refused by name. | this spec section 3 | none. Both commands answer with a typed refusal today, and no test covers either -- section 6 | unverified |
+
+### 1.7 Export a showcase bundle
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-IO-018` | POST | A showcase bundle MUST embed its board snapshot. | this spec section 3 | not built -- lands with the "The standalone showcase bundle" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TOILE-IO-019` | POST | A showcase bundle MUST carry plaintext content. | this spec section 3; `ZK-001` | not built -- lands with the "The standalone showcase bundle" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TOILE-IO-096` | POST | An export that produces a showcase bundle MUST say, at export time, that the bundle leaves the encryption boundary. | this spec section 3; `ZK-001` | not built -- lands with the "The standalone showcase bundle" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TOILE-IO-095` | FRAME | A showcase bundle MUST NOT contact the relay to render. | this spec section 3 | not built -- lands with the "The standalone showcase bundle" Story (`ambre-roadmap.md` E6) | unimplemented |
 
 * **Budget.** the SVG import of 5 000 nodes under 500 ms, a row of
   `ambre-spec-budgets.md section 1`. It is a budget for a conversion no user can start
@@ -49,12 +111,15 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. No converter opens a socket, and
   the pixels an import produces reach the relay as ciphertext alone
   (`features/ambre-spec-toile-media.md section 1`, `TOILE-IO-013`). The showcase bundle is the one
-  deliberate exit from the zero-knowledge boundary, and `TOILE-IO-019` makes it say so.
-* **Verification.** 7 `verified`, 7 `unverified`, 8 `unimplemented`. What ships is held where it is
-  read: the native round trip, the SVG mapping, the safety limits and the determinism of the output
-  all have a host test. Six of the seven gaps state a rule the code answers with something else, and
-  they share one cause -- the converters were built as pure functions and never joined to a board or
-  to a user. The eight others describe paths with no code.
+  deliberate exit from the zero-knowledge boundary, and `TOILE-IO-096` makes it say so.
+* **Verification.** 20 `verified`, 17 `unverified`, 15 `unimplemented`. Seven rows stated two rules
+  at once, and in each the covered half hid the uncovered one: a parse failure behind atomicity, a
+  bound behind a clamp, a typed rejection behind an untouched board. Three rules were already held
+  and never written down -- the reported count is elements and not groups, opening a file repaints
+  once, and the `<image>` row of the table in section 3 has a test no row had claimed. Eight state a
+  rule the code answers with something else, and section 6 names each. The mechanisms this document
+  cites grew by one across the pass: the split redistributed the coverage it already had, it did not
+  manufacture any.
 
 ---
 
@@ -68,7 +133,7 @@ joins the example to the test that holds it.
 | imports an SVG | draws elsewhere on the board | the imported elements and the drawing | both, on both boards | none. No property test drives an import |
 | imports a file | imports the same file | two sets of elements, each minted by its own peer | two imports, never one merged drawing | none |
 | imports a drawing, then undoes | watches | the board as before the import (`TOILE-IO-001`) | the drawing leaves in one step, on both boards | `logic::state::import::tests::import_is_one_undo_group` |
-| imports a broken file | watches | nothing (`TOILE-IO-001`) | an error on Alice's screen and no change on Bob's | `logic::state::import::tests::a_broken_file_fails_without_touching_the_board` |
+| imports a broken file | watches | nothing (`TOILE-IO-073`) | an error on Alice's screen and no change on Bob's | `logic::state::import::tests::a_broken_file_fails_without_touching_the_board` |
 | exports the board | moves an element | the move alone: the export writes nothing (`TOILE-IO-024`) | Bob's move; Alice's file holds the board she exported | none |
 | saves an `.ambre` file | opens it | the same board state (`TOILE-IO-010`) | the same elements, styles and deck | `logic::state::docfile::tests::round_trip_preserves_the_document_state` |
 
@@ -116,13 +181,13 @@ pub struct ImportBatch {
 **Steps, on an import:**
 
 1. parse and convert the whole file in memory, and return an error carrying no command on any parse
-   failure or breached bound (`TOILE-IO-001`, `TOILE-IO-002`);
+   failure or breached bound (`TOILE-IO-073`, `TOILE-IO-074`);
 2. hold the batch and upload each media blob when the file carries one, applying nothing until every
    real content hash returns (`features/ambre-spec-toile-media.md section 1`);
 3. create each slot, restyle it, build the groups innermost-first, then the connectors, then seed
    the media map;
 4. commit once, so the whole file is one undo item, and rebuild the derived caches;
-5. report how many elements the file yields, and what it drops.
+5. report how many elements the file created, and what it drops (`TOILE-IO-070`).
 
 Step 3 is ordered on purpose: a style is an independent register that cannot ride a create, and a
 group needs the ids the creates mint.
@@ -193,18 +258,18 @@ surface a user can read.
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| Every conversion runs on the user's machine | the pillar is that the server holds ciphertext. A conversion is the one moment a document exists as plaintext outside the editor, so it is the one that must not leave the device | converting on the server, which is faster to build and hands the relay the whole document |
-| An import is one atomic batch | a mid-file failure would leave a board half built from a file the user cannot see, and no undo would take it back in one step | streaming the elements as they parse, which is cheaper in memory and corrupts the board on any failure |
-| A converter speaks in slots, not in ids | an offline converter cannot know an id the engine mints on apply, and rewriting the batch afterwards would need a second pass over every reference | minting ids in the converter, which needs the engine's counter outside the engine |
-| A group is rebuilt after the creates | a group is born from the ids of its members, so it cannot exist before them. Emitting innermost-first makes every nested member already resolved | flattening a group on import, which loses the author's structure silently |
-| Text is read from the XML source | the parser can only give text as outlines, which needs system fonts the browser lacks and destroys the string the user typed | letting the parser flatten text, which imports a picture of a word |
-| Foreign geometry is clamped, not refused | a merely large drawing is not an attack, and refusing it would reject honest files. A clamp bounds the world and keeps the import | rejecting any coordinate outside the world, which fails on ordinary files |
-| The native file is the only lossless path | every other format has a model of its own, so a round trip through it is a conversion twice. The native payload is the document itself | promising fidelity on SVG, which drops connector semantics and the deck |
-| A showcase bundle is an explicit act | it produces plaintext outside the encryption boundary, so it may never happen as a side effect of another action | publishing automatically on export, which declassifies without asking |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| Every conversion runs on the user's machine | converting on the server | it is faster to build and it hands the relay the whole document. The pillar is that the server holds ciphertext, and a conversion is the one moment a document exists as plaintext outside the editor, so it is the one that must not leave the device |
+| An import is one atomic batch | streaming the elements as they parse | it is cheaper in memory and corrupts the board on any failure: a mid-file error leaves a board half built from a file the user cannot see, and no undo takes it back in one step |
+| A converter speaks in slots, not in ids | minting ids in the converter | it needs the engine's counter outside the engine. An offline converter cannot know an id the engine mints on apply, and rewriting the batch afterwards needs a second pass over every reference |
+| A group is rebuilt after the creates | flattening a group on import | it loses the author's structure silently. A group is born from the ids of its members, so it cannot exist before them, and emitting innermost-first makes every nested member already resolved |
+| Text is read from the XML source | letting the parser flatten text | it imports a picture of a word: the parser can only give text as outlines, which needs system fonts the browser lacks and destroys the string the user typed |
+| Foreign geometry is clamped, not refused | rejecting any coordinate outside the world | it fails on ordinary files. A merely large drawing is not an attack, and a clamp bounds the world and keeps the import |
+| The native file is the only lossless path | promising fidelity on SVG | it drops connector semantics and the deck. Every other format has a model of its own, so a round trip through it is a conversion twice, while the native payload is the document itself |
+| A showcase bundle is an explicit act | publishing automatically on export | it declassifies without asking. The bundle produces plaintext outside the encryption boundary, so it may never happen as a side effect of another action |
 
 ---
 
@@ -226,10 +291,29 @@ surface a user can read.
 * **A rotated element exports upright** (`TOILE-IO-026`). The view model carries a rotation and the
   serializer never writes a transform. A board of rotated shapes exports as a board of unrotated
   ones, and the determinism rows still pass.
-* **Text loses its place** (`TOILE-IO-027`). The vector walk and the text pass are two passes over
-  one file, and the text pass appends. So every text node lands above every shape whatever the source
-  said, and a text node inside a group is not a member of that group. The group's transform is not
-  applied to it either.
+* **Text loses its place** (`TOILE-IO-027`, `TOILE-IO-083`, `TOILE-IO-080`). The vector walk and the
+  text pass are two passes over one file, and the text pass appends. So every text node lands above
+  every shape whatever the source said, and a text node inside a group is not a member of that
+  group. The text pass reads `x`, `y` and `font-size` off the node alone, so every transform above it
+  is ignored.
+* **Text the reader refuses is lost in silence** (`TOILE-IO-081`). A source that is not UTF-8, or one
+  the XML reader rejects, ends the text pass with no skip recorded. The shapes import as if the file
+  had carried no text at all, and the report says nothing.
+* **A group of one member disappears without a word** (`TOILE-IO-079`). The walk emits the group, the
+  apply pass declines to build one from fewer than two members, and neither calls the report. The
+  decision in section 5 is that no group is flattened silently; this one is.
+* **A board the export could not read still becomes a file** (`TOILE-IO-069`). The snapshot is taken
+  with a fallback: on failure it logs an error and writes the header over an empty payload. The file
+  is well formed, carries the right document id, and opens as an empty board.
+* **The export frame is anchored at the origin** (`TOILE-IO-086`). The view box spans `0 0` to the
+  content's far corner, which keeps the round trip from translating the document but drops whatever
+  sits left of or above the origin outside the frame a reader crops to.
+* **A picture and a text leave without what they carried** (`TOILE-IO-087`, `TOILE-IO-088`). An
+  `<image>` is written with a `media:` href no reader outside Ambre resolves, and a `<text>` with a
+  position and a body but neither the size nor the colour it was drawn with.
+* **No test of the apply pass starts from a populated board** (`TOILE-IO-071`). Every one begins on a
+  fresh state, so the rule that an import leaves alone what the board already held rests on reading
+  the code.
 * **The responsiveness design has no code** (`TOILE-IO-028`). The corpus described bounded batches
   that yield between chunks and an `ImportProgress` event, and contrasted them with Trame's single
   synchronous pass. Toile's apply pass is a single synchronous pass, and no such event exists on the
@@ -237,9 +321,9 @@ surface a user can read.
 * **The dependency table was a plan.** Two crates were declared for paths that do not exist and are
   absent from the manifest. The table above marks each one, because a dependency list is the most
   mechanically checkable paragraph in a spec.
-* **Figma and Miro are refused by name.** Both commands answer with a typed message and touch
-  nothing, which is the honest behaviour; the four rows that describe the mapping are the
-  specification the converters will be built against.
+* **Figma and Miro are refused by name** (`TOILE-IO-094`). Both commands answer with a typed
+  message and touch nothing, which is the honest behaviour, and no test asserts it. The four rows
+  that describe the mapping are the specification the converters will be built against.
 * **Templates have no owner.** A template is a saved batch applied through the import path, so it
   needs no new concept and no new row. It needs a store, a gallery and curation, and none of the
   three is scheduled.

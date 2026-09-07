@@ -1,6 +1,7 @@
 # AMBRE -- FEATURE: THE TRAME ENGINE
 **Type:** Vertical (feature)
-**Implementation:** partial -- the engine and the seam are built; the remote apply diverges.
+**Implementation:** partial -- the engine and the seam are built; the remote apply diverges, and
+so does the local one.
 
 > A user types into a cell, and every value that depended on it changes before the next frame. One
 > thread holds the workbook, writes the change, recomputes what the change made stale, and answers
@@ -17,19 +18,37 @@ through it, so the index, the recompute and the seam are one document and not th
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TRAME-001` | The workbook CRDT MUST NOT leave the Logic thread; it exits only as bytes. | this spec section 3; architecture section 2.B | type-level: `TrameState.doc` is private and **no public signature in `ambre-trame` names `LoroDoc`**; both exits return `Vec<u8>` | verified |
-| `TRAME-002` | Recomputing what a change made stale MUST finish before the command returns; the outcome carries every resulting display event. | this spec section 3 | type-level: `handle_command` returns `TrameOutcome` by value and the crate has no async path; `ambre_trame::logic::tests::group7::apply_remote_batch_emits_single_datareset_with_full_state` | verified |
-| `TRAME-015` | Two peers exchanging the same operations in any interleaving MUST converge to the same document. | audit `H6`; this spec section 2; `ambre-spec-testing.md` | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` (proptest), `ambre_trame::logic::tests::group3::two_peers_converge_via_mock_sync` | verified |
-| `TRAME-023` | The incrementally maintained sheet index MUST equal a from-scratch rebuild after any sequence of structural operations. | this spec section 3 | none. Per-operation unit tests only (`ambre_trame::model::sheet_index::tests::apply_insert_and_delete_row_shift_positions`, `::apply_move_row_permutes_order_and_reindexes`). The equivalence property exists on the Toile index and not here, though this is the cache invariant the whole engine rests on | unverified |
-| `TRAME-024` | `ambre-trame` MUST contain no `unsafe`. | README pillar "Security" | measured zero `unsafe` in the crate, but no `#![forbid(unsafe_code)]` on its root -- a claim, not a mechanism (`ambre-spec-testing.md`, the mechanism ladder) | unverified |
-| `TRAME-FEAT-001` | A feature handler MUST NOT send on any channel: it returns a `TrameOutcome` and the Logic dispatcher fans it out. | this spec section 3; architecture section 4 | type-level: `TrameState` holds no sink or sender and `handle_command` returns `TrameOutcome` by value; the dispatcher seam is exercised by `ambre_trame::logic::tests::group3::edit_emits_send_update_through_sink` | verified |
-| `TRAME-UI-001` | The UI thread MUST hold no document data -- only view state and the viewport the Logic thread sends. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | structural: **no occurrence of `LoroDoc` or `loro::` anywhere under `ambre-trame/src/ui/`**; `deny.toml` bans `loro` outside the four app crates (`SYNC-011`) | verified |
-| `TRAME-UI-002` | Every document mutation MUST leave the UI thread as a `TrameCommand`; the UI MUST NOT write document state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level: the single outbound path is `TrameView::send_command_lossless` (`ui/view/lifecycle.rs`), which accepts a `TrameCommand` and wraps it in `LogicCommand::App` -- there is no other sender | verified |
-| `TRAME-UI-003` | The UI thread MUST NOT block on the Logic channel: a full channel drops the command with a log, it never waits. | architecture section 2.B; `ambre-spec-ui.md section 1` | type-level: `send_command_lossless` is `try_send` and returns `Result<(), SendError>`; `SendError::Full` is handled at every call site | verified |
-| `TRAME-UI-006` | The canvas dispatch over `TrameEvent` MUST be exhaustive -- no wildcard arm -- so a new variant is a compile error, not a silent drop. | this spec section 4 | compiler: `ui/view/frame.rs::dispatch_trame` carries **no `_` arm**; adding a variant fails the build | verified |
-| `TRAME-UI-014` | A cell in error MUST be marked visually from its displayed text; there MUST NOT be an `is_error` field on `DisplayCell`. | this spec section 3 | `ambre_trame::ui::renderer::tests::errored_cell_gets_a_corner_marker`, `::dirty_cell_gets_a_translucent_veil` | verified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-001` | `INV` | The workbook CRDT MUST NOT leave the Logic thread; it exits only as bytes. | this spec section 3; architecture section 2.B | `cargo deny`: `deny.toml` bans `loro` outside the four engine crates (`SYNC-011`), so no crate on the other side of the seam can even name the type. The stronger claim this cell used to make is false -- `ambre_trame::logic::docfile::export_ambre_plaintext` is a public signature naming `LoroDoc` -- but it takes the document and returns bytes, and no accessor hands one out | verified |
+| `TRAME-015` | `CONC` | Two peers exchanging the same operations in any interleaving MUST converge to the same document. | audit `H6`; this spec section 2; `ambre-spec-testing.md` | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` (proptest), `ambre_trame::logic::tests::group3::two_peers_converge_via_mock_sync` | verified |
+| `TRAME-023` | `INV` | The incrementally maintained sheet index MUST equal a from-scratch rebuild after any sequence of structural operations. | this spec section 3 | none. Per-operation unit tests only (`ambre_trame::model::sheet_index::tests::apply_insert_and_delete_row_shift_positions`, `::apply_move_row_permutes_order_and_reindexes`). The equivalence property exists on the Toile index and not here, though this is the cache invariant the whole engine rests on | unverified |
+| `TRAME-024` | `INV` | `ambre-trame` MUST contain no `unsafe`. | README pillar "Security" | measured zero `unsafe` in the crate, but no `#![forbid(unsafe_code)]` on its root -- a claim, not a mechanism (`ambre-spec-testing.md`, the mechanism ladder) | unverified |
+| `TRAME-FEAT-001` | `INV` | A feature handler MUST NOT send on any channel: it returns a `TrameOutcome` and the Logic dispatcher fans it out. | this spec section 3; architecture section 4 | type-level: `TrameState` holds no sink or sender, so a handler has no channel in reach; the dispatcher seam is exercised by `ambre_trame::logic::tests::group3::edit_emits_send_update_through_sink` | verified |
+| `TRAME-UI-001` | `INV` | The UI thread MUST hold no document data -- only view state and the viewport the Logic thread sends. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | none. No occurrence of `LoroDoc` or `loro::` sits under `ambre-trame/src/ui/` today, but nothing runs that search: `deny.toml` bans the crate, not the directory, and `ambre-trame` is one of the four the ban allows. It is a measurement, like `TRAME-024` | unverified |
+| `TRAME-UI-002` | `INV` | Every document mutation MUST leave the UI thread as a `TrameCommand`; the UI MUST NOT write document state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level: the outbound path is `TrameView::send_command_lossless` and its lossy twin (`ui/view/lifecycle.rs`), both of which take a `TrameCommand`; the document itself is out of reach on this side (`TRAME-UI-001`) | verified |
+| `TRAME-UI-003` | `INV` | The UI thread MUST NOT block on the Logic channel. | architecture section 2.B; `ambre-spec-ui.md section 1` | type-level: both senders are `try_send`, and neither has a blocking form in scope | verified |
+| `TRAME-UI-142` | `INV` | A command the UI thread failed to send MUST NOT be dropped in silence. | this spec section 4; `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none, and two call sites do exactly that: the `SetCellsBatch` of a paste fallback (`ui/view/interact.rs`) and the `CommitEdit` on cell exit (`ui/view/lifecycle.rs`) discard the result outright. The other fifteen match `SendError::Full` and log it | unverified |
+| `TRAME-UI-006` | `INV` | The canvas dispatch over `TrameEvent` MUST be exhaustive -- no wildcard arm -- so a new variant is a compile error, not a silent drop. | this spec section 4 | the compiler: `ui/view/frame.rs::dispatch_trame` names all 26 variants of the enum and carries no `_` arm, so adding one fails the build | verified |
+| `TRAME-UI-014` | `INV` | There MUST NOT be an `is_error` field on `DisplayCell`. | this spec section 3 | type-level: the struct declares no such field, and the renderer has no other input | verified |
+| `TRAME-UI-141` | `OBS` | A cell in error MUST be marked visually from its displayed text. | this spec section 3 | `ambre_trame::ui::renderer::tests::errored_cell_gets_a_corner_marker`, `::dirty_cell_gets_a_translucent_veil` | verified |
+
+### 1.2 A command reaches the engine
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-002` | `POST` | Recomputing what a change made stale MUST finish before the command returns. | this spec section 3 | type-level: `handle_command` returns `TrameOutcome` by value and the crate has no `async fn`, no `.await` and no spawn, so there is nowhere to defer to. No test separates the two recomputes: the one that reads a formula's new value (`ambre_trame::logic::tests::group1::sum_over_plain_literals_and_formula_raw_in_viewport`) reads it from the viewport that follows, which recomputes again | verified |
+| `TRAME-166` | `FRAME` | A command that mutates nothing MUST NOT produce a delta. | this spec section 3 | `ambre_trame::logic::tests::group4::active_column_values_are_distinct_sorted_and_visible` asserts a read-only query carries no update, and `::group3::merge_selection_single_cell_is_noop` asserts the same for a refused mutation | verified |
+
+### 1.3 A remote delta arrives
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-167` | `POST` | A batch of remote operations MUST repaint once, carrying the whole new state. | this spec section 3 | `ambre_trame::logic::tests::group7::apply_remote_batch_emits_single_datareset_with_full_state`, which counts the resets and reads both cells back | verified |
+| `TRAME-168` | `FRAME` | Applying a remote delta MUST NOT re-broadcast it. | this spec section 3 | type-level: `apply_remote` returns `Vec<TrameEvent>` and no outcome, so it has no shape to broadcast through | verified |
+| `TRAME-169` | `FRAME` | An import MUST NOT swallow the local peer's own operations before they have been broadcast. | this spec section 2, row 4 | `ambre_trame::logic::tests::group7::edit_after_reopen_broadcasts_causally_complete_delta`, which drives two reopens and asserts the second replay carries both cells. The merge preserves this peer's entry in the export cursor and adopts every other | verified |
 
 * **Budget.** the Trame rows of `ambre-spec-budgets.md section 1` -- the 10k-cell recompute
   in < 50 ms, the sheet-index rebuild of 10k rows in < 10 ms, the 50-cell batch in < 1 ms, the
@@ -38,10 +57,17 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: `TRAME-001` keeps the workbook inside this thread and lets it out
   as bytes alone, which the Sync worker seals before anything reaches the relay (`ZK-001`).
   `UI-THREAD-004` bans a network, crypto or persistence path on the other side of the seam.
-* **Verification.** 9 `verified`, 2 `unverified`, 0 `unimplemented`. The two gaps are `TRAME-023`,
-  the cache invariant the whole engine rests on and the one Toile holds with a property test, and
-  `TRAME-024`, a measurement rather than a mechanism. Four divergences between this design and the
-  code carry no row at all and are named in section 6.
+* **Verification.** 13 `verified`, 4 `unverified`, 0 `unimplemented`. Eleven rows became
+  seventeen, and six mechanisms came with them, so the split manufactured no coverage. What holds is
+  what a type or a compiler holds: a handler with no channel in reach, an apply that returns display
+  events and cannot broadcast, a dispatch the compiler checks against all 26 variants of the event
+  enum. `TRAME-UI-001` is withdrawn: nothing runs the search it cites, `deny.toml` bans the crate
+  rather than the directory, and `ambre-trame` is one of the four crates the ban allows -- it is a
+  measurement, exactly like `TRAME-024`. Two conjunctions came apart. `TRAME-UI-014` claimed a
+  drawing and an absent field, and each half has its own mechanism now. `TRAME-UI-003` claimed the
+  send never waits and that a refused one reaches the log: the first is `try_send`, the second is
+  `TRAME-UI-142`, which two call sites break. The three new frames were the rules the seam relied on
+  and never wrote down. Four divergences between this design and the code are named in section 6.
 
 ---
 
@@ -274,18 +300,18 @@ Each viewport answer carries a version, and the UI drops one older than the last
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| A handler returns an outcome and sends nothing | a value returned by a pure method is testable on the host with no channel, no worker and no browser, and it keeps the state free of a transport handle. The dispatcher is then the single place where a document change becomes traffic | injecting an effect sink into the state, which is the trait object the closed `DocState` enum exists to avoid |
-| The recompute finishes inside the command | a value the user can read is never a value from before their edit, and there is no second scheduler to reason about. The dirty set is what bounds the cost, so an incremental recompute stays inside the frame budget | a deferred pass on a timer, which buys a shorter command and pays with a grid showing stale numbers |
-| A cell reference binds to a uid; a range binds to positions | a range bound to two row uids breaks under a sort: the endpoints reorder independently and can cross, so `SUM(A1:A3)` over a sorted block collapses to zero. A rectangle cannot follow a non-contiguous set of rows, and a user expects an internal sort to leave the block total intact | binding both endpoints of a range to uids, so a range follows the data the way a cell does |
-| A range is one dependency, not an edge per cell | a whole column is a hundred thousand edges, rebuilt on every row insert. Storing the rectangle and testing containment costs one entry per formula | expanding each range into cell-to-cell edges |
-| A formula compiles to bytecode before it is evaluated | a formula is compiled once and executed on every recompute, and the compiled form is where a reference is bound to a uid | walking the syntax tree on each recompute, which re-parses the text every time |
-| Formula cycles are detected outside the CRDT graph | the CRDT graph orders operations causally, which says nothing about which cell reads which | reusing the document's own dependency graph for the formula cycle search |
-| The recompute is single-threaded | a fourth worker context costs a thread, a copy of the state and a synchronization rule, and the dirty set is small in every case the budget covers | a parallel recompute over the dirty set |
-| The index is a dense vector over the used range | the sheet the user sees is a hundred thousand rows and the sheet the document holds is the few thousand carrying data; a dense vector over the second is one lookup and a small allocation | a sparse map over the virtual grid, which pays a hash on every resolve |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| A handler returns an outcome and sends nothing | injecting an effect sink into the state | it is the trait object the closed `DocState` enum exists to avoid, and it puts a transport handle in the state. A value returned by a pure method is testable on the host with no channel, no worker and no browser, and the dispatcher is then the single place where a document change becomes traffic |
+| The recompute finishes inside the command | a deferred pass on a timer | it buys a shorter command and pays with a grid showing stale numbers, plus a second scheduler to reason about. The dirty set is what bounds the cost, so an incremental recompute stays inside the frame budget |
+| A cell reference binds to a uid; a range binds to positions | binding both endpoints of a range to uids, so a range follows the data the way a cell does | the endpoints then reorder independently under a sort and can cross, so `SUM(A1:A3)` over a sorted block collapses to zero. A rectangle cannot follow a non-contiguous set of rows, and a user expects an internal sort to leave the block total intact |
+| A range is one dependency, not an edge per cell | expanding each range into cell-to-cell edges | a whole column is a hundred thousand edges, rebuilt on every row insert. Storing the rectangle and testing containment costs one entry per formula |
+| A formula compiles to bytecode before it is evaluated | walking the syntax tree on each recompute | it re-parses the text every time. A formula is compiled once and executed on every recompute, and the compiled form is where a reference is bound to a uid |
+| Formula cycles are detected outside the CRDT graph | reusing the document's own dependency graph for the formula cycle search | the CRDT graph orders operations causally, which says nothing about which cell reads which |
+| The recompute is single-threaded | a parallel recompute over the dirty set | a fourth worker context costs a thread, a copy of the state and a synchronization rule, and the dirty set is small in every case the budget covers |
+| The index is a dense vector over the used range | a sparse map over the virtual grid | it pays a hash on every resolve. The sheet the user sees is a hundred thousand rows and the sheet the document holds is the few thousand carrying data; a dense vector over the second is one lookup and a small allocation |
 
 ---
 
@@ -326,5 +352,19 @@ Each viewport answer carries a version, and the UI drops one older than the last
   rather than the DAG. Two further defects sit in the same path, and they belong to the graph:
   `features/ambre-spec-trame-formula-engine.md section 6`. Answered by the "A recompute bounded by
   what changed" story.
+* **A local edit costs the whole viewport too** (`TRAME-002`). Section 3.C says P2 answers with a
+  fresh viewport only when the recompute touched the visible window. `finish_cell_writes` answers
+  with a bare `DataReset` every time, so each keystroke that commits makes the UI re-fetch the whole
+  window, whether or not anything visible changed. It is the same defect as the remote one above,
+  on the path taken far more often, and the invalidated-range event that answers one answers both.
+* **A dropped command is silent twice** (`TRAME-UI-142`). Fifteen call sites match `SendError::Full`
+  and log it; the `SetCellsBatch` of a paste fallback and the `CommitEdit` on cell exit discard the
+  result. A `CommitEdit` lost this way leaves the undo group open, so the next command's fallback
+  seal is what closes it -- and a lost `SetCellsBatch` is a paste the user watched land.
+  `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) states the general rule, unbuilt.
+* **Presence is a stub, and section 3.D describes what it will be.** `apply_ephemeral` takes a
+  payload it ignores and returns an empty vector; it takes no `from_user_id` at all. The signature
+  in section 3.D, and the rule about a Sync-resolved author it carries, describe the target.
+  `features/ambre-spec-trame-selection.md` owns the collaborator cursors that will use it.
 * **No budget is measured.** One benchmark exists, for the recompute, and no CI job runs it. Every
   divergence above is a claim about a cost that nothing weighs.

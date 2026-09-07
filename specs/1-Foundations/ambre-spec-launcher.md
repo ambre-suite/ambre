@@ -18,19 +18,55 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The prefix is `CHROME`, shared with the
 other five documents of the DOM side.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `CHROME-035` | The home screen MUST list every kind of document through one view: it MUST NOT belong to an application. | this spec section 2 | `ambre_app::landing::tests::creatable_types_round_trip_through_doc_path` walks every creatable kind through one path builder and one parser, so a kind the view named separately would not round-trip | verified |
-| `CHROME-036` | A card MUST show the document's decrypted name, and an unnamed one MUST show a placeholder -- never an identifier, a hash, or the kind's own word. | this spec section 2; `ambre-spec-zero-knowledge.md` | none. The card renders the name or the placeholder and has no branch that reaches for an identifier. Nothing refuses the fallback a later author would add, which is how an identifier reaches a screen | unverified |
-| `CHROME-037` | A new document MUST be created unnamed: a placeholder MUST NOT be stored as a name. | this spec section 2; `ambre-spec-zero-knowledge.md` | none. Creation sends no name at all, so there is nothing to store. `SYNC-067` holds the ciphertext half; nothing holds this half | unverified |
-| `CHROME-038` | The kind picker MUST offer exactly the kinds whose engine can be instantiated, and MUST NOT name a kind of its own. | this spec section 2 | `ambre_app::landing::tests::picker_lists_creatable_types_and_reports_pick` mounts the picker in a real document, asserts one entry per creatable kind in order under its generic label, and asserts the pick is reported | verified |
-| `CHROME-039` | Opening a document whose render kind differs from the booted one MUST reload the page; a same-kind open MUST swap in place. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-010` | `ambre_app::route::tests::cross_kind_open_needs_reload` covers all four combinations of the one predicate the cards and the picker share | verified |
-| `CHROME-040` | A path MUST resolve to the home screen or to exactly one document; an unknown or malformed path MUST resolve to the home screen. | this spec section 2 | `ambre_app::route::tests::root_is_landing`, `::each_doc_type_slug_parses`, `::path_doc_roundtrip`, `::unknown_slug_falls_back_to_landing`, `::malformed_id_falls_back_to_landing`, `::trailing_and_extra_segments_tolerated`, `::landing_route_has_no_doc` | verified |
-| `CHROME-041` | A delete MUST be confirmed against the document's own name before anything is dispatched. | this spec section 2; README pillar "E2EE" | none. The card stores the target and opens a modal that renders the name; the dispatch sits behind the confirming action. Nothing refuses a second delete path added without the modal, and there is no recovery from one | unverified |
-| `CHROME-042` | The content surface MUST NOT be unmounted for the home screen: it MUST be covered and frozen. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-010` | none. The overlay covers the canvas cell and the route poll pauses the loop, so the GPU surface, the Logic thread and the Sync worker survive. Nothing observes that the loop is actually paused | unverified |
-| `CHROME-043` | A context that carries no kind icon MUST compose the name with the generic kind label, at the point of use, and MUST NOT store the composition. | this spec section 2 | none. The tab title is recomputed each frame from the name and the label and written only when it changes, so nothing composed is ever persisted. Nothing refuses a composition sent to the server as a name | unverified |
-| `CHROME-044` | The home screen MUST perform no cryptography: a name MUST reach it already decrypted. | `ambre-spec-zero-knowledge.md` (`ZK-001`); `UI-THREAD-004` | none. The launcher declares no crypto crate, and the names arrive on the display payload the Sync thread filled. The crate graph is the same fact `CHROME-001` reads, and no lint holds it here | unverified |
-| `CHROME-045` | The sign-in panel MUST show neither route until the server has answered which one applies. | this spec section 2 | none. The panel renders a neutral placeholder while the answer is absent and branches once it arrives. Nothing refuses a default that would flash the wrong sign-in for one frame | unverified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CHROME-035` | `INV` | The home screen MUST list every kind of document through one view: it MUST NOT belong to an application. | this spec section 2 | `ambre_app::landing::tests::creatable_types_round_trip_through_doc_path` walks every creatable kind through one path builder and one parser, so a kind the view named separately would not round-trip | verified |
+| `CHROME-038` | `INV` | The kind picker MUST offer exactly the kinds whose engine can be instantiated, and MUST NOT name a kind of its own. | this spec section 2 | `ambre_app::landing::tests::picker_lists_creatable_types_and_reports_pick` mounts the picker in a real document, asserts one entry per creatable kind in order under its generic label, and asserts the pick is reported | verified |
+| `CHROME-044` | `INV` | The home screen MUST perform no cryptography: a name MUST reach it already decrypted. | `ambre-spec-zero-knowledge.md` (`ZK-001`); `UI-THREAD-004` | none. The launcher declares no crypto crate, and the names arrive on the display payload the Sync thread filled. The crate graph is the same fact `CHROME-001` reads, and no lint holds it here | unverified |
+| `CHROME-080` | `INV` | A composed name MUST NOT be stored. | this spec section 2; `ambre-spec-zero-knowledge.md` | none. The tab title is recomputed each frame and written only when it changes, so nothing composed is persisted today. It is the half of `CHROME-043` with a consequence: a composition sent to the server as a name puts the generic kind word inside the document's own sealed name, for every reader, for good | unverified |
+| `CHROME-036` | `OBS` | A card MUST show the document's decrypted name. | this spec section 2; `ambre-spec-zero-knowledge.md` | none. The card renders the name it was handed and nothing reads a card back | unverified |
+| `CHROME-079` | `OBS` | An unnamed document MUST show a placeholder -- never an identifier, a hash, or the kind's own word. | this spec section 2; `ambre-spec-zero-knowledge.md` | none. The card has no branch that reaches for an identifier, and nothing refuses the fallback a later author would add. It is the half that leaks: a name is absent by design, and an identifier on screen is routing metadata the user never asked to see | unverified |
+| `CHROME-043` | `OBS` | A context that carries no kind icon MUST compose the name with the generic kind label, at the point of use. | this spec section 2 | none. The tab title is recomputed each frame from the name and the label, and no test reads a title | unverified |
+| `CHROME-045` | `OBS` | The sign-in panel MUST show neither route until the server has answered which one applies. | this spec section 2 | none. The panel renders a neutral placeholder while the answer is absent and branches once it arrives. Nothing refuses a default that would flash the wrong sign-in for one frame | unverified |
+
+### 1.2 Resolve a path
+
+The address bar hands over a string. It becomes the home screen or one document, and nothing else.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CHROME-040` | `POST` | A path MUST resolve to the home screen or to exactly one document. | this spec section 2 | `ambre_app::route::tests::root_is_landing`, `::each_doc_type_slug_parses`, `::path_doc_roundtrip`, `::landing_route_has_no_doc` | verified |
+| `CHROME-082` | `FRAME` | Resolving a path MUST NOT open or close a document. | derived | type-level: the parser is a pure function from a string to a route and holds no handle to a document, a thread or a surface, so a resolution with a side effect has nothing in scope to act on | verified |
+| `CHROME-081` | `FAIL` | An unknown or malformed path MUST resolve to the home screen. | this spec section 2 | `ambre_app::route::tests::unknown_slug_falls_back_to_landing`, `::malformed_id_falls_back_to_landing`, `::trailing_and_extra_segments_tolerated` | verified |
+
+### 1.3 Open a document, or go back home
+
+The route changed. Either the booted engine can draw what was asked for, or the page starts again.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CHROME-039` | `POST` | An open whose render kind equals the booted one MUST swap in place. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-010` | `ambre_app::route::tests::cross_kind_open_needs_reload`, on the two of its four combinations where the kinds agree | verified |
+| `CHROME-083` | `POST` | An open whose render kind differs from the booted one MUST reload the page. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-010` | `ambre_app::route::tests::cross_kind_open_needs_reload`, on the two combinations where they differ. One engine is booted per page, so this is the rule that keeps a board from being drawn by a grid | verified |
+| `CHROME-042` | `FRAME` | Going back home MUST NOT unmount the content surface: it MUST be covered and frozen. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-010` | none. The overlay covers the canvas cell and the route poll pauses the loop, so the GPU surface, the Logic thread and the Sync worker survive. Nothing observes that the loop is actually paused | unverified |
+
+### 1.4 Create a document
+
+The user picks a kind. Nothing is named.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CHROME-037` | `POST` | A new document MUST be created unnamed. | this spec section 2; `ambre-spec-zero-knowledge.md` | none. Creation sends no name at all, so the rule holds by absence. `SYNC-067` holds the ciphertext half; nothing holds this one | unverified |
+| `CHROME-084` | `FRAME` | Creating a document MUST NOT store a placeholder as its name. | this spec section 2; `ambre-spec-zero-knowledge.md` | none. It is the half `CHROME-037` carried, and the one that is permanent: an unnamed document can be named later, and a document born holding the word "Untitled" as its sealed name never reads as unnamed again | unverified |
+
+### 1.5 Delete a document
+
+There is no recovery, so the gesture is gated on the user reading the name back.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CHROME-041` | `FAIL` | A delete MUST be confirmed against the document's own name before anything is dispatched. | this spec section 2; README pillar "E2EE" | none. The card stores the target and opens a modal that renders the name; the dispatch sits behind the confirming action. Nothing refuses a second delete path added without the modal, and there is no recovery from one | unverified |
 
 * **Budget.** none of its own. The list is a handful of rows of DOM and
   `ambre-spec-budgets.md` budgets no chrome operation. The frame the home screen does
@@ -41,10 +77,15 @@ other five documents of the DOM side.
   unauthenticated same-origin read of the server's sign-in configuration, which carries no document
   data and no identity. `UI-THREAD-004` names one exception to the UI thread's ban and this is a
   second one, recorded in section 5.
-* **Verification.** 4 `verified`, 7 `unverified`, 0 `unimplemented`. The verified four are the ones a
-  pure function carries: the path mapping, the reload predicate and the kind list, all extracted out
-  of the DOM and all covered. The unverified seven are properties of a rendered page against a live
-  session, and the tier that mounts a page does not have one.
+* **Verification.** 7 `verified`, 10 `unverified`, 0 `unimplemented`. The verified rows are the ones
+  a pure function carries: the path mapping and its fallback, the two halves of the reload
+  predicate, the kind list, and the parser's own freedom from side effects. The rest are properties
+  of a rendered page against a live session, and the tier that mounts a page does not have one.
+  Three conjunctions came apart, and in each the second half is the one that costs something
+  permanent. `CHROME-079`: an identifier shown where a name is absent is routing metadata on screen.
+  `CHROME-080`: a composed name sent to the server seals the generic kind word into the document's
+  own name, for every reader. `CHROME-084`: a document born holding a placeholder never reads as
+  unnamed again. Two tests back two rows each, and each cell names the combinations it reads.
 
 ---
 
@@ -135,19 +176,21 @@ monograms, their generic labels and the creatable list. The style is `crates/amb
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The home screen is app-agnostic and lives in the launcher | it lists documents of every kind and holds none of their content, so putting it in an application crate would make one application's crate the owner of the others' entry point. Kept where it is, a new kind appears in it by being creatable | a home screen per application, or one owned by whichever application shipped first |
-| A new document is unnamed, with no prompt | naming is the one thing the user cannot do usefully before there is content, and asking is friction on every single creation. An unnamed document is a decidable state that a rename resolves whenever the user is ready | a name prompt on create, or a generated default name |
-| A placeholder is rendered, never stored | a stored placeholder is a name as far as every other layer can tell: the ciphertext holds it, the list shows it, and nothing can distinguish it from a deliberate title. Rendering it keeps the absence of a name a fact rather than a guess | writing the placeholder into the stored name |
-| No counters in a default name | there is no server authority over names, and each device decrypts its own list, so two offline devices both create the same numbered name. Deletions then leave holes the counter never reclaims | numbering new documents per kind |
-| A cross-kind open reloads the page | the booted view is a closed choice made at page load, and swapping a document inside it cannot change which view is mounted. A reload is honest and costs a session the worker rebuilds; a push that leaves the wrong view mounted is a blank document | swapping the view at run time, which means every view is always linked and always mountable |
-| The content surface is covered, never unmounted | unmounting it destroys the GPU surface, the offscreen pair and the atlases, and rebuilding them is the slowest thing the client does. Covering it and pausing the loop costs a paused frame | unmounting the canvas while the home screen is shown |
-| The card shows an icon, a name and a date, and no preview | a preview of an end-to-end encrypted document is a whole pipeline: an offscreen render on save, an invalidation policy across peers, an extra encrypted object per document, and a decrypt of every image when the list loads. The gain over a tile and a name is cosmetic | encrypted thumbnails on the cards |
-| The list shows no content statistics | a modification time, a role and a member count are routing metadata the server already holds in plaintext and hands over for free. A word count or a cell count is content, so it must be computed on the client and stored encrypted -- a second coherent object to maintain, for a number | counts of cells, words or pages on the cards |
-| The kind tile is a monogram, not an icon | the icon pipeline does not exist, and a monogram is a tile of text that needs nothing. It is a stand-in and it is legible about being one | waiting for the icon pipeline before shipping the list |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The home screen is app-agnostic and lives in the launcher | a home screen per application | it lists documents of every kind, so one per application means every application maintains a list of the others' documents and a new kind has to be added to each. |
+| The home screen is app-agnostic and lives in the launcher | one owned by whichever application shipped first | it would make one application's crate the owner of the others' entry point. Kept in the launcher, a new kind appears in the list by being creatable. |
+| A new document is unnamed, with no prompt | a name prompt on create | naming is the one thing the user cannot do usefully before there is content, and asking is friction on every single creation. An unnamed document is a decidable state that a rename resolves whenever the user is ready. |
+| A new document is unnamed, with no prompt | a generated default name | it is indistinguishable from a name the user chose, so nothing downstream can tell an unnamed document from a named one, and the user is left deleting a title rather than writing one. |
+| A placeholder is rendered, never stored | writing the placeholder into the stored name | a stored placeholder is a name as far as every other layer can tell: the ciphertext holds it, the list shows it, and nothing can distinguish it from a deliberate title. Rendering it keeps the absence of a name a fact rather than a guess. |
+| No counters in a default name | numbering new documents per kind | there is no server authority over names, and each device decrypts its own list, so two offline devices both create the same numbered name. Deletions then leave holes the counter never reclaims. |
+| A cross-kind open reloads the page | swapping the view at run time | it means every view is always linked and always mountable. The booted view is a closed choice made at page load, and swapping a document inside it cannot change which view is mounted: a reload is honest and costs a session the worker rebuilds, while a push that leaves the wrong view mounted is a blank document. |
+| The content surface is covered, never unmounted | unmounting the canvas while the home screen is shown | it destroys the GPU surface, the offscreen pair and the atlases, and rebuilding them is the slowest thing the client does. Covering it and pausing the loop costs a paused frame. |
+| The card shows an icon, a name and a date | encrypted thumbnails on the cards | a preview of an end-to-end encrypted document is a whole pipeline: an offscreen render on save, an invalidation policy across peers, an extra encrypted object per document, and a decrypt of every image when the list loads. The gain over a tile and a name is cosmetic. |
+| The list shows no content statistics | counts of cells, words or pages on the cards | a modification time, a role and a member count are routing metadata the server already holds in plaintext and hands over for free. A word count or a cell count is content, so it must be computed on the client and stored encrypted -- a second coherent object to maintain, for a number. |
+| The kind tile is a monogram | waiting for the icon pipeline before shipping the list | the icon pipeline does not exist, and a monogram is a tile of text that needs nothing. It is a stand-in and it is legible about being one. |
 
 ---
 

@@ -19,17 +19,44 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, shared with
 `ambre-spec-server.md` and the four other documents of this layer.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `SRV-060` | An organization MUST NOT be left without an owner. | this spec section 3 | `ambre_server::routes::orgs::tests::integration::owner_cannot_demote_last_owner`, `::owner_cannot_remove_last_owner`, `::owner_can_leave_when_another_owner_remains`. The count is taken inside the same transaction as the change, so two concurrent departures cannot both pass it | verified |
-| `SRV-061` | A caller MUST NOT grant an organization role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::orgs::tests::admin_cannot_grant_owner`, `::org_role_rank_ordering`; `routes::orgs::tests::integration::admin_cannot_escalate_via_add_member` | verified |
-| `SRV-071` | A caller MUST NOT change or remove an organization member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::orgs::tests::integration::admin_cannot_remove_owner`, `::update_member_role_rejects_invalid_role` | verified |
-| `SRV-062` | A declared quorum MUST NOT exceed the quorum the relay enforces. | audit `N1`; this spec section 3 | `ambre_server::routes::orgs::tests::shamir_threshold_above_1_rejected_until_reconstruction_lands`, `::shamir_threshold_1_accepted`, `::shamir_out_of_range_rejected` | verified |
-| `SRV-063` | Only an owner MUST be able to release a member's escrowed key. | this spec section 3; `SRV-062` | `ambre_server::routes::orgs::tests::integration::recovery_requires_auth` covers the caller with no session. Nothing drives an administrator or an ordinary member against the route, which is the refusal that matters while the quorum is one | unverified |
-| `SRV-064` | Every release of an escrowed key MUST be recorded. | this spec section 3 | none. The release writes one row naming the organization, the subject, the caller and the instant, before it answers; no test reads that row back, and nothing refuses a release whose record failed to write | unverified |
-| `SRV-065` | A release MUST require the quorum the organization declared. | audit `N1`; this spec section 3 | not built -- lands with the `Split-secret organization recovery` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `SRV-066` | The relay MUST NOT be able to combine a set of shares into a secret. | `ZK-004`; `SRV-012` | crate graph: `deny.toml` refuses the secret-sharing crate in this process, and the continuous-integration `deny` job fails the manifest that declares it. It was declared and unused until audit `C4` removed it | verified |
-| `SRV-067` | A member's escrowed key MUST reach the relay already sealed to the organization. | `ZK-001`; this spec section 3 | none, and **no route deposits one**: the register carries the column and the release reads it, and nothing anywhere writes it, so the release can only ever answer that there is nothing to release -- section 5 | unverified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SRV-060` | `INV` | An organization MUST NOT be left without an owner. | this spec section 3 | `ambre_server::routes::orgs::tests::integration::owner_cannot_demote_last_owner`, `::owner_cannot_remove_last_owner`, `::owner_can_leave_when_another_owner_remains`. The count is taken inside the same transaction as the change, so two concurrent departures cannot both pass it | verified |
+| `SRV-066` | `INV` | The relay MUST NOT be able to combine a set of shares into a secret. | `ZK-004`; `SRV-012` | crate graph: `deny.toml` refuses the secret-sharing crate in this process, and the continuous-integration `deny` job fails the manifest that declares it. It was declared and unused until audit `C4` removed it | verified |
+| `SRV-067` | `INV` | A member's escrowed key MUST reach the relay already sealed to the organization. | `ZK-001`; this spec section 3 | none, and **no route deposits one**: the register carries the column and the release reads it, and nothing anywhere writes it, so the release can only ever answer that there is nothing to release -- section 5 | unverified |
+
+### 1.2 Create an organization
+
+The caller supplies a name, a public key and the quorum it wants its escrow to require.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SRV-062` | `FAIL` | A declared quorum MUST NOT exceed the quorum the relay enforces. | audit `N1`; this spec section 3 | `ambre_server::routes::orgs::tests::shamir_threshold_above_1_rejected_until_reconstruction_lands`, `::shamir_threshold_1_accepted`, `::shamir_out_of_range_rejected`: the three read the refusal, the one value accepted and the range | verified |
+
+### 1.3 Change who is in the organization
+
+An owner or an administrator adds a member, changes a role, or removes someone. Every clamp is on
+the caller's own rank.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SRV-061` | `FAIL` | A caller MUST NOT grant an organization role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::orgs::tests::admin_cannot_grant_owner`, `::org_role_rank_ordering`; `routes::orgs::tests::integration::admin_cannot_escalate_via_add_member` | verified |
+| `SRV-071` | `FAIL` | A caller MUST NOT remove an organization member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::orgs::tests::integration::admin_cannot_remove_owner`: an administrator asking for an owner's removal is refused | verified |
+| `SRV-076` | `FAIL` | A caller MUST NOT change the role of an organization member ranked above it. | audit `N2`; this spec section 3 | none. `::update_member_role_rejects_invalid_role` was cited for this and asserts something else: an unknown role name is a clean refusal, and a valid change by an owner succeeds. Nothing drives an administrator at an owner's role | unverified |
+
+### 1.4 Release an escrowed key
+
+An owner asks for a departed member's sealed seed. Nothing is reconstructed on the relay: it hands
+over an opaque blob.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SRV-064` | `POST` | Every release of an escrowed key MUST be recorded. | this spec section 3 | none. The release writes one row naming the organization, the subject, the caller and the instant, before it answers; no test reads that row back, and nothing refuses a release whose record failed to write | unverified |
+| `SRV-065` | `POST` | A release MUST require the quorum the organization declared. | audit `N1`; this spec section 3 | not built -- lands with the `Split-secret organization recovery` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `SRV-077` | `FRAME` | A release MUST NOT change the subject's key material. | this spec section 3, the escrow as designed; derived | none. The route reads the sealed column and writes only the record, so a release is a read of the escrow and never a re-issue of it. Nothing asserts the column is unchanged afterwards, and a release that rewrote it would take the member's own recovery away | unverified |
+| `SRV-063` | `FAIL` | Only an owner MUST be able to release a member's escrowed key. | this spec section 3; `SRV-062` | `ambre_server::routes::orgs::tests::integration::recovery_requires_auth` covers the caller with no session. Nothing drives an administrator or an ordinary member against the route, which is the refusal that matters while the quorum is one | unverified |
 
 * **Budget.** none. Nothing here is on a hot path: an organization is read when a person opens their
   settings, and a release is a rare deliberate act. No row of
@@ -39,10 +66,15 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   what the **relay** can. The escrowed key is sealed to the organization's own public key, so the
   relay stores an opaque blob and hands it to an owner who decrypts it elsewhere (`SRV-067`).
   `SRV-066` keeps the relay unable to combine anything, and the release is recorded (`SRV-064`).
-* **Verification.** 5 `verified`, 3 `unverified`, 1 `unimplemented`. What holds is the membership:
-  the last owner, the rank clamps, and the refusal of a quorum the relay cannot keep. What is loose
-  is the release itself -- who may ask for one, and whether the record survives -- and the deposit,
-  which no route performs at all.
+* **Verification.** 5 `verified`, 5 `unverified`, 1 `unimplemented`. What holds is the membership:
+  the last owner, the grant clamp, the removal clamp, and the refusal of a quorum the relay cannot
+  keep. What is loose is the release itself -- who may ask for one, and whether the record
+  survives -- and the deposit, which no route performs at all. The pass split `SRV-071`, which
+  clamped a change and a removal in one row: the removal is driven by a test and the change is not.
+  The second test the row cited asserts an unknown role name and a valid change by an owner, so it
+  never puts an administrator against a superior's role, and the covered half made the uncovered one
+  read as held. That half is `SRV-076`. `SRV-077` is the frame condition of a release: it reads the
+  escrow and records the act, and it must not re-issue what it read.
 
 ---
 
@@ -69,7 +101,7 @@ Two people in one organization. The membership is the shared state.
 | Role | May read the member list | May add or remove | May change a role | May release an escrowed key |
 |---|---|---|---|---|
 | owner | yes | yes | yes | yes (`SRV-063`) |
-| admin | yes | up to admin, and never above (`SRV-061`, `SRV-071`) | no | no |
+| admin | yes | up to admin, and never above (`SRV-061`, `SRV-071`, `SRV-076`) | no | no |
 | member | yes | no | no | no |
 
 **What the register holds.**
@@ -97,7 +129,7 @@ stores both sealed things and can combine neither (`SRV-066`).
 | the private key is split into shares | the column exists; no route computes a share |
 | a quorum combines its shares | a single owner asks, and the relay releases (`SRV-063`, `SRV-065`) |
 | the release is recorded | it is (`SRV-064`) |
-| the recovered seed is re-sealed for the member | outside the relay, by whoever asked |
+| the recovered seed is re-sealed for the member | outside the relay, by whoever asked (`SRV-077`) |
 
 **Why the declared quorum is clamped to one.** A stored quorum of three, with no reconstruction to
 enforce it, is a guarantee the register advertises and nothing keeps: an auditor reading the row
@@ -117,15 +149,15 @@ enforced the gate stops being a role and becomes the count of shares presented.
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The escrow seals a member's own seed to the organization, rather than storing a second copy of anything | the relay must not become the party that can read a document, so the recovery key has to be somebody else's key and not a server key. Sealing to the organization keeps the relay exactly as blind as it is elsewhere (`SRV-067`, `ZK-004`) | the relay holding a recovery key, which would end the zero-knowledge pillar in one field |
-| The private key is split, rather than held by one person | recovery is the capability to read an employee's documents, so a single holder is a single point of compromise and a single point of loss. A quorum makes the act visible to several people by construction | one recovery holder per organization |
-| A quorum the relay cannot enforce may not be declared | the register is what an auditor reads, and a number in it that nothing keeps is worse than an absent feature: it invites the trust it does not deserve. Refusing the declaration keeps the two in step (`SRV-062`) | storing the intended quorum and enforcing one, with a note somewhere |
-| Every release is recorded before it answers | the escrow is a designed exception to the pillar, so the only thing that makes it acceptable is that using it leaves a trace nobody involved can suppress (`SRV-064`) | releasing without a record, which makes the exception invisible |
-| The roles are ranked exactly as a document's are | two rank models is two places to get a clamp wrong, and the escalation the clamp exists to stop is the same one on both sides. The vocabulary differs because the objects differ; the comparison does not (`SRV-061`, `SRV-071`, and `ambre-spec-server.md`, `SRV-016`) | a capability check per route, which is where the escalation paths came from on the document side |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The escrow seals a member's own seed to the organization | the relay holding a recovery key | it would end the zero-knowledge pillar in one field: the relay would become the party that can read a document. The recovery key has to be somebody else's key and not a server key, and sealing to the organization keeps the relay exactly as blind as it is elsewhere (`SRV-067`, `ZK-004`) |
+| The private key is split, rather than held by one person | one recovery holder per organization | recovery is the capability to read an employee's documents, so a single holder is a single point of compromise and a single point of loss. A quorum makes the act visible to several people by construction |
+| A quorum the relay cannot enforce may not be declared | storing the intended quorum and enforcing one, with a note somewhere | the register is what an auditor reads, and a number in it that nothing keeps is worse than an absent feature: it invites the trust it does not deserve. Refusing the declaration keeps the two in step (`SRV-062`) |
+| Every release is recorded before it answers | releasing without a record | it makes the exception invisible. The escrow is a designed exception to the pillar, so the only thing that makes it acceptable is that using it leaves a trace nobody involved can suppress (`SRV-064`) |
+| The roles are ranked exactly as a document's are | a capability check per route | it is where the escalation paths came from on the document side. Two rank models is two places to get a clamp wrong, and the escalation the clamp exists to stop is the same one on both sides: the vocabulary differs because the objects differ, the comparison does not (`SRV-061`, `SRV-071`, and `ambre-spec-server.md`, `SRV-016`) |
 
 ---
 

@@ -31,26 +31,38 @@ here as a **cause**, never as a **rule**.
 
 ## 1. INVARIANTS
 
-Prefix `TOILE`, shared with the feature documents: one prefix, one numbering, no renumbering. `TOILE-003`
-and `TOILE-018` sit here because each states a property of the format, not of the engine. Grammar
-and status values are normative in `ambre-spec-template.md`.
+Prefix `TOILE`, shared with the feature documents: one prefix, one numbering, no renumbering.
+`TOILE-003` and `TOILE-018` sit here because each states a property of the format, not of the
+engine; `TOILE-227` and `TOILE-228` are the halves those two hid. `TOILE-229`, `TOILE-230` and
+`TOILE-231` state format rules sections 2, 3 and 7 already lean on and no row carried. Grammar and
+status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TOILE-003` | Element identity MUST be a minted, move-invariant `ElementId`; a positional or slot key MUST NOT be used. | this spec section 2 | `ambre_toile::logic::convergence_tests::copy_does_not_mutate_and_paste_remints_offset`, `::paste_reproduces_selection_on_a_separate_board` | verified |
-| `TOILE-018` | An element's whole style MUST be a single LWW register; concurrent restyles MUST NOT blend per attribute. | this spec section 3; architecture section 2.D | structural, and the construction is the proof: one `LoroValue::Binary` under the `style` key per element map (`logic/state/elements.rs`), decoded whole by `ElementStyle::from_bytes`, so no attribute has a register to be elected on its own. `ambre_toile::logic::convergence_tests::two_peers_converge` drives concurrent restyles (`RestyleNth`) and holds convergence; Trame's dedicated no-blend tests have no counterpart here | verified |
-| `TOILE-027` | A Toile document MUST carry `meta.schema_version`, and a document whose version exceeds the compiled `SCHEMA_VERSION` MUST be refused whole. | architecture section 2.D; this spec section 7 | not built -- lands with `ARCH P8` | unimplemented |
-| `TOILE-028` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | not built -- lands with `ARCH P8` | unimplemented |
-| `TOILE-029` | A container under a fixed key MUST be created once, with its parent; it MUST NOT be created by the first peer that writes into it. | this spec section 5 | none, and **the rule fails today** for `presentation/order` and `presentation/config`: `order_list_or_seed` creates both on the first `SetSlideOrder`, so two peers building the deck at the same moment mint rival lists and Loro keeps one. A container under a minted key (`elements/{id}`, `comments/{id}`) is out of reach of the race, and a `media/{hash}` entry loses nothing to it: the two rival maps carry the same bytes. No test drives the concurrent seed | unverified |
-| `TOILE-030` | A sticky or text body MUST converge character by character; it MUST NOT be a register two authors race for whole. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 3` | none, and **the rule fails today** for a sticky and a text element: the body is a flat String under the element's `text` key, so one of two authors typing in the same note loses their sentence. The two `LoroText` bodies of `ambre-toile` are a frame's `notes` and a comment message | unverified |
-
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-003` | INV | Element identity MUST be a minted `ElementId` carried as a value; a positional or slot key MUST NOT be used. | this spec section 2 | structural, and the construction is the proof: `ElementId::mint` renders the document `PeerID` and a per-session counter (`crates/ambre-bus/src/app/toile.rs`), and every reference -- a connector endpoint, a `children` entry, a `layers` entry, a reaction key -- carries that string as a value, so no position is a key. `ambre_toile::logic::convergence_tests::copy_does_not_mutate_and_paste_remints_offset` asserts a pasted element draws a fresh id and `::paste_reproduces_selection_on_a_separate_board` carries the minting across boards; neither walks a move, which is `TOILE-227` | verified |
+| `TOILE-227` | INV | A reference to an element MUST still resolve after a move, a reorder and a regroup. | this spec section 2; this spec section 6 | `ambre_toile::logic::convergence_tests::move_translates_bounds` resolves the id after a translate; `::reorder_to_back_moves_node` reads the `layers` order back after a `mov`, which is the call section 6 rejects the Loro slot id for; `::group_unions_bounds_and_sits_below_members` resolves the members after they are regrouped | verified |
+| `TOILE-229` | INV | A composite key MUST re-read as the pair it joins: a `layers` entry as tag and id, a reaction key as target and user. | this spec section 2 | structural, and the alphabets are the proof: an id is hex and `_`, a `UserId` is a hyphenated UUID, so no half can carry the `:` or the `/` the key splits on. `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` walks the `NodeId` codec both ways, and `::two_peers_converge` compares the reaction tally of two peers, which is read by splitting the composite key | verified |
+| `TOILE-231` | INV | Every id in the document MUST render at the fixed width `mint` produces: 25 characters for an id, 27 for a `layers` entry. | this spec section 2; this spec section 7 | none. The width is a habit of the minting path, not a property of the type: `ElementId` is a public tuple over `String` and `NodeId::decode` rebuilds one from whatever follows `E:`, so any string entering as an id is an id. Nothing asserts either number -- `crates/ambre-bus/src/app/toile.rs` carries no test at all -- and the size line of section 7 counts on both | unverified |
+| `TOILE-018` | INV | An element's whole style MUST be a single LWW register. | this spec section 3; architecture section 2.D | structural, and the construction is the proof: one `LoroValue::Binary` under the `style` key per element map (`logic/state/elements.rs`), decoded whole by `ElementStyle::from_bytes`, so no attribute has a register to be elected on its own | verified |
+| `TOILE-228` | CONC | Two concurrent restyles of one element MUST converge on the whole style one of the two wrote, never a per-attribute blend. | this spec section 3; architecture section 2.D | `ambre_toile::logic::convergence_tests::two_peers_converge` (proptest, 48 cases) interleaves restyles of the same element across two peers and compares the full rendered viewport, so a blend of two writers' attributes diverges. Trame's dedicated no-blend tests have no counterpart here | verified |
+| `TOILE-230` | INV | An unset property MUST be the absence of its key; a container MUST NOT carry a "cleared" marker. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` clears a frame's auto-layout and asserts the read is `None` with the key gone, and that the clear of an already-absent key broadcasts nothing -- a marker would make both assertions fail | verified |
+| `TOILE-027` | INV | A Toile document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7 | not built -- lands with `ARCH P8` | unimplemented |
+| `TOILE-028` | INV | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | not built -- lands with `ARCH P8` | unimplemented |
+| `TOILE-029` | INV | A container under a fixed key MUST be created once, with its parent; it MUST NOT be created by the first peer that writes into it. | this spec section 5 | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` holds the half that obeys: a frame's `notes` is seeded at frame birth (`logic/state/elements.rs`), and two concurrent first edits both survive. **The rule fails today** for `presentation/order` and `presentation/config`: `order_list_or_seed` creates both on the first `SetSlideOrder`, so two peers building the deck at the same moment mint rival lists and Loro keeps one. A container under a minted key (`elements/{id}`, `comments/{id}`) is out of reach of the race, and a `media/{hash}` entry loses nothing to it: the two rival maps carry the same bytes | unverified |
+| `TOILE-030` | CONC | A sticky or text body MUST converge character by character; it MUST NOT be a register two authors race for whole. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 3` | none, and **the rule fails today** for a sticky and a text element: the body is a flat String under the element's `text` key, so one of two authors typing in the same note loses their sentence. The two `LoroText` bodies of `ambre-toile` are a frame's `notes` and a comment message | unverified |
 * **Budget.** none: a format has no operation to budget. What loading a board costs is the remote
   change row of `ambre-spec-budgets.md section 1`, and leg 4 of `ambre-spec-budgets.md section 4`.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and the media entry holds a content hash, never the pixels
   (`features/ambre-spec-toile-media.md section 3`).
-* **Verification.** 2 `verified`, 2 `unverified`, 2 `unimplemented`. `TOILE-029` and `TOILE-030`
-  are the gaps, and both are defects rather than blind spots: each names the code that breaks it.
+* **Verification.** 6 `verified`, 3 `unverified`, 2 `unimplemented`. Two carried-over cells said
+  something the tests do not: `TOILE-003` credited two paste tests with move-invariance, which they
+  never walk, and `TOILE-029` claimed no test drives the concurrent seed when one holds the half
+  that is seeded eagerly. Three rules were already load-bearing and unwritten -- a composite key
+  re-reads as its pair, an absent key is the value, an id is fixed width -- and the last of them is
+  the one gap this pass opened: section 7 counts 25 bytes an id that no type constrains.
+  `TOILE-029` and `TOILE-030` remain defects rather than blind spots: each names the code that
+  breaks it.
 
 ---
 
@@ -68,7 +80,7 @@ One identity type serves elements, connectors, frames and comment threads.
 * `crates/ambre-bus/src/app/toile.rs` holds the two id types and the `NodeId` codec.
 
 Both the id shape and the two composite keys are decisions, with their rejected alternatives in
-section 6.
+section 6. The width is `TOILE-231`, the two splits are `TOILE-229`.
 
 ---
 
@@ -141,9 +153,9 @@ lock and the style, and reads the box from the derived cache.
 | `arrow_start`, `arrow_end` | `bool` | the two end caps | built |
 | `style` | Binary | `postcard(ElementStyle)` | design |
 
-**Absence is a value.** No `link` key means no hyperlink; no `autolayout` key means free
-positioning; an empty `presentation` map means no deck; no `reactions` key under a target prefix
-means no reaction. No container carries a "cleared" marker.
+**Absence is a value** (`TOILE-230`). No `link` key means no hyperlink; no `autolayout` key means
+free positioning; an empty `presentation` map means no deck; no `reactions` key under a target
+prefix means no reaction. No container carries a "cleared" marker.
 
 ---
 
@@ -204,22 +216,23 @@ Only where a schema decision needs a reason. 40 words each.
 
 ---
 
-## 6. SCHEMA DECISIONS
+## 6. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| A minted `ElementId` carried as the map key, and as the value of every reference to it | An element is freely moved, reordered and regrouped, and every reference -- a connector endpoint, a frame child list, a `layers` entry, a reaction key -- must keep resolving. A minted id is invariant under all four | (a) a positional or slot-derived key -- invalidated by every reorder, which is the whole gesture the board exists for; (b) the Loro slot id (`ListItemId`) -- `LoroMovableList::mov` **reassigns the moved element's op id**, so every reference keyed by that slot is orphaned on the first reorder, the same call Trame reversed for its rows (`ambre-spec-trame-schema.md section 6`) |
-| `{peer:016x}_{counter:08x}`, fixed width | Two peers minting at the same moment draw a distinct `peer`, so identity needs no coordination and both creations survive | a document-global monotonic counter -- one LWW collision per concurrent create, on a board where concurrent create is the normal case |
-| One binary register for a whole element style | LWW on one blob converges every peer to one writer's whole style | one register per attribute. On a blind relay there is no cross-register atomicity, so a fill update racing a stroke update leaves a half-applied style. This is the cross-app pattern of `architecture section 2.D`, which Trame's `cellstyle_{sheet}` also follows |
-| `locked` and `link` outside `ElementStyle` | A lock is a lifecycle flag and a link is navigation; neither is a visual attribute, and neither may race with a restyle on the single style register | folding both into `ElementStyle` -- one register, three unrelated concerns, and a restyle silently reverting a lock |
-| A frame is an ordinary element | One lifecycle for every node, and one `layers` list. Frame-specific content is three payload fields, not a second entity | a parallel `frames` map -- a duplicated move, resize, delete and reorder surface, and paint order split over two structures |
-| A group is a frame without chrome | The membership machinery is the frame's, so grouping costs one element type and no new container. Its bounds are the derived union of its members | an independent `groups` container with its own membership list -- a third lifecycle, and two rules to keep in step |
-| `layers` holds a tagged string, not a sub-map | The list stays flat and order-preserving, and a `mov` is one operation on one element | a `LoroMap` per entry -- a container per z-order slot, and a reorder that touches two structures |
-| A flat `"{target_id}/{user_id}"` key for a reaction | The `reactions` root always exists, so concurrent inserts under distinct composite keys all converge. Splitting on the first `/` recovers the target | a nested sub-map per target -- created lazily by the first reactor, so two peers reacting on a fresh target mint rival containers and Loro drops one |
-| Keyed by `UserId`, never `PeerID` | A reaction is a per-user decision that must survive a reload, a key rotation and a second device. `PeerID` is per session, so one user on two devices would vote twice | keying by `PeerID` -- a double-counted tally, and a vote no later session can remove |
-| Raw stroke samples only, never the smoothed curve | Smoothing is a pure function of the samples, so replicating it costs bandwidth and can disagree with a peer's own render | storing the smoothed polyline beside the samples |
-| A nested Ambre document is a reference, never inlined | The child keeps its own `DocumentId`, `DocumentKey` and `LoroDoc`, so the relay sees no embedding table and the child's access rules stay the child's | inlining the child's content into this board -- one key for two documents, and a viewer of the board reading a document they were never granted |
-| No `styles` dictionary | A board holds far fewer distinct styles than a spreadsheet holds cells, and the deduplication is unmeasured | a shared style dictionary with an `s` indirection -- a lookup paid before its benchmark |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| A minted `ElementId` carried as the map key, and as the value of every reference to it | a positional or slot-derived key | every reorder invalidates it, and a reorder is the whole gesture the board exists for. A minted id is invariant under a move, a reorder, a regroup and a delete, so a connector endpoint, a frame child list, a `layers` entry and a reaction key all keep resolving |
+| A minted `ElementId` carried as the map key, and as the value of every reference to it | the Loro slot id (`ListItemId`) | `LoroMovableList::mov` reassigns the moved element's op id, so every reference keyed by that slot is orphaned on the first reorder. It is the same call Trame reversed for its rows (`ambre-spec-trame-schema.md section 6`) |
+| `{peer:016x}_{counter:08x}`, fixed width | a document-global monotonic counter | it costs one LWW collision per concurrent create, on a board where concurrent create is the normal case. Two peers minting at the same moment draw a distinct `peer`, so identity needs no coordination and both creations survive |
+| One binary register for a whole element style | one register per attribute | on a blind relay there is no cross-register atomicity, so a fill update racing a stroke update leaves a half-applied style. LWW on one blob converges every peer to one writer's whole style, which is the cross-app pattern of `architecture section 2.D` that Trame's `cellstyle_{sheet}` also follows |
+| `locked` and `link` outside `ElementStyle` | folding both into `ElementStyle` | it puts three unrelated concerns on one register, and a restyle then silently reverts a lock. A lock is a lifecycle flag and a link is navigation; neither is a visual attribute |
+| A frame is an ordinary element | a parallel `frames` map | it duplicates the move, resize, delete and reorder surface, and splits paint order over two structures. As an element there is one lifecycle for every node and one `layers` list, and frame-specific content is three payload fields |
+| A group is a frame without chrome | an independent `groups` container with its own membership list | it is a third lifecycle, and two membership rules to keep in step. Reusing the frame's machinery costs one element type and no new container, and the group's bounds are the derived union of its members |
+| `layers` holds a tagged string, not a sub-map | a `LoroMap` per entry | it is a container per z-order slot, and a reorder that touches two structures. A tagged string keeps the list flat and order-preserving, and a `mov` is one operation on one element |
+| A flat `"{target_id}/{user_id}"` key for a reaction | a nested sub-map per target | it is created lazily by the first reactor, so two peers reacting on a fresh target mint rival containers and Loro drops one. The `reactions` root always exists, so concurrent inserts under distinct composite keys all converge, and splitting on the first `/` recovers the target |
+| Keyed by `UserId`, never `PeerID` | keying by `PeerID` | it double-counts the tally and leaves a vote no later session can remove. `PeerID` is per session, so one user on two devices votes twice, while a reaction must survive a reload, a key rotation and a second device |
+| Raw stroke samples only, never the smoothed curve | storing the smoothed polyline beside the samples | smoothing is a pure function of the samples, so replicating it costs bandwidth and can disagree with a peer's own render |
+| A nested Ambre document is a reference, never inlined | inlining the child's content into this board | it is one key for two documents, and a viewer of the board reads a document they were never granted. As a reference the child keeps its own `DocumentId`, `DocumentKey` and `LoroDoc`, the relay sees no embedding table, and the child's access rules stay the child's |
+| No `styles` dictionary | a shared style dictionary with an `s` indirection | it is a lookup paid before its benchmark. A board holds far fewer distinct styles than a spreadsheet holds cells, and the deduplication is unmeasured |
 
 ---
 
@@ -232,7 +245,7 @@ Only where a schema decision needs a reason. 40 words each.
 | Migration | the chain lives in `ambre-toile`; the foundation owns the protocol, never the semantics | architecture section 2.D |
 | Bump | a key or layout change raises `SCHEMA_VERSION` and freezes one named fixture in the same commit | `TOILE-028`; `ambre-spec-fixtures.md section 2` |
 | Unknown field | `postcard` decodes a blob whole and tolerates none, so a stale `ElementStyle` falls back to `Default` -- a silent downgrade, which is what `TOILE-027` exists to stop | architecture section 2.D |
-| Size, ids | an id is 25 bytes and a `layers` entry 27; a 50 000-element board is 1.3 MB of ids alone | this spec section 2 |
+| Size, ids | an id is 25 bytes and a `layers` entry 27; a 50 000-element board is 1.3 MB of ids alone | this spec section 2; `TOILE-231` |
 | Size, blobs | `media` carries a thumbnail inline and the full blob out of band; the board never holds pixels | `features/ambre-spec-toile-media.md section 3` |
 | Deltas | a remote delta carries no version and applies blind; mixed-version live editing is bounded, not solved | architecture section 2.D |
 
@@ -250,3 +263,4 @@ Only where a schema decision needs a reason. 40 words each.
 | That one command is one undo item | the engine; `TOILE-014` |
 | How a hash becomes pixels | `features/ambre-spec-toile-media.md section 3` |
 | Who may write, and what the server enforces | architecture section 2.D; `ambre-spec-server.md` |
+| That a document newer than the binary is refused whole | `ambre-spec-schema-version.md`; `SCHEMA-008` |

@@ -21,34 +21,75 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CHROME`,
 `ambre-spec-launcher.md` and `ambre-spec-key-verification.md`: one numbering over the six documents
 the DOM side produces.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `CHROME-001` | The chrome MUST NOT draw content nor hit-test it: it invokes a command and reads state from signals. | `ambre-spec-ui.md section 2` | crate graph: `ambre-chrome` declares neither `wgpu` nor `ambre-draw`, so no drawing surface is reachable from it | verified |
-| `CHROME-002` | The shared toolkit MUST NOT depend on an application crate. | this spec section 2 | crate graph: the manifest names `ambre-commands`, `leptos`, the two icon crates and the DOM bindings, and no application | verified |
-| `CHROME-003` | A floating menu MUST stay inside the viewport: it flips at an edge, and pins to the origin when it is larger than the viewport. | this spec section 2 | `ambre_chrome::context_menu::tests::no_overflow_keeps_click_point`, `::right_overflow_flips_horizontally`, `::bottom_overflow_flips_vertically`, `::corner_overflow_flips_both_axes`, `::menu_larger_than_viewport_pins_to_origin` | verified |
-| `CHROME-004` | Every popover and floating bar MUST take its placement, flip and keyboard model from one shell. | this spec section 2 | not built -- lands with `One floating-menu shell` (`ambre-roadmap.md` E8). Four shells exist: the shared menu, Trame's filter popover, Trame's find panel and Toile's selection toolbar | unimplemented |
-| `CHROME-005` | A key event MUST resolve to a modelled key or be rejected; an unmodelled key MUST NOT reach a command. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::command::tests::named_keys_map`, `::function_keys_in_range`, `::function_keys_out_of_range_rejected`, `::single_printable_char_maps`, `::unmodelled_keys_rejected` | verified |
-| `CHROME-008` | The command palette MUST search every command the active application declares, not the subset some menu happens to show. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::palette::tests::an_empty_query_lists_every_declared_command`, `::a_query_matches_any_case_and_any_position`, `::a_query_that_answers_nothing_lists_nothing`, `::rows_keep_the_declaration_order`; the DOM belt `ambre_chrome::chrome_ui::palette_lists_every_declared_command` mounts a table holding a command no menu shows and counts the rendered rows | verified |
-| `CHROME-009` | The content surface MUST be a cell of the chrome layout, so it is sized by the layout and never by the viewport. | this spec section 2 | `ambre_chrome::chrome_ui::app_shell_owns_the_named_canvas_cell` -- wasm tier, real `document` | verified |
-| `CHROME-010` | A control MUST show the state the Logic thread reported: it MUST NOT set its own toggle from the click that raised it. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::chrome_ui::command_states_defaults`, `::command_states_single_writer_propagates`, `::command_states_unknown_id_is_noop` prove the store has one writer and that a view only subscribes. Nothing refuses a control that writes the signal itself | verified |
-| `CHROME-011` | A modal MUST suspend the frame loop while it is open, and resume it on close. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none. Three modals pass a pause callback and a resume callback, and the launcher's own confirmation dialog passes neither. Nothing joins opening a modal to the state of the loop | unverified |
-| `CHROME-012` | A modal's open state MUST follow the element in both directions: Escape and a click on the backdrop MUST close it. | this spec section 2 | none. One effect drives the element from the signal and two handlers drive the signal from the element. A regression leaves a closed modal whose signal still reads open, which blocks the next open | unverified |
-| `CHROME-013` | A shared formatting control MUST report a change and MUST NOT apply it. | this spec section 2 | `ambre_chrome::chrome_ui::format_toggle_reflects_pressed_and_reports_clicks`, `::font_size_select_lists_presets_plus_auto_entry` | verified |
-| `CHROME-014` | A status-bar chip MUST read its value live from a signal, and MUST start collapsed. | this spec section 2 | `ambre_chrome::chrome_ui::zoom_chip_renders_readout_from_signal_and_starts_collapsed`, `::perf_chip_renders_fps_from_signal_and_starts_collapsed` | verified |
-| `CHROME-015` | A control driven by a drag MUST coalesce the burst into one command. | this spec section 2 | none. A debouncer reschedules its timer on each call, and each caller decides whether to use it. Nothing refuses a slider wired straight to a command, which is one command per pixel of travel | unverified |
+### 1.1 The state
 
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CHROME-001` | `INV` | The chrome MUST NOT draw content nor hit-test it. | `ambre-spec-ui.md section 2` (`UI-THREAD-001`, `UI-THREAD-050`) | crate graph: `ambre-chrome` declares neither `wgpu` nor `ambre-draw`, so no drawing surface is reachable from it. What it does instead -- invoke a command, read a signal -- is `UI-THREAD-050`, and is not restated here | verified |
+| `CHROME-002` | `INV` | The shared toolkit MUST NOT depend on an application crate. | this spec section 2 | crate graph: the manifest names `ambre-commands`, `leptos`, the two icon crates and the DOM bindings, and no application | verified |
+| `CHROME-009` | `INV` | The content surface MUST be a cell of the chrome layout, so it is sized by the layout and never by the viewport. | this spec section 2 | `ambre_chrome::chrome_ui::app_shell_owns_the_named_canvas_cell` -- wasm tier, real `document` | verified |
+| `CHROME-004` | `INV` | Every popover and floating bar MUST take its placement, flip and keyboard model from one shell. | this spec section 2 | not built -- lands with `One floating-menu shell` (`ambre-roadmap.md` E8). Four shells exist: the shared menu, Trame's filter popover, Trame's find panel and Toile's selection toolbar | unimplemented |
+| `CHROME-008` | `INV` | The command palette MUST search every command the active application declares, not the subset some menu happens to show. | this spec section 2; `ambre-spec-commands.md` | the filter is held: `ambre_chrome::palette::tests::an_empty_query_lists_every_declared_command`, `::a_query_matches_any_case_and_any_position`, `::a_query_that_answers_nothing_lists_nothing`, `::rows_keep_the_declaration_order`, and the DOM belt `ambre_chrome::chrome_ui::palette_lists_every_declared_command`, all over a table the test declares. What the rule is about is the feed, and nothing reads it: `crates/ambre-app/src/shell/app_root.rs` passes the application's whole table today, and passing a menu's subset instead would leave every one of those assertions green | unverified |
+
+### 1.2 A floating menu is placed
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CHROME-003` | `POST` | A floating menu MUST stay inside the viewport: it flips at an edge, and pins to the origin when it is larger than the viewport. | this spec section 2 | `ambre_chrome::context_menu::tests::right_overflow_flips_horizontally`, `::bottom_overflow_flips_vertically` and `::corner_overflow_flips_both_axes` assert each flip; `::menu_larger_than_viewport_pins_to_origin` asserts the clamp that would otherwise place it off-screen. The arithmetic is a free function, which is why it is testable at all | verified |
+| `CHROME-085` | `FRAME` | Placing a menu that already fits MUST NOT move it off the point it was raised from. | this spec section 2 | `ambre_chrome::context_menu::tests::no_overflow_keeps_click_point` asserts the placement returns the click point unchanged. It is the row that keeps the flip from becoming an unconditional offset | verified |
+
+### 1.3 A key event is resolved
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CHROME-005` | `FAIL` | A key event MUST resolve to a modelled key or be rejected; an unmodelled key MUST NOT reach a command. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::command::tests::named_keys_map`, `::function_keys_in_range`, `::single_printable_char_maps` assert what resolves; `::function_keys_out_of_range_rejected` and `::unmodelled_keys_rejected` assert the refusal, which is the half that keeps an unknown key from binding a command by accident | verified |
+
+### 1.4 A control renders, and reports a click
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CHROME-010` | `POST` | A control MUST show the state the Logic thread reported. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::chrome_ui::command_states_defaults`, `::command_states_single_writer_propagates`, `::command_states_unknown_id_is_noop` assert one writer reaches the right signal and leaves its neighbours alone | verified |
+| `CHROME-013` | `POST` | A shared formatting control MUST report a change. | this spec section 2 | `ambre_chrome::chrome_ui::format_toggle_reflects_pressed_and_reports_clicks` dispatches a real click and asserts the callback fired once; `::font_size_select_lists_presets_plus_auto_entry` asserts the same shape for a select | verified |
+| `CHROME-014` | `POST` | A status-bar chip MUST start collapsed. | this spec section 2 | `ambre_chrome::chrome_ui::zoom_chip_renders_readout_from_signal_and_starts_collapsed`, `::perf_chip_renders_fps_from_signal_and_starts_collapsed` assert the menu element is absent on mount | verified |
+| `CHROME-086` | `POST` | A control MUST follow its signal when the value changes, not only when it mounts. | this spec section 2 | none. Both chip tests read the value off the first synchronous render and say so in their own comments: a re-render lands on a later microtask, so a post-change query would race and none is written. What is asserted is the mount, and the live half is the one a stale readout breaks | unverified |
+| `CHROME-087` | `FRAME` | A control MUST NOT change the state it displays: the click leaves as a report and the value comes back from the Logic thread. | this spec section 2; `ambre-spec-commands.md` | none. The toggle test sets the pressed signal itself before dispatching the click, so nothing would notice a control that also wrote it; the store has one writer by construction and no test drives a second. This is the row that keeps a toolbar from showing a change the document refused | unverified |
+
+### 1.5 A modal opens, and closes
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CHROME-011` | `POST` | A modal MUST suspend the frame loop while it is open. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none. Three modals pass a pause callback and the launcher's own confirmation dialog passes none. Nothing joins opening a modal to the state of the loop | unverified |
+| `CHROME-012` | `POST` | A modal's open signal MUST drive the element: setting it open MUST show the element, and clearing it MUST hide it. | this spec section 2 | none. One effect drives the element from the signal, and no test mounts a modal to watch it | unverified |
+| `CHROME-088` | `POST` | Escape and a click on the backdrop MUST close a modal, and MUST clear its signal. | this spec section 2 | none. Two handlers drive the signal from the element. A regression leaves a closed modal whose signal still reads open, which blocks the next open -- the failure is not the dismissal, it is the one after | unverified |
+| `CHROME-089` | `FRAME` | Closing a modal MUST NOT leave the frame loop suspended. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none, and this is the dangerous half: a missing pause costs a few frames of work, and a missing resume leaves the surface frozen with the interface answering normally around it. The resume callback is passed by the same three modals that pass the pause, and by no one else | unverified |
+
+### 1.6 A drag drives a control
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CHROME-015` | `POST` | A control driven by a drag MUST coalesce the burst into one command. | this spec section 2 | none. A debouncer reschedules its timer on each call, and each caller decides whether to use it. Nothing refuses a slider wired straight to a command, which is one command per pixel of travel | unverified |
+| `CHROME-090` | `FRAME` | Coalescing a burst MUST NOT drop its last value. | this spec section 2 | none. The debouncer keeps the most recent call and fires it when the timer runs out, so the rule is held by the reschedule being written that way; nothing drives a burst that ends before the delay. Dropping the tail leaves the control showing one value and the document holding another | unverified |
 * **Budget.** none: the chrome renders in the DOM, off the frame loop, and
   `ambre-spec-budgets.md` budgets no chrome operation. What the chrome does spend on
   the frame is the pause of `CHROME-011`, which saves rather than costs.
-* **Boundary.** none: `UI-THREAD-004` bans a network, crypto and persistence path on the UI thread,
-  and the toolkit adds no exception. Its manifest names no transport and no crypto crate, which is
-  the same crate-graph fact `CHROME-001` and `CHROME-002` are read off.
-* **Verification.** 9 `verified`, 3 `unverified`, 1 `unimplemented`. The verified half is either a
+* **Boundary.** none: `UI-THREAD-004` and `UI-THREAD-049` ban a network, crypto and persistence
+  path on the UI thread, and the toolkit adds no exception. Its manifest names no transport and no
+  crypto crate, which is the same crate-graph fact `CHROME-001` and `CHROME-002` are read off.
+* **Verification.** 9 `verified`, 9 `unverified`, 1 `unimplemented`. The verified rows are either a
   crate-graph fact, placement arithmetic the code extracted out of the DOM, or a component mounted
-  in a real headless document. The unverified three are one shape three times: a behaviour that
-  spans two owners -- a modal and the frame loop, a control and its command -- with no seam either
-  side can assert alone.
-
+  in a real headless document -- and every one of them asserts a first render. Three conjunctions
+  came apart and each hid the same shape: a rule that reads as one behaviour is a claim about the
+  mount and a claim about what happens afterwards, and only the mount is ever driven.
+  `CHROME-010` and `CHROME-013` each bundled what a control shows with a ban on it showing anything
+  of its own; the ban is one row now, `CHROME-087`, and nothing holds it -- the toggle test sets the
+  pressed signal itself before it clicks, so a control that also wrote it would pass. `CHROME-014`
+  claimed a chip reads its value **live**, and both chip tests state in their own comments that they
+  assert the synchronous first render because a re-render lands on a later microtask: the live half
+  is `CHROME-086` and is held by nothing. `CHROME-011` and `CHROME-012` each bundled two directions,
+  and in both cases the second is the dangerous one -- a missing resume freezes the surface while
+  the interface answers normally, and a signal left open blocks the next open rather than the
+  dismissal you just made. `CHROME-085` and `CHROME-090` are the two frame conditions the document
+  lacked: a menu that fits is not moved, and a coalesced burst does not lose its tail.
 ---
 
 ## 2. MODEL
@@ -150,18 +191,19 @@ label narrows the list (`CHROME-008`). The palette is why every command carries 
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The chrome is DOM, and the content is not | a menu, a modal and a toolbar are what a browser is good at: focus, tab order, screen readers, text selection and input methods all come free and correct, and none of them is on a frame path. Recomposing a rasterized DOM layer beside a canvas costs the compositor nothing per frame, so the argument against it was never a performance one | a canvas widget framework, which is roughly two years of work to reach parity with an existing toolkit and still has to rebuild a hidden DOM tree for accessibility |
-| A modal is the native dialog element | the focus trap, the inertness of the rest of the page, Escape and the backdrop are four behaviours that are hard to get right and already correct in every browser. Reimplementing them buys a styling hook and costs four bugs | a component that traps focus and paints its own backdrop |
-| A menu is placed by arithmetic, not by the browser | anchor positioning is too recent to rely on across browsers, and the decision is two comparisons and a clamp. Keeping it a pure function is what makes it the one piece of floating-menu behaviour with a test | CSS anchor positioning, and a positioning library |
-| The toggle store has one writer | a control that flips itself on click is right until the command fails, is refused, or is undone from elsewhere -- and then it lies, silently, until something else repaints it. One writer means the interface can only show what the document actually holds | optimistic local state in each control, reconciled on the event |
-| The contextual bar, never a ribbon | a ribbon is dense, adapts badly to a narrow window and is hostile on a phone. One bar showing what the selection can do carries the same commands in less space, and a ribbon remains generable from the registry later as an option | an office-style ribbon as the default |
-| The shared toolkit carries only what two applications share | a component in the shared crate that one application uses is a dependency inversion with no payoff, and it is how a shared crate learns the name of an application. The line is the crate graph, which the compiler holds | every application's chrome in the shared crate |
-| A drag is debounced by the caller, not by the command | a slider and a text field want different quiet periods, and a command that debounced itself would have to guess one. The debouncer is a value a component keeps, which is why it is a rule about the caller and not about the command | debouncing inside the command dispatch |
-| The frame chip is shared and its panel is not | the frame rate reads the same everywhere and the timings behind it are per renderer, so the chip is one component and the panel is a slot. This is what stops each application inventing its own read-out | a per-application status bar built from scratch |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The chrome is DOM, and the content is not | a canvas widget framework | it is roughly two years of work to reach parity with an existing toolkit, and it still has to rebuild a hidden DOM tree for accessibility. A menu, a modal and a toolbar are what a browser is good at -- focus, tab order, screen readers, text selection and input methods all come free and correct, and none of them is on a frame path. Recomposing a rasterized DOM layer beside a canvas costs the compositor nothing per frame, so the argument for the canvas was never a performance one |
+| A modal is the native dialog element | a component that traps focus and paints its own backdrop | the focus trap, the inertness of the rest of the page, Escape and the backdrop are four behaviours that are hard to get right and already correct in every browser. Reimplementing them buys a styling hook and costs four bugs |
+| A menu is placed by arithmetic, not by the browser | CSS anchor positioning | it is too recent to rely on across browsers, for a decision that is two comparisons and a clamp |
+| A menu is placed by arithmetic, not by the browser | a positioning library | it takes a dependency for those same two comparisons, and it takes the placement out of a pure function -- which is what makes this the one piece of floating-menu behaviour with a test |
+| The toggle store has one writer | optimistic local state in each control, reconciled on the event | a control that flips itself on click is right until the command fails, is refused, or is undone from elsewhere -- and then it lies, silently, until something else repaints it. One writer means the interface can only show what the document actually holds |
+| The contextual bar, never a ribbon | an office-style ribbon as the default | a ribbon is dense, adapts badly to a narrow window and is hostile on a phone. One bar showing what the selection can do carries the same commands in less space, and a ribbon remains generable from the registry later as an option |
+| The shared toolkit carries only what two applications share | every application's chrome in the shared crate | a component in the shared crate that one application uses is a dependency inversion with no payoff, and it is how a shared crate learns the name of an application. The line is the crate graph, which the compiler holds |
+| A drag is debounced by the caller, not by the command | debouncing inside the command dispatch | a slider and a text field want different quiet periods, and a command that debounced itself would have to guess one. The debouncer is a value a component keeps, which is why the rule is about the caller and not about the command |
+| The frame chip is shared and its panel is not | a per-application status bar built from scratch | each application would invent its own read-out for a frame rate that reads the same everywhere. The timings behind it are per renderer, so the chip is one component and the panel is a slot |
 
 ---
 

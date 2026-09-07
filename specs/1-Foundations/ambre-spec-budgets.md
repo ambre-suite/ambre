@@ -10,7 +10,7 @@
   hold a budget cites the row instead (`CANVAS-005`, `FIXTURE-007`). `Method` names the mechanism
   that measures the row, and "**none exists**" is the honest value.
 * **This file is a register, not a specification.** It states no rule of its own, so it declares no
-  invariant table: `ambre-spec-template.md section 4` holds what a file of this class owes.
+  contract table: `ambre-spec-template.md section 4` holds what a file of this class owes.
 
 ---
 
@@ -27,7 +27,7 @@
 | Snapshot compression 100 KB (ruzstd) | < 5 ms | -- | Sync | criterion |
 | Quarantine release, 100 updates | < 1 ms | -- | Sync | criterion -- **none exists** |
 | `doc.import()` Loro update (1 KB delta) | < 2 ms | -- | Logic | criterion |
-| Trame formula DAG recompute (10k cells) | < 50 ms | -- | Logic | custom benchmark |
+| Trame formula DAG recompute (10k cells) | < 50 ms | -- | Logic | custom benchmark -- **none exists** |
 | Scroll viewport response (P1, end-to-end) | < 15 ms | -- | Logic -> UI | benchmark e2e |
 | Trame CSV import (10k lines) | < 200 ms | -- | Logic | criterion -- **none exists** |
 | Trame CSV export (10k lines) | < 100 ms | -- | Logic | criterion -- **none exists** |

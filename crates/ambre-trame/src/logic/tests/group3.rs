@@ -207,6 +207,80 @@ fn concurrent_value_under_merge_is_masked_then_restored() {
     );
 }
 
+/// Two concurrent merges that overlap resolve to one block, and the survivor
+/// is the merge whose master key sorts first -- not the last writer, and not
+/// the local one. The winner is read from the keys, so the assertion holds the
+/// rule and not the positions this run happened to mint (`TRAME-144`).
+#[test]
+fn overlapping_merges_resolve_to_the_lowest_master_key() {
+    // Shared base so both peers address rows and columns 0..2 by the *same*
+    // stable ids. Seeding then clearing C3 materializes them without leaving a
+    // value behind.
+    let mut base = TrameState::new();
+    base.handle_command(TrameCommand::SetCellText {
+        row: 2,
+        col: 2,
+        text: "seed".to_owned(),
+    });
+    base.handle_command(TrameCommand::SetCellText {
+        row: 2,
+        col: 2,
+        text: String::new(),
+    });
+    let base_snap = base.export_snapshot();
+
+    let mut a = TrameState::new();
+    a.import_snapshot(&base_snap);
+    let mut b = TrameState::new();
+    b.import_snapshot(&base_snap);
+
+    // A merges A1:B2, B merges B2:C3 concurrently: they overlap at B2.
+    a.handle_command(TrameCommand::MergeCells {
+        row: 0,
+        col: 0,
+        row_end: 1,
+        col_end: 1,
+    });
+    b.handle_command(TrameCommand::MergeCells {
+        row: 1,
+        col: 1,
+        row_end: 2,
+        col_end: 2,
+    });
+    let (delta_a, delta_b) = (a.export_snapshot(), b.export_snapshot());
+    a.apply_remote(&delta_b);
+    b.apply_remote(&delta_a);
+
+    let master_key = |state: &TrameState, row: usize, col: usize| {
+        let (r, c) = state
+            .index
+            .resolve(row, col)
+            .expect("materialized by the base");
+        crate::model::cell_key(r, c)
+    };
+    let expected = if master_key(&a, 0, 0) < master_key(&a, 1, 1) {
+        ((0, 0), (1, 1))
+    } else {
+        ((1, 1), (2, 2))
+    };
+
+    assert_eq!(a.merges.len(), 1, "the overlap leaves one block, not two");
+    assert_eq!(a.merges, b.merges, "both peers reach the same layout");
+    assert_eq!(
+        a.merges.get(&expected.0).copied(),
+        Some(expected.1),
+        "the surviving block is the one whose master key sorts first"
+    );
+    // The formula feed reads the same resolution as the grid: one precedence,
+    // one answer, on the active sheet as on any other.
+    let sheet = a.active_sheet.clone();
+    assert_eq!(
+        a.masked_cells_for(&sheet, &a.index),
+        a.masked_cells,
+        "the engine masks exactly what the display masks"
+    );
+}
+
 /// A merge follows its cells across a structural insert: inserting a row
 /// above the merge shifts the master span down with it.
 #[test]
@@ -477,10 +551,10 @@ fn cross_sheet_formula_evaluates_end_to_end() {
 /// A masked cell (covered by a merge, non-empty -> concurrent conflict) is
 /// excluded from computation on *every* sheet, not only the displayed one
 /// (`trame-cell-merges`, `TRAME-020`).
-/// Regression for the view-dependent masking bug: masking was applied to the
-/// engine feed only at local index 0 (the active sheet), so a cross-sheet
-/// reference to a masked cell on a *non-active* sheet leaked the hidden value,
-/// making the formula result depend on which tab was shown.
+/// Regression for the view-dependent masking bug. The feed masked local index
+/// 0 alone -- the active sheet -- so a cross-sheet reference to a masked cell
+/// elsewhere leaked the hidden value. The formula result then depended on the
+/// tab in front of the user.
 #[test]
 fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
     // Shared base: Sheet2 exists with rows 0/1 materialized under stable ids

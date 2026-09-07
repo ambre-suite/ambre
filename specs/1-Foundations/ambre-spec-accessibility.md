@@ -19,27 +19,40 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The prefix is `CHROME`, shared with the
 other five documents of the DOM side.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `CHROME-006` | A toast MUST be announced to a screen reader without moving focus. | this spec section 2 | `ambre_chrome::chrome_ui::toast_host_is_an_aria_live_region`, `::toast_push_renders_message_with_kind_class` -- wasm tier, real `document` | verified |
-| `CHROME-022` | A control carrying no text MUST carry an accessible name, and a control with two states MUST report which one it is in. | this spec section 2 | `ambre_chrome::chrome_ui::format_toggle_reflects_pressed_and_reports_clicks`, `::font_size_select_lists_presets_plus_auto_entry`, `::zoom_chip_renders_readout_from_signal_and_starts_collapsed` | verified |
-| `CHROME-023` | The focused unit of drawn content MUST be announced, in every application that draws content. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-009` | none, and **the rule fails today**: the mechanism is a live region in the shared crate and one application calls it. A board and a page announce nothing at all as the selection moves | unverified |
-| `CHROME-024` | The name the content announces MUST describe the kind of document the view holds. | this spec section 2 | none, and **the rule fails today**: the shared crate fixes the name and the role description at creation, naming a spreadsheet cell, so a board and a page announce themselves as one | unverified |
-| `CHROME-025` | The element that carries content focus MUST stay in the page's tab order, and MUST NOT be hidden from assistive technology. | this spec section 2; `ambre-spec-text-input.md` | none. The pipe is created focusable and is never marked hidden, which is what makes it the content's entry point as well as its keyboard. Nothing refuses the hidden marking that an invisible element invites | unverified |
-| `CHROME-026` | A menu MUST be fully operable from the keyboard: move, jump to an end, jump by first letter, choose, and dismiss. | this spec section 2 | none, and **the rule holds for one menu of two**: the shared menu implements all five, and the launcher's document-type menu carries the roles with no key handling at all. No test drives either | unverified |
-| `CHROME-027` | Closing a floating menu MUST return focus to what opened it. | this spec section 2; `ambre-spec-chrome.md`, `CHROME-004` | not built -- lands with `One floating-menu shell` (`ambre-roadmap.md` E8). Focus moves into the menu and nothing puts it back, so dismissal leaves a keyboard user on the page body | unimplemented |
-| `CHROME-028` | A modal MUST trap focus and MUST make the rest of the page inert. | this spec section 2 | none. Every modal in the suite is opened through the platform's own modal call, so the trap is the browser's rather than ours. Nothing refuses a panel styled as a modal and opened as an ordinary element | unverified |
-| `CHROME-029` | Drawn content MUST NOT be the only carrier of a state: a state the user must know MUST also reach the page. | this spec section 2 | not built -- lands with `CANVAS P2 -- frame quality` (`ambre-roadmap.md` E6). The selection, the active tool, the sync state and the presence of collaborators are drawn, and only the last two also exist as chrome | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CHROME-006` | `INV` | A toast MUST be announced to a screen reader. | this spec section 2 | `ambre_chrome::chrome_ui::toast_host_is_an_aria_live_region`: it reads the host's role and its politeness back off a real `document`, so a host that stopped being a live region fails | verified |
+| `CHROME-065` | `INV` | Announcing a toast MUST NOT move focus. | this spec section 2, the pattern table; this spec section 3, row 4 | none. The host is a polite live region, which is the mechanism that makes the rule true, and no test in the belt reads the focused element at all -- before or after a toast | unverified |
+| `CHROME-022` | `INV` | A control carrying no text MUST carry an accessible name. | this spec section 2 | `ambre_chrome::chrome_ui::format_toggle_reflects_pressed_and_reports_clicks`: its first assertion reads the accessible name off an icon-only toggle | verified |
+| `CHROME-066` | `INV` | A control with two states MUST report which one it is in. | this spec section 2 | none. The same test asserts only that an unpressed toggle carries no pressed state; it raises the signal and never reads the element again, because the re-render lands on a later microtask. A toggle that never reported pressed would pass | unverified |
+| `CHROME-069` | `INV` | A menu trigger MUST declare that it opens a menu. | this spec section 2, the pattern table | `ambre_chrome::chrome_ui::zoom_chip_renders_readout_from_signal_and_starts_collapsed`: it reads the trigger's popup declaration off the mounted button | verified |
+| `CHROME-070` | `INV` | A menu trigger MUST report whether it is open. | this spec section 2, the pattern table | none. The same test checks that the menu element is absent on mount, which is the DOM and not the declaration a screen reader reads. Nothing asserts the expanded state at either value | unverified |
+| `CHROME-023` | `OBS` | The focused unit of drawn content MUST be announced, in every application that draws content. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-009` | none, and **the rule fails today**: the mechanism is a live region in the shared crate and one application calls it. A board and a page announce nothing at all as the selection moves | unverified |
+| `CHROME-024` | `OBS` | The name the content announces MUST describe the kind of document the view holds. | this spec section 2 | none, and **the rule fails today**: the shared crate fixes the name and the role description at creation, naming a spreadsheet cell, so a board and a page announce themselves as one | unverified |
+| `CHROME-025` | `INV` | The element that carries content focus MUST stay in the page's tab order. | this spec section 2; `ambre-spec-text-input.md` | none. The pipe is created focusable, which is what makes it the content's entry point as well as its keyboard. Nothing refuses the change that would take it out of the order | unverified |
+| `CHROME-067` | `INV` | The element that carries content focus MUST NOT be hidden from assistive technology. | this spec section 2; `ambre-spec-text-input.md` | none. The pipe is never marked hidden, so the rule holds by absence. Nothing refuses the hidden marking that an element drawn as nothing invites, and `CHROME-059` is the style that invites it | unverified |
+| `CHROME-026` | `INV` | A menu MUST be fully operable from the keyboard: move, jump to an end, jump by first letter, choose, and dismiss. | this spec section 2 | none, and **the rule holds for one menu of two**: the shared menu implements all five, and the launcher's document-type menu carries the roles with no key handling at all. No test drives either | unverified |
+| `CHROME-027` | `INV` | Closing a floating menu MUST return focus to what opened it. | this spec section 2; `ambre-spec-chrome.md`, `CHROME-004` | not built -- lands with `One floating-menu shell` (`ambre-roadmap.md` E8). Focus moves into the menu and nothing puts it back, so dismissal leaves a keyboard user on the page body | unimplemented |
+| `CHROME-028` | `INV` | A modal MUST trap focus. | this spec section 2 | none. Every modal in the suite is opened through the platform's own modal call, so the trap is the browser's rather than ours. Nothing refuses a panel styled as a modal and opened as an ordinary element | unverified |
+| `CHROME-068` | `INV` | A modal MUST make the rest of the page inert. | this spec section 2 | none. Same call, same absence: the inertness comes with the platform's modal and nothing asserts that the element behind it stops taking a click or a Tab | unverified |
+| `CHROME-029` | `INV` | Drawn content MUST NOT be the only carrier of a state: a state the user must know MUST also reach the page. | this spec section 2 | not built -- lands with `CANVAS P2 -- frame quality` (`ambre-roadmap.md` E6). The selection, the active tool, the sync state and the presence of collaborators are drawn, and only the last two also exist as chrome | unimplemented |
 
 * **Budget.** none: an announcement is a text write into a hidden element, off the frame path, and
   `ambre-spec-budgets.md` budgets no chrome operation.
 * **Boundary.** none: an announcement carries what the user already sees on their own screen, into
   their own page. It reaches no relay and crosses no thread.
-* **Verification.** 2 `verified`, 5 `unverified`, 2 `unimplemented`. The two verified rules are the
-  two that live entirely inside a component a headless browser can mount. Everything else is a
-  property of the whole page with an assistive technology attached, and no tier drives one
-  (`ambre-spec-testing.md section 8`). Two of the five unverified rows are stated as failing, which
-  is the honest reading: the mechanism exists and the callers do not.
+* **Verification.** 3 `verified`, 10 `unverified`, 2 `unimplemented`. Every row is an `INV` or an
+  `OBS`: this document owns no gesture of its own -- the components belong to
+  `ambre-spec-chrome.md` and the announcement to the view that draws -- so it declares one table and
+  no operation. The three verified rules are the three a headless browser can mount and read an
+  attribute off. Everything else is a property of the whole page with an assistive technology
+  attached, and no tier drives one (`ambre-spec-testing.md section 8`). Two rows are stated as
+  failing: the mechanism exists and the callers do not. What the pass took away matters more than
+  what it added. Two rows claimed `verified` on five cited tests, and three of those five assert
+  nothing the rule states: `CHROME-066` is the pressed state a toggle never reads back, because the
+  test raises the signal and stops; `CHROME-070` is the expanded state nothing checks at either
+  value; `CHROME-065` is the focus no test in the belt reads before or after a toast. Each was
+  hidden by a conjunction whose other half was genuinely held.
 
 ---
 
@@ -116,16 +129,16 @@ today, because it is the only view that calls the announcement (`CHROME-023`).
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The chrome is DOM, so its accessibility is the platform's | roles, names, focus order, screen-reader support and high-contrast handling are decades of work that a browser already ships and that a canvas widget set has to rebuild. Choosing DOM for the chrome buys all of it and costs nothing on the frame path | drawing the chrome, and rebuilding an accessibility layer under it |
-| Content accessibility is a DOM mirror, not an accessibility tree | on the web the accessibility tree is the DOM, and the library the corpus used to name for this has no web adapter at all. So a "tree" would be reconstructed as hidden DOM anyway -- the mirror is the same destination reached directly, and it is the destination the code chose | pushing a tree to a platform adapter, which on this target has nothing to push to |
-| The mirror is the focused unit alone | a full mirror is the document rendered twice, once in pixels and once in DOM, with the second copy to keep in step on every edit and every scroll. What a screen-reader user needs as they navigate is what they just moved onto, which is one element | a complete hidden mirror of the document |
-| The focus carrier is the input pipe, not a second element | the element that receives the keyboard is the one a browser reports as focused, so making it also the accessible name of the content keeps one focus and one announcement. A separate accessible element beside it would be focusable, silent and confusing | a second focusable element for accessibility |
-| The live region is polite, and the modal is not | a toast and a selection change are information, and interrupting a reader mid-sentence for them is worse than waiting. A trust decision or a destructive confirmation is different: it takes a modal, which stops everything, and `ambre-spec-key-verification.md` is where that rule is stated | one severity for everything |
-| The announcement is composed by the view, not by the shared crate | the shared crate cannot know that a unit is a cell reference plus a value, a shape plus a label, or a paragraph plus a style. It owns the region and the write; the words are the view's | a shared formatter, which would have to enumerate every application's content model |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The chrome is DOM, so its accessibility is the platform's | drawing the chrome, and rebuilding an accessibility layer under it | roles, names, focus order, screen-reader support and high-contrast handling are decades of work a canvas widget set has to rebuild and a browser already ships. Choosing DOM buys all of it and costs nothing on the frame path |
+| Content accessibility is a DOM mirror, not an accessibility tree | pushing a tree to a platform adapter | on this target there is nothing to push to: on the web the accessibility tree is the DOM, and the library the corpus used to name for this has no web adapter at all. A "tree" would be reconstructed as hidden DOM anyway -- the mirror is the same destination reached directly, and it is the destination the code chose |
+| The mirror is the focused unit alone | a complete hidden mirror of the document | it is the document rendered twice, once in pixels and once in DOM, with the second copy to keep in step on every edit and every scroll. What a screen-reader user needs as they navigate is what they just moved onto, which is one element |
+| The focus carrier is the input pipe, not a second element | a second focusable element for accessibility | it would be focusable, silent and confusing. The element that receives the keyboard is the one a browser reports as focused, so making it also the accessible name of the content keeps one focus and one announcement |
+| The live region is polite, and the modal is not | one severity for everything | a toast and a selection change are information, and interrupting a reader mid-sentence for them is worse than waiting. A trust decision or a destructive confirmation is different: it takes a modal, which stops everything, and `ambre-spec-key-verification.md` is where that rule is stated |
+| The announcement is composed by the view, not by the shared crate | a shared formatter | it would have to enumerate every application's content model: the shared crate cannot know that a unit is a cell reference plus a value, a shape plus a label, or a paragraph plus a style. It owns the region and the write; the words are the view's |
 
 ---
 

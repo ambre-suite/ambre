@@ -20,12 +20,12 @@
 * **Delete empty openers:** "It should be noted that", "In order to", "basically", "obviously".
 * **A list for a sequence, a table for a mapping.** Both beat a sentence chaining "and", "or" and
   "except". Digits then a space then an SI unit: `15 ms`. Expand an acronym on first use.
-* **RFC 2119 keywords stay uppercase** in an invariant statement, and keep their normative force.
+* **RFC 2119 keywords stay uppercase** in a contract statement, and keep their normative force.
   This overrides the simplest-word rule.
 * **Printable ASCII only, code points 32 to 126**, everywhere: prose, code, comments, commit
   messages, file names. Write `--`, `->`, and "section 4".
 * **A Rust comment explains why, never what.** A public item states its contract and its failure
   modes.
 
-No script checks this file, unlike `just invariants` and `just spec-code`. It is a review rule, and
+No script checks this file, unlike `just contracts` and `just spec-code`. It is a review rule, and
 review rules drift.

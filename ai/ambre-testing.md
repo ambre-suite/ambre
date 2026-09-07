@@ -4,7 +4,7 @@
 > included. The doctrine, the verification regimes and the mechanism ladder are normative in
 > `specs/1-Foundations/ambre-spec-testing.md`. This file routes you to a mechanism.
 
-An invariant is written before the code, as `unimplemented`, and its `Verification` cell reads
+A contract row is written before the code, as `unimplemented`, and its `Verification` cell reads
 `not built -- lands with <Story>`, naming the roadmap Story that will build it. The day that code
 ships, the row names a `Verification` that runs in CI, or it turns `unverified` and counts as debt.
 A mechanism that no CI job reaches verifies nothing. Status values and the full grammar are
@@ -42,5 +42,5 @@ normative in `specs/ambre-spec-template.md`, section 1.
   `just test-db` runs them, services already up through `docker compose`. `#[sqlx::test]`
   provisions an ephemeral database per test and applies every migration.
 * **Benchmarks defend the 60 FPS and document open budgets.** One exists, `ambre-crypto/benches`,
-  and no CI job runs it. Until the performance budget pass lands, no invariant may cite a bench as
+  and no CI job runs it. Until the performance budget pass lands, no contract row may cite a bench as
   its `Verification`.

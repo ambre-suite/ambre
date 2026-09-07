@@ -19,18 +19,37 @@ is not restated here; the colour is, because the rule about it is `PRESENCE-006`
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PRESENCE-001` | A presence sample MUST travel as an ephemeral frame only: broadcast, and never written to the document or its history. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only`, `::apply_ephemeral_keys_presence_by_user_id_without_touching_history` | verified |
-| `PRESENCE-002` | A presence payload MUST NOT carry a user identifier. | this spec section 3; `SYNC-014` | type-level: no payload in the suite declares the field, so an impersonated sample has no shape to travel in | verified |
-| `PRESENCE-003` | The author of a presence frame MUST be the `UserId` the Sync thread resolves from the signing key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-014` | `ambre_sync::pipeline::tests::roundtrip_ephemeral`; `ambre_server::ws::handler::message::tests::forged_author_key_writes_no_presence` | verified |
-| `PRESENCE-004` | A peer's display name MUST be cosmetic: it MUST NOT decide identity, colour or permission. | this spec section 3 | none. `PRESENCE-002` and `PRESENCE-003` leave the name nothing to decide, and no test drives a sample whose name contradicts its resolved author | unverified |
-| `PRESENCE-005` | The peer set MUST be keyed by `UserId`: one collaborator on two devices MUST NOT render as two. | this spec section 3 | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` | verified |
-| `PRESENCE-006` | A peer's colour MUST be derived from that `UserId` by the shared cross-app helper. | this spec section 3; this spec section 5 | `ambre_draw::peer::tests::stable_and_pure`, `::distinct_seeds_usually_differ`, `::opaque` | verified |
-| `PRESENCE-007` | A presence anchor MUST name identities that survive a structural edit, never positions. | this spec section 3 | not built -- lands with the "Live presence on the board" Story (`ambre-roadmap.md` E4). Toile's anchor is an `ElementId` and satisfies it; the two anchors that must be resolved, Trame's and Prose's, have no crate | unimplemented |
-| `PRESENCE-008` | An anchor that resolves to no live target MUST be dropped without an error. | this spec section 3 | not built -- lands with the "Live presence on the board" Story (`ambre-roadmap.md` E4) | unimplemented |
-| `PRESENCE-009` | The event delivered to the view MUST carry the whole live peer set, so a departed peer is an absent entry. | this spec section 3 | none, and **the rule fails today**: Toile emits one event per inbound frame and the view accumulates, so a peer who leaves is painted for good -- section 6, and `TOILE-UI-075` | unverified |
-| `PRESENCE-010` | A remote position MUST snap when its new sample is not adjacent to the previous one. | this spec section 4 | not built -- lands with the "Live presence on the board" Story (`ambre-roadmap.md` E4) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PRESENCE-002` | `INV` | A presence payload MUST NOT carry a user identifier. | this spec section 3; `SYNC-014` | type-level: no payload in the suite declares the field, so an impersonated sample has no shape to travel in | verified |
+| `PRESENCE-003` | `INV` | The author of a presence frame MUST be the `UserId` the Sync thread resolves from the signing key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-014` | `ambre_sync::pipeline::tests::roundtrip_ephemeral`; `ambre_server::ws::handler::message::tests::forged_author_key_writes_no_presence` | verified |
+| `PRESENCE-005` | `INV` | The peer set MUST be keyed by `UserId`: one collaborator on two devices MUST NOT render as two. | this spec section 3 | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history`, on the assertions that a second peer is tracked under its own identity and neither displaces the other | verified |
+| `PRESENCE-006` | `INV` | A peer's colour MUST be derived from that `UserId` by the shared cross-app helper. | this spec section 3; this spec section 5 | `ambre_draw::peer::tests::stable_and_pure`, `::distinct_seeds_usually_differ`, `::opaque` | verified |
+| `PRESENCE-004` | `INV` | A peer's display name MUST be cosmetic: it MUST NOT decide identity, colour or permission. | this spec section 3 | none. `PRESENCE-002` and `PRESENCE-003` leave the name nothing to decide, and no test drives a sample whose name contradicts its resolved author | unverified |
+| `PRESENCE-007` | `INV` | A presence anchor MUST name identities that survive a structural edit, never positions. | this spec section 3 | not built -- lands with the "Live presence on the board" Story (`ambre-roadmap.md` E4). Toile's anchor is an `ElementId` and satisfies it; the two anchors that must be resolved, Trame's and Prose's, have no crate | unimplemented |
+
+### 1.2 Send a presence sample
+
+The local peer moves. What leaves is one ephemeral frame and nothing else.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PRESENCE-001` | `POST` | A presence sample MUST travel as an ephemeral frame. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only`, on the assertion that the command produced an ephemeral frame | verified |
+| `PRESENCE-011` | `FRAME` | Sending a presence sample MUST NOT write to the document or its history. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only`, on its two other assertions: the command produced no CRDT delta and no display event, so a sample that reached the document fails | verified |
+
+### 1.3 Receive a presence sample
+
+An inbound frame is opened, its author resolved, and the peer set updated for the view.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PRESENCE-009` | `POST` | The event delivered to the view MUST carry the whole live peer set, so a departed peer is an absent entry. | this spec section 3 | none, and **the rule fails today**: Toile emits one event per inbound frame and the view accumulates, so a peer who leaves is painted for good -- section 6, and `TOILE-UI-075` | unverified |
+| `PRESENCE-010` | `POST` | A remote position MUST snap when its new sample is not adjacent to the previous one. | this spec section 4 | not built -- lands with the "Live presence on the board" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `PRESENCE-012` | `FRAME` | Applying a presence sample MUST NOT change the document or its history. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history`, on the assertions that the snapshot and the element count are identical either side of the apply | verified |
+| `PRESENCE-013` | `FAIL` | A presence frame that does not decode MUST be dropped without an error. | this spec section 3; derived | `ambre_toile::logic::convergence_tests::apply_ephemeral_drops_a_malformed_frame`: it feeds four arbitrary bytes and asserts the apply answers with nothing rather than raising | verified |
+| `PRESENCE-008` | `FAIL` | An anchor that resolves to no live target MUST be dropped without an error. | this spec section 3 | not built -- lands with the "Live presence on the board" Story (`ambre-roadmap.md` E4) | unimplemented |
 
 * **Budget.** the presence overlay under 1 ms per frame, a row of
   `ambre-spec-budgets.md section 2`, written against Toile's twenty cursors and their trails
@@ -40,10 +59,16 @@ status values are normative in `ambre-spec-template.md`.
   `DocumentKey`: the relay reads `document_id`, `pub_key` and `counter` and nothing else. The author
   is resolved to a `UserId` in `ambre-sync` before the frame reaches an application, so no peer can
   paint a position under another user's name (`SYNC-014`, `SYNC-015`).
-* **Verification.** 5 `verified`, 2 `unverified`, 3 `unimplemented`. The identity half is held end
-  to end, by the seal, the author resolution and Toile's two convergence tests. The two gaps are
-  where the three applications disagree, and both are named in section 6: nothing sends a sample in
-  any application, and Toile's event shape is the one that keeps a departed peer on the screen.
+* **Verification.** 8 `verified`, 2 `unverified`, 3 `unimplemented`. The identity half is held end
+  to end, by the seal, the author resolution and Toile's convergence tests. The two gaps are where
+  the three applications disagree, and both are named in section 6: nothing sends a sample in any
+  application, and Toile's event shape is the one that keeps a departed peer on the screen. The
+  three rows the pass added are all held by assertions that were already running and that no row
+  claimed. `PRESENCE-001` bundled the broadcast with the promise that nothing reaches the document,
+  and those are a postcondition and a frame condition on two different sides of the wire, so
+  `PRESENCE-011` and `PRESENCE-012` state them per direction. `PRESENCE-013` is a refusal the suite
+  drives -- a frame of four arbitrary bytes is dropped rather than raised -- and no row said so.
+  Two tests back two rows each, and each cell names the assertion that goes red for it.
 
 ---
 
@@ -172,20 +197,20 @@ not draw a cursor sliding through thirty-nine pages they never visited.
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| One document for three applications | the transport, the identity, the colour, the keying and the set semantics are one behaviour, and the review that read Prose against Trame found four defects with one root over two documents. Three copies drift in three directions, and the drift is invisible because no reader holds two of them at once | a presence section per application, which is what produced X59, X60, X30 and X15 |
-| The anchor stays with the application | an anchor names the identities of one document model, and a spreadsheet has no text offset. The behaviour above is identical for all three; the thing it points at is the one part that cannot be | a shared anchor type parameterized over three models, which buys one type and forces every application through an indirection to reach its own ids |
-| Presence is ephemeral, never a document write | a position changes on every gesture and matters for as long as it is on the screen. Writing it would put a per-gesture operation into the history every peer keeps for good, and make a cursor a thing that merges (`PRESENCE-001`) | a presence container pruned on a timer, which grows the file and makes undo step over other people's gestures |
-| The payload carries no user identifier | anything a peer writes about itself is something it can write about anyone else. Leaving the field out means there is nothing to forge: the only identity is the one resolved from the key that signed the frame (`PRESENCE-002`) | an author field in the sample, which lets any member paint a cursor under any other member's name |
-| Keyed by `UserId`, never by peer or device | a peer identifier is per session and per device, so one collaborator on a laptop and a phone appears as two people in two colours. The `UserId` is the person (`PRESENCE-005`) | keying by the sending peer, which doubles a collaborator every time they open a second tab |
-| The colour is hashed from the `UserId` by the shared helper | a collaborator working in a sheet, a board and a document is one person, and one person with three colours is three people to the reader. The helper is pure, so the colour is the same on every device and in every application (`PRESENCE-006`) | a per-application palette assigned in join order, which gives one user a different colour per document and swaps two users' colours on a reconnect |
-| The anchor is move-invariant | a remote position must follow its target through the inserts, deletes and sorts a collaborator makes while the frame is in flight. A row number, a screen point or a text offset is exactly what those edits invalidate, so a positional anchor makes remote cursors jump on every structural change (`PRESENCE-007`) | raw coordinates, which is what Trame carried until the review named it X30 |
-| An unresolvable anchor is dropped, silently | the sample is one of a stream whose next one is on its way, and the target is missing because a delta is in flight. There is nothing for the user to do and nothing for the log to say (`PRESENCE-008`) | queueing the sample until the target resolves, which holds a cursor at a position the peer has already left |
-| The event carries the whole live set | it makes a departure the absence of an entry, so no application needs a departure signal, and none of the three has one. The alternative is what Toile built, and `TOILE-UI-075` is the ghost cursor it produces (`PRESENCE-009`) | one event per peer with a receiver-side accumulation, which needs a removal path, a timeout or a leave message, and leaves a ghost until whichever one is written |
-| A non-adjacent move snaps | the interpolation exists to hide 100 ms of latency on a cursor that moved one step. Applied to a jump, it draws a path through content the peer never visited, which is a lie the reader cannot detect (`PRESENCE-010`) | interpolating every move, which is one rule fewer and shows a false path |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| One document for three applications | a presence section per application | it is what produced X59, X60, X30 and X15. The transport, the identity, the colour, the keying and the set semantics are one behaviour, and the review that read Prose against Trame found four defects with one root over two documents. Three copies drift in three directions, and the drift is invisible because no reader holds two of them at once. |
+| The anchor stays with the application | a shared anchor type parameterized over three models | it buys one type and forces every application through an indirection to reach its own ids. An anchor names the identities of one document model, and a spreadsheet has no text offset. |
+| Presence is ephemeral, never a document write | a presence container pruned on a timer | it grows the file and makes undo step over other people's gestures. A position changes on every gesture and matters for as long as it is on the screen; writing it would put a per-gesture operation into the history every peer keeps for good, and make a cursor a thing that merges (`PRESENCE-001`). |
+| The payload carries no user identifier | an author field in the sample | it lets any member paint a cursor under any other member's name. Anything a peer writes about itself is something it can write about anyone else; leaving the field out means there is nothing to forge, and the only identity is the one resolved from the key that signed the frame (`PRESENCE-002`). |
+| Keyed by `UserId`, never by peer or device | keying by the sending peer | it doubles a collaborator every time they open a second tab. A peer identifier is per session and per device, so one collaborator on a laptop and a phone appears as two people in two colours; the `UserId` is the person (`PRESENCE-005`). |
+| The colour is hashed from the `UserId` by the shared helper | a per-application palette assigned in join order | it gives one user a different colour per document and swaps two users' colours on a reconnect. One person with three colours is three people to the reader; the helper is pure, so the colour is the same on every device and in every application (`PRESENCE-006`). |
+| The anchor is move-invariant | raw coordinates | it is what Trame carried until the review named it X30. A remote position must follow its target through the inserts, deletes and sorts a collaborator makes while the frame is in flight, and a row number, a screen point or a text offset is exactly what those edits invalidate, so a positional anchor makes remote cursors jump on every structural change (`PRESENCE-007`). |
+| An unresolvable anchor is dropped, silently | queueing the sample until the target resolves | it holds a cursor at a position the peer has already left. The sample is one of a stream whose next one is on its way, and the target is missing because a delta is in flight: there is nothing for the user to do and nothing for the log to say (`PRESENCE-008`). |
+| The event carries the whole live set | one event per peer with a receiver-side accumulation | it needs a removal path, a timeout or a leave message, and leaves a ghost until whichever one is written. It is what Toile built, and `TOILE-UI-075` is the ghost cursor it produces. The whole live set makes a departure the absence of an entry, so no application needs a departure signal, and none of the three has one (`PRESENCE-009`). |
+| A non-adjacent move snaps | interpolating every move | it is one rule fewer and shows a false path. The interpolation exists to hide 100 ms of latency on a cursor that moved one step; applied to a jump, it draws a path through content the peer never visited, which is a lie the reader cannot detect (`PRESENCE-010`). |
 
 ---
 

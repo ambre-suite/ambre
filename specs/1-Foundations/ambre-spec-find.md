@@ -21,15 +21,33 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The cross-app pattern this feature realizes
 is normative in `ambre-spec-message-bus.md`. The prefix is `FIND`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `FIND-001` | A search MUST be pure local view state: it MUST NOT change the document. | this spec section 2 | Toile `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default`, `::find_focus_wraps_after_from`, `::find_backward_steps_to_previous_hit_wrapping`, `::find_honors_match_case_and_whole_word`, `::find_ignores_non_text_elements_and_empty_query`, each asserting no delta; Trame `find_next` returns a display-only outcome but takes `&mut self`, so only review holds it there; Prose design-only | verified |
-| `FIND-002` | A search MUST cover the whole scope, never only what the viewport holds; the walk MUST run in the Logic thread. | this spec section 3 | Trame `ambre_trame::logic::tests::group6::find_next_matches_and_wraps`; Toile structural -- the walk reads the element maps in the Logic thread, which holds no camera, and `::find_matches_in_z_order_and_is_case_insensitive_by_default` matches an element outside the default camera; Prose runs in the Logic thread by decision, design-only | verified |
-| `FIND-003` | Stepping MUST wrap in both directions, and a resume point that is no longer a match MUST restart the walk. | this spec section 3 | Toile `ambre_toile::logic::convergence_tests::find_focus_wraps_after_from`, `::find_backward_steps_to_previous_hit_wrapping`; Trame `ambre_trame::logic::tests::group6::find_next_matches_and_wraps` holds the forward wrap; Prose design-only | verified |
-| `FIND-004` | The current match MUST be brought into view. | this spec section 4 | Trame elects the match and moves the active cell to it (`ambre_trame::logic::tests::group6::find_next_matches_and_wraps`); Toile resolves the recentre target and the camera reach is the viewport's (`3-Toile/features/ambre-spec-toile-viewport.md`); the scroll itself is per-application UI, asserted end to end by none; Prose design-only (`PROSE-FEAT-037` retired) | unverified |
-| `FIND-005` | An empty query MUST clear the highlight and MUST be the only signal for it, with no separate clear command. | this spec section 3 | Toile `ambre_toile::logic::convergence_tests::find_ignores_non_text_elements_and_empty_query`; Trame clears the highlight on close; Prose design-only | verified |
-| `FIND-006` | A replace-all MUST be a single undo item, whatever the match count. | this spec section 3; `ambre-spec-undo.md` | Trame `ambre_trame::logic::tests::group6::replace_all_rewrites_and_undoes_as_one_group`; Prose design-only; Toile carries no replace -- section 5 | verified |
-| `FIND-007` | A replace MUST rewrite the active match and then advance to the next. | this spec section 4 | Trame `ambre_trame::logic::tests::group6::replace_one_replaces_active_and_advances`; Prose design-only; Toile carries no replace -- section 5 | verified |
+### 1.1 Search, and step through the matches
+
+One gesture with two directions: the walk is the same whichever way the cursor moves, so forward and
+backward share a table rather than repeating one.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `FIND-002` | `POST` | A search MUST cover the whole scope, never only what the viewport holds. | this spec section 3 | the walk is held, the bound is not. Trame `ambre_trame::logic::tests::group6::find_next_matches_and_wraps` and Toile `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default` drive a walk that reads the whole map, and neither builds a camera or places a match outside one, so a viewport bound added to either walk would fail nothing. Prose runs in the Logic thread by decision, design-only | unverified |
+| `FIND-003` | `POST` | Stepping MUST elect the hit adjacent to the resume point in the direction asked, wrapping at either end. | this spec section 3 | Toile `ambre_toile::logic::convergence_tests::find_focus_wraps_after_from`, which steps off the first hit and reads the second back, then steps off the last and reads the first: it asserts which hit is elected, so an engine that re-elected the current one fails it. `::find_backward_steps_to_previous_hit_wrapping` holds the other direction; Trame `ambre_trame::logic::tests::group6::find_next_matches_and_wraps` holds the forward case; Prose design-only | verified |
+| `FIND-010` | `POST` | A step with no usable resume point -- none given, or one that is no longer a match -- MUST elect the first hit. | this spec section 3 | the half that is held is the fresh search: Toile `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default` asserts a search with no resume point focuses the first hit. Nothing drives the other half, a resume point edited away between two keystrokes, in any application; Prose design-only | unverified |
+| `FIND-004` | `POST` | The current match MUST be brought into view. | this spec section 4 | none. Trame elects the match and moves the active cell to it (`ambre_trame::logic::tests::group6::find_next_matches_and_wraps`); Toile resolves the recentre target and the camera reach is the viewport's (`3-Toile/features/ambre-spec-toile-viewport.md`); the scroll itself is per-application UI and no test drives it end to end; Prose design-only | unverified |
+| `FIND-005` | `FAIL` | An empty query MUST clear the highlight. | this spec section 3 | Toile `ambre_toile::logic::convergence_tests::find_ignores_non_text_elements_and_empty_query`, which asserts the empty query answers with nothing; Trame clears the highlight on close and no test reads it back; Prose design-only | verified |
+| `FIND-001` | `FRAME` | A search MUST NOT change the document. | this spec section 2 | Toile `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default`, `::find_focus_wraps_after_from`, `::find_backward_steps_to_previous_hit_wrapping`, `::find_honors_match_case_and_whole_word`, `::find_ignores_non_text_elements_and_empty_query`, each asserting no delta; Trame's `find_next` answers a display-only outcome but takes `&mut self`, so only review holds it there; Prose design-only | verified |
+
+### 1.2 Replace the active match
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `FIND-007` | `POST` | A replace MUST rewrite the active match and then advance to the next. | this spec section 4 | Trame `ambre_trame::logic::tests::group6::replace_one_replaces_active_and_advances`, over a matching active cell and a non-matching one; Prose design-only; Toile carries no replace -- section 5 | verified |
+| `FIND-008` | `FRAME` | A replace MUST NOT change any text outside the active match. | this spec section 4 | Trame `ambre_trame::logic::tests::group6::replace_one_replaces_active_and_advances`, on the assertion that reads the next match back as its old text after the rewrite; Prose design-only; Toile carries no replace | verified |
+
+### 1.3 Replace every match in scope
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `FIND-006` | `POST` | A replace-all MUST be a single undo item, whatever the match count. | this spec section 3; `ambre-spec-undo.md` | Trame `ambre_trame::logic::tests::group6::replace_all_rewrites_and_undoes_as_one_group`, and `::replace_all_spans_sheets` for the cross-sheet path, which writes through a different door; Prose design-only; Toile carries no replace -- section 5 | verified |
+| `FIND-009` | `FRAME` | A replace-all MUST NOT change any text that no reported match covers. | this spec section 3 | none. Trame's `::replace_all_spans_sheets` drives the widest scope, where nothing is outside it, and no test rewrites a document holding text the query never matched. This is the row that keeps a replace-all from reaching past its own hit list, and the sheet-scope half of it is `2-Trame/features/ambre-spec-trame-find-replace.md`, `TRAME-UI-138` | unverified |
 
 * **Budget.** none of its own: a search is one linear walk over the scope, and
   `ambre-spec-budgets.md` budgets no search; a replace lands under the batch row of
@@ -37,10 +55,15 @@ is normative in `ambre-spec-message-bus.md`. The prefix is `FIND`.
 * **Boundary.** none of its own: a search reads the document in the Logic thread and the query never
   leaves the client; a replace is a document write, and `ZK-001` seals every payload before it
   leaves the client.
-* **Verification.** 6 `verified`, 1 `unverified`, 0 `unimplemented`. The rules that make the feature
-  worth having -- it writes nothing, it reaches past the screen, it wraps, an empty query clears, a
-  replace-all is one undo -- are each held in Trame or Toile. What is loose is the reveal, which is
-  each application's own scroll. Prose is design-only and adds no code to any row.
+* **Verification.** 6 `verified`, 4 `unverified`, 0 `unimplemented`. What the feature is for holds:
+  it writes nothing, it wraps, it elects the adjacent hit, and a replace stays inside its match. An
+  empty query clears, and a replace-all is one undo item. Four rows stay loose. `FIND-002` is the
+  reach. Both engines read the whole map, and no test places a match where a viewport bound would
+  hide it, so the rule rests on a walk that does not ask. `FIND-004` is
+  the reveal, each application's own scroll, which no test drives end to end. `FIND-010` holds the
+  fresh search, never the resume point an edit takes away between two keystrokes. `FIND-009` is the
+  frame condition of a replace-all, and the only replace-all any test runs covers everything. Prose
+  is design-only and adds no code to any row.
 
 ---
 
@@ -87,8 +110,8 @@ pub struct FindQuery { pub query: String, pub match_case: bool }
 2. walk the whole scope in the application's stable order and keep each text-bearing item that
    matches, folding both sides to lower case unless the case option is set (`FIND-002`);
 3. resolve the reveal target: the hit after the resume point, or the one before it when stepping
-   backward, wrapping either way, and the first hit when the resume point is no longer one
-   (`FIND-003`);
+   backward, wrapping either way (`FIND-003`), and the first hit when there is no usable resume
+   point (`FIND-010`);
 4. answer with the hits and the target, having written nothing (`FIND-001`).
 
 **Steps, on a replace** (text applications only). `ReplaceOne` rewrites the active match's raw text
@@ -109,7 +132,7 @@ cited from its own find document.
 | `Enter` | resumes the search from the current match, forward, and reveals the elected one (`FIND-004`) |
 | `Shift+Enter` | the same, backward (`FIND-003`) |
 | Replace, Replace all | rewrites the active match then advances, or every match in scope (`FIND-006`, `FIND-007`) |
-| `Escape`, or the close button | dismisses the panel and clears the highlight (`FIND-005`) |
+| `Escape`, or the close button | dismisses the panel and clears the highlight |
 
 **The panel is chrome** (`ambre-spec-chrome.md`), pinned to a corner of the surface, never painted on
 the canvas: a text field with a few toggles, which the shared toolkit already builds. It holds only
@@ -118,16 +141,16 @@ thread can disagree with the document. Which chord opens find is `ambre-spec-com
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The scan runs in the Logic thread | the UI cache holds one viewport, so a search there would find only what is already on screen -- and a document is mostly past the edge of the screen | scanning the UI cache, which silently bounds the search by the scroll position |
-| The panel holds no cursor and no hit list | the Logic thread already tracks the origin and computes the hits, and a second copy of the index is the one that drifts under a merge or a wrap | the panel walking its own hit list against its own index |
-| An empty query is the clear signal | the panel needs a way to say "no highlight" and the engine needs no second command for it | a separate clear command |
-| A search writes nothing | a search is one reader's attention; two readers searching different words in one document must not see each other's highlights, nor undo each other's searches | recording the session in the document, which shares one reader's search with every peer |
-| A replace-all is one undo item | a replace over a thousand matches is one decision, and undoing it one match at a time is not an undo | one undo item per rewritten match |
-| Replace is the text applications' | replacing across a board's free-form elements rewrites bodies the user cannot all see, on a surface where a note is a drawing as much as a text; the cost is high and the gesture is rare | one replace model for every application, which Toile declines (`3-Toile/features/ambre-spec-toile-find.md`) |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The scan runs in the Logic thread | scanning the UI cache | the cache holds one viewport, so a search there would find only what is already on screen, and a document is mostly past the edge of the screen. It bounds the search by the scroll position and says nothing |
+| The panel holds no cursor and no hit list | the panel walking its own hit list against its own index | the Logic thread already tracks the origin and computes the hits, and a second copy of the index is the one that drifts under a merge or a wrap |
+| An empty query is the clear signal | a separate clear command | the panel needs a way to say "no highlight" and the engine needs no second command for it |
+| A search writes nothing | recording the session in the document | a search is one reader's attention. Sharing it gives every peer one reader's highlights, and puts a search in the undo history of everyone else |
+| A replace-all is one undo item | one undo item per rewritten match | a replace over a thousand matches is one decision, and undoing it one match at a time is not an undo |
+| Replace is the text applications' | one replace model for every application | replacing across a board's free-form elements rewrites bodies the user cannot all see, on a surface where a note is a drawing as much as a text. The cost is high and the gesture is rare, which is why Toile declines it (`3-Toile/features/ambre-spec-toile-find.md`) |
 
 ---
 

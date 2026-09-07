@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Generate the invariant ledger from the spec tables, and check their rules.
+"""Generate the contract ledger from the spec tables, and check their rules.
 
-`ambre-invariant-ledger.md` is the roll-up of every per-spec invariant table. A
+`ambre-contract-ledger.md` is the roll-up of every per-spec contract table. A
 hand-maintained roll-up is the same failure mode as a hand-maintained test list:
 it is believed, and it is wrong (it was, by one, for a week). So the file is
 written by this script and by nothing else, like each application's feature
@@ -42,7 +42,7 @@ The rules it enforces, beyond generating the file:
     bound to nothing. It was counted here, rolled into a total of 355, and adding
     one more cost an author nothing: regenerate, and the ledger reports the
     larger number in green. So each document carries a ceiling in
-    `invariant_ceilings.json`, and a document absent from that file has a ceiling
+    `contract_ceilings.json`, and a document absent from that file has a ceiling
     of zero. Growth is still allowed -- `--ceilings --raise` -- as one reviewed
     line of diff instead of silence. `human-review` and `qa-manual` carry no
     ceiling: they are decisions, and a ceiling over them would never reach zero;
@@ -57,10 +57,10 @@ What this still cannot see: a row citing a test that runs, passes, and does not
 test the rule. That is `TRAME-FEAT-004`'s defect, and it needs a probe or
 `cargo-mutants`, not a parser.
 
-Run: `just invariants` (fail when the file on disk is not what this would
-write), `just invariants-write` (rewrite it). The check compares the whole text,
+Run: `just contracts` (fail when the file on disk is not what this would
+write), `just contracts-write` (rewrite it). The check compares the whole text,
 so a spec edited without a regeneration turns CI red instead of leaving a stale
-roll-up behind. `just invariants-ceilings` rewrites the ceilings, lowering only.
+roll-up behind. `just contracts-ceilings` rewrites the ceilings, lowering only.
 """
 
 import json
@@ -72,12 +72,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SPECS = ROOT / "specs"
 CRATES = ROOT / "crates"
-TEMPLATE = "ambre-spec-template.md"  # carries example rows, not real invariants
-LEDGER = "1-Foundations/ambre-invariant-ledger.md"  # generated here, nowhere else
+TEMPLATE = "ambre-spec-template.md"  # carries example rows, not real contracts
+LEDGER = "1-Foundations/ambre-contract-ledger.md"  # generated here, nowhere else
 ROADMAP = "ambre-roadmap.md"  # the one schedule: every Story is a row of it
 JOURNAL = "ambre-roadmap-journal.md"  # closed epics, cut there verbatim
 AUDIT = "security-audit.md"  # numbered findings, cited by the rows that close them
-CEILINGS = Path(__file__).resolve().parent / "invariant_ceilings.json"
+CEILINGS = Path(__file__).resolve().parent / "contract_ceilings.json"
 STATUSES = ("verified", "unverified", "human-review", "qa-manual", "unimplemented")
 LOOSE = ("unverified", "human-review", "qa-manual")  # built, and no test would fail
 APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose")
@@ -88,7 +88,9 @@ APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose")
 # declared here rather than passing as a numbering hole. Each entry names the
 # shared row that carries the rule today, so the trail from an old citation is
 # one lookup. Nothing else may be entered: a row whose rule is still this
-# application's is narrowed or split, never withdrawn.
+# application's is narrowed or split, never withdrawn -- unless another row of
+# the same document already states it, which is the only other entry this
+# register takes.
 RETIRED = {
     "PROSE-020": "PRESENCE-003",
     "PROSE-021": "PRESENCE-004",
@@ -101,6 +103,12 @@ RETIRED = {
     "TRAME-UI-066": "UI-THREAD-009",
     "TRAME-122": "UI-THREAD-016",
     "TOILE-077": "UI-THREAD-016",
+    # Withdrawn as a duplicate: each stated, as a precondition, a guard the
+    # operation checks and refuses, which its `FAIL` row already stated. A
+    # checked guard is one row. This is the second reason the register admits.
+    "TRAME-129": "TRAME-019",
+    "TRAME-134": "TRAME-137",
+    "TRAME-139": "TRAME-143",
     "TRAME-018": "UNDO-001",
     "TRAME-116": "UNDO-002",
     "TRAME-117": "UNDO-005",
@@ -116,10 +124,9 @@ RETIRED = {
     "PROSE-022": "UNDO-001",
     "PROSE-FEAT-012": "UNDO-001",
     "PROSE-FEAT-032": "UNDO-002",
-    "TRAME-IO-020": "PDF-001",
-    "TRAME-IO-021": "PDF-001",
+    "TRAME-IO-020": "CANVAS-028",
     "TRAME-IO-024": "PDF-004",
-    "TRAME-UI-022": "PDF-003",
+    "TRAME-UI-022": "CANVAS-028",
     "TRAME-UI-023": "PDF-006",
     "TOILE-IO-032": "PDF-002",
     "TOILE-IO-033": "PDF-005",
@@ -132,10 +139,25 @@ RETIRED = {
     "TRAME-UI-084": "FIND-001",
     "TOILE-019": "FIND-001",
     "TOILE-078": "FIND-002",
-    "TOILE-081": "FIND-003",
+    "TOILE-081": "FIND-010",
     "PROSE-FEAT-015": "FIND-006",
     "PROSE-FEAT-016": "FIND-001",
     "PROSE-FEAT-037": "FIND-004",
+    # Withdrawn by the migration that gave `ambre-spec-find.md` its operation
+    # tables: each restated a rule the shared document now states for every
+    # application, which is the second reason this register admits.
+    "TRAME-UI-137": "FIND-008",
+    "TOILE-141": "FIND-010",
+    "TOILE-146": "FIND-005",
+    "TOILE-147": "FIND-003",
+    "TOILE-148": "FIND-003",
+    "PROSE-FEAT-147": "FIND-001",
+    "PROSE-FEAT-149": "UI-THREAD-020",
+    "PROSE-FEAT-154": "FIND-007",
+    "TOILE-IO-005": "PDF-004",
+    "TRAME-IO-032": "PDF-001",
+    "PROSE-IO-034": "PDF-006",
+    "PROSE-IO-036": "CANVAS-028",
 }
 
 # A finding that states no rule, and why. It is the `RETIRED` register applied to
@@ -162,6 +184,31 @@ ROW = re.compile(
     r"^\|\s*`(?P<id>[A-Z][A-Z0-9-]*-\d{3})`\s*\|"
     r"(?P<rest>.*)\|\s*(?P<status>[a-z-]+)\s*\|\s*$"
 )
+
+# The header of a contract table, and whether it declares the `Kind` column.
+# A document that declares it is held to the vocabulary and to the completeness
+# rule below; one that does not is a table the column has not
+# reached, so the corpus migrates a document at a time
+# (`ambre-spec-template.md section 1.B`).
+TABLE_HEAD = re.compile(r"^\|\s*ID\s*\|")
+
+
+def kind_column(header: str) -> int | None:
+    """The index of the `Kind` cell in one table header, or `None`.
+
+    The index, not the second cell: pinning the column to position two makes a
+    reordered header opt the document out of every check below in silence,
+    which is the failure mode this whole file exists to refuse.
+    """
+    cells = [c.strip() for c in header.strip().strip("|").split("|")]
+    return cells.index("Kind") if "Kind" in cells else None
+# What a rule binds. A state kind holds at every instant; an operation kind
+# holds at one point of one operation's run, and the four of them are what
+# design by contract adds. The two families never share a table: one table per
+# operation is what makes a missing row visible.
+STATE_KINDS = ("INV", "CONC", "OBS", "IO")
+OPERATION_KINDS = ("PRE", "POST", "FRAME", "FAIL")
+KINDS = STATE_KINDS + OPERATION_KINDS
 
 
 # A backticked Rust path in a Verification cell: `crate::module::name`, or the
@@ -432,14 +479,14 @@ def audit_coverage_defects(findings: dict[str, int], cited: set[str]) -> list[st
         if fid in cited:
             if fid in NO_RULE:
                 defects.append(
-                    f"{AUDIT}:{lineno}: finding `{fid}` is cited by an invariant "
+                    f"{AUDIT}:{lineno}: finding `{fid}` is cited by a contract "
                     f"row and declared in `NO_RULE` -- one or the other"
                 )
             continue
         if fid in NO_RULE:
             continue
         defects.append(
-            f"{AUDIT}:{lineno}: finding `{fid}` is cited by no invariant row -- "
+            f"{AUDIT}:{lineno}: finding `{fid}` is cited by no contract row -- "
             f"state the rule that closes it in the spec of the component it "
             f"constrains, or declare it in `NO_RULE` with its reason"
         )
@@ -451,7 +498,7 @@ def audit_coverage_defects(findings: dict[str, int], cited: set[str]) -> list[st
     return defects
 
 
-# The `Verification` answer under an invariant table, and the counts it opens
+# The `Verification` answer under a contract table, and the counts it opens
 # on: `7 `verified`, 1 `unverified`, 1 `unimplemented`.` Both separators the
 # corpus uses are read, the comma and the final "and".
 ANSWER = re.compile(r"^\*\s+\*\*Verification\.\*\*\s+(?P<text>.*)$")
@@ -477,6 +524,54 @@ def stated_counts(text: str) -> dict[str, int]:
             break
         pos = sep.end()
     return counts
+
+
+def table_defects(spec: str, table: list[tuple[int, str, str]]) -> list[str]:
+    """Whether one table that declares `Kind` obeys the grammar of section 1.B.
+
+    Three rules, and each one caught a defect the day it landed. An unknown kind
+    is the `Implementation` field's story again: a vocabulary nothing checks
+    grows a ninth value. A table mixing a state kind with an operation kind
+    is the layout collapsing back into one list, which is what hid the frame
+    conditions. And the completeness rule is the reason for the column: a `POST`
+    with no `FRAME` names what an operation writes and never what it leaves
+    alone.
+
+    What no rule here holds is the line between `PRE` and `FAIL`, because it is
+    semantic: a `PRE` binds an obligation nothing checks, a `FAIL` states a
+    refusal the operation performs. Writing both for one condition states one
+    guard twice, which four rows of `trame-cell-merges` did, and doubles one
+    test into two `verified` rows. The template carries the test that separates
+    them; a reader applies it.
+    """
+    defects = []
+    kinds = set()
+    for lineno, rid, kind in table:
+        if kind not in KINDS:
+            defects.append(
+                f"{spec}:{lineno} {rid}: kind {kind!r} is none of the eight "
+                f"({', '.join(KINDS)})"
+            )
+            continue
+        kinds.add(kind)
+    if not kinds:
+        return defects
+    operation = kinds & set(OPERATION_KINDS)
+    state = kinds & set(STATE_KINDS)
+    lineno = table[0][0]
+    if operation and state:
+        defects.append(
+            f"{spec}:{lineno}: one table holds the state kinds "
+            f"{sorted(state)} and the operation kinds {sorted(operation)} -- an "
+            f"operation carries a table of its own, under its own heading"
+        )
+    if "POST" in kinds and "FRAME" not in kinds:
+        defects.append(
+            f"{spec}:{lineno}: this operation declares a `POST` and no `FRAME` "
+            f"-- state what it MUST NOT touch, `unverified` when nothing "
+            f"isolates it"
+        )
+    return defects
 
 
 def answer_defects(spec: str, answer: tuple[int, str] | None, counts: Counter) -> list[str]:
@@ -506,6 +601,29 @@ def answer_defects(spec: str, answer: tuple[int, str] | None, counts: Counter) -
     return defects
 
 
+def leaning_report(leans: dict[str, list[str]]) -> list[str]:
+    """The tests that back more than one `verified` row, worst first.
+
+    Not a defect: a test carrying five assertions legitimately backs five rows.
+    It is the number the ledger cannot show. Splitting one row into five raises
+    `verified` by four without a new assertion, so a migration that only
+    relabels reads exactly like one that adds coverage. This prints the
+    difference and lets a reader judge it.
+    """
+    # One row citing a test twice in its cell is one row, not two.
+    shared = {fn: sorted(set(rows)) for fn, rows in leans.items() if len(set(rows)) > 1}
+    if not shared:
+        return []
+    lines = [
+        "",
+        f"one test, several rows: {len(shared)} tests back "
+        f"{sum(len(r) for r in shared.values())} `verified` rows",
+    ]
+    for fn, rows in sorted(shared.items(), key=lambda kv: (-len(kv[1]), kv[0]))[:10]:
+        lines.append(f"  {len(rows):>2}  {fn}  {', '.join(rows)}")
+    return lines
+
+
 def load_ceilings() -> dict[str, int]:
     """`{spec: n}` -- the `unverified` rows a document is still allowed to carry.
 
@@ -524,7 +642,7 @@ def ceiling_defects(per_spec: dict[str, Counter], ceilings: dict[str, int]) -> l
             defects.append(
                 f"{spec}: {counts['unverified']} `unverified` rows, ceiling {ceiling}"
                 " -- it may only fall. Write the mechanism, or record the debt with"
-                " `just invariants-ceilings`"
+                " `just contracts-ceilings`"
             )
     return defects
 
@@ -581,24 +699,24 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter) -> str:
         by_app.setdefault(app_of(spec), Counter()).update(counts)
 
     lines = [
-        "# AMBRE -- INVARIANT LEDGER",
+        "# AMBRE -- CONTRACT LEDGER",
         "",
         "**Type:** Inventory (generated)",
         "",
-        "> The status of every invariant row in the corpus, rolled up. The rows themselves live in",
+        "> The status of every contract row in the corpus, rolled up. The rows themselves live in",
         "> the spec of the component they constrain, and this file reports their state, never intent.",
-        "> Generated by `scripts/invariants.py` from the tables themselves, so it carries no fact of",
+        "> Generated by `scripts/contracts.py` from the tables themselves, so it carries no fact of",
         "> its own.",
         "",
-        "**Do not edit this file.** Edit the invariant row and run `just invariants-write`.",
+        "**Do not edit this file.** Edit the contract row and run `just contracts-write`.",
         "",
         "* **Shipped** counts a row whose code exists. **Unbuilt** counts `unimplemented`, and the",
         "  split is the whole point: one number is a debt, the other is a plan.",
         "* **Loose** counts a shipped row that nothing would fail on: `unverified`, `human-review`,",
         "  `qa-manual`. That number is the coverage debt of the product.",
         "* **`unverified` may only fall.** Each document's count is a ceiling in",
-        "  `scripts/invariant_ceilings.json`, and `invariants.py` fails when one grows. A",
-        "  deliberate growth is `just invariants-ceilings-raise`, one line of reviewed diff.",
+        "  `scripts/contract_ceilings.json`, and `contracts.py` fails when one grows. A",
+        "  deliberate growth is `just contracts-ceilings-raise`, one line of reviewed diff.",
         "  `human-review` and `qa-manual` carry no ceiling: they are decisions, not debt.",
         "* How each layer is tested is `ambre-spec-testing.md`.",
         "",
@@ -639,6 +757,8 @@ def main() -> int:
     seen: dict[str, str] = {}
     errors: list[str] = []
     per_crate, pooled = declared_fns()
+    # Which `verified` rows lean on the same test, for the report below.
+    leans: dict[str, list[str]] = defaultdict(list)
     schedule = read_schedule(SPECS / ROADMAP)
     closed = read_schedule(SPECS / JOURNAL)
     errors += duplicate_stories(SPECS / ROADMAP)
@@ -650,7 +770,26 @@ def main() -> int:
             continue
         counts: Counter = Counter()
         answer: tuple[int, str] | None = None
+        rel = str(path.relative_to(SPECS))
+        # The table being read, and whether its header declares `Kind`. A table
+        # ends where the pipes do, so a heading, a bullet or a blank line
+        # closes it and the rows it collected are checked as one operation.
+        table: list[tuple[int, str, str]] = []
+        kind_column_at: int | None = None
+        # Per document, for the rule the template states at document level: a
+        # spec declares the column or it does not, never half of each.
+        shapes: set[bool] = set()
         for lineno, line in enumerate(path.read_text().splitlines(), 1):
+            stripped = line.lstrip()
+            head = TABLE_HEAD.match(line)
+            # A blank line does not close a table: an author who breaks a long
+            # operation table over one still writes one operation, and treating
+            # the halves as two tables checked each half against nothing.
+            if head or (stripped and not stripped.startswith("|")):
+                if kind_column_at is not None and table:
+                    errors += table_defects(rel, table)
+                table = []
+                kind_column_at = kind_column(line) if head else None
             m = ROW.match(line)
             # a story the row's own binding already answers for, checked below
             bound: set[str] = set()
@@ -668,6 +807,12 @@ def main() -> int:
                 continue
             rid, status, rest = m["id"], m["status"], m["rest"]
             where = f"{path.relative_to(SPECS)}:{lineno} {rid}"
+            shapes.add(kind_column_at is not None)
+            if kind_column_at is not None:
+                cells = [c.strip() for c in rest.split("|")]
+                # `rest` starts after the ID cell, so the header index shifts by one.
+                kind = cells[kind_column_at - 1] if kind_column_at <= len(cells) else ""
+                table.append((lineno, rid, kind.strip("`")))
 
             if status not in STATUSES:
                 errors.append(f"{where}: unknown status {status!r}")
@@ -698,8 +843,21 @@ def main() -> int:
             if status != "unimplemented":
                 for defect in unresolved_citations(verification, per_crate, pooled):
                     errors.append(f"{where}: {defect}")
+            if status == "verified":
+                for token in CITED.findall(verification):
+                    name = token.lstrip(":").split("::")[-1]
+                    if not name[:1].isupper():
+                        leans[name].append(rid)
 
             counts[status] += 1
+        if kind_column_at is not None and table:
+            errors += table_defects(rel, table)
+        if shapes == {True, False}:
+            errors.append(
+                f"{rel}: some contract tables declare `Kind` and some do not -- "
+                f"a document declares the column or it does not, so a half-"
+                f"migrated file cannot pass as a migrated one"
+            )
         if counts:
             per_spec[str(path.relative_to(SPECS))] = counts
             errors += answer_defects(str(path.relative_to(SPECS)), answer, counts)
@@ -719,7 +877,7 @@ def main() -> int:
     for rid in RETIRED:
         if rid in seen:
             errors.append(
-                f"{rid}: retired in `invariants.py` and still declared by a spec"
+                f"{rid}: retired in `contracts.py` and still declared by a spec"
                 " -- a withdrawn id is never re-minted"
             )
         prefix, num = rid.rsplit("-", 1)
@@ -747,10 +905,12 @@ def main() -> int:
 
     debt = total["verified"] + total["unverified"] + total["human-review"] + total["qa-manual"]
     print(
-        f"\nshipped surface: {debt} invariants "
+        f"\nshipped surface: {debt} contract rows "
         f"({total['unverified']} unverified, {total['human-review']} human-review)"
     )
     print(f"specified, not built: {total['unimplemented']}")
+    for line in leaning_report(leans):
+        print(line)
 
     target = SPECS / LEDGER
     text = render_ledger(per_spec, total)
@@ -760,11 +920,11 @@ def main() -> int:
     else:
         current = target.read_text() if target.exists() else None
         if current is None:
-            errors.append(f"{LEDGER}: missing -- run `just invariants-write`")
+            errors.append(f"{LEDGER}: missing -- run `just contracts-write`")
         elif current != text:
             errors.append(
-                f"{LEDGER}: stale -- an invariant row changed and the ledger did not. "
-                f"Run `just invariants-write`"
+                f"{LEDGER}: stale -- a contract row changed and the ledger did not. "
+                f"Run `just contracts-write`"
             )
 
     for e in errors:

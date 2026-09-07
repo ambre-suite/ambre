@@ -17,15 +17,47 @@ no collaborator, so there is no two-peer table below.
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PROSE-UI-007` | Only the visible pages plus one on each side MUST be built for a frame; the whole document MUST NOT be walked per frame. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-021` | The visible page range MUST be empty or well ordered for every scroll offset and every layout, an empty one included: it MUST NOT be inverted and MUST NOT name a page the layout does not have. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-022` | Every document position inside the column MUST resolve to a page: one falling in a gutter MUST snap to the nearer page edge, never to no page. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-023` | A document point and a screen point MUST map to each other exactly, and a zoom about a point MUST leave that document point under it. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-024` | Zoom MUST stay inside a quarter to four times, whatever the input. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-025` | The scroll offset MUST stay between the top of the column and its last scrollable position, after a scroll, a zoom, a relayout or an autoscroll tick. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-026` | The page column MUST stay centred at every zoom and every viewport width, and MUST pin to the left edge rather than go negative when the page is wider than the viewport. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-007` | `INV` | Only the visible pages plus one on each side MUST be built for a frame; the whole document MUST NOT be walked per frame. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-021` | `INV` | The visible page range MUST NOT be inverted, for every scroll offset and every layout, an empty one included. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-123` | `INV` | The visible page range MUST NOT name a page the layout does not have. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-022` | `INV` | Every document position inside the column MUST resolve to a page; only a layout with no page at all MUST resolve to none. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-124` | `INV` | A position falling in a gutter MUST resolve to the nearer of the two page edges it lies between. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-023` | `INV` | A document point and a screen point MUST map to each other exactly: converting one to the other and back MUST return the point it started from. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-024` | `INV` | Zoom MUST stay inside a quarter to four times, whatever the input. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-025` | `INV` | The scroll offset MUST stay between the top of the column and its last scrollable position, after a scroll, a zoom, a relayout or an autoscroll tick. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-026` | `INV` | The page column MUST stay centred at every zoom and every viewport width. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-125` | `INV` | The left edge of the column MUST NOT go negative: a page wider than the viewport MUST pin the column to the left edge instead. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+
+### 1.2 Scroll the column
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-126` | `POST` | A scroll MUST move the column by the distance the gesture asks for, up to the clamp. | this spec section 3 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-127` | `FRAME` | A scroll MUST NOT change the zoom, MUST NOT rebuild the column and MUST NOT write to the document. | derived | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.3 Zoom about a point
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-128` | `POST` | A zoom about a point MUST leave the document point that was under it there: the anchor MUST keep its screen position. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-129` | `FRAME` | A zoom MUST NOT move the caret, MUST NOT change the selection and MUST NOT write to the document: the factor, the column's left edge and the scroll offset are all it moves. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+
+### 1.4 Resize the canvas
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-130` | `FRAME` | A canvas resize MUST NOT change the scroll offset and MUST NOT change the zoom. | this spec section 3 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.5 Rebuild the column from a new layout
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-131` | `POST` | A layout that arrives MUST rebuild the column: the page count, the page box and the total height MUST come from that layout. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-132` | `FRAME` | Rebuilding the column MUST NOT change the zoom and MUST NOT write to the document. | derived | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the scroll of one page, a row of `ambre-spec-budgets.md section 1`. The
   culling itself costs nothing worth a row: the visible range is arithmetic over a uniform page
@@ -33,10 +65,13 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the scroll offset and the zoom are view state on the UI thread, where
   `UI-THREAD-004` bans a network, crypto or persistence path, and `PROSE-UI-010`
   (`features/ambre-spec-prose-engine.md section 1`) keeps both out of the document.
-* **Verification.** 7 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. Five of
-  the seven are the degenerate cases -- an empty layout, a position in a gutter, a scroll past the
-  end, a zoom out of range, a page wider than the window -- and each names a shape a property test
-  reaches directly, because all five are pure arithmetic over three numbers.
+* **Verification.** 17 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. Six of
+  the state rows are the degenerate cases -- an empty layout, a position in a gutter, a scroll past
+  the end, a zoom out of range, an inverted range, a page wider than the window -- and each names a
+  shape a property test reaches directly, because all six are pure arithmetic over three numbers.
+  `PROSE-UI-023` and `PROSE-UI-128` are round trips over generated points, which is the same
+  mechanism at a stronger setting. The frame conditions are the weak half: nothing but a review
+  holds them until the view state is one struct a test can compare before and after.
 
 ---
 
@@ -150,19 +185,19 @@ The zoom control itself is chrome, not canvas, and lives with the rest of the ap
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| Pages are a uniform column with a fixed gutter | every page in a document shares one page box, so the column's geometry is three numbers and the visible range is a division rather than a search. That is also what makes a scroll offset meaningful across a relayout: only the count changes | a per-page offset table, which a section break would eventually need and which costs a binary search per frame for a document that has no such break |
-| A gutter position snaps to the nearer page edge | a pointer between two pages is a real event and there is no correct answer in the gutter itself. Returning nothing pushes the decision into every caller, and each one invents a different fallback | returning no page for a gutter, which is what made a click between pages resolve to nothing |
-| An empty layout is a first-class case | a document opens before its first layout arrives, so every function here is called on a column of zero pages before it is called on a real one. Answering it explicitly is cheaper than an underflow at every call site | assuming at least one page, which the engine does guarantee for a live document and cannot guarantee before the first layout |
-| The scroll offset is clamped after the fact, never assumed valid | four independent paths move it and a fifth changes what valid means. Clamping at each one leaves the fifth uncovered, and a relayout is exactly the fifth | validating the offset where it is set |
-| Zoom is anchored on a point, not on the column centre | a reader zooms in to look at something. Anchoring on the centre moves what they were looking at off screen, and they then scroll to find it again | zooming about the viewport centre, which is what a page-fit control does and which is a different gesture |
-| The zoom range is a quarter to four | below a quarter a page of body text is unreadable and the reader is looking at a thumbnail we do not draw; above four a line of text no longer fits the width, which is the point at which zoom stops helping and reflow would be needed instead | an open-ended zoom, which produces both of those states with no affordance to leave them |
-| The camera is applied locally and the culling follows | scrolling is direct manipulation, and the content already on screen only needs a different offset to be correct. Waiting for a round trip before painting would put it inside every scroll | routing the scroll through the engine, which a virtually scrolled grid does because its content is fetched by index |
-| Only what is on screen is built | a hundred pages rebuilt per frame is the frame budget spent many times over, and the reader is looking at one of them. Culling by page also makes the cost of a document independent of its length, which is the property a page column exists to give | painting the whole document each frame, which is what makes a long document unusable rather than slow |
-| One page of overscan on each side | a scroll reveals at most a page before the next frame, so one page is what keeps the reveal from showing an unbuilt page. Two doubles the build cost for a case that does not occur | building only the visible pages, which flashes on a fast scroll |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| Pages are a uniform column with a fixed gutter | a per-page offset table | it costs a binary search per frame for a document that has no section break, which is the only thing that would eventually need it. Uniform, the column's geometry is three numbers and the visible range is a division, and a scroll offset stays meaningful across a relayout because only the count changes |
+| A gutter position snaps to the nearer page edge | returning no page for a gutter | it is what made a click between pages resolve to nothing. A pointer between two pages is a real event with no correct answer in the gutter itself, so returning nothing pushes the decision into every caller and each invents a different fallback |
+| An empty layout is a first-class case | assuming at least one page | the engine guarantees it for a live document and cannot guarantee it before the first layout, and a document opens before its first layout arrives. Answering the empty column explicitly is cheaper than an underflow at every call site |
+| The scroll offset is clamped after the fact, never assumed valid | validating the offset where it is set | four independent paths move it and a fifth changes what valid means. Clamping at each of the four leaves the fifth uncovered, and a relayout is exactly the fifth |
+| Zoom is anchored on a point, not on the column centre | zooming about the viewport centre | it moves what the reader was looking at off screen, and they scroll to find it again. It is what a page-fit control does, and that is a different gesture |
+| The zoom range is a quarter to four | an open-ended zoom | it produces two unusable states with no affordance to leave them: below a quarter a page of body text is unreadable and the reader is looking at a thumbnail we do not draw, and above four a line no longer fits the width, which is where zoom stops helping and reflow would be needed instead |
+| The camera is applied locally and the culling follows | routing the scroll through the engine | it puts a round trip inside every scroll. Scrolling is direct manipulation and the content already on screen only needs a different offset to be correct; a virtually scrolled grid routes it because its content is fetched by index |
+| Only what is on screen is built | painting the whole document each frame | it makes a long document unusable rather than slow: a hundred pages rebuilt per frame is the frame budget spent many times over, and the reader is looking at one of them. Culling by page also makes the cost of a document independent of its length |
+| One page of overscan on each side | building only the visible pages | it flashes on a fast scroll. A scroll reveals at most a page before the next frame, so one page of overscan covers the reveal, and two doubles the build cost for a case that does not occur |
 
 ---
 
@@ -177,6 +212,10 @@ The zoom control itself is chrome, not canvas, and lives with the rest of the ap
   reader who zooms to a hundred and fifty per cent does it again on the next visit.
 * **A page wider than the viewport has no horizontal scroll.** The column pins to the left edge
   and the right side of the page is unreachable at a zoom the rules allow.
+* **Nothing rules on a device pixel ratio that changes.** The ratio is carried in the view state
+  and a conversion multiplies by it, so moving the window to a second screen changes every mapping
+  `PROSE-UI-023` governs. Section 3 lists a canvas resize and not this, and `PROSE-UI-130` says
+  what a resize leaves alone without saying whether a ratio change is one.
 * **A pageless mode would replace this column.** `meta/pageless` is a container the schema carries
   as deferred; with it set, the layout is linear, the gutters go and the width follows the
   viewport -- which is a different geometry, not a variant of this one.

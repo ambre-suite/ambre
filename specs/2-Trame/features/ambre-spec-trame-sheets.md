@@ -1,7 +1,8 @@
 # AMBRE -- FEATURE: SHEETS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the lifecycle and the tab strip are built; the concurrent rules are not.
+**Implementation:** partial -- the lifecycle and the tab strip are built; the concurrent rules are
+not, and a new sheet is not the one the user lands on.
 
 > A workbook is several sheets, shown as tabs along the bottom edge. A user adds one, renames it,
 > drags it to another position, or deletes it -- and every formula pointing into it keeps working.
@@ -17,19 +18,53 @@ workbook is never empty -- is what the strip lets a user break.
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TRAME-022` | A workbook MUST always hold at least one sheet. | this spec section 2, row 4 | partial: `ambre_trame::logic::tests::group3::delete_last_sheet_rejected` covers the **local** guard only. Two peers deleting the last two sheets at once still converge on a workbook with none, which is `TRAME-077` | unverified |
-| `TRAME-070` | A sheet MUST keep its identity through a rename. | this spec section 3 | `ambre_trame::logic::tests::group3::rename_sheet_keeps_id_and_cells`, `::cross_sheet_reference_converges_across_peers_on_rename` | verified |
-| `TRAME-071` | Two users adding a sheet at once MUST each keep theirs. | this spec section 2, row 1 | type-level: an explicit sheet's id is minted from the peer id and a per-peer counter, so two peers cannot mint the same one, and the order list appends rather than elects | verified |
-| `TRAME-072` | A sheet's cells MUST NOT be reachable through another sheet's coordinates. | this spec section 3 | `ambre_trame::logic::tests::group3::create_sheet_lists_and_isolates`, `group1::multi_sheet_isolation_and_name_lookup` | verified |
-| `TRAME-073` | Reordering the tabs MUST move the strip and nothing else. | this spec section 4 | `ambre_trame::logic::tests::group3::move_sheet_reorders_tabs` | verified |
-| `TRAME-074` | Two users reordering tabs at once MUST converge on one order. | this spec section 6 | none, and the path is worse than untested: when the stored order differs from the canonical one, the handler empties the list and pushes every id back, discarding the element identities a concurrent move needs to land against | unverified |
-| `TRAME-075` | Deleting the sheet a user is reading MUST leave that user on another one. | this spec section 2, row 3 | `ambre_trame::logic::tests::group3::delete_active_sheet_falls_back` | verified |
-| `TRAME-076` | Deleting a sheet MUST leave none of its data in the document. | this spec section 6 | none, and the code is partial: the cells, the styles, the merges and the two axes are dropped; the column widths, the row heights, the filter and the hidden rows are not | unverified |
-| `TRAME-077` | Two users deleting the last two sheets at once MUST still leave one. | this spec section 6 | not built -- lands with the "Engine completion" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-078` | Two sheets MUST NOT carry the same name. | this spec section 6 | none, and the code does the **opposite**: nothing checks a name when a sheet is created or renamed, so two may share one and a formula naming it reaches whichever the lookup yields first | unverified |
-| `TRAME-079` | The tab strip MUST show every sheet of the document, in the document's order. | this spec section 4 | `ambre_trame::logic::tests::group3::move_sheet_reorders_tabs`, `::first_scroll_viewport_hydrates_sheet_list_once` | verified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-022` | `INV` | A workbook MUST always hold at least one sheet. | this spec section 2, row 4 | none for the invariant itself. The local guard is a refusal, and it is `TRAME-163`; two peers deleting the last two sheets at once still converge on a workbook with none, which is `TRAME-077` | unverified |
+| `TRAME-072` | `INV` | A sheet's cells MUST NOT be reachable through another sheet's coordinates. | this spec section 3 | `ambre_trame::logic::tests::group3::create_sheet_lists_and_isolates`, `group1::multi_sheet_isolation_and_name_lookup` | verified |
+| `TRAME-078` | `INV` | Two sheets MUST NOT carry the same name. | this spec section 6 | none, and the code does the **opposite**: nothing checks a name on a create or on a rename, and the strip names a new sheet after the count of tabs it shows, so four gestures -- add, add, delete the first, add -- put two identical labels in the strip with no second user in sight | unverified |
+| `TRAME-079` | `OBS` | The tab strip MUST show every sheet of the document, in the document's order. | this spec section 4 | `ambre_trame::logic::tests::group3::move_sheet_reorders_tabs`, `::first_scroll_viewport_hydrates_sheet_list_once` for the order the Logic thread publishes, and `ambre_trame::tests::chrome_ui::sheet_tabs_render_active_and_emit_intents` for the strip drawing one tab per entry in that order. What joins the two halves -- the launcher mirroring the list into the strip's signals -- is asserted nowhere | verified |
+| `TRAME-071` | `CONC` | Two users adding a sheet at once MUST each keep theirs. | this spec section 2, row 1 | none. The mint gives each peer its own id -- the document's peer id and a per-session counter -- and the order list appends rather than elects, but nothing goes red if that mint changes: no test drives two peers through a create, and the convergence property's op set carries no sheet command | unverified |
+| `TRAME-074` | `CONC` | Two users reordering tabs at once MUST converge on one order. | this spec section 6 | none, and the path is worse than untested: when the stored order differs from the canonical one, the handler empties the list and pushes every id back, discarding the element identities a concurrent move needs to land against | unverified |
+| `TRAME-077` | `CONC` | Two users deleting the last two sheets at once MUST still leave one. | this spec section 6 | not built -- lands with the "Engine completion" Story (`ambre-roadmap.md` E6) | unimplemented |
+
+### 1.2 Add a sheet
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-159` | `FRAME` | Adding a sheet MUST NOT change which sheet the reader is on. | this spec section 4 | `ambre_trame::logic::tests::group3::create_sheet_lists_and_isolates`, which asserts the active id after the create. The rule is held and section 4 wanted the opposite -- the new tab is never activated, because nothing sends the second command the create leaves to the caller (section 6) | verified |
+
+### 1.3 Rename a sheet
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-160` | `PRE` | The name a rename is given MUST NOT be empty. | this spec section 4 | none, and nothing checks. The strip drops a blank on both its paths, the Enter and the blur; the engine writes whatever it is handed, so a rename reaching it from anywhere else leaves a tab with no label and no way to click it | unverified |
+| `TRAME-070` | `POST` | A sheet MUST keep its identity through a rename. | this spec section 3 | `ambre_trame::logic::tests::group3::rename_sheet_keeps_id_and_cells`, `::cross_sheet_reference_converges_across_peers_on_rename` | verified |
+| `TRAME-161` | `FRAME` | A rename MUST NOT move the sheet in the strip. | this spec section 4 | none. The rename writes the name map alone and never the order list, and the canonical order falls back to the id, not to the label -- so no sort can follow a name. No test reads the order after a rename | unverified |
+
+### 1.4 Drag a tab to another slot
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-073` | `POST` | Reordering the tabs MUST put the sheet at the slot it was dropped on. | this spec section 4 | `ambre_trame::logic::tests::group3::move_sheet_reorders_tabs` | verified |
+| `TRAME-162` | `FRAME` | Reordering the tabs MUST NOT change a cell, a style or a formula. | this spec section 4 | none. The move writes the order list alone and asks for no recompute, and no test reads the document after one. The list is not left alone either: a diverging order is cleared and pushed back before the move, which is what `TRAME-074` fails on | unverified |
+
+### 1.5 Delete a sheet
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-163` | `FAIL` | Deleting the last remaining sheet MUST be refused, with a message and no write. | this spec section 4 | `ambre_trame::logic::tests::group3::delete_last_sheet_rejected`, which asserts both the error event and the absence of an update. This is the whole of what used to be read as covering `TRAME-022` | verified |
+| `TRAME-075` | `POST` | Deleting the sheet a user is reading MUST leave that user on another one. | this spec section 2, row 3 | `ambre_trame::logic::tests::group3::delete_active_sheet_falls_back` | verified |
+| `TRAME-076` | `POST` | Deleting a sheet MUST leave none of its data in the document. | this spec section 6 | none, and the code is partial: the cells, the styles, the merges and the two axes are dropped; the column widths, the row heights, the filter and the hidden rows are not | unverified |
+| `TRAME-164` | `FRAME` | Deleting a sheet MUST NOT touch another sheet's data. | this spec section 5 | none. Every per-sheet container is named by the sheet id, so the drop cannot reach a neighbour's key; it does not reach four of its own either (`TRAME-076`), and no test reads a second sheet after a delete | unverified |
+
+### 1.6 Switch to another tab
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-165` | `FRAME` | Switching tabs MUST NOT change the document, and MUST reach no collaborator. | this spec section 3 | none. The switch answers with display events alone, so it carries no delta to send, and no test asserts it. What it does cost is a full engine reseed, which is the debt of section 6 | unverified |
 
 * **Budget.** none of its own: what opening a sheet costs is the `SheetIndex` rebuild of
   `ambre-spec-budgets.md section 1`, and that budget belongs to
@@ -37,9 +72,14 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a sheet create, rename, reorder or delete is a document write, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 6 `verified`, 4 `unverified`, 1 `unimplemented`. The four gaps are all about a
-  second user: a concurrent reorder, a concurrent last-sheet delete, the leftovers a delete does
-  not remove, and a name nothing keeps unique. Everything one user can do alone is covered.
+* **Verification.** 7 `verified`, 10 `unverified`, 1 `unimplemented`. One claim is withdrawn and one
+  is recovered from a cell that hid it. `TRAME-071` was `verified` on the mint: two peers do get
+  distinct ids, and nothing goes red if that stops being true, so it is an argument and not a
+  mechanism. `TRAME-022` cited the local guard as a partial cover of an invariant it cannot reach;
+  the guard is a refusal, it is now `TRAME-163`, and the invariant is left saying what it is: held
+  on one peer, open between two (`TRAME-077`). Four frames are new, and the gestures they bind had
+  none: what an add leaves alone is the tab the reader is on, and the code holds it while section 4
+  claimed the opposite.
 
 ---
 
@@ -99,10 +139,10 @@ The tab strip is DOM chrome along the bottom edge, not painted on the canvas.
 | Part | Behaviour |
 |---|---|
 | a tab | the sheet's name. The active one is marked, and a click activates its sheet |
-| the `+` button | adds a sheet, and the new one becomes active |
-| a double-click on a tab | renames it in place. A blank name is refused by the strip, not by the engine |
+| the `+` button | adds a sheet at the end of the strip, and leaves the reader on the sheet they were on (`TRAME-159`) |
+| a double-click on a tab | renames it in place. A blank name is refused by the strip, not by the engine (`TRAME-160`) |
 | a drag of a tab | reorders the strip, dropping at the slot under the pointer (`TRAME-073`) |
-| a delete on a tab | removes the sheet, unless it is the last one, which raises an error message |
+| a delete on a tab | removes the sheet, unless it is the last one, which raises an error message and writes nothing (`TRAME-163`) |
 | the order shown | the document's order, refreshed after every lifecycle command (`TRAME-079`) |
 
 Each handler sends one command and decides nothing: the fallback after deleting the active sheet,
@@ -110,17 +150,18 @@ the refusal of the last sheet and the id of a new sheet are all the Logic thread
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| A sheet is an id, and its name is a label | a formula that depended on the name would have to be rewritten on every rename, in every cell, and a rewrite that fails halfway is a corrupt document | naming the sheet in the reference, as the file formats do |
-| The first sheet's id is a constant | two peers each starting from a fresh document must merge into one workbook, not two. A minted id makes the two first sheets different sheets | minting the first id like every other |
-| An explicit sheet's id carries the peer that minted it | two users adding a sheet at the same second must both get one. A shared counter would give them the same id, and one would silently win | a document-wide counter, or a name-derived id |
-| The order is a list, and the names are a map | the order is the thing two users move, and a list move is a first-class operation that converges. The name is the thing two users overwrite, and a map entry is the unit that elects | one container holding both |
-| Per-sheet containers are named by the id, not nested | a sheet's cells can be dropped in one pass, and a name collision between two sheets is impossible | one container per sheet holding every sub-container |
-| Deleting a sheet breaks its references rather than rewriting them | a formula pointing at deleted data has no right answer, and inventing one hides the deletion from the reader | resolving the reference to empty, as a deleted row does |
-| Delete is the one sheet operation a reference can feel | a rename changes a label the reader sees and a reorder changes the strip, so neither touches the dependency graph; only a delete removes a `sheet_id`. Excel's rename-rewrite carries the same hazard as its row-insert rewrite -- two concurrent rewrites of one formula converge on a third -- and binding to the id leaves `#REF!` meaning one thing (`TRAME-009`) | rewriting the name token in every dependent formula on rename, as Excel does |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| A sheet is an id, and its name is a label | naming the sheet in the reference, as the file formats do | a formula that depended on the name would have to be rewritten on every rename, in every cell, and a rewrite that fails halfway is a corrupt document |
+| The first sheet's id is a constant | minting the first id like every other | two peers each starting from a fresh document must merge into one workbook, not two. A minted id makes the two first sheets different sheets |
+| An explicit sheet's id carries the peer that minted it | a document-wide counter | two users adding a sheet at the same second must both get one. A shared counter would give them the same id, and one would silently win |
+| An explicit sheet's id carries the peer that minted it | a name-derived id | the name is an editable label and nothing keeps two sheets from sharing one; deriving the id from it would move the id on every rename, which the first decision here exists to prevent |
+| The order is a list, and the names are a map | one container holding both | the order is the thing two users move, and a list move is a first-class operation that converges. The name is the thing two users overwrite, and a map entry is the unit that elects |
+| Per-sheet containers are named by the id, not nested | one container per sheet holding every sub-container | a sheet's cells can be dropped in one pass, and a name collision between two sheets is impossible |
+| Deleting a sheet breaks its references | resolving the reference to empty, as a deleted row does | a formula pointing at deleted data has no right answer, and inventing one hides the deletion from the reader |
+| Delete is the one sheet operation a reference can feel | rewriting the name token in every dependent formula on rename, as Excel does | a rename changes a label the reader sees and a reorder changes the strip, so neither touches the dependency graph; only a delete removes a `sheet_id`. Excel's rename-rewrite carries the same hazard as its row-insert rewrite -- two concurrent rewrites of one formula converge on a third -- and binding to the id leaves `#REF!` meaning one thing (`TRAME-009`) |
 
 ---
 
@@ -136,8 +177,14 @@ the refusal of the last sheet and the id of a new sheet are all the Logic thread
 * **The last sheet holds locally and not between peers** (`TRAME-022`, `TRAME-077`). The rule for the
   concurrent case is decided -- deterministic re-insertion of the lowest-sorting id, identical on
   every peer -- and not implemented.
-* **Two sheets may share a name** (`TRAME-078`). Nothing checks. A formula typed with that name
-  resolves to whichever the lookup yields first, and the two are indistinguishable in the strip.
+* **The `+` button does not open the sheet it adds** (`TRAME-159`). `create_sheet` leaves the
+  active sheet alone by design, and expects the surface to send `ActivateSheet` behind it. The
+  launcher does not, so a user who clicks `+` gets a tab they have to click again. Nothing rules
+  which of the two is wrong.
+* **Two sheets may share a name** (`TRAME-078`). Nothing checks, and one user is enough: the
+  launcher names a new sheet after the count of sheets, so adding two, deleting the first of them
+  and adding again yields the same name twice. A formula typed with that name resolves to whichever
+  the lookup yields first, and the two are indistinguishable in the strip.
 * **Switching a tab is a full engine reseed.** The engine pins the active sheet to its own index
   zero, so activating another one remaps every compiled reference. It is engine debt
   (`ambre-spec-trame-engine.md`), and it is the direct cause of `TRAME-062`: a

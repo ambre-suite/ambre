@@ -69,7 +69,7 @@ section 1.D):
                     deleting them removed the one thing they did well: a writer
                     met three headings and had to answer them, and an empty
                     section was visible. The question comes back as three
-                    bullets under the invariant table -- `Budget`, `Boundary`
+                    bullets under the contract table -- `Budget`, `Boundary`
                     and `Verification` -- at three lines instead of three
                     pages. Each must be present and non-empty. **Whether the
                     answer is true, no script holds**, exactly like the
@@ -132,7 +132,7 @@ NON_NORMATIVE = {
 
 # A generated aggregation: no author, so no prose budget and no `Implementation`
 # header. Its shape is held by the script that writes it -- `feature_inventory.py`
-# and `invariants.py` each fail when the file on disk differs from what they would
+# and `contracts.py` each fail when the file on disk differs from what they would
 # write today -- which is a stricter guard than any of the rules here, not an
 # exemption from them.
 GENERATED = re.compile(r"-(inventory|ledger)\.md$")
@@ -187,7 +187,7 @@ MIGRATED_DOCS = {
 # The one register the corpus keeps outside both templates: every budget of the
 # workspace, one row each. It is `ambre-spec-template.md section 4` material --
 # the class the roadmap and the generated inventories belong to -- so it carries
-# no `Implementation` field and declares no invariant table. It is still held to
+# no `Implementation` field and declares no contract table. It is still held to
 # the prose cap and to the long-line rule, because a register a reader cannot
 # scan is a register nobody cites.
 BUDGETS = "1-Foundations/ambre-spec-budgets.md"
@@ -273,12 +273,12 @@ METHOD_MARKERS = [
     ),
 ]
 
-# A declared invariant row, matched on its ID cell alone. `invariants.py` parses
+# A declared contract row, matched on its ID cell alone. `contracts.py` parses
 # the whole row because it counts a status; this script only needs to know the
 # table is there, so it reads the one cell that says so.
-INVARIANT_ROW = re.compile(r"^\|\s*`[A-Z][A-Z0-9-]*-\d{3}`\s*\|")
+CONTRACT_ROW = re.compile(r"^\|\s*`[A-Z][A-Z0-9-]*-\d{3}`\s*\|")
 
-# The three answers an invariant table owes, directly under it. Matched as a
+# The three answers a contract table owes, directly under it. Matched as a
 # **bullet**, so naming a label inside a table cell is not an answer --
 # `ambre-spec-template.md` names all three to define them.
 ANSWERS = {
@@ -446,7 +446,7 @@ def prose_share(text: str) -> float:
 def feature_issues(text: str):
     """Yield (line_no, reason) for every production marker in a feature document."""
     for i, line in enumerate(text.splitlines(), 1):
-        # A table row carries the invariant grammar, which names the Story an
+        # A table row carries the contract grammar, which names the Story an
         # `unimplemented` row is bound to. That is required, not history.
         if line.lstrip().startswith("|"):
             continue
@@ -477,19 +477,19 @@ def header_issues(text: str):
 
 
 def answer_issues(text: str):
-    """Yield (kind, detail) for an answer a document with an invariant table owes.
+    """Yield (kind, detail) for an answer a document with a contract table owes.
 
     A document with no row owes nothing: the three bullets answer **for a
     table**, and a document that declares none has no cost, no boundary and no
     coverage to report.
     """
     lines = text.splitlines()
-    if not any(INVARIANT_ROW.match(line) for line in lines):
+    if not any(CONTRACT_ROW.match(line) for line in lines):
         return
     for label, pattern in ANSWERS.items():
         bodies = [m.group("body").strip() for line in lines if (m := pattern.match(line))]
         if not bodies:
-            yield "answer", f"no `**{label}.**` bullet under the invariant table"
+            yield "answer", f"no `**{label}.**` bullet under the contract table"
         elif not any(bodies):
             yield "answer", f"`**{label}.**` is empty -- `none`, and why, is an answer"
 
@@ -620,7 +620,7 @@ def main() -> int:
     for path in sorted(SPECS.rglob("*.md")):
         rel = str(path.relative_to(SPECS))
         # `Todo/` holds scoping notes for applications with no crate and no
-        # invariant table: not specs under the corpus's own grammar, and their
+        # contract table: not specs under the corpus's own grammar, and their
         # effort tables are the shape a scoping note legitimately takes.
         if (
             "reviews/" in rel

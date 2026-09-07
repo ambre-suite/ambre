@@ -14,19 +14,35 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The shared rules are `ambre-spec-pdf-export.md`,
 `PDF-001` through `PDF-006`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TRAME-IO-022` | The page format MUST be read from the sheet's persisted setup; a one-off override MUST NOT write to it. | this spec section 2; section 3 | not built -- lands with the "Persisted page setup" Story (`ambre-roadmap.md` E6); the container is declared and no code writes it | unimplemented |
-| `TRAME-IO-023` | Text too wide for its cell MUST be cut at the cell edge, with no ellipsis, exactly as on screen. | this spec section 3 | not built -- lands with the "Sheet PDF export" Story (`ambre-roadmap.md` post-V1) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-IO-021` | `INV` | The drawing primitives MUST hold no screen-only state. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | type-level: the seven primitives under `crates/ambre-trame/src/render/` are generic over `DrawSurface` and none names a scroll offset or a dirty rect. Three of them -- `ambre_trame::render::tests::draw_cells_on_fills_each_and_counts_nonempty_text`, `::draw_grid_lines_on_strokes_with_grid_color`, `::col_headers_draw_bg_separator_and_active_tint` -- run through a recording surface that is neither screen nor page; the merge overlay and the cell borders are driven by the screen renderer alone. They do take a `TextCache`, which lives in the GPU crate and is not a GPU type: a shaping cache, not screen state | verified |
+| `TRAME-IO-023` | `OBS` | Text too wide for its cell MUST be cut at the cell edge on the page, with no ellipsis, exactly as on screen. | this spec section 3; `features/ambre-spec-trame-cell-rendering.md section 4` | not built -- lands with `Sheet PDF export` (`ambre-roadmap.md` post-V1). Nothing serves a page, so no test compares one with the screen | unimplemented |
+
+### 1.2 Export a sheet to a page
+
+That a page is drawn by the screen's own walk, is pure vector, is byte-stable and reaches the
+browser off the UI thread is `ambre-spec-pdf-export.md section 1.1`. What a sheet adds is a page
+format, and an override that must not become an edit.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-IO-022` | `POST` | An export MUST take its page format from the sheet's persisted setup, unless the gesture carries a one-off override. | this spec section 2; section 3 | not built -- lands with `Persisted page setup` (`ambre-roadmap.md` E6). The container is declared and no command writes it | unimplemented |
+| `TRAME-IO-031` | `FRAME` | An export MUST NOT change the document, the stored page setup of a one-off override included. | this spec section 2; section 5 | not built -- lands with `Sheet PDF export` (`ambre-roadmap.md` post-V1). It is the row that keeps a trial print from becoming a shared edit | unimplemented |
 
 * **Budget.** none: `ambre-spec-budgets.md` budgets no grid export, and the page walk over a large
-  sheet is unmeasured until the fixture corpus exists (`ambre-spec-fixtures.md`). The shared writer's
-  weight is `ambre-spec-pdf-export.md`.
+  sheet is unmeasured until the fixture corpus exists (`ambre-spec-fixtures.md`). The shared
+  writer's weight is `ambre-spec-pdf-export.md`.
 * **Boundary.** the finished file reaches the browser and nothing else, on the shared export path
   (`ambre-spec-pdf-export.md`, `PDF-002`, `PDF-003`).
-* **Verification.** 0 `verified`, 0 `unverified`, 2 `unimplemented`. The page setup has no writer and
-  the pagination has no driver. The shared rules and their coverage are in `ambre-spec-pdf-export.md`;
-  the render walk they rest on is already surface-generic (`PDF-001`).
+* **Verification.** 1 `verified`, 0 `unverified`, 3 `unimplemented`. One row holds, and it is the
+  one the shared document does not reach: `PDF-001` binds the walk that draws a page, and
+  `TRAME-IO-021` binds that walk's own primitives, which carry no screen state. The page setup has
+  no writer, the pagination has no driver, and the shared rules are `ambre-spec-pdf-export.md`.
+  Three of Trame's seven primitives run through a surface that is not the screen. The rest reach a
+  page only when the driver lands, section 6.
 
 ---
 
@@ -38,7 +54,7 @@ The shared scenario -- an export writes nothing, and two exports are the same by
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
 | sets the paper size to A3 | exports the sheet | one page format, converged | Bob's file is A3: he did not have to be told (`TRAME-IO-022`) | none -- unbuilt |
-| overrides the orientation for one export | reads the page setup | the stored format, unchanged | Alice's file is landscape; Bob's setup is what it was (`TRAME-IO-022`) | none -- unbuilt |
+| overrides the orientation for one export | reads the page setup | the stored format, unchanged | Alice's file is landscape; Bob's setup is what it was (`TRAME-IO-031`) | none -- unbuilt |
 
 ---
 
@@ -106,12 +122,38 @@ No progress reaches the user: a long export is one wait with no report
 
 ---
 
-## 5. NOT BUILT, AND NOT YET RULED
+## 5. REJECTED ALTERNATIVES
+
+The shared decisions -- the page drawn by the screen's own walk, the export in the Logic thread, the
+pure-vector file, the glyph runs that carry their source range -- are
+`ambre-spec-pdf-export.md section 5`. Trame's own:
+
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The PDF surface belongs to no application | a PDF module inside `ambre-trame` | it is where the design first put it, and it would make the other two applications depend on Trame. The surface translates drawing primitives into a page and knows nothing about a grid |
+| The page format is persisted | passing the format with the export command | it is a per-user setting that nobody can see or agree on, and two peers exporting one sheet must produce one layout |
+| An override does not write the container | writing the override | it makes every trial print a shared edit. Printing one copy in landscape is not a decision about the document, and it must not reach the other peers |
+| Wide text is cut, never elided | adding an ellipsis on the page | it reads better and matches nothing: the page must match the screen, and the screen cuts at the cell edge. An ellipsis on the page alone would break the promise the export exists for |
+
+---
+
+## 6. NOT BUILT, AND NOT YET RULED
 
 The shared gaps are in `ambre-spec-pdf-export.md section 6`. Trame's own:
 
-* **Nothing exports a PDF in Trame.** There is no driver, no pagination, no command on the bus and no
-  menu entry. What exists is the shared seam they will use.
+* **Nothing exports a PDF in Trame.** There is no driver, no pagination, no command on the bus and
+  no menu entry. What exists is the shared seam they will use.
+* **The seam is proven three ways out of seven.** The render walk is generic over the surface for
+  all of its primitives, and only the cell bodies, the grid lines and the column headers are ever
+  driven through a surface that is not the screen. The merge overlay and the cell borders reach a
+  page for the first time when the driver lands, with no recording behind them.
+* **Nothing says the PDF surface stays a lazy chunk.** Toile declares `ambre-pdf` behind an
+  optional feature, so `krilla` is not in the Main fetch unless an export compiles it in
+  (`ambre-spec-budgets.md section 5`). Trame declares nothing yet, and no rule here says which of
+  the two shapes it takes.
+* **Toile exports and Trame does not, through the same surface.** The difference between the two is
+  the pagination: a board yields one page per frame, and a grid must be cut into pages nobody has
+  specified.
 * **Nothing rules what a page break may cut.** A row taller than the printable area, a merged block
   that straddles the edge, and a column wider than the paper have no rule. Repeating the header strip
   on each page has none either.

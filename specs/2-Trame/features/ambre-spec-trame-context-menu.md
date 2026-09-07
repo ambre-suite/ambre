@@ -17,22 +17,42 @@ document holds is the scope, the order and the dispatch.
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TRAME-UI-085` | The menu MUST be scoped to what the pointer targeted: a cell, a column, a row or the corner. | this spec section 3 | partial: `ambre_trame::tests::chrome_ui::cell_menu_has_clipboard_and_merge`, `::column_menu_keeps_column_ops_drops_cell_and_row_ops`, `::row_menu_keeps_row_ops_drops_column_inserts` and `::corner_menu_has_sheet_sort_only` cover the four entry sets; nothing covers the pointer handler that picks the scope | unverified |
-| `TRAME-UI-086` | A menu entry MUST carry no geometry of its own. | this spec section 2 | type-level: an entry holds a parameterless `CommandId`, so there is no field a coordinate could travel in (`chrome/commands.rs`) | verified |
-| `TRAME-UI-087` | A menu entry MUST dispatch through the same command path as the toolbar and the keyboard. | this spec section 2 | type-level: the menu emits `CommandId` and the only route from there is the shared `on_command` dispatch, which the toolbar and the keymap also take | verified |
-| `TRAME-UI-088` | A right-click inside the selection MUST keep it. | this spec section 3 | none. The handler re-selects only when the point falls outside the selection, and no test drives a right-click | unverified |
-| `TRAME-UI-089` | A command the document refuses MUST answer with a message, never with silence. | this spec section 3 | partial: `ambre_trame::logic::tests::group2::merge_rejected_when_covered_cell_non_empty` covers the refusal reply; nothing covers the toast the chrome raises from it | unverified |
-| `TRAME-UI-090` | A filter entry MUST NOT offer to filter a row. | this spec section 3 | none. `ambre_trame::tests::chrome_ui::row_menu_keeps_row_ops_drops_column_inserts` reads the row scope and asserts nothing about the filter entry; `::filter_entry_toggles_with_filter_state` asserts the toggle on the cell scope, which is the scope the rule does not constrain | unverified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-085` | `OBS` | A menu MUST list the entries its scope allows, and no others. | this spec section 3 | `ambre_trame::tests::chrome_ui::cell_menu_has_clipboard_and_merge`, `::column_menu_keeps_column_ops_drops_cell_and_row_ops`, `::row_menu_keeps_row_ops_drops_column_inserts`, `::corner_menu_has_sheet_sort_only`. Four scopes, four entry sets, one wasm test each, asserting presence and absence. The row also claimed the pointer that picks the scope, and `TRAME-UI-117` now holds that half | verified |
+| `TRAME-UI-086` | `INV` | A menu entry MUST carry no geometry of its own. | this spec section 2 | type-level: an entry holds a parameterless `CommandId`, so there is no field a coordinate could travel in (`ambre-chrome/src/context_menu.rs`) | verified |
+| `TRAME-UI-090` | `OBS` | A filter entry MUST NOT offer to filter a row. | this spec section 3 | none. `ambre_trame::tests::chrome_ui::row_menu_keeps_row_ops_drops_column_inserts` reads the row scope and asserts the absence of three column entries, never the filter one; `::filter_entry_toggles_with_filter_state` drives the cell scope, which this rule does not constrain | unverified |
+
+### 1.2 Right-click to open the menu
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-117` | `POST` | The menu MUST open scoped to what the pointer targeted: a cell, a column, a row or the corner. | this spec section 3 | none. The scope is resolved in the pointer handler (`ui/view/input.rs`), which no test drives. It is the half `TRAME-UI-085` was carrying: the four entry sets are covered, the point that picks one is not | unverified |
+| `TRAME-UI-118` | `POST` | A right-click landing outside the current selection MUST move the selection onto what it targets before the menu opens, as a left click would. | this spec section 3 | none. The handler re-selects on the press, and no test drives a right-click. Three of the five cases of the selection table in section 3 reached this pass ruled by nothing at all: the cell outside, the header body and the corner | unverified |
+| `TRAME-UI-088` | `FRAME` | A right-click inside the current selection MUST NOT change it. | this spec section 3 | none. The handler re-selects only when the point falls outside the selection, and no test drives a right-click. It holds over the cell grid alone: a right-click on a header body selects that axis whether or not the selection already covered it | unverified |
+
+### 1.3 Choose an entry
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-087` | `POST` | A menu entry MUST dispatch through the same command path as the toolbar and the keyboard. | this spec section 2 | type-level: the menu emits a `CommandId`, and the only route from there is the shared `on_command` dispatch that the toolbar and the keymap also take | verified |
+| `TRAME-UI-119` | `FRAME` | Choosing an entry MUST NOT change the selection the menu was opened on. | derived | none. Section 4 rests every range command reached by mouse on this frame condition, and nothing reads the selection back after a menu command | unverified |
+| `TRAME-UI-089` | `FAIL` | A command the document refuses MUST leave the document untouched and answer with the reason. | this spec section 3 | `ambre_trame::logic::tests::group2::merge_rejected_when_covered_cell_non_empty` asserts the rejection reply, that no document update is emitted, and that the merge span is unchanged | verified |
+| `TRAME-UI-120` | `FAIL` | A refusal MUST reach the user as a message, never as silence. | this spec section 3 | none. The chrome raises the toast from the rejection event (`chrome/commands.rs`), and no test reaches that arm. It is the half `TRAME-UI-089` was carrying | unverified |
 
 * **Budget.** none: the menu is built from a static entry set on the UI thread, and
   `ambre-spec-budgets.md` budgets no menu operation.
 * **Boundary.** none: the menu is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What an entry commits leaves as a `TrameCommand`.
-* **Verification.** 2 `verified`, 4 `unverified`. The two that hold are true by construction, and
-  the four entry sets are covered on the wasm tier. What no test reaches is the pointer: which
-  scope a right-click resolves to, and what it does to the selection.
+* **Verification.** 4 `verified`, 6 `unverified`. The `verified` count doubled while the cited
+  mechanisms did not move: the four wasm entry-set tests and the merge refusal were already here,
+  and two conjunctions were split so each half names what covers it. `TRAME-UI-085` claimed the
+  entry sets and the pointer that picks them, and only the sets are covered; `TRAME-UI-089` claimed
+  the refusal and the message that carries it, and only the refusal is covered. What no test
+  reaches is still the pointer, and now the toast: which scope a right-click resolves to, what it
+  does to the selection, and whether a refusal is ever seen.
 
 ---
 
@@ -45,10 +65,10 @@ status values are normative in `ambre-spec-template.md`.
 ```rust
 pub enum CtxScope { Cell, Column, Row, Corner }
 
-pub struct MenuEntry {
-    id: CommandId,          // parameterless: there is no field a coordinate fits in
-    icon: Option<IconId>,
-    // plus a separator variant, which carries nothing
+pub enum MenuEntry {
+    // parameterless: no variant field a coordinate fits in
+    Item { command: CommandId, label: String, icon: Option<Icon>, shortcut: Option<KeyBinding> },
+    Separator,
 }
 ```
 
@@ -82,11 +102,11 @@ the right-click scope resolution; `ambre-chrome` -- the menu component itself.
 
 | Where it lands | Effect |
 |---|---|
-| inside the current selection | the selection stays, so the menu acts on the whole range |
-| on a cell outside it | collapses to that cell, like a left click |
-| on a column or row header body | selects that whole axis |
-| on the corner | selects the sheet |
-| on a header boundary | keeps the selection, and scopes the menu to that axis |
+| inside the current selection | the selection stays, so the menu acts on the whole range (`TRAME-UI-088`) |
+| on a cell outside it | collapses to that cell, like a left click (`TRAME-UI-118`) |
+| on a column or row header body | selects that whole axis (`TRAME-UI-118`) |
+| on the corner | selects the sheet (`TRAME-UI-118`) |
+| on a header boundary | keeps the selection, and scopes the menu to that axis (`TRAME-UI-117`) |
 
 **Where each entry is specified.**
 
@@ -100,26 +120,32 @@ the right-click scope resolution; `ambre-chrome` -- the menu component itself.
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The menu is the shared DOM component | it already flips at the viewport edge, navigates by keyboard and dismisses, and it already shares one command path with the toolbar and the keymap. A second menu would duplicate all of that to gain nothing | a canvas overlay drawn by the renderer, which is what the earlier design carried |
-| Entries are parameterless | the shared component dispatches an identifier, so a command that needed coordinates could not travel through it. The Logic thread already tracks the selection for formatting, so it can resolve the geometry itself | passing the click position with the command, which would give two sources for one selection |
-| The scope is resolved on the press, not on the menu | the browser opens the menu from its own event, after ours; deciding later would mean re-deriving the target from a stale position | reading the pointer position when the menu builds |
-| Merge is always listed | a greyed entry that explains itself on click teaches the rule; a missing entry teaches nothing. The refusal carries the reason | hiding the entry when the selection cannot merge |
-| A right-click keeps a selection it lands in | the menu exists to act on ranges, and collapsing the range first would make every range command unreachable by mouse | collapsing on every right-click, like a plain click |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The menu is the shared DOM component | a canvas overlay drawn by the renderer | it is what the earlier design carried, and it would duplicate to gain nothing what the shared component already does: flipping at the viewport edge, keyboard navigation, dismissal, and one command path shared with the toolbar and the keymap. |
+| Entries are parameterless | passing the click position with the command | it would give two sources for one selection. The shared component dispatches an identifier, so a command that needed coordinates could not travel through it, and the Logic thread already tracks the selection for formatting. |
+| The scope is resolved on the press | reading the pointer position when the menu builds | the browser opens the menu from its own event, after ours; deciding later would mean re-deriving the target from a stale position. |
+| Merge is always listed | hiding the entry when the selection cannot merge | a missing entry teaches nothing, where a greyed entry that explains itself on click teaches the rule. The refusal carries the reason. |
+| A right-click keeps a selection it lands in | collapsing on every right-click, like a plain click | the menu exists to act on ranges, and collapsing the range first would make every range command unreachable by mouse. |
 
 ---
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The pointer half is untested.** The entry builder is covered on the wasm tier, one test per
-  scope. The handler that decides which scope a right-click means, and what it does to the
-  selection, is reached by nothing. It is a pure function of a point and a selection rectangle, so
-  it belongs on the host tier and is the cheapest gap here to close.
+* **The pointer half is untested** (`TRAME-UI-117`, `TRAME-UI-118`, `TRAME-UI-088`). The entry
+  builder is covered on the wasm tier, one test per scope. The handler that decides which scope a
+  right-click means, and what it does to the selection, is reached by nothing, and three of the
+  five cases section 3 describes were ruled by no row at all before this pass. It is a pure
+  function of a point and a selection rectangle, so it belongs on the host tier and is the cheapest
+  gap here to close.
+* **A refusal may be silent** (`TRAME-UI-120`). The Logic thread's rejection reply is covered; the
+  toast the chrome raises from it is reached by nothing, so a user could meet a command that does
+  nothing and says nothing.
 * **The sort dialog has no rule.** The multi-column dialog carries ordered levels, a per-level
   direction and a header toggle, and no row states what an empty level list or a duplicated column
   must do.
-* **Keyboard access.** The shared component navigates by keyboard once open, but no key opens the
-  menu: a user without a pointer cannot reach any of these commands.
+* **Keyboard access.** The shared component navigates by keyboard once open (`CHROME-026`, itself
+  `unverified`), but no key opens the menu: a user without a pointer cannot reach any of these
+  commands.

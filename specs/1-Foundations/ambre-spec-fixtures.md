@@ -22,34 +22,66 @@ engine. Import consumes theirs, export consumes ours; neither substitutes for th
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `FIXTURE-001` | For a generator and a seed, `build` MUST produce byte-identical output, across runs and across processes. | this spec section 2 | `fixture_determinism::a_generator_rebuilt_in_the_same_process_is_byte_identical`, `::a_generator_is_byte_identical_across_processes`, `::a_generator_that_ignores_its_seed_is_caught`; `fixtures_corpus::regenerating_rewrites_the_same_bytes` | verified |
-| `FIXTURE-002` | A generator MUST pin all three sources of entropy -- the `PeerID`, the commit clock and the `document_id`. None is optional. | this spec section 2 | `fixture_determinism::an_unpinned_peer_is_not_deterministic`, `::the_commit_clock_is_not_recorded`, `::the_document_id_is_part_of_what_the_digest_covers`; `ambre_core::fixtures::tests::a_seeded_document_id_is_stable_distinct_and_well_formed` | verified |
-| `FIXTURE-003` | Determinism MUST hold at the scale a fixture is built at, and on a document that has been through a merge. | this spec section 2 | `fixture_determinism::a_large_document_is_deterministic` (5 000 cells, wide enough for the encoder's wide paths), `::a_two_peer_merge_is_deterministic`. Two edges stay open by choice. The 100k-cell case belongs to the `FIXTURES P2` benchmark corpus, because it is too slow for a per-commit belt. No test exercises an architecture other than x86_64 | verified |
-| `FIXTURE-004` | A generator MUST build through `handle_command` on the app state; it MUST NOT write CRDT containers directly. | this spec section 2 | none. Every generator obeys the rule, and nothing stops the next one from writing to the `LoroDoc` directly. Such a fixture holds a state that no user action can reach, so it proves nothing | unverified |
-| `FIXTURE-005` | Every committed artifact MUST trace to a generator run from a seed, and MUST NOT come from a real user document. | this spec section 2 | none is possible: a real document and a generated one are both Loro bytes, so no gate can tell them apart. It is a **review rule**, and it belongs in the contribution checklist. A committed real document would place plaintext user content in a public AGPL repository, permanently, in git history; a fixture that is interesting *because* it came from real data is exactly the one that must not be committed -- write a generator that reproduces its shape instead | human-review |
-| `FIXTURE-006` | A committed fixture whose bytes drift MUST fail CI. | this spec section 3 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). Nothing is committed and no recipe compares a corpus against a regeneration | unimplemented |
-| `FIXTURE-007` | Fixture machinery MUST NOT reach a client build. The three production symbols named in section 2 are the whole exception. | this spec section 2; section 3 | crate graph: `ambre-app` names no `fixtures` feature, and Cargo never enables a dependency feature implicitly. The surface is therefore unreachable from the wasm artifact today. Nothing refuses the manifest line that would change that | unverified |
-| `FIXTURE-008` | Loading a fixture MUST go through the production importer; no test-only reader MUST read a `.ambre`. | this spec section 2 | `fixtures_corpus::a_written_fixture_loads_back_through_the_production_importer` | verified |
-| `FIXTURE-009` | A generator whose declared document type contradicts the bytes it built MUST be refused. | this spec section 2 | `fixtures_corpus::a_generator_whose_doc_type_contradicts_its_bytes_is_refused` | verified |
-| `FIXTURE-010` | Two generators MUST NOT share a name: the name is the artifact's identity on disk. | this spec section 2 | `fixtures_corpus::the_shipping_registry_has_no_duplicate_names`, `::the_driver_walks_a_whole_registry_and_creates_its_subdirectories` | verified |
-| `FIXTURE-011` | A manifest MUST describe the artifact beside it, and its digest MUST cover the whole file, header included. | this spec section 2 | `fixtures_corpus::the_manifest_describes_the_artifact_beside_it`, `::a_flipped_header_byte_moves_the_digest`, `::the_shape_counts_what_the_document_holds`, `::a_solo_document_reports_one_peer_and_a_merged_one_reports_two` | verified |
-| `FIXTURE-012` | A manifest MUST be readable as text and MUST read back equal to what was written. | this spec section 2 | `fixtures_corpus::the_sidecar_is_readable_json_and_reads_back_equal` | verified |
-| `FIXTURE-013` | A document that has been through the export and import cycle MUST be a fixed point of it, on every document type with an engine. | this spec section 2 | `fixture_determinism::the_round_trip_is_stable_on_every_doc_state_variant`, `::every_variant_reports_its_own_doc_type` | verified |
-| `FIXTURE-014` | Every corpus and container failure MUST reach the caller typed, and MUST NOT panic. | this spec section 2 | `fixtures_corpus::every_header_failure_is_typed_and_none_of_them_panics`, `::a_container_failure_arrives_intact_never_flattened_into_a_string`, `::a_missing_name_is_not_found_not_an_io_error`, `::an_unreadable_corpus_root_is_an_io_error`, `::a_malformed_sidecar_is_reported_as_a_manifest_failure`, `::a_doc_type_with_no_engine_degrades_cleanly` | verified |
-| `FIXTURE-015` | The corpus root MUST be resolved from the workspace, never from the process working directory. | this spec section 2 | `fixtures_corpus::the_corpus_root_is_resolved_from_the_manifest_dir_not_the_cwd` | verified |
-| `FIXTURE-016` | The canonical dump MUST be blind to the route a document took to its content. | this spec section 2 | `fixtures_corpus::the_canonical_dump_is_blind_to_the_route_a_document_took`, `::a_toile_dump_names_nodes_by_paint_order_not_by_element_id` | verified |
-| `FIXTURE-017` | The canonical dump of a formula cell MUST carry both the stored source and the evaluated result. | this spec section 2 | `fixtures_corpus::the_canonical_dump_carries_both_representations_of_a_formula` | verified |
-| `FIXTURE-018` | A frozen artifact MUST NOT be regenerated. | this spec section 2; `ambre-spec-docfile.md section 3` | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
-| `FIXTURE-019` | A migrated frozen artifact MUST produce the canonical dump of the live artifact its manifest names. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
-| `FIXTURE-020` | That comparison MUST be retired, not failed, when the frozen manifest and the live generator disagree on `generator_version`. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
-| `FIXTURE-021` | The frozen set MUST keep the newest three artifacts per document type, and drop the rest. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
-| `FIXTURE-022` | A benchmark corpus MUST NOT be committed. | this spec section 3 | not built -- lands with `FIXTURES P2 -- scale corpora and benches` (`ambre-roadmap.md` EF). The `.gitignore` entry lands with the recipe that writes the corpus | unimplemented |
-| `FIXTURE-023` | A committed benchmark baseline MUST name the machine it was measured on. | this spec section 3 | not built -- lands with `FIXTURES P2 -- scale corpora and benches` (`ambre-roadmap.md` EF) | unimplemented |
-| `FIXTURE-024` | A benchmark built on a fixture MUST NOT be reported as a frame-rate validation. | this spec section 3; `ambre-spec-testing.md section 5` | none, and none is possible: the claim is made in a pull request, not in a test. The reviewer refuses it, and section 3 states what the corpus does measure so the honest claim is at hand | human-review |
-| `FIXTURE-025` | The committed corpus and the generator registry MUST match one for one: an artifact whose generator is gone, and a generator with no committed artifact, MUST each fail the gate. | this spec section 3 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). A byte diff alone reports neither, because each case is missing the term the diff would compare, so both pass silently on the very run that introduces them | unimplemented |
-| `FIXTURE-026` | A frozen artifact whose manifest names a generator that no longer exists MUST report as degraded, and MUST be dropped at the next retention pass. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). The outcome of `FIXTURE-020` for a different cause: a renamed or deleted generator leaves the comparison without a second term rather than with a stale one | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `FIXTURE-007` | `INV` | Fixture machinery MUST NOT reach a client build. The three production symbols named in section 2 are the whole exception. | this spec section 2; section 3 | crate graph: `ambre-app` names no `fixtures` feature, and Cargo never enables a dependency feature implicitly. The surface is therefore unreachable from the wasm artifact today. Nothing refuses the manifest line that would change that | unverified |
+| `FIXTURE-010` | `INV` | Two generators MUST NOT share a name: the name is the artifact's identity on disk. | this spec section 2 | none today. `fixtures_corpus::the_shipping_registry_has_no_duplicate_names` says so in its own comment: it is vacuous while `REGISTRY` is empty, and the registry is empty until the corpus lands. `::the_driver_walks_a_whole_registry_and_creates_its_subdirectories` drives two generators with distinct names and asserts the subdirectories, never the collision | unverified |
+| `FIXTURE-005` | `INV` | Every committed artifact MUST trace to a generator run from a seed, and MUST NOT come from a real user document. | this spec section 2 | none is possible: a real document and a generated one are both Loro bytes, so no gate can tell them apart. It is a **review rule**, and it belongs in the contribution checklist. A committed real document would place plaintext user content in a public AGPL repository, permanently, in git history; a fixture that is interesting *because* it came from real data is exactly the one that must not be committed -- write a generator that reproduces its shape instead | human-review |
+| `FIXTURE-024` | `INV` | A benchmark built on a fixture MUST NOT be reported as a frame-rate validation. | this spec section 3; `ambre-spec-testing.md section 5` | none, and none is possible: the claim is made in a pull request, not in a test. The reviewer refuses it, and section 3 states what the corpus does measure so the honest claim is at hand | human-review |
+| `FIXTURE-022` | `INV` | A benchmark corpus MUST NOT be committed. | this spec section 3 | not built -- lands with `FIXTURES P2 -- scale corpora and benches` (`ambre-roadmap.md` EF). The `.gitignore` entry lands with the recipe that writes the corpus | unimplemented |
+| `FIXTURE-023` | `INV` | A committed benchmark baseline MUST name the machine it was measured on. | this spec section 3 | not built -- lands with `FIXTURES P2 -- scale corpora and benches` (`ambre-roadmap.md` EF) | unimplemented |
+
+### 1.2 A generator builds a document
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `FIXTURE-001` | `POST` | For a generator and a seed, `build` MUST produce byte-identical output across runs. | this spec section 2 | `fixture_determinism::a_generator_rebuilt_in_the_same_process_is_byte_identical`; `::a_generator_that_ignores_its_seed_is_caught` asserts the negative case, so a generator that is stable because it is constant does not pass as deterministic | verified |
+| `FIXTURE-027` | `POST` | `build` MUST produce byte-identical output across processes. | this spec section 2 | `fixture_determinism::a_generator_is_byte_identical_across_processes` re-execs the test binary and compares the child's digests with the parent's. It is the half that matters: Rust reseeds hash-map state per process, so an encoder iterating one is stable within a run and unstable between runs -- the failure an in-process rebuild cannot see | verified |
+| `FIXTURE-002` | `POST` | A generator MUST pin all three sources of entropy -- the `PeerID`, the commit clock and the `document_id`. None is optional. | this spec section 2 | one test per source, each asserting the output moves when that source is left free: `fixture_determinism::an_unpinned_peer_is_not_deterministic`, `::the_commit_clock_is_not_recorded`, `::the_document_id_is_part_of_what_the_digest_covers`; `ambre_core::fixtures::tests::a_seeded_document_id_is_stable_distinct_and_well_formed` pins the seeded identity itself | verified |
+| `FIXTURE-003` | `POST` | Determinism MUST hold at the scale a fixture is built at. | this spec section 2 | `fixture_determinism::a_large_document_is_deterministic` builds 5 000 cells, wide enough for the encoder's wide paths. Two edges stay open by choice: the 100k-cell case belongs to the `FIXTURES P2` benchmark corpus, being too slow for a per-commit belt, and no test exercises an architecture other than x86_64 | verified |
+| `FIXTURE-028` | `POST` | Determinism MUST hold on a document that has been through a merge. | this spec section 2; `ambre-spec-delta-order.md` | `fixture_determinism::a_two_peer_merge_is_deterministic` has two pinned peers edit disjoint cells, exchange snapshots both ways and export the result. Without it no post-convergence fixture could ever be committed, because convergence is exactly where a stable encoder stops being enough | verified |
+| `FIXTURE-004` | `FRAME` | A generator MUST build through `handle_command` on the app state; it MUST NOT write CRDT containers directly. | this spec section 2 | none. Every generator obeys the rule, and nothing stops the next one from writing to the `LoroDoc` directly. Such a fixture holds a state that no user action can reach, so it proves nothing | unverified |
+
+### 1.3 An artifact and its manifest are written
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `FIXTURE-011` | `POST` | A manifest MUST describe the artifact beside it. | this spec section 2 | `fixtures_corpus::the_manifest_describes_the_artifact_beside_it`; `::the_shape_counts_what_the_document_holds` and `::a_solo_document_reports_one_peer_and_a_merged_one_reports_two` assert the description is read off the document rather than declared | verified |
+| `FIXTURE-029` | `POST` | A manifest's digest MUST cover the whole file, header included. | this spec section 2; `ambre-spec-docfile.md section 3` | `fixtures_corpus::a_flipped_header_byte_moves_the_digest` flips one byte of the header and asserts the digest changes. A digest over the payload alone would let the header drift under a gate that reports green | verified |
+| `FIXTURE-012` | `POST` | A manifest MUST be readable as text and MUST read back equal to what was written. | this spec section 2 | `fixtures_corpus::the_sidecar_is_readable_json_and_reads_back_equal` | verified |
+| `FIXTURE-009` | `FAIL` | A generator whose declared document type contradicts the bytes it built MUST be refused. | this spec section 2 | `fixtures_corpus::a_generator_whose_doc_type_contradicts_its_bytes_is_refused` | verified |
+| `FIXTURE-030` | `FRAME` | Writing over an existing artifact MUST NOT change its bytes when the generator and the seed are unchanged. | this spec section 3 | `fixtures_corpus::regenerating_rewrites_the_same_bytes` runs the writer twice over one tree and compares both the manifest and the file. The drift gate of `FIXTURE-006` is a byte diff, so this is the property that whole gate rests on | verified |
+
+### 1.4 A document is dumped canonically
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `FIXTURE-017` | `POST` | The canonical dump of a formula cell MUST carry both the stored source and the evaluated result. | this spec section 2 | `fixtures_corpus::the_canonical_dump_carries_both_representations_of_a_formula` | verified |
+| `FIXTURE-016` | `FRAME` | The canonical dump MUST be blind to the route a document took to its content. | this spec section 2 | `fixtures_corpus::the_canonical_dump_is_blind_to_the_route_a_document_took`; `::a_toile_dump_names_nodes_by_paint_order_not_by_element_id` asserts the one ordering that would otherwise leak insertion history into the comparison | verified |
+
+### 1.5 A fixture is loaded
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `FIXTURE-008` | `POST` | Loading a fixture MUST go through the production importer; no test-only reader MUST read a `.ambre`. | this spec section 2 | `fixtures_corpus::a_written_fixture_loads_back_through_the_production_importer` | verified |
+| `FIXTURE-013` | `POST` | A document that has been through the export and import cycle MUST be a fixed point of it, on every document type with an engine. | this spec section 2 | `fixture_determinism::the_round_trip_is_stable_on_every_doc_state_variant`, `::every_variant_reports_its_own_doc_type` -- the second is what keeps a variant added later from silently taking another's path | verified |
+| `FIXTURE-014` | `FAIL` | Every corpus and container failure MUST reach the caller typed, and MUST NOT panic. | this spec section 2 | `fixtures_corpus::every_header_failure_is_typed_and_none_of_them_panics`, `::a_container_failure_arrives_intact_never_flattened_into_a_string`, `::a_missing_name_is_not_found_not_an_io_error`, `::an_unreadable_corpus_root_is_an_io_error`, `::a_malformed_sidecar_is_reported_as_a_manifest_failure`, `::a_doc_type_with_no_engine_degrades_cleanly` | verified |
+| `FIXTURE-015` | `FRAME` | Resolving the corpus root MUST NOT read the process working directory. | this spec section 2 | `fixtures_corpus::the_corpus_root_is_resolved_from_the_manifest_dir_not_the_cwd`. A root read off the working directory makes every corpus test pass or fail on where it was invoked from | verified |
+
+### 1.6 The gate compares the corpus against the registry
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `FIXTURE-006` | `POST` | A committed fixture whose bytes drift MUST fail CI. | this spec section 3 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). Nothing is committed and no recipe compares a corpus against a regeneration | unimplemented |
+| `FIXTURE-019` | `POST` | A migrated frozen artifact MUST produce the canonical dump of the live artifact its manifest names. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
+| `FIXTURE-020` | `POST` | That comparison MUST be retired, not failed, when the frozen manifest and the live generator disagree on `generator_version`. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
+| `FIXTURE-026` | `POST` | A frozen artifact whose manifest names a generator that no longer exists MUST report as degraded, and MUST be dropped at the next retention pass. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). The outcome of `FIXTURE-020` for a different cause: a renamed or deleted generator leaves the comparison without a second term rather than with a stale one | unimplemented |
+| `FIXTURE-021` | `POST` | The frozen set MUST keep the newest three artifacts per document type, and drop the rest. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
+| `FIXTURE-025` | `FAIL` | A committed artifact whose generator is gone MUST fail the gate. | this spec section 3 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). A byte diff alone reports nothing here, because the term it would compare against is the one that vanished | unimplemented |
+| `FIXTURE-031` | `FAIL` | A generator with no committed artifact MUST fail the gate. | this spec section 3 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). The mirror of `FIXTURE-025`, and the one that passes silently on the very run that introduces it: a new generator with no artifact yet is a diff with nothing to diff | unimplemented |
+| `FIXTURE-018` | `FRAME` | A frozen artifact MUST NOT be regenerated. | this spec section 2; `ambre-spec-docfile.md section 3` | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
 
 * **Budget.** the tooling targets of `ambre-spec-budgets.md`: `just fixtures` in
   ~30 s, `just fixtures-check` in ~10 s, and the committed artifact cap. `FIXTURE-021` is what keeps
@@ -59,14 +91,24 @@ status values are normative in `ambre-spec-template.md`.
   that `ambre-app` never names (`FIXTURE-007`), so it links into no shipped binary and reaches no
   relay. The one key it touches is derived at test setup, guards nothing, and is never written to
   disk (section 2).
-* **Verification.** 13 `verified`, 2 `unverified`, 2 `human-review`, 9 `unimplemented`. Determinism
+* **Verification.** 16 `verified`, 3 `unverified`, 2 `human-review`, 10 `unimplemented`. Determinism
   is held on four axes including the cross-process one, and the whole loader is held: the round
-  trip, every typed failure, the root resolution and both canonical-dump rules. The two
-  `unverified` are the same shape -- a rule nothing refuses breaking, one on how a generator builds
-  and one on what a manifest may declare. Every `unimplemented` row is the corpus itself, which does
-  not exist: `fixtures/` is not in the tree, so freezing, retention, drift and the match against the
-  registry are specified and unbuilt.
-
+  trip, every typed failure, the root resolution and both canonical-dump rules. Every
+  `unimplemented` row is the corpus itself, which does not exist: `fixtures/` is not in the tree, so
+  freezing, retention, drift and the match against the registry are specified and unbuilt. Three
+  conjunctions came apart, and each separated a covered half from a half that carries the weight.
+  `FIXTURE-001` claimed byte-identical output across runs **and** across processes, and the second
+  is the one the spike was written for: Rust reseeds hash-map state per process, so an encoder
+  iterating one passes an in-process rebuild and fails a real rebuild. `FIXTURE-003` claimed scale
+  **and** merge, which are different failures -- the first exercises the encoder's wide paths, the
+  second is convergence, where a stable encoder stops being enough. `FIXTURE-011` claimed the
+  manifest describes its artifact **and** that its digest covers the header, and a digest over the
+  payload alone lets a header drift under a gate reporting green. `FIXTURE-025` bundled two mirror
+  failures of one gate; `FIXTURE-031` is the half that passes silently on the very run introducing
+  it. `FIXTURE-030` is new: the drift gate is a byte diff, so a second write reproducing the first
+  is the property the whole gate rests on, and one test already asserts it. One status was withdrawn:
+  `FIXTURE-010` was `verified` by a test whose own comment calls it vacuous while `REGISTRY` is
+  empty -- and the registry is empty until the corpus lands, so nothing holds the rule today.
 ---
 
 ## 2. MODEL
@@ -421,22 +463,23 @@ host with no GPU through the recording surface.
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| A fixture is an `.ambre` file | every test run then exercises the production import path, and the corpus becomes the regression belt for the format itself. An earlier draft of this document invented a container: it would carry the same bytes through a second, test-only reader and writer, unexercised by users, free to drift from the shipping importer, and a duplicated migration surface (`FIXTURE-008`) | a bespoke fixture container; and a textual format, RON or JSON, which is readable in a diff and is a second, uncompiled copy of each schema, drifting exactly as `ambre-spec-template.md section 0` warns |
-| Generators are code, seeded and versioned | a fixture must be deterministic, replayable, diffable and runnable in CI. Generated prose output is none of those: the same prompt yields a different document each run, so no golden can be committed and no gate can exist | a document produced by a language model |
-| A generator drives `handle_command` | writing CRDT containers directly is faster and produces documents no user action can produce, including states the engine's own invariants forbid. Such a fixture tests the test (`FIXTURE-004`) | writing the containers directly, bypassing the command surface |
-| The seed is the generator's own constant | a seed supplied from outside could differ between runs, which turns the drift gate into noise. Changing it is a content change and takes a `generator_version` bump with it | a seed passed to `build` by the driver |
-| The trait is defined in `ambre-core` | the orphan rule requires an implementing crate to depend on the trait's home, and both applications sit *upstream* of `ambre-logic`. Types go to `ambre-core`, behaviour stays in `ambre-logic` | defining `FixtureGen` in `ambre-logic` next to the loader, which is the natural reading of "the machinery lives in `ambre-logic`" and is impossible |
-| The generators sit next to their engine | a generator depends on the engine's command surface and must change in the same commit as the schema it exercises. Proximity enforces that coupling; a separate crate lets it drift silently, which is the failure this document exists to prevent elsewhere | a separate `ambre-fixtures` crate |
-| Two trees, membership positional | a flag in the manifest is free to disagree with reality, and nothing could adjudicate. A directory cannot (`FIXTURE-018`) | one corpus tree with a `frozen` flag in each manifest |
-| A frozen artifact is compared by canonical dump | two documents agreeing on every user-visible value still differ in op history, peer ids and commit timestamps, which is the same fact `FIXTURE-001` pins around. The dump compares content and prints a readable diff when it fails (`FIXTURE-019`) | comparing the migrated frozen document against the current one by state or by bytes |
-| The retention cap is three per document type | the gate loads and migrates every frozen artifact, so an unbounded set walks into its 10 s budget one bump at a time. The cap states how far back migration is exercised, rather than leaving it to be discovered when CI slows down (`FIXTURE-021`) | keeping every frozen artifact, and discovering the cost as a CI regression |
-| Only the small corpora are committed | git keeps a committed artifact forever, and the scale corpora are multi-megabyte and fully reproducible from a seed. Generated on demand and git-ignored instead (`FIXTURE-022`) | committing the benchmark corpora, for a convenience a seed already provides |
-| "No silent golden refresh" is a review rule | the gate compares the corpus against the code, never against the corpus's own history, so any regenerate-and-commit passes. The manifest makes a refresh **visible** instead, moving a digest and usually a shape in a JSON file read as plain text, and `generator_version` is the author's declaration that the change was intended | a gate that claims to enforce it, which would put a machine check's name on a review rule |
-| A real document is never committed | plaintext user content in a public AGPL repository, irreversibly, and a fixture that is interesting *because* it came from real data is exactly the one that must not be committed. No check can hold the rule, and `FIXTURE-005` says so rather than implying otherwise | capturing a fixture from a real document, and trusting the gate to notice |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| A fixture is an `.ambre` file | a bespoke fixture container | an earlier draft of this document invented one: it would carry the same bytes through a second, test-only reader and writer, unexercised by users, free to drift from the shipping importer, and a duplicated migration surface. An `.ambre` file makes every test run exercise the production import path, and the corpus the regression belt for the format itself (`FIXTURE-008`). |
+| A fixture is an `.ambre` file | a textual format, RON or JSON | it is readable in a diff and is a second, uncompiled copy of each schema, drifting exactly as `ambre-spec-template.md section 0` warns. |
+| Generators are code, seeded and versioned | a document produced by a language model | a fixture must be deterministic, replayable, diffable and runnable in CI. Generated prose output is none of those: the same prompt yields a different document each run, so no golden can be committed and no gate can exist. |
+| A generator drives `handle_command` | writing the containers directly, bypassing the command surface | it is faster and produces documents no user action can produce, including states the engine's own invariants forbid. Such a fixture tests the test (`FIXTURE-004`). |
+| The seed is the generator's own constant | a seed passed to `build` by the driver | it could differ between runs, which turns the drift gate into noise. A constant makes changing it a content change, and takes a `generator_version` bump with it. |
+| The trait is defined in `ambre-core` | defining `FixtureGen` in `ambre-logic` next to the loader | it is the natural reading of "the machinery lives in `ambre-logic`" and is impossible: the orphan rule requires an implementing crate to depend on the trait's home, and both applications sit *upstream* of `ambre-logic`. Types go to `ambre-core`, behaviour stays in `ambre-logic`. |
+| The generators sit next to their engine | a separate `ambre-fixtures` crate | a generator depends on the engine's command surface and must change in the same commit as the schema it exercises. Proximity enforces that coupling; a separate crate lets it drift silently, which is the failure this document exists to prevent elsewhere. |
+| Two trees, membership positional | one corpus tree with a `frozen` flag in each manifest | a flag is free to disagree with reality, and nothing could adjudicate. A directory cannot (`FIXTURE-018`). |
+| A frozen artifact is compared by canonical dump | comparing the migrated frozen document against the current one by state or by bytes | two documents agreeing on every user-visible value still differ in op history, peer ids and commit timestamps, which is the same fact `FIXTURE-001` pins around. The dump compares content and prints a readable diff when it fails (`FIXTURE-019`). |
+| The retention cap is three per document type | keeping every frozen artifact, and discovering the cost as a CI regression | the gate loads and migrates every frozen artifact, so an unbounded set walks into its 10 s budget one bump at a time. The cap states how far back migration is exercised, rather than leaving it to be discovered when CI slows down (`FIXTURE-021`). |
+| Only the small corpora are committed | committing the benchmark corpora | it buys a convenience a seed already provides. Git keeps a committed artifact forever, and the scale corpora are multi-megabyte and fully reproducible from a seed, so they are generated on demand and git-ignored instead (`FIXTURE-022`). |
+| "No silent golden refresh" is a review rule | a gate that claims to enforce it | it would put a machine check's name on a review rule: the gate compares the corpus against the code, never against the corpus's own history, so any regenerate-and-commit passes. The manifest makes a refresh **visible** instead, moving a digest and usually a shape in a JSON file read as plain text, and `generator_version` is the author's declaration that the change was intended. |
+| A real document is never committed | capturing a fixture from a real document, and trusting the gate to notice | plaintext user content in a public AGPL repository, irreversibly, and a fixture that is interesting *because* it came from real data is exactly the one that must not be committed. No check can hold the rule, and `FIXTURE-005` says so rather than implying otherwise. |
 
 ---
 

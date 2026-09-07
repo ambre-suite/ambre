@@ -20,16 +20,37 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, shared with
 `ambre-spec-sync.md` and the four other documents of this layer.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `SYNC-041` | A revoke MUST rotate the key: it MUST NOT leave the member removed while the key they hold still opens new content. | `ZK-001`; this spec section 3 | none, and **the rule fails today**: the removal is posted first, and every later step can fail on its own. The user is told the revoke failed while the member is already out of the list, and nothing retries the rotation. Answered by the "A revoke either completes or changes nothing" Story | unverified |
-| `SYNC-042` | A rotation MUST re-key everything the document key seals, not the deltas alone. | this spec section 3 | none, and **the rule fails today**: the document name and every media blob stay sealed under the previous key and no member can open either again, so a revoke silently blanks the name and every picture. Answered by the "The rotation re-keys the whole document" Story | unverified |
-| `SYNC-043` | A member the rotation cannot re-wrap for MUST be reported, never dropped in silence. | this spec section 3 | none, and **the rule fails today**: a member whose exchange key does not parse is skipped, keeps a copy of the previous key and loses the document without a message to anyone. Answered by the "A revoke either completes or changes nothing" Story | unverified |
-| `SYNC-044` | The cache of previous keys MUST be bounded, and a key leaving it MUST be wiped. | this spec section 3 | the wipe is type-level, on the key type's own drop. The bound is a truncation with no test: nothing rotates eleven times and counts what is held | unverified |
-| `SYNC-045` | An inbound frame MUST be opened with the key its parent snapshot names, never by trying every key in turn. | this spec section 3 | none, and **the rule fails today**: the open tries the current key, then every cached key, then the current key again, so a frame nobody can open costs eleven attempts and a frame sealed under a revoked key still opens | unverified |
-| `SYNC-046` | Whoever rotates MUST become the wrapper of record, so a later unwrap resolves against their key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-034` | `ambre_server::routes::tests::revoke_then_rotate_replaces_owner_key` | verified |
-| `SYNC-047` | The rotation notice MUST reach the other clients only after the new keys are stored. | this spec section 3; `ambre-spec-server.md` | none. The relay writes every wrapped copy in one transaction and broadcasts after it commits, and no test asserts the order: a broadcast before the commit would let a client fetch the previous copy and see no error | unverified |
-| `SYNC-048` | A rotation MUST seal a fresh snapshot under the new key, so the state after it stands on its own. | this spec section 3 | not built -- lands with the "The rotation re-keys the whole document" Story | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SYNC-044` | `INV` | The cache of previous keys MUST be bounded. | this spec section 3 | none. The bound is a truncation at ten with no test: nothing rotates eleven times and counts what is held | unverified |
+| `SYNC-078` | `INV` | A key leaving the cache MUST be wiped. | this spec section 3; `ZK-011` | type-level: the document key derives `ZeroizeOnDrop`, so truncating the cache wipes what it drops and a key type that did not would be a change to the type rather than to this path | verified |
+| `SYNC-045` | `INV` | An inbound frame MUST be opened with the key its parent snapshot names, never by trying every key in turn. | this spec section 3 | none, and **the rule fails today**: the open tries the current key, then every cached key, then the current key again, so a frame nobody can open costs eleven attempts and a frame sealed under a revoked key still opens | unverified |
+
+### 1.2 Remove a member
+
+The initiating client asks the relay to drop the member, then generates a key, re-wraps it for
+everyone who stays and posts every copy at once.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SYNC-041` | `POST` | A revoke MUST rotate the key, so the member removed cannot open what is written after it. | `ZK-001`; this spec section 3 | none, and **the rule fails today**: the removal is posted first, and every later step can fail on its own. The user is told the revoke failed while the member is already out of the list, and nothing retries the rotation. Answered by the "A revoke either completes or changes nothing" Story | unverified |
+| `SYNC-042` | `POST` | A rotation MUST re-key everything the document key seals, not the deltas alone. | this spec section 3 | none, and **the rule fails today**: the document name and every media blob stay sealed under the previous key and no member can open either again, so a revoke silently blanks the name and every picture. Answered by the "The rotation re-keys the whole document" Story | unverified |
+| `SYNC-046` | `POST` | Whoever rotates MUST become the wrapper of record, so a later unwrap resolves against their key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-034` | `ambre_server::routes::tests::revoke_then_rotate_replaces_owner_key`: it reads the wrapper recorded after the rotation and fails when the inviter is still named | verified |
+| `SYNC-047` | `POST` | The rotation notice MUST reach the other clients only after the new keys are stored. | this spec section 3; `ambre-spec-server.md` | none. The relay writes every wrapped copy in one transaction and broadcasts after it commits, and no test asserts the order: a broadcast before the commit would let a client fetch the previous copy and see no error | unverified |
+| `SYNC-048` | `POST` | A rotation MUST seal a fresh snapshot under the new key, so the state after it stands on its own. | this spec section 3 | not built -- lands with the "The rotation re-keys the whole document" Story | unimplemented |
+| `SYNC-079` | `FRAME` | A revoke MUST NOT change the document's content. | this spec section 3, the opening of the model | none. A rotation changes which key opens the document and never what it holds, and no test reads the state back across one. The re-key `SYNC-042` is missing would touch the name and the blobs, which is the one place the two rules meet | unverified |
+| `SYNC-043` | `FAIL` | A member the rotation cannot re-wrap for MUST be reported, never dropped in silence. | this spec section 3 | none, and **the rule fails today**: `ambre_sync::sharing::tests::rotate_entries_cover_valid_members_and_skip_malformed` asserts the skip this rule forbids. A member whose exchange key does not parse keeps a copy of the previous key and loses the document without a message to anyone. Answered by the "A revoke either completes or changes nothing" Story | unverified |
+
+### 1.3 Take on a rotation
+
+Every other client is told the key rotated, fetches its new wrapped copy and swaps.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SYNC-080` | `POST` | Taking on a rotation MUST install the new key and move the previous one into the cache. | this spec section 3, every other client, step 3 | none. The swap and the cache push are one call, and no test drives the notice through to the key a client holds afterwards | unverified |
+| `SYNC-081` | `FRAME` | Taking on a rotation MUST NOT close the document. | this spec section 3, a rotation is not a removal | none. Being removed is a separate, targeted notice on the user's own channel, and the rotation notice reports no departure. Nothing asserts the two stay apart, and a client that closed on a rotation would drop every member who stayed | unverified |
 
 * **Budget.** one elliptic-curve operation per remaining member, about 150 us each on mobile, plus
   one full snapshot seal once `SYNC-048` lands: the crypto rows of
@@ -40,10 +61,15 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. The plaintext key stays in the Sync
   worker on both sides (`SYNC-002`).
-* **Verification.** 1 `verified`, 6 `unverified`, 1 `unimplemented`. What holds is the relay half:
-  the rotator becomes the wrapper of record, and the transaction is tested. Everything on the client
-  side is loose, and four rules are stated as failing -- the revoke is not atomic, the rotation
-  reaches the deltas alone, a member can be dropped in silence, and the open tries every key.
+* **Verification.** 2 `verified`, 9 `unverified`, 1 `unimplemented`. What holds is the relay half --
+  the rotator becomes the wrapper of record -- and the wipe of a key leaving the cache, which the
+  key type carries. Everything else on the client side is loose, and four rules are stated as
+  failing: the revoke is not atomic, the rotation reaches the deltas alone, a member can be dropped
+  in silence, and the open tries every key. `SYNC-044` was a conjunction whose halves have different
+  statuses, which is what hid the second one: the wipe is held by the type and the bound is a
+  truncation nothing counts. The two frame conditions are the pass's other find. `SYNC-079` says a
+  revoke moves no content, and `SYNC-081` says taking on a rotation is not being removed -- the
+  document argues both in prose and ruled neither.
 
 ---
 
@@ -91,16 +117,17 @@ key never leaves the Sync worker.
 
 1. fetch the members answer, which now carries the new wrapped copy and the rotator as wrapper;
 2. run the exchange against the rotator's key, never against its own (`SYNC-034`);
-3. move the previous key into the cache and install the new one.
+3. move the previous key into the cache and install the new one (`SYNC-080`).
 
 **Why the previous key is kept.** A rotation is not instantaneous: a peer's edit can already be in
 flight, sealed under the key it held a moment ago. The cache lets that edit open rather than reading
 as corrupt. It is bounded at ten keys, so a document past its eleventh rotation can no longer open
-its older snapshots locally and re-reads them from object storage (`SYNC-044`).
+its older snapshots locally and re-reads them from object storage (`SYNC-044`), and what leaves the
+cache is wiped by the key type itself (`SYNC-078`).
 
 **A rotation is not a removal.** Being taken off a document is a separate, targeted notice on the
 user's own channel: it closes the document locally and tells the Logic thread. The rotation notice
-is for the members who stay, and it reports no departure.
+is for the members who stay, and it reports no departure (`SYNC-081`).
 
 **What the document key seals.** The rotation reaches the first row and none of the others, which is
 `SYNC-042`.
@@ -121,17 +148,19 @@ is for the members who stay, and it reports no departure.
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| A revoke rotates the key | removing a row from a table takes nothing away: the person removed holds the key in the memory of a browser we do not control, and every later delta would still open under it. Rotation is what makes the removal mean something | removing the member's wrapped copy alone, which is a table edit dressed as a security act |
-| The relay replaces every wrapped copy in one transaction | a partial replacement splits the document: some members open the new deltas and some do not, and nothing tells them apart from a network failure. One transaction makes the rotation atomic on the side that can be atomic | one request per member, retried on failure |
-| The rotator becomes the wrapper of record | the recipient runs the exchange against whoever wrapped, so leaving the original inviter recorded would make every unwrap after a rotation resolve against a key that never sealed the copy | keeping the inviter as wrapper, and having the recipient try both keys |
-| The notice follows the commit | a client that fetches on a notice sent before the commit reads the previous copy, unwraps it successfully, and installs a key that is already stale -- with no error anywhere | broadcasting on receipt of the rotation request, which is one round trip earlier |
-| The previous keys are cached, and bounded at ten | an in-flight edit sealed a moment before the rotation must open, or a normal race reads as tampering. Ten covers every real case, and the bound is what stops a rapid rotation loop, whether a bug or an attack, from growing the worker's heap | an unbounded cache, or no cache at all with in-flight edits reported as corrupt |
-| History is not re-keyed | a snapshot from before the rotation is what the removed member already read, so re-sealing it protects nothing and costs a full upload per rotation | re-sealing every stored snapshot on every rotation |
-| The Logic thread is not involved | it does no cryptography and no network by design, and a rotation is both. Keeping it out means the key never crosses the boundary, which is the whole reason the boundary is there | the Logic thread orchestrating the steps and asking the worker for each one |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| A revoke rotates the key | removing the member's wrapped copy alone | it is a table edit dressed as a security act: the person removed holds the key in the memory of a browser we do not control, and every later delta would still open under it. Rotation is what makes the removal mean something |
+| The relay replaces every wrapped copy in one transaction | one request per member, retried on failure | a partial replacement splits the document: some members open the new deltas and some do not, and nothing tells them apart from a network failure. One transaction makes the rotation atomic on the side that can be atomic |
+| The rotator becomes the wrapper of record | keeping the inviter as wrapper | the recipient runs the exchange against whoever wrapped, so every unwrap after a rotation would resolve against a key that never sealed the copy |
+| The rotator becomes the wrapper of record | having the recipient try both keys | it turns one exchange into two on every unwrap, and it makes a genuine mismatch indistinguishable from a stale record: the second attempt succeeds either way |
+| The notice follows the commit | broadcasting on receipt of the rotation request, which is one round trip earlier | a client that fetches on a notice sent before the commit reads the previous copy, unwraps it successfully, and installs a key that is already stale -- with no error anywhere |
+| The previous keys are cached, and bounded at ten | no cache at all | an in-flight edit sealed a moment before the rotation must still open, or a normal race reports as tampering |
+| The previous keys are cached, and bounded at ten | an unbounded cache | a rapid rotation loop, whether a bug or an attack, grows the worker's heap with keys nothing will ever need. Ten covers every real case and holds the bound |
+| History is not re-keyed | re-sealing every stored snapshot on every rotation | a snapshot from before the rotation is what the removed member already read, so re-sealing it protects nothing and costs a full upload per rotation |
+| The Logic thread is not involved | the Logic thread orchestrating the steps and asking the worker for each one | it does no cryptography and no network by design, and a rotation is both. Keeping it out means the key never crosses the boundary, which is the whole reason the boundary is there |
 
 ---
 

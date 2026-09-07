@@ -18,22 +18,30 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The prefix is `CHROME`, shared with the
 other five documents of the DOM side.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `CHROME-030` | The chrome MUST adapt at three declared widths, and each threshold MUST be written once. | this spec section 2 | none. Three width queries sit in one stylesheet and no other file carries a threshold. Nothing refuses a fourth query added beside them, which is how two components come to disagree about where a phone stops | unverified |
-| `CHROME-031` | The narrowest layout MUST be the default: a wider window MUST only add to it. | this spec section 2 | none. Each adapting rule hides at the base and restores upward, so a component with no query at all is correct on a phone. Nothing refuses the reverse, which fails on the width nobody tests on | unverified |
-| `CHROME-032` | On a phone, a floating menu MUST become a sheet pinned to the bottom edge. | this spec section 2 | none. The style pins all four edges and overrides the placement the arithmetic of `CHROME-003` computed, so the two agree by one of them winning. No test drives a narrow viewport | unverified |
-| `CHROME-033` | Navigation and panels MUST stay reachable at every width: a region MUST collapse, never disappear. | this spec section 2 | not built -- lands with `The adaptive chrome` (`ambre-roadmap.md` E6). No sidebar, no drawer and no panel region exists at any width, so there is nothing to collapse yet | unimplemented |
-| `CHROME-034` | A content view MUST lay out from the size it is given, never from a device class. | this spec section 2; `ambre-spec-frame.md` | none. No code outside the stylesheet reads a width threshold, so the rule holds by absence. Nothing refuses the first view that reads the window and branches on it | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CHROME-030` | `INV` | The chrome MUST adapt at three declared widths. | this spec section 2 | none. Three width queries sit in one stylesheet, at under 600, from 600 and over 1024. Nothing refuses a fourth added beside them | unverified |
+| `CHROME-056` | `INV` | Each threshold MUST be written once. | this spec section 2 | none. No file outside that stylesheet carries a threshold, so the rule holds by absence. Nothing refuses a second spelling of 600, which is how two components come to disagree about where a phone stops | unverified |
+| `CHROME-031` | `INV` | The narrowest layout MUST be the default: a wider window MUST only add to it. | this spec section 2 | none. Each adapting rule hides at the base and restores upward, so a component with no query at all is correct on a phone. Nothing refuses the reverse, which fails on the width nobody tests on | unverified |
+| `CHROME-032` | `OBS` | On a phone, a floating menu MUST become a sheet pinned to the bottom edge. | this spec section 2 | none. The style pins all four edges and overrides the placement the arithmetic of `CHROME-003` computed, so the two agree by one of them winning. No test drives a narrow viewport | unverified |
+| `CHROME-057` | `OBS` | A keyboard chord MUST NOT be shown below the desktop width. | this spec section 2, the table of what moves today | none. The chip is hidden at the base and restored over 1024, and a chord names a key a phone has not got. No test drives a narrow viewport, so nothing reads the chip at any width | unverified |
+| `CHROME-058` | `OBS` | On a phone, the sync state MUST show its icon without its label. | this spec section 2, the table of what moves today | none. The label is hidden at the base and restored from 600, and nothing reads it at either width | unverified |
+| `CHROME-033` | `OBS` | Navigation and panels MUST stay reachable at every width: a region MUST collapse, never disappear. | this spec section 2 | not built -- lands with `The adaptive chrome` (`ambre-roadmap.md` E6). No sidebar, no drawer and no panel region exists at any width, so there is nothing to collapse yet | unimplemented |
+| `CHROME-034` | `INV` | A content view MUST lay out from the size it is given, never from a device class. | this spec section 2; `ambre-spec-frame.md` | none. No code outside the stylesheet reads a width threshold, so the rule holds by absence. Nothing refuses the first view that reads the window and branches on it | unverified |
 
 * **Budget.** none: adaptation is style, resolved by the browser, and
   `ambre-spec-budgets.md` budgets no chrome operation. A resize does cost a frame,
   and that is charged to `ambre-spec-frame.md`.
 * **Boundary.** none: the window width is read from the browser and never leaves the client. It is a
   signal the page already carries, and nothing sends it anywhere.
-* **Verification.** 0 `verified`, 4 `unverified`, 1 `unimplemented`. Nothing holds a single row, and
+* **Verification.** 0 `verified`, 7 `unverified`, 1 `unimplemented`. Nothing holds a single row, and
   the reason is one reason: every rule is a property of a rendered page at a given width, and no
-  tier resizes a viewport. What the stylesheet declares is checked by looking at it.
+  tier resizes a viewport. What the stylesheet declares is checked by looking at it. The pass added
+  three rows and no mechanism: `CHROME-056` is the half `CHROME-030` carried as a conjunction, and
+  `CHROME-057` and `CHROME-058` are two of the four entries the table of what moves today lists and
+  no row ruled. The fourth, the tightened spacing, is not a row here: it is written as five literal
+  lengths, so it is one of the values `UI-THREAD-029` already reports as bypassing the token
+  source.
 
 ---
 
@@ -51,8 +59,8 @@ what the user can actually see rather than on a raw pixel count.
 | tablet | 600 | 1024 |
 | desktop | over 1024 | -- |
 
-**What moves today.** Three rules, each written as a hide at the base and a restore upward
-(`CHROME-031`).
+**What moves today.** Four entries. The three that appear and disappear are each written as a hide
+at the base and a restore upward (`CHROME-031`); the fourth overrides a length.
 
 | What | Phone | Tablet | Desktop |
 |---|---|---|---|
@@ -100,15 +108,15 @@ The user touches nothing here. What they see is whether the interface fits.
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| Three widths, declared once, in the stylesheet | a threshold is a design constant, and the browser already resolves it without a frame, a listener or a signal. Putting it in Rust means a resize listener, a signal and a re-render for something the style engine does for free | a display mode computed on resize and pushed through the reactive layer |
-| The narrow layout is the default | a component written with no query at all is then correct on a phone, and a missing query degrades to less rather than to broken. The reverse makes the smallest screen depend on the rule nobody remembers to write | a desktop default, narrowed downward |
-| A phone gets a bottom sheet, not a smaller popover | a popover under the finger is under the finger: the hand covers what it opened, and the entries are too small to hit. A sheet at the bottom edge is where the thumb already is, and it is the platform idiom on both mobile operating systems | the same popover, scaled down |
-| The content reads no threshold | a view that branches on a device class has two layouts to keep correct, two sets of pixel arithmetic and two things to test, for a document whose content did not change. A continuous size has one | a content layout per width band |
-| Density-independent pixels, not raw pixels | a raw pixel count calls a modern phone a desktop, because the screen has three physical pixels per logical one. What the layout is written against is what the user can see, which is the logical unit `ambre-spec-high-density.md` names | a threshold in physical pixels |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| Three widths, declared once, in the stylesheet | a display mode computed on resize and pushed through the reactive layer | it buys a resize listener, a signal and a re-render for something the style engine does for free: a threshold is a design constant, and the browser already resolves it without a frame |
+| The narrow layout is the default | a desktop default, narrowed downward | it makes the smallest screen depend on the rule nobody remembers to write, so a missing query degrades to broken rather than to less. With the narrow default, a component written with no query at all is correct on a phone |
+| A phone gets a bottom sheet, not a smaller popover | the same popover, scaled down | a popover under the finger is under the finger: the hand covers what it opened, and the entries are too small to hit. A sheet at the bottom edge is where the thumb already is, and it is the platform idiom on both mobile operating systems |
+| The content reads no threshold | a content layout per width band | a view that branches on a device class has two layouts to keep correct, two sets of pixel arithmetic and two things to test, for a document whose content did not change. A continuous size has one |
+| Density-independent pixels, not raw pixels | a threshold in physical pixels | a raw pixel count calls a modern phone a desktop, because the screen has three physical pixels per logical one. What the layout is written against is what the user can see, which is the logical unit `ambre-spec-high-density.md` names |
 
 ---
 
@@ -119,6 +127,10 @@ The user touches nothing here. What they see is whether the interface fits.
   three small differences (`CHROME-033`).
 * **No tier resizes a viewport.** The wasm tier mounts components in a document of fixed size, so
   every row here is held by reading the stylesheet.
+* **The phone block writes its own lengths.** The tightened header, the tightened command bar, the
+  sheet's padding, its corner radius and its taller rows are five literal values, none of them from
+  the token source. They are a phone-only palette nobody declared (`ambre-spec-design-tokens.md`,
+  `UI-THREAD-029`).
 * **An open menu does not re-place itself on a resize.** The placement is computed when the menu
   opens, and a window narrowed under it leaves it where it was.
 * **Nothing rules on orientation, or on a soft keyboard.** A phone rotated, or a keyboard covering

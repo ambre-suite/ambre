@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE COMMAND MODEL
 
 **Type:** Horizontal (framework)
-**Implementation:** built -- the identity, the description every view derives from, the chord
+**Implementation:** implemented -- the identity, the description every view derives from, the chord
 resolution and the state store all ship, in both applications.
 
 > Everything the user can ask for has one name. A menu entry, a toolbar button, a keyboard chord
@@ -19,13 +19,37 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREAD`, shared with
 `ambre-spec-ui.md`, `ambre-spec-clipboard.md` and `ambre-spec-design-tokens.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `UI-THREAD-011` | Copy, cut and paste MUST resolve through shared identities, on the modern and the legacy chords alike, in every application. | this spec section 2 | `ambre_trame::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity`, `ambre_toile::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity`: both read the shared identity and both chord families off each application's own table. `ambre_commands::tests::the_keymap_binds_no_browser_serviced_chord` and `ambre_trame::ui::commands::tests::the_keymap_binds_no_clipboard_chord` hold the other half, that no chord table decodes them a second time | verified |
-| `UI-THREAD-019` | A command MUST be described once -- its label, its icon, its chord, its grouping -- and every view of it MUST be derived from that description; a view MUST NOT declare one of its own. | this spec section 2 | `ambre_trame::ui::commands::tests::every_layout_row_resolves_in_the_registry`, `::every_command_has_a_label`; `ambre_toile::ui::commands::tests::every_exposed_identity_is_described`, `ambre_toile::ui::menu_bar::tests::every_dropdown_row_is_described`; the DOM belt `chrome_ui::the_toolbar_announces_the_registry_labels` reads the rendered `aria-label` back, so a literal written into the markup fails | verified |
-| `UI-THREAD-026` | A chord MUST resolve to at most one command, and a rebinding MUST report the command it displaced. | this spec section 2 | `ambre_commands::tests::keymap_resolves_default_bindings`, `::rebinding_reports_the_displaced_command`; `ambre_toile::ui::palette::tests::tool_chords_are_distinct` drives a real application's table and fails on a collision | verified |
-| `UI-THREAD-027` | The crate that owns command identity MUST depend on no user-interface framework. | this spec section 2 | type-level: its dependency table is empty, so a framework type has no path into it and the crate builds and tests on the host | verified |
-| `UI-THREAD-028` | One chord table MUST serve every platform: the primary accelerator MUST fold the control and the command modifiers. | this spec section 2 | type-level: a chord's modifier set carries one accelerator bit and no way to name the control and the command keys apart, so no table can declare one platform's chord. `ambre_commands::keybinding::tests::the_control_key_and_the_command_key_fold_into_one_chord` drives the fold itself, which is the one function that still reads the two bits | verified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `UI-THREAD-011` | `INV` | Copy, cut and paste MUST resolve through shared identities, in every application. | this spec section 2 | `ambre_trame::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity`, `ambre_toile::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity`: each reads the shared identity off its own application's table. `ambre_commands::tests::the_keymap_binds_no_browser_serviced_chord` and `ambre_trame::ui::commands::tests::the_keymap_binds_no_clipboard_chord` hold the other half, that no chord table decodes them a second time | verified |
+| `UI-THREAD-035` | `INV` | The legacy copy, cut and paste chords MUST name the same identities as the modern ones. | this spec section 2; section 4, row 5 | `ambre_trame::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity`, `ambre_toile::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity`: each asserts both chord families of the three intents against the one shared identity, so a legacy chord naming a second command fails | verified |
+| `UI-THREAD-019` | `INV` | A command MUST carry one description of its label, its icon, its chord and its grouping. | this spec section 2 | `ambre_trame::ui::commands::tests::every_command_has_a_label`, `ambre_toile::ui::commands::tests::every_exposed_identity_is_described`: each walks its application's table and fails on a command whose **label** is empty. The other three quarters of the description are unread -- no test asserts that a command carries an icon, a chord or a grouping, so a table entry declaring none passes both | unverified |
+| `UI-THREAD-036` | `INV` | Every view of a command MUST take what it shows from that description, and never declare a label of its own. | this spec section 2 | the DOM belt `chrome_ui::the_toolbar_announces_the_registry_labels` holds it where it bites: it queries the rendered `aria-label` of eleven identities against the registry title, so a literal written into Trame's format bar fails. Nothing covers any other surface. `ambre_trame::ui::commands::tests::every_layout_row_resolves_in_the_registry` and `ambre_toile::ui::menu_bar::tests::every_dropdown_row_is_described` assert only that a laid-out identity resolves, which a view rendering its own label still satisfies | unverified |
+| `UI-THREAD-026` | `INV` | A chord MUST resolve to at most one command. | this spec section 2 | type-level: the chord table is a map keyed by the chord, so a second command bound to a chord replaces the first rather than joining it, and a table holding two commands on one chord does not exist | verified |
+| `UI-THREAD-037` | `INV` | Two commands MUST NOT declare the same default chord. | this spec section 2; derived | none. Seeding keeps the last command seen and reports nothing, so a collision silently drops one from the keyboard. `ambre_toile::ui::palette::tests::tool_chords_are_distinct` holds it for the eight tool chords of one application; every other declared table is unread | unverified |
+| `UI-THREAD-027` | `INV` | The crate that owns command identity MUST depend on no user-interface framework. | this spec section 2 | type-level: its dependency table is empty, so a framework type has no path into it and the crate builds and tests on the host | verified |
+| `UI-THREAD-028` | `INV` | One chord table MUST serve every platform: the primary accelerator MUST fold the control and the command modifiers. | this spec section 2 | type-level: a chord's modifier set carries one accelerator bit and no way to name the control and the command keys apart, so no table can declare one platform's chord. `ambre_commands::keybinding::tests::the_control_key_and_the_command_key_fold_into_one_chord` drives the fold itself, which is the one function that still reads the two bits | verified |
+
+### 1.2 Resolve a chord
+
+The user presses a chord. The table answers with a command, or with nothing.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `UI-THREAD-038` | `POST` | A chord the table binds MUST resolve to the command it was bound to. | this spec section 2 | `ambre_commands::tests::keymap_resolves_default_bindings`: it seeds from a command table and asserts the bound chord answers with that command's identity | verified |
+| `UI-THREAD-039` | `FRAME` | Resolving a chord MUST NOT change the table. | derived | type-level: the resolve takes the table by shared reference and the map has no interior mutability, so a resolution that binds, rebinds or drops an entry does not compile | verified |
+| `UI-THREAD-040` | `FAIL` | A chord the table does not bind MUST resolve to no command. | this spec section 3, row 5 | `ambre_commands::tests::keymap_resolves_default_bindings`: two of its assertions ask for an unbound chord and a bound chord under an extra modifier, and both must answer with nothing | verified |
+
+### 1.3 Rebind a chord
+
+The chord table accepts a new binding for a chord that may already carry one.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `UI-THREAD-041` | `POST` | A rebinding MUST report the command it displaced. | this spec section 2 | `ambre_commands::tests::rebinding_reports_the_displaced_command`: its first assertion reads back the displaced identity, which is what a conflict notice would show | verified |
+| `UI-THREAD-042` | `FRAME` | A rebinding MUST NOT change the command any other chord resolves to. | derived | none. The rebinding test reads the rebound chord alone, so an insert reaching a neighbouring entry would pass | unverified |
 
 * **Budget.** none: resolving a chord is one hash lookup and building a menu is a walk over a table
   of tens of entries, and `ambre-spec-budgets.md` budgets neither. What a command
@@ -33,11 +57,15 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 * **Boundary.** none: an identity is a string in memory. It reaches no relay, holds no key and
   opens no socket, and the payload it produces is sealed by the thread that sends it
   (`ambre-spec-zero-knowledge.md`).
-* **Verification.** 5 `verified`, 0 `unverified`, 0 `unimplemented`. Every rule is pure data, so
-  every one is held on the host tier: the resolution, the collision report, the crate's isolation,
-  the fold, and the chords the keymap must leave to the browser. The single description is held per
-  application and by one DOM belt, where a label reaches the user. What no rule states is what a
-  chord does while an edit session is open -- section 5.
+* **Verification.** 9 `verified`, 4 `unverified`, 0 `unimplemented`. The host tier holds every rule
+  that is pure data -- resolution, refusal, displacement, isolation, the fold, the browser's own
+  chords. Four rows stay loose, in two pairs. `UI-THREAD-037` is the collision nobody refuses:
+  seeding keeps the last command and reports nothing. `UI-THREAD-042` is the frame condition of a
+  rebinding, and its test reads the rebound chord alone. `UI-THREAD-019` and `UI-THREAD-036` are the
+  description, and their tests claim more than they assert: both applications walk a command's
+  label, nothing walks its icon, its chord or its grouping, and one belt reads a rendered label back
+  over eleven identities of one toolbar. `keymap_resolves_default_bindings` backs two rows on two of
+  its own assertions, and `just contracts` reports the leaning.
 
 ---
 
@@ -101,7 +129,8 @@ strikethrough, wrap and the decimal steppers emit a `StylePatch` and name no ide
 **The chord.** A chord is a modifier set plus a logical key, normalized so a letter is compared in
 one case. The table is a map from chord to identity, seeded from the declared defaults and
 rebindable, and it reports what a rebinding displaced so a conflict can be shown to the user
-(`UI-THREAD-026`).
+(`UI-THREAD-041`). A chord carries at most one command because the table is keyed by it
+(`UI-THREAD-026`), and nothing refuses two commands declaring the same default (`UI-THREAD-037`).
 
 **One accelerator, one table.** The modifier set carries `primary`, and the control key and the
 command key both fold into it where a browser event becomes a chord. A table therefore cannot name
@@ -169,18 +198,19 @@ changes nothing does not refresh them.
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The identity is a namespaced string, not an enumeration | the launcher must resolve a command without knowing which application declared it, and a closed enumeration in a shared crate would name every command of every application. A string keeps the crate a leaf and lets an application add a command without touching it | one enumeration of every command in the shared crate |
-| The identity crate depends on nothing | it is depended on by every application and by the chrome toolkit at once, so any dependency it takes is taken by both sides of the interface. An empty dependency table also makes it testable on the host, which is where its tests run today | putting the identity beside the chrome components that consume it |
-| The registry is filled before the next surface is written | a label at the view is copied once per view, so every surface still unwritten pays the duplication again: the palette, which can borrow no label from any menu, and the whole Prose toolbar. `One command registry` carries it at the MVP milestone | filling it after those surfaces, once 68 commands have become several hundred |
-| Runtime state is derived on each query, never stored on the description | a stored state is a second copy of what the document already knows, and the two agree until one path forgets to refresh. Deriving is the same rule `UI-THREAD-003` states for every piece of interface state | caching enabled and toggled on the command |
-| Copy, cut and paste ride the browser's events | the browser raises them with the clipboard attached, and decoding the chords again means guessing when the browser will also act. What the chords must agree on is the identity they name, so the table describes the three intents and the seeding refuses to bind their chords | decoding the three chords in the keyboard path beside every other command |
-| The two accelerator keys fold, they are not mapped per platform | a table that names one platform's accelerator is a table per platform, and the second one is written by whoever notices the first is wrong. The price is that a Mac's own control chords reach the same command as its command chords, which costs a text navigation the operating system offers and no application here implements | reading the platform at boot and translating each table entry into the local accelerator |
-| The shared chords live in the identity crate, not in an application | the pair `Ctrl+Shift+Z` and `Ctrl+Y` is one decision, and an application that declares it a second time is where the two drift apart. The crate that owns what a chord is owns which chords the universal operations answer | each application declaring the alias beside its own table, which is where the Ctrl+Y alias sat |
-| The title is a function of the locale, on the description | a translation table in the identity crate makes the leaf own the languages, and a string constant makes a command untranslatable. A function keeps the crate free of both, and keeps the title where every view derives it from | a static label on the description, or a translation table in the shared crate |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The identity is a namespaced string, not an enumeration | one enumeration of every command in the shared crate | it would name every command of every application in a crate that must stay a leaf, and an application could not add a command without touching it. The launcher has to resolve a command without knowing which application declared it |
+| The identity crate depends on nothing | putting the identity beside the chrome components that consume it | the crate is depended on by every application and by the chrome toolkit at once, so any dependency it takes is taken by both sides of the interface. An empty dependency table also makes it testable on the host, which is where its tests run today |
+| The registry is filled before the next surface is written | filling it after those surfaces, once 68 commands have become several hundred | a label at the view is copied once per view, so every surface still unwritten pays the duplication again: the palette, which can borrow no label from any menu, and the whole Prose toolbar |
+| Runtime state is derived on each query, never stored on the description | caching enabled and toggled on the command | a stored state is a second copy of what the document already knows, and the two agree until one path forgets to refresh. Deriving is the same rule `UI-THREAD-003` states for every piece of interface state |
+| Copy, cut and paste ride the browser's events | decoding the three chords in the keyboard path beside every other command | the browser raises them with the clipboard attached, and decoding the chords again means guessing when the browser will also act. What the chords must agree on is the identity they name, so the table describes the three intents and the seeding refuses to bind their chords |
+| The two accelerator keys fold, they are not mapped per platform | reading the platform at boot and translating each table entry into the local accelerator | a table that names one platform's accelerator is a table per platform, and the second one is written by whoever notices the first is wrong. The price is that a Mac's own control chords reach the same command as its command chords, which costs a text navigation the operating system offers and no application here implements |
+| The shared chords live in the identity crate, not in an application | each application declaring the alias beside its own table, which is where the Ctrl+Y alias sat | the pair `Ctrl+Shift+Z` and `Ctrl+Y` is one decision, and an application that declares it a second time is where the two drift apart. The crate that owns what a chord is owns which chords the universal operations answer |
+| The title is a function of the locale, on the description | a static label on the description | it makes a command untranslatable, and a title is read by every view |
+| The title is a function of the locale, on the description | a translation table in the shared crate | it makes the leaf own the languages, which is exactly the dependency the crate is kept free of. A function keeps the title where every view derives it from without either cost |
 
 ---
 

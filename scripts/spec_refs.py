@@ -42,7 +42,7 @@ read, so neither can hide from the other.
 A section number is the one part of a citation that rots: renumbering ten
 documents re-pointed 108 coordinates, and the code held 906 more that named no
 document at all. A code comment cites the **document name** and, where the rule
-has one, its **invariant id** -- the two namespaces an ID is minted once and never
+has one, its **contract id** -- the two namespaces an ID is minted once and never
 renumbered in. Nothing in `crates/` needs a number to be followed: a name picks
 one document out of 57, and a grep finds the rule inside it. So a coordinate
 written in a `.rs` file is neither resolved nor reported here; what is held there
@@ -390,7 +390,7 @@ def main() -> int:
                     dead_names.setdefault(target, []).append(f"{rel}:{lineno}")
                 continue
             # The coordinate namespace is the corpus. A `.rs` file cites a name and
-            # an invariant id, both minted once; a section number is the one part
+            # a contract id, both minted once; a section number is the one part
             # that a renumbering breaks, so the code does not carry it.
             if path.suffix != ".md" or path.name in RECORDS:
                 continue

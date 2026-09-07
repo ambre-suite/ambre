@@ -7,7 +7,7 @@
 > tested, this one wins. One file holds the method, because two files disagree.
 >
 > What a rule looks like is `ambre-spec-template.md`. What every rule's status is today is
-> `ambre-invariant-ledger.md`, generated. This document holds neither.
+> `ambre-contract-ledger.md`, generated. This document holds neither.
 
 ---
 
@@ -93,7 +93,7 @@ asserting identical final states once every delta has been exchanged.
 `#[ignore]` is a test that no job runs and no reader counts.
 
 **A cited mechanism must run in CI.** A test name that resolves to a `fn` behind a Cargo feature no
-job enables is the same claim as a name that resolves to nothing. `invariants.py` holds the first
+job enables is the same claim as a name that resolves to nothing. `contracts.py` holds the first
 half. Nothing holds the second, and it went unseen for six months: the five tests that are the whole
 `Verification` cell of `SRV-006` sat behind `--features test-helpers`, which no CI job enabled, and
 eight `ambre-toile` PDF tests sat behind `--features pdf`. Both features are in `just test-db` and
@@ -247,6 +247,6 @@ and epic `E9` of `ambre-roadmap.md` schedules them.
 | :--- | :--- |
 | A `QUALITY & TESTABILITY` section per spec | nineteen of them held the same four things with the names changed, and the two that seemed to hold a unique fact held it in three other places. A method restated per document is a method that disagrees with itself |
 | A test list in a spec | it has no join to the suite and no way to fail. 82 names were cited across the corpus and 23 resolved |
-| A "Definition of Done" per component | identical in nineteen files, and its only checkable half is already held by `invariants.py`: no row may lack a `Status` |
-| A coverage percentage as the headline number | it counts lines, not rules. The number that matters is the **loose** column of `ambre-invariant-ledger.md`: shipped code that nothing would fail on |
+| A "Definition of Done" per component | identical in nineteen files, and its only checkable half is already held by `contracts.py`: no row may lack a `Status` |
+| A coverage percentage as the headline number | it counts lines, not rules. The number that matters is the **loose** column of `ambre-contract-ledger.md`: shipped code that nothing would fail on |
 | Golden-image comparison as a routine mechanism | brittle under antialiasing and driver drift. Reserved for a precise critical need |

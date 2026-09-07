@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: FUNCTION LIBRARY
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- 112 functions ship; the reference-preserving and advanced sets do not.
+**Implementation:** partial -- 113 functions ship; the reference-preserving and advanced sets do not.
 
 > The named calls a user may write inside a formula: `SUM`, `VLOOKUP`, `IF`, `TEXT`, `PMT`. The engine
 > that evaluates them is a feature of its own; this one is the catalogue and the rules it obeys.
@@ -17,32 +17,64 @@ never looks inside a function, and a function never looks at the document.
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TRAME-014` | A total over a range MUST be exact, and MUST NOT depend on the order of the cells. | this spec section 2 | `ambre_trame::formula::prop_tests::sum_is_exact_and_order_independent`, `::engine_sum_matches_naive_sum`, `::product_is_order_independent`, `::average_times_count_equals_sum`, `::min_max_bound_every_element` (proptest) | verified |
-| `TRAME-049` | A name the library does not know MUST read as an error, never as a blank. | this spec section 3 | none. The dispatch falls through to `#N/A`, and no test calls a name outside the catalogue -- so the arm that answers a mistyped `=SUMM(A1)` is the one arm nothing drives | unverified |
-| `TRAME-050` | A function MUST receive values, never references. | this spec section 2 | type-level: `call_builtin(name, args: &[CellValue], ctx)` takes evaluated values, and the machine pops every argument off the stack before the call | verified |
-| `TRAME-051` | A range given where a value is expected MUST be read cell by cell. | this spec section 2 | `ambre_trame::formula::prop_tests::sum_flattens_range_like_scalars`, `::engine_sum_matches_naive_sum`, `ambre_trame::formula::functions::tests::sum_basic` | verified |
-| `TRAME-052` | A call MUST NOT lose an argument, whatever their number. | this spec section 4 | `ambre_trame::formula::vm::tests::call_with_more_than_255_arguments_keeps_them_all` | verified |
-| `TRAME-053` | Every clock reading inside one recomputation MUST be the same instant. | this spec section 2 | type-level: the clock is sampled once per pass in `formula/engine.rs` and copied into every call context; no function reads the system clock itself | verified |
-| `TRAME-054` | A function that asks where it sits MUST answer the cell being computed. | this spec section 3 | `ambre_trame::formula::functions::tests::lookup_reference_functions` | verified |
-| `TRAME-055` | A lookup that finds no key MUST say so, and MUST NOT answer a neighbour. | this spec section 3 | `ambre_trame::formula::functions::tests::vlookup_exact_and_approx`, `::index_and_match` | verified |
-| `TRAME-056` | A total MUST NOT silently drop a cell it cannot read. | this spec section 5 | none, and the code does the **opposite**: the numeric flattening skips an error value exactly as it skips an empty one, so `=SUM(A1:A3)` answers the sum of the readable cells when one of them holds `#REF!`. Neither behaviour is asserted anywhere | unverified |
-| `TRAME-057` | A function given a range MUST be able to answer a reference into it, not only a value. | this spec section 5 | not built -- lands with the "Engine completion" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-058` | A lookup MUST be expressible without counting columns from the key. | this spec section 5 | not built -- lands with the "Engine completion" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-059` | A user MUST be able to name a formula of their own and call it. | this spec section 5 | not built -- lands with the "Engine completion" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-060` | A formula answering many values MUST fill the cells beside it, and MUST refuse to overwrite. | this spec section 5 | not built -- lands with the "Engine completion" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-061` | A total MUST be able to skip the rows a filter hides. | this spec section 5 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
+### 1.1 The catalogue
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-050` | `INV` | A function MUST receive values, never references. | this spec section 2 | type-level: `call_builtin(name, args: &[CellValue], ctx)` takes evaluated values, and the machine pops every argument off the stack before the call | verified |
+| `TRAME-053` | `INV` | Every clock reading inside one recomputation MUST be the same instant. | this spec section 2 | type-level: `EvalContext` holds one `now_serial` for the whole pass, and every `FnCtx` the machine builds copies that field | verified |
+| `TRAME-194` | `INV` | A function MUST NOT read the clock for itself. | this spec section 2 | none. `functions::now_serial()` is `pub` and every builtin module imports it through the glob; nothing -- no lint, no visibility, no test -- stops a body from calling it, and the rule holds today only by reading | unverified |
+| `TRAME-195` | `INV` | Every name a formula may call MUST appear in the catalogue. | this spec section 3 | none, and the code contradicts it: the dispatch answers 113 names, section 3 lists 112. `CONCAT` is dispatched, is generated by the property tests, and is absent from the catalogue. No script compares the list to the `match` | unverified |
+| `TRAME-196` | `INV` | A name MUST be recognised whatever its case. | this spec section 3 | none. The upper-casing happens in `formula/parser/mod.rs`, not in the dispatch, and no test writes a name in lower case -- so the claim rests on one line nothing exercises | unverified |
+
+### 1.2 Call a function in a formula
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-197` | `PRE` | The key column of an approximate lookup MUST already be ascending. | this spec section 3 | none. `vlookup` stops at the first key above the target, so an unsorted column answers whatever row it stopped on -- a plausible neighbour, with no notice | unverified |
+| `TRAME-198` | `PRE` | A recomputation MUST be given its clock before it runs. | this spec section 2 | none. `with_now` is an optional builder step; an `EvalContext` that skips it carries `now_serial: 0.0`, so `TODAY()` answers 1899-12-30 -- a valid-looking date, not an error | unverified |
+| `TRAME-014` | `POST` | A total over whole numbers MUST equal the naive total. | this spec section 2 | `ambre_trame::formula::prop_tests::sum_is_exact_and_order_independent`, `::engine_sum_matches_naive_sum`, `::average_times_count_equals_sum`, `::min_max_bound_every_element` (proptest, integer inputs) | verified |
+| `TRAME-199` | `POST` | A total MUST NOT depend on the order of the cells. | this spec section 2 | whole numbers only: `ambre_trame::formula::prop_tests::sum_is_exact_and_order_independent`, `::product_is_order_independent` bound their inputs to integers on purpose (`prop_tests.rs` header). `sum` is a left fold over `f64`, which is not associative, so over decimals the rule is untested and not expected to hold | unverified |
+| `TRAME-051` | `POST` | A range given where a value is expected MUST be read cell by cell. | this spec section 2 | `ambre_trame::formula::prop_tests::sum_flattens_range_like_scalars`, `::engine_sum_matches_naive_sum`, `ambre_trame::formula::functions::tests::sum_basic` | verified |
+| `TRAME-200` | `POST` | A value stored as text MUST count in a total when it reads as a number. | this spec section 4 | none. `flatten_numeric_inner` parses it, section 4 decides it, and nothing asserts it. The two halves of the model also disagree: `ISNUMBER("1")` answers false while `SUM("1")` answers 1 | unverified |
+| `TRAME-056` | `POST` | A total MUST NOT silently drop a cell it cannot read. | this spec section 5 | none, and the code does the **opposite**: `flatten_numeric_inner` skips an error value exactly as it skips an empty one, so `=SUM(A1:A3)` answers the sum of the readable cells when one of them holds `#REF!`. Neither behaviour is asserted anywhere | unverified |
+| `TRAME-052` | `POST` | A call MUST NOT lose an argument, whatever their number. | this spec section 4 | `ambre_trame::formula::vm::tests::call_with_more_than_255_arguments_keeps_them_all` | verified |
+| `TRAME-054` | `POST` | A function that asks where it sits MUST answer the cell being computed. | this spec section 3 | `ambre_trame::formula::functions::tests::lookup_reference_functions` | verified |
+| `TRAME-055` | `POST` | An approximate lookup MUST answer the largest key at or below the target. | this spec section 3 | `ambre_trame::formula::functions::tests::vlookup_exact_and_approx`, `::index_and_match` | verified |
+| `TRAME-201` | `POST` | A lookup that omits its match flag MUST be read as approximate. | this spec section 3 | none. Both lookup tests pass the flag, so the default is the one branch nothing drives -- and it is the dangerous one: `=VLOOKUP(4;A1:B3;2)` answers the row of key 3 rather than `#N/A` | unverified |
+| `TRAME-202` | `POST` | An exact lookup MUST match a text key whatever its case. | this spec section 3 | none. `values_equal_ci` lower-cases both sides, no test writes a key in another case, and no section of this document says a lookup is case-blind | unverified |
+| `TRAME-057` | `POST` | A function given a range MUST be able to answer a reference into it, not only a value. | this spec section 5 | not built -- lands with the "Engine completion" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-058` | `POST` | A lookup MUST be expressible without counting columns from the key. | this spec section 5 | not built -- lands with the "Engine completion" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-059` | `POST` | A user MUST be able to name a formula of their own and call it. | this spec section 5 | not built -- lands with the "Engine completion" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-061` | `POST` | A total MUST be able to skip the rows a filter hides. | this spec section 5 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-203` | `FRAME` | A function MUST NOT read or write the document. | this spec section 2 | type-level: `call_builtin(name, &[CellValue], FnCtx)` receives no document, no cell cache and no index, so a body has nothing to reach for | verified |
+| `TRAME-204` | `FRAME` | A call MUST NOT consume a value that is not one of its arguments. | this spec section 2 | `ambre_trame::formula::prop_tests::compile_emits_balanced_bytecode`, whose generator emits `FnCall` nodes with 0 to 3 arguments and whose stack simulation rejects any `CallFn` reading below its own operands | verified |
+| `TRAME-049` | `FAIL` | A name the library does not know MUST read as an error, never as a blank. | this spec section 3 | none. The dispatch falls through to `#N/A`, and no test calls a name outside the catalogue -- so the arm that answers a mistyped `=SUMM(A1)` is the one arm nothing drives | unverified |
+| `TRAME-205` | `FAIL` | An exact lookup that finds no key MUST answer an error, and MUST NOT answer a neighbour. | this spec section 3 | `ambre_trame::formula::functions::tests::vlookup_exact_and_approx` (the exact miss asserts `#N/A`) | verified |
+
+### 1.3 Spill a result across the cells beside it
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-060` | `POST` | A formula answering many values MUST fill the cells beside it. | this spec section 5 | not built -- lands with the "Engine completion" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-206` | `FAIL` | A spill that meets a cell it cannot have MUST refuse, and MUST say which cell. | this spec section 5 | not built -- lands with the "Engine completion" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-207` | `FRAME` | A spill that shrinks MUST NOT leave a value in a cell it no longer covers. | this spec section 5 | not built -- lands with the "Engine completion" Story (`ambre-roadmap.md` E6) | unimplemented |
 
 * **Budget.** none of its own: a call is one node of the graph the engine recomputes, so it lands
   under the 10k-cell DAG recompute of `ambre-spec-budgets.md section 1`, which
   `features/ambre-spec-trame-formula-engine.md` owns.
 * **Boundary.** none: a function reads cells and returns a value in the Logic thread. It opens no
   path, and `ZK-001` seals what the document sends.
-* **Verification.** 7 `verified`, 2 `unverified`, 5 `unimplemented`. `TRAME-056` is the one the
-  code contradicts, and it is the expensive kind: a total that is quietly wrong reads like a total
-  that is right. `TRAME-049` is the same shape one step milder -- a typed function name that no
-  test exercises.
+* **Verification.** 10 `verified`, 11 `unverified`, 7 `unimplemented`. Rows went 14 to 28 and
+  distinct cited mechanisms 13 to 15, so the three extra `verified` are worth naming: a signature
+  (`TRAME-203`), a property that was already running and nothing cited (`TRAME-204`), and the two
+  halves of the old lookup rule, both asserted by the test that already covered it. Nothing here
+  was manufactured, and what the pass found is on the other side of the ledger.
+  `TRAME-056` is still the expensive one -- a total that is quietly wrong reads like a total that
+  is right -- but it now has company: `TRAME-199` claims an order-independence that `f64` addition
+  cannot give outside whole numbers, `TRAME-201` and `TRAME-197` are the two halves of a lookup
+  default that answers a neighbour rather than `#N/A`, and `TRAME-194` through `TRAME-196` are
+  claims section 3 makes that no mechanism holds.
 
 ---
 
@@ -84,7 +116,7 @@ conditional aggregates; `builtins_a.rs`, `builtins_b.rs` and `builtins_c.rs` hol
 
 ## 3. SURFACE
 
-**The catalogue**, 112 names in seven families:
+**The catalogue**, 113 names in seven families:
 
 | Family | Count | Names |
 |---|---|---|
@@ -93,7 +125,7 @@ conditional aggregates; `builtins_a.rs`, `builtins_b.rs` and `builtins_c.rs` hol
 | Financial | 7 | `PMT` `FV` `PV` `RATE` `NPER` `NPV` `IRR` |
 | Logic | 18 | `IF` `IFERROR` `AND` `OR` `NOT` `XOR` `ISBLANK` `ISNUMBER` `ISTEXT` `ISERROR` `ISNA` `ISEVEN` `ISODD` `IFNA` `IFS` `SWITCH` `TRUE` `FALSE` |
 | Lookup | 9 | `VLOOKUP` `HLOOKUP` `INDEX` `MATCH` `CHOOSE` `ROWS` `COLUMNS` `ROW` `COLUMN` |
-| Text | 20 | `CONCATENATE` `TEXT` `LEFT` `RIGHT` `MID` `UPPER` `LOWER` `TRIM` `LEN` `PROPER` `SUBSTITUTE` `REPT` `FIND` `SEARCH` `REPLACE` `EXACT` `TEXTJOIN` `CHAR` `CODE` `VALUE` |
+| Text | 21 | `CONCAT` `CONCATENATE` `TEXT` `LEFT` `RIGHT` `MID` `UPPER` `LOWER` `TRIM` `LEN` `PROPER` `SUBSTITUTE` `REPT` `FIND` `SEARCH` `REPLACE` `EXACT` `TEXTJOIN` `CHAR` `CODE` `VALUE` |
 | Date and time | 13 | `TODAY` `NOW` `DATE` `YEAR` `MONTH` `DAY` `TIME` `HOUR` `MINUTE` `SECOND` `WEEKDAY` `EDATE` `EOMONTH` |
 
 **How a call behaves:**
@@ -105,21 +137,23 @@ conditional aggregates; `builtins_a.rs`, `builtins_b.rs` and `builtins_c.rs` hol
 | How arguments are separated | by commas. A range is one argument holding many values |
 | A criterion, for `SUMIF` and its kin | text carrying an operator and an operand: `">5"`, `"<>done"`, or a bare value meaning equality |
 | A criterion against a non-number | `>` and `>=` refuse it; `<>` is the one operator it satisfies |
+| A lookup with no match flag | approximate, not exact (`TRAME-201`). `=VLOOKUP(4,A1:B3,2)` answers the row of key 3 |
+| A lookup key that is text | matched without regard to case (`TRAME-202`) |
 | How a date is held | a serial number on the 1899-12-30 epoch: integer part the day, fraction the time of day |
 | Where `TODAY` and `NOW` read | the recomputation clock, never the system clock (`TRAME-053`) |
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| A function receives values, never references | the machine already evaluates each argument for cycle detection to work through ranges. Handing a function a reference would mean a second evaluation path, with a second set of cycle rules | passing references and letting each function resolve them |
-| An empty total is zero, not an error | `=SUM(A1:A10)` over a range a user has not filled yet is the normal state of a sheet under construction, not a mistake | an error on an empty range |
-| Text that reads as a number counts in a total | a value pasted from the web or imported from a CSV arrives as text, and a total that ignores it is wrong in a way the user cannot see | counting only values typed as numbers |
-| The argument count is not a byte | a `u8` count wrapped at 256, so the 256th argument turned `SUM` into a call with no arguments, which answered the last operand left on the stack instead of the total (`TRAME-052`) | keeping the compact encoding and capping the call |
-| One clock per recomputation | two cells reading `NOW()` in the same pass must agree, or a sheet cannot subtract one from the other | reading the system clock in each call |
-| The bodies live in three modules, the dispatch in one | 112 arms in one file is a merge conflict per function added; the dispatch is the part that must stay readable as a list | one module per family, which multiplies the imports for no gain |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| A function receives values, never references | passing references and letting each function resolve them | the machine already evaluates each argument for cycle detection to work through ranges, so a function resolving its own would be a second evaluation path, with a second set of cycle rules. |
+| An empty total is zero, not an error | an error on an empty range | `=SUM(A1:A10)` over a range a user has not filled yet is the normal state of a sheet under construction, not a mistake. |
+| Text that reads as a number counts in a total | counting only values typed as numbers | a value pasted from the web or imported from a CSV arrives as text, and a total that ignores it is wrong in a way the user cannot see. |
+| The argument count is not a byte | keeping the compact encoding and capping the call | a `u8` count wrapped at 256, so the 256th argument turned `SUM` into a call with no arguments, which answered the last operand left on the stack instead of the total. A cap makes that a refusal instead of a wrong answer, and still refuses a call the sheet is entitled to make (`TRAME-052`). |
+| One clock per recomputation | reading the system clock in each call | two cells reading `NOW()` in the same pass must agree, or a sheet cannot subtract one from the other. |
+| The bodies live in three modules, the dispatch in one | one module per family | it multiplies the imports for no gain. What the split has to fix is 112 arms in one file, a merge conflict per function added, and the dispatch is the part that must stay readable as a list. |
 
 ---
 
@@ -138,6 +172,16 @@ conditional aggregates; `builtins_a.rs`, `builtins_b.rs` and `builtins_c.rs` hol
 * **A total that skips filtered rows** (`TRAME-061`). `SUBTOTAL` is absent, and it is the deliberate
   exception to `TRAME-021`: every other result is independent of view state, and this one is not. What
   a peer with a different personal filter reads is the open question.
-* **The catalogue has no accuracy oracle.** The property tests cover the aggregates against a naive
-  sum; the other hundred functions are covered by example, one assertion per case. Nothing compares
-  `PMT` or `WEEKDAY` against a reference implementation, so a wrong formula stays wrong and green.
+* **The catalogue has no accuracy oracle, and a fifth of it has no test at all.** The property
+  tests cover the aggregates against a naive sum; the rest is covered by example, one assertion per
+  case. Twenty-one of the 113 names -- among them `AND`'s partner `OR`, every `IS*` predicate but
+  `ISTEXT`'s neighbours, `ROUNDUP`, `ROUNDDOWN`, `FLOOR`, and the whole trigonometric set -- appear
+  in no test in the workspace. Nothing compares `PMT` or `WEEKDAY` against a reference
+  implementation either, so a wrong formula stays wrong and green.
+* **The catalogue and the dispatch drift, and nothing catches it.** This pass found `CONCAT`
+  answering calls while section 3 listed 112 names; the count is corrected above, and `TRAME-195`
+  records that only a reading keeps the two in step. A script that diffs the `match` arms against
+  the table would close it.
+* **A lookup is case-blind and nobody wrote that down.** `values_equal_ci` lower-cases both sides,
+  so `VLOOKUP("Paris", ...)` finds `paris`. That is the spreadsheet convention, but it is a rule of
+  the library (`TRAME-202`), not an accident of the comparison helper, and no test pins it.

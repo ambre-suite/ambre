@@ -33,23 +33,28 @@ reorder, and its `{peer}_{counter}` shape answers concurrent minting. So an acti
 
 Prefix `TRAME`, shared with `trame-engine`: one prefix, one numbering, no renumbering.
 `TRAME-003`, `TRAME-010` and `TRAME-016` sit here because each states a property of the format,
-not of the engine. Grammar and status values are normative in `ambre-spec-template.md`.
+not of the engine; `TRAME-221` and `TRAME-222` are the halves those last two hid, and each states
+what two peers reach, not what one holds. Grammar and status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TRAME-003` | A row's or column's identity MUST be a minted `Uid` carried as the `LoroMovableList` element's **value**, never its position. | this spec section 2 | `ambre_trame::model::sheet_index::tests::build_maps_positions_to_stable_ids`, `::apply_move_row_permutes_order_and_reindexes`, `::cell_key_is_fixed_length_and_stable` | verified |
-| `TRAME-010` | Computed values MUST NOT enter the CRDT: only the raw `v` is shared and each peer recomputes independently. | this spec section 3 | none. `ambre_trame::logic::tests::group1::sum_over_plain_literals_survives_reseed` covers recompute-after-reseed; **nothing asserts the absence of computed values from the document**, which is the half a remote peer depends on | unverified |
-| `TRAME-016` | A cell's whole style MUST be a single LWW register; concurrent restyles MUST NOT blend per attribute. | this spec section 3; architecture section 2.D | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`, `::subset_style_edit_does_not_tear_a_whole_cell_rewrite`, `logic::tests::group1::bold_stays_on_the_cell_not_the_selection` | verified |
-| `TRAME-025` | A Trame document MUST carry `meta.schema_version`, and a document whose version exceeds the compiled `SCHEMA_VERSION` MUST be refused whole. | architecture section 2.D; this spec section 7 | not built -- lands with `ARCH P8` | unimplemented |
-| `TRAME-026` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | not built -- lands with `ARCH P8` | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-003` | `INV` | A row's or column's identity MUST be a minted `Uid` carried as the `LoroMovableList` element's **value**, never its position. | this spec section 2 | `ambre_trame::model::sheet_index::tests::build_maps_positions_to_stable_ids`, `::apply_move_row_permutes_order_and_reindexes`, `::cell_key_is_fixed_length_and_stable` hold the index; `ambre_trame::logic::tests::group4::sort_range_formulas_follow_data` is the one that walks a real move on the `LoroMovableList` and reads the cells back under their unchanged keys, which is the hazard section 6 rejects the slot id for | verified |
+| `TRAME-010` | `INV` | Computed values MUST NOT enter the CRDT: a container MUST hold the raw text alone. | this spec section 3 | none for the rule as stated. `ambre_trame::logic::tests::group1::sum_over_plain_literals_survives_reseed` reads the raw text back after a snapshot round-trip, so a computed value **overwriting** it goes red; a computed value stored **beside** it -- the `t` of the declared, unbuilt `{v, t, s}` sub-map (section 5) -- leaves every test green and costs every peer the bandwidth | unverified |
+| `TRAME-221` | `CONC` | Two peers that exchanged their whole history MUST show the same computed value, and a peer rebuilt from the converged snapshot MUST show it too. | this spec section 3 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` (proptest, 256 interleavings) compares the rendered text of both peers, then of a third peer imported from the converged snapshot; `logic::tests::group1::sum_over_plain_literals_survives_reseed` is the worked example | verified |
+| `TRAME-016` | `INV` | A cell's whole style MUST be one binary register, keyed by that cell's identity. | this spec section 3; architecture section 2.D | `ambre_trame::logic::convergence_tests::subset_style_edit_does_not_tear_a_whole_cell_rewrite` goes red on a split register: a partial patch racing a whole rewrite is exactly what a second style container tears on. `logic::tests::group1::bold_stays_on_the_cell_not_the_selection` holds the key | verified |
+| `TRAME-222` | `CONC` | Two concurrent restyles of one cell MUST converge on the whole style one of the two wrote, never a per-attribute blend. | this spec section 3; architecture section 2.D | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`, `::subset_style_edit_does_not_tear_a_whole_cell_rewrite` | verified |
+| `TRAME-025` | `INV` | A Trame document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7 | not built -- lands with `ARCH P8` | unimplemented |
+| `TRAME-026` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | not built -- lands with `ARCH P8` | unimplemented |
 
 * **Budget.** none: a format has no operation to budget. What loading one costs is legs 3 and 4 of
   `ambre-spec-budgets.md section 4`, and both are recorded there as unbudgeted.
 * **Boundary.** none: `TRAME-010` keeps computed values out of the document, and the containers
   this table declares reach the relay as ciphertext alone (`ZK-001`).
-* **Verification.** 2 `verified`, 1 `unverified`, 2 `unimplemented`. `TRAME-010` is the gap: a
-  regression is invisible locally and corrupts every peer. Reported in `ambre-spec-testing.md
-  section 7`.
+* **Verification.** 4 `verified`, 1 `unverified`, 2 `unimplemented`. Two conjunctions came apart:
+  `TRAME-010` and `TRAME-016` each stated a format rule and a convergence rule, and in both the
+  convergence half was the tested one. `TRAME-010` is the gap that remains, and it is narrower than
+  it reads: only a computed value stored **beside** the raw text escapes. Reported in
+  `ambre-spec-testing.md section 7`.
 
 ---
 
@@ -155,19 +160,29 @@ Only where a schema decision needs a reason. 40 words each.
 
 ---
 
-## 6. SCHEMA DECISIONS
+## 6. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| A minted `Uid` carried as the element value | `mov` leaves an element's value untouched, so a sort is one order permutation and no cell key is rewritten | (a) positional `R{row}C{col}` -- inserting a row at position 5 invalidates every key below it, O(n) CRDT operations against one; (b) the Loro slot id (`ListItemId`) -- `LoroMovableList::mov` **reassigns the moved element's op id**, so every cell keyed by that slot is orphaned on the first reorder. This reverses the earlier "Loro already gives stable ids, a uid is redundant" call: it holds for insert and delete, never for `mov`; (c) sort by rewriting cell contents into fixed slots -- the workaround for (b): O(cells) instead of O(rows), every moved cell replicates and lands on the undo stack, and an id-bound reference stays pinned to the overwritten slot |
-| `{peer:016x}_{counter:08x}`, fixed width, `:` between the halves | two peers minting concurrently draw a distinct `peer`, so identity needs no coordination; a fixed width makes a cell key parseable by offset | `{client_hex}{counter_hex}` with no separator -- ambiguous; a document-global monotonic counter -- one LWW collision per concurrent insert |
-| A dense axis over the used range | list index equals grid position, so resolving `A5` is one lookup, and each line is its own element with no shared state | sparse run-length rows with a shared `gap_before` counter and an order-statistic tree. **Not convergent:** two concurrent inserts splitting the same gap both `set` the shared counter, LWW keeps one, and the absolute numbering of every following row corrupts identically on all replicas. The tree speeds the query, not the hazard; the materialization cap bounds the memory the sparse model aimed at |
-| One binary register for a whole cell style | LWW on one blob converges every peer to one writer's whole style | one register per attribute (the old `format_` / `style_` / `fgcolor_` fan-out). Cheap only with a server that orders content; on a blind relay, per-register LWW has no cross-register atomicity, so a whole-cell edit tears (border presence against border colour) and a colour-only or font-only cell was lost on reload. A finer model, if ever justified, is a nested per-cell map, never a flat fan-out |
-| Raw text only, never a computed value | a computed value is derived from the raw text, so replicating it costs bandwidth and can disagree with a peer's own recompute | storing the computed value beside the raw text |
-| A shared `styles` dictionary, declared and deferred | deduplication is a size optimization and the size is unmeasured | building the `s` indirection now -- a lookup paid before its benchmark |
-| The filter definition sits flat in `filters_{sheet}` | one container fewer to merge, for the same LWW granularity -- which is the key either way | a nested `active` sub-map. **Neither shape holds the definition together**: the fields race one by one and converge torn (`TRAME-FEAT-025`), so the open choice is one register against five keys, not flat against nested |
-| A container name as the primary key | `merges_{sheet}` is unique, stable, meaningful and verbatim in the code | a numeric container id -- one more indirection, no new information |
-| No anchored-comment container, and the anchor already decided | Section 3 declares none, a parity gap with Prose's `annots` subsystem (`4-Prose/features/ambre-spec-prose-comments.md`). The shape is settled ahead of the container: a note keys on the move-invariant `(row_uid, col_uid)` pair, so it follows its cell through a sort and a reorder, and a delete of a bound line orphans it under the Prose model. Deciding it here is what stops the eventual container being keyed positionally by whoever writes it first | (a) a positional `R{row}C{col}` anchor -- every insert above the note re-points it, the same failure the row uid exists to answer; (b) a Trame-private orphan model -- one gesture, two behaviours across the suite, and two rules to keep in step |
+Section 3 declares no anchored-comment container, a parity gap with Prose's `annots` subsystem
+(`4-Prose/features/ambre-spec-prose-comments.md`). The shape is settled ahead of the container: a
+note keys on the move-invariant `(row_uid, col_uid)` pair, so it follows its cell through a sort and
+a reorder, and a delete of a bound line orphans it under the Prose model. Deciding it here is what
+stops the eventual container being keyed positionally by whoever writes it first.
+
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| A minted `Uid` carried as the element value | a positional `R{row}C{col}` key | inserting a row at position 5 invalidates every key below it, O(n) CRDT operations against one |
+| A minted `Uid` carried as the element value | the Loro slot id (`ListItemId`) | `LoroMovableList::mov` **reassigns the moved element's op id**, so every cell keyed by that slot is orphaned on the first reorder. This reverses the earlier "Loro already gives stable ids, a uid is redundant" call: it holds for insert and delete, never for `mov` |
+| A minted `Uid` carried as the element value | sorting by rewriting cell contents into fixed slots | the workaround for the slot id: O(cells) instead of O(rows), every moved cell replicates and lands on the undo stack, and an id-bound reference stays pinned to the overwritten slot |
+| `{peer:016x}_{counter:08x}`, fixed width, `:` between the halves | `{client_hex}{counter_hex}` with no separator | ambiguous: without a separator the two fixed-width halves cannot be told apart once either widens |
+| `{peer:016x}_{counter:08x}`, fixed width, `:` between the halves | a document-global monotonic counter | one LWW collision per concurrent insert. Two peers minting concurrently draw a distinct `peer` instead, so identity needs no coordination |
+| A dense axis over the used range | sparse run-length rows with a shared `gap_before` counter and an order-statistic tree | **not convergent:** two concurrent inserts splitting the same gap both `set` the shared counter, LWW keeps one, and the absolute numbering of every following row corrupts identically on all replicas. The tree speeds the query, not the hazard; the materialization cap bounds the memory the sparse model aimed at |
+| One binary register for a whole cell style | one register per attribute (the old `format_` / `style_` / `fgcolor_` fan-out) | cheap only with a server that orders content; on a blind relay, per-register LWW has no cross-register atomicity, so a whole-cell edit tears (border presence against border colour) and a colour-only or font-only cell was lost on reload. A finer model, if ever justified, is a nested per-cell map, never a flat fan-out |
+| Raw text only, never a computed value | storing the computed value beside the raw text | it is derived from the raw text, so replicating it costs bandwidth and can disagree with a peer's own recompute |
+| A shared `styles` dictionary, declared and deferred | building the `s` indirection now | a lookup paid before its benchmark: deduplication is a size optimization and the size is unmeasured |
+| The filter definition sits flat in `filters_{sheet}` | a nested `active` sub-map | **neither shape holds the definition together**: the fields race one by one and converge torn (`TRAME-FEAT-025`), so the open choice is one register against five keys, not flat against nested. Flat costs one container fewer to merge, for the same LWW granularity |
+| A container name as the primary key | a numeric container id | one more indirection, no new information: `merges_{sheet}` is already unique, stable, meaningful and verbatim in the code |
+| No anchored-comment container, and the anchor already decided | a positional `R{row}C{col}` anchor | every insert above the note re-points it, the same failure the row uid exists to answer |
+| No anchored-comment container, and the anchor already decided | a Trame-private orphan model | one gesture, two behaviours across the suite, and two rules to keep in step |
 
 ---
 
@@ -194,4 +209,5 @@ Only where a schema decision needs a reason. 40 words each.
 | That a sort is a permutation and a range stays a positional block | the sort feature; `TRAME-004`, `TRAME-005` |
 | When a reference becomes `#REF!` | the formula engine; `TRAME-007`, `TRAME-008` |
 | That one command is one undo item | the engine; `TRAME-017` |
+| That a document newer than the binary is refused whole | `ambre-spec-schema-version.md`; `SCHEMA-008` |
 | Who may write, and what the server enforces | architecture section 2.D; `ambre-spec-server.md` |

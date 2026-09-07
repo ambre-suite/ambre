@@ -17,25 +17,49 @@ theme, and a repaint writes nothing back. There is no two-peer table below.
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PROSE-UI-006` | A full text layout or a table-of-contents recompute MUST NOT run in the UI thread: both arrive already computed. | this spec section 2; `features/ambre-spec-prose-pagination.md` | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-014` | Every colour drawn MUST come from the generated theme tokens; a literal colour MUST NOT appear in render code. | this spec section 3; `ambre-spec-design-tokens.md` | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-016` | A layout older than the one already applied MUST be dropped, so a late arrival MUST NOT replace a newer one. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-017` | Partial repaint MUST use the shared content-repaint contract; a second repaint mechanism MUST NOT exist beside it. | this spec section 2; `ambre-spec-frame.md section 2` | not built -- lands with the "One repaint contract" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-018` | Block drawing MUST be written once against the drawing surface: the screen and the PDF MUST NOT be two implementations. | this spec section 2; `ambre-spec-drawing-surface.md section 2` | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5); `ambre-spec-pdf-export.md`, `PDF-001` is the export half of the same rule | unimplemented |
-| `PROSE-UI-019` | The run cache MUST be bounded: it MUST evict rather than grow with the document. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-020` | Building a page's drawing MUST cost what is visible, never what the document holds: an annotation anchored outside the visible pages MUST NOT be walked. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+### 1.1 The state
 
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-006` | `INV` | A full text layout or a table-of-contents recompute MUST NOT run in the UI thread: both arrive already computed. | this spec section 2; `features/ambre-spec-prose-pagination.md` | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-113` | `INV` | A shaped run handed from the side that shapes to the side that draws MUST NOT carry a GPU handle or any other handle bound to one thread. | this spec section 4 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-114` | `INV` | Resolving the position under a pointer MUST read the runs already shaped and MUST NOT shape a block: a block that was culled and never painted MUST resolve like any other. | this spec section 4 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-019` | `INV` | The run cache MUST be bounded: it MUST evict rather than grow with the document. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-018` | `INV` | Block drawing MUST be written once against the drawing surface: the screen and the PDF MUST NOT be two implementations. | this spec section 2; `ambre-spec-drawing-surface.md section 2` | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5); `ambre-spec-pdf-export.md`, `PDF-001` is the export half of the same rule | unimplemented |
+| `PROSE-UI-017` | `INV` | Partial repaint MUST use the shared content-repaint contract; a second repaint mechanism MUST NOT exist beside it. | this spec section 2; `ambre-spec-frame.md section 2` | not built -- lands with the "One repaint contract" Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-014` | `INV` | Every colour drawn MUST come from the generated theme tokens; a literal colour MUST NOT appear in render code. | this spec section 3; `ambre-spec-design-tokens.md` | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-115` | `OBS` | A visible page MUST be drawn with its sheet, the blocks the layout places on it, and the header, the footer and the footnote band the layout carries for it. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-116` | `OBS` | A block the layout breaks across two pages MUST be drawn on both: the continuation MUST NOT be left out. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-117` | `OBS` | A selection MUST be drawn under the glyphs it covers, and an inline highlight over them. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-118` | `OBS` | A remote caret and its label MUST NOT hide local text: they MUST be drawn after the glyphs of the page. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.2 Paint a page
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-119` | `POST` | Painting a page MUST build the GPU state of a run the first time that run is drawn, and MUST reuse it afterwards. | this spec section 4 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-020` | `FRAME` | Painting a page MUST NOT walk an annotation anchored outside the pages it draws. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-120` | `FRAME` | Painting a page MUST NOT write to the document, and MUST NOT build the GPU state of a run it does not draw. | derived | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.3 Apply a layout
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-121` | `POST` | A layout newer than the one in force MUST replace it, and the version it carries MUST become the version the view holds. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-016` | `FAIL` | A layout older than the one already applied MUST be dropped, so a late arrival MUST NOT replace a newer one. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-122` | `FRAME` | Applying a layout MUST NOT write to the document and MUST NOT shape a block. | derived | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 * **Budget.** the display-list build and the whole page paint, two rows of
   `ambre-spec-budgets.md section 2`; the run cache and the vertex buffers, two rows of
   `ambre-spec-budgets.md section 6`. The second of those exceeds the shared UI-thread total, and
   the register says so.
 * **Boundary.** none: this thread paints view state, where `UI-THREAD-004` bans a network, crypto
   or persistence path. What it draws arrives as an event and leaves as nothing.
-* **Verification.** 7 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-UI-018` is the one row a compiler can hold before a test exists, because a second
-  implementation cannot hide behind a generic parameter.
+* **Verification.** 17 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+  `PROSE-UI-018` and `PROSE-UI-113` are the two rows a compiler can hold before a test exists: a
+  second drawing implementation cannot hide behind a generic parameter, and a run carrying a
+  device handle does not cross a thread. The four drawn rows are screenshot work, which is the
+  weakest mechanism this workspace uses, and `PROSE-UI-116` is the one of them a layout fixture
+  can hold instead -- a block broken across two pages is drawn twice or it is not.
 
 ---
 
@@ -152,18 +176,18 @@ that sit over the canvas are DOM and are not painted here (`UI-THREAD-001`,
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| Shaping happens on the Logic thread and the UI thread only draws | pagination already shapes every block to measure where it breaks, so shaping again on the render thread would duplicate that work and put an unbounded cost inside the frame. The shared heap makes handing the result over free, which removes the usual reason to shape where you draw | the shared UI-thread shaping path the single-line cell editor uses, which is right for one short line and wrong for a page |
-| The shaped run carries no GPU handle | it has to cross a thread boundary, and a device handle cannot. Splitting the run in two puts the immovable half where the device is and keeps the movable half movable | one run type carrying its atlas entries, which would pin the shaped output to the thread that rasterized it |
-| The GPU state is built on first paint, not on receipt | a document sends runs for blocks the reader may never scroll to, and rasterizing them all would spend the atlas on text nobody sees | building the draw state when the run arrives, which makes a remote edit far off screen cost a raster |
-| Hit-testing reads the shaped data, never a live layout pass | a click must resolve on a block that was culled and never painted, and re-shaping it inside the pointer handler is the shaping-on-the-render-thread rule broken through the back door | shaping the block under the pointer on demand |
-| The run cache is bounded and evicts | a cache proportional to the document is a memory leak with a slow fuse: a hundred-page document would hold every block's glyphs for the session. Fifty pages of runs is more than any reader has scrolled through recently | caching every block, or caching only what is visible, which would re-raster on every scroll reversal |
-| Partial repaint is the shared contract, not a Prose one | two repaint mechanisms means two places a repaint bug can live, and the shared one already models what Prose needs. Prose simply never uses the scroll-band mode | a Prose-specific dirty-page mechanism, which is what the design started as |
-| One drawing implementation for screen and PDF | a page is the same picture on both, and two implementations disagree on the first thing that is hard -- a wavy underline, a struck-through run, a footnote separator. Parameterizing the drawing on the surface makes divergence a compile error rather than a rendering bug | a separate PDF painter reading the same layout |
-| A stale layout is dropped, not merged | layouts are whole values, so a late one is not a delta to reconcile: applying it would move the page a reader is looking at backwards. Dropping it costs a frame at worst | applying whatever arrives last |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| Shaping happens on the Logic thread and the UI thread only draws | the shared UI-thread shaping path the single-line cell editor uses | it is right for one short line and wrong for a page. Pagination already shapes every block to measure where it breaks, so shaping again on the render thread duplicates that work and puts an unbounded cost inside the frame, and the shared heap makes handing the result over free |
+| The shaped run carries no GPU handle | one run type carrying its atlas entries | it pins the shaped output to the thread that rasterized it, and a device handle cannot cross a thread boundary. Split in two, the immovable half stays where the device is and the movable half stays movable |
+| The GPU state is built on first paint, not on receipt | building the draw state when the run arrives | it makes a remote edit far off screen cost a raster. A document sends runs for blocks the reader may never scroll to, and rasterizing them all spends the atlas on text nobody sees |
+| Hit-testing reads the shaped data, never a live layout pass | shaping the block under the pointer on demand | it is the shaping-on-the-render-thread rule broken through the back door, and a click must resolve on a block that was culled and never painted |
+| The run cache is bounded and evicts | caching every block, or caching only what is visible | a cache proportional to the document is a memory leak with a slow fuse -- a hundred-page document holds every block's glyphs for the session -- while a visible-only cache re-rasters on every scroll reversal. Fifty pages of runs is more than any reader has scrolled through recently |
+| Partial repaint is the shared contract, not a Prose one | a Prose-specific dirty-page mechanism | it is two places a repaint bug can live, and the shared contract already models what Prose needs. Prose simply never uses the scroll-band mode. It is also what the design started as |
+| One drawing implementation for screen and PDF | a separate PDF painter reading the same layout | two implementations disagree on the first thing that is hard -- a wavy underline, a struck-through run, a footnote separator. A page is the same picture on both, and parameterizing the drawing on the surface makes divergence a compile error rather than a rendering bug |
+| A stale layout is dropped, not merged | applying whatever arrives last | it moves the page a reader is looking at backwards. Layouts are whole values, so a late one is not a delta to reconcile, and dropping it costs a frame at worst |
 
 ---
 
@@ -184,5 +208,9 @@ that sit over the canvas are DOM and are not painted here (`UI-THREAD-001`,
   has a name, `PROSE-UI-014` is checkable by a reviewer and by nothing else.
 * **Nothing paints an orphaned comment or a broken cross reference.** Both are specified as
   surfaced to the reader, and neither has a drawn form here.
+* **Nothing rules the order of two overlapping annotations.** Section 3 gives a comment
+  highlight, a suggested insertion and a suggested deletion an opacity each, and a sentence can
+  carry all three. `PROSE-UI-117` puts highlights over the glyphs and says nothing about which of
+  them sits over which, so three overlapping marks have three orders and no rule between them.
 * **A page taller than the viewport at minimum zoom is not ruled.** The sheet is drawn whole and
   clipped by the viewport, and no rule says what a block overflowing its own page frame looks like.

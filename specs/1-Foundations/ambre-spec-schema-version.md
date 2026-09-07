@@ -18,27 +18,44 @@ rules every application obeys, and the version that makes them safe to change.
 The only mandatory read. Grammar and status values are normative in `ambre-spec-template.md`. The
 prefix is `SCHEMA`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `SCHEMA-001` | A styled unit's whole style MUST be one binary register keyed by that unit's identity; a register per attribute is forbidden. | this spec section 2; `features/ambre-spec-trame-cell-styles.md` | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`, `::subset_style_edit_does_not_tear_a_whole_cell_rewrite`. Toile stores one register per element and no test drives two concurrent restyles of it | unverified |
-| `SCHEMA-002` | A shared formatting control MUST emit one changed field, and the view MUST fold it into a whole-register write. | this spec section 2; `ambre-spec-chrome.md` | none. The four shared controls each emit one field, and nothing refuses a view that writes the field straight into a register of its own | unverified |
-| `SCHEMA-003` | A record a binary cannot decode MUST reach the user as an error, never as a default or an absence. | this spec section 2; derived | none, and both applications fail it. Toile answers a failed decode with the default style; Trame skips the cell and leaves it unstyled. Neither tells the user | unverified |
-| `SCHEMA-004` | Every document MUST carry its schema version in a root register, written when the document is created. | this spec section 2 | not built -- lands with `ARCH P8` | unimplemented |
-| `SCHEMA-005` | A document with no schema version MUST read as version 0. | this spec section 2 | not built -- lands with `ARCH P8` | unimplemented |
-| `SCHEMA-006` | Every full-state read MUST compare the document's schema version with the binary's before using the document. | this spec section 2 | not built -- lands with `ARCH P8` | unimplemented |
-| `SCHEMA-007` | A document older than the binary MUST be migrated before use. | this spec section 2 | not built -- lands with `ARCH P8` | unimplemented |
-| `SCHEMA-008` | A document newer than the binary MUST be refused whole, and MUST NOT be written back. | this spec section 2 | not built -- lands with `ARCH P8` | unimplemented |
-| `SCHEMA-009` | A change to the layout of a persisted record MUST raise the schema version. | this spec section 2 | not built -- lands with `ARCH P8` | unimplemented |
-| `SCHEMA-010` | A migration MUST live in the application crate that owns the schema it migrates. | this spec section 2 | not built -- lands with `ARCH P8` | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SCHEMA-001` | `INV` | A styled unit's whole style MUST be one binary register keyed by that unit's identity; a register per attribute is forbidden. | this spec section 2; `features/ambre-spec-trame-cell-styles.md` | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`, `::subset_style_edit_does_not_tear_a_whole_cell_rewrite`. Toile stores one register per element and no test drives two concurrent restyles of it | unverified |
+| `SCHEMA-002` | `INV` | A shared formatting control MUST emit one changed field. | this spec section 2; `ambre-spec-chrome.md` | none. The four shared controls each emit one field, and nothing refuses a fifth that emits a whole style | unverified |
+| `SCHEMA-011` | `INV` | A view MUST fold that field into a whole-register write. | this spec section 2; `ambre-spec-chrome.md` | none. It is the half that decides whether `SCHEMA-001` survives contact with the chrome: a view writing the field straight into a register of its own is the per-attribute layout the first rule forbids, arrived at from the other end. Nothing refuses one | unverified |
+| `SCHEMA-004` | `INV` | Every document MUST carry its schema version in a root register, written when the document is created. | this spec section 2 | not built -- lands with `ARCH P8` | unimplemented |
+| `SCHEMA-009` | `INV` | A change to the layout of a persisted record MUST raise the schema version. | this spec section 2 | not built -- lands with `ARCH P8` | unimplemented |
+| `SCHEMA-010` | `INV` | A migration MUST live in the application crate that owns the schema it migrates. | this spec section 2 | not built -- lands with `ARCH P8` | unimplemented |
+
+### 1.2 Read a document's full state
+
+A binary opens a stored document. Everything below happens before a single container is used, which
+is the only moment a wrong reading can still be caught.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SCHEMA-006` | `POST` | Every full-state read MUST compare the document's schema version with the binary's before using the document. | this spec section 2 | not built -- lands with `ARCH P8` | unimplemented |
+| `SCHEMA-005` | `POST` | A document with no schema version MUST read as version 0. | this spec section 2 | not built -- lands with `ARCH P8` | unimplemented |
+| `SCHEMA-007` | `POST` | A document older than the binary MUST be migrated before use. | this spec section 2 | not built -- lands with `ARCH P8` | unimplemented |
+| `SCHEMA-012` | `FRAME` | A read that refuses a document MUST NOT write it back. | this spec section 2 | not built -- lands with `ARCH P8`. It is the half `SCHEMA-008` carried, and it is the one that destroys data: refusing to open a newer document is an inconvenience, and writing an older binary's shape over it is the silent loss the whole register exists to prevent | unimplemented |
+| `SCHEMA-008` | `FAIL` | A document newer than the binary MUST be refused whole. | this spec section 2 | not built -- lands with `ARCH P8` | unimplemented |
+| `SCHEMA-003` | `FAIL` | A record a binary cannot decode MUST reach the user as an error, never as a default or an absence. | this spec section 2; derived | none, and both applications fail it. Toile answers a failed decode with the default style; Trame skips the cell and leaves it unstyled. Neither tells the user | unverified |
 
 * **Budget.** none of its own. The version read is one map lookup inside leg 4 of
   `ambre-spec-budgets.md section 4`, and a migration chain is charged to the same leg.
 * **Boundary.** none. The version register is ordinary document state, so it travels sealed like
   every other container and the relay sees a blob (`ZK-001`).
-* **Verification.** 3 `unverified`, 7 `unimplemented`. The one rule with a real mechanism is
+* **Verification.** 4 `unverified`, 8 `unimplemented`. The one rule with a real mechanism is
   `SCHEMA-001`, and it is held for one application out of two. Everything the version register
   promises is design: the failure it guards against -- a stored document read into the wrong meaning
-  -- is today caught by nothing at all.
+  -- is today caught by nothing at all. Two conjunctions came apart. `SCHEMA-002` bound what a
+  control emits to what a view does with it, and only the second half can undo `SCHEMA-001`: a view
+  writing one field into a register of its own reaches the forbidden per-attribute layout from the
+  other end. `SCHEMA-008` bound a refusal to a frame condition, and the frame is the half that
+  destroys data -- refusing a newer document is an inconvenience, writing an older binary's shape
+  over it is the silent loss.
 
 ---
 
@@ -120,16 +137,16 @@ The user never sees the version. What they meet is what it protects them from.
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| One register for the whole style of a unit | a per-attribute fan-out lets two concurrent edits converge to a style neither author wrote, and the tear is invisible until someone reads the result. One value per unit makes the race resolve as last writer wins over a whole style | one register per attribute, so that concurrent edits to different attributes both survive |
-| The version lives in the document, not in the carrier | a version held by the container file protects the file alone, and the same document also arrives through a relay snapshot and a local store. State that travels with the document is checked on every path by construction | a version field on each persistence carrier |
-| Absent means version 0 | the alternative is rewriting every existing document to adopt the register, which is a migration whose only purpose is to enable migrations | refusing a document that carries no version |
-| A newer document is refused whole | a best-effort read of a schema the binary does not know is the silent-loss case the register exists to remove. Refusing costs the user an update; reading costs them the document | reading a newer document on a best-effort basis and dropping what is unknown |
-| Migrations live in the application crate | the foundation owns the protocol -- where the number is, when it is read, what each comparison means. What a container meant in version 2 and means in version 3 is the application's own semantics | a shared migration registry in the foundation |
-| Mixed-version live collaboration is stated, not solved | one deployment serves every client, so skew is bounded by an open tab. Solving it needs a relay-side gate, and paying for that before the bound is exceeded buys nothing | a schema version on every delta, checked before it is applied |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| One register for the whole style of a unit | one register per attribute, so that concurrent edits to different attributes both survive | the fan-out lets two concurrent edits converge to a style neither author wrote, and the tear is invisible until someone reads the result. One value per unit makes the race resolve as last writer wins over a whole style, which is a result someone did write |
+| The version lives in the document, not in the carrier | a version field on each persistence carrier | a version held by the container file protects the file alone, and the same document also arrives through a relay snapshot and a local store. State that travels with the document is checked on every path by construction |
+| Absent means version 0 | refusing a document that carries no version | it means rewriting every existing document to adopt the register, which is a migration whose only purpose is to enable migrations |
+| A newer document is refused whole | reading a newer document on a best-effort basis and dropping what is unknown | a best-effort read of a schema the binary does not know is the silent-loss case the register exists to remove. Refusing costs the user an update; reading costs them the document |
+| Migrations live in the application crate | a shared migration registry in the foundation | what a container meant in version 2 and means in version 3 is the application's own semantics, and the foundation owns the protocol instead -- where the number is, when it is read, what each comparison means |
+| Mixed-version live collaboration is stated, not solved | a schema version on every delta, checked before it is applied | it needs a relay-side gate, and paying for that buys nothing while the skew is still bounded: one deployment serves every client, so the window is an open tab |
 
 ---
 

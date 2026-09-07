@@ -18,32 +18,48 @@ and no application respecifies it.
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `DOCFILE-001` | A `.ambre` round trip MUST be the identity on document state, and MUST NOT need a warning list: the payload **is** the document. | this spec section 3 | `ambre_core::docfile::tests::round_trip_is_the_identity_on_the_container`; `ambre_trame::logic::docfile::tests::round_trip_preserves_the_document_state`, `::round_trip_is_byte_identical_on_a_bare_document`; `ambre_toile::logic::state::docfile::tests::round_trip_preserves_the_document_state`, `::round_trip_is_byte_identical_on_a_bare_document`; `fixture_determinism::the_round_trip_is_stable_on_every_doc_state_variant` | verified |
-| `DOCFILE-002` | A reader MUST identify the file from `doc_type` and `version`, before any app-specific parsing and without consulting the extension. | this spec section 3 | `ambre_core::docfile::tests::header_layout_is_the_spec_layout`, `::dispatch_reports_the_type_that_wrote_the_file`, `::an_unknown_doc_type_byte_is_not_a_dispatch_target`; `ambre_trame::logic::docfile::tests::a_toile_file_is_re_dispatched_not_coerced` | verified |
-| `DOCFILE-003` | An older version MUST migrate on read; a newer one MUST be refused cleanly. | this spec section 3 | `ambre_core::docfile::tests::a_newer_version_is_refused_and_an_older_one_is_attempted`, `::migrating_from_a_newer_version_is_refused`, `::the_walk_applies_one_step_per_version`, `::the_walk_chains_steps_in_order`, `::a_gap_in_the_registry_stops_the_walk_at_the_missing_row`, `::a_failing_step_fails_the_whole_migration` | verified |
-| `DOCFILE-004` | No error path MUST mutate the bytes it was handed. | this spec section 3 | `ambre_core::docfile::tests::every_error_path_leaves_the_input_untouched`; `ambre_trame::logic::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone` | verified |
-| `DOCFILE-005` | A malformed file MUST produce a typed error, never a panic. | this spec section 3 | `ambre_core::docfile::tests::truncated_header_is_rejected_at_every_length`, `::bad_magic_is_rejected`; `ambre_trame::logic::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic` | verified |
-| `DOCFILE-006` | The container layer MUST NOT compress or encrypt: the two entry points are pure functions over bytes, and protection is a separate stage. | this spec section 5 | crate graph: `ambre-core` declares no crypto and no compression dependency, so neither is reachable from the container | verified |
-| `DOCFILE-007` | There MUST be one container for every app: the only app-dependent value in the header is the `doc_type` byte. | this spec section 3 | `ambre_core::docfile::tests::header_layout_is_the_spec_layout` pins the 22-byte layout. One writer takes the type as a parameter, so a per-app variant has nowhere to be written | verified |
-| `DOCFILE-008` | A version bump MUST freeze one named artifact per `doc_type` in the same commit that adds the registry row. | this spec section 3; `ambre-spec-fixtures.md` | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). The recipe that performs the freeze does not exist, and no check reads the registry against the frozen corpus | unimplemented |
-| `DOCFILE-009` | The export surface MUST state that a plaintext file carries no encryption of its own. | this spec section 5 | not built -- lands with `DOCFILE P1 -- user-facing export and import` (`ambre-roadmap.md` EF) | unimplemented |
-| `DOCFILE-010` | A passphrase-sealed file MUST carry its own container version; it MUST NOT be a flag on an existing one. | this spec section 5 | not built -- lands with `DOCFILE P2 -- passphrase-sealed files` (`ambre-roadmap.md` EF) | unimplemented |
-| `DOCFILE-011` | A snapshot on the wire MUST NOT carry this header: the container is a file format, never a wire format. | this spec section 5 | none. `ambre-sync` names neither entry point and seals a bare `export_snapshot()`, so the rule holds today by construction. Nothing refuses the line that would change it, and no test asserts the magic bytes are absent from a sealed payload | unverified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `DOCFILE-001` | `IO` | A `.ambre` round trip MUST be the identity on document state, and MUST NOT need a warning list: the payload **is** the document. | this spec section 3 | `ambre_core::docfile::tests::round_trip_is_the_identity_on_the_container`; `ambre_trame::logic::docfile::tests::round_trip_preserves_the_document_state`, `::round_trip_is_byte_identical_on_a_bare_document`; `ambre_toile::logic::state::docfile::tests::round_trip_preserves_the_document_state`, `::round_trip_is_byte_identical_on_a_bare_document`; `fixture_determinism::the_round_trip_is_stable_on_every_doc_state_variant` | verified |
+| `DOCFILE-006` | `INV` | The container layer MUST NOT compress or encrypt: the two entry points are pure functions over bytes, and protection is a separate stage. | this spec section 5 | crate graph: `ambre-core` declares no crypto and no compression dependency, so neither is reachable from the container | verified |
+| `DOCFILE-007` | `INV` | There MUST be one container for every app: the only app-dependent value in the header is the `doc_type` byte. | this spec section 3 | `ambre_core::docfile::tests::header_layout_is_the_spec_layout` pins the 22-byte layout. One writer takes the type as a parameter, so a per-app variant has nowhere to be written | verified |
+| `DOCFILE-011` | `INV` | A snapshot on the wire MUST NOT carry this header: the container is a file format, never a wire format. | this spec section 5 | none. `ambre-sync` names neither entry point and seals a bare `export_snapshot()`, so the rule holds today by construction. Nothing refuses the line that would change it, and no test asserts the magic bytes are absent from a sealed payload | unverified |
+| `DOCFILE-008` | `INV` | A version bump MUST freeze one named artifact per `doc_type` in the same commit that adds the registry row. | this spec section 3; `ambre-spec-fixtures.md` | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). The recipe that performs the freeze does not exist, and no check reads the registry against the frozen corpus | unimplemented |
+| `DOCFILE-010` | `INV` | A passphrase-sealed file MUST carry its own container version; it MUST NOT be a flag on an existing one. | this spec section 5 | not built -- lands with `DOCFILE P2 -- passphrase-sealed files` (`ambre-roadmap.md` EF) | unimplemented |
+| `DOCFILE-009` | `OBS` | The export surface MUST state that a plaintext file carries no encryption of its own. | this spec section 5 | not built -- lands with `DOCFILE P1 -- user-facing export and import` (`ambre-roadmap.md` EF) | unimplemented |
+
+### 1.2 Read a `.ambre` file
+
+The reader is handed bytes and nothing else. It reads the header, decides what wrote the file, and
+migrates or refuses before an application ever sees a payload.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `DOCFILE-002` | `POST` | A reader MUST identify the file from `doc_type` and `version`, before any app-specific parsing. | this spec section 3 | `ambre_core::docfile::tests::header_layout_is_the_spec_layout`, `::dispatch_reports_the_type_that_wrote_the_file`, `::an_unknown_doc_type_byte_is_not_a_dispatch_target`; `ambre_trame::logic::docfile::tests::a_toile_file_is_re_dispatched_not_coerced` | verified |
+| `DOCFILE-003` | `POST` | A version older than the binary's MUST migrate on read. | this spec section 3 | `ambre_core::docfile::tests::the_walk_applies_one_step_per_version`, `::the_walk_chains_steps_in_order`, `::a_gap_in_the_registry_stops_the_walk_at_the_missing_row`, `::a_failing_step_fails_the_whole_migration` | verified |
+| `DOCFILE-012` | `FRAME` | A reader MUST NOT consult the file's name or extension. | this spec section 3 | type-level: both entry points take a byte slice, so there is no path, no name and no extension in scope to branch on | verified |
+| `DOCFILE-004` | `FRAME` | No error path MUST mutate the bytes it was handed. | this spec section 3 | `ambre_core::docfile::tests::every_error_path_leaves_the_input_untouched`; `ambre_trame::logic::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone` | verified |
+| `DOCFILE-013` | `FAIL` | A version newer than the binary's MUST be refused cleanly. | this spec section 3 | `ambre_core::docfile::tests::a_newer_version_is_refused_and_an_older_one_is_attempted`, `::migrating_from_a_newer_version_is_refused` | verified |
+| `DOCFILE-005` | `FAIL` | A malformed file MUST produce a typed error, never a panic. | this spec section 3 | `ambre_core::docfile::tests::truncated_header_is_rejected_at_every_length`, `::bad_magic_is_rejected`; `ambre_trame::logic::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic` | verified |
 
 * **Budget.** none, and `ambre-spec-budgets.md` records that as a result: the
   container adds a 22-byte write and a 22-byte parse, and its binary contribution is a few dozen
   bytes in `ambre-core`, shared rather than duplicated per application.
 * **Boundary.** none: `DOCFILE-006` bans compression and encryption in this layer, so it holds no
   key, and `DOCFILE-011` keeps the bytes it produces on a local disk rather than on the relay.
-* **Verification.** 7 `verified`, 1 `unverified`, 3 `unimplemented`. The container is the one
+* **Verification.** 9 `verified`, 1 `unverified`, 3 `unimplemented`. The container is the one
   Foundations subsystem where the first count is honest: it does pure byte handling on the host
   tier, so a test can reach every rule it makes about bytes. The four gaps are the rules that reach
   outside it -- a bump obligation on a recipe that is unbuilt, two rules about a surface no gesture
   has yet, and one about what another crate must refrain from putting on the wire. The fixture
   corpus (`ambre-spec-fixtures.md`) widens the belt further, because it exercises this reader and
-  this writer on every run.
+  this writer on every run. The pass split `DOCFILE-003`, which cited six tests for a migration and
+  a refusal: four drive the walk and two drive the refusal, and one row could not say which. It also
+  gave `DOCFILE-002`'s second clause its own row: not consulting the extension is a frame condition,
+  and it is held by a stronger mechanism than the rest of the row -- the entry points take a byte
+  slice, so no name is in scope to branch on.
 
 ---
 
@@ -223,20 +239,22 @@ fixture corpus.
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| A plaintext file by default | it is what every other export already does: an .xlsx, a .csv and a PDF exported from Ambre land on the user's disk in the clear today. The Zero-Knowledge pillar is a statement about the **server**, never about the user's own filesystem, and a partial gesture on one export of six buys the user nothing while suggesting a protection the file lacks (`DOCFILE-009`) | sealing every file, which makes the honest default invisible and still leaves five lossy exports in the clear |
-| A passphrase-sealed variant, on explicit opt-in | the right answer for a backup that leaves the machine. Argon2id then XChaCha20-Poly1305, over a passphrase the user types at export time, so the key is independent of any server-side lifecycle. Its salt and Argon2id parameters live in the header, so the file stays self-describing and the parameters can be strengthened later without breaking old files (`DOCFILE-010`) | no sealed variant at all, which leaves a user carrying a document off the machine with nothing but the filesystem |
-| Never the `DocumentKey` | the `DocumentKey` is rotated server-side on every revocation (`ambre-spec-key-rotation.md`). A file sealed under a since-rotated key is permanently unreadable, and it fails silently and late: the user finds out months after the export, when the backup is the only copy left. A local backup whose validity depends on a future membership change is not a backup | sealing under the key Sync already holds for the document, which is the reading a reader reaches for first and the reason this row exists |
-| The sealed variant is a version, not a flag | a reader must tell a sealed file from a plaintext one from the header alone, before it attempts to parse a payload. A flag on the current version makes the two indistinguishable to every reader already shipped (`DOCFILE-010`) | a bit in the current header, which every existing client reads as a plaintext file and fails on |
-| A file format, never a wire format | the server already holds `document_id` and `doc_type` as routing metadata, so a header inside the ciphertext duplicates them for nothing. Calling the container a persistence **and sharing** format conflates two destinations, and that conflation is what produced the at-rest question the three rows above answer (`DOCFILE-011`) | one format for the disk and the socket, which is what put an unnamed key at the centre of the at-rest question |
-| No compression and no encryption in this layer | the two entry points stay pure functions over bytes, testable on host with no key and no dependency, and `ambre-sync` stays the sole compression and crypto consumer (`ambre-spec-architecture.md section 2`, `DOCFILE-006`) | protection inside the container, which puts a crypto dependency in `ambre-core` and a key in every caller |
-| One container for every application | four headers to keep in step, and "open this file" stops being one user action. The type byte plus the dispatch rule cover the whole need (`DOCFILE-007`) | a per-application container variant |
-| A 22-byte binary header | the payload is one opaque CRDT blob, so a packaging format buys nothing. A fixed layout is trivially inspectable with any hex viewer, and it adds no parser to the Logic thread and no attack surface on untrusted input | a zip or OPC-style container, which OOXML uses and which buys multi-part packaging Ambre does not need; and a JSON or RON wrapper around base64, which inflates every file for a readability that is illusory while the payload stays binary |
-| The document name stays out of the header | the name is E2EE metadata (`ambre-spec-zero-knowledge.md`) and the filename already serves the purpose. In the header it would leak into a plaintext file whose contents the user may have chosen not to expose | carrying the name in the header, for a convenience the filename already provides |
-| Compatibility is a read-side duty | one writer and N readers stays testable as versions accumulate, and every reader path has an input to prove it: the frozen corpus. N writers has no such input, because nothing can produce a document at a version the build no longer writes | version negotiation, or a backward-compatible write mode |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| A plaintext file by default | sealing every file | it makes the honest default invisible and still leaves five lossy exports in the clear. An .xlsx, a .csv and a PDF exported from Ambre land on the user's disk in the clear today; the Zero-Knowledge pillar is a statement about the **server**, never about the user's own filesystem, and a partial gesture on one export of six buys the user nothing while suggesting a protection the file lacks (`DOCFILE-009`). |
+| A passphrase-sealed variant, on explicit opt-in | no sealed variant at all | it leaves a user carrying a document off the machine with nothing but the filesystem. Argon2id then XChaCha20-Poly1305 over a passphrase typed at export time keeps the key independent of any server-side lifecycle, and the salt and parameters in the header keep the file self-describing and strengthenable later without breaking old files (`DOCFILE-010`). |
+| Never the `DocumentKey` | sealing under the key Sync already holds for the document | it is the reading a reader reaches for first, and the reason this row exists. The `DocumentKey` is rotated server-side on every revocation (`ambre-spec-key-rotation.md`), so a file sealed under a since-rotated key is permanently unreadable, silently and late: the user finds out months after the export, when the backup is the only copy left. A local backup whose validity depends on a future membership change is not a backup. |
+| The sealed variant is a version, not a flag | a bit in the current header | every existing client reads it as a plaintext file and fails on it. A reader must tell a sealed file from a plaintext one from the header alone, before it attempts to parse a payload (`DOCFILE-010`). |
+| A file format, never a wire format | one format for the disk and the socket | it is what put an unnamed key at the centre of the at-rest question. The server already holds `document_id` and `doc_type` as routing metadata, so a header inside the ciphertext duplicates them for nothing, and calling the container a persistence **and sharing** format conflates two destinations (`DOCFILE-011`). |
+| No compression and no encryption in this layer | protection inside the container | it puts a crypto dependency in `ambre-core` and a key in every caller. The two entry points stay pure functions over bytes, testable on host with no key and no dependency, and `ambre-sync` stays the sole compression and crypto consumer (`ambre-spec-architecture.md section 2`, `DOCFILE-006`). |
+| One container for every application | a per-application container variant | four headers to keep in step, and "open this file" stops being one user action. The type byte plus the dispatch rule cover the whole need (`DOCFILE-007`). |
+| A 22-byte binary header | a zip or OPC-style container | it is what OOXML uses, and it buys multi-part packaging Ambre does not need: the payload is one opaque CRDT blob. A fixed layout is trivially inspectable with any hex viewer, and it adds no parser to the Logic thread and no attack surface on untrusted input. |
+| A 22-byte binary header | a JSON or RON wrapper around base64 | it inflates every file for a readability that is illusory while the payload stays binary. |
+| The document name stays out of the header | carrying the name in the header | it buys a convenience the filename already provides. The name is E2EE metadata (`ambre-spec-zero-knowledge.md`), and in the header it would leak into a plaintext file whose contents the user may have chosen not to expose. |
+| Compatibility is a read-side duty | version negotiation | one writer and N readers stays testable as versions accumulate, and every reader path has an input to prove it: the frozen corpus. Negotiation puts the version choice at run time, where no corpus can pin what a build will write. |
+| Compatibility is a read-side duty | a backward-compatible write mode | N writers has no input to prove them, because nothing can produce a document at a version the build no longer writes. |
 
 ---
 

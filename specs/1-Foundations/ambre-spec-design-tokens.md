@@ -2,7 +2,7 @@
 
 **Type:** Horizontal (framework)
 **Implementation:** partial -- one source generates both sides and the theme switch works; the
-stylesheet still carries fifty colours the source never declared.
+stylesheet still carries fifty-eight colours the source never declared.
 
 > The interface is drawn twice, once by the browser and once by the graphics card, and the two
 > halves must not disagree about what a surface, an accent or a body size looks like. One file
@@ -19,12 +19,23 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREAD`, shared with
 `ambre-spec-ui.md`, `ambre-spec-commands.md` and `ambre-spec-clipboard.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `UI-THREAD-029` | Every colour, spacing, radius and type size the interface uses MUST be declared in the one token source. | this spec section 2 | none, and **the rule fails today**: the shell stylesheet carries fifty literal colours, of which every shadow and every white on a coloured ground, and no check counts them. The repair is the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | unverified |
-| `UI-THREAD-030` | The stylesheet and the drawing constants MUST both be generated from that source, in one build step. | this spec section 2 | type-level: the drawing crate includes the generated constants and the generated sheet as files the build step writes, so neither exists unless that step ran and read the source | verified |
-| `UI-THREAD-031` | A stylesheet MUST NOT read a token the source does not emit and the sheet does not declare. | this spec section 2 | none, and **the rule fails today**: five names are read and defined nowhere, and one of the five carries no fallback, so a label on the home screen has no colour of its own. The repair is the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | unverified |
-| `UI-THREAD-032` | A theme switch MUST reach the browser half and the drawing half together, from one act. | this spec section 2 | none. One control carries the active theme, the launcher sets the document attribute from it and the render loop reads it on the next frame. Nothing drives a switch and observes both halves, and no test in the suite names the theme at all | unverified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `UI-THREAD-029` | `INV` | Every colour, spacing, radius and type size the interface uses MUST be declared in the one token source. | this spec section 2 | none, and **the rule fails today**: the shell stylesheet carries fifty-eight literal colours, twenty-five of them distinct, of which every shadow and every white on a coloured ground, and no check counts them. The repair is the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | unverified |
+| `UI-THREAD-030` | `INV` | The stylesheet and the drawing constants MUST both be generated from that source, in one build step. | this spec section 2 | type-level: the drawing crate includes the generated constants and the generated sheet as files the build step writes, so neither exists unless that step ran and read the source | verified |
+| `UI-THREAD-031` | `INV` | A stylesheet MUST NOT read a token the source does not emit and the sheet does not declare. | this spec section 2 | none, and **the rule fails today**: five names are read and defined nowhere -- the content ground, a danger colour, a foreground, a shadow and a dimmed text -- and the foreground carries no fallback, so a label on the home screen has no colour of its own. The repair is the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | unverified |
+| `UI-THREAD-033` | `INV` | The unmarked stylesheet MUST carry the light set, so a page that never sets the theme attribute renders light rather than unstyled. | this spec section 2; section 4, row 4 | none. The generator writes the light colours into the unmarked block and the dark ones into the attributed one, so the default is the order of two blocks in one build script, and nothing goes red the day they swap | unverified |
+
+### 1.2 Switch the theme
+
+The user flips the theme control. One act must move both halves, and it must move nothing else.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `UI-THREAD-032` | `POST` | A theme switch MUST reach the browser half and the drawing half together, from one act. | this spec section 2 | none. One control carries the active theme, the launcher sets the document attribute from it and the render loop reads it on the next frame. Nothing drives a switch and observes both halves, and no test in the suite names the theme at all | unverified |
+| `UI-THREAD-034` | `FRAME` | A theme switch MUST NOT change a spacing, a radius or a type size. | this spec section 2; section 4, row 5 | none. The generator emits the scales once, into the unmarked block, and the drawing palette declares twelve colours and no scale field -- so a theme-dependent scale takes an edit to the build script, which compiles and which no test reads | unverified |
 
 * **Budget.** none: a token is a constant resolved at build time, so it costs nothing at run time.
   A theme switch repaints the content once, which is the frame budget of
@@ -32,9 +43,12 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
   the binary budget of `ambre-spec-budgets.md section 5`.
 * **Boundary.** none: a token is a colour and a number, generated into the binary. Nothing here
   reaches the relay, holds a key or opens a socket, and the chosen theme is never sent anywhere.
-* **Verification.** 1 `verified`, 3 `unverified`, 0 `unimplemented`. The one held rule is held by
+* **Verification.** 1 `verified`, 5 `unverified`, 0 `unimplemented`. The one held rule is held by
   the compiler and holds the half that matters most: the two sides cannot come from two sources.
-  What nothing holds is whether a value bypassed the source, and both failing rows say it did.
+  What nothing holds is whether a value bypassed the source, and both failing rows say it did. The
+  two rows the pass added are the gaps it exposed: `UI-THREAD-033`, the unmarked default, and
+  `UI-THREAD-034`, the frame condition of the switch. Both were written as decisions in section 4
+  and ruled nowhere, and neither has a mechanism.
 
 ---
 
@@ -84,7 +98,7 @@ unstyled.
 * `crates/ambre-canvas/src/theme.rs` -- the includes, the theme value and the shared control;
 * `crates/ambre-app/src/platform.rs` -- the injection of the generated sheet into the page;
 * `crates/ambre-app/styles.css` -- the shell layout, which reads the properties and is where the
-  fifty literals are.
+  fifty-eight literals are.
 
 ---
 
@@ -101,22 +115,22 @@ The user touches one thing: the theme control. Everything else is what they see.
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| One source, generated into two artefacts at build time | the browser half needs a stylesheet and the drawing half needs typed constants, and no run-time value can be both. Generating them removes the failure this design exists to prevent: two hand-kept lists that agree until one is edited alone | keeping a stylesheet and a Rust palette side by side, and reviewing that they match |
-| The generated artefacts are included, never committed | a committed artefact is a second source that a build can silently disagree with, and reviewing a generated diff is reviewing the generator twice | writing the generated files into the tree so they are readable in a diff |
-| Both palettes ship, and the theme is selected at run time | a build per theme doubles the binary count and makes the switch a reload. Two palettes cost the size of forty-eight colours, which is nothing against the binary budget | a build-time theme, one binary per palette |
-| Light is the unmarked default | a page that has not yet applied the attribute renders light rather than unstyled, which is the failure that degrades to something readable. It is also the same rule the adaptive layout uses for its narrowest width | making dark the unmarked set, so an unattributed page is dark text on a dark ground |
-| A scale is theme-independent | a spacing and a type size are the shape of the layout, and a theme is its colour. Making a scale switch with the theme means the interface reflows on a colour change | one full token set per theme, scales included |
-| The colour vocabulary differs between the two halves | the chrome has surfaces and borders, the content has grid lines and carets, and a shared vocabulary would name each concept for the half that does not use it. What must agree is named the same in both groups | one flat palette both halves index into |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| One source, generated into two artefacts at build time | keeping a stylesheet and a Rust palette side by side, and reviewing that they match | two hand-kept lists agree until one is edited alone, which is the failure this design exists to prevent. The browser half needs a stylesheet and the drawing half needs typed constants, and no run-time value can be both, so the two artefacts are unavoidable -- only the hand-keeping is |
+| The generated artefacts are included, never committed | writing the generated files into the tree so they are readable in a diff | a committed artefact is a second source that a build can silently disagree with, and reviewing a generated diff is reviewing the generator twice |
+| Both palettes ship, and the theme is selected at run time | a build-time theme, one binary per palette | it doubles the binary count and makes the switch a reload. Two palettes cost the size of forty-eight colours, which is nothing against the binary budget |
+| Light is the unmarked default | making dark the unmarked set | an unattributed page would be dark text on a dark ground. Light degrades to something readable instead, which is the same rule the adaptive layout uses for its narrowest width |
+| A scale is theme-independent | one full token set per theme, scales included | a scale that switches with the theme reflows the interface on a colour change. A spacing and a type size are the shape of the layout, and a theme is its colour |
+| The colour vocabulary differs between the two halves | one flat palette both halves index into | the chrome has surfaces and borders, the content has grid lines and carets, so a shared vocabulary names each concept for the half that does not use it. What must agree is named the same in both groups anyway |
 
 ---
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The shell stylesheet carries fifty literal colours.** Every shadow is a literal, so no theme
+* **The shell stylesheet carries fifty-eight literal colours.** Every shadow is a literal, so no theme
   changes one, and every white on a coloured ground is a literal, so a light theme cannot lighten
   the ground under it. The file's own header still says the token sets will land later, and they
   landed (`UI-THREAD-029`).

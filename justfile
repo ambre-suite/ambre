@@ -123,30 +123,30 @@ cov:
 spec-code:
     python3 scripts/spec_code.py --check
 
-# Ledger of the per-spec invariant tables (`ambre-invariant-ledger.md`), written
+# Ledger of the per-spec contract tables (`ambre-contract-ledger.md`), written
 # by the script and by nothing else -- a hand-maintained roll-up is the same
 # failure mode as a hand-maintained test list, and it was already wrong by one.
 # Also enforces the rules that keep `unimplemented` honest: a declared status
 # value, a Story citation on every unbuilt row, and a cited `fn` that resolves.
 
-# invariant ledger: fail when the file on disk is not what the script would write.
-invariants:
-    python3 scripts/invariants.py
+# contract ledger: fail when the file on disk is not what the script would write.
+contracts:
+    python3 scripts/contracts.py
 
-# Rewrite the ledger after an invariant row changed.
-invariants-write:
-    python3 scripts/invariants.py --write
+# Rewrite the ledger after a contract row changed.
+contracts-write:
+    python3 scripts/contracts.py --write
 
 # Rewrite the per-document ceiling on `unverified` rows after a deliberate
 # change. It lowers only, so it cannot make a red check green: a rising ceiling
 # is shipped code losing its last mechanism. A document that legitimately grows
 # loose needs the target below, and a reviewed diff.
-invariants-ceilings:
-    python3 scripts/invariants.py --ceilings
+contracts-ceilings:
+    python3 scripts/contracts.py --ceilings
 
 # A deliberate growth of the coverage debt, recorded rather than silent.
-invariants-ceilings-raise:
-    python3 scripts/invariants.py --ceilings --raise
+contracts-ceilings-raise:
+    python3 scripts/contracts.py --ceilings --raise
 
 # How a spec is built, not what it quotes: prose share (a migrated document is
 # capped, every other spec carries a ceiling it may only fall below), production

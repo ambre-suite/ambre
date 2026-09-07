@@ -14,19 +14,102 @@
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PROSE-009` | A merged region's span MUST be derived from its two corner cells; it MUST NOT be stored, so a concurrent row or column insert cannot corrupt it. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-040` | An insert or a move whose result breaks the nesting rules of the document MUST be refused, and the refusal MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-017` | A row or column insert MUST converge with a concurrent edit inside the table, and MUST NOT corrupt the geometry of a merged region. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-044` | The stored column widths MUST hold exactly one entry per column: a column insert and a column delete MUST each move that list in the same operation. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-045` | Deleting the last column MUST delete the whole table: a table of no columns MUST NOT exist. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-046` | A merge MUST be refused while any covered cell holds text, and nothing MUST be written. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-047` | A merge whose covered cells are not a solid rectangle MUST be refused. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-048` | A covered cell's text MUST survive the merge and MUST reappear verbatim when the region is unmerged. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-049` | A merged region MUST be dropped when either corner is deleted, and the cells it covered MUST become ordinary cells again. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-050` | Two merges covering one cell at the same moment MUST resolve to a single region, identically on every peer. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5); needs a 2-peer convergence regression test, like Trame's `TRAME-022` | unimplemented |
-| `PROSE-FEAT-051` | Moving the caret between cells MUST NOT change the document, except at the last cell, where it MUST append a row. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-009` | `INV` | A merged region MUST be held as its two corner cells alone: no row count, no column count and no grid position may be stored, and the span MUST be worked out from the grid the table has now. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-227` | `INV` | Every row of a table MUST hold one cell per column. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-044` | `INV` | The stored column widths MUST hold exactly one entry per column. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-228` | `INV` | A table of no columns MUST NOT exist. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-229` | `INV` | The validation pass MUST read the merge map and the liveness of the cells, and nothing else. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-017` | `CONC` | A row or column insert MUST converge with a concurrent edit inside the table. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-230` | `CONC` | A row or column inserted between a region's two corners MUST leave one region on those same two corners, widened by what fell between them. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-050` | `CONC` | Two merges covering one cell at the same moment MUST resolve to a single region, identically on every peer. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5); needs a 2-peer convergence regression test, like Trame's `TRAME-022` | unimplemented |
+| `PROSE-UI-147` | `OBS` | A covered cell MUST NOT be painted: a region MUST be drawn as one cell. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.2 Insert a row or a column
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-231` | `POST` | A column insert MUST splice the matching width entry in the same operation that writes the cells. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-232` | `POST` | A column insert carrying no width MUST take the document's default width. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-233` | `FAIL` | An insert naming a column index past the grid MUST be refused, and the refusal MUST be reported. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-234` | `FRAME` | An insert MUST NOT change the width of an existing column, the text of an existing cell, or either corner of a region. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.3 Delete a row or a column
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-235` | `POST` | A column delete MUST remove the matching width entry in the same operation that removes the cells. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-049` | `POST` | A merged region MUST be dropped when either of its corners is deleted. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-236` | `POST` | The cells a dropped region covered MUST become ordinary cells again. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-237` | `POST` | A region the deleted row or column merely crosses MUST keep both corners and narrow by one. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-045` | `POST` | Deleting the last column MUST delete the whole table. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-238` | `FRAME` | A delete MUST NOT change the width of a surviving column, or the text of a surviving cell. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.4 Resize a column
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-239` | `POST` | A resize MUST rewrite the width entry of the column it names. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-240` | `FRAME` | A resize MUST NOT change the number of width entries, the width of another column, or the text of any cell. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.5 Merge cells
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-047` | `FAIL` | A merge whose covered cells are not a solid rectangle MUST be refused. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-046` | `FAIL` | A merge MUST be refused while any covered cell holds text, and nothing MUST be written. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-241` | `POST` | The grid positions the command carries MUST be resolved to two corner block ids before anything is written. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-242` | `POST` | Every existing region the covered set intersects MUST be removed: a merge supersedes the merges it overlaps. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-243` | `POST` | A merge MUST write one entry, keyed on the anchor's block id. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-048` | `POST` | A covered cell's text MUST survive the merge. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-244` | `FRAME` | A merge over a selection of one cell MUST NOT write to the document. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.6 Unmerge a region
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-245` | `POST` | An unmerge MUST remove the region the named cell anchors, or the one covering it. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-246` | `POST` | A covered cell's text MUST reappear verbatim when the region is unmerged. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-247` | `FRAME` | An unmerge of a cell that neither anchors a region nor is covered by one MUST NOT write to the document. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.7 Style a cell
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-248` | `POST` | A cell style MUST be written on the cell the command names, and on no other. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-249` | `FRAME` | Styling a cell MUST NOT change its text, the column widths, or the merge map. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.8 Move the caret to another cell
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-250` | `POST` | Traversal MUST land on a region's anchor and skip the cells it covers. | this spec section 4 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-051` | `FRAME` | Moving the caret between cells MUST NOT change the document. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.9 Move the caret past the last cell
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-251` | `POST` | Moving past the last cell MUST append a row and put the caret in its first cell. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-252` | `FRAME` | Appending that row MUST NOT change the text of an existing cell, the column widths, or the merge map. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.10 Validate the table after a remote change
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-253` | `POST` | Each region whose anchor or extent no longer resolves to a live cell MUST be dropped. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-254` | `POST` | Two regions covering one cell MUST resolve to the later of the two, and the other MUST be dropped. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-255` | `POST` | A cell found covered while it still holds text MUST be reported to the view. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-256` | `FRAME` | The pass MUST NOT change the text of a cell, and MUST NOT hold a change back on what it reports. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.11 Insert or move a block
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-040` | `FAIL` | An insert or a move whose result breaks the nesting rules of the document MUST be refused, and the refusal MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
 
 * **Budget.** none of its own: a table is measured with the rest of the page, and the figure is the
   pagination row of `ambre-spec-budgets.md section 1`. Resolving a merged region to a
@@ -34,10 +117,12 @@ status values are normative in `ambre-spec-template.md`.
   owns it.
 * **Boundary.** none of its own: a cell is a block like any other, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 11 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+* **Verification.** 42 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
   `PROSE-009` is the row a reviewer can hold without a test, because a stored span would be a key
-  in the schema table and the schema table has none. `PROSE-FEAT-050` is the row that needs two
-  peers rather than one, and it is the only one of the eleven a single-peer test cannot reach.
+  in the schema table and the schema table has none. `PROSE-FEAT-017`, `-050` and `-230` are the
+  three that need two peers rather than one, and the rest a single writer can reach. The eight
+  frame conditions are what a grid costs: a width list, a merge map and a text per cell, each of
+  which most of the gestures must leave exactly as they found it.
 
 ---
 
@@ -47,13 +132,13 @@ Two peers in one table. No test resolves yet: the last column names the row each
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| merges four cells | inserts a row between the two corners at the same moment | the same two corners, one row further apart | one region, one row taller, on both screens | none -- `PROSE-009` |
-| merges four cells | types in a cell of that region at the same moment | the region, and Bob's text under it | the merged cell; Bob's text returns if the region is unmerged | none -- `PROSE-FEAT-048` |
+| merges four cells | inserts a row between the two corners at the same moment | the same two corners, one row further apart | one region, one row taller, on both screens | none -- `PROSE-FEAT-230` |
+| merges four cells | types in a cell of that region at the same moment | the region, and Bob's text under it | the merged cell; Bob's text returns if the region is unmerged | none -- `PROSE-FEAT-048`, `PROSE-FEAT-246` |
 | merges cells one to four | merges cells three to six at the same moment | one of the two regions | the same region on both screens, never a half of each | none -- `PROSE-FEAT-050` |
-| deletes the row holding a region's top-left cell | -- | no region, and the surviving cells | the merge gone, the cells back, on both screens | none -- `PROSE-FEAT-049` |
-| inserts a column | resizes another column at the same moment | one more width entry, and Bob's width | the same grid on both screens | none -- `PROSE-FEAT-044` |
+| deletes the row holding a region's top-left cell | -- | no region, and the surviving cells | the merge gone, the cells back, on both screens | none -- `PROSE-FEAT-049`, `PROSE-FEAT-236` |
+| inserts a column | resizes another column at the same moment | one more width entry, and Bob's width | the same grid on both screens | none -- `PROSE-FEAT-017`, `PROSE-FEAT-231` |
 | deletes the only column left | -- | no table | the table gone, the surrounding text kept | none -- `PROSE-FEAT-045` |
-| presses Tab in the last cell | -- | one more row | the caret at the start of a new row, on Alice's screen and in Bob's document | none -- `PROSE-FEAT-051` |
+| presses Tab in the last cell | -- | one more row | the caret at the start of a new row, on Alice's screen and in Bob's document | none -- `PROSE-FEAT-251` |
 
 ---
 
@@ -160,22 +245,22 @@ traversal lands on the anchor and skips the cells it covers.
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| A merged region is stored as two corner block ids | a block id survives every insert, delete and move, so the region keeps meaning the same cells whatever happens to the grid around it. The span the reader sees is then a question about today's grid, which cannot be stale because nothing stored it (`PROSE-009`) | four numbers -- row, column, row span, column span -- which are positions: a concurrent row insert above the region shifts every one of them, and nothing in the document says it happened |
-| A row inserted between the corners widens the region | the two corners still name the cells the author merged, so the rectangle between them grew. Recomputing the span from the corners gives that answer for free, and it is what a spreadsheet does | keeping the stored span and pushing the extra row out of the region, which needs a stored count and a rule for what to do with the cell that fell out |
-| A covered cell is masked, never destroyed | a merge is a display decision, and destroying text to take one would lose a collaborator's sentence written at the same moment. Masking makes the merge reversible, and the unmerge is then a removal of one map entry (`PROSE-FEAT-048`) | deleting the covered cells, which turns a merge into a data loss no undo of the remote peer can repair |
-| A local merge over non-empty cells is refused | the covered content would disappear from the screen with no gesture that says so. Refusing lets the chrome tell the author what is in the way, which is the one moment they can act on it (`PROSE-FEAT-046`) | merging anyway and relying on masking, which is the concurrent path's answer to a race, not an answer to a deliberate gesture |
-| A new merge absorbs the merges it overlaps | two regions sharing a cell have no meaning, and the author's last gesture is the one they can see. Removing the intersecting entries first makes the write a single entry, so validation never meets an overlap it did not create | refusing a merge that overlaps another, which forces an unmerge-then-merge sequence for the commonest correction |
-| Overlapping concurrent merges resolve to the later entry | both peers apply the same rule to the same map, so both land on the same region without exchanging anything more. The loser's cells reappear rather than vanishing, so nothing is lost by losing | asking the author to resolve the conflict, which needs a UI, a pending state in the document, and an answer for the peer who is offline |
-| Deleting a corner drops the region | the region is its two corners, and one of them is gone: there is no rectangle left to describe. Dropping it and restoring ordinary cells is the outcome the reader can understand from what they did | keeping the entry and resolving it to the nearest surviving cell, which silently moves a merge the author never moved |
-| The column widths are one list, kept in step by the same operation | a width list of a different length than the grid has no correct reading, and the two would drift on the first insert that forgot it. Binding them to one operation makes the invariant hold by construction (`PROSE-FEAT-044`) | a width per cell, which stores the same number once per row and lets two rows of one column disagree |
-| A new column widens the table | taking width from the neighbours changes columns the author did not touch, and the arithmetic is different for every neighbour. Growing is the behaviour of the popular editors, and it is one number to explain | redistributing the existing width, which moves every column on every insert |
-| Deleting the last column deletes the table | a table of zero columns paints nothing and accepts no text, so it is a state the reader can neither see nor leave. Removing it makes the last delete the gesture that removes the table | keeping an empty table node, which leaves an invisible block the caret can enter and nothing can fill |
-| Cell traversal is caret-only, except at the last cell | a table is entered from the keyboard, and every stop of the walk that wrote to the document would put a mutation on a key the author presses to look around. The one exception is the growth gesture every word processor binds there (`PROSE-FEAT-051`) | binding growth to a menu entry alone, which makes the commonest table edit the slowest one |
-| Nesting is refused at the command, not documented | a rule enforced by prose is enforced by nobody, and the import path is a second writer that never read the prose. One predicate refuses on both paths (`PROSE-040`) | stating the nesting rules in the schema alone, which is the shape and not the guard |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| A merged region is stored as two corner block ids | four numbers -- row, column, row span, column span | they are positions, so a concurrent row insert above the region shifts every one of them, and nothing in the document says it happened. A block id survives every insert, delete and move, so the region keeps meaning the same cells whatever happens to the grid around it; the span the reader sees is then a question about today's grid, which cannot be stale because nothing stored it (`PROSE-009`) |
+| A row inserted between the corners widens the region | keeping the stored span and pushing the extra row out of the region | it needs a stored count and a rule for what to do with the cell that fell out. The two corners still name the cells the author merged, so the rectangle between them grew; recomputing the span from the corners gives that answer for free, and it is what a spreadsheet does |
+| A covered cell is masked, never destroyed | deleting the covered cells | it turns a merge into a data loss no undo of the remote peer can repair. A merge is a display decision, and destroying text to take one would lose a collaborator's sentence written at the same moment; masking makes the merge reversible, and the unmerge is then a removal of one map entry (`PROSE-FEAT-048`) |
+| A local merge over non-empty cells is refused | merging anyway and relying on masking | it is the concurrent path's answer to a race, not an answer to a deliberate gesture. The covered content would disappear from the screen with no gesture that says so; refusing lets the chrome tell the author what is in the way, which is the one moment they can act on it (`PROSE-FEAT-046`) |
+| A new merge absorbs the merges it overlaps | refusing a merge that overlaps another | it forces an unmerge-then-merge sequence for the commonest correction. Two regions sharing a cell have no meaning, and the author's last gesture is the one they can see; removing the intersecting entries first makes the write a single entry, so validation never meets an overlap it did not create |
+| Overlapping concurrent merges resolve to the later entry | asking the author to resolve the conflict | it needs a UI, a pending state in the document, and an answer for the peer who is offline. Both peers apply the same rule to the same map, so both land on the same region without exchanging anything more; the loser's cells reappear rather than vanishing, so nothing is lost by losing |
+| Deleting a corner drops the region | keeping the entry and resolving it to the nearest surviving cell | it silently moves a merge the author never moved. The region is its two corners, and one of them is gone, so there is no rectangle left to describe; dropping it and restoring ordinary cells is the outcome the reader can understand from what they did |
+| The column widths are one list, kept in step by the same operation | a width per cell | it stores the same number once per row and lets two rows of one column disagree. A width list of a different length than the grid has no correct reading, and the two would drift on the first insert that forgot it; binding them to one operation makes the invariant hold by construction (`PROSE-FEAT-044`) |
+| A new column widens the table | redistributing the existing width | it moves every column on every insert. Taking width from the neighbours changes columns the author did not touch, and the arithmetic is different for every neighbour; growing is the behaviour of the popular editors, and it is one number to explain |
+| Deleting the last column deletes the table | keeping an empty table node | it leaves an invisible block the caret can enter and nothing can fill. A table of zero columns paints nothing and accepts no text, so it is a state the reader can neither see nor leave; removing it makes the last delete the gesture that removes the table |
+| Cell traversal is caret-only, except at the last cell | binding growth to a menu entry alone | it makes the commonest table edit the slowest one. A table is entered from the keyboard, and every stop of the walk that wrote to the document would put a mutation on a key the author presses to look around; the one exception is the growth gesture every word processor binds there (`PROSE-FEAT-051`) |
+| Nesting is refused at the command, not documented | stating the nesting rules in the schema alone | it is the shape and not the guard. A rule enforced by prose is enforced by nobody, and the import path is a second writer that never read the prose; one predicate refuses on both paths (`PROSE-040`) |
 
 ---
 
@@ -184,7 +269,7 @@ traversal lands on the anchor and skips the cells it covers.
 * **The table style has no key.** `SetTableStyle` writes a header-row flag and two banding flags,
   and the table node of `ambre-spec-prose-schema.md section 3` declares two attributes: the column
   widths and the merge map. Nothing says where the three flags live, and nothing says what they
-  paint.
+  paint, so section 1 carries no row for the command.
 * **A cell background crosses the command plane as a number and is stored as text.**
   `SetCellStyle` carries the background and the border colour as packed integers, and the schema
   stores both as `"#rrggbb"` strings. Nothing states the conversion, and it is the same two-unit
@@ -193,6 +278,8 @@ traversal lands on the anchor and skips the cells it covers.
   refusal to be reported, and the engine declares one untyped error carrying a code and a message
   (`features/ambre-spec-prose-engine.md section 3`). The lists and the styles features report through the
   same gap.
+* **Nothing rules on a caret inside a cell a merge covers.** Traversal skips a covered cell
+  (section 4), and no row says where a caret already sitting in one goes when the merge lands.
 * **Nothing rules on the selection inside a table.** Every gesture above needs a rectangle of
   cells, and `features/ambre-spec-prose-selection.md` describes a selection as two positions in the
   text. What a drag across two cells selects is undecided.

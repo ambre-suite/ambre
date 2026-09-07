@@ -4,7 +4,7 @@
 > **Date:** 2026-07-05 (supersedes the 2026-06-07 pass on 7 crates / ~15 000 lines)
 >
 > **State, 2026-08-27.** Every numbered finding below is closed. The report is kept as written; the
-> ledger in "Status of previous findings" carries the state, and names the invariant row that holds
+> ledger in "Status of previous findings" carries the state, and names the contract row that holds
 > each fix.
 >
 > **Scope.** `crates/*` (server, sync, crypto, protocol, bus, core, logic, trame,
@@ -47,8 +47,8 @@ finding of this report is closed today. A reader of that column alone acts on fi
 remediation waves removed. This ledger is the state; each section below is kept as written, because
 the reasoning is what a reader needs the day the same shape appears elsewhere.
 
-`Held by` names the invariant row that goes red if the fix is reverted. A finding that states no
-behaviour rule holds none, and `scripts/invariants.py` carries the reason in its `NO_RULE` register.
+`Held by` names the contract row that goes red if the fix is reverted. A finding that states no
+behaviour rule holds none, and `scripts/contracts.py` carries the reason in its `NO_RULE` register.
 The script reads this ledger from both ends: a row cannot cite a finding this report does not
 declare, and a finding cannot sit here uncited.
 

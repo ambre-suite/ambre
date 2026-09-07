@@ -20,18 +20,40 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`, shared with
 `ambre-spec-frame.md`, `ambre-spec-drawing-surface.md` and `ambre-spec-high-density.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `CANVAS-006` | A script-specific font MUST be fetched only when text needing it appears, and MUST be fetched once. | this spec section 2 | `ambre_canvas::fonts::tests::observe_latches_each_script_once`, `::latin_and_symbols_never_trigger`, `::drain_is_empty_without_fetches` | verified |
-| `CANVAS-007` | Every decoded image MUST pass through one bounded cache, whichever application decoded it. | this spec section 2; `ambre-spec-budgets.md section 6` | not built -- lands with `One media cache` (`ambre-roadmap.md` E8). Toile holds a `MediaCache` in its own Logic module and no other application has one | unimplemented |
-| `CANVAS-017` | Every font family label MUST resolve to a loaded face before shaping; an unmatched label MUST NOT reach the shaper. | this spec section 2 | `ambre_canvas::text_cache::tests::family_labels_map_to_registered_faces`, `::registered_face_names_pass_through` | verified |
-| `CANVAS-018` | A font MUST NOT be embedded in a binary: it MUST be fetched at run time, from the same origin. | this spec section 3; `ambre-spec-budgets.md section 5` | none. No manifest and no source names a font file, so the rule holds by absence. Nothing refuses the `include_bytes!` that would break it, and `UI-THREAD-004` holds the same-origin half alone | unverified |
-| `CANVAS-019` | A layout mixing text and colour emoji MUST paint both: a colour glyph through the colour atlas, a mask glyph through the alpha atlas. | this spec section 2 | none. An `is_color` flag on the atlas slot routes each glyph to its pipeline, and no test reads a pixel back. A regression paints a black box where an emoji belongs | unverified |
-| `CANVAS-020` | The colour atlas MUST NOT be allocated at full size before the first colour glyph appears. | this spec section 2; `ambre-spec-budgets.md section 6` | none. The texture is a 1x1 placeholder until `color_ready` flips, and nothing asserts the 16 MB allocation is absent from an emoji-free session | unverified |
-| `CANVAS-021` | The glyph atlas MUST hold a bounded working set: on overflow it MUST repack by least recent use, never grow. | this spec section 2; `ambre-spec-budgets.md section 6` | none. The compaction retains each glyph's bitmap so a repack re-uploads without re-rasterizing, and no test drives an atlas past its capacity | unverified |
-| `CANVAS-022` | The layout cache MUST be bounded: it MUST evict by least recent use, never clear itself whole. | this spec section 2 | none. `evict_if_oversized` keeps the hottest three quarters above a cap the frame passes in, and no test drives the cache past that cap | unverified |
-| `CANVAS-023` | An icon MUST stay a vector buffer: it MUST NOT be rasterized into a bitmap atlas. | this spec section 2 | not built -- lands with `The icon pipeline` (`ambre-roadmap.md` E6) | unimplemented |
-| `CANVAS-024` | An icon MUST be tessellated at build time, never on the frame path. | this spec section 2 | not built -- lands with `The icon pipeline` (`ambre-roadmap.md` E6) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CANVAS-017` | `INV` | Every font family label MUST resolve to a loaded face before shaping; an unmatched label MUST NOT reach the shaper. | this spec section 2 | `ambre_canvas::text_cache::tests::family_labels_map_to_registered_faces`, `::registered_face_names_pass_through` | verified |
+| `CANVAS-018` | `INV` | A font MUST NOT be embedded in a binary. | this spec section 3; `ambre-spec-budgets.md section 5` | none. No manifest and no source names a font file, so the rule holds by absence. Nothing refuses the `include_bytes!` that would break it, and the binary budget it would break is read by no check | unverified |
+| `CANVAS-051` | `INV` | A font MUST be fetched from the same origin. | this spec section 3; `UI-THREAD-004` | none. `UI-THREAD-004` names the font fetch as the UI thread's single network exception and holds the origin half there. This document restates neither the ban nor its exception; what it needs is that no third party learns which scripts a user reads | unverified |
+| `CANVAS-019` | `OBS` | A layout mixing text and colour emoji MUST paint both: a colour glyph through the colour atlas, a mask glyph through the alpha atlas. | this spec section 2 | none. An `is_color` flag on the atlas slot routes each glyph to its pipeline, and no test reads a pixel back. A regression paints a black box where an emoji belongs | unverified |
+| `CANVAS-020` | `INV` | The colour atlas MUST NOT be allocated at full size before the first colour glyph appears. | this spec section 2; `ambre-spec-budgets.md section 6` | none. The texture is a 1x1 placeholder until `color_ready` flips, and nothing asserts the 16 MB allocation is absent from an emoji-free session | unverified |
+| `CANVAS-007` | `INV` | Every decoded image MUST pass through one bounded cache, whichever application decoded it. | this spec section 2; `ambre-spec-budgets.md section 6` | not built -- lands with `One media cache` (`ambre-roadmap.md` E8). Toile holds a `MediaCache` in its own Logic module and no other application has one | unimplemented |
+| `CANVAS-023` | `INV` | An icon MUST stay a vector buffer: it MUST NOT be rasterized into a bitmap atlas. | this spec section 2 | not built -- lands with `The icon pipeline` (`ambre-roadmap.md` E6) | unimplemented |
+| `CANVAS-024` | `INV` | An icon MUST be tessellated at build time, never on the frame path. | this spec section 2 | not built -- lands with `The icon pipeline` (`ambre-roadmap.md` E6) | unimplemented |
+
+### 1.2 Fetch a script font
+
+A codepoint the loaded faces cannot cover appears in a string being shaped. The face it needs is
+fetched, and the strings that were shaped without it are dropped.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CANVAS-006` | `POST` | A script-specific font MUST be fetched only when text needing it appears. | this spec section 2 | `ambre_canvas::fonts::tests::latin_and_symbols_never_trigger`: every codepoint the base faces cover must classify to no lazy font, so a fetch armed for ordinary text fails | verified |
+| `CANVAS-052` | `POST` | A script-specific font MUST be fetched once. | this spec section 2 | `ambre_canvas::fonts::tests::observe_latches_each_script_once`: it reads the request count back after repeated observations of the same script and asserts it stays at one | verified |
+| `CANVAS-053` | `FRAME` | Fetching a font MUST NOT block the frame that needed it. | this spec section 2; `ambre-spec-frame.md` | none. The fetch is armed from the shaping path and the face is registered on a later frame, which is the whole reason the cache is cleared when one arrives. `ambre_canvas::fonts::tests::drain_is_empty_without_fetches` reads the empty case and nothing drives an arrival | unverified |
+
+### 1.3 Overflow an atlas or a cache
+
+The working set outgrows its cap. Both stores answer the same way: drop the coldest entries and
+keep the allocation where it is.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CANVAS-021` | `POST` | The glyph atlas MUST repack by least recent use on overflow, never grow. | this spec section 2; `ambre-spec-budgets.md section 6` | none. The compaction retains each glyph's bitmap so a repack re-uploads without re-rasterizing, and no test drives an atlas past its capacity | unverified |
+| `CANVAS-022` | `POST` | The layout cache MUST evict by least recent use on overflow, never clear itself whole. | this spec section 2 | none. `evict_if_oversized` keeps the hottest three quarters above a cap the frame passes in, and no test drives the cache past that cap | unverified |
+| `CANVAS-054` | `FRAME` | A repack or an eviction MUST NOT change what a surviving glyph or layout draws. | this spec section 2; derived | none. The atlas keeps each bitmap so a repack re-uploads rather than re-rasterizes, and that is the whole reason it can move a glyph at all. Nothing reads a glyph back across an overflow, and a repack that dropped a live slot paints a hole | unverified |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 6` -- fonts in memory under 10 MB,
   the wgpu textures under 20 MB with the 4 MB alpha atlas and the lazily allocated 16 MB colour
@@ -41,11 +63,16 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 * **Boundary.** the font fetch is the one network path this layer opens, and `UI-THREAD-004` names
   it as the single exception to the UI thread's ban. It is same-origin by `CANVAS-018`, so no
   third party learns which scripts a user reads. This layer holds no key and reaches no relay.
-* **Verification.** 2 `verified`, 5 `unverified`, 3 `unimplemented`. The two verified rules are the
-  two that are pure functions of a string: which script a codepoint belongs to, and which face a
-  family label resolves to. The five gaps are all GPU-resident state -- an atlas, a texture, a
+* **Verification.** 3 `verified`, 8 `unverified`, 3 `unimplemented`. The verified rules are the ones
+  that are pure functions of a string: which face a family label resolves to, and the two halves
+  `CANVAS-006` was carrying as one -- a font is fetched only when text needs it, and it is fetched
+  once. Those are different failures, driven by different tests, and one row citing three of them
+  said which was which for none. The gaps are all GPU-resident state -- an atlas, a texture, a
   cache -- and reading one back needs the browser tier that does not exist
-  (`ambre-spec-testing.md section 8`).
+  (`ambre-spec-testing.md section 8`). `CANVAS-018` split the same way: nothing refuses an embedded
+  font, and the same-origin half is held in another document, so one status covered two rules with
+  two owners. The two frame conditions are new: a fetch that blocked its frame, and a repack that
+  changed what a surviving glyph draws.
 
 ---
 
@@ -160,19 +187,21 @@ exist: an image reaches a surface only through the path
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| Fonts are fetched, never embedded | both the UI thread and the Logic thread need the same faces, and a fetch from the same origin is deduplicated by the browser's HTTP cache: one download, two contexts. It also takes about 600 KB of raw weight out of the WASM binary, which `ambre-spec-budgets.md section 5` counts | `include_bytes!`, which pays the weight twice and caches nothing |
-| The fonts are served from the Ambre server | a font request carries the page that made it and the scripts the reader needs. Sent to a third party that is a profile of what a user reads, and it is sent on a document nobody else is supposed to see | Google Fonts or any other CDN |
-| A script-specific face is fetched on first sight | bundling CJK, Arabic, Devanagari and colour emoji at startup costs every user the union of every script. Fetching on the first uncovered codepoint costs each user their own | one bundle covering everything, or a per-document declaration of the scripts it uses, which a paste falsifies immediately |
-| Two atlases, not one | text dominates the working set and a mask glyph costs one byte a texel. One RGBA atlas for everything pays four times the memory so that emoji, which are rare, can share a pipeline with digits, which are not | a single `Rgba8Unorm` atlas, and a colour atlas allocated at startup, which spends 16 MB on documents that hold no emoji |
-| The emoji face is the CBDT bitmap build | swash 0.2.7 rasterizes no COLRv1 table, so the vector build shapes and paints nothing. A bitmap emoji at atlas resolution is what the user actually sees | the COLRv1 build, which is smaller and currently invisible |
-| Shaping is pure Rust | a C binding is an unaudited dependency inside the process that holds the plaintext document, and the pillar in `README.md` refuses it. HarfRust is HarfBuzz ported by the same people | HarfBuzz through a C binding |
-| The family label is resolved in one place | an unmatched `Named` family shapes zero glyphs, so the failure is invisible text rather than an error. Resolving in each renderer means each one gets to have the bug once | each renderer mapping its own labels, which is what `CANVAS-017` withdrew |
-| Icons stay vector | a tessellated path is sharp at any density, and `ambre-spec-high-density.md` then has nothing to say about icons. The tessellation is a build-time cost, so the frame path pays a draw call and nothing else | a bitmap texture atlas, which blurs on a high-density screen and needs a second set at each density |
-| One image cache for the suite | three caches means the memory budget is the sum of three caps nobody set together, and a picture pasted from a board into a sheet is decoded twice | a decoded-image cache per application, which is what exists today |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| Fonts are fetched, never embedded | `include_bytes!` | it pays the weight twice and caches nothing. Both the UI thread and the Logic thread need the same faces, and a fetch from the same origin is deduplicated by the browser's HTTP cache: one download, two contexts. It also takes about 600 KB of raw weight out of the WASM binary, which `ambre-spec-budgets.md section 5` counts. |
+| The fonts are served from the Ambre server | Google Fonts or any other CDN | a font request carries the page that made it and the scripts the reader needs. Sent to a third party, that is a profile of what a user reads, and it is sent on a document nobody else is supposed to see. |
+| A script-specific face is fetched on first sight | one bundle covering everything | bundling CJK, Arabic, Devanagari and colour emoji at startup costs every user the union of every script. Fetching on the first uncovered codepoint costs each user their own. |
+| A script-specific face is fetched on first sight | a per-document declaration of the scripts it uses | a paste falsifies it immediately: the codepoint arrives after the declaration was written, and the face it needs is the one nobody asked for. |
+| Two atlases, not one | a single `Rgba8Unorm` atlas | it pays four times the memory so that emoji, which are rare, can share a pipeline with digits, which are not. Text dominates the working set and a mask glyph costs one byte a texel. |
+| Two atlases, not one | a colour atlas allocated at startup | it spends 16 MB on documents that hold no emoji, which is most of them. |
+| The emoji face is the CBDT bitmap build | the COLRv1 build | it is smaller and currently invisible: swash 0.2.7 rasterizes no COLRv1 table, so the vector build shapes and paints nothing. A bitmap emoji at atlas resolution is what the user actually sees. |
+| Shaping is pure Rust | HarfBuzz through a C binding | a C binding is an unaudited dependency inside the process that holds the plaintext document, and the pillar in `README.md` refuses it. HarfRust is HarfBuzz ported by the same people. |
+| The family label is resolved in one place | each renderer mapping its own labels | it is what `CANVAS-017` withdrew: an unmatched `Named` family shapes zero glyphs, so the failure is invisible text rather than an error, and each renderer gets to have the bug once. |
+| Icons stay vector | a bitmap texture atlas | it blurs on a high-density screen and needs a second set at each density. A tessellated path is sharp at any density, so `ambre-spec-high-density.md` has nothing to say about icons; the tessellation is a build-time cost and the frame path pays a draw call and nothing else. |
+| One image cache for the suite | a decoded-image cache per application | it is what exists today: three caches means the memory budget is the sum of three caps nobody set together, and a picture pasted from a board into a sheet is decoded twice. |
 
 ---
 

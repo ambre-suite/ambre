@@ -19,18 +19,46 @@ shared canvas runtime (`ambre-spec-drawing-surface.md`, `ambre-spec-render-asset
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TOILE-UI-001` | The render side MUST NOT link the CRDT: it consumes the culled visible set and emits commands. | this spec section 2; `ambre-spec-architecture.md section 2` | structural: `loro` appears nowhere under `ambre-toile/src/ui/` except in four explanatory comments -- no type, no call; `deny.toml` bans `loro` outside the four app crates (`SYNC-011`) | verified |
-| `TOILE-UI-011` | The content walk MUST balance every pushed transform with its pop. | this spec section 2 | `ambre_toile::ui::render::tests::content_walk_balances_transform_and_paints_each_node`, `::content_walk_applies_animation_override` | verified |
-| `TOILE-UI-012` | A note MUST paint as a filled card whose ink is independent of its fill, and whose body size tracks the card. | this spec section 3; `features/ambre-spec-toile-styles.md section 3` | `ambre_toile::ui::render::tests::sticky_paints_a_colored_card`, `::sticky_font_size_tracks_the_card_and_is_clamped`, `::sticky_font_size_auto_unless_overridden`, `::text_ink_precedence`, `::text_element_paints_no_card` | verified |
-| `TOILE-UI-013` | An image whose media is not resolved MUST paint a placeholder, never nothing. | this spec section 3; `features/ambre-spec-toile-media.md section 4` | `ambre_toile::ui::render::tests::image_paints_pixels_when_resolved_else_placeholder` | verified |
-| `TOILE-UI-020` | At most one cull request MUST leave the UI thread per frame. | this spec section 2 | type-level: the pending request is one `Option<Viewport>` on the view, so a second request in the same frame replaces the first, and the frame flush is its only send site | verified |
-| `TOILE-UI-021` | The render loop MUST NOT repaint when nothing changed. | this spec section 2 | none. The dirty flags are read once per frame and cleared there; nothing asserts that a clean frame plans no draw, and no bench guards the frame budget of `ambre-spec-budgets.md section 2` | unverified |
-| `TOILE-UI-043` | The content pass MUST be a single walk of the visible sequence, elements and connectors interleaved in the order it carries. | this spec section 2 | `ambre_toile::ui::render::tests::content_walk_balances_transform_and_paints_each_node`, which asserts the emitted draw calls follow the sequence | verified |
-| `TOILE-UI-044` | A body MUST be painted in screen space so its glyphs stay crisp, and MUST carry its element's rotation. | this spec section 3 | `ambre_toile::ui::render::tests::rotated_sticky_body_rotates_its_glyphs`, `::sticky_font_size_tracks_the_card_and_is_clamped` | verified |
-| `TOILE-UI-045` | The board background MUST paint under the content, and presentation focus MUST drop the grid. | this spec section 3; `TOILE-UI-083` | none. The background and the grid are one call at the head of the content pass, taking the focus flag, and no test drives either branch | unverified |
-| `TOILE-UI-046` | The overlay MUST paint the selection box, its handles, the gesture preview and the find highlights above the content. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_draws_box_and_handles_for_single_selection`, `::overlay_box_follows_gesture_override_bounds`, `::overlay_outlines_visible_find_hits`, `::overlay_rotates_box_and_handles_for_a_rotated_element` | verified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-UI-001` | INV | The render side MUST NOT link the CRDT: it consumes the culled visible set and emits commands. | this spec section 2; `ambre-spec-architecture.md section 2` | structural, and the absence is the proof: `loro` appears nowhere under `ambre-toile/src/ui/` except in four explanatory comments -- no type, no call; `deny.toml` bans `loro` outside the four app crates (`SYNC-011`) | verified |
+| `TOILE-UI-011` | INV | The content walk MUST leave the transform stack as it found it: every push balanced by its pop. | this spec section 2 | `ambre_toile::ui::render::tests::content_walk_balances_transform_and_paints_each_node` and `::image_paints_pixels_when_resolved_else_placeholder` both assert the depth is zero when the walk returns | verified |
+| `TOILE-UI-043` | OBS | Elements and connectors MUST overlap on screen in the one order the board gives them, a frame's children with their frame. | this spec section 2; `features/ambre-spec-toile-z-order.md section 1` | `ambre_toile::ui::render::tests::content_walk_balances_transform_and_paints_each_node` walks the sequence, but counts pushes and fills and asserts no order, and the visible set it builds holds no connector, so the word "interleaved" is exercised nowhere | unverified |
+| `TOILE-UI-012` | OBS | A note MUST paint as a filled card, and a text element MUST paint none. | this spec section 3; `features/ambre-spec-toile-styles.md section 3` | `ambre_toile::ui::render::tests::sticky_paints_a_colored_card` for the card and its shadow, `::text_element_paints_no_card` for the element that has neither | verified |
+| `TOILE-UI-262` | OBS | A note's body MUST stay legible whatever the card colour: its ink is chosen for it, not taken from the fill. | this spec section 3; `features/ambre-spec-toile-styles.md section 3` | `ambre_toile::ui::render::tests::text_ink_precedence` holds the choice as a pure function. The paint is not held: the two tests that look at the glyph colour loop over runs a headless host may never shape, so both pass on a surface that drew no text at all -- section 5 | unverified |
+| `TOILE-UI-263` | OBS | A note's body MUST size itself to the card, within a legible range, unless the style names a size. | this spec section 3 | `ambre_toile::ui::render::tests::sticky_font_size_tracks_the_card_and_is_clamped` for the growth and the two clamps, `::sticky_font_size_auto_unless_overridden` for the sentinel and the override | verified |
+| `TOILE-UI-013` | OBS | An image whose media is not resolved MUST paint a placeholder, never nothing. | this spec section 3; `features/ambre-spec-toile-media.md section 4` | `ambre_toile::ui::render::tests::image_paints_pixels_when_resolved_else_placeholder` asserts one image draw at the element box and one placeholder fill beside it | verified |
+| `TOILE-UI-264` | OBS | An element the walk cannot draw MUST hold its place: a group paints nothing, an embed and a nested document paint a box until their child is composited. | this spec section 3; `features/ambre-spec-toile-embeds.md section 3` | none. Three of the nine kinds the walk switches on -- group, embed, doc-embed -- are reached by no test, so the arm that paints nothing and the arm that paints a box are the same untested arm today | unverified |
+| `TOILE-UI-044` | OBS | A body MUST be laid out in screen space at a zoom-scaled size, so its glyphs stay crisp at any zoom. | this spec section 3 | none. The two font-size tests are pure functions of the card and the style and take no camera, so nothing observes the zoom multiplying the size or the layout happening outside the camera transform -- section 5 | unverified |
+| `TOILE-UI-265` | OBS | A rotated element MUST carry its body and the rules through it round with it. | this spec section 3 | `ambre_toile::ui::render::tests::rotated_sticky_body_rotates_its_glyphs` asserts the rotation on each glyph run it finds, and finds none on a host with no font: the test states so itself and holds vacuously -- section 5 | unverified |
+| `TOILE-UI-276` | OBS | An element a transition or an in-flight gesture overrides MUST paint that override's colour and opacity, not the ones its style carries. | this spec section 3; `features/ambre-spec-toile-presentation.md section 4` | `ambre_toile::ui::render::tests::content_walk_applies_animation_override` asserts the interpolated blue at half alpha reaches the surface, a colour the default white style cannot produce | verified |
+| `TOILE-UI-277` | OBS | An element so overridden MUST paint at the override's bounds and rotation, and an element without one MUST paint where it committed. | this spec section 3; `features/ambre-spec-toile-presentation.md section 4` | none. The one test of the override looks at the fill alone: it tweens the bounds by twenty units and never reads them back, and it never looks at the second element, the one it left untouched | unverified |
+| `TOILE-UI-266` | OBS | The element under the inline editor MUST NOT be painted twice: the static body gives way to the live buffer. | this spec section 2; `features/ambre-spec-toile-text-editing.md section 3` | none. The text pass skips the id it is handed and no test hands it one, so a regression would show as doubled glyphs on screen and green tests | unverified |
+| `TOILE-UI-045` | OBS | The board background MUST paint under the content, filling the canvas. | this spec section 3 | none. The background is one call at the head of the content pass and no test looks at it | unverified |
+| `TOILE-UI-267` | OBS | Presentation focus MUST drop the grid, so the audience sees the slide and not the board. | this spec section 3; `TOILE-UI-083` | none. One test paints with focus on, but asserts a tweened fill and never the lines that should be missing, so both branches of the choice are unobserved | unverified |
+| `TOILE-UI-046` | OBS | The selection box and its handles MUST paint above the content, and MUST follow an in-flight gesture rather than the committed geometry. | this spec section 3; `features/ambre-spec-toile-selection.md section 3` | `ambre_toile::ui::render::tests::overlay_draws_box_and_handles_for_single_selection` for the box and the five handles, `::overlay_box_follows_gesture_override_bounds` for the live bounds, `::overlay_rotates_box_and_handles_for_a_rotated_element` for the rotated edges and the rotated handle centres | verified |
+| `TOILE-UI-268` | OBS | Only a single selection MUST carry the resize handles; several elements MUST show their union box alone. | this spec section 3; `features/ambre-spec-toile-selection.md section 3` | the single case is held by `::overlay_draws_box_and_handles_for_single_selection`, which counts five squares. Nothing paints a multi-selection, so the half that says what several elements do not get is untested | unverified |
+| `TOILE-UI-269` | OBS | Every find match in view MUST be outlined, and the current one MUST stand out from the rest. | this spec section 3; `features/ambre-spec-toile-find.md section 1` | `ambre_toile::ui::render::tests::overlay_outlines_visible_find_hits` counts one outline per hit with both hits on screen. It passes a focused hit and asserts nothing about it, and drives no off-screen match, so neither the accent nor the word "in view" is held | unverified |
+| `TOILE-UI-270` | OBS | A gesture in flight MUST show its preview above the content, tracking the geometry it will commit. | this spec section 3; `features/ambre-spec-toile-tools.md section 1` | none. No test builds a preview of any kind, so the marquee, the four shapes, the connector, the pen and the stroke are seven unexercised arms of one function -- section 5 | unverified |
+
+### 1.2 Paint one frame
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-UI-021` | POST | A frame in which nothing changed MUST plan no draw. | this spec section 2 | none. The plan is a pure function of six fields and a tick, and nothing asserts that a clean frame plans neither pass; no bench guards the frame budget of `ambre-spec-budgets.md section 2` | unverified |
+| `TOILE-UI-271` | POST | A content change MUST repaint the content; anything else MUST repaint the overlay alone. | this spec section 2 | none, and the split is the whole point of the plan: a rule that mistook one for the other would repaint the board on a cursor move and cost the idle budget nothing measures | unverified |
+| `TOILE-UI-272` | POST | An open inline editor or a gesture in flight MUST keep the overlay repainting for as long as it lasts. | this spec section 2 | none. These two are not flags a frame clears but states it reads, so the board repaints every frame until the editor closes -- which is the caret blink, and the reason an idle board is only idle with nothing open | unverified |
+| `TOILE-UI-273` | FRAME | Painting a frame MUST NOT read or write the document: it paints the snapshot it was handed. | this spec section 2; `ambre-spec-architecture.md section 2` | structural, and the signature is the proof: both paint entries take the culled snapshot by reference and no document handle, so the walk has nothing else to read | verified |
+
+### 1.3 Ask for what is on screen
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-UI-020` | POST | At most one cull request MUST leave the UI thread per frame. | this spec section 2 | structural, and the type is the proof: the pending request is one `Option<Viewport>` on the view, so a second request in the same frame replaces the first, and the frame flush is its only send site | verified |
+| `TOILE-UI-274` | FRAME | Asking for the visible set MUST NOT stall the frame. | this spec section 2; `BUS-004` | structural, and the construction is the proof: the flush is a try-send on a bounded channel and the frame continues on either arm, so no paint waits on the Logic thread | verified |
+| `TOILE-UI-275` | FAIL | A cull request the channel refuses MUST NOT leave the board painting a stale set. | this spec section 2; section 5 | none, and **the rule fails today**: a full channel drops the request without a warning, the dirty flag is cleared in the same frame, and the board keeps the previous culled set until the camera moves again -- section 5 | unverified |
 
 * **Budget.** the board paint under 16 ms at 2 000 visible elements, a row of
   `ambre-spec-budgets.md section 2`, beside the frame phases it sits inside. An idle board
@@ -38,9 +66,13 @@ status values are normative in `ambre-spec-template.md`.
   a bench, which is why that row is `unverified`.
 * **Boundary.** none: the walk paints view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It reads no document and holds no key (`TOILE-UI-001`).
-* **Verification.** 8 `verified`, 2 `unverified`. Both gaps are the frame itself rather than what it
-  draws: the dirty flag and the background branch are the two behaviours the render tests step over,
-  because each is a decision of the loop and not of the walk.
+* **Verification.** 10 `verified`, 16 `unverified`. The document went from ten rows to twenty-six
+  and cites the same thirteen tests it cited before: the split withdrew claims, it made no
+  coverage.
+  The old bullet held that both gaps were the frame rather than what it draws, and that was the
+  error. The background, the grid, the gesture preview, the multi-selection box and three arms of
+  the walk are painted by no test at all, and two rows that read `verified` rested on assertions
+  that hold vacuously on a host with no font (section 5).
 
 ---
 
@@ -50,9 +82,9 @@ status values are normative in `ambre-spec-template.md`.
 
 **What the Logic thread hands over** (`ambre-bus`): one snapshot per relevant change, carrying the
 camera it was culled against, a single back-to-front sequence of nodes -- elements and connectors
-interleaved by z-order -- and the comment pins, kept apart because a pin is not z-ordered with the
-board. Its shape is declared in `features/ambre-spec-toile-engine.md section 3`; this document does
-not restate it.
+interleaved by z-order -- and, beside that sequence, the reaction tally per target, which is not
+z-ordered with the board. It carries no comment pins: nothing does yet (section 5). Its shape is
+declared in `features/ambre-spec-toile-engine.md section 3`; this document does not restate it.
 
 **The frame, in steps:**
 
@@ -60,14 +92,18 @@ not restate it.
 2. flush at most one cull request for the current camera (`TOILE-UI-020`);
 3. plan the repaint from the dirty flags: a content change repaints the content, anything else
    repaints the overlay alone, and a clean frame plans neither (`TOILE-UI-021`);
-4. paint the background and the grid in screen space, then push the camera and walk the sequence
-   once (`TOILE-UI-043`), then pop it and lay the bodies out in screen space;
+4. paint the background and, unless a presentation holds focus, the grid, in screen space; then
+   push the camera and walk the sequence once (`TOILE-UI-043`), pop it, and lay the bodies out in
+   screen space, skipping the one element the inline editor sits over (`TOILE-UI-266`);
 5. paint the overlay: the gesture preview, the find highlights, then the selection box and its
-   handles (`TOILE-UI-046`).
+   handles (`TOILE-UI-046`); then the presence cursors, the reaction badges and, when one is open,
+   the inline editor -- three further passes this feature drives without owning.
 
 **What marks the frame dirty.** A new visible set, a camera change, an in-flight gesture, an open
-inline editor, a presentation transition, and the frame-rate chip's own tick. Each is cleared in the
-same call that reads it, so a flag never survives the frame that honoured it.
+inline editor, a presentation transition, and the frame-rate chip's own tick. The flags among them
+are cleared in the same call that reads them, so none survives the frame that honoured it. An
+in-flight gesture and an open editor are not flags but states, and hold the overlay repainting for
+as long as they last, which is what makes the caret blink (`TOILE-UI-272`).
 
 **What draws, and what the canvas layer draws.** This feature owns the walk and the draw calls it
 emits. The tessellation and the shaders are `ambre-spec-drawing-surface.md`, the glyph atlas is
@@ -89,10 +125,11 @@ the assertion is the ordered sequence of draw calls, with no GPU.
 
 | Pass | Holds |
 |---|---|
-| background | the board fill, then the adaptive grid, in screen space (`TOILE-UI-045`) |
+| background | the board fill, then the adaptive grid, in screen space; presentation focus drops the grid (`TOILE-UI-045`, `TOILE-UI-267`) |
 | content | the visible sequence under the camera: frames, shapes, images, strokes, notes, embeds and connectors, interleaved by z-order |
 | bodies | notes and text elements, laid out in screen space at a zoom-scaled size, rotated with their element (`TOILE-UI-044`) |
-| overlay | the gesture preview, the find highlights, the selection box and its handles |
+| overlay | the gesture preview (`TOILE-UI-270`), the find highlights (`TOILE-UI-269`), then the selection box and its handles, which only a single selection carries (`TOILE-UI-268`) |
+| above the overlay | the presence cursors, the reaction badges of the visible set, and the inline editor when one is open: driven here, owned elsewhere |
 
 **How each kind paints.**
 
@@ -109,23 +146,24 @@ the assertion is the ordered sequence of draw calls, with no GPU.
 | a connector | its routed path, stroked, at its own place in the sequence |
 
 **During a transition.** A presentation transition hands the walk a per-element override -- bounds,
-rotation, opacity and fill -- and the same override carries an in-flight gesture, so one code path
-paints both (`features/ambre-spec-toile-presentation.md section 4`). An element the cull drops takes
-no override at all, which is what stops a fade half-way (`TOILE-UI-085`).
+rotation, opacity and fill (`TOILE-UI-276`, `TOILE-UI-277`) -- and the same override carries an
+in-flight gesture, so one code path paints both
+(`features/ambre-spec-toile-presentation.md section 4`). An element the cull drops takes no
+override at all, which is what stops a fade half-way (`TOILE-UI-085`).
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| One walk of one sequence | a connector can sit behind or in front of an element, and a frame's children must follow their frame. Any split into passes re-orders them, so the z-order would have to be rebuilt inside the renderer from data it does not hold | separate passes for frames, elements and connectors |
-| The render side never links the CRDT | it is the only mechanical way to hold the thread contract: the board lives in one document on one thread, and a render path that could read it would eventually read it | reading the document behind a discipline |
-| The walk emits abstract draw calls | it makes the whole feature host-testable against a recording surface, and it is the same seam the spreadsheet uses, so the GPU stack is written once | painting through the GPU types directly |
-| Bodies are laid out in screen space | glyphs rasterized at a world size and scaled would blur at every zoom, and the atlas would hold one entry per zoom level | shaping text in world space with the rest of the walk |
-| An unresolved image paints a placeholder | media arrives after the board does, and painting nothing makes an image look deleted rather than pending | leaving the element out of the walk until its pixels land |
-| A clean frame plans no draw | an infinite board is mostly idle, and the pillar is a battery on a phone, not a frame rate on a desktop | painting every frame and relying on the GPU to be fast |
-| Any content change repaints the whole content | the board is transformed on the GPU for a pan, so the common cases are a full change or no change at all; a partial strip would have to be derived from a diff nothing computes | a dirty-rectangle scheme, as the grid uses for a scroll |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| One walk of one sequence | separate passes for frames, elements and connectors | a connector can sit behind or in front of an element, and a frame's children must follow their frame; any split into passes re-orders them, so the z-order would have to be rebuilt inside the renderer from data it does not hold |
+| The render side never links the CRDT | reading the document behind a discipline | a render path that could read the document would eventually read it. Cutting the link is the only mechanical way to hold the thread contract, since the board lives in one document on one thread |
+| The walk emits abstract draw calls | painting through the GPU types directly | the feature stops being host-testable against a recording surface, and the GPU stack is written twice instead of once: this is the same seam the spreadsheet uses |
+| Bodies are laid out in screen space | shaping text in world space with the rest of the walk | glyphs rasterized at a world size and scaled would blur at every zoom, and the atlas would hold one entry per zoom level |
+| An unresolved image paints a placeholder | leaving the element out of the walk until its pixels land | media arrives after the board does, and painting nothing makes an image look deleted rather than pending |
+| A clean frame plans no draw | painting every frame and relying on the GPU to be fast | an infinite board is mostly idle, and the pillar is a battery on a phone, not a frame rate on a desktop |
+| Any content change repaints the whole content | a dirty-rectangle scheme, as the grid uses for a scroll | a partial strip would have to be derived from a diff nothing computes. The board is transformed on the GPU for a pan, so the common cases are a full change or no change at all |
 
 ---
 
@@ -141,9 +179,24 @@ no override at all, which is what stops a fade half-way (`TOILE-UI-085`).
 * **The tessellation cache is the canvas layer's, and unmeasured here.** The tolerance bucketing this
   feature relies on is owned by `ambre-spec-drawing-surface.md`; no test of this crate observes a
   cache hit.
-* **Comment pins are not painted.** The visible set carries a field for them and the overlay has no
-  pass for it, which is consistent: the whole subject lands with the "Comments" Story
-  (`ambre-roadmap.md` E4) and its rules live with it.
+* **Comment pins are not painted, and nothing carries one.** This document said the visible set
+  held a field for them. It does not: the only thing beside the sequence is the reaction tally. The
+  whole subject lands with the "Comments" Story (`ambre-roadmap.md` E4) and its rules live with it.
+* **Two rows read `verified` on assertions that can hold vacuously.** The card ink and the rotated
+  body are asserted by looping over the glyph runs the surface recorded, and a host with no font
+  shapes none -- both tests say so themselves. `TOILE-UI-265` is `unverified` for it and
+  `TOILE-UI-262` keeps only the pure choice of ink, which takes no surface.
+* **No test builds a gesture preview.** The marquee, the four shapes, the connector, the pen and the
+  freehand stroke are seven arms of one function nothing reaches (`TOILE-UI-270`). The same silence
+  covers the union box of a multi-selection (`TOILE-UI-268`) and the group, embed and doc-embed arms
+  of the walk (`TOILE-UI-264`).
+* **The background and the grid have no test at all**, in either branch of the presentation choice
+  (`TOILE-UI-045`, `TOILE-UI-267`), and the zoom-scaled body pass is held only by pure functions of
+  the card that take no camera (`TOILE-UI-044`).
+* **A refused cull request is lost without a trace** (`TOILE-UI-275`). The flush is a try-send that
+  logs a disconnect and nothing else, the pending camera has already been taken, and the dirty flag
+  is cleared on either arm: a full channel leaves the board painting the previous culled set until
+  the camera moves again. Nothing retries and nothing warns.
 * **A differential visible set is unspecified.** Every push carries the whole culled set, including
   what the UI already holds. The design names a patch, keyed on change size; nothing states when a
   patch is correct against an out-of-order full push.

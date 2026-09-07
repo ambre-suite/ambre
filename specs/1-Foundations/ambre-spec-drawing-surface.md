@@ -20,15 +20,27 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`, shared with
 `ambre-spec-frame.md`, `ambre-spec-render-assets.md` and `ambre-spec-high-density.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `CANVAS-002` | Application render code MUST NOT name a GPU type: it draws through the shared surface alone. | this spec section 2 | crate graph: neither `ambre-trame` nor `ambre-toile` declares `wgpu`, and their render tests drive `RecordingSurface` on host | verified |
-| `CANVAS-025` | The drawing crate MUST declare no GPU and no PDF dependency. | this spec section 2; `ambre-spec-architecture.md section 2` | crate graph: `ambre-draw` declares `kurbo`, `peniko`, `parley` and `ambre-core`, and a `wgpu` or `krilla` line added there fails the build of every host-tier render test | verified |
-| `CANVAS-026` | The drawing crate MUST decode nothing: a raster image MUST arrive as pixels the caller already decoded. | this spec section 2 | crate graph: `ambre-draw` declares no codec, and `ImageSource` borrows a slice it never owns | verified |
-| `CANVAS-027` | Every `push_clip` and `push_transform` MUST be matched by its pop before the surface is finished. | this spec section 2 | `ambre_pdf::tests::zero_area_clip_stays_balanced` holds the degenerate case, where an unbalanced push corrupts the rest of the page | verified |
-| `CANVAS-028` | The PDF back end MUST run in the Logic thread, and MUST NOT be in the startup bundle. | this spec section 2; `ambre-spec-budgets.md section 5` | crate graph: `ambre-app` declares neither `krilla` nor `ambre-pdf`, and Toile's `pdf` feature is off by default, so nothing links krilla into a client build | verified |
-| `CANVAS-029` | One render walk MUST serve the screen and the page: a drawing primitive MUST NOT hold screen-only state. | this spec section 2 | none. The trait declares no screen type, so the rule holds by its signature. Nothing refuses a back end that reads a frame counter or a device pixel ratio behind it | unverified |
-| `CANVAS-030` | A surface that does not implement an optional primitive MUST do nothing, never fail. | this spec section 2 | type-level: each optional method carries a default empty body, so a back end that omits it compiles and draws nothing | verified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CANVAS-002` | `INV` | Application render code MUST NOT name a GPU type: it draws through the shared surface alone. | this spec section 2 | crate graph: neither `ambre-trame` nor `ambre-toile` declares `wgpu`, and their render tests drive `RecordingSurface` on host | verified |
+| `CANVAS-025` | `INV` | The drawing crate MUST declare no GPU and no PDF dependency. | this spec section 2; `ambre-spec-architecture.md section 2` | crate graph: `ambre-draw` declares `kurbo`, `peniko`, `parley` and `ambre-core`, and a `wgpu` or `krilla` line added there fails the build of every host-tier render test | verified |
+| `CANVAS-026` | `INV` | The drawing crate MUST decode nothing: a raster image MUST arrive as pixels the caller already decoded. | this spec section 2 | crate graph: `ambre-draw` declares no codec, and `ImageSource` borrows a slice it never owns | verified |
+| `CANVAS-055` | `INV` | The PDF back end MUST NOT be in the startup bundle. | this spec section 2; `ambre-spec-budgets.md section 5` | crate graph: `ambre-app` declares neither `krilla` nor `ambre-pdf`, and Toile's `pdf` feature is off by default, so nothing links krilla into a client build | verified |
+| `CANVAS-028` | `INV` | The PDF back end MUST run in the Logic thread. | this spec section 2 | none. It is the half the crate graph does not hold: keeping krilla out of the startup bundle says nothing about which thread calls it, and a PDF built on the UI thread would block the frame for as long as the document is long | unverified |
+| `CANVAS-030` | `INV` | A surface that does not implement an optional primitive MUST do nothing, never fail. | this spec section 2 | type-level: each optional method carries a default empty body, so a back end that omits it compiles and draws nothing | verified |
+
+### 1.2 Draw one document onto a surface
+
+One walk over the document. What it is handed decides whether the result is a screen or a page, and
+the walk is not told which.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CANVAS-029` | `POST` | One render walk MUST serve the screen and the page. | this spec section 2 | none. The trait declares no screen type, so the rule holds by its signature, and no test walks one document onto both surfaces and compares what each recorded | unverified |
+| `CANVAS-027` | `POST` | Every `push_clip` and `push_transform` MUST be matched by its pop before the surface is finished. | this spec section 2 | `ambre_pdf::tests::zero_area_clip_stays_balanced` holds the degenerate case, where an unbalanced push corrupts the rest of the page | verified |
+| `CANVAS-056` | `FRAME` | A drawing primitive MUST NOT hold screen-only state. | this spec section 2 | none. It is the half `CANVAS-029` carried, and the one an implementation breaks rather than a caller: nothing refuses a back end that reads a frame counter or a device pixel ratio behind the trait, and the page then stops matching the screen one primitive at a time | unverified |
 
 * **Budget.** the krilla row of `ambre-spec-budgets.md section 5` -- about 400 KB raw, about
   120 KB gzipped, counted once for the whole suite and kept out of the startup bundle by
@@ -37,11 +49,16 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 * **Boundary.** none: a surface writes to a texture or to a byte buffer, holds no key and opens no
   socket. A PDF the user exports leaves the machine only when the user sends it, and
   `ambre-spec-docfile.md` owns what a plaintext export owes them.
-* **Verification.** 6 `verified`, 1 `unverified`, 0 `unimplemented`. This is the best-held document
-  of the rendering layer, and the reason is structural: five of the six rules are held by the crate
-  graph or by the compiler, which the frame path cannot use because a frame is a runtime property.
-  The one gap, `CANVAS-029`, is a rule about what an implementation must refrain from storing, and
-  no crate-graph check can read that.
+* **Verification.** 6 `verified`, 3 `unverified`, 0 `unimplemented`. This is still the best-held
+  document of the rendering layer, and the reason is structural: five of the six verified rules are
+  held by the crate graph or by the compiler, which the frame path cannot use because a frame is a
+  runtime property. The pass split the two rows whose second half no crate graph can read.
+  `CANVAS-028` claimed the PDF back end runs on the Logic thread and stays out of the startup
+  bundle, on one crate-graph mechanism that holds only the second: keeping krilla unlinked says
+  nothing about which thread calls it, and a PDF built on the UI thread blocks the frame for as
+  long as the document is long. `CANVAS-029` claimed one walk serves both destinations and that no
+  primitive holds screen-only state; the second is what an implementation breaks rather than a
+  caller, and it is `CANVAS-056`.
 
 ---
 
@@ -159,16 +176,18 @@ The user touches no drawing call. What they see of this document is that two des
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| One trait, in a crate that draws nothing | it is what lets an application render without naming a GPU type (`CANVAS-002`) and test its whole render walk on the host tier against `RecordingSurface`. A trait declared in the wgpu crate would drag wgpu into every application and into every test | a rendering trait in `ambre-canvas`, or a pair of render walks, one per destination |
-| The PDF back end is its own crate | PDF export translates the same primitives whatever the document is, so `ambre-pdf` serves every application and is billed once in `ambre-spec-budgets.md section 5`. Inside an application crate it would be written a second time by the second application to want it | `KrillaSurface` inside the first application that needed a PDF |
-| krilla, with default features off | the simple-text helper and rayon buy nothing here -- the glyph runs are already shaped, and there is no thread pool on the WASM target -- while they cost weight in a chunk that is fetched on a user's first export | krilla with its defaults, and a PDF writer of our own |
-| An optional primitive defaults to a no-op | a back end gains a capability when it can, and until then an export loses that one element instead of failing. A required method would mean each new primitive breaks every surface on the day it is declared | every method required, which is the same trait with a worse migration |
-| An image arrives decoded | a codec dependency in `ambre-draw` reaches every crate that draws, including the ones that never show a picture, and puts a parser for untrusted bytes in the middle of the render path | the surface decoding what it is handed |
-| The clip and transform stacks are the caller's to balance | krilla has one instruction stack and the screen surface has a vector, so a contract that both obey is cheaper than a stack that guesses. An unbalanced push is a bug in the walk, and it shows up as a corrupt page | a surface that closes what the caller left open, which hides the walk's bug and picks an arbitrary order to close it in |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| One trait, in a crate that draws nothing | a rendering trait in `ambre-canvas` | it drags wgpu into every application and into every test. The trait as it stands is what lets an application render without naming a GPU type (`CANVAS-002`) and test its whole render walk on the host tier against `RecordingSurface` |
+| One trait, in a crate that draws nothing | a pair of render walks, one per destination | two walks over the same document are two things to keep in step, and the export diverges from the screen with nothing to report it |
+| The PDF back end is its own crate | `KrillaSurface` inside the first application that needed a PDF | PDF export translates the same primitives whatever the document is, so inside an application crate it would be written a second time by the second application to want it. As `ambre-pdf` it serves every application and is billed once in `ambre-spec-budgets.md section 5` |
+| krilla, with default features off | krilla with its defaults | the simple-text helper and rayon buy nothing here -- the glyph runs are already shaped, and there is no thread pool on the WASM target -- while they cost weight in a chunk that is fetched on a user's first export |
+| krilla, with default features off | a PDF writer of our own | the format is the dependency either way, and writing it here means owning fonts, compression and conformance for a chunk that is fetched on a user's first export |
+| An optional primitive defaults to a no-op | every method required | it is the same trait with a worse migration: each new primitive breaks every surface on the day it is declared. With a no-op default a back end gains a capability when it can, and until then an export loses that one element instead of failing |
+| An image arrives decoded | the surface decoding what it is handed | a codec dependency in `ambre-draw` reaches every crate that draws, including the ones that never show a picture, and it puts a parser for untrusted bytes in the middle of the render path |
+| The clip and transform stacks are the caller's to balance | a surface that closes what the caller left open | it hides the walk's bug and picks an arbitrary order to close it in. krilla has one instruction stack and the screen surface has a vector, so a contract both obey is cheaper than a stack that guesses: an unbalanced push is a bug in the walk, and it shows up as a corrupt page |
 
 ---
 

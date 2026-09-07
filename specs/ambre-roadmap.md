@@ -39,10 +39,10 @@
   carries them.
 
 **An epic key is an identifier, not a rank.** `EF` precedes `E4`, and `E4` is the current objective. A
-key is minted once, because a few hundred invariant rows cite one. The `Milestone` column orders the
+key is minted once, because a few hundred contract rows cite one. The `Milestone` column orders the
 work.
 
-A story is cited by its name, and the name is a join key: `invariants.py` fails on a citation this
+A story is cited by its name, and the name is a join key: `contracts.py` fails on a citation this
 file does not answer (`ambre-spec-template.md` section 1, `ambre-spec-architecture.md` section 4).
 
 ---

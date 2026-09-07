@@ -17,28 +17,73 @@ cache.
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TOILE-IO-006` | Media MUST be content-addressed: two identical pictures MUST resolve to one blob. | this spec section 3 | `ambre_toile::logic::state::import::tests::import_seeds_the_media_map`, `::seed_media_dedups_repeated_hashes`, `::seed_media_writes_load_info`, `::seed_media_skips_unresolved_hash`, `ambre_toile::logic::interop::media::tests::first_request_fetches_then_dedups` | verified |
-| `TOILE-IO-007` | The cache MUST evict only resolved entries: a load in flight MUST never be evicted. | this spec section 3 | `ambre_toile::logic::interop::media::tests::loading_entries_are_never_evicted`, `::lru_evicts_least_recently_used_ready_entry`, `::loading_to_ready_carries_pixels`, `::loading_to_failed`, `::capacity_zero_coerced_to_one` | verified |
-| `TOILE-IO-008` | A picture import MUST wait for its upload; a failed upload MUST abort the pending import. | this spec section 3 | `ambre_toile::logic::state::import::tests::image_import_defers_until_media_uploads`, `::a_failed_upload_aborts_the_pending_import`, `::a_stale_service_response_is_dropped` | verified |
-| `TOILE-IO-009` | An oversized or undecodable picture MUST abort the import atomically, and a generated thumbnail MUST stay bounded. | this spec section 3 | `ambre_toile::logic::interop::raster::tests::oversized_image_aborts_atomically`, `::garbage_bytes_fail_to_decode`, `::thumbnail_is_bounded`, `::imports_one_image_with_thumbnail`, `ambre_toile::logic::interop::tests::embedded_png_maps_to_image_and_media_blob` | verified |
-| `TOILE-IO-013` | This board MUST NOT implement cryptography: it hands plaintext to the Sync thread and no pixel reaches the server except as ciphertext. | this spec section 3; `ZK-001`, `ZK-004` | crate graph: `ambre-toile` declares no AEAD, no key derivation and no key exchange crate, and `deny.toml` refuses to let it -- each capability crate lists its allowed wrappers | verified |
-| `TOILE-IO-034` | A picture the board names MUST reach the screen: an address MUST resolve to pixels. | this spec section 3; section 4 | none, and **the rule fails today**: no code issues a download, and the store the painter reads is built empty and never filled -- section 6 | unverified |
-| `TOILE-IO-035` | A picture MUST show its thumbnail while the full blob loads, so the first paint waits on nothing. | this spec section 3; section 4 | none, and **the rule fails today**: the thumbnail is written into the document on import and read by nothing -- section 6 | unverified |
-| `TOILE-IO-036` | Undoing an import MUST take back the media entries that import seeded. | this spec section 3 | none. The seed runs inside the import's single commit, so the rule holds by construction; no test undoes an import and counts the entries | unverified |
-| `TOILE-IO-037` | A decoded picture MUST NOT outlive the session: no plaintext pixel MUST reach local storage. | this spec section 3; `ZK-004` | none. The cache is a map in Logic-thread memory and the crate opens no storage handle, so the rule holds by absence; nothing would go red the day a writer appeared | unverified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-IO-006` | INV | Media MUST be content-addressed: two identical pictures MUST resolve to one entry. | this spec section 3 | `ambre_toile::logic::state::import::tests::seed_media_dedups_repeated_hashes`, which seeds the same address twice and again later, and `::import_seeds_the_media_map` for the entry an import mints | verified |
+| `TOILE-IO-049` | INV | An entry MUST carry the dimensions, the type and a thumbnail, and MUST NOT carry the picture. | this spec section 3; `ambre-spec-toile-schema.md section 3` | structural, and the construction is the proof: `ambre_toile::logic::state::import::seed_media` writes four fields and the plaintext is not one of them | verified |
+| `TOILE-IO-013` | INV | This board MUST NOT implement cryptography: it hands plaintext to the Sync thread and no pixel reaches the server except as ciphertext. | this spec section 3; `ZK-001`, `ZK-004` | crate graph: `ambre-toile` declares no AEAD, no key derivation and no key exchange crate, and `deny.toml` refuses to let it -- each capability crate lists its allowed wrappers | verified |
+| `TOILE-IO-037` | INV | A decoded picture MUST NOT outlive the session: no plaintext pixel MUST reach local storage. | this spec section 3; `ZK-004` | none. The cache is a map in Logic-thread memory and the crate opens no storage handle, so the rule holds by absence; nothing would go red the day a writer appeared | unverified |
+| `TOILE-IO-050` | OBS | A picture whose pixels are resident MUST paint them scaled to its box and rotated with it. | this spec section 4 | `ambre_toile::ui::render::tests::image_paints_pixels_when_resolved_else_placeholder` asserts one image draw at the element box | verified |
+| `TOILE-IO-051` | OBS | A picture whose pixels are not resident MUST paint a placeholder box, never a hole. | this spec section 4 | `::image_paints_pixels_when_resolved_else_placeholder` asserts the fallback fill for the unresolved address in the same walk | verified |
+| `TOILE-IO-034` | OBS | A picture the board names MUST reach the screen: an address MUST resolve to pixels. | this spec section 3; section 4 | none, and **the rule fails today**: no code issues a download, and the store the painter reads is built empty and never filled, so the resident case above is reachable only from its own test -- section 6 | unverified |
+| `TOILE-IO-035` | OBS | A picture MUST show its thumbnail while the full blob loads, so the first paint waits on nothing. | this spec section 3; section 4 | none, and **the rule fails today**: the thumbnail is written into the document on import and read by nothing, and the paint has two states where the surface promises four -- section 6 | unverified |
+
+### 1.2 Bring a picture in
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-IO-052` | PRE | The caller owes bytes whose decoded form fits in memory. | this spec section 3 | none, and **the rule fails today**: the decoder expands the whole picture before `ambre_toile::logic::interop::raster::decode_media` measures it, so the dimension bound protects the document and not the heap -- section 6 | unverified |
+| `TOILE-IO-053` | POST | An import MUST yield one picture element sized to the decoded resolution and one plaintext blob it names. | this spec section 3 | `ambre_toile::logic::interop::raster::tests::imports_one_image_with_thumbnail` asserts the element kind, its size, the blob dimensions, the type and the address they share | verified |
+| `TOILE-IO-054` | POST | An import MUST build a thumbnail bounded on each edge, so the entry stays small enough to ride in the document. | this spec section 3 | `::thumbnail_is_bounded` decodes the produced thumbnail and checks both edges against the bound | verified |
+| `TOILE-IO-055` | FRAME | Converting a file MUST NOT write to the document: it MUST return a batch the state layer applies. | this spec section 3 | structural, and the signature is the proof: the decoder takes bytes and returns a batch, and holds no handle on the document | verified |
+| `TOILE-IO-009` | FAIL | A picture past the dimension bound MUST abort the import atomically. | this spec section 3 | `::oversized_image_aborts_atomically` | verified |
+| `TOILE-IO-056` | FAIL | Bytes that do not decode MUST abort the import atomically. | this spec section 3 | `::garbage_bytes_fail_to_decode` for the refusal, `ambre_toile::logic::state::import::tests::a_broken_file_fails_without_touching_the_board` for the untouched board | verified |
+
+### 1.3 Wait for the upload, then land the import
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-IO-008` | POST | A picture import MUST wait for its upload: nothing MUST be applied until every blob has the address Sync returned. | this spec section 3 | `ambre_toile::logic::state::import::tests::image_import_defers_until_media_uploads` asserts one request issued, no delta and no element while it is outstanding | verified |
+| `TOILE-IO-057` | POST | The last address to return MUST land the whole batch in one commit, elements and entries together. | this spec section 3 | `::image_import_defers_until_media_uploads` asserts the element, the entry and the single delta once the confirmation arrives | verified |
+| `TOILE-IO-058` | POST | A seeded entry MUST record the picture's dimensions and its type, so a box can be laid out before the pixels arrive. | this spec section 3 | `ambre_toile::logic::state::import::tests::seed_media_writes_load_info`, and `::import_seeds_the_media_map` for the same read through a whole import | verified |
+| `TOILE-IO-036` | POST | Undoing an import MUST take back the media entries that import seeded. | this spec section 3 | none. The seed runs inside the import's single commit, so the rule holds by construction; `::image_import_defers_until_media_uploads` does undo an import, and counts the elements that left rather than the entries | unverified |
+| `TOILE-IO-059` | FRAME | A seed MUST NOT put a placeholder token in the document: only an address Sync returned may become a key. | this spec section 3 | none. The guard refuses an empty key, which `::seed_media_skips_unresolved_hash` drives, and not the `pending:` token itself; what keeps the token out is the rewrite that always runs first -- section 6 | unverified |
+| `TOILE-IO-060` | FAIL | A failed upload MUST abort the whole pending import and leave the board untouched. | this spec section 3 | `::a_failed_upload_aborts_the_pending_import` asserts the notice, the empty board and the drained registry | verified |
+| `TOILE-IO-061` | FAIL | A confirmation matching no pending import MUST be dropped, and MUST change nothing. | this spec section 3 | `::a_stale_service_response_is_dropped` | verified |
+
+### 1.4 Ask the cache for a picture
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-IO-062` | POST | A first request for an address MUST open a slot and order one download. | this spec section 3 | `ambre_toile::logic::interop::media::tests::first_request_fetches_then_dedups` | verified |
+| `TOILE-IO-063` | POST | A repeat request for the same address MUST order nothing, whatever the slot holds. | this spec section 3 | `::first_request_fetches_then_dedups` for a slot in flight, `::loading_to_ready_carries_pixels` and `::loading_to_failed` for the two terminal states | verified |
+| `TOILE-IO-064` | POST | An arriving download MUST resolve its slot and hold the decoded pixels for the painter. | this spec section 3 | `::loading_to_ready_carries_pixels` | verified |
+| `TOILE-IO-065` | POST | A failed download MUST mark its slot failed, so a picture the relay cannot serve is not requested again on the next frame. | this spec section 3 | `::loading_to_failed` | verified |
+| `TOILE-IO-066` | POST | A cache over capacity MUST drop the least recently used resolved slot. | this spec section 3 | `::lru_evicts_least_recently_used_ready_entry`, which touches one of two ready slots and watches the other leave | verified |
+| `TOILE-IO-067` | POST | A cache MUST have room for one blob however it was sized: a capacity of zero MUST be raised to one. | this spec section 3 | `::capacity_zero_coerced_to_one` | verified |
+| `TOILE-IO-007` | FRAME | Eviction MUST NOT take a slot whose download is in flight. | this spec section 3 | `::loading_entries_are_never_evicted`, which fills a cache of one with two in-flight slots and asserts both survive | verified |
 
 * **Budget.** the first paint of a picture under 15 ms and no refetch on a revisit, two rows of
   `ambre-spec-budgets.md section 1`. The first is the budget the thumbnail exists to meet, and
-  nothing reads the thumbnail (`TOILE-IO-035`).
+  nothing reads the thumbnail (`TOILE-IO-035`). Neither row bounds memory, and three quantities on
+  this path are unbounded: the bytes of a thumbnail, which is capped on its edges alone; the
+  decoded picture, which is expanded in full before the bound is read (`TOILE-IO-052`); and the
+  number of loads in flight, which is what lets the cache exceed its capacity -- section 6.
 * **Boundary.** this document owns Toile's only outbound flow of user content: media blobs, sealed
   by the Sync thread before they leave (`TOILE-IO-013`), plus the routing metadata the relay already
   sees for any document. No board geometry and no pixel leaves in plaintext.
-* **Verification.** 5 `verified`, 4 `unverified`. The upload half is held end to end: the address
-  dedups, the cache keeps a load in flight, a failed upload takes the import with it and a hostile
-  picture is refused. The four gaps are the download half, and they are one absence -- the cache
-  exists, the thumbnail exists, and nothing joins either to a screen.
+* **Verification.** 22 `verified`, 6 `unverified`. The growth is the split and not new coverage:
+  nineteen distinct tests hold the document where eighteen held it before, and four flat rows cited
+  seventeen of them between them -- one row per operation, citing every test that ran near it
+  rather than the one that asserts it. Two of those citations were removed as not holding their
+  rule at all. The upload half is held end to end: the address dedups, the cache keeps a load in
+  flight, a failed upload takes the import with it and a hostile picture is refused. Four gaps are
+  the download half, and they are one absence -- the cache exists, the thumbnail exists, and
+  nothing joins either to a screen. The other two are rules the code states and nothing asserts:
+  the memory the decoder takes before it refuses (`TOILE-IO-052`) and the placeholder token the
+  seed must keep out of the document (`TOILE-IO-059`).
 
 ---
 
@@ -52,7 +97,7 @@ example to the test that holds it.
 | imports a picture | watches | one address and one entry (`TOILE-IO-006`) | Alice sees her picture; Bob sees a box until his own fetch lands (`TOILE-IO-034`) | `logic::state::import::tests::import_seeds_the_media_map` |
 | imports the same picture twice | watches | one entry, two elements (`TOILE-IO-006`) | two pictures, one blob | `logic::state::import::tests::seed_media_dedups_repeated_hashes` |
 | imports a picture whose upload fails | watches | nothing (`TOILE-IO-008`) | an error on Alice's screen and no change on Bob's | `logic::state::import::tests::a_failed_upload_aborts_the_pending_import` |
-| imports a picture, then undoes | watches | neither the element nor its entry (`TOILE-IO-036`) | the picture leaves in one step, on both boards | none -- section 6 |
+| imports a picture, then undoes | watches | neither the element nor its entry (`TOILE-IO-036`) | the picture leaves in one step, on both boards | `logic::state::import::tests::image_import_defers_until_media_uploads`, which undoes and counts the elements, never the entries |
 
 ---
 
@@ -138,23 +183,25 @@ picture looks like before its pixels arrive.
 | there is no thumbnail either | a placeholder box in the element's own style (`TOILE-UI-013`) |
 | the download failed | the same box, and no further request |
 
-**Two of the four rows are the same box today** (`TOILE-IO-034`). Nothing orders a download and
+**Three of the four rows are the same box today** (`TOILE-IO-034`). Nothing orders a download and
 nothing fills the store the painter consults, so every picture on every board paints the placeholder,
-on screen and in an exported page alike.
+on screen and in an exported page alike. The painter has two states and not four: pixels resident,
+or nothing (`TOILE-IO-050`, `TOILE-IO-051`). The thumbnail row and the failure row are the surface
+promising a distinction the code does not draw.
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| A picture is addressed by the hash of its content | the same picture pasted ten times is one blob and one upload, and the address is stable across peers with no coordination | a minted id per picture, which uploads the same bytes once per use |
-| The Sync thread computes the address | the address is the hash of the plaintext and the Sync thread is the only crypto consumer, so hashing there keeps every primitive behind one wall | hashing on the Logic side, which puts a second crate on the crypto path for one call |
-| The document holds an address, never pixels | a board with fifty photographs would otherwise be a CRDT nobody can merge, and every peer would carry every byte of history | storing the bytes in the document, which is simpler and unbounded |
-| The entry carries a thumbnail inline | the first paint must not wait on the network, and a thumbnail is small enough to ride in the document | fetching the full blob before painting, which leaves a hole on screen for as long as the transfer takes |
-| An import waits for every upload | an element naming an address that does not exist yet would be a broken picture on every other peer, and the failure would arrive after the undo item closed | applying the elements first, which makes the picture converge before the pixels do |
-| The cache never evicts a load in flight | the answer would resolve into a slot that is gone, and the request would be re-issued on the next paint | evicting strictly by recency, which loses in-flight work under pressure |
-| A failure is a cache state, not a retry | a picture the relay cannot serve would otherwise be re-requested on every frame of a pan | leaving the slot empty, which turns one failure into a request loop |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| A picture is addressed by the hash of its content | a minted id per picture | it uploads the same bytes once per use. Under a content hash the same picture pasted ten times is one blob and one upload, and the address is stable across peers with no coordination |
+| The Sync thread computes the address | hashing on the Logic side | it puts a second crate on the crypto path for one call. The address is the hash of the plaintext and the Sync thread is the only crypto consumer, so hashing there keeps every primitive behind one wall |
+| The document holds an address, never pixels | storing the bytes in the document | it is simpler and unbounded: a board with fifty photographs becomes a CRDT nobody can merge, and every peer carries every byte of history |
+| The entry carries a thumbnail inline | fetching the full blob before painting | it leaves a hole on screen for as long as the transfer takes. The first paint must not wait on the network, and a thumbnail is small enough to ride in the document |
+| An import waits for every upload | applying the elements first | the picture converges before the pixels do, so an element naming an address that does not exist yet is a broken picture on every other peer, and the failure arrives after the undo item closed |
+| The cache never evicts a load in flight | evicting strictly by recency | it loses in-flight work under pressure: the answer resolves into a slot that is gone, and the request is re-issued on the next paint |
+| A failure is a cache state, not a retry | leaving the slot empty | it turns one failure into a request loop, and a picture the relay cannot serve is re-requested on every frame of a pan |
 
 ---
 
@@ -163,7 +210,9 @@ on screen and in an exported page alike.
 * **Nothing downloads** (`TOILE-IO-034`). The cache is complete, tested and exported, and its only
   callers are its own tests. The download request exists on the bus and in the dispatcher, and no
   code in Toile ever builds one. The store the painter reads is created empty and written by nothing
-  outside the render tests.
+  outside the render tests. The return leg is missing too: the service handler matches the upload
+  confirmation alone and drops a download answer on the floor, so wiring the request would not be
+  enough.
 * **The thumbnail is written and never read** (`TOILE-IO-035`). Every import encodes one and puts it
   in the document; no reader consults it. The field that exists to make the first paint instant costs
   bytes in the document and buys nothing -- the same shape as the stroke pressure and the reaction
@@ -181,7 +230,38 @@ on screen and in an exported page alike.
 * **A local blob is never re-used across documents.** Content addressing would let two boards share
   one fetch, and the cache would have to leave the engine to do it.
 * **Undo is not tested against the media map** (`TOILE-IO-036`). The seed runs inside the import's
-  single commit, so the rule follows from the commit; no test undoes an import and counts what is
-  left.
+  single commit, so the rule follows from the commit. A test does undo an import -- it counts the
+  elements that left and never the entries, which is the assertion the rule needs.
+
+* **The bound is read after the decode** (`TOILE-IO-052`). The decoder expands the whole picture
+  into memory, then measures it and refuses. A picture whose header claims dimensions no machine
+  can hold is therefore held before it is refused: the bound protects the document and not the
+  process. Reading the header alone first would refuse the same pictures for a few hundred bytes.
+
+* **The thumbnail is bounded on its edges and not in bytes.** The rule the entry must meet is that
+  it rides in the document (`TOILE-IO-054`); what is enforced is the longest edge. A noisy picture
+  at the bound still encodes to a couple of hundred kilobytes, inline, in a CRDT that keeps every
+  version of it.
+
+* **The dedup is a seed-time dedup, not an upload-time one.** The same picture pasted ten times in
+  one import carries ten placeholder addresses and leaves as ten uploads; the addresses collapse
+  only when Sync answers and the seed skips the key it already holds. The decision in section 5
+  holds on its first half -- one entry -- and not on its second.
+
+* **A pending import has no deadline, and holds each picture twice.** The bytes are cloned into the
+  upload request and kept in the batch until the answer lands, so a 20 MB photograph occupies 40 MB
+  for as long as the Sync thread takes, and forever if it never answers. Nothing expires the entry.
+
+* **An abandoned import leaves its other uploads in flight.** A failure drops the pending import and
+  cancels nothing: the blobs that already reached the relay stay there, sealed, named by an address
+  no document will ever carry.
+
+* **The cache can exceed its capacity without a bound.** Eviction walks for a slot that is not in
+  flight and stops when it finds none, so a cache whose loads never answer grows past its capacity
+  with nothing to stop it. The comment calls this transient; nothing makes it so.
+
+* **A doc comment describes a path that does not exist.** The painter's store is documented as the
+  one the PDF export fills from the document's media map. The export takes such a store, has no
+  caller outside its tests, and every test hands it an empty one.
 * **No test drives the transfer end to end.** The upload round trip is held at the dispatcher with a
   mock, and the download half has nothing to hold.

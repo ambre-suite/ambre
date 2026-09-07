@@ -19,48 +19,116 @@ and what it drops is the subject of this document. The paginated PDF is
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PROSE-IO-001` | Every conversion MUST run in the Logic thread; no part of a document MUST reach the relay during a conversion. | this spec section 3; `ZK-001` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-002` | An import MUST write through typed commands; it MUST NOT mutate the document directly. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-009` | Every format MUST pass through the intermediate form: a reader MUST NOT emit commands, and a writer MUST NOT read the document. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-003` | An export MUST be idempotent: the same document exported twice MUST yield the same bytes, up to the stamp the format writes. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-017` | An export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-011` | A failed import MUST leave the document untouched: a partial application MUST NOT be observable. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-010` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5); the readers are the first `cargo-fuzz` targets | unimplemented |
-| `PROSE-IO-004` | Every fidelity loss MUST raise a warning naming the construct that was dropped. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-005` | A reader MUST warn before it discards an element it does not recognise. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-006` | A writer that emits an approximation MUST record it in the report. | this spec section 3 | not built -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-026` | A construct the block tree refuses MUST be lifted to the nearest place the tree allows, and the lift MUST be reported; it MUST NOT be dropped. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-021` | A conversion of a large document MUST report its progress; it MUST NOT hold the Logic thread for the whole file. | this spec section 3; `ambre-spec-budgets.md section 1` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-020` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-022` | An export MUST omit the comments and the suggestions the user did not ask for. | this spec section 4; `ZK-001` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-012` | The native file MUST be the only lossless round trip, and it MUST reuse the shared container rather than restate it. | this spec section 3; `ambre-spec-docfile.md section 3` | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5), on top of `DOCFILE P0` (Epic `EF`) | unimplemented |
-| `PROSE-IO-013` | A native file belonging to another application MUST be re-dispatched, never coerced into Prose. | this spec section 3; `ambre-spec-docfile.md section 3` | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-014` | A Word round trip MUST keep every structure the intermediate form represents, or warn for each one it drops. | this spec section 3 | not built -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-024` | A Word import MUST NOT run a macro the file carries. | this spec section 3; `ZK-001` | not built -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-018` | A Markdown export MUST report every construct the flavour has no syntax for, the page model included. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-016` | An imported HTML document MUST be sanitised: no script MUST run, and no remote fetch MUST start. | this spec section 3; `ZK-001` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-019` | An HTML export MUST report the header and the footer, which the format has no element for. | this spec section 3 | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-023` | An imported picture naming a remote address MUST NOT be fetched, and the picture MUST be reported as unresolved. | this spec section 3; `ZK-001` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-025` | The reader an HTML import uses MUST be the reader a rich paste uses: they MUST NOT be two readers. | this spec section 3; `features/ambre-spec-prose-clipboard.md` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-027` | A user MUST be able to bring a file into the document. | this spec section 4 | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-028` | A user MUST be able to take the document out as a file, and the bytes MUST reach the browser download path. | this spec section 4 | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-IO-001` | `INV` | Every conversion MUST run in the Logic thread. | this spec section 3; `ZK-001` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-043` | `INV` | No part of a document MUST reach the relay while a conversion runs. | this spec section 3; `ZK-001` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-044` | `INV` | A reader and a writer MUST meet in the intermediate form alone: neither MUST know the other. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-009` | `INV` | A reader MUST NOT emit a command. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-045` | `INV` | A writer MUST NOT read the document. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-046` | `INV` | The walk from the document into the intermediate form MUST be one, shared by every writer. | this spec section 3; `ambre-spec-budgets.md section 1` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-004` | `INV` | Every fidelity loss MUST raise a warning naming the construct that was dropped. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-005` | `INV` | A reader MUST warn before it discards an element it does not recognise. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-006` | `INV` | A writer that emits an approximation MUST record it in the report. | this spec section 3 | not built -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-047` | `INV` | A conversion that finished MUST answer with a report, and one that produced nothing MUST answer with an error: the two MUST NOT be one type. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file. | this spec section 3; `ambre-spec-budgets.md section 1` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-025` | `INV` | The reader an HTML import uses MUST be the reader a rich paste uses: they MUST NOT be two readers. | this spec section 3; `features/ambre-spec-prose-clipboard.md` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-049` | `INV` | The native file MUST reuse the shared container rather than restate it. | this spec section 3; `ambre-spec-docfile.md section 3` | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5), on top of `DOCFILE P0` (Epic `EF`) | unimplemented |
+| `PROSE-IO-012` | `IO` | The native file MUST be the only lossless round trip. | this spec section 3; `ambre-spec-docfile.md section 3` | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5), on top of `DOCFILE P0` (Epic `EF`) | unimplemented |
+| `PROSE-IO-014` | `IO` | A Word round trip MUST keep every structure the intermediate form represents, or warn for each one it drops. | this spec section 3 | not built -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.2 Bring a file into the document
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-IO-027` | `POST` | A user MUST be able to bring a file into the document. | this spec section 4 | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-002` | `POST` | An import MUST write through typed commands. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-050` | `POST` | The commands MUST be built in tree order, parent before child. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-051` | `POST` | The whole file MUST apply as one batch: one undo MUST take the import back. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-026` | `POST` | A construct the block tree refuses MUST be lifted to the nearest place the tree allows, never dropped. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-052` | `POST` | Every lift MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-053` | `POST` | The report MUST reach the user: a construct changed in silence MUST NOT be the outcome. | this spec section 4 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-021` | `POST` | An import of a large file MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-054` | `POST` | An imported picture naming a remote address MUST be reported as unresolved. | this spec section 3; `ZK-001` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-023` | `FRAME` | An import MUST NOT fetch a remote address a picture names. | this spec section 3; `ZK-001` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-055` | `FRAME` | An import MUST NOT mutate the document directly. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-011` | `FAIL` | A failed import MUST leave the document untouched: a partial application MUST NOT be observable. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5); the readers are the first `cargo-fuzz` targets | unimplemented |
+
+### 1.3 Take the document out as a file
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-IO-028` | `POST` | A user MUST be able to take the document out as a file. | this spec section 4 | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-056` | `POST` | The exported bytes MUST reach the browser download path. | this spec section 4 | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-003` | `POST` | An export MUST be idempotent: the same document exported twice MUST yield the same bytes, up to the stamp the format writes. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-020` | `POST` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-022` | `POST` | An export MUST omit the comments and the suggestions the user did not ask for. | this spec section 4; `ZK-001` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-057` | `POST` | An export of a large document MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-017` | `FRAME` | An export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.4 Save a native file
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-IO-058` | `POST` | A native file MUST carry Prose's own document-type byte. | this spec section 3; `ambre-spec-docfile.md section 3` | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-059` | `FRAME` | A native export MUST NOT route the document through the intermediate form: its payload MUST be the snapshot itself. | this spec section 3; `ambre-spec-docfile.md section 3` | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.5 Open a native file
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-IO-013` | `FAIL` | A native file belonging to another application MUST be re-dispatched, never coerced into Prose. | this spec section 3; `ambre-spec-docfile.md section 3` | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.6 Import a Word file
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-IO-060` | `POST` | A tracked change and a comment the file carries MUST arrive as a suggestion and a comment thread, never as plain text. | this spec section 3 | not built -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-024` | `FRAME` | A Word import MUST NOT run a macro the file carries. | this spec section 3; `ZK-001` | not built -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.7 Export to Markdown
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-IO-018` | `POST` | A Markdown export MUST report every construct the flavour has no syntax for, the page model included. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-061` | `FRAME` | A Markdown export MUST NOT emit a table, a to-do item or a footnote the chosen flavour has no syntax for. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.8 Import an HTML file
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-IO-016` | `FRAME` | An imported HTML document MUST NOT run a script it carries. | this spec section 3; `ZK-001` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-062` | `FRAME` | An HTML import MUST NOT resolve a remote reference the document carries: no stylesheet, no font, no frame. | this spec section 3; `ZK-001` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.9 Export to HTML
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-IO-019` | `POST` | An HTML export MUST report the header and the footer, which the format has no element for. | this spec section 3 | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-063` | `POST` | An HTML export MUST stand alone: it MUST carry the stylesheet it needs, in the head or inline. | this spec section 3 | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-064` | `FRAME` | An HTML export MUST NOT emit a script or an event handler: the file it writes MUST be inert. | this spec section 3 | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** six rows of `ambre-spec-budgets.md section 1`: the Word import and export of a
   hundred pages, the Markdown export, the HTML clipboard import, the plaintext native export, and
-  the document-to-intermediate-form walk the four writers share. The four reader crates are billed
-  in `section 5`, each one lazily loaded. Every row of both reads **none exists**.
+  the document-to-intermediate-form walk the four writers share (`PROSE-IO-046`). The four reader
+  crates are billed in `section 5`, each one lazily loaded. Every row of both reads
+  **none exists**.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
-  conversion in the Logic thread, `PROSE-IO-016` and `PROSE-IO-024` stop an imported file executing
+  conversion in the Logic thread and `PROSE-IO-043` keeps the document off the relay while it runs,
+  `PROSE-IO-016`, `PROSE-IO-062` and `PROSE-IO-024` stop an imported file executing or fetching
   anything, `PROSE-IO-023` stops an import becoming a fetch, and `PROSE-IO-022` stops an export
   carrying commentary the user did not ask to publish. A native file written to disk is plaintext
   at rest by decision, and `ambre-spec-docfile.md section 5` owns that decision.
-* **Verification.** 25 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-IO-009` is the one a compiler can hold before a test exists, because a reader that emits a
-  command and a writer that reads the document are both type errors once the two halves take the
-  intermediate form and nothing else. `PROSE-IO-003` and `PROSE-IO-017` are the pair a host test
-  reaches with no network and no file picker. `PROSE-IO-007` and `PROSE-IO-008` left two steps
+* **Verification.** 47 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+  `PROSE-IO-009` and `PROSE-IO-045` are the two a compiler can hold before a test exists, because a
+  reader that emits a command and a writer that reads the document are both type errors once the
+  two halves take the intermediate form and nothing else. `PROSE-IO-003` and `PROSE-IO-017` are the
+  pair a host test reaches with no network and no file picker. The frame conditions are new and
+  none of them is held: nine rows say what a conversion must not touch, and the crate that would
+  touch it does not exist. `PROSE-IO-007` and `PROSE-IO-008` left two steps
   earlier for `features/ambre-spec-prose-images.md`: a picture is part of the document structure,
   not of the pipeline beside it.
 
@@ -75,11 +143,11 @@ nothing. No test resolves yet: the last column names the row each scenario rests
 |---|---|---|---|---|
 | imports a Word file | types elsewhere | the imported blocks and the typing | both, on both screens | none -- `PROSE-IO-002` |
 | imports a file that fails to parse | watches | the document as before | an error on Alice's screen and no change on Bob's | none -- `PROSE-IO-011` |
-| imports a file, then undoes | watches | the document as before the import | the import leaves in one step, on both screens | none -- `PROSE-IO-002` |
+| imports a file, then undoes | watches | the document as before the import | the import leaves in one step, on both screens | none -- `PROSE-IO-051` |
 | exports to Markdown | types | the typing alone: an export writes nothing | Bob's typing; Alice's file holds the document she exported | none -- `PROSE-IO-017` |
 | exports the same document twice | -- | nothing | the same bytes, twice | none -- `PROSE-IO-003` |
 | saves a native file | opens it | the same document state | the same blocks, styles and comments | none -- `PROSE-IO-012` |
-| imports a Word table holding a picture | watches | the picture beside the table, never inside it | the picture out of the cell, and a line in the report | none -- `PROSE-IO-026` |
+| imports a Word table holding a picture | watches | the picture beside the table, never inside it | the picture out of the cell, and a line in the report | none -- `PROSE-IO-026`, `PROSE-IO-052` |
 
 ---
 
@@ -90,8 +158,8 @@ annotation register the schema declares (`ambre-spec-prose-schema.md section 3`)
 serializes the whole document and adds nothing to it.
 
 **The pipeline is symmetric.** A reader turns bytes into the intermediate form, and a writer turns
-the intermediate form into bytes. Neither half knows the other, and neither touches the document
-(`PROSE-IO-009`).
+the intermediate form into bytes. Neither half knows the other (`PROSE-IO-044`), and neither
+touches the document (`PROSE-IO-009`, `PROSE-IO-045`).
 
 ```text
 Import:  bytes -> reader -> ProseIr -> command builder -> Vec<ProseCommand> -> the document
@@ -99,7 +167,8 @@ Export:  the document -> document walk -> ProseIr -> writer -> bytes
 ```
 
 The native path is the one exception and it is deliberate: it carries a Loro snapshot under the
-shared header, so it passes through no intermediate form and loses nothing (`PROSE-IO-012`).
+shared header, so it passes through no intermediate form and loses nothing (`PROSE-IO-012`,
+`PROSE-IO-059`).
 
 **The intermediate form.** A linear tree, held in memory for the length of one conversion and never
 serialized:
@@ -327,17 +396,17 @@ other is a file it could not open.
    any parse failure (`PROSE-IO-010`, `PROSE-IO-011`);
 2. lift every block the tree refuses to the nearest place it allows, and record each lift
    (`PROSE-IO-026`);
-3. build the commands, in tree order, parent before child (`PROSE-IO-002`);
-4. apply them as one batch, so the whole file is one undo item;
-5. hand the report to the view.
+3. build the commands, in tree order, parent before child (`PROSE-IO-002`, `PROSE-IO-050`);
+4. apply them as one batch, so the whole file is one undo item (`PROSE-IO-051`);
+5. hand the report to the view (`PROSE-IO-053`).
 
 Step 2 is a separate pass on purpose: the tree's nesting rule is one predicate
 (`ambre-spec-prose-schema.md section 4`), and a reader that applied it inline would need a copy of
 it per format.
 
 **Steps, on an export:** walk the document once into the intermediate form, then hand that form to
-the writer. The walk is shared by all four writers, which is what makes it one budget row rather
-than four, and what keeps a writer from reading the document (`PROSE-IO-009`).
+the writer. The walk is shared by all four writers (`PROSE-IO-046`), which is what makes it one
+budget row rather than four, and what keeps a writer from reading the document (`PROSE-IO-045`).
 
 **The commands and the events** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
 
@@ -385,8 +454,8 @@ one download path and reads the media type to name the file (`PROSE-IO-020`).
 
 **The native file.** Prose owns one pair of entry points over the shared container, and nothing
 else: the header layout, the version registry, the migration policy and the at-rest decision are
-`ambre-spec-docfile.md section 3`. Prose writes its own document-type byte, and a file carrying
-another one is handed back to the caller for re-dispatch rather than read
+`ambre-spec-docfile.md section 3`. Prose writes its own document-type byte (`PROSE-IO-058`), and a file
+carrying another one is handed back to the caller for re-dispatch rather than read
 (`PROSE-IO-013`). A native file on disk is a different destination from the network snapshot: the
 snapshot carries no header and is sealed by the Sync worker, and the file is not.
 
@@ -446,7 +515,8 @@ Markdown has no superscript, subscript, colour, size, family, comment, suggestio
 reference, and a picture's width, height, alignment and caption have no syntax either. Each one is
 a warning at the drop site, never a silent omission (`PROSE-IO-018`, `PROSE-IO-004`).
 
-**What an HTML file becomes.** A standalone document, with the stylesheet in the head or inline:
+**What an HTML file becomes.** A standalone document, with the stylesheet in the head or inline
+(`PROSE-IO-063`), and no script in it at all (`PROSE-IO-064`):
 
 | Block | Element |
 |---|---|
@@ -502,7 +572,7 @@ none saves one.
 
 | Trigger, once it exists | What must happen |
 |---|---|
-| the open entry, or a file dropped on the page | the file is read and applied as one batch (`PROSE-IO-011`) |
+| the open entry, or a file dropped on the page | the file is read and applied as one batch (`PROSE-IO-051`) |
 | the save entry | the Logic thread serializes and answers with the bytes and their media type |
 | the export entry, per format | a dialog collects the options, then the same path runs |
 | the answer | the view hands the bytes to the browser; the document does not change (`PROSE-IO-017`) |
@@ -515,25 +585,27 @@ unless the export leaves it out. The dialog states both, and the writer honours 
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| Every conversion runs on the user's machine | the pillar is that the server holds ciphertext. A conversion is the one moment a document exists as plaintext outside the editor, so it is the one that must not leave the device | converting on the server, which is faster to build and hands the relay the whole document |
-| One intermediate form between every reader and every writer | four formats read and written directly would be twelve converters and twelve places to forget a warning. One form makes a format a reader plus a writer, and the loss report a property of the form rather than of a pair | writing commands straight out of each reader, which gives no place to validate, no place to report, and nothing to roll back |
-| The reader emits no command, and the writer reads no document | it is what makes a conversion testable with no engine: a reader is bytes to a value, a writer is a value to bytes, and both are pure functions on the host. It is also the only way the walk stays one budget row for four formats | letting each writer read the document, which multiplies the walk by the format count and couples every writer to the CRDT |
-| The native file is the only lossless path | every other format has a model of its own, so a round trip through it is a conversion twice. The native payload is the document itself | promising fidelity on Word, which has no place for a Prose custom style and numbers its own headings |
-| The native path skips the intermediate form | its payload is a snapshot, and a snapshot through an intermediate form would be a conversion of the document into a subset of itself. The form exists to lose things safely, and this path loses nothing | routing the native file through the form too, which trades the one lossless path for symmetry |
-| The container is Foundation's, not Prose's | the header carries a document-type byte and re-dispatches across applications, so it is a contract between three applications and belongs to none of them | a Prose header, which is what the corpus had, and which made each new application restate the layout |
-| A picture is an address, and an import never fetches one | the Logic thread holds no key and opens no socket, and a fetch on the import path would tell a third party which document a user just opened, before the user has seen it | fetching a remote picture during the import, which puts a network call in the thread whose whole contract is that it makes none |
-| A block the tree refuses is lifted, never dropped | a file the reader opens is not a command they typed, so losing part of it in silence loses content they still have and cannot see is gone. Lifting keeps it, and the report says where it went | refusing the file, which fails on an ordinary Word document; or dropping the block, which is the silent loss this pipeline exists to make impossible |
-| A wildcard arm warns before it discards | a reader meets constructs its author never saw, and the honest answer is to name them. An arm that discards in silence turns every future format extension into an invisible data loss | matching the rest and moving on, which is what makes a lossy import look like a faithful one |
-| An export is idempotent | a user who exports twice and gets two different files cannot tell a real change from a serialization detail, and neither can a test. Fixing the order of every attribute is what makes the round trip provable at all | writing in map order, which is stable within one run and different across builds |
-| The comments and the suggestions are opt-in on the way out | a review is internal by default: a document sent to a client should not carry who doubted which sentence. The safe direction is the one that needs an explicit act to publish | exporting them always, which publishes the review with the document and is discovered by the reader on the other side |
-| A report accompanies a conversion that finished, and an error replaces one that did not | the two are different facts and a caller acts on them differently: one is shown beside a document, the other instead of it. Merging them forces every caller to ask which case it is holding | one error type, which makes "the file opened with three warnings" and "the file did not open" the same value |
-| A progress event past one megabyte | a conversion that finishes in ten milliseconds needs no progress bar, and one that takes ten seconds with no sign of life reads as a freeze. The threshold is where the first becomes the second | reporting progress always, which spends an event per small import; or never, which is the freeze |
-| Word and the clipboard are the two Google Docs paths | there is no way to read a Google document from the client without an authenticated network call to Google, which leaks which document is opened and when. A download and a paste both arrive as formats already read | calling the Google API from the client, which trades a metadata leak for a convenience the download already gives |
-| The HTML reader is the paste reader | a paste from a web page and an import of that page are the same bytes in the same format, so two readers would be two results for one input, and the second one to drift would be the one nobody tested | a paste-specific reader, which is a second HTML implementation with a second set of losses |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| Every conversion runs on the user's machine | converting on the server | it is faster to build and hands the relay the whole document. The pillar is that the server holds ciphertext; a conversion is the one moment a document exists as plaintext outside the editor, so it is the one that must not leave the device |
+| One intermediate form between every reader and every writer | writing commands straight out of each reader | it gives no place to validate, no place to report, and nothing to roll back. Four formats read and written directly would be twelve converters and twelve places to forget a warning; one form makes a format a reader plus a writer, and the loss report a property of the form rather than of a pair |
+| The reader emits no command, and the writer reads no document | letting each writer read the document | it multiplies the walk by the format count and couples every writer to the CRDT. A reader is bytes to a value, a writer is a value to bytes, and both are pure functions on the host, which is what makes a conversion testable with no engine and keeps the walk one budget row for four formats |
+| The native file is the only lossless path | promising fidelity on Word | Word has no place for a Prose custom style and numbers its own headings. Every other format has a model of its own, so a round trip through it is a conversion twice; the native payload is the document itself |
+| The native path skips the intermediate form | routing the native file through the form too | it trades the one lossless path for symmetry. The payload is a snapshot, and a snapshot through an intermediate form would be a conversion of the document into a subset of itself; the form exists to lose things safely, and this path loses nothing |
+| The container is Foundation's, not Prose's | a Prose header | it is what the corpus had, and it made each new application restate the layout. The header carries a document-type byte and re-dispatches across applications, so it is a contract between three applications and belongs to none of them |
+| A picture is an address, and an import never fetches one | fetching a remote picture during the import | it puts a network call in the thread whose whole contract is that it makes none. The Logic thread holds no key and opens no socket, and a fetch on the import path would tell a third party which document a user just opened, before the user has seen it |
+| A block the tree refuses is lifted, never dropped | refusing the file | it fails on an ordinary Word document. A file the reader opens is not a command they typed, so losing part of it in silence loses content they still have and cannot see is gone; lifting keeps it, and the report says where it went |
+| A block the tree refuses is lifted, never dropped | dropping the block | it is the silent loss this pipeline exists to make impossible. A file the reader opens is not a command they typed, so losing part of it in silence loses content they still have and cannot see is gone; lifting keeps it, and the report says where it went |
+| A wildcard arm warns before it discards | matching the rest and moving on | it is what makes a lossy import look like a faithful one. A reader meets constructs its author never saw, and the honest answer is to name them; an arm that discards in silence turns every future format extension into an invisible data loss |
+| An export is idempotent | writing in map order | it is stable within one run and different across builds. A user who exports twice and gets two different files cannot tell a real change from a serialization detail, and neither can a test; fixing the order of every attribute is what makes the round trip provable at all |
+| The comments and the suggestions are opt-in on the way out | exporting them always | it publishes the review with the document and is discovered by the reader on the other side. A review is internal by default: a document sent to a client should not carry who doubted which sentence, so the safe direction is the one that needs an explicit act to publish |
+| A report accompanies a conversion that finished, and an error replaces one that did not | one error type | it makes "the file opened with three warnings" and "the file did not open" the same value. The two are different facts and a caller acts on them differently: one is shown beside a document, the other instead of it; merging them forces every caller to ask which case it is holding |
+| A progress event past one megabyte | reporting progress always | it spends an event per small import. A conversion that finishes in ten milliseconds needs no progress bar, and one that takes ten seconds with no sign of life reads as a freeze; the threshold is where the first becomes the second |
+| A progress event past one megabyte | reporting progress never | it is the freeze. A conversion that finishes in ten milliseconds needs no progress bar, and one that takes ten seconds with no sign of life reads as a freeze; the threshold is where the first becomes the second |
+| Word and the clipboard are the two Google Docs paths | calling the Google API from the client | it trades a metadata leak for a convenience the download already gives. There is no way to read a Google document from the client without an authenticated network call to Google, which leaks which document is opened and when; a download and a paste both arrive as formats already read |
+| The HTML reader is the paste reader | a paste-specific reader | it is a second HTML implementation with a second set of losses. A paste from a web page and an import of that page are the same bytes in the same format, so two readers would be two results for one input, and the second one to drift would be the one nobody tested |
 
 ---
 
@@ -546,7 +618,14 @@ unless the export leaves it out. The dialog states both, and the writer honours 
 * **Where an import lands is not ruled.** A failed import leaves the document untouched
   (`PROSE-IO-011`), and nothing says what a successful one does to a document that already has
   content: replace it, append to it, or insert at the caret. Toile answers the same question with
-  `TOILE-IO-023` and Prose states nothing, so the batch of step 3 has no defined destination.
+  `TOILE-IO-023` and Prose states nothing, so the batch of step 4 has no defined destination.
+* **A failed conversion has no way back to the user.** `PROSE-IO-047` makes the report and the
+  error two answers, and the bus carries one of them: `ImportCompleted` holds a report, and no
+  event holds an `InteropError`. A file that does not open therefore has a typed refusal and no
+  declared path to the screen that must show it.
+* **An export has no size to measure its progress against.** `PROSE-IO-057` owes a progress event
+  and the threshold is one megabyte of file, which an import knows before it starts and an export
+  learns only when it has finished. Nothing states what an export counts instead.
 * **A named style's character defaults have no home in the document.** The intermediate form
   carries them, because a Word style carries them, and the style register of
   `ambre-spec-prose-schema.md section 3` holds paragraph fields alone. A Word file whose "Quote"

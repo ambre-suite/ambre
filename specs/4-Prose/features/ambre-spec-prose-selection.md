@@ -18,34 +18,95 @@ collaborator, so there is no two-peer table below. What a peer sees of another's
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PROSE-UI-008` | Hit-testing MUST be the exact inverse of the drawn layout, under zoom and scroll. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-009` | A click that lands in no glyph MUST resolve to the nearest valid caret position, never to no position. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-031` | Hit-testing MUST read the shaped runs alone: a block that was never painted MUST resolve like a painted one. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-032` | A block that holds no text MUST resolve to one of its two edges, chosen by the side the pointer is on. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-033` | Header, footer and footnote text MUST hit-test like body text, so the caret can enter it. | this spec section 2 | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-034` | A vertical move MUST keep the column the caret started from until a horizontal move, a click or an edit ends the run of vertical moves. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-035` | Every caret move MUST leave the caret on screen: a move that takes it out of the window MUST scroll the least that brings it back. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-036` | A caret move without extension MUST collapse the selection to the caret. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-037` | The anchor of a drag MUST be captured when the drag starts and MUST NOT move under a remote change for as long as the drag lasts. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-038` | While a drag holds past the edge of the window, each tick MUST scroll and then re-resolve the pointer, so the selection follows the text being revealed. | this spec section 2 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-039` | A selection MUST be valid with its end before its start, and MUST be read in document order wherever it is used. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-070` | A press inside a link, without the platform's modifier, MUST place the caret and MUST NOT open the target. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-071` | Opening a link's target MUST go through the shared open-URL affordance of the host, never a call made from the crate. | this spec section 2; `UI-THREAD-004` | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-072` | A press on a document holding no block MUST place the caret in a block created through the command path, never in a locally invented one. | this spec section 2; `PROSE-027` | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-008` | `INV` | Hit-testing MUST be the exact inverse of the drawn layout, under zoom and scroll. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-031` | `INV` | Hit-testing MUST read the shaped runs alone: a block that was never painted MUST resolve like a painted one. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-039` | `INV` | A selection MUST be valid with its end before its start. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-151` | `INV` | Every reader of a selection MUST order its two ends before it uses them: a backwards selection MUST NOT reach a caller as it is held. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-034` | `INV` | A vertical move MUST keep the column the caret started from until a horizontal move, a click or an edit ends the run of vertical moves. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-152` | `INV` | A change from a collaborator MUST NOT move the anchor of a drag in flight: the anchor is a gesture, not a document position, for as long as the gesture lasts. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-033` | `INV` | Header, footer and footnote text MUST hit-test like body text, so the caret can enter it. | this spec section 2 | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-153` | `OBS` | A pointer resting inside a link MUST show the link cursor, and MUST show it over the marked text alone. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.2 Press in the text
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-009` | `POST` | A click that lands in no glyph MUST resolve to the nearest valid caret position, never to no position. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-032` | `POST` | A block that holds no text MUST resolve to one of its two edges, chosen by the side the pointer is on. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-154` | `POST` | A press that does not extend MUST collapse the selection to the caret it places. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-155` | `POST` | A second press in place MUST select the word under the pointer and a third MUST select its paragraph. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-072` | `POST` | A press on a document holding no block MUST place the caret in a block created through the command path, never in a locally invented one. | this spec section 2; `PROSE-027` | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-156` | `FAIL` | A press on a layout carrying no page at all MUST resolve to no position, and the caret MUST stay where it was until a block exists to hold it. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-157` | `FRAME` | Placing the caret with a press MUST NOT shape a block and MUST NOT scroll the column: what the press resolved is already on screen. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.3 Walk the caret with the keys
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-036` | `POST` | A caret move without extension MUST collapse the selection to the caret. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-035` | `POST` | Every caret move MUST leave the caret on screen. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-158` | `POST` | A move that takes the caret out of the window MUST scroll the least that brings it back. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-159` | `POST` | A move to the start or the end of a line MUST honour the wrapped line under the caret, and the caret's affinity at a wrap point, never the paragraph. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-160` | `FRAME` | A move that extends the selection MUST NOT move its anchor. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.4 Drag to select
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-037` | `POST` | The anchor of a drag MUST be captured when the drag starts. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-161` | `POST` | Extending a drag MUST resolve the moving end at the position under the pointer, leaving the anchor where the drag started. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-162` | `FRAME` | Extending a drag MUST NOT scroll the column: only an armed autoscroll tick does. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.5 Hold the drag past the edge of the window
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-038` | `POST` | While a drag holds past the edge of the window, each tick MUST scroll and then re-resolve the pointer, so the selection follows the text being revealed. | this spec section 2 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-163` | `FRAME` | A tick MUST NOT run once the pointer is released: releasing MUST leave nothing armed. | this spec section 2 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.6 Press Escape
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-164` | `POST` | Escape MUST collapse the selection to the caret. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-165` | `POST` | Escape MUST cancel a drag in flight: the release that follows MUST extend nothing. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-166` | `FRAME` | Escape MUST NOT move the caret and MUST NOT change the scroll offset. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.7 Select the whole document
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-167` | `POST` | Selecting the whole document MUST set the anchor at the start of the first block and the moving end at the end of the last. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-168` | `FRAME` | Selecting the whole document MUST NOT change the scroll offset: the reader stays on the page they were on. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.8 Press inside a link
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-070` | `POST` | A press inside a link, without the platform's modifier, MUST place the caret. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-169` | `FRAME` | A press inside a link, without the platform's modifier, MUST NOT open the target. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-071` | `POST` | Opening a link's target MUST go through the shared open-URL affordance of the host, never a call made from the crate. | this spec section 2; `UI-THREAD-004` | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-170` | `FRAME` | Opening a link's target MUST NOT move the caret and MUST NOT change the selection. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the hit-test of a pointer position, a row of `ambre-spec-budgets.md section 1`.
   The autoscroll tick costs one hit-test per frame and no row of its own.
 * **Boundary.** none: `PROSE-UI-010` (`features/ambre-spec-prose-engine.md section 1`) keeps the
   selection out of the document, and the UI thread reaches no network, crypto or persistence path
   (`UI-THREAD-004`).
-* **Verification.** 14 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+* **Verification.** 34 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
   `PROSE-UI-008` is the one row with an oracle already available: the layout draws a glyph at a
   position and the hit-test answers a position for a point, so the round trip through both is a
   property over the shaped runs, at every zoom and every scroll offset. `PROSE-UI-071` is
   compiler-held the day the crate exists, for the reason the clipboard's write is: the browser
-  binding cannot be named from a crate that does not depend on it.
+  binding cannot be named from a crate that does not depend on it. The eight frame conditions are
+  rows this document did not state before, and they are where a gesture document pays: the anchor
+  a Shift-arrow must not move, the scroll a press must not touch, the tick a release must leave
+  disarmed. `PROSE-UI-010` (`features/ambre-spec-prose-engine.md section 1`) already keeps both
+  out of the document, so none of the eight repeats it.
 
 ---
 
@@ -91,7 +152,7 @@ pub fn hit_test(pos: DocPos, state: &ProseUiState) -> Option<(TreeID, u32)>;
 | in a page margin, above the first block or below the last | the nearest block edge on that page, then the page's first or last block (`PROSE-UI-009`) |
 | in a block with no text -- an image, a rule, a page break | that block's offset zero or its end, by the pointer side (`PROSE-UI-032`) |
 | in a header, a footer or a footnote band | that text's own offset (`PROSE-UI-033`) |
-| on a layout with no page at all | nothing, and the caller asks the engine for a first paragraph |
+| on a layout with no page at all | nothing, and the caret stays where it was (`PROSE-UI-156`) |
 
 The block is found by bisection on the page's block positions, then the offset is read off the
 run. Both halves are arithmetic over data the engine already produced.
@@ -120,8 +181,8 @@ pub fn advance_cursor(state: &mut ProseUiState, n: u32);
 ```
 
 Line start and line end honour the wrapped line under the caret and the caret's affinity at a
-wrap point, not the paragraph. Every move funnels through the tail above, so no path can leave
-the caret off screen (`PROSE-UI-035`).
+wrap point, not the paragraph (`PROSE-UI-159`). Every move funnels through the tail above, so no
+path can leave the caret off screen (`PROSE-UI-035`).
 
 **Dragging.**
 
@@ -137,26 +198,27 @@ pub fn tick_autoscroll(state: &mut ProseUiState);
 
 The armed velocity and the anchor live in the UI state and nowhere else
 (`features/ambre-spec-prose-engine.md section 3`). A selection built by dragging upward has its
-focus before its anchor, and every reader of it normalizes first (`PROSE-UI-039`), including the
+focus before its anchor, and every reader of it normalizes first (`PROSE-UI-151`), including the
 one that clamps a culled page to the window edge when it paints the bands.
 
 **Selecting a word, a paragraph, everything.** Word and paragraph bounds are read off the shaped
-runs at the hit-tested offset. Select-all sets the anchor to the first block's start and the focus
-to the last block's end. Escape drops the selection, closes any open menu and cancels a drag in
-flight; it never mutates the document.
+runs at the hit-tested offset (`PROSE-UI-155`). Select-all sets the anchor to the first block's
+start and the focus to the last block's end (`PROSE-UI-167`). Escape drops the selection and
+cancels a drag in flight (`PROSE-UI-164`, `PROSE-UI-165`); it closes any open menu, and it never
+mutates the document.
 
 **A press inside a link.** A link is a mark over text the author is still editing, so the press
 resolves to a caret like any other and the link is inert (`PROSE-UI-070`). The press carrying the
 platform's modifier resolves the target instead and hands it to the host's open-URL affordance,
 which is where every application's outbound link goes (`PROSE-UI-071`); hovering paints the link
-cursor. Neither path writes to the document. What the mark holds is
+cursor (`PROSE-UI-153`). Neither path writes to the document. What the mark holds is
 `features/ambre-spec-prose-inline-styles.md`.
 
 **A press on an empty document.** A document with no block has nothing to hit-test, and a caret
 placed in a block the view invented would be a second model of the document (`PROSE-UI-001`). The
 press sends a block insertion and the caret lands at its start once the layout for it arrives
 (`PROSE-UI-072`). This is the local guard only: two peers emptying the document at the same moment
-converge by the format's own rule, `PROSE-027`.
+converge by the format's own rule, `PROSE-094`.
 
 **Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
 
@@ -189,20 +251,20 @@ declared once and the command key answers it.
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The hit-test reads the shaped runs, never a live layout | the runs are already in memory for every cached block, painted or not, and re-shaping a paragraph to answer a click costs a layout pass per pointer move. It also makes the answer identical to what was drawn, which is the whole of `PROSE-UI-008` | shaping the block under the pointer on demand, which is both slower and a second layout that may disagree with the first |
-| A click never answers "nowhere" on a page that has content | a pointer lands in a margin, in a gap between blocks or under the last line constantly, and each of those is a real click a user expects to place a caret. Returning nothing pushes the decision into every caller, and each one invents a different fallback | returning no position outside a glyph, which makes the bottom half of a short page dead to the pointer |
-| The column of a vertical run is remembered | walking down through a short line and a long one loses the column at the short one, and the caret then drifts left with every further press. Keeping the column from the first press is what makes a run of Down presses return to where it started | recomputing the column at each step, which turns a straight walk down a paragraph into a staircase |
-| Every move reveals the caret | typing at the bottom of the window, extending a selection with Shift and jumping to the end of the document all put the caret out of view, and each would otherwise need its own scroll. One tail covers all of them, so no path can forget | scrolling at the call sites that need it, which is the version where one path forgets and the caret vanishes |
-| The drag anchor is captured once and frozen | a remote peer editing before the anchor would otherwise move it mid-drag, and the selection would grow from a place the user never pressed. The anchor is a gesture, not a document position, for as long as the gesture lasts | re-resolving the anchor against the document, which makes a drag jump under a collaborator's edit |
-| Autoscroll re-resolves the pointer each tick | the pointer is still, the text under it is not. Extending only on pointer moves stops the selection the moment the user holds the mouse past the edge, which is exactly when they are asking for more | extending on pointer movement alone, which makes the hold-at-the-edge gesture do nothing |
-| A selection may run backwards | a drag upward is as common as one downward, and normalizing at capture time loses which end the user is moving, which is what Shift with an arrow key extends next | normalizing the selection when it is stored, which makes the moving end the one the user did not touch |
-| The selection is ours, not the browser's | the browser's own selection describes DOM nodes, and the page is a canvas with none: there is nothing for it to select. Every position here comes from the shaped runs and the pointer instead, which is also the only representation that survives a page break | the browser's selection object, which has no node to anchor to on a canvas |
-| A link needs a modifier to be followed | the text under a link is text the author edits, and a document editor that navigates on a plain click makes every link a place the caret cannot reach. The modifier is what every editor of this kind uses, so the gesture is already known | following the link on a plain click, which is a reader's behaviour applied to a writer's surface |
-| The selection stays out of the document | a selection is one person's attention, not content, and writing it would put a keystroke's worth of traffic on the wire per pointer move. What a collaborator needs to see travels as an ephemeral instead | storing the selection in the document, which every peer then has to merge and undo |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The hit-test reads the shaped runs, never a live layout | shaping the block under the pointer on demand | it is both slower and a second layout that may disagree with the first. The runs are already in memory for every cached block, painted or not, and re-shaping a paragraph to answer a click costs a layout pass per pointer move; reading the runs also makes the answer identical to what was drawn, which is the whole of `PROSE-UI-008` |
+| A click never answers "nowhere" on a page that has content | returning no position outside a glyph | it makes the bottom half of a short page dead to the pointer. A pointer lands in a margin, in a gap between blocks or under the last line constantly, and each of those is a real click a user expects to place a caret; returning nothing pushes the decision into every caller, and each one invents a different fallback |
+| The column of a vertical run is remembered | recomputing the column at each step | it turns a straight walk down a paragraph into a staircase. Walking down through a short line and a long one loses the column at the short one, and the caret then drifts left with every further press; keeping the column from the first press is what makes a run of Down presses return to where it started |
+| Every move reveals the caret | scrolling at the call sites that need it | it is the version where one path forgets and the caret vanishes. Typing at the bottom of the window, extending a selection with Shift and jumping to the end of the document all put the caret out of view, and one tail covers all of them, so no path can forget |
+| The drag anchor is captured once and frozen | re-resolving the anchor against the document | it makes a drag jump under a collaborator's edit. A remote peer editing before the anchor would otherwise move it mid-drag, and the selection would grow from a place the user never pressed; the anchor is a gesture, not a document position, for as long as the gesture lasts |
+| Autoscroll re-resolves the pointer each tick | extending on pointer movement alone | it makes the hold-at-the-edge gesture do nothing. The pointer is still and the text under it is not; extending only on pointer moves stops the selection the moment the user holds the mouse past the edge, which is exactly when they are asking for more |
+| A selection may run backwards | normalizing the selection when it is stored | it makes the moving end the one the user did not touch. A drag upward is as common as one downward, and normalizing at capture time loses which end the user is moving, which is what Shift with an arrow key extends next |
+| The selection is ours, not the browser's | the browser's selection object | it has no node to anchor to on a canvas. The browser's own selection describes DOM nodes, and the page is a canvas with none; every position here comes from the shaped runs and the pointer instead, which is also the only representation that survives a page break |
+| A link needs a modifier to be followed | following the link on a plain click | it is a reader's behaviour applied to a writer's surface. The text under a link is text the author edits, and a document editor that navigates on a plain click makes every link a place the caret cannot reach; the modifier is what every editor of this kind uses, so the gesture is already known |
+| The selection stays out of the document | storing the selection in the document | every peer then has to merge and undo it. A selection is one person's attention, not content, and writing it would put a keystroke's worth of traffic on the wire per pointer move; what a collaborator needs to see travels as an ephemeral instead |
 
 ---
 
@@ -217,6 +279,12 @@ declared once and the command key answers it.
 * **A selection is not repaired when its text is deleted remotely.** The draft has a rule for that
   case (`PROSE-UI-028`); the selection endpoints have none, so a peer deleting the selected
   paragraph leaves two offsets naming a block that is gone.
+* **Nothing says which affinity a press produces at a wrap point.** The caret carries one and the
+  line-start move honours it (`PROSE-UI-159`), but no row says whether a click at the end of a
+  wrapped line lands before the wrap or after it, and the two answers send Home to two places.
+* **Nothing rules on a relayout under a held drag.** The autoscroll re-resolves the pointer each
+  tick against a layout the engine may have replaced, and no row says what the selection does when
+  the page under the pointer is no longer the page that was there.
 * **The caret is not restored between sessions.** It is view state and nothing writes it, so a
   reader reopening a document starts at the top of it.
 * **Right-to-left and bidirectional text are not ruled on anywhere in this area.** The caret

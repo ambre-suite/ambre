@@ -21,25 +21,83 @@ applications hold a comments feature, and the anchor is the feature.
 | | Toile (`features/ambre-spec-toile-comments.md`) | Prose (here) |
 |---|---|---|
 | Anchor | an `ElementId`, or a free world point | a live mark on a text range |
-| When the target dies | the pin dangles, and is not painted (`TOILE-025`) | the thread orphans, and is listed for review (`PROSE-FEAT-009`) |
-| Thread order | the list's, never a timestamp (`TOILE-FEAT-012`) | the list's, never a timestamp |
-| Author | the canonical `UserId` (`TOILE-FEAT-014`) | a display name and a document peer, stamped locally |
+| When the target dies | the pin dangles, and is not painted (`TOILE-025`) | the thread orphans, and is kept for review (`PROSE-FEAT-202`) |
+| Thread order | the list's, never a timestamp (`TOILE-FEAT-012`) | the list's, never a timestamp (`PROSE-FEAT-186`) |
+| Author | the canonical `UserId` (`TOILE-FEAT-014`) | a display name and a document peer, stamped locally (`PROSE-FEAT-077`) |
 
 Two of the four match, and the two that do not are section 6.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PROSE-FEAT-001` | A comment's identity MUST be stable for the document's lifetime: an edit, a reply or a remote delta MUST NOT change it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-009` | A comment thread MUST stay anchored to its text range across concurrent edits, and MUST go orphaned rather than silently re-anchor when that range is deleted. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-075` | The live mark on the text, never the stored anchor, MUST decide where a comment sits. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-076` | The stored anchor MUST be rewritten from the mark on every edit that touches the annotated block. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-077` | The author and the peer of a comment MUST be stamped from the session identity, never read from the command. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-078` | Each comment MUST own its own mark span, and resolving or deleting one comment MUST NOT rewrite another's. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-079` | A reply to a resolved thread MUST reopen it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-080` | Editing or deleting a reply MUST be refused unless the caller wrote it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-081` | Deleting a thread's opening reply MUST delete the thread. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-049` | A comment highlight MUST be canvas content, painted under the annotated range. | this spec section 4 | not built -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-050` | The comment panel MUST be DOM chrome, not a canvas overlay. | this spec section 4; `ambre-spec-ui.md section 2` | not built -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-001` | `INV` | A comment's identity MUST be stable for the document's lifetime: an edit, a reply or a remote delta MUST NOT change it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-075` | `INV` | The live mark on the text, never the stored anchor, MUST decide where a comment sits. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-185` | `INV` | The stored anchor MUST NOT be read for a position while the comment's mark is alive. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-078` | `INV` | Each comment MUST own its own mark span. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-186` | `INV` | The order of a thread's replies MUST be the list's own, never a timestamp's. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-077` | `INV` | The author and the peer of a comment MUST be stamped from the session identity, never read from the command. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-187` | `INV` | Resolving, reopening or deleting a thread MUST NOT be refused on the caller's identity: only a reply is its author's alone. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-009` | `CONC` | A comment thread MUST stay anchored to its text range across concurrent edits. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-049` | `OBS` | A comment highlight MUST be canvas content, painted under the annotated range. | this spec section 4 | not built -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-144` | `OBS` | Two threads whose spans share characters MUST both be painted, one highlight over the other. | this spec section 3 | not built -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-050` | `INV` | The comment panel MUST be DOM chrome, not a canvas overlay. | this spec section 4; `ambre-spec-ui.md section 2` | not built -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.2 Open a thread on a range
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-188` | `POST` | Opening a thread MUST write one annotation entry and one mark reaching the requested range and no character outside it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-189` | `FRAME` | Opening a thread MUST NOT change the text of the block, or the entry or the span of any other thread. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.3 Reply to a thread
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-190` | `POST` | A reply MUST be appended at the end of the thread's reply list. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-079` | `POST` | A reply to a resolved thread MUST reopen it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-191` | `FRAME` | Replying MUST NOT move the thread's mark, rewrite an earlier reply, or touch another thread. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.4 Resolve or reopen a thread
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-192` | `POST` | Resolving a thread MUST mark it closed. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-193` | `POST` | Reopening a thread MUST mark it open, with no reply added. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-194` | `FRAME` | Resolving or reopening a thread MUST NOT rewrite another thread's span, and MUST NOT add, remove or edit a reply of its own. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.5 Edit a reply
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-195` | `POST` | Editing a reply MUST replace that reply's text and leave its place in the list. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-080` | `FAIL` | Editing a reply MUST be refused unless the caller wrote it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-196` | `FRAME` | Editing a reply MUST NOT change the thread's `resolved` flag, its mark, or the author stamped on the reply. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.6 Delete a reply
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-197` | `POST` | Deleting a reply MUST remove it from the list and leave the order of the replies around it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-081` | `POST` | Deleting a thread's opening reply MUST delete the thread. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-198` | `FAIL` | Deleting a reply MUST be refused unless the caller wrote it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-199` | `FRAME` | Deleting a reply that is not the head MUST NOT change the thread's mark, its `resolved` flag, or another thread. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.7 Delete a thread
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-200` | `POST` | Deleting a thread MUST remove its entry and its mark, and MUST leave the text the mark covered. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-201` | `FRAME` | Deleting a thread MUST NOT rewrite the span of any other thread over the same characters. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.8 Edit the text a thread is anchored to
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-076` | `POST` | The stored anchor MUST be rewritten from the mark on every edit that touches the annotated block. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-202` | `POST` | An edit that deletes the whole marked range MUST keep the entry, with the thread orphaned rather than re-anchored. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-203` | `POST` | An edit that takes the mark away MUST leave the stored anchor on the last position the mark held. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-204` | `FRAME` | An edit over an annotated range MUST NOT change the thread's `resolved` flag, its replies, or the entry of another thread. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none of its own: a comment is an annotation entry and a mark, both written on the
   ordinary command path, and the highlight is painted in the page pass
@@ -47,11 +105,13 @@ Two of the four match, and the two that do not are section 6.
 * **Boundary.** none of its own: a thread is content in the document, and `ZK-001` seals every
   payload before it leaves the client. The author field is stamped locally, which is a rule of this
   document and not a boundary the relay sees.
-* **Verification.** 11 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+* **Verification.** 32 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
   `PROSE-FEAT-009` is the row a property test reaches without a screen: any interleaving of edits
   over an annotated range leaves the thread on that range or leaves it orphaned, and never on
   another range. `PROSE-FEAT-078` is the row two peers are needed for, because a single writer can
-  never make two spans race.
+  never make two spans race. The eight frame conditions are the rows a single assertion cannot
+  reach: each names a field the operation is not allowed to touch, and a test has to read it
+  before and after.
 
 ---
 
@@ -62,9 +122,9 @@ Two peers over one thread. No test resolves yet: the last column names the row e
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
 | comments on a sentence | types a word before it | the thread, on the same sentence, one word further down | the highlight on Alice's sentence, on both screens | none -- `PROSE-FEAT-009` |
-| comments on a sentence | comments on three words inside it | two threads, two spans | both highlights, stacked over the three shared words | none -- `PROSE-FEAT-078` |
-| resolves her thread | -- | both threads, one closed | Bob's highlight untouched, and Alice's out of the open list | none -- `PROSE-FEAT-078` |
-| deletes the whole commented sentence | replies to that thread | the thread, with no mark left | the reply, and the thread listed as orphaned on both screens | none -- `PROSE-FEAT-009` |
+| comments on a sentence | comments on three words inside it | two threads, two spans | both highlights, stacked over the three shared words | none -- `PROSE-FEAT-078`, `PROSE-UI-144` |
+| resolves her thread | -- | both threads, one closed | Bob's highlight untouched, and Alice's out of the open list | none -- `PROSE-FEAT-194` |
+| deletes the whole commented sentence | replies to that thread | the thread, with no mark left | the reply, and the thread listed as orphaned on both screens | none -- `PROSE-FEAT-202` |
 | replies to a thread Bob resolved | -- | the thread, open again | the thread back in the open list, on both screens | none -- `PROSE-FEAT-079` |
 | edits Bob's reply | -- | Bob's reply, unchanged | a refusal on Alice's screen, and nothing on Bob's | none -- `PROSE-FEAT-080` |
 | deletes the opening reply of her own thread | replies to it at the same moment | no thread | the thread gone on both screens, and no highlight left | none -- `PROSE-FEAT-081` |
@@ -156,19 +216,19 @@ position the view publishes for its anchor (`PROSE-UI-050`).
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The thread lives in the document's own annotation map | a comment has to converge with the text it points at, and two peers editing the passage and the discussion at once must merge once, not twice. One document is one merge and one history | a second `LoroDoc` for the comments, which doubles the synchronization and makes consistency between the text and the threads unreachable |
-| The mark is the position, and the stored anchor is a cache | a mark is what the text CRDT moves for free on every insertion and deletion; a stored offset is a number two concurrent edits race for. Making the mark authoritative means the anchor is correct with no reconciliation to get right (`PROSE-FEAT-075`) | storing the offsets as the truth, which needs every peer to rewrite them identically on every edit, and diverges on the first concurrent one |
-| The cache is kept anyway | the panel is drawn before the block's runs are shaped, and an orphaned thread has no mark left to read. Both cases need a last known position, and neither is worth a second pass to recompute (`PROSE-FEAT-076`) | reading the mark alone, which leaves the panel with nothing to align to on the first frame and an orphan with no position at all |
-| A deleted range orphans the thread | the discussion is work several people did, and the deletion was of a sentence. Destroying the thread with it loses that work with no gesture that says so; keeping it lets the author see what became unreachable (`PROSE-FEAT-009`) | deleting the thread with its text, which loses a discussion on an ordinary edit and cannot be undone from the thread's side |
-| Overlap is layered, not merged | two readers commenting on overlapping passages is the normal case, and a single-valued mark cannot hold two threads. Giving each thread its own span keeps both discussions alive and makes a resolve a write to one span (`PROSE-FEAT-078`) | one mark carrying a list of identities, which turns every comment and every resolve into a read-modify-write of a value two peers race for |
-| The author is stamped locally | the name on a comment is what every reader judges it by, so it must not be a field the sender chooses. Stamping it from the session identity leaves nothing to forge (`PROSE-FEAT-077`) | trusting an author field on the command, which lets any member post under any other member's name |
-| A reply reopens a resolved thread | someone replying to a closed discussion is reopening it, whatever the control they used. Requiring a separate reopen first means a reply that lands in a list nobody reads (`PROSE-FEAT-079`) | keeping the thread closed, which hides the reply from everyone but the reader who went looking in the resolved list |
-| A reply is its author's, a thread is everyone's | rewriting someone else's words is the one operation with no honest use; closing a discussion is what a reviewer is there to do. The two restrictions are different because the two acts are (`PROSE-FEAT-080`) | one permission for both, which either lets a member rewrite another's reply or stops a reviewer resolving a thread they did not open |
-| The highlight is canvas and the panel is DOM | the highlight sits under the text, at a position only the layout knows, so it belongs to the page pass. The panel is a scrollable list of text fields, which the browser lays out, focuses and reads to a screen reader for free (`PROSE-UI-049`, `PROSE-UI-050`) | drawing the panel on the canvas, which reimplements scrolling, focus and accessibility for a list of text boxes |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The thread lives in the document's own annotation map | a second `LoroDoc` for the comments | it doubles the synchronization and makes consistency between the text and the threads unreachable. A comment has to converge with the text it points at, and two peers editing the passage and the discussion at once must merge once, not twice: one document is one merge and one history |
+| The mark is the position, and the stored anchor is a cache | storing the offsets as the truth | it needs every peer to rewrite them identically on every edit, and diverges on the first concurrent one. A mark is what the text CRDT moves for free on every insertion and deletion, and a stored offset is a number two concurrent edits race for; making the mark authoritative means the anchor is correct with no reconciliation to get right (`PROSE-FEAT-075`) |
+| The cache is kept anyway | reading the mark alone | it leaves the panel with nothing to align to on the first frame, and an orphan with no position at all. The panel is drawn before the block's runs are shaped, and an orphaned thread has no mark left to read, so both cases need a last known position and neither is worth a second pass to recompute (`PROSE-FEAT-076`) |
+| A deleted range orphans the thread | deleting the thread with its text | it loses a discussion on an ordinary edit and cannot be undone from the thread's side. The discussion is work several people did, and the deletion was of a sentence; keeping the thread lets the author see what became unreachable (`PROSE-FEAT-009`) |
+| Overlap is layered, not merged | one mark carrying a list of identities | it turns every comment and every resolve into a read-modify-write of a value two peers race for. Two readers commenting on overlapping passages is the normal case, and a single-valued mark cannot hold two threads; giving each thread its own span keeps both discussions alive and makes a resolve a write to one span (`PROSE-FEAT-078`) |
+| The author is stamped locally | trusting an author field on the command | it lets any member post under any other member's name. The name on a comment is what every reader judges it by, so it must not be a field the sender chooses; stamping it from the session identity leaves nothing to forge (`PROSE-FEAT-077`) |
+| A reply reopens a resolved thread | keeping the thread closed | it hides the reply from everyone but the reader who went looking in the resolved list. Someone replying to a closed discussion is reopening it, whatever the control they used; requiring a separate reopen first means a reply that lands in a list nobody reads (`PROSE-FEAT-079`) |
+| A reply is its author's, a thread is everyone's | one permission for both | it either lets a member rewrite another's reply or stops a reviewer resolving a thread they did not open. Rewriting someone else's words is the one operation with no honest use; closing a discussion is what a reviewer is there to do (`PROSE-FEAT-080`) |
+| The highlight is canvas and the panel is DOM | drawing the panel on the canvas | it reimplements scrolling, focus and accessibility for a list of text boxes. The highlight sits under the text, at a position only the layout knows, so it belongs to the page pass; the panel is a scrollable list of text fields, which the browser lays out, focuses and reads to a screen reader for free (`PROSE-UI-049`, `PROSE-UI-050`) |
 
 ---
 
@@ -200,6 +260,12 @@ position the view publishes for its anchor (`PROSE-UI-050`).
   name and the document peer, and no `UserId` at all (`ambre-spec-prose-schema.md section 3`). Both
   refuse a forged author, and only one of the two survives a user renaming themselves. Nothing in
   the corpus rules on which is right.
+* **Nothing rules on a reply that lands on a thread another peer deleted.** Section 2 pairs the
+  two and expects no thread on either screen. `PROSE-FEAT-081` states the local gesture alone, and
+  no row says what becomes of the reply that raced it.
+* **No row rules on the range a thread opens over.** `AddComment` takes a `block_id` and a
+  `range`, and section 1 carries one refusal, on a reply's author. An empty range, and a range the
+  block does not hold, are refused nowhere.
 * **A comment command's place in the undo stack is ruled on in one application.**
   `TOILE-FEAT-017` keeps a comment out of the undo stack, so `Ctrl+Z` cannot retract a message a
   teammate has read. Prose states nothing, and `features/ambre-spec-prose-undo.md` reverts every

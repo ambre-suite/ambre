@@ -76,7 +76,7 @@ impl TrameState {
 
     /// Split every merge intersecting the tracked selection rectangle. The
     /// context-menu intent resolves against the whole selection, not just the
-    /// active cell, so a multi-merge selection is fully unmerged in one step.
+    /// active cell, so one step splits every merge the selection touches.
     pub(super) fn unmerge_selection(&mut self) -> TrameOutcome {
         let (mut r1, mut c1, mut r2, mut c2) = self.selection;
         // Masters whose rectangle intersects the selection. Snapshot first: the
@@ -93,9 +93,9 @@ impl TrameState {
         for (top, left, bottom, right) in masters {
             if self.delete_merge_at(top, left) {
                 deleted = true;
-                // Grow the post-unmerge selection over every freed block: a merge
-                // straddling the selection edge extends past it, so the user must
-                // see all the cells the split exposed (not just the drag rect).
+                // Grow the post-unmerge selection over every freed block. A
+                // merge straddling the selection edge extends past it, and the
+                // user needs every cell the split exposed, not the drag rect.
                 r1 = r1.min(top);
                 c1 = c1.min(left);
                 r2 = r2.max(bottom);
@@ -154,15 +154,16 @@ impl TrameState {
     /// Whether grid `(row, col)` holds a non-empty string value in the CRDT.
     /// Resolves the position to its stable id pair; a virtual cell has no value.
     pub(super) fn cell_has_raw(&self, row: u32, col: u32) -> bool {
-        self.index
-            .resolve(row as usize, col as usize)
-            .and_then(|(rl, cl)| {
-                self.doc
-                    .get_map(cells_map_name(&self.active_sheet))
-                    .get(&cell_key(rl, cl))
-                    .map(|v| v.get_deep_value())
-            })
-            .is_some_and(|v| matches!(v, LoroValue::String(s) if !s.is_empty()))
+        has_raw_value(
+            self.index
+                .resolve(row as usize, col as usize)
+                .and_then(|(rl, cl)| {
+                    self.doc
+                        .get_map(cells_map_name(&self.active_sheet))
+                        .get(&cell_key(rl, cl))
+                        .map(|v| v.get_deep_value())
+                }),
+        )
     }
 
     /// Rebuild the derived merge caches ([`Self::merges`], [`Self::covered`],
@@ -171,59 +172,22 @@ impl TrameState {
     /// back to grid positions). Returns one [`TrameEvent::MergeConflictDetected`]
     /// per masked cell.
     ///
-    /// Overlapping merges are resolved deterministically: rectangles are placed
-    /// in ascending master-key order and any that intersects an already-placed
-    /// one is skipped. The order is identical on every peer (it derives only
-    /// from the stable keys), so all clients converge on the same layout without
-    /// mutating the CRDT (no corrective op, no conflict loop --
-    /// `trame-cell-merges`).
+    /// Overlap resolution is deterministic: the walk places rectangles in
+    /// ascending master-key order and skips any that intersects one already
+    /// placed. That order derives from the stable keys alone, so every peer
+    /// reaches one layout and mutates nothing -- no corrective op, no conflict
+    /// loop (`trame-cell-merges`).
     pub(super) fn rebuild_merges(&mut self) -> Vec<TrameEvent> {
         self.merges.clear();
         self.covered.clear();
         self.masked_cells.clear();
-        let LoroValue::Map(entries) = self
-            .doc
-            .get_map(merges_map_name(&self.active_sheet))
-            .get_value()
-        else {
-            return Vec::new();
-        };
-        // Collect resolvable rectangles tagged with their master key for a
-        // deterministic, peer-independent overlap precedence.
-        let mut rects: Vec<MergeRect> = entries
-            .iter()
-            .filter_map(|(master_key, value)| {
-                let LoroValue::String(extent_key) = value else {
-                    return None;
-                };
-                let (mr, mc) = parse_cell_key(master_key)?;
-                let (er, ec) = parse_cell_key(extent_key)?;
-                let top = self.index.row_pos(&mr)? as u32;
-                let left = self.index.col_pos(&mc)? as u32;
-                let bottom = self.index.row_pos(&er)? as u32;
-                let right = self.index.col_pos(&ec)? as u32;
-                Some((
-                    master_key.to_string(),
-                    (top.min(bottom), left.min(right)),
-                    (top.max(bottom), right.max(left)),
-                ))
-            })
-            .collect();
-        rects.sort_by(|a, b| a.0.cmp(&b.0));
+        let placed = self.resolved_merges(&self.active_sheet, &self.index);
 
         let mut events = Vec::new();
-        let mut occupied: HashSet<(u32, u32)> = HashSet::new();
-        for (_key, (top, left), (bottom, right)) in rects {
-            let overlaps = (top..=bottom)
-                .flat_map(|r| (left..=right).map(move |c| (r, c)))
-                .any(|cell| occupied.contains(&cell));
-            if overlaps {
-                continue;
-            }
+        for ((top, left), (bottom, right)) in placed {
             self.merges.insert((top, left), (bottom, right));
             for row in top..=bottom {
                 for col in left..=right {
-                    occupied.insert((row, col));
                     if (row, col) == (top, left) {
                         continue;
                     }
@@ -247,25 +211,30 @@ impl TrameState {
         events
     }
 
-    /// Compute the masked-cell key set for an arbitrary sheet, using `index` for
-    /// position<->id resolution. This is the masking half of
-    /// [`Self::rebuild_merges`] made sheet-parametric and side-effect-free: it
-    /// touches no active-sheet cache and emits no event. The formula engine feed
-    /// ([`Self::reseed_engine`]) uses it to exclude masked cells uniformly on
-    /// every sheet, not only the displayed one -- so a cross-sheet reference to a
-    /// masked conflicted cell reads the same value regardless of the active tab
-    /// (`trame-cell-merges`, `TRAME-020`). For the active
-    /// sheet (fed with [`Self::index`]) it returns exactly [`Self::masked_cells`].
-    pub(super) fn masked_cells_for(&self, sheet_id: &str, index: &SheetIndex) -> HashSet<String> {
-        let mut masked = HashSet::new();
+    /// The merge rectangles of `sheet_id` that survive overlap resolution, in
+    /// placement order, as `(master, bottom-right)` grid positions. The walk
+    /// takes entries in ascending master-key order and skips any rectangle
+    /// meeting one already placed. That key is stable and that order derives
+    /// from the document alone. Every peer resolves one layout, and none
+    /// mutates the CRDT -- no corrective op, no conflict loop
+    /// (`trame-cell-merges`, `TRAME-126`, `TRAME-144`).
+    ///
+    /// Sheet-parametric and side-effect-free, so both consumers -- the display
+    /// caches ([`Self::rebuild_merges`]) and the formula feed
+    /// ([`Self::masked_cells_for`]) -- read one answer instead of each deriving
+    /// its own. A second copy of this precedence would let a masked cell differ
+    /// from the block the grid draws.
+    pub(super) fn resolved_merges(
+        &self,
+        sheet_id: &str,
+        index: &SheetIndex,
+    ) -> Vec<((u32, u32), (u32, u32))> {
         let LoroValue::Map(entries) = self.doc.get_map(merges_map_name(sheet_id)).get_value()
         else {
-            return masked;
+            return Vec::new();
         };
-        let cells = self.doc.get_map(cells_map_name(sheet_id));
-        // Same deterministic, peer-independent overlap precedence as
-        // `rebuild_merges`: ascending master-key order, skip any rectangle that
-        // intersects an already-placed one.
+        // Collect resolvable rectangles tagged with their master key for a
+        // deterministic, peer-independent overlap precedence.
         let mut rects: Vec<MergeRect> = entries
             .iter()
             .filter_map(|(master_key, value)| {
@@ -287,36 +256,51 @@ impl TrameState {
             .collect();
         rects.sort_by(|a, b| a.0.cmp(&b.0));
 
+        let mut placed = Vec::with_capacity(rects.len());
         let mut occupied: HashSet<(u32, u32)> = HashSet::new();
         for (_key, (top, left), (bottom, right)) in rects {
-            let overlaps = (top..=bottom)
-                .flat_map(|r| (left..=right).map(move |c| (r, c)))
-                .any(|cell| occupied.contains(&cell));
-            if overlaps {
+            let cells = (top..=bottom).flat_map(|r| (left..=right).map(move |c| (r, c)));
+            if cells.clone().any(|cell| occupied.contains(&cell)) {
                 continue;
             }
-            for row in top..=bottom {
-                for col in left..=right {
-                    occupied.insert((row, col));
-                    if (row, col) == (top, left) {
-                        continue;
-                    }
-                    // A covered cell that still holds a value is a concurrent
-                    // conflict: mask it (keep the data, exclude it from the DAG).
-                    let Some((rl, cl)) = index.resolve(row as usize, col as usize) else {
-                        continue;
-                    };
-                    let key = cell_key(rl, cl);
-                    let has_value = cells
-                        .get(&key)
-                        .map(|v| v.get_deep_value())
-                        .is_some_and(|v| matches!(v, LoroValue::String(s) if !s.is_empty()));
-                    if has_value {
-                        masked.insert(key);
-                    }
-                }
-            }
+            occupied.extend(cells);
+            placed.push(((top, left), (bottom, right)));
         }
-        masked
+        placed
     }
+
+    /// Compute the masked-cell key set for an arbitrary sheet, using `index` for
+    /// position<->id resolution. The masking half of the merge rebuild, over the
+    /// same [`Self::resolved_merges`] the display caches read: it touches no
+    /// active-sheet cache and emits no event. The formula engine feed
+    /// ([`Self::reseed_engine`]) uses it to exclude masked cells uniformly on
+    /// every sheet, not only the displayed one -- so a cross-sheet reference to a
+    /// masked conflicted cell reads the same value regardless of the active tab
+    /// (`trame-cell-merges`, `TRAME-020`). For the active
+    /// sheet (fed with [`Self::index`]) it returns exactly [`Self::masked_cells`].
+    pub(super) fn masked_cells_for(&self, sheet_id: &str, index: &SheetIndex) -> HashSet<String> {
+        let cells = self.doc.get_map(cells_map_name(sheet_id));
+        self.resolved_merges(sheet_id, index)
+            .into_iter()
+            .flat_map(|((top, left), (bottom, right))| {
+                (top..=bottom)
+                    .flat_map(move |row| (left..=right).map(move |col| (row, col)))
+                    // The master carries the value; only what it covers is masked.
+                    .filter(move |&pos| pos != (top, left))
+            })
+            .filter_map(|(row, col)| index.resolve(row as usize, col as usize))
+            .map(|(rl, cl)| cell_key(rl, cl))
+            // A covered cell that still holds a value is a concurrent conflict:
+            // mask it (keep the data, exclude it from the DAG).
+            .filter(|key| has_raw_value(cells.get(key).map(|v| v.get_deep_value())))
+            .collect()
+    }
+}
+
+/// Whether a stored cell value counts as holding something. The one place the
+/// test lives, so the display path ([`TrameState::cell_has_raw`]) and the
+/// formula feed ([`TrameState::masked_cells_for`]) cannot disagree about which
+/// covered cell is a concurrent conflict.
+fn has_raw_value(value: Option<LoroValue>) -> bool {
+    value.is_some_and(|v| matches!(v, LoroValue::String(s) if !s.is_empty()))
 }

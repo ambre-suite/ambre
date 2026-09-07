@@ -18,19 +18,87 @@ cache that holds them and what an export does when they are missing.
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PROSE-IO-007` | The document MUST hold a picture as an address, and an export MUST resolve that address from the local cache. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-008` | An export whose pictures are not cached MUST emit a placeholder and report it; it MUST NOT block and MUST NOT fail in silence. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-052` | A picture MUST be a child of the document root: a picture inside a table cell or a list item MUST be refused. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-053` | An import carrying a picture in an illegal place MUST lift it to the nearest legal place and report it; it MUST NOT drop it. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-054` | The decoded pictures MUST be held under a cap measured in decoded bytes, and the least recently painted MUST leave first. | this spec section 3; `ambre-spec-budgets.md section 6` | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-055` | A picture whose transfer is in flight MUST NOT be evicted. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-056` | Eviction MUST NOT touch the document: the address MUST stay on the block. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-057` | A picture that is absent, undecryptable or undecodable MUST NOT be fetched again on its own; only the reader MUST be able to ask again. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-058` | A resize to a width or a height of zero MUST be refused. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-059` | A display dimension past the maximum MUST be clamped, and the clamped value MUST be what the document holds. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-046` | A picture that failed for good MUST show that it failed and offer to try again; it MUST NOT stay on the loading placeholder. | this spec section 4 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-205` | `INV` | The document MUST hold a picture as an address, never as its pixels. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-206` | `INV` | The address of a picture MUST be the content hash of the plaintext blob, so two copies of one picture resolve to one address. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-052` | `INV` | A picture MUST be a child of the document root: neither a table cell nor a list item may hold one. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-054` | `INV` | The decoded pictures MUST be held under a cap measured in decoded bytes, not in entries. | this spec section 3; `ambre-spec-budgets.md section 6` | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-207` | `INV` | A picture's resolution state MUST NOT be written into the document: it is a fact of the session alone. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-057` | `INV` | A picture that is absent, undecryptable or undecodable MUST NOT be fetched again without a reader's gesture. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-208` | `CONC` | Two peers resizing one picture at the same moment MUST converge on one display size, and both MUST hold that one. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-209` | `IO` | An alignment MUST come back from a round trip as it was written, including the two the layout does not honour. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-046` | `OBS` | A picture that failed for good MUST paint a mark distinct from the loading placeholder. | this spec section 4 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-145` | `OBS` | A picture that failed for good MUST offer the gesture that asks for it again. | this spec section 4 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-146` | `OBS` | A picture not yet resolved MUST paint a neutral placeholder carrying its alternative text. | this spec section 4 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.2 Insert a picture
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-210` | `POST` | Inserting MUST write one picture block at the named place in the tree, holding the address and the display size the command carried. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-211` | `FAIL` | An insertion naming a parent that is not the document root MUST be refused, and MUST be reported to the author. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-212` | `FRAME` | Inserting a picture MUST NOT change the text of any block, the order of the blocks around it, or the decoded cache. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.3 Resize a picture
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-058` | `FAIL` | A resize to a width or a height of zero MUST be refused. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-059` | `POST` | A display dimension past the maximum MUST be clamped to the maximum. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-213` | `POST` | The document MUST hold the clamped value, never the value the gesture asked for. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-214` | `POST` | With the aspect locked, the dimension that moved most against the stored size MUST be the one the other is derived from. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-215` | `POST` | The derived dimension MUST be taken from the decoded picture's own ratio, or from the stored size when nothing is decoded yet. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-216` | `FRAME` | A resize MUST NOT change the picture's address, its alignment, its alternative text or its caption. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.4 Align a picture
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-217` | `POST` | Aligning MUST store the alignment the command named, whether or not the layout honours it. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-218` | `FRAME` | Aligning MUST NOT change the picture's display size, its address, or the text around it. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.5 Put text on a picture
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-219` | `POST` | The text such a command carries MUST be stored on the field it names, on that block alone. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-220` | `FRAME` | Setting the alternative text or the caption MUST NOT change the picture's address, its display size or its alignment. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.6 Ask for a failed picture again
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-221` | `POST` | Asking again MUST put the entry back to the unasked state and issue the download once more. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-222` | `FRAME` | Asking again MUST NOT write to the document, and MUST NOT touch the resolution state of another address. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.7 Evict a decoded picture
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-223` | `POST` | Eviction MUST take the least recently painted entries first, and MUST stop as soon as the total fits the cap. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-224` | `POST` | Eviction MUST leave one entry standing, even when that entry alone is over the cap. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-055` | `FRAME` | A picture whose transfer is in flight MUST NOT be evicted. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-056` | `FRAME` | Eviction MUST NOT touch the document: the address MUST stay on the block. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.8 Export a document holding pictures
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-IO-007` | `POST` | An export MUST take a picture's pixels from the local cache. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-008` | `POST` | A picture the cache does not hold MUST become a placeholder in the file and a line in the report. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-040` | `POST` | An export MUST finish without waiting on a transfer, whatever is missing. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-041` | `FRAME` | An export MUST NOT issue a fetch, and MUST NOT write to the document it reads. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.9 Import a file carrying a picture
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-FEAT-053` | `POST` | An import carrying a picture in an illegal place MUST put it at the nearest legal ancestor, never drop it. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-225` | `POST` | The conversion report MUST carry every picture the import lifted. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-226` | `FRAME` | Lifting a picture MUST NOT change its address, its display size, its alternative text or its caption. | this spec section 3 | not built -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the PDF export of a hundred pages with pictures, one row of
   `ambre-spec-budgets.md section 1`, whose second figure is the blob fetches this document
@@ -40,11 +108,13 @@ status values are normative in `ambre-spec-template.md`.
   document itself: the picture blobs. The Logic thread makes no network call and holds no key
   (`PROSE-025`), the Sync worker seals every blob before it leaves, and the document carries an
   address rather than pixels, so nothing here reaches a service that could read one.
-* **Verification.** 11 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+* **Verification.** 37 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
   `PROSE-FEAT-056` is the row a reviewer can hold without a test, because eviction touching the
-  document would be a write in a cache the crate keeps per session. `PROSE-FEAT-054` and `-055` are
-  the two a test reaches with no network, from the cache alone, and Toile holds the same pair with
-  `TOILE-IO-007`.
+  document would be a write in a cache the crate keeps per session. `PROSE-FEAT-054`, `-055`,
+  `-223` and `-224` are the four a test reaches with no network, from the cache alone, and Toile
+  holds the same pair with `TOILE-IO-007`. The eleven frame conditions are what a resize and an
+  eviction cost: each names a field the gesture is not allowed to reach, and no single assertion
+  covers one.
 
 ---
 
@@ -55,10 +125,10 @@ the last column names the row each row rests on.
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| inserts a picture | watches | one address, one display size | Alice sees her picture; Bob sees a placeholder until his own fetch lands | none -- `PROSE-IO-007` |
-| resizes a picture | resizes the same picture at the same moment | one size, the later of the two | the same size on both screens | none -- `PROSE-FEAT-059` |
+| inserts a picture | watches | one address, one display size | Alice sees her picture; Bob sees a placeholder until his own fetch lands | none -- `PROSE-FEAT-205`, `PROSE-UI-146` |
+| resizes a picture | resizes the same picture at the same moment | one size, the later of the two | the same size on both screens | none -- `PROSE-FEAT-208` |
 | scrolls past many pictures and back | -- | every address, unchanged | the pictures again, refetched where the cache dropped them | none -- `PROSE-FEAT-056` |
-| opens a document whose picture the server no longer has | watches | the address | a broken picture and an offer to try again, on both screens | none -- `PROSE-UI-046` |
+| opens a document whose picture the server no longer has | watches | the address | a broken picture and an offer to try again, on both screens | none -- `PROSE-UI-046`, `PROSE-UI-145` |
 | exports to PDF before a picture has arrived | -- | the address | a placeholder in the file, and a line in the report | none -- `PROSE-IO-008` |
 | pastes a picture inside a table cell | -- | the picture, above or below the table | the picture out of the cell, and a line in the report | none -- `PROSE-FEAT-053` |
 
@@ -195,24 +265,25 @@ the loading placeholder for ever (`PROSE-UI-046`).
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The document holds an address, never pixels | a document is synchronized on every keystroke and a picture is megabytes: embedding it would put those megabytes on the delta path, in the history, and in every peer's copy of the document whether they look at the picture or not. An address is 32 bytes and deduplicates two copies of one picture for free | embedding the bytes in the block, which makes the document grow with the pictures and the history grow with the edits to them |
-| The address is the content hash of the plaintext | two identical pictures then resolve to one blob without anything having to notice they are the same, and the address is verifiable against what came back | a minted identifier, which stores the same picture twice and lets an address point at bytes that are not the ones it named |
-| The Logic thread never fetches | the fetch needs the presigned URL and the document key, and the boundary that keeps those in the Sync worker is the one `PROSE-025` states. Asking through a command keeps the Logic thread a pure function of what it is given | fetching from the Logic thread, which puts network and crypto into the crate the whole application's rules say holds neither |
-| The cache is capped by decoded bytes | a decoded picture is its pixels, and an entry count says nothing about them: ten thumbnails and ten photographs are the same count and two orders of magnitude apart. The pillar is a memory figure, so the cap has to be one | a cap on the number of entries, which is a memory figure only when every picture is the same size |
-| Eviction frees the decoding and never the document | the address is the fact and the pixels are a view of it, so dropping the pixels costs a refetch and nothing else. Writing to the document to free memory would put a local memory decision on the synchronization path | clearing the address, which turns a local eviction into a remote deletion of the picture |
-| An entry in flight is never evicted | its bytes have not arrived, so evicting it frees nothing and cancels work already paid for. It is also the entry the reader is most likely waiting on (`PROSE-FEAT-055`) | evicting by recency alone, which drops the picture that is loading in favour of one already on screen |
-| A terminal failure is not retried on its own | a picture the server does not have, or that does not decrypt, answers the same on every attempt: retrying spends requests to learn nothing, and hides the failure behind a spinner. Asking the reader turns it into one visible state with one gesture out of it | retrying on a timer, which never ends for a blob that was garbage-collected and never tells the reader why |
-| A failure shows a distinct mark, not the loading placeholder | the two mean opposite things -- one is waiting, the other is over -- and one glyph for both makes every failure look like a slow network for ever (`PROSE-UI-046`) | keeping the neutral placeholder, which is what a reader stares at with no way to know it will never resolve |
-| A zero dimension is refused and a large one is clamped | zero has no correct interpretation, so refusing is the honest answer. A number too large has one, the largest the layout can carry, so clamping keeps the gesture working instead of failing it | clamping the zero too, which invents a size the author never asked for; or refusing the large one, which fails a drag rather than stopping it |
-| The clamped value is what is stored | the document then says what the reader sees, and every later reader agrees with it. Storing the request and clamping at paint time makes two builds with different maxima disagree about one document | storing the requested size and clamping when painting, which leaves the document holding a size nothing renders |
-| Wrapped text is laid out as a block | the shaper offers no exclusion zones, so a wrap would be an approximation that puts glyphs under the picture. A block is visibly not the wrap the author asked for, and it is never wrong | shipping an approximation, which is wrong in a way the author has to fix by hand on every page |
-| A picture sits at the root alone | a picture inside a cell or a list item multiplies the layout cases -- a cell that must grow, an ordinal beside a box -- for a document shape the MVP does not need. Refusing it once keeps every measurement rule about text | allowing it everywhere, which makes the pagination cases and the merge cases grow together |
-| An illegal import is lifted, never dropped | a file the reader opens is not a command they typed: refusing part of it silently loses their content. Lifting keeps the picture and the report says where it went (`PROSE-FEAT-053`) | dropping the node with a warning, which loses content the author still has in the source file and cannot see is gone |
-| An export placeholder never blocks the export | an export is a gesture with an end, and waiting on a network fetch inside it turns a five-second action into an unbounded one. The report is what carries the loss (`PROSE-IO-008`) | fetching the missing blobs inside the export, which makes an offline export hang instead of finishing |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The document holds an address, never pixels | embedding the bytes in the block | it makes the document grow with the pictures and the history grow with the edits to them. A document is synchronized on every keystroke and a picture is megabytes: embedding it would put those megabytes on the delta path, in the history, and in every peer's copy whether they look at the picture or not. An address is 32 bytes and deduplicates two copies of one picture for free |
+| The address is the content hash of the plaintext | a minted identifier | it stores the same picture twice and lets an address point at bytes that are not the ones it named. Two identical pictures then resolve to one blob without anything having to notice they are the same, and the address is verifiable against what came back |
+| The Logic thread never fetches | fetching from the Logic thread | it puts network and crypto into the crate the whole application's rules say holds neither. The fetch needs the presigned URL and the document key, and the boundary that keeps those in the Sync worker is the one `PROSE-025` states; asking through a command keeps the Logic thread a pure function of what it is given |
+| The cache is capped by decoded bytes | a cap on the number of entries | it is a memory figure only when every picture is the same size. A decoded picture is its pixels, and an entry count says nothing about them: ten thumbnails and ten photographs are the same count and two orders of magnitude apart, so the cap has to be the memory figure the pillar names |
+| Eviction frees the decoding and never the document | clearing the address | it turns a local eviction into a remote deletion of the picture. The address is the fact and the pixels are a view of it, so dropping the pixels costs a refetch and nothing else; writing to the document to free memory would put a local memory decision on the synchronization path |
+| An entry in flight is never evicted | evicting by recency alone | it drops the picture that is loading in favour of one already on screen. The in-flight entry's bytes have not arrived, so evicting it frees nothing and cancels work already paid for; it is also the entry the reader is most likely waiting on (`PROSE-FEAT-055`) |
+| A terminal failure is not retried on its own | retrying on a timer | it never ends for a blob that was garbage-collected, and never tells the reader why. A picture the server does not have, or that does not decrypt, answers the same on every attempt: retrying spends requests to learn nothing and hides the failure behind a spinner, while asking the reader turns it into one visible state with one gesture out of it |
+| A failure shows a distinct mark, not the loading placeholder | keeping the neutral placeholder | it is what a reader stares at with no way to know it will never resolve. The two mean opposite things -- one is waiting, the other is over -- and one glyph for both makes every failure look like a slow network for ever (`PROSE-UI-046`) |
+| A zero dimension is refused and a large one is clamped | clamping the zero too | it invents a size the author never asked for. Zero has no correct interpretation, so refusing is the honest answer |
+| A zero dimension is refused and a large one is clamped | refusing the large one | it fails a drag rather than stopping it. A number too large has one interpretation, the largest the layout can carry, so clamping keeps the gesture working |
+| The clamped value is what is stored | storing the requested size and clamping when painting | it leaves the document holding a size nothing renders, and makes two builds with different maxima disagree about one document. Storing the clamped value makes the document say what the reader sees, so every later reader agrees with it |
+| Wrapped text is laid out as a block | shipping an approximation of the wrap | it is wrong in a way the author has to fix by hand on every page. The shaper offers no exclusion zones, so a wrap would be an approximation that puts glyphs under the picture; a block is visibly not the wrap the author asked for, and it is never wrong |
+| A picture sits at the root alone | allowing it everywhere | it makes the pagination cases and the merge cases grow together. A picture inside a cell or a list item multiplies the layout cases -- a cell that must grow, an ordinal beside a box -- for a document shape the MVP does not need, and refusing it once keeps every measurement rule about text |
+| An illegal import is lifted, never dropped | dropping the node with a warning | it loses content the author still has in the source file and cannot see is gone. A file the reader opens is not a command they typed, so refusing part of it in silence loses their content; lifting keeps the picture and the report says where it went (`PROSE-FEAT-053`) |
+| An export placeholder never blocks the export | fetching the missing blobs inside the export | it makes an offline export hang instead of finishing. An export is a gesture with an end, and waiting on a network fetch inside it turns a five-second action into an unbounded one; the report is what carries the loss (`PROSE-IO-008`) |
 
 ---
 
@@ -223,6 +294,12 @@ the loading placeholder for ever (`PROSE-UI-046`).
   uploads it. `features/ambre-spec-prose-import-export.md section 3` reads the local cache and
   nothing fills it, and no Prose rule says who uploads a blob or what the reader sees while it
   runs.
+* **Nothing says whether a paste follows the refusal or the lift.** Section 2 pastes a picture
+  into a table cell and expects it beside the table. `PROSE-FEAT-053` rules on an import and
+  `PROSE-FEAT-211` refuses an insertion; a paste is named by neither, and the two answers differ.
+* **Two blocks holding one address are not ruled on.** The resolution state is the address's and
+  `RetryImageLoad` names a block, so nothing says whether one retry, one failure mark and one
+  eviction reach the second block or leave it as it was.
 * **The retry has no answer for the reader.** `RetryImageLoad` asks again and nothing says what the
   view shows while it runs, nor what it shows when the second attempt fails the same way.
 * **Nothing bounds the source picture.** The display size is clamped and the decoded cache is

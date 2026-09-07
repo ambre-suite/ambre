@@ -14,27 +14,73 @@
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PROSE-UI-004` | Keystrokes MUST be displayed optimistically from a local draft, never by mutating shared state on the UI side. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-005` | The draft MUST be discarded when the confirming event arrives, and MUST NOT survive a divergence between what was typed and what the document accepted. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-027` | An event carrying no change MUST leave the draft untouched: a download or a presence update MUST NOT erase what is being typed. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-028` | A remote change MUST shift the pending draft by what it applied before the draft position, and MUST drop the draft only when the paragraph it sits in is deleted. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-029` | While a composition is open the view MUST send no text to the document; the composed text MUST reach it once, when the composition ends, at the position the draft holds then. | this spec section 3 | not built -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-030` | An edit that inserts or splits MUST delete the active selection first, through the one primitive both paths share. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-037` | A deletion spanning two paragraphs MUST keep the first one's identity and paragraph style, append what survives of the last to it, and remove every paragraph it emptied. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-038` | Splitting a paragraph MUST give the new one the source's type and paragraph style, and MUST leave the caret at its start. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-039` | Joining two paragraphs MUST be expressed as the deletion above with an empty range; a second join operation MUST NOT exist. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-004` | `INV` | The view MUST NOT mutate shared state: what was typed and not yet confirmed MUST live in a draft held apart from the document, and every mutation MUST leave as a command. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-134` | `OBS` | The text a draft holds MUST be drawn under the caret over the confirmed runs, before the document has answered. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-135` | `INV` | A draft MUST hold text and an anchor and no structure: it MUST NOT be able to express a split, a deletion or a mark. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-137` | `INV` | One primitive MUST delete the active selection, and a second one MUST NOT exist per editing path. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-039` | `INV` | Joining two paragraphs MUST be expressed as the deletion below with an empty range; a second join operation MUST NOT exist. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+
+### 1.2 Type a run of text
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-136` | `POST` | The text MUST be appended to the draft at its anchor, and one insertion command MUST leave carrying the same text at the same position. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-138` | `POST` | The draft MUST re-anchor only when it moves to another block, so consecutive keystrokes in one block MUST accumulate in one draft. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-139` | `FRAME` | Typing MUST NOT change the structure of the document, the paragraph's settings, or the marks the run lands beside. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.3 Take the active selection
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-030` | `POST` | An edit that inserts or splits MUST delete the active selection first, and the caret MUST collapse to the start of the range it deleted. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-140` | `FRAME` | Taking the selection MUST emit the deletion alone: the insertion or the split that follows MUST be the caller's, and MUST reach the document after it. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.4 Delete across a paragraph boundary
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-037` | `POST` | What survives of the last paragraph MUST be appended to the first, and every paragraph the deletion emptied MUST be removed. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-041` | `FRAME` | The deletion MUST NOT change the identity of the first paragraph or its paragraph style, whichever of the two the caret started in. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+
+### 1.5 Split a paragraph
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-038` | `POST` | The new paragraph MUST carry the source's type and paragraph style. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-141` | `POST` | The caret MUST be left at the start of the new paragraph. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-042` | `FRAME` | The split MUST NOT change the text the two paragraphs carry between them, or the identity of the source paragraph. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+
+### 1.6 Compose with an input method
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-029` | `POST` | The composed text MUST reach the document once, when the composition ends, at the position the draft holds then. | this spec section 3 | not built -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-142` | `FRAME` | While a composition is open the view MUST send no text to the document: a preview MUST reach the canvas and nothing else. | this spec section 3 | not built -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.7 Take in a document event
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-005` | `POST` | An event confirming the anchored block MUST discard the draft: its text is then in the confirmed runs. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-028` | `POST` | A remote change MUST shift the pending draft by what it applied at or before the draft position. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-143` | `POST` | The draft MUST be dropped only when the block it is anchored in is deleted, and the caret MUST then collapse to the nearest confirmed position. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-027` | `FRAME` | An event carrying no change MUST leave the draft untouched: a download or a presence update MUST NOT erase what is being typed. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the keystroke to a local echo and the keystroke to a confirmed one, two rows of
   `ambre-spec-budgets.md section 1`. The first is what the draft exists to hold.
 * **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path, and every mutation leaves as a command (`PROSE-UI-002`,
   `features/ambre-spec-prose-engine.md section 1`).
-* **Verification.** 9 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-039` is the row a reviewer can hold before a test exists, because a second join primitive
-  is a second command variant. The three draft rows are pure state machine over one struct, which
-  is the shape a property test reaches directly.
+* **Verification.** 21 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+  `PROSE-039` and `PROSE-UI-137` are the two a reviewer holds before a test exists, because a
+  second primitive is a second declaration. The four rows of section 1.7 are a pure state machine
+  over one struct, which is the shape a property test reaches directly; `PROSE-UI-134` is the one
+  row of this document that needs a page drawn, so it waits on the renderer rather than on the
+  engine.
 
 ---
 
@@ -44,13 +90,13 @@ Two peers in one paragraph. No test resolves yet: the last column names the row 
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| types `hello` fast | -- | the five characters, one command each | the text under the caret at once, before the round trip | none -- `PROSE-UI-004` |
+| types `hello` fast | -- | the five characters, one command each | the text under the caret at once, before the round trip | none -- `PROSE-UI-134` |
 | is mid-word when Bob's change arrives | inserts a word earlier in the same paragraph | both edits, in arrival order | Alice's pending letters, shifted past Bob's word, still under her caret | none -- `PROSE-UI-028` |
-| is mid-word | deletes the paragraph she is typing in | Bob's deletion | Alice's draft dropped, her caret at the nearest surviving position | none -- `PROSE-UI-028` |
-| is composing with an input method | inserts a word earlier | Bob's word alone, until the composition ends | Alice's preview unbroken; the committed text lands where her caret now is | none -- `PROSE-UI-029` |
+| is mid-word | deletes the paragraph she is typing in | Bob's deletion | Alice's draft dropped, her caret at the nearest surviving position | none -- `PROSE-UI-143` |
+| is composing with an input method | inserts a word earlier | Bob's word alone, until the composition ends | Alice's preview unbroken; the committed text lands where her caret now is | none -- `PROSE-UI-029`, `PROSE-UI-142` |
 | selects a sentence and types over it | -- | the deletion, then the insertion, in that order | the sentence replaced | none -- `PROSE-UI-030` |
-| presses Backspace at the start of a paragraph | -- | one deletion spanning the boundary | the two paragraphs joined, keeping the first one's style | none -- `PROSE-037`, `PROSE-039` |
-| presses Enter mid-paragraph | -- | a new sibling paragraph after the source | the tail on a new line, the caret at its start | none -- `PROSE-038` |
+| presses Backspace at the start of a paragraph | -- | one deletion spanning the boundary | the two paragraphs joined, keeping the first one's style | none -- `PROSE-039`, `PROSE-041` |
+| presses Enter mid-paragraph | -- | a new sibling paragraph after the source | the tail on a new line, the caret at its start | none -- `PROSE-038`, `PROSE-UI-141` |
 
 ---
 
@@ -60,7 +106,8 @@ Two peers in one paragraph. No test resolves yet: the last column names the row 
 in `ambre-spec-prose-schema.md section 3`.
 
 **The draft** (`ambre-prose`, UI thread). What was typed and not yet confirmed, held apart from the
-document rather than written into a second copy of it:
+document rather than written into a second copy of it. It carries text and an anchor and no
+structure (`PROSE-UI-135`):
 
 ```rust
 pub struct DraftBuffer {
@@ -75,7 +122,7 @@ pub struct DraftBuffer {
 impl DraftBuffer {
     pub fn is_empty(&self) -> bool;
     /// Append committed text. Re-anchors only when the draft moves to another block, so
-    /// consecutive keystrokes in one block accumulate.
+    /// consecutive keystrokes in one block accumulate (`PROSE-UI-138`).
     pub fn push_str(&mut self, text: &str, block_id: &TreeID, pos: u32);
     pub fn begin_composition(&mut self, block_id: TreeID, pos: u32);
     /// Replace the preview text. Canvas only: no command leaves (`PROSE-UI-029`).
@@ -85,7 +132,8 @@ impl DraftBuffer {
     pub fn end_composition(&mut self) -> (TreeID, u32);
     pub fn clear(&mut self);
     /// Carry the draft over a remote change: `shift` is the net offset change applied at or
-    /// before `insert_pos`. Answers `false` when the anchored block is gone (`PROSE-UI-028`).
+    /// before `insert_pos` (`PROSE-UI-028`). Answers `false` when the anchored block is gone
+    /// (`PROSE-UI-143`).
     pub fn reanchor(&mut self, block_still_alive: bool, shift: i64) -> bool;
 }
 ```
@@ -98,15 +146,15 @@ carries. Anything else erases keystrokes the user is still typing.
 | carries no delta -- a media download, presence, any content-free event | untouched (`PROSE-UI-027`) |
 | confirms the anchored block: the local edit came back | cleared, the text is in the confirmed runs (`PROSE-UI-005`) |
 | touches other blocks, or this one from another peer | reanchored over the applied shift (`PROSE-UI-028`) |
-| deleted the anchored block | dropped, the caret collapses to the confirmed position |
+| deleted the anchored block | dropped, the caret collapses to the confirmed position (`PROSE-UI-143`) |
 
 **The input path.** Printable text is never matched key by key. The shared transparent text field
 owns editing focus and normalizes the DOM events (`ambre-spec-text-input.md`); the view
 receives them as input events and answers whether the host must swallow the key.
 
 1. The host normalizes a key or a text input and dispatches it to the view.
-2. A text input pushes to the draft (`PROSE-UI-004`) and emits the insertion command.
-3. A composition draws in the draft alone until it ends (`PROSE-UI-029`).
+2. A text input pushes to the draft and emits the insertion command (`PROSE-UI-136`).
+3. A composition draws in the draft alone until it ends (`PROSE-UI-142`).
 4. Any of the four mutating paths -- typing, Backspace, Delete, Enter -- takes the selection
    first (`PROSE-UI-030`).
 5. The caret advances locally, and is revealed (`features/ambre-spec-prose-selection.md`).
@@ -124,6 +172,8 @@ pub fn handle_composition(phase: CompositionPhase, text: &str, state: &mut Prose
                           to_logic: &flume::Sender<LogicCommand>);
 /// Delete the active selection and collapse the caret to its start. True when one was
 /// consumed; callers that then insert or split act at the collapsed caret (`PROSE-UI-030`).
+/// The one primitive of the four editing paths (`PROSE-UI-137`), and it emits the deletion
+/// alone (`PROSE-UI-140`).
 fn take_selection(state: &mut ProseUiState, to_logic: &flume::Sender<LogicCommand>) -> bool;
 ```
 
@@ -140,10 +190,12 @@ The channel keeps the order it was sent in, so the deletion of a selection alway
 the insertion that replaced it. Whether the two are one undo item is undecided
 (`features/ambre-spec-prose-undo.md section 4`).
 
-**The join, in one primitive.** A deletion across paragraphs keeps the head block, appends the
-tail's surviving suffix to it and removes what it emptied (`PROSE-037`). Backspace at offset zero
+**The join, in one primitive.** A deletion across paragraphs keeps the head block
+(`PROSE-041`), appends the tail's surviving suffix to it and removes what it emptied
+(`PROSE-037`). Backspace at offset zero
 is that deletion with both endpoints at the boundary, so a merge and a cross-paragraph delete are
-one code path and one convergence case (`PROSE-039`). Splitting is its inverse (`PROSE-038`).
+one code path and one convergence case (`PROSE-039`). Splitting is its inverse (`PROSE-038`,
+`PROSE-042`), and it leaves the caret on the new paragraph (`PROSE-UI-141`).
 
 **Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
 
@@ -165,18 +217,18 @@ toolbar and the slash command.
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| A local draft absorbs the round trip | the confirmation costs one to three milliseconds, which is invisible on one keystroke and visible on a fast typist. Drawing the letters immediately keeps the echo under the budget without a second model of the document: the draft holds text, not structure, and it is thrown away the moment the document answers | waiting for the confirmation before drawing, which puts the round trip inside every keystroke |
-| Only a confirming change clears the draft | the draft is cleared by whatever arrives next, and what arrives next is often unrelated -- an image finishing its download, a peer's cursor. Each of those would wipe in-progress keystrokes, and the user has no way to tell it happened | clearing on any document event, which is the version that loses text |
-| A remote change shifts the draft rather than dropping it | the common case of collaboration is two authors in different paragraphs, and the second most common is two in the same one. Both are survivable by moving the anchor over the applied shift; dropping is right only when the paragraph itself is gone | dropping the draft on any remote change, which makes typing feel broken whenever somebody else is present |
-| No command leaves during a composition | an input method emits a preview per keystroke and only the last one is the word. Sending each preview would put a dozen operations in the document and in every peer's history for one word | emitting on each composition update, which turns one word into a dozen convergence cases |
-| One primitive deletes the selection | typing over a selection and pressing Delete on it are the same operation with a different follow-up. Written twice they drift, and the second copy is the one that forgets a corner case | a delete inside each of the four editing paths |
-| A join is a deletion with an empty range | a join is what a cross-paragraph deletion already does at its boundary, so a separate command would be a second implementation of the same merge, tested apart and converging apart | a dedicated merge command, which needs its own convergence proof for a case the deletion already covers |
-| The page is not an editable DOM element | letting the browser edit the text gives away every decision this application has to make: what a paragraph is, where it breaks, which page it is on. The behaviour also differs per browser and per input method, so the same document edits differently in two of them | a content-editable page, whose layout and composition behaviour cannot be controlled and cannot be paginated |
-| The transparent text field owns focus and the input method | the browser gives composition, dictation and mobile keyboards to a focused editable element and to nothing else. A canvas cannot receive them at all, so the field is not an extra layer but the only way in | reading key events off the canvas, which loses every input method and every mobile keyboard |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| A local draft absorbs the round trip | waiting for the confirmation before drawing | it puts the round trip inside every keystroke. The confirmation costs one to three milliseconds, invisible on one keystroke and visible on a fast typist, and the draft holds text rather than structure, so it buys the echo budget without a second model of the document |
+| Only a confirming change clears the draft | clearing on any document event | it is the version that loses text: what arrives next is often unrelated -- an image finishing its download, a peer's cursor -- and each would wipe in-progress keystrokes with no way for the user to tell it happened |
+| A remote change shifts the draft rather than dropping it | dropping the draft on any remote change | it makes typing feel broken whenever somebody else is present. Two authors in different paragraphs, and two in the same one, are the two common cases and both survive a shift of the anchor; dropping is right only when the paragraph itself is gone |
+| No command leaves during a composition | emitting on each composition update | it turns one word into a dozen convergence cases. An input method emits a preview per keystroke and only the last one is the word, so each preview would sit in the document and in every peer's history |
+| One primitive deletes the selection | a delete inside each of the four editing paths | typing over a selection and pressing Delete on it are the same operation with a different follow-up. Written four times they drift, and the copies are what forget a corner case |
+| A join is a deletion with an empty range | a dedicated merge command | it needs its own convergence proof for a case the deletion already covers. A join is what a cross-paragraph deletion does at its boundary, so the command is a second implementation of the same merge, tested apart and converging apart |
+| The page is not an editable DOM element | a content-editable page | its layout and composition behaviour cannot be controlled and cannot be paginated. Letting the browser edit the text gives away what a paragraph is, where it breaks and which page it is on, and the behaviour differs per browser and per input method, so the same document edits differently in two of them |
+| The transparent text field owns focus and the input method | reading key events off the canvas | it loses every input method and every mobile keyboard. The browser gives composition, dictation and mobile keyboards to a focused editable element and to nothing else, so the field is not an extra layer but the only way in |
 
 ---
 
@@ -193,8 +245,13 @@ toolbar and the slash command.
   thread grows the string without bound, and no rule caps it or says what happens when the
   confirmation never comes.
 * **Nothing rules on an insertion refused by the document.** The engine can reject a command;
-  no rule says what the draft does when the confirmation that arrives contradicts it, which is
-  the divergence half of `PROSE-UI-005`.
+  no rule says what the draft does when the confirmation that arrives contradicts what was typed.
+  `PROSE-UI-005` rules on the confirming event alone, and section 1.7 has no `FAIL` row because
+  no event reports a refusal.
+* **Nothing rules on what a split does to a mark it cuts.** `PROSE-038` carries the type and the
+  paragraph style to the new paragraph, and says nothing of an inline mark, a comment or a
+  footnote anchored across the point the paragraph parts. `PROSE-042` holds the text and leaves
+  the marks over it unruled.
 * **A protected range is designed and unbuilt, and its limit is the design.** The deferred design
   marks a range with the peers allowed to write it and has the dispatcher refuse a mutation from
   anyone else. The mark key is in no registry (`ambre-spec-prose-schema.md section 3`), and the

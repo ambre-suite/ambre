@@ -17,21 +17,37 @@ carry belongs to another feature. There is no two-peer table, because no collabo
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TRAME-UI-043` | A column MUST be labelled by the spreadsheet convention: A to Z, then AA. | this spec section 3 | `ambre_trame::render::tests::col_label_matches_spreadsheet_convention` | verified |
-| `TRAME-UI-044` | A point in a strip MUST resolve to exactly one gesture. | this spec section 3 | `ambre_trame::ui::grid::tests::group1::header_hit_resolves_zones`, `::header_boundary_splits_insert_and_resize`, `::axis_pointer_resolution_follows_variable_metrics` | verified |
-| `TRAME-UI-045` | The header of the active row and of the active column MUST be marked. | this spec section 3 | `ambre_trame::render::tests::col_headers_draw_bg_separator_and_active_tint`, `::row_headers_skip_tint_when_inactive` | verified |
-| `TRAME-UI-046` | A header under the pointer MUST be marked as reachable, unless it already carries the active mark. | this spec section 3 | `ambre_trame::render::tests::col_headers_draw_hover_tint`, `::col_headers_skip_hover_tint_on_active_column`, `::row_headers_draw_hover_tint`, `::row_headers_draw_corner_hover_tint` | verified |
-| `TRAME-UI-047` | A whole-axis selection MUST be visible in the strip, since no rectangle bounds it on screen. | this spec section 3 | none. The band tint is drawn in `ui/renderer/overlay.rs` and no recording asserts it, though the band itself is covered (`TRAME-UI-033`) | unverified |
-| `TRAME-UI-048` | The inline insert MUST insert at the boundary its affordance sits on. | this spec section 3 | none. The affordance resolves to the right boundary (`TRAME-UI-044`), and nothing drives the click through to the insert it fires | unverified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-043` | `OBS` | A column MUST be labelled by the spreadsheet convention: A to Z, then AA. | this spec section 3 | `ambre_trame::render::tests::col_label_matches_spreadsheet_convention`, over the two carries and the three-letter case | verified |
+| `TRAME-UI-121` | `OBS` | A row MUST be labelled by its one-based number. | this spec section 3 | none. The label is formatted inline in `render/headers.rs` and no recording reads a row header's text, so the strip could number from zero and nothing would fail. The column half had a rule and a test; this half had neither | unverified |
+| `TRAME-UI-044` | `INV` | A point in a strip MUST resolve to exactly one gesture. | this spec section 3 | `ambre_trame::ui::grid::tests::group1::header_hit_resolves_zones`, `::header_boundary_splits_insert_and_resize`, `::axis_pointer_resolution_follows_variable_metrics` | verified |
+| `TRAME-UI-045` | `OBS` | The header of the active column MUST be marked. | this spec section 3 | `ambre_trame::render::tests::col_headers_draw_bg_separator_and_active_tint` asserts the active tint on the column strip | verified |
+| `TRAME-UI-122` | `OBS` | The header of the active row MUST be marked. | this spec section 3 | none. The four calls into the row strip all pass no active row, so `::row_headers_skip_tint_when_inactive` proves the absence and nothing proves the presence: a row strip that never tinted would pass every test. It is the half `TRAME-UI-045` was carrying | unverified |
+| `TRAME-UI-046` | `OBS` | A header under the pointer MUST be marked as reachable, unless it already carries the active mark. | this spec section 3 | `ambre_trame::render::tests::col_headers_draw_hover_tint`, `::row_headers_draw_hover_tint`, `::row_headers_draw_corner_hover_tint` cover the mark on both strips and the corner; `::col_headers_skip_hover_tint_on_active_column` covers the exception on the column strip alone | verified |
+| `TRAME-UI-047` | `OBS` | A whole-axis selection MUST be visible in the strip, since no rectangle bounds it on screen. | this spec section 3 | none. The band tint is drawn in `ui/renderer/overlay.rs` and no recording asserts it, though the band itself is covered (`TRAME-UI-033`) | unverified |
+
+### 1.2 Insert from a boundary
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-048` | `POST` | The inline insert MUST insert at the boundary its affordance sits on. | this spec section 3 | none. The affordance resolves to the right boundary (`TRAME-UI-044`), and nothing drives the click through to the insert it fires. The intent also leaves the UI thread as a lossy send (`ui/view/interact.rs`), the one class the bus allows to drop (`ambre-spec-message-bus.md section 2`), while every other document mutation of this crate is sent lossless | unverified |
+| `TRAME-UI-123` | `FRAME` | An insert fired from a boundary MUST NOT change the size of either axis that boundary separates. | this spec section 4; derived | none. The insert and the resize are armed from the same four pixels, split by the half of the band the point falls in, and `::header_boundary_splits_insert_and_resize` covers the split alone: no test fires an insert and reads the widths back | unverified |
 
 * **Budget.** none of its own: the strips paint from the same viewport slice the grid does, inside
   the frame phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the strips are view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path.
-* **Verification.** 4 `verified`, 2 `unverified`. What the strips reach is specified where it
-  lives: a band selection in `features/ambre-spec-trame-selection.md` (`TRAME-UI-033`), a size in
+* **Verification.** 4 `verified`, 5 `unverified`. Two rows were counted for a span they did not
+  hold. `TRAME-UI-045` claimed both strips and only the column strip is asserted: every call into
+  the row strip passes no active row, so the one row test proves the tint is absent when it should
+  be and nothing proves it is there when it should be. The labels were the same asymmetry: the
+  column convention has a rule and a test, and the row number had neither. The insert stays the
+  weakest gesture here -- untested end to end, sharing its pixels with the resize, and sent on the
+  droppable class of the bus. What the strips reach is specified where it lives: a band selection
+  in `features/ambre-spec-trame-selection.md` (`TRAME-UI-033`), a size in
   `features/ambre-spec-trame-resize.md`, the move a reorder emits in
   `features/ambre-spec-trame-rows-and-columns.md` (`TRAME-083`), and the filter buttons of the
   first row in `features/ambre-spec-trame-shared-filter.md` (`TRAME-FEAT-027`).
@@ -83,8 +99,8 @@ insert_hint: Option<HeaderHit>,    // the boundary whose insert affordance is sh
 |---|---|
 | the strips | fixed bands, above and left of the grid, that the scroll never moves (`TRAME-UI-013`) |
 | a column label | A to Z, then AA, from its position (`TRAME-UI-043`) |
-| a row label | its one-based number |
-| the active row and column | a tinted header (`TRAME-UI-045`) |
+| a row label | its one-based number (`TRAME-UI-121`) |
+| the active column and the active row | a tinted header (`TRAME-UI-045`, `TRAME-UI-122`) |
 | a header under the pointer | a lighter tint, dropped when that header is the active one (`TRAME-UI-046`) |
 | a whole-axis selection | an opaque tint over the whole band, plus a fill over the grid body (`TRAME-UI-047`) |
 | a hovered boundary | a small plus, and a cursor naming the axis a drag would move |
@@ -101,25 +117,28 @@ insert_hint: Option<HeaderHit>,    // the boundary whose insert affordance is sh
 | a header body with `Shift`, on a band of the same axis | extends the band |
 | the corner | takes every column as one band |
 | a boundary band, lower half | arms a resize |
-| a boundary band, upper half | inserts a column left of it, or a row above it, through the intent the context menu already uses (`TRAME-UI-048`) |
+| a boundary band, upper half | inserts a column left of it, or a row above it, through the intent the context menu already uses (`TRAME-UI-048`), and sizes nothing (`TRAME-UI-123`) |
 | a boundary band, double-click | sizes that column or row to its content (`TRAME-UI-042`) |
 | the right button, anywhere in a strip | the context menu, scoped to that axis: the structural and sort entries, without the cell entries (`features/ambre-spec-trame-context-menu.md section 3`) |
 
 An insert from the strip carries no coordinates: the tracked active cell is moved onto the target
 axis first, and the intent the menu sends is fired unchanged, so one path resolves the position.
+That intent is sent on the droppable class of the bus, and the selection moves either way, which is
+the state `BUS-018` bans and does not yet hold (`ambre-spec-message-bus.md section 1`).
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| One point resolves to one zone, and the boundary band splits in half | the resize and the insert start on the same pixels, and a hit target is easier to explain and to test than a modifier | a modifier to choose between them; an insert affordance elsewhere in the strip |
-| A whole-axis selection is drawn in the strip, opaquely | it has no rectangle to bound it on screen, so without the strip the user cannot see what an axis operation will act on | the range fill alone, which stops at the last fetched row |
-| A press on a header already selected grabs it instead of reselecting it | reselecting what is already selected does nothing, so the gesture is free, and dragging a selected column is how a spreadsheet moves one | a modifier to start the reorder |
-| An insert from the strip fires the same intent as the menu | two paths resolving a position against the same document is two chances to disagree; the affordance is a shortcut, not a second rule | a command carrying the boundary |
-| A hovered header drops its tint when it is the active one | two marks on one header read as two states, and the active mark is the one that carries meaning | tinting both, layered |
-| The row strip walks visible rows only | a hidden row occupies no height, so a zone for it would be a target with no pixels | keeping a zone per absolute row |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| One point resolves to one zone, the boundary band splitting in half | a modifier to choose between them | the resize and the insert start on the same pixels, and a hit target is easier to explain and to test than a modifier. |
+| One point resolves to one zone, the boundary band splitting in half | an insert affordance elsewhere in the strip | it moves the gesture away from the boundary it acts on, so the user has to learn where the affordance lives rather than pointing at the line. |
+| A whole-axis selection is drawn in the strip, opaquely | the range fill alone | it stops at the last fetched row. A whole-axis selection has no rectangle to bound it on screen, so without the strip the user cannot see what an axis operation will act on. |
+| A press on a header already selected grabs it | a modifier to start the reorder | reselecting what is already selected does nothing, so the gesture is free, and dragging a selected column is how a spreadsheet moves one. |
+| An insert from the strip fires the same intent as the menu | a command carrying the boundary | two paths resolving a position against the same document is two chances to disagree; the affordance is a shortcut, not a second rule. |
+| A hovered header drops its tint when it is the active one | tinting both, layered | two marks on one header read as two states, and the active mark is the one that carries meaning. |
+| The row strip walks visible rows only | keeping a zone per absolute row | a hidden row occupies no height, so a zone for it would be a target with no pixels. |
 
 ---
 
@@ -130,9 +149,15 @@ axis first, and the intent the menu sends is fired unchanged, so one path resolv
   them, so only the active row and column are marked (`TRAME-UI-045`).
 * **The band tint is unrecorded** (`TRAME-UI-047`), in the one case where the strip is the only
   place the selection is visible.
-* **The click through an insert affordance is untested** (`TRAME-UI-048`). It moves the tracked
-  active cell before firing the intent, so a dropped command leaves the active cell moved and
-  nothing inserted, and no rule covers that half-step.
+* **The click through an insert affordance is untested** (`TRAME-UI-048`, `TRAME-UI-123`). It
+  moves the tracked active cell before firing the intent, so a dropped command leaves the active
+  cell moved and nothing inserted. The half-step is ruled by `BUS-018`, which is `unimplemented`,
+  and the drop is possible here because the insert is the one document mutation of this crate sent
+  on the lossy class rather than the lossless one (`BUS-011`).
+* **The row strip is asserted only in the negative** (`TRAME-UI-121`, `TRAME-UI-122`). Every
+  recording of it passes no active row and reads no label text, so the tint that marks the active
+  row and the number that names a row are both held by reading the code. The column strip has a
+  test for each.
 * **The reorder drag is described and not ruled.**
   `features/ambre-spec-trame-rows-and-columns.md` owns the move itself (`TRAME-083`, `TRAME-084`)
   and describes the drag as a gesture table. What the strip owes it -- the grab, the guide and the

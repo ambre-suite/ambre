@@ -32,20 +32,36 @@ as a **rule**.
 ## 1. INVARIANTS
 
 Prefix `PROSE`, shared with the feature documents: one prefix, one numbering, no renumbering.
-`PROSE-002`, `-007`, `-008` and `-027` sit here because each states a property of the format, not of
-the engine. Grammar and status values are normative in `ambre-spec-template.md`.
+`PROSE-002`, `-007`, `-008` and `-027` sit here because each states a property of the format, not
+of the engine; `PROSE-089`, `-090`, `-091` and `-094` are the halves those four hid, and three of
+them state what two peers reach rather than what one peer holds. `PROSE-085` to `-088`, `-093`,
+`-095` and `-096` state format rules sections 2 to 5 already lean on and no row carried. Grammar and
+status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PROSE-002` | All editable text MUST live in `LoroText`; a `LoroMap` MUST NOT hold body text. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-007` | A mark's expansion behaviour MUST come from `expand_type_for`, which MUST be total: an unknown key returns a default, never a panic. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-008` | A mark value MUST be encoded as a canonical string (`f32::to_string()` form), so two peers writing the same value produce identical bytes. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-027` | A document MUST converge to at least one root body block: an empty `blocks` tree is invalid. Two peers concurrently emptying the tree MUST deterministically re-insert one block (the tombstoned root block whose `TreeID` sorts first), identically on every peer -- not just the local recreate-on-open. | this spec section 4 | not built -- lands with `ARCH P2` (Epic `E5`); needs a 2-peer convergence regression test, like Trame's `TRAME-022` | unimplemented |
-| `PROSE-028` | A Prose document MUST carry `meta.schema_version`, and a document whose version exceeds the compiled `SCHEMA_VERSION` MUST be refused whole. | architecture section 2.D; this spec section 7 | not built -- lands with `ARCH P8` | unimplemented |
-| `PROSE-029` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | not built -- lands with `ARCH P8` | unimplemented |
-| `PROSE-030` | A block's paragraph style MUST be stored one key per property; concurrent edits to two different properties MUST NOT clobber each other. | this spec section 3; architecture section 2.D | not built -- lands with `ARCH P2` (Epic `E5`); the register it deviates from is normative for a styled unit, and the exception `architecture section 2.D` grants Prose covers the inline run, not the block | unimplemented |
-| `PROSE-031` | An `annots` entry MUST declare its kind in one field of one type; a reader MUST NOT infer the kind from the presence of another field. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-032` | `meta.page.orientation` MUST agree with `width_mm` and `height_mm`; a document whose orientation contradicts its two dimensions MUST NOT be written. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-085` | `INV` | A block's identity MUST be the `TreeID` the tree mints; a position among siblings MUST NOT be used as a key. | this spec section 2 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-086` | `INV` | A reference to a block MUST still resolve after a move, an indent and a move into a table cell. | this spec section 2 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-087` | `INV` | An annotation's identity MUST be a `Uuid` minted by the peer that creates it, carried as the value of the mark that anchors it. | this spec section 2 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-088` | `INV` | A body key MUST re-read as the pair it joins -- the tag and the tree id -- split on a separator neither half can carry. | this spec section 2 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-002` | `INV` | All editable text MUST live in `LoroText`; a `LoroMap` MUST NOT hold body text. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-089` | `CONC` | Two peers typing in the same paragraph MUST both keep their text: one author's sentence MUST NOT be lost to the other's write. | this spec section 3; this spec section 6 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-007` | `INV` | A mark's expansion behaviour MUST come from `expand_type_for` alone: no call site MUST decide it. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-090` | `INV` | `expand_type_for` MUST be total: an unknown key MUST return a default, never a panic. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-008` | `INV` | A mark value MUST be encoded as a canonical string (`f32::to_string()` form). | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-091` | `CONC` | Two peers writing the same mark value MUST produce the same bytes, so the merge holds one value rather than a choice between two spellings. | this spec section 3; this spec section 6 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-030` | `INV` | A block's paragraph style MUST be stored one key per property. | this spec section 3; architecture section 2.D | not built -- lands with `ARCH P2` (Epic `E5`); the register it deviates from is normative for a styled unit, and the exception `architecture section 2.D` grants Prose covers the inline run, not the block | unimplemented |
+| `PROSE-092` | `CONC` | Two concurrent edits to two different paragraph-style properties MUST both survive: neither MUST clobber the other. | this spec section 3; architecture section 2.D | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-093` | `INV` | `styles` MUST hold the user's own styles alone: the nine built-in names MUST NOT be stored. | this spec section 5 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-031` | `INV` | An `annots` entry MUST declare its kind in one field of one type; a reader MUST NOT infer the kind from the presence of another field. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-096` | `INV` | An unset property MUST be the absence of its key; no container MUST carry a "cleared" marker. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-032` | `INV` | `meta.page.orientation` MUST agree with `width_mm` and `height_mm`; a document whose orientation contradicts its two dimensions MUST NOT be written. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-027` | `INV` | A document MUST hold at least one root body block: an empty `blocks` tree is invalid. | this spec section 4 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-094` | `CONC` | Two peers concurrently emptying the tree MUST re-insert one block deterministically -- the tombstoned root block whose `TreeID` sorts first -- identically on every peer, not by a local recreate-on-open. | this spec section 4 | not built -- lands with `ARCH P2` (Epic `E5`); needs a 2-peer convergence regression test, like Trame's `TRAME-022` | unimplemented |
+| `PROSE-095` | `INV` | A converged document MUST hold only the parentages section 4 declares. | this spec section 4 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-028` | `INV` | A Prose document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7 | not built -- lands with `ARCH P8` | unimplemented |
+| `PROSE-097` | `INV` | A document whose `schema_version` exceeds the compiled `SCHEMA_VERSION` MUST be refused whole. | architecture section 2.D; this spec section 7 | not built -- lands with `ARCH P8` | unimplemented |
+| `PROSE-029` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | not built -- lands with `ARCH P8` | unimplemented |
 
 * **Budget.** none: a format has no operation to budget. What opening, shaping and paginating a
   document costs is now rows of the register in `ambre-spec-budgets.md`, cited by
@@ -53,9 +69,13 @@ the engine. Grammar and status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and an image node holds a content hash, never the pixels
   (`features/ambre-spec-prose-images.md`).
-* **Verification.** 9 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. The three
-  gaps are `PROSE-030`, `-031` and `-032`, and none is a blind spot: each states a shape the corpus
-  described in prose while no rule held it, and `PROSE-031` names a defect the shape already has.
+* **Verification.** 22 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. Six
+  conjunctions came apart, and in four of them the hidden half was the convergence the decision of
+  section 6 is argued from: the format was written down, the merge result was not. Seven rules were
+  load-bearing and unwritten -- the block identity, the reference that survives a move, the
+  annotation id on the mark, the body key as a pair, the built-ins that are not stored, the
+  parentages of section 4, and the absent key as the value. `PROSE-031` still names a defect the
+  shape already has.
 
 ---
 
@@ -64,12 +84,14 @@ the engine. Grammar and status values are normative in `ambre-spec-template.md`.
 Four identities and one composite key. Prose mints one of the four: Loro mints the block's, the user
 names the style's, and the blob's own bytes decide the image's.
 
-* A block is identified by the `TreeID` Loro mints for the tree node. It is stable through
-  `move_to`, so an indent, a reorder and a move into a table cell all keep it.
+* A block is identified by the `TreeID` Loro mints for the tree node (`PROSE-085`). It is stable
+  through `move_to`, so an indent, a reorder and a move into a table cell all keep it
+  (`PROSE-086`).
 * A block's body is a **root** Text container whose name joins the tag `t` and the tree id with `:`
-  -- `"t:{tree_id}"`. A `TreeID` renders as hex and `@`, so it cannot contain the separator.
+  -- `"t:{tree_id}"`. A `TreeID` renders as hex and `@`, so it cannot contain the separator
+  (`PROSE-088`).
 * An annotation -- a comment, a suggestion, a footnote -- is identified by a `Uuid` minted by the
-  peer that creates it, carried as the String value of the mark that anchors it.
+  peer that creates it, carried as the String value of the mark that anchors it (`PROSE-087`).
 * A style is identified by its `style_id`, a name. The nine built-in names are not stored.
 * An image is identified by the content hash of its plaintext blob, which is also its key into the
   media flow of `architecture section 2.D`.
@@ -175,9 +197,9 @@ function is total (`PROSE-007`).
 | `text` | Text | the note body | footnote | design |
 | `name`, `block_id`, `range` | -- | the deferred bookmark fields | bookmark | design |
 
-**Absence is a value.** No `s` key means the block type's built-in style; no `a` map means the type
-carries no attribute; no mark on a range means the cascade decides; an empty `annots` map means no
-comment, no suggestion and no footnote. No container carries a "cleared" marker.
+**Absence is a value** (`PROSE-096`). No `s` key means the block type's built-in style; no `a` map
+means the type carries no attribute; no mark on a range means the cascade decides; an empty
+`annots` map means no comment, no suggestion and no footnote. No container carries a "cleared" marker.
 
 ---
 
@@ -211,7 +233,8 @@ these parentages, and the feature that inserts a block is what refuses the rest 
 | ListItem | ListItem, and Paragraph as the degenerate case |
 | every other type | -- : a leaf |
 
-The root body tree is never empty (`PROSE-027`). A `TableCell` or a `ListItem` emptying to zero
+The root body tree is never empty (`PROSE-027`), and only these parentages survive a merge
+(`PROSE-095`). A `TableCell` or a `ListItem` emptying to zero
 children follows its own type's rule, which is the tables and lists features'.
 
 ---
@@ -229,9 +252,9 @@ Only where a schema decision needs a reason. 40 words each.
 * **`t:{tree_id}`.** A root container per leaf block, addressed by name rather than nested in the
   node map: Loro's text is opened from the document, not from a map entry. Deleting a block leaves
   its text container behind, and nothing reclaims it.
-* **`styles`.** Only the user's custom styles. The nine built-ins, `quote` among them, are compiled
-  in, so a document written by an older client renders them from the client rather than from stale
-  copies of its own.
+* **`styles`.** Only the user's custom styles (`PROSE-093`). The nine built-ins, `quote` among
+  them, are compiled in, so a document written by an older client renders them from the client
+  rather than from stale copies of its own.
 * **`annots`.** One map for comments, suggestions and footnotes, because all three are reached the
   same way: a mark carrying an id. The cost is the discriminant of `PROSE-031`.
 * **`annots/{id}/replies`.** A list, so order is the list's and no reply carries an index two peers
@@ -241,23 +264,24 @@ Only where a schema decision needs a reason. 40 words each.
 
 ---
 
-## 6. SCHEMA DECISIONS
+## 6. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| Body text in a `LoroText` per leaf block | Fugue converges two insertions at the same position without interleaving, and keeps a cursor stable across a remote change, which is the whole of collaborative editing (`PROSE-002`) | (a) a `LoroMap` key -- LWW on the whole body, so one of two authors typing in the same paragraph loses their sentence, the defect `ambre-spec-toile-schema.md section 1` records as `TOILE-030`; (b) a `LoroList` of characters -- convergent, but marks are native to the text container and would have to be rebuilt on top |
-| Loro's own `TreeID` as the block identity | The tree already mints an id that survives `move_to`, so a move, an indent and a regroup keep every reference: a comment anchor, a cross reference target, a header block id | a minted `"{peer}_{counter}"` string, as Trame and Toile carry -- a second identity to keep in step with the one the tree mints anyway, and two ids to migrate the day either shape changes |
-| The block hierarchy in a `LoroMovableTree` | A move is one operation and the node keeps its id, so nesting a list item costs no recreation and orphans no reference | a flat `LoroList` of blocks -- a move is a delete plus an insert, which mints a new identity and breaks every reference to the block |
-| A block's body keyed `"t:{tree_id}"` at the root | The body is opened from the document by name, which is how Loro addresses a text container, and the tag keeps the block namespace out of every other root's | nesting the text inside the node map -- one more container per block on the merge path, for an address the code never needs |
-| Depth derived from the ancestor chain, never stored | A stored depth is a second truth that a concurrent move puts out of step with the tree, and the tree is the one both peers converge on (`PROSE-005`) | a `depth` field on the list item -- correct until two peers indent the same item, and silently wrong afterwards |
-| Inline styles as marks on the text | A mark spans a range and may overlap another, which is what a formatted document is | a `LoroMovableTree` of styled spans -- overlapping ranges are not a tree, so bold across a link would need a node split the document never asked for |
-| Every mark value a String, in a canonical form | One value type across every key keeps the mark API single, and a canonical rendering makes two peers writing the same size produce the same bytes rather than two values LWW must choose between (`PROSE-008`) | a typed value per mark key -- a second grammar per key, and `11` against `11.0` racing as two distinct values |
-| A paragraph style stored one key per property | The nine properties are independent scalars with no atomicity between them, so per-key LWW lets two peers change the alignment and the spacing at once and lose neither (`PROSE-030`); a whole-blob register would also have no field to fall back to but the type default | one binary register per block, which is the cross-app pattern of `architecture section 2.D` -- correct for a fill racing a stroke, and here it turns two unrelated edits into one loss |
-| One `annots` map for every annotation kind | A comment, a suggestion and a footnote are all reached by a mark carrying a `Uuid`, so one map is one lookup and the marks are what separate the kinds | one container per kind -- three roots to seed, and a mark key that must agree with the root it points into |
-| No media register: the image node carries the hash | A Prose image has one display size and one alt text, both the block's own, and the blob is content-addressed out of band | Toile's `media` map, which stores the native size and an inline thumbnail -- a Prose page paints the blob or a placeholder, so the thumbnail has no surface and the native size no reader |
-| The header and the footer as ordinary blocks, addressed by a `TreeID` in `meta` | Every text command already targets a block id, so a header is edited by the machinery the body uses and inherits its marks and its cascade (`PROSE-006`) | a nested content command carrying the header's own edits -- a second editing surface, and a command that must be recursive to carry a mark |
-| The list style as a discriminant, never a flag | Four ordered renderings and a checkbox are five values, and the ordinal a reader sees comes from that one key | `ordered` as a boolean -- it can encode neither a todo item nor lower-roman numbering, so a second key would follow within one release |
-| No quote block type | A quote is an indent and a sidebar, which is a paragraph style; adding a type would fork every rule that walks paragraphs | `BlockType::Quote` -- a twelfth discriminant carrying no structure of its own |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| Body text in a `LoroText` per leaf block | a `LoroMap` key | LWW on the whole body, so one of two authors typing in the same paragraph loses their sentence, the defect `ambre-spec-toile-schema.md section 1` records as `TOILE-030`. Fugue converges two insertions at the same position without interleaving, and keeps a cursor stable across a remote change, which is the whole of collaborative editing (`PROSE-002`) |
+| Body text in a `LoroText` per leaf block | a `LoroList` of characters | it is convergent, but marks are native to the text container and would have to be rebuilt on top. Fugue converges two insertions at the same position without interleaving, and keeps a cursor stable across a remote change, which is the whole of collaborative editing (`PROSE-002`) |
+| Loro's own `TreeID` as the block identity | a minted `"{peer}_{counter}"` string, as Trame and Toile carry | it is a second identity to keep in step with the one the tree mints anyway, and two ids to migrate the day either shape changes. The tree already mints an id that survives `move_to`, so a move, an indent and a regroup keep every reference: a comment anchor, a cross reference target, a header block id |
+| The block hierarchy in a `LoroMovableTree` | a flat `LoroList` of blocks | a move is a delete plus an insert, which mints a new identity and breaks every reference to the block. A move as one operation keeps the node's id, so nesting a list item costs no recreation and orphans no reference |
+| A block's body keyed `"t:{tree_id}"` at the root | nesting the text inside the node map | it is one more container per block on the merge path, for an address the code never needs. The body is opened from the document by name, which is how Loro addresses a text container, and the tag keeps the block namespace out of every other root's |
+| Depth derived from the ancestor chain, never stored | a `depth` field on the list item | it is correct until two peers indent the same item, and silently wrong afterwards. A stored depth is a second truth that a concurrent move puts out of step with the tree, and the tree is the one both peers converge on (`PROSE-005`) |
+| Inline styles as marks on the text | a `LoroMovableTree` of styled spans | overlapping ranges are not a tree, so bold across a link would need a node split the document never asked for. A mark spans a range and may overlap another, which is what a formatted document is |
+| Every mark value a String, in a canonical form | a typed value per mark key | it is a second grammar per key, and `11` against `11.0` race as two distinct values. One value type across every key keeps the mark API single, and a canonical rendering makes two peers writing the same size produce the same bytes rather than two values LWW must choose between (`PROSE-008`) |
+| A paragraph style stored one key per property | one binary register per block | it is the cross-app pattern of `architecture section 2.D` -- correct for a fill racing a stroke, and here it turns two unrelated edits into one loss. The nine properties are independent scalars with no atomicity between them, so per-key LWW lets two peers change the alignment and the spacing at once and lose neither (`PROSE-030`); a whole-blob register would also have no field to fall back to but the type default |
+| One `annots` map for every annotation kind | one container per kind | it is three roots to seed, and a mark key that must agree with the root it points into. A comment, a suggestion and a footnote are all reached by a mark carrying a `Uuid`, so one map is one lookup and the marks are what separate the kinds |
+| No media register: the image node carries the hash | Toile's `media` map | it stores the native size and an inline thumbnail, and a Prose page paints the blob or a placeholder, so the thumbnail has no surface and the native size no reader. A Prose image has one display size and one alt text, both the block's own, and the blob is content-addressed out of band |
+| The header and the footer as ordinary blocks, addressed by a `TreeID` in `meta` | a nested content command carrying the header's own edits | it is a second editing surface, and a command that must be recursive to carry a mark. Every text command already targets a block id, so a header is edited by the machinery the body uses and inherits its marks and its cascade (`PROSE-006`) |
+| The list style as a discriminant, never a flag | `ordered` as a boolean | it can encode neither a todo item nor lower-roman numbering, so a second key would follow within one release. Four ordered renderings and a checkbox are five values, and the ordinal a reader sees comes from that one key |
+| No quote block type | `BlockType::Quote` | it is a twelfth discriminant carrying no structure of its own. A quote is an indent and a sidebar, which is a paragraph style; adding a type would fork every rule that walks paragraphs |
 
 ---
 

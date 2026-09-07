@@ -17,22 +17,93 @@ through it, so the state, the two planes and the seam are one document and not t
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PROSE-001` | The document CRDT MUST NOT leave the Logic thread; it exits only as bytes. | this spec section 3; `ambre-spec-architecture.md section 2` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-003` | Exported deltas MUST be treated as opaque bytes: `ambre-prose` MUST NOT inspect them after serialization. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-004` | After convergence, a cursor expressed as a `loro::Cursor` MUST resolve to the same absolute position on every peer. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-023` | The confirmed-change event MUST carry the exact bytes that were applied -- the imported remote payload on the remote path, the freshly exported delta on the local one -- never a re-export of the current state. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-024` | A command handler MUST NOT send on a channel: it returns an outcome, and the Logic dispatcher fans it out. | this spec section 3; `ambre-spec-message-bus.md` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-025` | `ambre-prose` MUST NOT contact the network and MUST NOT depend on `ambre-crypto` or `ambre-sync`. | this spec section 1 | not built -- lands with `ARCH P2` (Epic `E5`); `deny.toml` already bans `ambre-crypto` outside `ambre-sync`/`ambre-logic`, so this one is half-held before the crate exists | unimplemented |
-| `PROSE-026` | `ambre-prose` MUST contain no `unsafe`. | README pillar "Security" | not built -- lands with `ARCH P2` (Epic `E5`); `#![forbid(unsafe_code)]` on the crate root makes it compiler-held from day one | unimplemented |
-| `PROSE-FEAT-005` | A feature MUST NOT write to the document directly: every mutation MUST reach it through the engine's one command entry point. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-FEAT-006` | Text offsets MUST be counted in Unicode graphemes, never in Rust `char`s, wherever they address a position in the document. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`), and **the rule contradicts the plane it constrains**: section 3.B declares the same offsets to be code points, which is what a Rust `char` is. Section 6 carries the gap | unimplemented |
-| `PROSE-UI-001` | The UI thread MUST hold no document data: only view state and what arrives as an event. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-002` | Every mutation MUST leave the UI thread as a command; there MUST NOT be a second model of the document. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-003` | The UI thread MUST NOT block on the Logic channel: a full channel drops the command rather than waiting on it. | this spec section 3; `ambre-spec-architecture.md section 2` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-010` | The scroll position and the selection MUST stay local: neither MUST enter the document. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-015` | `ambre-prose`'s UI module MUST contain no `unsafe`. | README pillar "Security" | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-001` | `INV` | The document CRDT MUST NOT leave the Logic thread; it exits only as bytes. | this spec section 3; `ambre-spec-architecture.md section 2` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-003` | `INV` | Exported deltas MUST be treated as opaque bytes: `ambre-prose` MUST NOT inspect them after serialization. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-024` | `INV` | A command handler MUST NOT send on a channel: it returns an outcome, and the Logic dispatcher fans it out. | this spec section 3; `ambre-spec-message-bus.md` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-025` | `INV` | `ambre-prose` MUST NOT contact the network. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-043` | `INV` | `ambre-prose` MUST NOT depend on `ambre-crypto` or `ambre-sync`. | this spec section 1 | not built -- lands with `ARCH P2` (Epic `E5`); `deny.toml` already bans `ambre-crypto` outside `ambre-sync`/`ambre-logic`, so this half is held before the crate exists | unimplemented |
+| `PROSE-026` | `INV` | `ambre-prose` MUST contain no `unsafe`. | README pillar "Security" | not built -- lands with `ARCH P2` (Epic `E5`); `#![forbid(unsafe_code)]` on the crate root makes it compiler-held from day one | unimplemented |
+| `PROSE-FEAT-005` | `INV` | A feature MUST NOT write to the document directly: every mutation MUST reach it through the engine's one command entry point. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-FEAT-006` | `INV` | Text offsets MUST be counted in Unicode graphemes, never in Rust `char`s, wherever they address a position in the document. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`), and **the rule contradicts the plane it constrains**: section 3.B declares the same offsets to be code points, which is what a Rust `char` is. Section 6 carries the gap | unimplemented |
+| `PROSE-044` | `INV` | The page layout, the media cache and the local history MUST be derived or session state: none of them MUST enter the document. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-004` | `CONC` | After convergence, a cursor expressed as a `loro::Cursor` MUST resolve to the same absolute position on every peer. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-IO-042` | `IO` | A document re-imported from its own snapshot MUST hold what the document that exported it held. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-001` | `INV` | The UI thread MUST hold no document data: only view state and what arrives as an event. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-003` | `INV` | The UI thread MUST NOT block on the Logic channel. | this spec section 3; `ambre-spec-architecture.md section 2` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-010` | `INV` | The scroll position and the selection MUST stay local: neither MUST enter the document. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-015` | `INV` | `ambre-prose`'s UI module MUST contain no `unsafe`. | README pillar "Security" | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+
+### 1.2 Do one thing to the document
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-045` | `PRE` | Every offset a command carries MUST address the body text of the block the command names. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-046` | `POST` | A command MUST answer with one outcome carrying every display event it produced, the delta it exported and the presence frame it built. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-023` | `POST` | The confirmed-change event of a local command MUST carry the delta that command exported, never a re-export of the current state. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-047` | `FRAME` | A command that does not mutate the document MUST NOT produce a delta. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+
+### 1.3 Take in a change from a collaborator
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-048` | `POST` | The confirmed-change event of a remote change MUST carry the payload that arrived, never a re-export of the current state. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-049` | `FRAME` | A remote change MUST NOT be re-broadcast. | this spec section 3; `ambre-spec-delta-order.md` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+
+### 1.4 Hand a change to the Sync worker
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-050` | `POST` | An export MUST read from the last exported version vector and MUST advance it. | this spec section 3; `ambre-spec-delta-order.md` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-051` | `POST` | A second export from the same version vector MUST yield the same bytes: an extra call MUST NOT truncate the stream. | this spec section 3; `ambre-spec-delta-order.md` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-052` | `FRAME` | Exporting MUST NOT write to the document. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+
+### 1.5 Answer a request for the whole document
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-053` | `POST` | A snapshot MUST be the CRDT's own bytes and nothing else: no layout, no cache, no session state. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-054` | `FRAME` | Answering with a snapshot MUST NOT write to the document and MUST NOT advance the export cursor. | this spec section 3; `ambre-spec-delta-order.md` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+
+### 1.6 Take in a whole document
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-055` | `POST` | An imported snapshot MUST replace the document whole. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-056` | `FRAME` | Importing a snapshot MUST NOT produce a delta. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+
+### 1.7 Take in a peer's cursor
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-057` | `FAIL` | A remote position naming a block this peer has not received, or one already tombstoned, MUST resolve to nothing and the cursor MUST be dropped rather than raised. | this spec section 3; `ambre-spec-presence.md` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-058` | `FRAME` | Applying a presence frame MUST NOT touch the document, its history or the export cursor. | this spec section 3; `ambre-spec-presence.md` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+
+### 1.8 Take in a decrypted picture
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-059` | `POST` | A decrypted picture MUST be cached under the content hash it arrived with. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-060` | `POST` | What the picture is shown in MUST be invalidated when it arrives. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-061` | `FRAME` | A picture arriving MUST NOT write to the document and MUST NOT produce a delta. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+
+### 1.9 Send a command from the UI thread
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-002` | `POST` | Every mutation MUST leave the UI thread as a command. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-149` | `FAIL` | A full Logic channel MUST drop the command rather than hold the frame. | this spec section 3; `ambre-spec-architecture.md section 2` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-UI-150` | `FRAME` | The draft echo a send paints MUST NOT reach the wire. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+
+### 1.10 Fan one answer out
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-062` | `POST` | One outcome MUST reach the destinations it names: the display events to the UI thread, the delta and the presence frame to the Sync worker. | this spec section 3; `ambre-spec-message-bus.md` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-063` | `FRAME` | Fanning an outcome out MUST NOT let a connection change, a sharing change or a revoked member reach the document state. | this spec section 3; `ambre-spec-membership.md` | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1` -- the local text insert with its
   exported delta under 2 ms, the snapshot export of a hundred pages under 10 ms, the page-layout
@@ -44,14 +115,16 @@ status values are normative in `ambre-spec-template.md`.
   network, crypto or persistence path on the other side of the seam. Prose's one outbound flow of
   user content that is not the document itself is the picture blob, audited in
   `features/ambre-spec-prose-images.md section 1`.
-* **Verification.** 14 `unimplemented`, nothing else -- the honest shape for a document whose crate
-  is a `lib.rs`. Two of the fourteen are compiler-held the day the crate exists, `PROSE-026` and
-  `PROSE-025`'s dependency half; the pair a host test reaches with no browser is `PROSE-004` and
-  `PROSE-023`, both properties over a generated command stream. `PROSE-FEAT-006` is the one gap that
-  is not absence but disagreement: it and the plane of section 3.B state two different units for one
+* **Verification.** 38 `unimplemented`, nothing else -- the honest shape for a document whose crate
+  is a `lib.rs`. Two of the thirty-eight are compiler-held the day the crate exists, `PROSE-026` and
+  `PROSE-043`; the pair a host test reaches with no browser is `PROSE-004` and
+  `PROSE-023`, both properties over a generated command stream. The nine frame conditions are rows
+  this document did not state before: nothing said what each entry point leaves alone.
+  `PROSE-FEAT-006` is the one gap that is not absence but disagreement: it and the plane of
+  section 3.B state two different units for one
   offset, so whichever is built the other row goes red. `PROSE-002`, `-007`, `-008` and `-027` are
   the format's and live in `ambre-spec-prose-schema.md section 1`; `PROSE-020`, `PROSE-021`,
-  `PROSE-UI-011` and `PROSE-UI-012` are **retired, not moved** (the register is `invariants.py`).
+  `PROSE-UI-011` and `PROSE-UI-012` are **retired, not moved** (the register is `contracts.py`).
 
 ---
 
@@ -62,17 +135,18 @@ on rather than a test.
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| types in a paragraph | types in the same paragraph at the same moment | both insertions, neither interleaved into the other | the same sentence on both screens | none -- `PROSE-002` |
+| types in a paragraph | types in the same paragraph at the same moment | both insertions, neither interleaved into the other | the same sentence on both screens | none -- `PROSE-089` |
 | types before Bob's caret | reads | the insertion | Bob's caret still on the character it was on, pushed along by the text | none -- `PROSE-004` |
 | pastes ten pages | scrolls | the whole paste as one confirmed change | the same page count on both screens, once both have measured | none -- `PROSE-023` |
-| opens the document offline, types, reconnects | edited the same paragraph meanwhile | both edits, in either arrival order | one paragraph on both screens | none -- `PROSE-002` |
-| moves her caret | reads | nothing: a caret is never written | Bob's screen shows Alice's caret, and the history does not | none -- `PRESENCE-001` |
+| opens the document offline, types, reconnects | edited the same paragraph meanwhile | both edits, in either arrival order | one paragraph on both screens | none -- `PROSE-089` |
+| moves her caret | reads | nothing: a caret is never written | Bob's screen shows Alice's caret, and the history does not | none -- `PRESENCE-011`, `PROSE-058` |
 | scrolls to page 40 | stays on page 1 | nothing: a scroll is never written | each reader where they were | none -- `PROSE-UI-010` |
 
 Convergence rests on rules the format owns: a block is named by a minted `TreeID` and never by a
-slot, a body is a sequence CRDT and not a register, and an empty tree deterministically re-grows one
-root block (`ambre-spec-prose-schema.md section 1`, `PROSE-002` and `PROSE-027`). Two peers holding
-the same operations hold the same document.
+slot (`PROSE-085`), a body is a sequence CRDT and not a register (`PROSE-002`, `PROSE-089`), and an
+empty tree deterministically re-grows one root block (`PROSE-094`). Two peers holding the same
+operations hold the same document, and `ambre-spec-prose-schema.md section 1` is where each rule
+sits.
 
 ---
 
@@ -81,8 +155,8 @@ the same operations hold the same document.
 **Containers.** Declared in `ambre-spec-prose-schema.md section 3` and cited from there by name.
 This document restates no part of the format. Three functions are the whole of the engine's access
 to it: one opens a leaf block's body, one counts a list item's ancestors because a depth is never
-stored (`PROSE-005`), and one answers the expansion policy of a mark key and is total over every key
-(`PROSE-007`).
+stored (`PROSE-005`), and one answers the expansion policy of a mark key (`PROSE-007`) and is total
+over every key (`PROSE-090`).
 
 ```rust
 // ambre-prose/src/doc.rs
@@ -584,20 +658,20 @@ Prose view is an arm of the frame host's application enum, like Trame's.
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| One state per document, dispatched by a match | the Logic thread holds a closed enum of document states, so adding Prose adds an arm and no indirection. A concrete value is also what lets a host test build a document, drive it and read the answer with no worker and no browser | a trait object or a boxed `Any` in a registry, which trades the compiler's exhaustiveness for a downcast at every call site |
-| A handler returns an outcome and sends nothing | a value returned by a plain method is testable with no channel, and it keeps the state free of a transport handle. The dispatcher is then the single place where a document change becomes traffic | injecting an effect sink into the state, which is the trait object the closed enum exists to avoid |
-| Every mutation is a typed command, and there is one entry point | one path into the document is one place to intercept it, which is what track changes, undo and the refusal rules all hang off. A second path would have to reimplement each of them | letting a feature module open the CRDT and write to it, which is how the interception rules silently stop holding |
-| The command plane carries no `serde` | the UI and Logic threads share one linear memory, so a value moves between them; deriving serialization on the plane would invite a copy on a hop that has none, and it is the derive that makes a network type by accident | serializing every command, as the Sync hop must, and paying it on the hop that must not |
-| A delta is exported from a stored version vector | draining Loro's internal diff is order-fragile: a second call returns empty and silently truncates the stream, forcing every caller to thread the one exported copy by hand. Exporting from a stored vector is idempotent, and it is the mechanism `features/ambre-spec-trame-engine.md` already uses -- one delta model for both applications | a single-drain export, whose correctness depends on nobody calling it twice |
-| The confirmed-change event carries the bytes that were applied | a re-export of the current state after a remote import is a different set of operations from the one that arrived, and a peer applying it converges to something neither wrote. Passing the confirmed bytes in makes the two paths one rule | re-deriving the delta inside the event builder, which is correct only while no remote change is in flight |
-| Attributes are typed per block type, never a key-value pair | a stringly-typed attribute setter cannot be validated by the compiler, so every wrong key is a runtime defect in a document the user cannot repair. One variant per type costs a line and moves the whole class to compile time | a generic `SetBlockAttr { key, value }`, which is what every one of the typed commands above replaces |
-| A suggestion is a mark, never a branch | forking the whole document per suggestion costs memory proportional to the document times the number of open suggestions; a pair of marks costs the range it covers | a Loro branch per suggestion (`features/ambre-spec-prose-track-changes.md`) |
-| The UI thread is handed the layout, never the document | the thread that paints must not hold a second model, and a page layout is a fraction of the document's size. It is also what keeps the CRDT off a thread that can block on a frame | linking the CRDT into the view so it can read what it needs, which is the second model `PROSE-UI-001` exists to forbid |
-| The presence frame carries no user id | a peer that asserts its own identity can assert anyone's. The frame carries a position and a cosmetic name, and the canonical identity is the one Sync resolved on the inbound path (`PRESENCE-002`, `PRESENCE-003`) | trusting the author field of the frame, which makes impersonation a matter of editing a payload |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| One state per document, dispatched by a match | a trait object or a boxed `Any` in a registry | it trades the compiler's exhaustiveness for a downcast at every call site. A closed enum of document states means adding Prose adds an arm and no indirection, and a concrete value is what lets a host test build a document, drive it and read the answer with no worker and no browser |
+| A handler returns an outcome and sends nothing | injecting an effect sink into the state | it is the trait object the closed enum exists to avoid. A value returned by a plain method is testable with no channel and keeps the state free of a transport handle, so the dispatcher is the single place where a document change becomes traffic |
+| Every mutation is a typed command, and there is one entry point | letting a feature module open the CRDT and write to it | it is how the interception rules silently stop holding. One path into the document is one place to intercept it, which is what track changes, undo and the refusal rules all hang off; a second path would have to reimplement each of them |
+| The command plane carries no `serde` | serializing every command, as the Sync hop must | it pays the serialization on the hop that must not. The UI and Logic threads share one linear memory, so a value moves between them; deriving serialization on the plane would invite a copy on a hop that has none, and it is the derive that makes a network type by accident |
+| A delta is exported from a stored version vector | a single-drain export | its correctness depends on nobody calling it twice. Draining Loro's internal diff is order-fragile: a second call returns empty and silently truncates the stream, forcing every caller to thread the one exported copy by hand; exporting from a stored vector is idempotent, and it is the mechanism `features/ambre-spec-trame-engine.md` already uses -- one delta model for both applications |
+| The confirmed-change event carries the bytes that were applied | re-deriving the delta inside the event builder | it is correct only while no remote change is in flight. A re-export of the current state after a remote import is a different set of operations from the one that arrived, and a peer applying it converges to something neither wrote; passing the confirmed bytes in makes the two paths one rule |
+| Attributes are typed per block type, never a key-value pair | a generic `SetBlockAttr { key, value }` | it is what every one of the typed commands above replaces. A stringly-typed attribute setter cannot be validated by the compiler, so every wrong key is a runtime defect in a document the user cannot repair; one variant per type costs a line and moves the whole class to compile time |
+| A suggestion is a mark, never a branch | a Loro branch per suggestion | forking the whole document per suggestion costs memory proportional to the document times the number of open suggestions. A pair of marks costs the range it covers (`features/ambre-spec-prose-track-changes.md`) |
+| The UI thread is handed the layout, never the document | linking the CRDT into the view so it can read what it needs | it is the second model `PROSE-UI-001` exists to forbid. The thread that paints must not hold a second model, and a page layout is a fraction of the document's size; handing the layout also keeps the CRDT off a thread that can block on a frame |
+| The presence frame carries no user id | trusting the author field of the frame | it makes impersonation a matter of editing a payload. A peer that asserts its own identity can assert anyone's; the frame carries a position and a cosmetic name, and the canonical identity is the one Sync resolved on the inbound path (`PRESENCE-002`, `PRESENCE-003`) |
 
 ---
 
@@ -628,6 +702,14 @@ Prose view is an arm of the frame host's application enum, like Trame's.
   block id that resolves to nothing, a nesting rule broken by a move (`PROSE-040`): each feature
   states its own refusal, and no rule of this document says whether a refused command leaves the
   document untouched, whether it produces an outcome at all, or whether the undo stack sees it.
+* **Nothing rules on the export cursor when an export fails.** The cursor is advanced after every
+  export, and no rule of this document says whether a failed export advances it too, so the
+  operations of that range would never be offered again.
+* **A dropped command leaves no trace.** A full Logic channel discards the mutation, and nothing
+  says whether the drop is logged, surfaced or counted, so an edit the user made is lost silently.
+* **The remote path has no batch.** A run of deltas arriving together is applied one at a time, so
+  the layout is rebuilt once per delta. Trame and Toile each carry a row for the amortized path,
+  and this document declares no batch entry point to hold one.
 * **The priority scheduler that defers a long shaping pass is named and never designed.**
   `ambre-spec-budgets.md section 2` sends a monster paragraph's shaping through a P1-P4
   scheduler in the Logic thread, and no document declares what those four levels are, what preempts

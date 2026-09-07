@@ -17,20 +17,33 @@ leave it is `ambre-spec-zero-knowledge.md`, and what each part costs is `ambre-s
 The only mandatory read. Grammar and status values are normative in `ambre-spec-template.md`. The
 prefix is `ARCH`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `ARCH-001` | The client MUST run as two WebAssembly instances: one holding the UI and Logic threads over a single shared heap, one holding the Sync worker with its own memory. | this spec section 2 | none. The page loads two artefacts, and nothing refuses a third or a merge of the two | unverified |
-| `ARCH-002` | The crate graph MUST stay acyclic. | this spec section 2 | `cargo`: a cycle between two workspace crates fails to resolve, so the edit that would create one never builds | verified |
-| `ARCH-003` | The Logic thread MUST NOT declare a dependency on the render runtime or on the interface toolkit. | this spec section 2 | none. `ambre-logic` declares neither, and no capability ban refuses the line that would add one | unverified |
-| `ARCH-004` | Every cryptographic operation MUST run in the Sync worker. | pillar "Zero-Knowledge"; `ZK-002` | `cargo deny` -- `deny.toml` grants `ambre-crypto` to `ambre-sync`, and to `ambre-logic` for one host-only fixture hash. Every other crate fails the CI job | verified |
-| `ARCH-005` | Every network call MUST leave from the Sync worker. | this spec section 2; `ZK-001` | none. The transport crates are declared by `ambre-sync` alone; the launcher's same-origin reads are the stated exception of `UI-THREAD-004` | unverified |
-| `ARCH-006` | The wire protocol types MUST have one definition, shared by the worker and the relay. | this spec section 2 | none. Both crates depend on `ambre-protocol` and neither redeclares a type; nothing refuses a local copy | unverified |
-| `ARCH-007` | The Main thread MUST drain the Logic to Sync channel once per frame, before it draws. | this spec section 2 | none. The relay runs in the per-frame hook, ahead of the gate that can freeze the render; no test drives a frame | unverified |
-| `ARCH-008` | A thread failure MUST reach the user out of band; the client MUST NOT rely on a channel disconnection to detect one. | this spec section 2 | none as a test. The panic hook calls the page's fatal hook before the abort, and the terminal screen on the drawing surface is wired to it | unverified |
-| `ARCH-009` | A thread that detects an unrecoverable condition MUST emit a fatal event before it exits. | this spec section 2 | none. Each view latches an inert state when it receives one, and nothing drives the path | unverified |
-| `ARCH-010` | The engine MUST be created once per session and MUST survive every route change. | this spec section 2 | none for the lifetime itself. `ambre_app::route::tests::path_doc_roundtrip`, `::cross_kind_open_needs_reload` cover the parsing the per-frame route poll rests on | unverified |
-| `ARCH-011` | Each browser tab MUST run a complete client of its own, and two tabs on one document MUST converge as two users do. | this spec section 2 | none. Convergence is covered per application by the two-peer belt; nothing drives two tabs | unverified |
-| `ARCH-012` | The client MUST build against a shared memory with atomics enabled. | this spec section 2 | the build: the flags are scoped to the wasm target in `.cargo/config.toml`, and the threading runtime fails to link without them | verified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `ARCH-002` | `INV` | The crate graph MUST stay acyclic. | this spec section 2 | `cargo`: a cycle between two workspace crates fails to resolve, so the edit that would create one never builds | verified |
+| `ARCH-004` | `INV` | Every cryptographic operation MUST run in the Sync worker. | pillar "Zero-Knowledge"; `ZK-002` | `cargo deny` -- `deny.toml` grants `ambre-crypto` to `ambre-sync`, and to `ambre-logic` for one host-only fixture hash. Every other crate fails the CI job | verified |
+| `ARCH-012` | `INV` | The client MUST build against a shared memory with atomics enabled. | this spec section 2 | the build: the flags are scoped to the wasm target in `.cargo/config.toml`, and the threading runtime fails to link without them | verified |
+| `ARCH-001` | `INV` | The client MUST run as two WebAssembly instances: one holding the UI and Logic threads over a single shared heap, one holding the Sync worker with its own memory. | this spec section 2 | none. The page loads two artefacts, and nothing refuses a third or a merge of the two | unverified |
+| `ARCH-003` | `INV` | The Logic thread MUST NOT declare a dependency on the render runtime or on the interface toolkit. | this spec section 2 | none. `ambre-logic` declares neither, and no capability ban refuses the line that would add one | unverified |
+| `ARCH-005` | `INV` | Every network call MUST leave from the Sync worker. | this spec section 2; `ZK-001` | none. The transport crates are declared by `ambre-sync` alone; the launcher's same-origin reads are the stated exception of `UI-THREAD-004` | unverified |
+| `ARCH-006` | `INV` | The wire protocol types MUST have one definition, shared by the worker and the relay. | this spec section 2 | none. Both crates depend on `ambre-protocol` and neither redeclares a type; nothing refuses a local copy | unverified |
+| `ARCH-007` | `INV` | The Main thread MUST drain the Logic to Sync channel once per frame, before it draws. | this spec section 2 | none. The relay runs in the per-frame hook, ahead of the gate that can freeze the render; no test drives a frame | unverified |
+| `ARCH-010` | `INV` | The engine MUST be created once per session and MUST survive every route change. | this spec section 2 | none for the lifetime itself. `ambre_app::route::tests::path_doc_roundtrip`, `::cross_kind_open_needs_reload` cover the parsing the per-frame route poll rests on | unverified |
+| `ARCH-011` | `INV` | Each browser tab MUST run a complete client of its own. | this spec section 2 | none. Two tabs load the same two artefacts twice, and nothing refuses a design that shared one worker between them -- which is the shortcut this rule exists to close | unverified |
+| `ARCH-014` | `INV` | The client MUST NOT rely on a channel disconnection to detect a thread failure. | this spec section 2 | none. The panic hook fires before the abort, so the notice does not wait on a channel; nothing refuses a second detection path that would. A disconnection arrives late, or never, because a wedged thread holds its end open | unverified |
+| `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | none. Convergence is covered per application by the two-peer belt, which drives two engines in one process; nothing drives two tabs, and the two differ in exactly the place that matters -- one relay, two sessions, one identity | unverified |
+
+### 1.2 A thread fails
+
+Something unrecoverable happens on one of the three. The two rules below are what stands between
+that and a page that looks alive and answers nothing.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `ARCH-009` | `POST` | A thread that detects an unrecoverable condition MUST emit a fatal event before it exits. | this spec section 2 | none. Each view latches an inert state when it receives one, and nothing drives the path | unverified |
+| `ARCH-008` | `POST` | A thread failure MUST reach the user out of band. | this spec section 2 | none as a test. The panic hook calls the page's fatal hook before the abort, and the terminal screen on the drawing surface is wired to it | unverified |
+| `ARCH-015` | `FRAME` | A failing thread MUST NOT write to the document on its way out. | this spec section 2; derived | none. The fatal path emits an event and stops, so a half-applied operation is not flushed today. Nothing holds it: a thread failing mid-write is the one moment the document can be left in a state no peer will ever converge to | unverified |
 
 * **Budget.** the whole of `ambre-spec-budgets.md`: this stack is what every row of that register
   measures. The two rows belonging to the stack itself are the channel hop and the worker hop of
@@ -38,10 +51,18 @@ prefix is `ARCH`.
 * **Boundary.** none of its own. The stack decides **where** a secret may live, and
   `ambre-spec-zero-knowledge.md` decides what that means: `ARCH-004` and `ARCH-005` are this
   document's side of `ZK-002` and `ZK-001`.
-* **Verification.** 3 `verified`, 9 `unverified`. What holds is what the build and the capability
+* **Verification.** 3 `verified`, 12 `unverified`. What holds is what the build and the capability
   bans can refuse: a cycle, a cryptographic dependency in the wrong crate, a missing atomics flag.
   Everything else is held by the code having been written that way -- the instance count, the thread
-  boundaries, the relay cadence and the whole failure path.
+  boundaries, the relay cadence and the whole failure path. Two conjunctions came apart.
+  `ARCH-011` bundled a structural rule with a convergence property, and those are different kinds
+  with different mechanisms: one tab per client is read off the page, and two tabs converging is a
+  `CONC` the per-application two-peer belt does not reach, because it drives two engines in one
+  process rather than two sessions against one relay. `ARCH-008` bundled the notice with a ban on
+  how the failure is detected; the ban binds the client at every instant, so it is `ARCH-014` in the
+  state table. `ARCH-015` is the frame condition of a failure, and it is the one with teeth: a
+  thread dying mid-write is the one moment the document can be left in a state no peer converges
+  to.
 
 ---
 
@@ -165,22 +186,22 @@ The stack has no control of its own. What a user meets is what it guarantees the
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| Shared memory between the UI and the Logic threads, message passing to the Sync worker | the two links have different budgets. Scroll and typing cannot afford an encode and a copy; network traffic already waits on the network. Pushing the first link onto message passing would pay serialization on the one path where it is the whole budget | one uniform transport, every link by message passing and no shared memory anywhere |
-| The Sync worker is its own instance rather than a thread of the Main one | a shared-heap worker runs to completion: an asynchronous loop returns immediately, its handle is dropped and it is collected after the first poll. A worker cannot both block its stack to stay alive and keep an event loop free for a socket. A second instance has an ordinary event loop and no such conflict | a shared-heap worker for the Sync side, with an asynchronous loop inside it |
-| The blocking channel path is used across the worker boundary, never the asynchronous one | the asynchronous waker of the channel crate is scheduled on the sending worker, so it never wakes a consumer parked on another one. The blocking path is backed by atomics and crosses workers correctly, and inside the Sync worker every producer is local anyway | an asynchronous receive across a worker boundary |
-| No channel crate of our own | one was written to work around the freeze above, and the freeze had a different cause. Once the Sync worker moved out, the only shared-memory link left is the one where the existing crate always worked | a hand-written queue over atomics, duplicating the channel crate |
-| The launcher owns the frame driver and the closed view registry | a closed registry naming an application view must sit downstream of every application crate. Putting it in the content runtime, which is upstream, is the cycle this resolves | the view registry in the content runtime, upstream of the applications |
-| One crate per application, deliberately monolithic | the state, the view and the interface of one application share its whole vocabulary, and splitting them by layer is what produced the specification corpus this migration is undoing | a crate per layer, with an application spread across three of them |
-| The Logic runtime is pure Rust with no browser glue | it makes the whole engine testable on the host under an ordinary test run, with no browser and no worker. That is a first-order property of the split, not a side effect | a Logic runtime that reaches the browser directly for storage or timing |
-| The relay is in the same workspace as the client | the build flags are scoped by target, so a native member is unaffected, and one workspace gives one formatter, one lint pass and one CI job | a separate workspace for the server |
-| A panic aborts | unwinding across a shared heap with a leaked sender leaves the other threads reading a channel that will never close. Aborting is honest, and the fatal hook is what makes it visible | unwinding on panic, and detecting the death through channel disconnection |
-| One binary per instance, not one per application | the applications share the render runtime, the interface toolkit and the engine, so splitting them would duplicate the heavy half of the download per application | a separate build per application |
-| No dependency-injection framework | the registry is a map and the wiring is explicit in the launcher: two channels, a closure that builds a view, and a worker handle | a container that resolves the graph at run time |
-| No fourth thread for import and export | during an import the interface shows a waiting state, and a blocked Logic thread is the intended behaviour. The cost of a long conversion is paid by lazy loading, not by another thread | a fourth thread for conversions |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| Shared memory to the Logic thread, message passing to the Sync worker | one uniform transport, every link by message passing and no shared memory anywhere | the two links have different budgets. Scroll and typing cannot afford an encode and a copy; network traffic already waits on the network. Pushing the first link onto message passing would pay serialization on the one path where it is the whole budget. |
+| The Sync worker is its own instance | a shared-heap worker for the Sync side, with an asynchronous loop inside it | a shared-heap worker runs to completion: an asynchronous loop returns immediately, its handle is dropped and it is collected after the first poll. A worker cannot both block its stack to stay alive and keep an event loop free for a socket. A second instance has an ordinary event loop and no such conflict. |
+| The blocking channel path is used across the worker boundary | an asynchronous receive across a worker boundary | the asynchronous waker of the channel crate is scheduled on the sending worker, so it never wakes a consumer parked on another one. The blocking path is backed by atomics and crosses workers correctly, and inside the Sync worker every producer is local anyway. |
+| No channel crate of our own | a hand-written queue over atomics, duplicating the channel crate | one was written to work around the freeze above, and the freeze had a different cause. Once the Sync worker moved out, the only shared-memory link left is the one where the existing crate always worked. |
+| The launcher owns the frame driver and the closed view registry | the view registry in the content runtime, upstream of the applications | a closed registry naming an application view must sit downstream of every application crate, so putting it upstream is the cycle this resolves. |
+| One crate per application, deliberately monolithic | a crate per layer, with an application spread across three of them | the state, the view and the interface of one application share its whole vocabulary, and splitting them by layer is what produced the specification corpus this migration is undoing. |
+| The Logic runtime is pure Rust with no browser glue | a Logic runtime that reaches the browser directly for storage or timing | it forfeits the whole engine being testable on the host under an ordinary test run, with no browser and no worker. That is a first-order property of the split, not a side effect. |
+| The relay is in the same workspace as the client | a separate workspace for the server | the build flags are scoped by target, so a native member is unaffected, and one workspace gives one formatter, one lint pass and one CI job. |
+| A panic aborts | unwinding on panic, and detecting the death through channel disconnection | unwinding across a shared heap with a leaked sender leaves the other threads reading a channel that will never close, so the disconnection the detection waits on never comes. Aborting is honest, and the fatal hook is what makes it visible. |
+| One binary per instance, not one per application | a separate build per application | the applications share the render runtime, the interface toolkit and the engine, so splitting them would duplicate the heavy half of the download per application. |
+| No dependency-injection framework | a container that resolves the graph at run time | the registry is a map and the wiring is explicit in the launcher: two channels, a closure that builds a view, and a worker handle. |
+| No fourth thread for import and export | a fourth thread for conversions | during an import the interface shows a waiting state, and a blocked Logic thread is the intended behaviour. The cost of a long conversion is paid by lazy loading, not by another thread. |
 
 ---
 

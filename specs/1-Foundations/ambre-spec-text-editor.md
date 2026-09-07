@@ -21,17 +21,46 @@ other four documents of the rendering layer. Two rows carry `UI-THREAD` instead:
 component the cross-application arbitration of `ambre-spec-ui.md section 2` names, so its two
 unbuilt rules live beside the design they constrain rather than in the thread's own document.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `CANVAS-036` | An editing action MUST be recorded at input time without a font, and applied at paint time. | this spec section 2 | type-level: an `EditIntent` names no font type and no layout type, so an action that needs a live font context has no shape to be queued in | verified |
-| `CANVAS-037` | Every inline editor in the suite MUST drive this one core: a wrapper MUST NOT reimplement caret motion or selection. | this spec section 2; `ambre-spec-ui.md section 2` | `ambre_trame::ui::grid::tests::editor_parity::parity_caret_motion_and_insert`, `::parity_shift_selection`, `::parity_select_replace_and_delete`, `::parity_backspace_and_delete_forward`, `::parity_selection_collapse_on_arrows` replay one operation corpus through the wrapper and through the core. Toile's wrapper has no such belt | unverified |
-| `CANVAS-038` | Closing an edit that changed nothing MUST commit nothing. | this spec section 2 | none. The body at open time is kept and compared on close, and no test drives an open-and-close with no keystroke between them | unverified |
-| `CANVAS-039` | A pointer position MUST reach the core in the editor's own frame, never in screen space. | this spec section 2 | none. The host subtracts the text origin before it queues a pointer intent, which is what keeps this core free of a camera. Nothing refuses a caller that passes a screen point | unverified |
-| `CANVAS-040` | A composition preview MUST be replaceable in place, and MUST read as unconfirmed text. | this spec section 2; `ambre-spec-text-input.md` | `ambre_canvas::editor::tests::ime_preedit_run_is_underlined` | verified |
-| `CANVAS-041` | The caret and the selection MUST be drawn as paths, so a caller's transform carries them. | this spec section 2; `ambre-spec-drawing-surface.md` | none. Both use `fill_path`, which a rotation maps, rather than `fill_rect`, which maps a bounding box alone. No test observes a rotated edit | unverified |
-| `CANVAS-042` | The core MUST hold one style for the whole unit: it MUST NOT carry a per-range style. | this spec section 2 | type-level: the pinned style is one value with five fields, so a range-addressed style has nowhere to be stored | verified |
-| `UI-THREAD-014` | Every editor in the suite MUST take its input pipe, its composition machine, its caret and its selection model from this one substrate. | this spec section 2; `ambre-spec-ui.md section 2` | not built -- lands with `One text-editing substrate` (`ambre-roadmap.md` E8). `CANVAS-037` holds the caret and selection half for the two wrappers that exist; the input pipe is a second crate and the third application has no crate at all | unimplemented |
-| `UI-THREAD-018` | The moving end of a selection MUST be named the focus and the fixed one the anchor, in every application and in this core. | this spec section 2 | not built -- lands with `One name for the moving selection end` (`ambre-roadmap.md` E8). This core and the board already say focus; the grid says active beside its anchor, so one selection has two vocabularies and nothing refuses a third | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CANVAS-042` | `INV` | The core MUST hold one style for the whole unit: it MUST NOT carry a per-range style. | this spec section 2 | type-level: the pinned style is one value with five fields, so a range-addressed style has nowhere to be stored | verified |
+| `CANVAS-048` | `INV` | A composition preview MUST be replaceable in place. | this spec section 2; `ambre-spec-text-input.md` | `ambre_canvas::editor::tests::ime_preedit_run_is_underlined`: after the composition ends, its second assertion reads the buffer back as the composed run alone, so a preview appended beside its own commit fails | verified |
+| `CANVAS-040` | `OBS` | A composition preview MUST read as unconfirmed text. | this spec section 2; `ambre-spec-text-input.md` | `ambre_canvas::editor::tests::ime_preedit_run_is_underlined`: its first assertion finds the underline on the composing run, and its last asserts the committed run has lost it | verified |
+| `CANVAS-041` | `INV` | The caret and the selection MUST be drawn as paths, so a caller's transform carries them. | this spec section 2; `ambre-spec-drawing-surface.md` | none. Both use `fill_path`, which a rotation maps, rather than `fill_rect`, which maps a bounding box alone. No test observes a rotated edit | unverified |
+| `CANVAS-037` | `INV` | Every inline editor in the suite MUST drive this one core: a wrapper MUST NOT reimplement caret motion or selection. | this spec section 2; `ambre-spec-ui.md section 2` | `ambre_trame::ui::grid::tests::editor_parity::parity_caret_motion_and_insert`, `::parity_shift_selection`, `::parity_select_replace_and_delete`, `::parity_backspace_and_delete_forward`, `::parity_selection_collapse_on_arrows` replay one operation corpus through the wrapper and through the core. Toile's wrapper has no such belt | unverified |
+| `UI-THREAD-014` | `INV` | Every editor in the suite MUST take its input pipe, its composition machine, its caret and its selection model from this one substrate. | this spec section 2; `ambre-spec-ui.md section 2` | not built -- lands with `One text-editing substrate` (`ambre-roadmap.md` E8). `CANVAS-037` holds the caret and selection half for the two wrappers that exist; the input pipe is a second crate and the third application has no crate at all | unimplemented |
+| `UI-THREAD-018` | `INV` | The moving end of a selection MUST be named the focus and the fixed one the anchor, in every application and in this core. | this spec section 2 | not built -- lands with `One name for the moving selection end` (`ambre-roadmap.md` E8). This core and the board already say focus; the grid says active beside its anchor, so one selection has two vocabularies and nothing refuses a third | unimplemented |
+
+### 1.2 Record an editing action
+
+A key, a pointer or a composition event arrives when no font context is available, so the host
+records what was asked for and stops there.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CANVAS-036` | `POST` | An editing action MUST be recorded without a font. | this spec section 2 | type-level: an `EditIntent` names no font type and no layout type, so an action that needs a live font context has no shape to be queued in | verified |
+| `CANVAS-039` | `PRE` | A pointer position MUST reach the core in the editor's own frame, never in screen space. | this spec section 2 | none, and nothing can check it: the core holds no camera, so a screen point is a valid pair of numbers that lands the caret somewhere else. The host subtracts the text origin before it queues one, and a caller that forgot would corrupt the caret in silence | unverified |
+| `CANVAS-049` | `FRAME` | Recording an editing action MUST NOT change the buffer. | this spec section 2, the seam; derived | none. Recording is the whole reason the queue exists: the buffer moves at paint time and nowhere else. Nothing reads the buffer back across a recording, so an intent that applied itself early would pass | unverified |
+
+### 1.3 Flush the queue at paint time
+
+The paint pass has the font context. It re-applies the pinned style and the geometry, then drains
+everything recorded since the last frame.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CANVAS-047` | `POST` | Every recorded action MUST be applied at paint time. | this spec section 2 | none. The flush takes the queue and drives it, and no test records two actions and reads both effects back. It is the half `CANVAS-036` carried and the type system cannot hold | unverified |
+| `CANVAS-050` | `FRAME` | A flush MUST NOT leave a recorded action in the queue. | this spec section 2, the seam; derived | none. The drain takes the queue by value and replaces it with an empty one, so the rule holds by one line. An action left behind applies again on the next frame, which is a keystroke typed twice | unverified |
+
+### 1.4 Close an edit
+
+The host compares the body it captured when the edit opened against the one the core holds.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `CANVAS-038` | `FAIL` | Closing an edit that changed nothing MUST commit nothing. | this spec section 2 | none. The body at open time is kept and compared on close, and no test drives an open-and-close with no keystroke between them | unverified |
 
 * **Budget.** the text-layout row of `ambre-spec-budgets.md section 2` -- under 2 ms for a
   dirty paragraph, typically under 0.5 ms -- which this core pays on the UI thread on every flush,
@@ -39,10 +68,18 @@ unbuilt rules live beside the design they constrain rather than in the thread's 
 * **Boundary.** none: the core holds a string in memory, reaches no relay and opens no socket. What
   the user types leaves it as a commit the application turns into a document operation, and the
   keyboard path that feeds it is `ambre-spec-text-input.md`.
-* **Verification.** 3 `verified`, 4 `unverified`, 2 `unimplemented`. The three verified rules are
-  the two the compiler holds and the one a host-tier test reaches. The parity belt is the
+* **Verification.** 4 `verified`, 7 `unverified`, 2 `unimplemented`. The four verified rules are the
+  two the compiler holds and the two assertions of one host-tier test. The parity belt is the
   interesting cell: it is the only mechanism in the corpus that proves a wrapper delegates rather
-  than reimplements, and it exists for one of the two wrappers.
+  than reimplements, and it exists for one of the two wrappers. Two conjunctions came apart here,
+  and they came apart in opposite directions. `CANVAS-040` claimed a preview is replaceable in place
+  and reads as unconfirmed, on one cited test -- and that test does assert both, on two assertions,
+  so the split names which one goes red for which rule. `CANVAS-036` claimed an action is recorded
+  without a font and applied at paint time, on a type-level mechanism that holds only the first: an
+  intent naming no font is a shape the compiler refuses to widen, and the drain arriving at paint
+  time is a call nothing checks. That half is `CANVAS-047`. The three gestures also gained their
+  frame conditions, and `CANVAS-050` is the one with teeth: an action left in the queue is a
+  keystroke typed twice.
 
 ---
 
@@ -58,9 +95,9 @@ live font context. The frame host holds that context during the paint pass alone
 (`ambre-spec-frame.md`). So the editor cannot be driven when the input arrives.
 
 1. input time: the host maps the pointer into the editor's local frame and records a font-free
-   `EditIntent` in a queue (`CANVAS-036`, `CANVAS-039`);
+   `EditIntent` in a queue (`CANVAS-036`, `CANVAS-039`, `CANVAS-049`);
 2. paint time: `flush` re-applies the pinned style and the geometry, then drains the queue through
-   the driver;
+   the driver (`CANVAS-047`, `CANVAS-050`);
 3. still paint time: `render` draws the selection band, the glyphs and the caret;
 4. any time: reading the committed buffer needs no font context, so a view emits its commit
    straight from the flush.
@@ -144,16 +181,17 @@ reports, so an input method opens its window in the right place.
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| One editing core for the suite | the caret, the word jump, the selection and the composition are the same behaviour in a cell and on a sticky note, and they are the behaviours users notice when they differ. Two implementations means two sets of edge cases and two bug reports for one complaint | an editor per application, which is what existed before the core and what the parity belt now guards against returning |
-| The intent queue, rather than editing at input time | `PlainEditor` re-shapes on every operation, so it needs a font context, and the font context exists during the paint pass alone. The queue is what lets input handling stay pure and testable on the host tier, with no GPU and no browser | driving the editor from the input handler, which needs a second font context on the UI thread, or holding a live layout across frames, which is the same memory twice |
-| The style is pinned, not read live | the host recomputes the style each frame anyway -- the zoom, the theme and the toolbar all move it -- so pinning at open and re-applying at flush costs one assignment and keeps the core free of every source those values come from | the core reading a theme, a zoom and a toolbar state, which is three dependencies for a struct that holds a string |
-| One style for the whole unit | a cell and a sticky note carry one look, and giving the core a range-addressed style would make it a rich-text editor for two callers that have no rich text. The document that does have it is a different design entirely (`CANVAS-042`) | a per-range style model, which is `4-Prose/` and belongs there |
-| The caret and the band are filled paths | Toile rotates an element, and a rotation applied to an axis-aligned fill maps its bounding box rather than the shape. A path is mapped whole, so one code path serves the rotated and the unrotated case | `fill_rect`, which is cheaper and wrong on a rotated element |
-| The wrapper is proven by replay, not by reading | a shim wired to the wrong intent compiles, runs, and is wrong in one key out of twelve. Replaying an operation corpus through both editors and comparing after each step is the only mechanism that catches it, and reading the shim is not | a review of the wrapper, which is what let the mapping be wrong in the first place |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| One editing core for the suite | an editor per application | it is what existed before the core and what the parity belt now guards against returning. The caret, the word jump, the selection and the composition are the same behaviour in a cell and on a sticky note, and they are the behaviours users notice when they differ: two implementations means two sets of edge cases and two bug reports for one complaint |
+| The intent queue, rather than editing at input time | driving the editor from the input handler | it needs a second font context on the UI thread: `PlainEditor` re-shapes on every operation, and the font context exists during the paint pass alone. The queue is what lets input handling stay pure and testable on the host tier, with no GPU and no browser |
+| The intent queue, rather than editing at input time | holding a live layout across frames | it is the same memory twice, and it keeps a shaped layout alive outside the pass that can shape it |
+| The style is pinned, not read live | the core reading a theme, a zoom and a toolbar state | it is three dependencies for a struct that holds a string. The host recomputes the style each frame anyway -- the zoom, the theme and the toolbar all move it -- so pinning at open and re-applying at flush costs one assignment |
+| One style for the whole unit | a per-range style model | it makes the core a rich-text editor for two callers that have no rich text: a cell and a sticky note carry one look. The document that does have it is a different design entirely (`CANVAS-042`), and it is `4-Prose/` |
+| The caret and the band are filled paths | `fill_rect` | it is cheaper and wrong on a rotated element: Toile rotates, and a rotation applied to an axis-aligned fill maps its bounding box rather than the shape. A path is mapped whole, so one code path serves the rotated and the unrotated case |
+| The wrapper is proven by replay, not by reading | a review of the wrapper | it is what let the mapping be wrong in the first place. A shim wired to the wrong intent compiles, runs, and is wrong in one key out of twelve; replaying an operation corpus through both editors and comparing after each step is the only mechanism that catches it |
 
 ---
 

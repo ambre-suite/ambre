@@ -2,13 +2,13 @@
 """Fail when English drifts from `ai/ambre-writing-style.md`.
 
 The style file closed on its own admission: "No script checks this file, unlike
-`just invariants` and `just spec-code`. It is a review rule, and review rules
+`just contracts` and `just spec-code`. It is a review rule, and review rules
 drift." This is the half of it a script can hold.
 
 **A ceiling, not a hard error.** The corpus predates the check by a thousand
 breaches, so a hard error would be red on the first run and turn into a flag
 everyone passes. Each file carries a per-metric ceiling that may only fall, the
-mechanism `invariants.py` and `spec_shape.py` already use. A file the table does
+mechanism `contracts.py` and `spec_shape.py` already use. A file the table does
 not name has a ceiling of zero, which is the whole point: a new file, and a new
 comment in an old one, starts clean.
 

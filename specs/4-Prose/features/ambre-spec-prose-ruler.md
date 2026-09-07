@@ -17,21 +17,35 @@ The three values it writes are the paragraph's, and they belong to
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PROSE-UI-063` | A drag MUST write the paragraph once, when the handle is released; it MUST NOT write while the handle moves. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-064` | The handles MUST show the indents of the block the caret is in, and MUST follow the caret to another block. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-065` | The scale MUST stay aligned with the page's content width, at any zoom and at any horizontal offset of the page column. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-064` | `OBS` | The handles MUST show the indents of the block the caret is in, whichever block that is. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-075` | `OBS` | The values the handles show MUST be the ones the page is laid out with, not the block's own stored keys. | this spec section 3; this spec section 5 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-065` | `OBS` | The scale MUST stay aligned with the page's content width, at any zoom and at any horizontal offset of the page column. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.2 Drag a handle
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-063` | `POST` | Releasing a handle MUST write the paragraph once, whatever the length of the drag. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-076` | `FRAME` | A handle in motion MUST NOT touch the document: the paint follows the pointer and nothing is written until the release. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none of its own. A drag paints the handle and nothing else until release, which is
   the point of `PROSE-UI-063`: the frame it sits inside is the row of
   `ambre-spec-budgets.md section 2`, and no document write happens during the gesture.
 * **Boundary.** none: the ruler reads view state and emits one command on release. It holds no key
   and opens no socket (`PROSE-UI-002`).
-* **Verification.** 3 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-UI-063` is the one with an oracle a host test can hold: a drag of any length produces one
-  command, and counting them needs no browser. The two others are placement under a live zoom and
-  land in the wasm tier of `ambre-spec-testing.md section 6`.
+* **Verification.** 5 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line
+  `lib.rs`. `PROSE-UI-063` stated the write and its frame condition in one row, and the frame
+  condition is the half that matters here: an implementation writing on every pointer move
+  satisfies "one write on release" for the last of them. `PROSE-UI-075` is the rule section 5
+  decides and no row carried -- the handles read the cascade, not the block's keys, and a paragraph
+  taking its indents from a style has no keys to read. `PROSE-UI-063` and `PROSE-UI-076` are the
+  two with an oracle a host test can hold: a drag of any length produces one command, and counting
+  them needs no browser. The three `OBS` rows are placement under a live zoom and land in the wasm
+  tier of `ambre-spec-testing.md section 6`.
 
 ---
 
@@ -80,7 +94,7 @@ pub enum RulerHandle { IndentFirst, IndentLeft, IndentRight }
 **Steps, for one drag:**
 
 1. a press on a handle records which one, and the ruler paints the handle at the pointer from then
-   on; the document is untouched (`PROSE-UI-063`);
+   on; the document is untouched (`PROSE-UI-076`);
 2. the release converts the handle's position into points, against the page's content width
    (`PROSE-UI-065`);
 3. the view reads the caret block's current settings, replaces the one value that moved, and sends
@@ -91,9 +105,9 @@ pub enum RulerHandle { IndentFirst, IndentLeft, IndentRight }
 **One command per gesture.** Writing on release makes a drag one operation on the wire and one
 undo step (`features/ambre-spec-prose-undo.md`).
 
-**The handles follow the caret**, and read the block's effective settings through the cascade
-rather than its stored keys, so a paragraph inheriting its indents from a style shows the values it
-is laid out with (`PROSE-FEAT-020`, `PROSE-UI-064`).
+**The handles follow the caret** (`PROSE-UI-064`), and read the block's effective settings through
+the cascade rather than its stored keys, so a paragraph inheriting its indents from a style shows
+the values it is laid out with (`PROSE-FEAT-020`, `PROSE-UI-075`).
 
 **The scale is the page's.** Zero is the page's left margin and the length is the content width,
 both from the layout, so a zoom moves the ruler with the page (`PROSE-UI-065`,
@@ -117,14 +131,14 @@ are not respecified here (`ambre-spec-chrome.md`).
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The write happens on release | a drag is one intent and deserves one operation. Writing per pointer event puts hundreds of deltas on the wire for one gesture, and leaves an undo stack no author can walk back through | writing on every pointer move, which is the shape that floods the document and the network for a gesture that lasted a second |
-| The ruler is DOM chrome, fixed above the page | the canvas owns content and the DOM owns everything else (`UI-THREAD-001`), and a band drawn on the canvas would scroll with the page it is measuring. Fixing it in the chrome is what keeps it visible while the author reads page four | drawing the ruler as a `DrawSurface` band inside the scrolled column |
-| It shows the effective values, not the stored ones | a paragraph inheriting its indents from a style has no stored indent, and showing zero there tells the author the opposite of what the page shows. The cascade already answers the question | reading the block's own keys, which shows nothing for every paragraph that uses a style |
-| It shows one paragraph | the handles are three numbers and a selection can span two hundred paragraphs with two hundred different triples. Following the caret is the one rule that always has an answer | showing the selection's common values, which is blank for most real selections and needs a fourth, mixed rendering |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The write happens on release | writing on every pointer move | it floods the document and the network for a gesture that lasted a second: hundreds of deltas on the wire, and an undo stack no author can walk back through. A drag is one intent and deserves one operation |
+| The ruler is DOM chrome, fixed above the page | drawing the ruler as a `DrawSurface` band inside the scrolled column | the canvas owns content and the DOM owns everything else (`UI-THREAD-001`), and a band on the canvas scrolls with the page it is measuring. Fixed in the chrome, it stays visible while the author reads page four |
+| It shows the effective values, not the stored ones | reading the block's own keys | it shows nothing for every paragraph that uses a style. A paragraph inheriting its indents has no stored indent, so zero tells the author the opposite of what the page shows, and the cascade already answers the question |
+| It shows one paragraph | showing the selection's common values | it is blank for most real selections and needs a fourth, mixed rendering. The handles are three numbers and a selection can span two hundred paragraphs with two hundred different triples, so following the caret is the one rule that always has an answer |
 
 ---
 

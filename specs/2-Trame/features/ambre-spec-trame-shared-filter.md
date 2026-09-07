@@ -15,30 +15,75 @@ The personal views over it are the same predicate for one user alone. They are n
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TRAME-FEAT-002` | A hidden row MUST stay hidden when the data moves: a sort or an insert MUST NOT transfer the hidden mark to another row. | this spec section 3 | `ambre_trame::logic::tests::group5::shared_filter_hidden_follows_sort` | verified |
-| `TRAME-FEAT-003` | A hidden row MUST still count in every formula: a filter changes what a user sees, never what the sheet holds. | this spec section 2, row 5 | `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum` | verified |
-| `TRAME-FEAT-004` | A filter MUST survive a reload, and MUST re-evaluate a row when the user edits the cell the filter tests. | this spec section 2, row 1 | `ambre_trame::logic::tests::group5::shared_filter_recomputes_on_edit` drives the condition kind alone; `group4::shared_filter_by_values_hides_nonmatching` and `::shared_filter_condition_greater_than` cover the first evaluation, which reads no stored definition. **The values kind fails this rule today** -- section 6 | unverified |
-| `TRAME-FEAT-005` | Every collaborator MUST see the same hidden rows as the user who applied the filter. | this spec section 2, row 3 | `ambre_trame::logic::tests::group5::shared_filter_applies_on_remote_import` | verified |
-| `TRAME-FEAT-006` | When two users filter one sheet at the same moment, every peer MUST end on one filter and one hidden set. | this spec section 2, row 4 | `ambre_trame::logic::tests::group5::concurrent_filters_converge_lww`; the 2-peer convergence proptest drives `ApplyFilter` and `ClearFilter` and asserts the elected hidden set (`logic::convergence_tests::two_peers_converge_under_interleaved_ops`) | verified |
-| `TRAME-FEAT-007` | An undo MUST remove a filter in one step, like any other change to the sheet. | this spec section 2, row 6 | `ambre_trame::logic::tests::group5::shared_filter_is_undoable`, `group2::filtered_column_edit_is_one_undo_item` | verified |
-| `TRAME-FEAT-008` | A filter that cannot apply MUST leave the sheet unchanged and MUST reach no collaborator. | this spec section 4 | `ambre_trame::logic::tests::group5::shared_filter_noop_guards`, `::clear_filter_unhides_and_noops_when_absent` | verified |
-| `TRAME-FEAT-009` | A filter MUST hide the same rows after a reload as before it, for every operator it offers. | this spec section 3 | `ambre_trame::logic::tests::group5::condition_pass_covers_every_operator` and `::filter_pass_values_and_op_string_roundtrip` exercise the predicate and the operator spelling in memory; neither reads a definition back from the document, which is the half the rule is about | unverified |
-| `TRAME-FEAT-025` | A filter that wins a concurrent race MUST be one a user applied, whole: no peer MUST see one user's column joined to another user's operator or operand. | this spec section 2, row 7; section 6 | none. `concurrent_filters_converge_lww` asserts that the two peers agree, not that the winner is intact, so a mixed definition passes it. **The rule fails today** -- section 6 | unverified |
-| `TRAME-FEAT-026` | The values offered for a column MUST hold each distinct visible value once, in a stable order. | this spec section 4 | `ambre_trame::logic::tests::group4::active_column_values_are_distinct_sorted_and_visible` | verified |
-| `TRAME-FEAT-027` | Every column of the filtered range MUST carry a button on the range's first row, and the button MUST show whether a filter is active on that column. | this spec section 4 | `ambre_trame::ui::renderer::tests::autofilter_buttons_drawn_on_region_header_row`, `::autofilter_button_shows_funnel_on_filtered_column`, `ambre_trame::ui::grid::tests::group1::filter_button_hit_test_matches_drawn_rect`, `::filter_button_scales_with_zoom` | verified |
-| `TRAME-UI-008` | A hidden row MUST occupy no height, and arrow-key navigation MUST step over it. | this spec section 4 | `ambre_trame::ui::grid::tests::group2::filtered_rows_collapse_geometry_and_nav`, `ambre_trame::render::tests::cell_rect_collapses_over_hidden_rows` | verified |
-| `TRAME-FEAT-014` | A personal filter view MUST NOT emit any CRDT delta: it is local state, persisted to IndexedDB alone. | this spec section 3 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-FEAT-015` | Activating a personal filter view MUST recompute its hidden rows against the current document, never trust the stored set. | this spec section 3 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-FEAT-016` | Activating a personal filter view MUST NOT be an undo item. | this spec section 3 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-FEAT-002` | `INV` | A hidden row MUST stay hidden when the data moves: a sort or an insert MUST NOT transfer the hidden mark to another row. | this spec section 3 | `ambre_trame::logic::tests::group5::shared_filter_hidden_follows_sort` | verified |
+| `TRAME-FEAT-003` | `INV` | A hidden row MUST still count in every formula: a filter changes what a user sees, never what the sheet holds. | this spec section 2, row 5 | `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum` | verified |
+| `TRAME-FEAT-005` | `INV` | Every collaborator MUST see the same hidden rows as the user who applied the filter. | this spec section 2, row 3 | `ambre_trame::logic::tests::group5::shared_filter_applies_on_remote_import` | verified |
+| `TRAME-FEAT-031` | `INV` | The hidden rows MUST agree with the data: an edit to a filtered column MUST re-test that row. | this spec section 2, row 1 | `ambre_trame::logic::tests::group5::shared_filter_recomputes_on_edit` drives the condition kind alone. **The values kind fails this rule today** -- the stored list reads back empty, so the first edit after a filter by values hides every row (section 6) | unverified |
+| `TRAME-FEAT-030` | `INV` | A filter MUST NOT outlive the column it tests. | this spec section 3 | none, and the code does the opposite: `write_filter_hidden` returns 0 when the column uid no longer resolves, having already emptied the hidden set, while `filters_{sheet}` keeps the definition -- so the funnel stays lit on a column that is gone and no row is hidden | unverified |
+| `TRAME-FEAT-006` | `CONC` | When two users filter one sheet at the same moment, every peer MUST end on one filter and one hidden set. | this spec section 2, row 4 | `ambre_trame::logic::tests::group5::concurrent_filters_converge_lww`; the 2-peer convergence proptest drives `ApplyFilter` and `ClearFilter` and asserts the elected hidden set (`logic::convergence_tests::two_peers_converge_under_interleaved_ops`) | verified |
+| `TRAME-FEAT-025` | `CONC` | A filter that wins a concurrent race MUST be one a user applied, whole: no peer MUST see one user's column joined to another user's operator or operand. | this spec section 2, row 7; section 6 | none. `concurrent_filters_converge_lww` asserts that the two peers agree, not that the winner is intact, so a mixed definition passes it. **The rule fails today** -- section 6 | unverified |
+| `TRAME-UI-008` | `OBS` | A hidden row MUST occupy no height, and a click MUST land on the row the user sees. | this spec section 4 | `ambre_trame::ui::grid::tests::group2::filtered_rows_collapse_geometry_and_nav`, `ambre_trame::render::tests::cell_rect_collapses_over_hidden_rows` | verified |
+| `TRAME-UI-154` | `OBS` | Arrow-key navigation MUST step over a hidden row. | this spec section 4 | `ambre_trame::ui::grid::tests::group2::filtered_rows_collapse_geometry_and_nav` (the `nav` half of the same case) | verified |
+| `TRAME-FEAT-027` | `OBS` | Every column of the filtered range MUST carry a button on the range's first row. | this spec section 4 | `ambre_trame::ui::renderer::tests::autofilter_buttons_drawn_on_region_header_row`, `ambre_trame::ui::grid::tests::group1::filter_button_hit_test_matches_drawn_rect`, `::filter_button_scales_with_zoom` | verified |
+| `TRAME-FEAT-043` | `OBS` | The button MUST show whether a filter is active on its column. | this spec section 4 | `ambre_trame::ui::renderer::tests::autofilter_button_shows_funnel_on_filtered_column` | verified |
+| `TRAME-FEAT-046` | `OBS` | The user MUST be told how many rows a filter hid. | this spec section 4 | none. `chrome::commands` turns `FilterApplied` into an info toast; no test reads a toast, so the count is verified up to the event and no further | unverified |
+| `TRAME-FEAT-029` | `OBS` | What the status bar totals MUST be what a formula over the same cells totals. | this spec section 4 | none, and the two disagree: `selection_stats` skips every row in `hidden_rows`, while `TRAME-FEAT-003` keeps those rows in `SUM`. One column then reads two different totals, one in the bar and one in a cell, with nothing to explain the gap | unverified |
+| `TRAME-FEAT-004` | `IO` | A filter MUST read back from the document as the filter the user applied. | this spec section 2, row 1 | none, and the values kind fails it: `persist_filter_def` writes the list as a child container, `load_active_filter` reads the map's flat value where that child is a handle, and falls back to an empty list -- section 6 | unverified |
+| `TRAME-FEAT-009` | `IO` | A filter MUST hide the same rows after a reload as before it, for every operator it offers. | this spec section 3 | `ambre_trame::logic::tests::group5::condition_pass_covers_every_operator` and `::filter_pass_values_and_op_string_roundtrip` exercise the predicate and the operator spelling in memory; neither reads a definition back from the document, which is the half the rule is about | unverified |
+
+### 1.2 Filter a column
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-FEAT-034` | `PRE` | The rows MUST be tested on their computed value, never on their text. | this spec section 3 | none. `apply_filter` runs `compute_all_dirty` before the pass, so the order holds today; no test filters a column of formulas, which is the only case that would tell the two apart | unverified |
+| `TRAME-FEAT-032` | `POST` | Applying a filter MUST replace the previous one, never add to it. | this spec section 3 | none. `write_filter_hidden` and `persist_filter_def` each clear their map first, and no test applies a second filter over a first | unverified |
+| `TRAME-FEAT-045` | `POST` | Applying a filter MUST hide every row that fails the test and no other. | this spec section 3 | `ambre_trame::logic::tests::group4::shared_filter_by_values_hides_nonmatching`, `::shared_filter_condition_greater_than` assert the hidden mark row by row, one per filter kind | verified |
+| `TRAME-FEAT-033` | `POST` | Applying a filter MUST report the number of rows it hid. | this spec section 4 | `ambre_trame::logic::tests::group4::shared_filter_by_values_hides_nonmatching`, `::shared_filter_condition_greater_than` both match `FilterApplied { hidden_row_count }` against the rows they hid | verified |
+| `TRAME-FEAT-007` | `POST` | An undo MUST remove a filter in one step, like any other change to the sheet. | this spec section 2, row 6 | `ambre_trame::logic::tests::group5::shared_filter_is_undoable`, `ambre_trame::logic::tests::group2::filtered_column_edit_is_one_undo_item` | verified |
+| `TRAME-FEAT-035` | `FRAME` | Applying a filter MUST NOT change any cell value. | this spec section 5 | partial: `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum` shows the filtered column's total unchanged, which observes that column alone. Nothing watches the rest of the sheet | unverified |
+| `TRAME-FEAT-036` | `FRAME` | An edit outside the filtered column MUST NOT rewrite the hidden set. | this spec section 3 | none, and the code does the opposite: `finish_cell_writes` calls `recompute_active_filter` after every cell write, whatever its column, and that call clears and rewrites `filter_hidden_{sheet}` whole -- so each keystroke on a filtered sheet broadcasts one delta per hidden row and grows the history for an unchanged result | unverified |
+| `TRAME-FEAT-008` | `FAIL` | A filter that cannot apply MUST leave the sheet unchanged. | this spec section 4 | `ambre_trame::logic::tests::group5::shared_filter_noop_guards` (wrong sheet, virtual column), `::clear_filter_unhides_and_noops_when_absent` | verified |
+| `TRAME-FEAT-044` | `FAIL` | A filter that cannot apply MUST reach no collaborator. | this spec section 4 | `ambre_trame::logic::tests::group5::shared_filter_noop_guards` asserts `update.is_none()` on each guard | verified |
+| `TRAME-FEAT-037` | `FAIL` | A filter that cannot apply MUST say so. | this spec section 4 | none, and the code does the opposite: each guard returns `display_only(vec![])`, so the popover closes on a column that was never filtered and the user is told nothing | unverified |
+
+### 1.3 Clear the filter
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-FEAT-038` | `POST` | Clearing MUST remove both the definition and the hidden rows. | this spec section 3 | `ambre_trame::logic::tests::group5::clear_filter_unhides_and_noops_when_absent` (the `unhides` half) | verified |
+| `TRAME-FEAT-039` | `FRAME` | Clearing MUST NOT change any cell value. | this spec section 5 | none. `clear_filter` empties the two filter maps and touches no cell map; nothing asserts it | unverified |
+| `TRAME-FEAT-040` | `FAIL` | Clearing with no filter active MUST reach no collaborator. | this spec section 4 | `ambre_trame::logic::tests::group5::clear_filter_unhides_and_noops_when_absent` (the `noops_when_absent` half), `::shared_filter_noop_guards` | verified |
+
+### 1.4 List the values of a column
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-FEAT-026` | `POST` | The values offered for a column MUST hold each distinct visible value once. | this spec section 4 | `ambre_trame::logic::tests::group4::active_column_values_are_distinct_sorted_and_visible` | verified |
+| `TRAME-FEAT-041` | `POST` | The values MUST be ordered as the column reads them, not as text. | this spec section 4 | none, and the code does the opposite: `active_column_values` sorts the display strings, so a column of numbers lists `10` before `9`. The test asserts the sort the code performs, not the order a user expects | unverified |
+| `TRAME-FEAT-042` | `FRAME` | Listing the values MUST reach no collaborator. | this spec section 3 | type-level: the handler returns `TrameOutcome::display_only`, which builds `update: None` -- a read-only query cannot carry a delta | verified |
+
+### 1.5 Keep a filter of one's own
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-FEAT-015` | `POST` | Activating a personal filter view MUST recompute its hidden rows against the current document, never trust the stored set. | this spec section 3 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-FEAT-014` | `FRAME` | A personal filter view MUST NOT emit any CRDT delta: it is local state, persisted to IndexedDB alone. | this spec section 3 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-FEAT-016` | `FRAME` | Activating a personal filter view MUST NOT be an undo item. | this spec section 3 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
 
 * **Budget.** none: the filter is one predicate pass over the rows a sheet holds, and
   `ambre-spec-budgets.md` budgets no filter.
 * **Boundary.** none of its own: the filter is shared, so its definition is a document write, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 9 `verified`, 3 `unverified`, 3 `unimplemented`. The three gaps share one cause
-  -- the stored definition is not read back correctly -- and section 6 states it once.
+* **Verification.** 17 `verified`, 14 `unverified`, 3 `unimplemented`. The rows went 15 to 34 and
+  the mechanisms they cite went 21 to 23: the split manufactured no coverage. Every new `verified`
+  is one half of a conjunction the tests already carried whole -- `collapse_geometry_and_nav`,
+  `unhides_and_noops_when_absent`, `noop_guards` each name their two halves. The `unverified` rows
+  are where the split found the other half: four of them state a rule the code contradicts today,
+  and section 6 states each once.
 
 ---
 
@@ -191,21 +236,23 @@ the filtered column for the glyph, and the chrome relay turns each into a notice
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| A filter hides rows and changes no value | a user filters to read a subset, and expects the totals to hold | dropping the rows from the data; excluding them from every formula |
-| The author evaluates the rows, and the others apply the result | one evaluation gives one answer; two peers evaluating a formula at different moments can disagree | every peer re-tests the rows against its own state |
-| The hidden set is keyed by row identity | the mark follows its row through a sort, an insert and a delete, with no recompute | marking a row by its position, which a single insert invalidates |
-| The definition is stored in the document | the filter is shared, so it must survive a reload and reach a peer that connects later | keeping the filter in the local session, like a personal view |
-| A filter is an ordinary change to the sheet | it undoes, redoes and converges through the one path every other change uses; the user carries no exception in mind | making a filter non-undoable, as Google Sheets does; a separate history for view changes |
-| An edit recomputes the hidden set, a structural change does not | only an edit can change the outcome of the test; a move changes positions alone | recomputing after every change, which costs one pass over the column for nothing |
-| The buttons sit on the data's first row | the affordance sits where the data is, as it does in Excel | the funnel badge on the column letter alone, far from the values it describes |
-| A personal view writes nothing to the document | it is one user's reading of shared data, so it must reach no collaborator and enter no history. Local storage is the only store that gives both | a per-user container in the document, which every peer would then merge and undo |
-| A personal view re-tests the rows on each activation | the document changed since the view was saved, so a stored hidden set names rows that may now pass. The predicate is cheap and the set is not a fact | trusting the persisted set, which shows a stale view of live data |
-| The value list excludes hidden rows | the list shows what the current view holds, so a second filter narrows the first | listing every value of the column, including those the active filter hides |
-| The popover is DOM chrome anchored under its column | it needs a scrolling list, a search field and checkboxes, which the chrome toolkit already gives; a canvas overlay would reimplement all three and take the keyboard from the grid | drawing the popover on the `DrawSurface`, beside the cells it filters |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| A filter hides rows and changes no value | dropping the rows from the data | a filter is a reading gesture, and it would make one an irreversible deletion of everyone's data |
+| A filter hides rows and changes no value | excluding them from every formula | a user filters to read a subset, and expects the totals to hold |
+| The author evaluates the rows, and the others apply the result | every peer re-tests the rows against its own state | one evaluation gives one answer; two peers evaluating a formula at different moments can disagree |
+| The hidden set is keyed by row identity | marking a row by its position | a single insert invalidates it. An identity follows its row through a sort, an insert and a delete, with no recompute |
+| The definition is stored in the document | keeping the filter in the local session, like a personal view | the filter is shared, so it must survive a reload and reach a peer that connects later |
+| A filter is an ordinary change to the sheet | making a filter non-undoable, as Google Sheets does | the user then carries an exception in mind: one gesture on the sheet that the undo key does not answer |
+| A filter is an ordinary change to the sheet | a separate history for view changes | two stacks have to be ordered against each other on every undo, and the ordinary path already undoes, redoes and converges |
+| An edit recomputes the hidden set, a structural change does not | recomputing after every change | it costs one pass over the column for nothing: only an edit can change the outcome of the test, and a move changes positions alone |
+| The buttons sit on the data's first row | the funnel badge on the column letter alone | it sits far from the values it describes; the affordance belongs where the data is, as it does in Excel |
+| A personal view writes nothing to the document | a per-user container in the document | every peer would then merge and undo it. A personal view is one user's reading of shared data, so it must reach no collaborator and enter no history, and local storage is the only store that gives both |
+| A personal view re-tests the rows on each activation | trusting the persisted set | it shows a stale view of live data: the document changed since the view was saved, so a stored hidden set names rows that may now pass. The predicate is cheap and the set is not a fact |
+| The value list excludes hidden rows | listing every value of the column, including those the active filter hides | the list shows what the current view holds, so a second filter narrows the first |
+| The popover is DOM chrome anchored under its column | drawing the popover on the `DrawSurface`, beside the cells it filters | it needs a scrolling list, a search field and checkboxes, which the chrome toolkit already gives; a canvas overlay would reimplement all three and take the keyboard from the grid |
 
 ---
 
@@ -222,6 +269,22 @@ the filtered column for the glyph, and the chrome relay turns each into a notice
   joined to the other's operator and operand. Neither user applied that filter, and both peers agree
   on it. One register would hold the definition whole, which `ambre-spec-trame-schema.md section 6`
   already called for a cell style.
+* **An edit outside the filtered column rewrites the whole hidden set** (`TRAME-FEAT-036`).
+  `finish_cell_writes` calls `recompute_active_filter` after every cell write, whatever its column,
+  and that call empties `filter_hidden_{sheet}` and refills it. One keystroke on a filtered sheet
+  broadcasts one delta per hidden row for an unchanged result, against the section 5 decision that
+  only an edit to the tested column can change the outcome.
+* **A filter outlives the column it tests** (`TRAME-FEAT-030`). `write_filter_hidden` empties the
+  hidden set, fails to resolve the column uid and returns 0, while `filters_{sheet}` keeps the
+  definition. The funnel stays lit on a column that is gone and no row is hidden.
+* **The status bar and the formulas total different cells** (`TRAME-FEAT-029`). `selection_stats`
+  skips every hidden row; `TRAME-FEAT-003` keeps those rows in `SUM`. One column reads two totals,
+  one in the bar and one in a cell, and nothing tells the user which is which.
+* **A refusal is silent** (`TRAME-FEAT-037`). Each guard in `apply_filter` returns an empty
+  `display_only`, so filtering a virtual column closes the popover and says nothing.
+* **The value list is ordered as text** (`TRAME-FEAT-041`). `active_column_values` sorts the display
+  strings, so a column of numbers offers `10` before `9`. The test asserts the order the code
+  produces, not the order a reader expects.
 * **A filter over a merged block** is unspecified. `features/ambre-spec-trame-cell-merges.md
   section 6` states the same gap from the other side.
 * **`SUBTOTAL`** is not built: no function excludes the hidden rows today (`TRAME-FEAT-003` is the

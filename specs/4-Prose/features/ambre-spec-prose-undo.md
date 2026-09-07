@@ -14,9 +14,16 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The shared rules are `ambre-spec-undo.md`,
 `UNDO-001` through `UNDO-006`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PROSE-UI-045` | After an undo or a redo, the caret MUST be placed at the edit that was taken back or put back, and a selection MUST collapse to it. | this spec section 2 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+### 1.1 Undo or redo the last action
+
+One gesture with two directions and one caret rule, as `ambre-spec-undo.md section 1.2` states the
+shared steps once for both.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-045` | `POST` | After an undo or a redo, the caret MUST be placed at the edit that was taken back or put back. | this spec section 2 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-073` | `POST` | A selection open when the undo or the redo runs MUST collapse to that caret. | this spec section 2 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-074` | `FRAME` | Moving the caret after an undo or a redo MUST NOT write to the document: where this author looks is not a change a peer receives. | derived | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none: an undo applies one inverse operation and exports the delta it produced, which
   is the local-write row of `ambre-spec-budgets.md section 1` and no cost of its own. The unbounded
@@ -24,9 +31,12 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 * **Boundary.** none of its own: an undo is a document write like any other, and `ZK-001` seals
   every payload before it leaves the client. The history lives in memory on the Logic thread and
   is never persisted or sent.
-* **Verification.** 1 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. The shared
-  rules and their scenarios are in `ambre-spec-undo.md`; the caret is the one rule this document
-  adds.
+* **Verification.** 3 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line
+  `lib.rs`, so no row here can be held either way. The one row stated two rules -- where the caret
+  goes and what an open selection becomes -- and `PROSE-UI-073` is the second. `PROSE-UI-074` is
+  the frame condition nobody had written: a caret placed by an undo is this author's view state,
+  and an implementation that recorded it in the document would satisfy every row above it. The
+  shared rules and their scenarios stay in `ambre-spec-undo.md`.
 
 ---
 
@@ -38,7 +48,8 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 state (`features/ambre-spec-prose-engine.md section 3`) recording local transactions on the document.
 
 **Where the caret lands.** The confirming change carries the delta, and the view reads the edit
-point from it: the caret moves there and a selection collapses to it (`PROSE-UI-045`).
+point from it: the caret moves there (`PROSE-UI-045`) and an open selection collapses to it
+(`PROSE-UI-073`). Both are view state, and neither is written back (`PROSE-UI-074`).
 
 **What is one undo item.** A replace-all is one (`ambre-spec-find.md`, `FIND-006`;
 `features/ambre-spec-prose-find-replace.md`); everything else is section 4.

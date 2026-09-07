@@ -17,28 +17,49 @@ a collaborator changes is the data underneath it, which is what section 2 is abo
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TRAME-UI-030` | Extending a selection MUST leave its fixed corner where the user put it. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::move_with_extend_keeps_anchor`, `::selection_extend_disjoint_and_membership`, `::single_cell_selection_tracks_active` | verified |
-| `TRAME-UI-031` | A cell covered by two selected rectangles MUST be acted on once. | this spec section 3 | `ambre_trame::ui::grid::tests::group1::selected_cells_enumerates_and_dedups` | verified |
-| `TRAME-UI-032` | A range operation MUST act on the rectangle the user selected, never on the active cell alone. | this spec section 3 | type-level: `SetActiveCell` carries the anchor beside the active cell, and every range intent the menus send carries no geometry at all, so the Logic thread can only read the tracked pair | verified |
-| `TRAME-UI-033` | A whole-column or whole-row selection MUST NOT require the document height from the UI thread. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::axis_selection_spans_the_band` covers the band shape, which carries no extent across its axis. It does not cover the command built from it, and that command reads the extent out of the UI cache. **The rule fails today** -- section 6 | unverified |
-| `TRAME-UI-034` | A lone selected cell MUST show the active border alone, with no range fill behind it. | this spec section 4 | `ambre_trame::ui::renderer::tests::multi_cell_selection_fills_and_outlines_each_range`, `::draw_overlay_draws_headers_and_active_border` | verified |
-| `TRAME-UI-035` | A selection MUST NOT survive the document it was made in: it MUST NOT be written to the document nor sent to a peer. | `ambre-spec-ui.md section 2` | structural: `Selection` lives in `ui/grid/`, and `TRAME-UI-001` already forbids that module any document access | verified |
-| `TRAME-UI-019` | A remote cursor MUST NOT force a viewport re-derive. | this spec section 3 | not built -- lands with the "Grid surface" Story (`ambre-roadmap.md` E6). The half about leaving no trace in the document is `PRESENCE-001` | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-031` | `INV` | A cell covered by two selected rectangles MUST be acted on once. | this spec section 3 | `ambre_trame::ui::grid::tests::group1::selected_cells_enumerates_and_dedups` covers the enumeration two paths read: the clear and the `Ctrl`+`Enter` fill, which carry their cells | verified |
+| `TRAME-UI-032` | `INV` | A range operation MUST act on the rectangle the user selected, never on the active cell alone. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_selection_resolves_against_tracked_selection`: a `SetActiveCell` reporting A1:B3, then a parameterless `SortSelectionAsc`, sorts the three rows | verified |
+| `TRAME-UI-129` | `INV` | A range operation MUST act on every rectangle the user selected, not on the live one alone. | this spec section 4 | none. **The rule fails today** -- section 6: `SetActiveCell` carries one pair, so the rectangles the modifier committed never reach the Logic thread | unverified |
+| `TRAME-UI-035` | `INV` | A selection MUST NOT be written to the document. | `ambre-spec-ui.md section 2` | structural: `Selection` lives in `ui/grid/`, which `TRAME-UI-001` forbids any document access. The Logic thread keeps its own copy, and there the argument is an enumeration: the field is private and its ten readers each resolve a geometry | verified |
+| `TRAME-UI-130` | `INV` | A selection MUST NOT reach a peer. | `ambre-spec-ui.md section 2` | none: the rule holds by absence today -- Trame sends no ephemeral frame at all -- and becomes a claim to prove when `TRAME-UI-019` lands | unverified |
+| `TRAME-UI-034` | `OBS` | A lone selected cell MUST show the active border. | this spec section 4 | `ambre_trame::ui::renderer::tests::draw_overlay_draws_headers_and_active_border`: one 2px stroke in the selection colour. `::multi_cell_selection_fills_and_outlines_each_range` covers the other side, that a multi-cell selection draws none | verified |
+| `TRAME-UI-131` | `OBS` | A lone selected cell MUST show no range fill behind it. | this spec section 4 | none: the single-cell test counts the border and never counts the tint, so nothing fails if the fill returns | unverified |
+| `TRAME-UI-019` | `INV` | A remote cursor MUST NOT force a viewport re-derive. | this spec section 3 | not built -- lands with the "Grid surface" Story (`ambre-roadmap.md` E6). The half about leaving no trace in the document is `PRESENCE-001` | unimplemented |
+
+### 1.2 Move or extend the selection
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-030` | `POST` | Extending a selection MUST move its active corner alone and leave its fixed corner where the user put it. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::move_with_extend_keeps_anchor`, `::selection_extend_disjoint_and_membership` | verified |
+| `TRAME-UI-132` | `FRAME` | A move that does not extend MUST NOT keep a rectangle the modifier committed. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::selection_extend_disjoint_and_membership`: after two rectangles, a plain `move_to` leaves a single cell. `::single_cell_selection_tracks_active` covers the arrow path | verified |
+
+### 1.3 Take a whole column or row from its header
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-033` | `FRAME` | A whole-column or whole-row selection MUST NOT require the document height from the UI thread. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::axis_selection_spans_the_band` covers the band shape, which carries no extent across its axis. It does not cover the command built from it, and that command reads the extent out of the UI cache. **The rule fails today** -- section 6 | unverified |
 
 * **Budget.** none: the selection is view state, and `ambre-spec-budgets.md` budgets
   no selection operation. Painting it sits in the frame phases of
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** `TRAME-UI-019` is the one exception: another user's selection travels as an
   ephemeral frame, which `ZK-005` seals with the `DocumentKey` and leaves the relay `document_id`,
-  `pub_key` and `counter` alone. The local selection never leaves the UI thread.
-* **Verification.** 5 `verified`, 1 `unverified`, 1 `unimplemented`. Three rules the selection
+  `pub_key` and `counter` alone. The local selection stops at the Logic thread, which holds it in
+  memory to resolve the parameterless intents (`TRAME-UI-032`); nothing carries it further.
+* **Verification.** 6 `verified`, 4 `unverified`, 1 `unimplemented`. Three rules the selection
   depends on are declared elsewhere and cited, not restated: a merged block selects whole
   (`TRAME-UI-009`), a hidden row is stepped over (`TRAME-UI-008`), and hit-testing inverts the
-  drawn geometry (`TRAME-UI-007`). The one gap is the whole-axis band: the rule is right, the
-  decision below it is right, and the code answers with the last row it happens to hold. Three of
-  the four unbuilt presence rows are **retired, not moved** (the register is `invariants.py`):
+  drawn geometry (`TRAME-UI-007`). Two claims are withdrawn here. `TRAME-UI-032` rested on the
+  shape of the bus -- that a range intent carries no geometry, so the Logic thread can only read
+  the tracked pair -- and the bus carries both forms, `MergeCells` beside `MergeSelection`, with
+  the UI itself sending `FillRange` and `PasteRange` with their corners; what holds the rule is a
+  test of the intent path, and what the old argument hid is `TRAME-UI-129`. `TRAME-UI-035` claimed
+  the selection never leaves the UI thread, and it does. Three of
+  the four unbuilt presence rows are **retired, not moved** (the register is `contracts.py`):
   `TRAME-UI-016`, `-017` and `-018` each restated a rule three applications share and carried no
   Trame mechanism, and the rule is
   `PRESENCE-003` to `PRESENCE-006` of `1-Foundations/ambre-spec-presence.md`. What stays Trame's
@@ -92,7 +113,9 @@ that rectangle, and a cell in two of them is enumerated once (`TRAME-UI-031`).
 1. step from the active cell; on a merge master, step by the whole span, so the move cannot land on
    a covered cell and snap straight back (`TRAME-UI-009`);
 2. clamp to the grid, then skip the run of rows the filter hides in the travel direction;
-3. collapse to a single cell, or move the active corner alone when the user is extending;
+3. collapse to a single cell, dropping the rectangles the modifier committed
+   (`TRAME-UI-132`), or move the active corner alone when the user is extending
+   (`TRAME-UI-030`);
 4. snap a collapsing move onto the block master, and leave an extending one on its raw corner, so
    the rectangle can still grow cell by cell;
 5. report the new pair to the Logic thread, and scroll the target into view if it left the screen
@@ -167,7 +190,7 @@ an empty list, and it does not even receive the resolved author. Toile ships the
 | press on a cell | collapses the selection onto it and arms a sweep; a press on the already active cell opens the editor instead |
 | drag | moves the active corner, never the anchor (`TRAME-UI-030`) |
 | `Shift` and press | extends the live rectangle to that cell |
-| `Ctrl` or `Cmd` and press | commits the live rectangle and starts a new one, so the selection becomes several rectangles |
+| `Ctrl` or `Cmd` and press | commits the live rectangle and starts a new one, so the selection becomes several rectangles. Only the live one reaches the Logic thread (`TRAME-UI-129`) |
 | press on a column or row header | takes the whole axis as a band (`TRAME-UI-033`); a drag along the strip sweeps the band, and `Shift` extends it |
 | press on a header already inside the band | grabs it for a reorder instead of reselecting (`features/ambre-spec-trame-headers.md section 4`) |
 | press on the top-left corner | takes the whole sheet, as a band over every column |
@@ -189,27 +212,30 @@ modifier.
 | What | Drawn as |
 |---|---|
 | each selected rectangle | a translucent fill and a one-pixel outline |
-| a lone selected cell | the active border, and no fill (`TRAME-UI-034`) |
+| a lone selected cell | the active border (`TRAME-UI-034`), and no fill (`TRAME-UI-131`) |
 | a rectangle touching a merge | grown to whole blocks first (`features/ambre-spec-trame-cell-merges.md section 4`) |
 | the covered rows and columns | a tinted header; a whole-axis band tints its whole strip |
 | the active cell | announced to the accessibility tree on every move |
 
-**What reads the selection.** Merge, unmerge, sort, filter, fill, clipboard, structural insert and
-delete, cell style, and the status bar aggregates all send an intent with no geometry and let the
-Logic thread read the tracked pair (`TRAME-UI-032`).
+**What reads the selection.** Merge, unmerge, sort, filter, structural insert and delete, cell
+style, and the status bar aggregates send an intent with no geometry and let the Logic thread read
+the tracked pair (`TRAME-UI-032`). The fill handle and the paste are the exception: they carry the
+two rectangles they resolved, because the source and the destination are not the selection. The
+clear and the `Ctrl`+`Enter` fill carry their cell list, which is the one place the deduplicated
+enumeration is read (`TRAME-UI-031`).
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The UI sends both corners on every move, and range intents carry no geometry | one source of truth for what a command acts on. A command carrying its own rectangle can disagree with what the user sees, and every menu becomes a second place to get the range right | each intent carrying the rectangle it applies to |
-| A whole-axis selection is its own kind, not a rectangle clamped to a guess | the UI thread holds no document, so it cannot know where the data ends; the Logic thread does, and already resolves the used range for a whole-column formula range | a rectangle spanning to the last row of the virtual grid, which would make every axis operation cost 100 000 rows |
-| An extending move keeps its raw corner, a collapsing move snaps to the block master | a rectangle that snapped while growing could not be grown cell by cell past a merge; a collapsed active cell must never sit on a cell the merge hides | snapping in both cases, which traps the cursor beside a merge |
-| A step off a merge master advances by the whole span | the cell next to a master is covered, so a one-cell step would snap back onto the master and the cursor would not move | leaving the covered cells selectable |
-| A lone single cell shows no range fill | in a multi-cell selection the fill already marks the block, so a second active-cell border reads as a spurious selection following the cursor. This is what Excel does | drawing both marks in every case |
-| A second rectangle is added with a modifier click, not with a modifier drag | the committed rectangles are a list of finished shapes, and one live rectangle is what a drag can grow | a modifier drag adding a swept rectangle |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The UI sends both corners on every move; range intents carry no geometry | each intent carrying the rectangle it applies to | a command carrying its own rectangle can disagree with what the user sees, and every menu becomes a second place to get the range right. One source of truth for what a command acts on. |
+| A whole-axis selection is its own kind | a rectangle spanning to the last row of the virtual grid | it would make every axis operation cost 100 000 rows. The UI thread holds no document, so it cannot know where the data ends; the Logic thread does, and already resolves the used range for a whole-column formula range. |
+| An extending move keeps its raw corner, a collapsing move snaps to the master | snapping in both cases | it traps the cursor beside a merge: a rectangle that snapped while growing could not be grown cell by cell past one. A collapsed active cell must never sit on a cell the merge hides either. |
+| A step off a merge master advances by the whole span | leaving the covered cells selectable | the cell next to a master is covered, so a one-cell step would snap back onto the master and the cursor would not move. |
+| A lone single cell shows no range fill | drawing both marks in every case | in a multi-cell selection the fill already marks the block, so a second active-cell border reads as a spurious selection following the cursor. This is what Excel does. |
+| A second rectangle is added with a modifier click | a modifier drag adding a swept rectangle | the committed rectangles are a list of finished shapes, and one live rectangle is what a drag can grow: a second swept rectangle would need a second live one. |
 
 ---
 
@@ -224,6 +250,17 @@ Logic thread read the tracked pair (`TRAME-UI-032`).
   The Logic thread knows the used range and is not asked.
 * **A modifier drag adds nothing.** Only a modifier click commits a rectangle, so a user cannot
   sweep a second range.
+* **A disjoint selection is one rectangle to every menu** (`TRAME-UI-129`). `SetActiveCell` carries
+  one pair of corners, so the rectangles a modifier click committed stay in the UI thread and the
+  Logic thread resolves its intents against the live one alone. A user who takes two blocks and
+  presses bold styles the second; the first keeps its old weight and nothing says so. Only the two
+  paths that carry their own cell list -- the clear and the `Ctrl`+`Enter` fill -- reach the whole
+  selection.
+* **The sort dialog reads one rectangle and the sort another.** The dialog opens over a snapshot of
+  the selection and offers that snapshot's columns, each sort key range-relative to it; applying
+  sends the parameterless `SortSelectionMulti`, which the Logic thread resolves against the pair it
+  tracks. Nothing pins the two together, and no rule says what a selection change between the two
+  means: the keys land on whichever columns the current rectangle happens to start at.
 * **The band is resolved by the wrong thread, against the wrong data** (`TRAME-UI-033`). The
   decision below section 5 says the UI cannot know where the data ends, and the code has it guess:
   a header click builds a rectangle whose far corner is the last non-empty cell **in the local cell

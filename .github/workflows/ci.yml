@@ -50,9 +50,9 @@ jobs:
           # from main without consuming the shared 10 GB budget (avoids eviction).
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: just lint
-      # Doc-side check, milliseconds: derives the invariant ledger and fails on a
+      # Doc-side check, milliseconds: derives the contract ledger and fails on a
       # status value or a missing Story citation (`ambre-spec-architecture.md §4`).
-      - run: just invariants
+      - run: just contracts
       # What a spec quotes: no function body in a spec (template §0).
       - run: just spec-code
       # How a spec is built: prose share, production markers in a feature

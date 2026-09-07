@@ -18,26 +18,38 @@ two never swap places. The register, the toolbar and the convergence of a format
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TRAME-102` | A format MUST change what a cell shows, and MUST NOT change what it holds. | this spec section 2 | type-level: `format_display` takes `&self` and returns a `String`; its one call site is the viewport packing loop, so no formatted text can reach `cells_{sheet}` | verified |
-| `TRAME-103` | A value that is not a number MUST be shown unchanged, whatever format the cell carries. | this spec section 2 | none. `format_display` falls back to the text when the parse fails, and no test formats a word | unverified |
-| `TRAME-104` | Only a family that renders decimal places MUST accept a decimal count. | this spec section 3 | `ambre_bus::has_decimals_is_true_only_for_numeric_families`, which is exhaustive over the ten families | verified |
-| `TRAME-105` | Increasing the decimals MUST add one place to the count the cell already carries. | this spec section 3 | none, and the code does the opposite: the two buttons write the constants `0` and `2`, so the control is a two-value switch, not a step | unverified |
-| `TRAME-106` | A fraction MUST keep the sign of a value below one, and MUST NOT print a whole as sixteenths. | this spec section 2 | `ambre_trame::logic::packing::tests::fraction_format_keeps_the_sign_and_carries` | verified |
-| `TRAME-107` | A date-formatted cell MUST show a calendar date, never the day serial behind it. | this spec section 5 | none, and the code does the opposite: `Date` and `Time` print the serial as a number | unverified |
-| `TRAME-108` | A formatted value MUST read the same everywhere it is shown as text. | this spec section 5 | none, and the code does the opposite: find, replace and CSV export read the unformatted value, so a cell shown as `50.0%` is found by searching `0.5` | unverified |
-| `TRAME-109` | A custom pattern MUST be applied, or refused when it is set. | this spec section 5 | none, and the code does neither: `Custom` returns the text untouched, so the pattern is stored and silently ignored | unverified |
-| `TRAME-110` | A currency and a date MUST follow the document's locale, not the machine's. | this spec section 5 | not built -- lands with the "One document locale" Story (`ambre-roadmap.md` E8) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-102` | `INV` | A format MUST NOT change what a cell holds. | this spec section 2 | type-level: `format_display` takes `&self` and returns a `String`; its one call site is the viewport packing loop, so no formatted text can reach `cells_{sheet}` | verified |
+| `TRAME-157` | `OBS` | A formatted cell MUST show the text its family renders for the value it holds. | this spec section 2 | `ambre_trame::logic::tests::group1::set_cell_style_round_trips_and_formats_numbers`, which reads `314.2%` off the packed viewport for a cell holding `3.14159` under Percent with one decimal. One family of the nine, and the only test that reaches `format_display` at all | verified |
+| `TRAME-103` | `OBS` | A value that is not a number MUST be shown unchanged, whatever format the cell carries. | this spec section 2 | none. `format_display` falls back to the text when the parse fails, and no test formats a word | unverified |
+| `TRAME-104` | `OBS` | A decimal count MUST be offered only for a family that renders decimal places. | this spec section 3 | `ambre_bus::has_decimals_is_true_only_for_numeric_families`, exhaustive over the ten families; the predicate's one use is the `disabled` attribute of the two buttons. It guards the control, never the write -- section 5 | verified |
+| `TRAME-106` | `OBS` | A fraction MUST keep the sign of a value below one, and MUST NOT print a whole as sixteenths. | this spec section 2 | `ambre_trame::logic::packing::tests::fraction_format_keeps_the_sign_and_carries`, which calls the renderer directly, not through a packed cell | verified |
+| `TRAME-107` | `OBS` | A date-formatted cell MUST show a calendar date, never the day serial behind it. | this spec section 5 | none, and the code does the **opposite**: `Date` and `Time` print the serial as a number | unverified |
+| `TRAME-108` | `OBS` | A formatted value MUST read the same everywhere it is shown as text. | this spec section 5 | none, and the code does the **opposite**: find, replace and CSV export read the unformatted value, so a cell shown as `50.0%` is found by searching `0.5` | unverified |
+| `TRAME-109` | `OBS` | A cell carrying a custom pattern MUST show that pattern applied. | this spec section 5 | none, and the code does the **opposite**: `Custom` returns the text untouched, so the pattern is stored and silently ignored | unverified |
+| `TRAME-110` | `OBS` | A currency and a date MUST follow the document's locale, not the machine's. | this spec section 5 | not built -- lands with the "One document locale" Story (`ambre-roadmap.md` E8) | unimplemented |
+
+### 1.2 Change the decimal count
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-105` | `POST` | Increasing the decimals MUST add one place to the count the cell already carries. | this spec section 3 | none, and the code does the **opposite**: the two buttons write the constants `0` and `2`, so the control is a two-value switch, not a step | unverified |
+| `TRAME-158` | `FRAME` | Changing the decimal count MUST NOT change a computed value. | this spec section 3 | none. The restyle writes the style containers alone and drives no engine pass; the viewport re-packs from the values it already held, and no test asserts that it re-packs the same ones | unverified |
 
 * **Budget.** none of its own: a format is a pure function of a value and a pattern, applied per
   displayed cell inside the frame phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a format is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 3 `verified`, 5 `unverified`, 1 `unimplemented`. Four of the five gaps are rows
-  where the code is known to do something else, not rows waiting for a test: the decimal control,
-  the date family, the custom pattern, and the reach of a format past the grid. They are cheap to
-  close because each is a pure function of a value and a format.
+* **Verification.** 4 `verified`, 6 `unverified`, 1 `unimplemented`. `TRAME-102` stated two rules
+  in one row and is now two: what a cell holds is a type-level argument, and what a cell shows is
+  `TRAME-157`, held by the one test that packs a formatted cell. Four of the six gaps are rows where
+  the code is known to do something else -- the decimal control, the date family, the custom
+  pattern, and the reach of a format past the grid. `TRAME-109` no longer offers a refusal as an
+  alternative: nothing lets a user type a pattern, so a rule about refusing one claims a surface
+  that does not exist.
 
 ---
 
@@ -100,15 +112,15 @@ format edit is a restyle -- one undo item, one delta, whole-cell last-writer-win
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The format is applied at pack time, not at write time | the document must hold one value for two readers on different locales; a formatted string in the CRDT would be a second source of truth, and would break every formula reading the cell | storing the formatted text beside the raw text |
-| A non-numeric value ignores its format | a column formatted as Currency also holds its header and, after a broken reference, `#REF!`. Blanking those, or erroring on them, loses more than it explains | rendering a type mismatch as an error value |
-| The family and the decimal count are two fields | the count is meaningful for four families and meaningless for six, and a user changing family keeps the precision they chose | folding the count into each numeric variant |
-| `General` is the default and does nothing | a spreadsheet must show what was typed until asked otherwise; a default that rounds would make an untouched document lie about its own contents | defaulting to a fixed decimal count |
-| A country-specific family is expressed as a pattern, never as a variant | a zip code, a phone number and a national identifier are one country's shapes, and one family per country is a list with no end. `Custom` carries an arbitrary pattern, so the shape is expressible without a family the rest of the world never selects | a `Special` family, as Excel carries |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The format is applied at pack time | storing the formatted text beside the raw text | the document must hold one value for two readers on different locales; a formatted string in the CRDT would be a second source of truth, and would break every formula reading the cell. |
+| A non-numeric value ignores its format | rendering a type mismatch as an error value | a column formatted as Currency also holds its header and, after a broken reference, `#REF!`. Blanking those, or erroring on them, loses more than it explains. |
+| The family and the decimal count are two fields | folding the count into each numeric variant | the count is meaningful for four families and meaningless for six, and folding it in loses the precision a user chose the moment they change family. |
+| `General` is the default and does nothing | defaulting to a fixed decimal count | a spreadsheet must show what was typed until asked otherwise; a default that rounds would make an untouched document lie about its own contents. |
+| A country-specific family is expressed as a pattern | a `Special` family, as Excel carries | a zip code, a phone number and a national identifier are one country's shapes, and one family per country is a list with no end. `Custom` carries an arbitrary pattern, so the shape is expressible without a family the rest of the world never selects. |
 
 ---
 
@@ -124,10 +136,20 @@ format edit is a restyle -- one undo item, one delta, whole-cell last-writer-win
   value -- is `verified` by a test whose cells carry no format, and is false as soon as one does.
 * **A custom pattern is accepted and ignored** (`TRAME-109`). `CellFormat::Custom` carries the
   string, the toolbar has no field to type one into, and the renderer returns the text unchanged. No
-  rule says which pattern language it would be.
+  rule says which pattern language it would be, and none says a bad one is refused: there is no
+  surface that would do the refusing.
 * **The currency is the euro, in the code** (`TRAME-110`). There is no currency choice and no
   document locale, so a decimal separator, a thousands separator and a date order are all whatever
   the format function was written to emit.
+* **Nothing keeps a decimal count off a family that ignores it** (`TRAME-104`). The predicate is
+  exhaustive and its one use is greying the two buttons; the command merges whatever `decimals` it
+  is given into whatever family the cell carries. A document written by anything but the toolbar --
+  an import, a later API -- can hold a count on a `Text` cell, and the row above is a rule about the
+  control, not about the document.
+* **One test packs a formatted cell** (`TRAME-157`). `format_display` is reached by a single test,
+  on Percent. The parse failure, the three pass-through families and the fraction path through the
+  pack loop are all unread: the fraction test calls the renderer directly, so nothing proves the
+  loop hands it the value the cell holds.
 * **A number too wide for its column is not abbreviated.** A spreadsheet shows `#####` rather than a
   truncated number, because a truncated number is a wrong number. Trame spills or clips it like any
   other text (`features/ambre-spec-trame-cell-rendering.md section 3`), so a reader can misread a

@@ -13,14 +13,39 @@
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PROSE-UI-013` | A paste MUST be routed through the Logic thread as a command: the view MUST NOT insert clipboard content into a model of its own. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-040` | The copied payload MUST be built by the Logic thread from the whole selection; the view MUST NOT serialize document content and MUST NOT trim the payload to what is on screen. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-041` | The view MUST NOT touch the system clipboard: reading and writing it MUST be the host's, inside the window the user's gesture opens. | this spec section 3; `ambre-spec-clipboard.md` | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-042` | A paste MUST have exactly two outcomes, the rich payload or the plain-text mirror; no third format MUST be read from the system clipboard. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-043` | The kept payload MUST be used only while the system clipboard's text still matches it; otherwise the pasted content MUST come from the system clipboard. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-044` | A cut MUST delete the source range only after the copy has been asked for, and MUST NOT delete when no payload was produced. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-013` | `INV` | A paste MUST be routed through the Logic thread as a command: the view MUST NOT insert clipboard content into a model of its own. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-105` | `INV` | The view MUST NOT serialize document content: the payload MUST be built where the document lives. | this spec section 5 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-041` | `INV` | The view MUST NOT touch the system clipboard: reading and writing it MUST be the host's, inside the window the user's gesture opens. | this spec section 3; `ambre-spec-clipboard.md` | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-106` | `INV` | No format other than the plain-text mirror and this application's own bytes MUST be read from or written to the system clipboard. | this spec section 5 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-107` | `IO` | Content copied in Ambre and pasted back into Ambre MUST return with the marks and the block structure it was copied with. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.2 Copy
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-040` | `POST` | The copied payload MUST be built from the whole selection, and MUST NOT be trimmed to what is on screen. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-108` | `POST` | The payload MUST carry a plain-text mirror of the selection, readable by an application that knows nothing of Ambre. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-109` | `FRAME` | A copy MUST NOT write to the document, and MUST NOT move or shrink the selection it read. | derived | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.3 Cut
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-044` | `POST` | A cut MUST delete the source range only after the copy has been asked for. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-110` | `FAIL` | A cut that produced no payload MUST delete nothing, and MUST leave the document as it was. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-111` | `FRAME` | A cut MUST NOT delete outside the source range, and MUST NOT change the formatting of the text that remains around it. | derived | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.4 Paste
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PROSE-UI-042` | `POST` | A paste MUST have exactly two outcomes: the rich payload, or the plain-text mirror. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-043` | `POST` | The kept payload MUST be used only while the system clipboard's text still matches it; otherwise the pasted content MUST come from the system clipboard. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-112` | `FRAME` | A paste MUST NOT change a block outside the range it replaces, and MUST NOT reformat the text that surrounds it. | derived | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none: a copy walks the selection once and a paste is an ordinary insertion, and
   `ambre-spec-budgets.md` budgets neither. What a very large paste costs is named
@@ -30,10 +55,12 @@ status values are normative in `ambre-spec-template.md`.
   nothing is encrypted, nothing is sent, and the host performs the write (`PROSE-UI-041`). What
   the browser then does with the clipboard is outside Ambre's control and is the reason the
   mirror is gated (`ambre-spec-clipboard.md`).
-* **Verification.** 6 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-UI-041` is compiler-held the day the crate exists, because the browser clipboard type
-  cannot be named from a crate that does not depend on the web bindings. `PROSE-UI-042` is the row
-  a test reaches with two fixtures and no browser: a payload with rich bytes and one without.
+* **Verification.** 14 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+  `PROSE-UI-041` and `PROSE-UI-105` are compiler-held the day the crate exists, because the browser
+  clipboard type cannot be named from a crate that does not depend on the web bindings.
+  `PROSE-UI-042` is the row a test reaches with two fixtures and no browser: a payload with rich
+  bytes and one without. `PROSE-UI-107` is the one a round-trip answers, and it is the row the
+  feature is for.
 
 ---
 
@@ -43,10 +70,10 @@ Two peers, one selection. No test resolves yet: the last column names the row ea
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| copies three formatted paragraphs, then pastes them lower down | -- | the three paragraphs again, with their formatting | the same text twice, styles kept | none -- `PROSE-UI-040` |
+| copies three formatted paragraphs, then pastes them lower down | -- | the three paragraphs again, with their formatting | the same text twice, styles kept | none -- `PROSE-UI-107` |
 | copies a selection larger than the window | -- | nothing yet | the whole selection on the clipboard, not the visible part | none -- `PROSE-UI-040` |
 | cuts a sentence | edits the same sentence at that moment | the deletion and Bob's edit, merged | the sentence gone on both screens, Bob's edit kept where it survived | none -- `PROSE-UI-044` |
-| pastes into a text editor outside Ambre | -- | nothing | the plain text of what she copied | none -- `PROSE-UI-042` |
+| pastes into a text editor outside Ambre | -- | nothing | the plain text of what she copied | none -- `PROSE-UI-108` |
 | copies in Ambre, copies again in another application, pastes back | -- | the second copy's text | the other application's text, not the earlier rich payload | none -- `PROSE-UI-043` |
 | pastes a paragraph from a web page | -- | its text, inserted at the caret | plain text, without the page's formatting | none -- `PROSE-UI-042` |
 
@@ -68,7 +95,8 @@ pub struct ClipboardBlob { pub text: String, pub ambre: Option<Vec<u8>> }
 
 **The three steps of a copy.**
 
-1. The view asks the Logic thread for the payload (`PROSE-UI-040`); it serializes nothing.
+1. The view asks the Logic thread for the payload (`PROSE-UI-040`); it serializes nothing
+   (`PROSE-UI-105`).
 2. The Logic thread walks the selection in the document and answers with the two halves.
 3. The host writes both to the system clipboard on the next frame (`PROSE-UI-041`), and the view
    keeps the payload in memory for a paste back into the same tab.
@@ -102,7 +130,8 @@ host read is what tells the two apart: a copy in another application replaces th
 kept payload is then stale (`PROSE-UI-043`).
 
 **Cut.** A cut is a copy and then a deletion of the source range, in that order and never the
-other one (`PROSE-UI-044`). The deletion is the ordinary cross-paragraph one
+other one (`PROSE-UI-044`); a copy that produced nothing deletes nothing (`PROSE-UI-110`). The
+deletion is the ordinary cross-paragraph one
 (`features/ambre-spec-prose-text-editing.md section 3`).
 
 **Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
@@ -126,17 +155,17 @@ their chord lists, and decodes none of the three itself.
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The Logic thread builds the payload | the document lives there, and it is the only place the whole selection can be read. Building it in the view would need a second copy of the content on the UI side, which is the one thing `PROSE-UI-001` forbids | serializing the selection in the view, which requires the view to hold the document |
-| The payload covers the selection, never the window | a user selecting forty pages and copying them expects forty pages. Trimming to what was built for the frame is invisible until the paste, and then the loss is silent | building the payload from the display list, which is culled by construction |
-| The host owns the system clipboard | browsers grant clipboard access only inside the window a user gesture opens, and that window is the host's event handler. A worker or a view that asks later is refused, and the refusal is not reportable to the user in any useful way | calling the clipboard from the view, which fails outside the gesture and cannot be retried |
-| The clipboard carries plain text and this application's own bytes, and nothing else | a third format is a third writer and a third reader, and the rich half already carries everything. Markup on the clipboard also invites a paste path that sanitizes untrusted content on the UI thread, which is where it must never happen | a markup payload beside the two, which doubles the write and adds an untrusted parse |
-| The kept payload is gated on the mirror | the payload in memory is not what the clipboard holds -- another application may have replaced it. The plain-text mirror is the one thing both sides can compare, and it is exactly the field the other application also wrote | pasting the kept payload whenever there is one, which pastes what the user copied ten minutes ago |
-| A cut copies first | a deletion before a failed copy loses the text with nothing on the clipboard to show for it. Ordering it the other way makes the failure harmless | deleting and then copying, which loses the content if the copy is refused |
-| Importing a file is not a paste | a dropped or opened document is untrusted bytes that need a parser, a report of what was lost, and a progress path for a large file. A paste has none of those and must not grow them | routing a file drop through the paste path, which puts an untrusted document parse on a gesture that has no report |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The Logic thread builds the payload | serializing the selection in the view | it requires the view to hold the document, which is the one thing `PROSE-UI-001` forbids. The document lives on the Logic thread, and that is the only place the whole selection can be read |
+| The payload covers the selection, never the window | building the payload from the display list | the display list is culled by construction, so a user selecting forty pages gets what was built for the frame. The loss is invisible until the paste, and then it is silent |
+| The host owns the system clipboard | calling the clipboard from the view | browsers grant clipboard access only inside the window a user gesture opens, and that window is the host's event handler. A worker or a view that asks later is refused, and the refusal cannot be retried or reported usefully |
+| The clipboard carries plain text and this application's own bytes, and nothing else | a markup payload beside the two | it doubles the write and adds an untrusted parse. A third format is a third writer and a third reader while the rich half already carries everything, and markup invites a paste path that sanitizes untrusted content on the UI thread, which is where it must never happen |
+| The kept payload is gated on the mirror | pasting the kept payload whenever there is one | it pastes what the user copied ten minutes ago. The payload in memory is not what the clipboard holds, since another application may have replaced it, and the plain-text mirror is the one field both sides wrote and can compare |
+| A cut copies first | deleting and then copying | it loses the content if the copy is refused, with nothing on the clipboard to show for it. The other order makes the failure harmless |
+| Importing a file is not a paste | routing a file drop through the paste path | it puts an untrusted document parse on a gesture that has no report. A dropped or opened document needs a parser, a report of what was lost, and a progress path for a large file; a paste has none of those and must not grow them |
 
 ---
 

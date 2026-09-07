@@ -14,24 +14,31 @@
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TRAME-UI-067` | A numeric pattern in the source MUST continue across the filled range. | this spec section 3 | `ambre_trame::logic::tests::group5::fill_auto_extrapolates_numeric_series`, `::fill_series_single_cell_increments_by_one` | verified |
-| `TRAME-UI-068` | A source with no numeric pattern MUST be repeated verbatim. | this spec section 3 | `ambre_trame::logic::tests::group5::fill_copy_multi_cell_tiles_verbatim`, `::fill_auto_copies_text_and_reindexes_formula` | verified |
-| `TRAME-UI-069` | A filled formula MUST have its relative references shifted by its own offset from the source. | this spec section 3 | `ambre_trame::logic::tests::group5::fill_auto_copies_text_and_reindexes_formula` | verified |
-| `TRAME-UI-070` | A source tiled by equal merged blocks MUST fill block by block, not cell by cell. | this spec section 3 | `ambre_trame::logic::tests::group6::fill_merged_source_tiles_and_remerges_blocks`, `::fill_merged_series_increments_per_block`, `::fill_multi_merged_source_continues_pattern` | verified |
-| `TRAME-UI-071` | A fill MUST NOT write outside the rectangle the drag covered. | this spec section 3 | none. `fill_range` refuses a destination that does not contain the source and walks only the destination, and no test drives a malformed range | unverified |
-| `TRAME-UI-072` | A drag that ends where it started MUST write nothing. | this spec section 4 | none. Both sides guard it -- the release returns early and the engine returns early -- and neither guard is asserted | unverified |
-| `TRAME-UI-073` | A fill MUST be one undo item. | this spec section 3 | none. `fill_range` opens one undo group, as the paste does; the fill tests assert the values only | unverified |
-| `TRAME-UI-074` | A fill MUST NOT touch a sheet other than the active one. | this spec section 3 | none. `fill_range` returns empty when the command names another sheet, which is a guard nothing exercises | unverified |
+### 1.1 Drag the fill handle
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-067` | `POST` | A numeric pattern in the source MUST continue across the filled range. | this spec section 3 | `ambre_trame::logic::tests::group5::fill_auto_extrapolates_numeric_series`, `::fill_series_single_cell_increments_by_one`, `group6::fill_merged_series_increments_per_block` | verified |
+| `TRAME-UI-068` | `POST` | A source with no numeric pattern MUST be repeated verbatim. | this spec section 3 | `ambre_trame::logic::tests::group6::fill_merged_source_tiles_and_remerges_blocks` is the only text source in the suite, and it takes the merged path. On the plain path nothing fills text: one test forces `Copy` over numbers, the other fills a formula | unverified |
+| `TRAME-UI-069` | `POST` | A filled formula MUST have its relative references shifted by its own offset from the source. | this spec section 3 | `ambre_trame::logic::tests::group5::fill_auto_copies_text_and_reindexes_formula` | verified |
+| `TRAME-UI-070` | `POST` | A source tiled by equal merged blocks MUST fill block by block, not cell by cell. | this spec section 3 | `ambre_trame::logic::tests::group6::fill_merged_source_tiles_and_remerges_blocks`, `::fill_merged_series_increments_per_block`, `::fill_multi_merged_source_continues_pattern` | verified |
+| `TRAME-UI-134` | `POST` | A fill MUST write every cell between the source and the edge of the drag. | this spec section 3 | none. Both paths walk whole blocks and leave a partial tail unwritten in silence; what keeps the tail empty is the UI snapping the destination, not a guard the engine holds | unverified |
+| `TRAME-UI-073` | `POST` | A fill MUST be one undo item. | this spec section 3 | none. `fill_range` opens one undo group, as the paste does; the fill tests assert the values only | unverified |
+| `TRAME-UI-071` | `FRAME` | A fill MUST NOT write outside the rectangle the drag covered. | this spec section 3 | none. `fill_range` refuses a destination that does not contain the source and walks only the destination, and no test drives a malformed range | unverified |
+| `TRAME-UI-072` | `FRAME` | A drag that ends where it started MUST write nothing. | this spec section 4 | none. Both sides guard it -- the release returns early and the engine returns early -- and neither guard is asserted | unverified |
+| `TRAME-UI-074` | `FRAME` | A fill MUST NOT touch a sheet other than the active one. | this spec section 3 | none. `fill_range` returns empty when the command names another sheet, which is a guard nothing exercises | unverified |
+| `TRAME-UI-133` | `FRAME` | A fill whose command did not reach the Logic thread MUST NOT grow the selection over cells it did not write. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none. **The rule fails today** -- section 6: the release logs the full channel and grows the selection anyway | unverified |
 
 * **Budget.** the 50-cell batch of `ambre-spec-budgets.md section 1`, in < 1 ms: a fill is
   the operation that row was written for. No bench measures it.
 * **Boundary.** none of its own: the fill writes cells to the document, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 4 `verified`, 4 `unverified`. What is proven is what the fill produces; what is
-  loose is what it refuses. Every gap is a guard, and a guard with no test is the kind that
-  survives a rewrite of the code around it.
+* **Verification.** 3 `verified`, 7 `unverified`. What is proven is what the fill produces on the
+  numeric and the merged paths; what is loose is what it refuses, and one claim is withdrawn.
+  `TRAME-UI-068` cited two tests that assert something else: one forces `Copy` over a numeric
+  source, so it proves the mode overrides the pattern, and the other fills a formula, which is
+  `TRAME-UI-069`. Neither fills text. Every remaining gap is a guard, and a guard with no test is
+  the kind that survives a rewrite of the code around it.
 
 ---
 
@@ -101,14 +108,14 @@ modifier is read at release, not at press, so changing your mind mid-drag counts
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The engine picks between a series and a copy | it is the only side that holds the values, and the choice depends on them. Asking the UI would mean shipping the pattern detector twice, or shipping the viewport's opinion of the source | a mode chosen in the UI, which is what the modifier already does explicitly |
-| The modifier counts values along the drag axis | a vertical drag fills column lines, so a source two rows tall carries two values, whatever its width. Counting raw cells would call a wide single-row source "several values" and refuse to extrapolate it | counting the source cells, which reads the wrong axis on any rectangle |
-| A merged source counts blocks | a block is one value to the user, so a single block dragged down means "continue this one value". Counting its cells would make one block look like several values | tiling by raw cells, which tears the merge geometry |
-| The fill is one command, not one per cell | one drag is one gesture and must be one undo item; it also lets the engine see the whole destination before deciding | a batch of cell writes assembled in the UI |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The engine picks between a series and a copy | a mode chosen in the UI | it is what the modifier already does explicitly, and generalising it would mean shipping the pattern detector twice, or shipping the viewport's opinion of the source. The engine is the only side that holds the values, and the choice depends on them. |
+| The modifier counts values along the drag axis | counting the source cells | it reads the wrong axis on any rectangle: a vertical drag fills column lines, so a source two rows tall carries two values whatever its width, and counting raw cells would call a wide single-row source "several values" and refuse to extrapolate it. |
+| A merged source counts blocks | tiling by raw cells | it tears the merge geometry: a block is one value to the user, so a single block dragged down means "continue this one value", and counting its cells would make one block look like several values. |
+| The fill is one command | a batch of cell writes assembled in the UI | one drag is one gesture and must be one undo item; a batch also hides the whole destination from the engine, which needs it before deciding. |
 
 ---
 
@@ -122,6 +129,17 @@ modifier is read at release, not at press, so changing your mind mid-drag counts
   when the source splits, and nothing says whether they should follow.
 * **A date series.** A detected date pattern has been promised in the corpus and is not built: the
   engine extrapolates numbers only, and no row above claims otherwise.
-* **The gesture has no test.** The mode choice is the richest logic in this feature and it sits in
+* **The gesture has no test.** The mode choice reads the pointer and the modifier, so it sits in
   `TrameView`, on the untestable side of the seam -- the same wall as the edit session
-  (`features/ambre-spec-trame-cell-editing.md section 6`).
+  (`features/ambre-spec-trame-cell-editing.md section 6`). The destination geometry does not: it is
+  a free function that takes the source, the drag corner and the block granularity and returns a
+  rectangle. Nothing but habit keeps it untested.
+* **A fill the channel dropped still moves the selection.** `TRAME-UI-133`: the release logs the
+  full channel and grows the selection over the destination anyway, so the user is left selecting a
+  rectangle no peer ever wrote. The resize drops the same way (`features/ambre-spec-trame-resize.md
+  section 6`), and there the stale value is at least visible; here the cells stay as they were and
+  only the outline lies.
+* **A tail the engine leaves empty.** `TRAME-UI-134`: both paths walk whole blocks, so a
+  destination whose height is not a multiple of the block writes nothing on the remainder and
+  reports no error. What keeps that from happening is the UI snapping the drag to whole blocks, not
+  a guard the engine holds -- a second caller would find the hole.

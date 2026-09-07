@@ -1,6 +1,7 @@
 # AMBRE -- FEATURE: THE GRID VIEWPORT
 **Type:** Vertical (feature)
-**Implementation:** partial -- scrolling, the request window and variable metrics are built; freeze is not.
+**Implementation:** partial -- scrolling, the request window and variable metrics are built; freeze
+is not, and the request window does not cover a screen of narrow columns.
 
 > A user scrolls a sheet of 100 000 rows. Only the cells on screen, plus about a screen above and
 > below, ever leave the Logic thread. A cell the user has not been sent reads as pending or as
@@ -16,20 +17,49 @@ There is no two-peer table below, because two users scrolling one sheet see noth
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TRAME-UI-004` | Only the visible range, plus a bounded padding, MUST be requested from the Logic thread. | this spec section 2 | none. The window is built in `ui/grid/state.rs::scroll_viewport_cmd` and nothing compares the requested bounds with the visible range | unverified |
-| `TRAME-UI-005` | An answer whose version is lower than the last accepted one MUST be discarded. | this spec section 2 | none. The rule is in the code (`ui/grid/state.rs`: `if version < self.accepted_version { return; }`) and nothing exercises it | unverified |
-| `TRAME-UI-007` | Hit-testing MUST be the exact inverse of the drawn geometry, under zoom and under variable row and column sizes. | this spec section 2 | `ambre_trame::ui::grid::tests::group1::zoom_scales_metrics_and_round_trips_hit_test`, `::variable_metrics_round_trip_pixel_and_hit_test`, `::axis_pointer_resolution_follows_variable_metrics`, `::filter_button_hit_test_matches_drawn_rect`, `ambre_trame::render::tests::variable_metrics_shift_cells_and_hit_test` | verified |
-| `TRAME-UI-012` | Every fill colour drawn by the renderer MUST come from the theme palette; no literal colour in render code. | this spec section 3; `ambre-spec-ui.md` (design tokens) | `ambre_trame::ui::renderer::tests::renderer_uses_only_palette_colors_for_fills`. The fixture holds one unstyled cell, so a cell the user coloured is outside what it measures (`features/ambre-spec-trame-cell-styles.md`) | verified |
-| `TRAME-UI-013` | The renderer MUST NOT paint outside the grid region, whatever the canvas size or the scroll position. | this spec section 3 | `ambre_trame::ui::renderer::tests::draw_cells_strip_skips_when_outside_grid`, `ambre_trame::ui::grid::tests::group2::grid_bottom_floors_at_header_on_tiny_canvas`, `::header_strip_starts_at_top_of_canvas` | verified |
-| `TRAME-UI-024` | A cell held from an earlier window MUST be dropped when it falls outside the new one. | this spec section 2 | none. `scroll_viewport_cmd` retains only the requested window, and no test drives a cell out of it | unverified |
-| `TRAME-UI-025` | At most one viewport request MUST leave the UI thread per frame. | this spec section 2 | type-level: the pending request is one `Option<TrameCommand>` (`ui/view/frame.rs`), so a second request in the same frame replaces the first, and the frame flush is its only send site | verified |
-| `TRAME-UI-026` | A single wheel notch MUST NOT start a momentum coast. | this spec section 3 | none. `handle_wheel` classifies the sample and zeroes the velocity, and no test drives the wheel path at all | unverified |
-| `TRAME-UI-027` | A cell the user has just edited MUST read as unconfirmed until its computed value arrives. | this spec section 3 | `ambre_trame::ui::grid::tests::group2::dirty_and_error_lifecycle`, `ambre_trame::ui::renderer::tests::dirty_cell_gets_a_translucent_veil` | verified |
-| `TRAME-UI-028` | A band entering the viewport by a scroll MUST NOT be painted as pending. | this spec section 3 | `ambre_trame::ui::renderer::tests::draw_cells_scroll_strip_base_is_blank_not_pending_grey`, `::draw_cells_full_repaint_paints_pending_then_grid` | verified |
-| `TRAME-UI-029` | Freezing rows or columns MUST reach no collaborator: it MUST produce no change to the document. | this spec section 5 | not built -- lands with the "Grid surface" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-UI-049` | The painted grid MUST be offset by the sub-cell scroll remainder. | this spec section 5 | not built -- lands with the "Post-V1 surface" Story (`ambre-roadmap.md` post-V1) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-007` | `INV` | Hit-testing MUST be the exact inverse of the geometry it walks, under zoom and under variable row and column sizes. | this spec section 2 | `ambre_trame::ui::grid::tests::group1::zoom_scales_metrics_and_round_trips_hit_test`, `::variable_metrics_round_trip_pixel_and_hit_test`, `::axis_pointer_resolution_follows_variable_metrics`, `::filter_button_hit_test_matches_drawn_rect`, `ambre_trame::render::tests::variable_metrics_shift_cells_and_hit_test`. Each holds one modifier: the variable-metric round trips run at 100%, the zoom round trip runs on default metrics | verified |
+| `TRAME-UI-143` | `INV` | The geometry the renderer draws MUST agree with the geometry hit-testing walks. | this spec section 2 | none. `ui/grid/geometry.rs` and `render/layout.rs` walk the same sizes twice, and each of the two tests above closes the loop inside one of them. Nothing compares a drawn rect with a hit-tested one -- section 5 | unverified |
+| `TRAME-UI-024` | `INV` | The cache MUST hold no cell outside the last requested window. | this spec section 2 | none. `scroll_viewport_cmd` retains only the requested window, and no test drives a cell out of it | unverified |
+| `TRAME-UI-012` | `OBS` | Every fill colour drawn by the renderer MUST come from the theme palette; no literal colour in render code. | this spec section 3; `ambre-spec-ui.md` (design tokens) | `ambre_trame::ui::renderer::tests::renderer_uses_only_palette_colors_for_fills`. The fixture holds one unstyled cell, so a cell the user coloured is outside what it measures (`features/ambre-spec-trame-cell-styles.md`) | verified |
+| `TRAME-UI-013` | `OBS` | The renderer MUST NOT paint outside the grid region, whatever the canvas size or the scroll position. | this spec section 3 | `ambre_trame::ui::renderer::tests::draw_cells_strip_skips_when_outside_grid`, `ambre_trame::ui::grid::tests::group2::grid_bottom_floors_at_header_on_tiny_canvas`, `::header_strip_starts_at_top_of_canvas` | verified |
+| `TRAME-UI-027` | `OBS` | A cell the user has just edited MUST read as unconfirmed until its computed value arrives. | this spec section 3 | `ambre_trame::ui::grid::tests::group2::dirty_and_error_lifecycle`, `ambre_trame::ui::renderer::tests::dirty_cell_gets_a_translucent_veil` | verified |
+| `TRAME-UI-028` | `OBS` | A band entering the viewport by a scroll MUST NOT be painted as pending. | this spec section 3 | `ambre_trame::ui::renderer::tests::draw_cells_scroll_strip_base_is_blank_not_pending_grey`, `::draw_cells_full_repaint_paints_pending_then_grid` | verified |
+| `TRAME-UI-049` | `OBS` | The painted grid MUST be offset by the sub-cell scroll remainder. | this spec section 5 | not built -- lands with the "Post-V1 surface" Story (`ambre-roadmap.md` post-V1) | unimplemented |
+
+### 1.2 The user scrolls
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-004` | `POST` | A scroll MUST request no more than the visible range plus a bounded padding. | this spec section 2 | none. The window is built in `ui/grid/state.rs::scroll_viewport_cmd` and nothing compares the requested bounds with the visible range. The padding is not the constant it reads as: the row window is stretched by the count of every hidden row the cache knows, not by those inside the window | unverified |
+| `TRAME-UI-144` | `POST` | A scroll MUST request every cell the user can see. | this spec section 2 | none, and the column axis does the opposite: the window is sized from the uniform metric, and a resized column can be a third of it, so a screen of narrow columns runs past the last one requested. Those columns are never asked for, and the same window evicts them if an earlier one had brought them in -- section 5. The row axis survives by margin, not by rule | unverified |
+| `TRAME-UI-025` | `POST` | At most one viewport request MUST leave the UI thread per frame. | this spec section 2 | none, and the code does not hold it. The one-slot queue coalesces the scroll path alone: `ui/view/frame.rs` sends a request past it twice, on a `DataReset` or `CondFormatsUpdated` event and on a document's first frame. A keystroke answered by a `DataReset` in the same frame as a scroll sends two | unverified |
+| `TRAME-UI-145` | `FRAME` | A scroll MUST NOT change which cell is active or which range is selected. | this spec section 2 | none. `scroll_by` writes the origin and reads nothing else, but no test drives it: `scroll_by`, `scroll_viewport_cmd` and `accepted_version` are named by no test in the crate | unverified |
+
+### 1.3 The wheel turns
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-147` | `POST` | A wheel notch, a line delta or a page delta MUST be applied once and in full, keeping the sub-cell remainder. | this spec section 3 | none. `handle_wheel` classifies the sample and feeds the accumulator, and no test drives the wheel path at all -- section 5 | unverified |
+| `TRAME-UI-026` | `FRAME` | A single wheel notch MUST NOT start a momentum coast. | this spec section 3 | none. `handle_wheel` classifies the sample and zeroes the velocity, and no test drives the wheel path at all | unverified |
+| `TRAME-UI-146` | `FRAME` | The wheel held with `Ctrl` MUST NOT scroll the grid. | this spec section 3 | none. `handle_wheel` returns before reading the delta, which is also what hands the gesture to the browser, and no test drives it | unverified |
+
+### 1.4 An answer arrives
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-005` | `POST` | An answer whose version is lower than the last accepted one MUST be discarded. | this spec section 2 | none. The rule is in the code (`ui/grid/state.rs`: `if version < self.accepted_version`) and nothing exercises it | unverified |
+| `TRAME-UI-148` | `POST` | A row or column an answer reports at the default size MUST read as the default, not as the size it held before. | this spec section 2; `ambre-spec-trame-schema.md section 4` ("absence is a value") | none. `on_viewport_data` removes the entry instead of storing the default, and every metric test writes the maps directly: no test sends an answer that carries sizes | unverified |
+| `TRAME-UI-149` | `FRAME` | An answer MUST NOT move the scroll origin. | this spec section 2 | none. `on_viewport_data` writes the caches and the hidden-row set and touches neither `top_row` nor `left_col`, but nothing asserts it | unverified |
+
+### 1.5 Freeze a band of rows or columns
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-029` | `FRAME` | Freezing rows or columns MUST reach no collaborator: it MUST produce no change to the document. | this spec section 5 | not built -- lands with the "Grid surface" Story (`ambre-roadmap.md` E6) | unimplemented |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1`: the scroll round trip in
   < 2 ms, the scroll viewport response in < 15 ms, the `ScrollViewport` send in < 1 ms, and the
@@ -37,9 +67,13 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the viewport is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What crosses is a request and a display slice, never
   document data (`TRAME-UI-001`).
-* **Verification.** 6 `verified`, 4 `unverified`, 2 `unimplemented`. The four gaps are one gap: the
-  request window, the version guard, the eviction and the whole wheel path ship with nothing
-  guarding them, and each is a state machine on the UI thread that a host test can drive.
+* **Verification.** 5 `verified`, 12 `unverified`, 2 `unimplemented`. The split cost a row rather
+  than paying for one: distinct cited mechanisms did not move, and `TRAME-UI-025` changed hands the
+  wrong way -- its type-level claim named the one-slot queue as the only send site, and there are
+  three. Everything that is held here is drawn or hit-tested; everything that is a state machine --
+  the window, the version guard, the eviction, the wheel, the metric adoption -- is held by nothing,
+  and `scroll_by`, `scroll_viewport_cmd` and `accepted_version` are named by no test in the crate.
+  Two of the seven new rows are not gaps but contradictions: the code does the opposite.
 
 ---
 
@@ -134,17 +168,18 @@ painter never leaves it (`TRAME-UI-013`). Every fill comes from the theme palett
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The axis scrolls by whole rows and columns, with the sub-cell remainder kept in an accumulator | the grid is a lattice: an origin that is an index makes every mapping between a pixel and a cell exact, and a touchpad glide still feels continuous because the accumulator absorbs the remainder | a pixel scroll origin, which is what the earlier design carried and what the code never built |
-| The padding is one screen each side, floored at 20 rows | a page jump moves the origin by exactly one screen, so a smaller margin lands outside the cache and flashes the entering rows | a padding derived from the gesture speed, 20 to 100 rows, which the earlier design prescribed and no code implements |
-| A late answer is dropped on a version compare | the Logic thread answers each request, and a slow one arriving after a fast one would repaint the grid with the wrong window | a sequence number per axis; cancelling the outstanding request, which the channel cannot do |
-| A cell outside the new window is evicted | a cell that stays in the cache after leaving the window is a value nothing will refresh, and it reads as authoritative | keeping every cell ever received, which is unbounded on a 100 000-row sheet |
-| A band entering by a scroll is painted blank, not pending | the pending fill is grey, and a grey flash on every scroll reads as a fault rather than as a wait | painting the pending fill uniformly, which is what a full repaint does |
-| Only a high-resolution pixel gesture gets momentum | a notched wheel emits one large discrete delta, and feeding it to a velocity estimate sends the sheet flying from a single click | one path for every scroll source |
-| Freeze stays local | a frozen pane is a reading preference and screens differ; sharing it would make two users fight over one number | freezing as a document property, synchronized to every collaborator |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The axis scrolls by whole rows, the remainder kept in an accumulator | a pixel scroll origin | it is what the earlier design carried and what the code never built. The grid is a lattice: an origin that is an index makes every mapping between a pixel and a cell exact, and a touchpad glide still feels continuous because the accumulator absorbs the remainder. |
+| The padding is one screen each side, floored at 20 rows | a padding derived from the gesture speed, 20 to 100 rows | the earlier design prescribed it and no code implements it, and it misses the case the padding exists for: a page jump moves the origin by exactly one screen, so a margin smaller than that lands outside the cache and flashes the entering rows. |
+| A late answer is dropped on a version compare | a sequence number per axis | the window is one answer over two axes, so two counters can each be current while the pair they describe never existed. |
+| A late answer is dropped on a version compare | cancelling the outstanding request | the channel cannot do it: a request already sent is answered, and the answer arrives whether the window still wants it or not. |
+| A cell outside the new window is evicted | keeping every cell ever received | it is unbounded on a 100 000-row sheet, and a cell that stays in the cache after leaving the window is a value nothing will refresh, which reads as authoritative. |
+| A band entering by a scroll is painted blank, not pending | painting the pending fill uniformly | it is what a full repaint does, and the pending fill is grey: a grey flash on every scroll reads as a fault rather than as a wait. |
+| Only a high-resolution pixel gesture gets momentum | one path for every scroll source | a notched wheel emits one large discrete delta, and feeding it to a velocity estimate sends the sheet flying from a single click. |
+| Freeze stays local | freezing as a document property, synchronized to every collaborator | a frozen pane is a reading preference and screens differ; sharing it would make two users fight over one number. |
 
 ---
 
@@ -164,10 +199,29 @@ painter never leaves it (`TRAME-UI-013`). Every fill comes from the theme palett
   lands with a geometry round trip and a recording of what it painted
   (`ambre-spec-testing.md section 6`). It is pure state over an injected clock, so nothing
   about it needs a browser.
-* **Two implementations of one geometry.** Hit-testing walks the sizes in `ui/grid/geometry.rs` and
-  drawing walks them again in `render/layout.rs`. `TRAME-UI-007` is what holds the two together,
-  and it holds them by test rather than by construction: one of them calling the other would make
-  the rule true by type.
+* **A screen of narrow columns is not fetched** (`TRAME-UI-144`). The request window is sized from
+  the uniform metric -- `viewport_cols` is the canvas width over the default column width -- while
+  the grid is drawn from the per-column sizes. A column can be resized to under a third of the
+  default, so three times as many columns fit on screen as the window asks for, and the ones past
+  the end of it stay blank for as long as the user looks at them: the next scroll evicts whatever
+  the cache still held there, and no request ever names them. The row axis has the same shape and
+  survives on its margin alone, the padding of one screen each side covering the ratio between the
+  default height and its floor. The fix is to size the window by walking the metrics the grid
+  draws, which is the walk `TRAME-UI-143` already asks the two implementations to share.
+* **A viewport request leaves outside the queue** (`TRAME-UI-025`). `ui/view/frame.rs` sends one on
+  a `DataReset` and on a document's first frame without passing through the one slot, so the
+  per-frame bound is a convention of the scroll path rather than a property of the code. It costs a
+  round trip per keystroke today, because a cell write answers with a bare `DataReset`
+  (`features/ambre-spec-trame-engine.md`), and each answer carries the whole window.
+* **The padding grows with the filter, not with the window** (`TRAME-UI-004`). The row window is
+  extended by the count of every hidden row in the cache, under a name and a comment that say the
+  hidden rows in the window. The two agree only while the cache holds one window, which is what the
+  eviction makes true and what a late answer for a wider window undoes.
+* **Two implementations of one geometry** (`TRAME-UI-143`). Hit-testing walks the sizes in
+  `ui/grid/geometry.rs` and drawing walks them again in `render/layout.rs`, one commented as
+  mirroring the other. Nothing holds them together: each test closes a round trip inside one
+  implementation, so the two could drift a pixel apart and stay green. One of them calling the
+  other would make the rule true by type.
 * **A differential answer** is unspecified: every answer carries the whole window, including the
   cells the UI already holds. The earlier design named a patch event, gated on a share of changed
   cells; nothing states when a patch is correct against an out-of-order full answer.

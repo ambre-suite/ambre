@@ -19,15 +19,35 @@ application maps it onto its own space, and `ambre-spec-chrome.md` owns the chip
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`. The prefix is `ZOOM`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `ZOOM-001` | A zoom MUST stay local view state: it MUST emit no CRDT delta and reach no collaborator. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `ZOOM-002` | A zoom MUST clamp to the application's supported range, away from zero, whatever the input. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `ZOOM-003` | A zoom about a point MUST leave that point under the pointer, in the application's own mapping. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `ZOOM-004` | `Ctrl` with `=`, `-` or `0`, `Ctrl` with the wheel, and a trackpad pinch MUST zoom in every application. | this spec section 3 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `ZOOM-005` | `Ctrl` with `0` MUST return the factor to one, a hundred per cent. | this spec section 3 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `ZOOM-006` | The preset ladder MUST be one ladder for every application, read by the shared chip. | this spec section 2; `ambre-spec-chrome.md`, `CHROME-014` | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `ZOOM-007` | A zoom to a selection MUST frame it and clamp; an empty target MUST be ignored, never a degenerate factor. | this spec section 3 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `ZOOM-004` | `INV` | `Ctrl` with `=`, `-` or `0`, `Ctrl` with the wheel, and a trackpad pinch MUST zoom in every application. | this spec section 3 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+| `ZOOM-006` | `INV` | The preset ladder MUST be one ladder for every application, read by the shared chip. | this spec section 2; `ambre-spec-chrome.md`, `CHROME-014` | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+
+### 1.2 Zoom the view
+
+The user presses a chord, turns the wheel under `Ctrl`, or pinches. One factor moves, about one
+point.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `ZOOM-002` | `POST` | A zoom MUST clamp to the application's supported range, away from zero, whatever the input. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+| `ZOOM-003` | `POST` | A zoom about a point MUST leave that point under the pointer, in the application's own mapping. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+| `ZOOM-005` | `POST` | `Ctrl` with `0` MUST return the factor to one, a hundred per cent. | this spec section 3 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+| `ZOOM-001` | `FRAME` | A zoom MUST emit no CRDT delta. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+| `ZOOM-008` | `FRAME` | A zoom MUST reach no collaborator. | this spec section 2; `ambre-spec-presence.md` | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8). It is not the same rule as emitting no delta: a presence sample is broadcast and written to no document, so a factor riding one would reach every peer while `ZOOM-001` still held | unimplemented |
+
+### 1.3 Zoom to a selection
+
+The user asks for the selection to fill the view. The target may be empty.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `ZOOM-007` | `POST` | A zoom to a selection MUST frame it and clamp. | this spec section 3 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+| `ZOOM-010` | `FRAME` | A zoom to a selection MUST NOT change the selection. | this spec section 3; derived | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8). The gesture reads a selection to compute a factor, and an application that grew or collapsed it while framing would make the command unrepeatable | unimplemented |
+| `ZOOM-009` | `FAIL` | A zoom to an empty target MUST be ignored, never applied as a degenerate factor. | this spec section 3 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8). It is the half `ZOOM-007` carried, and the one with a failure mode of its own: framing nothing is a division by a zero-sized box, which clamps to the range bound rather than to anything the user asked for | unimplemented |
 
 * **Budget.** none of its own: a zoom recomputes one view transform and repaints, which is the frame
   cost the application's viewport already carries in `ambre-spec-budgets.md`. This document adds no
@@ -35,9 +55,13 @@ status values are normative in `ambre-spec-template.md`. The prefix is `ZOOM`.
 * **Boundary.** none: a zoom is local view state. It writes no document, so nothing here reaches the
   relay, holds a key or opens a socket, and `ambre-spec-zero-knowledge.md` seals every payload that
   does leave the client.
-* **Verification.** 0 `verified`, 0 `unverified`, 7 `unimplemented`. The one engine is unbuilt: Toile
-  clamps and maps its own zoom today, Trame zooms its render without keys or pinch, and Prose has no
-  zoom at all -- the three per-application states are named in section 5.
+* **Verification.** 0 `verified`, 0 `unverified`, 10 `unimplemented`. The one engine is unbuilt:
+  Toile clamps and maps its own zoom today, Trame zooms its render without keys or pinch, and Prose
+  has no zoom at all -- the three per-application states are named in section 5. Writing the rules
+  before the code is what makes the three added ones cheap: `ZOOM-008`, because reaching no
+  collaborator is not the same rule as emitting no delta once presence exists; `ZOOM-009`, because
+  an empty target has a failure of its own; and `ZOOM-010`, the frame condition that keeps the
+  gesture repeatable.
 
 ---
 
@@ -89,15 +113,15 @@ every editor.
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| One zoom engine behind the shared chip | the chip is one component over one kind of value, and two engines behind it drift in their preset ladder and their clamp, so the read-out then means a different thing per application | a zoom read-out and a preset ladder per application |
-| Zoom is local view state, never a document register | a zoom is a way of looking, and a factor in the document makes two users fight over one camera. It converges nothing, because it is nobody else's business | a zoom register on the document, shared like content |
-| The factor is one number, mapped per application | a grid cell, a world unit and a page point are three spaces, but the factor over them is one and the fixed-point rule is one. Sharing the number and mapping it locally is what lets the chip stay one component | a shared coordinate space every application projects into |
-| Each application keeps its own clamp | a board zooms from a bird's eye to a detail and a page from a quarter to four times, so the range is a property of the space, not of the model | one clamp for every application, which either caps the board or lets a page zoom past use |
-| Three per-application viewports stand beside this one | the model is one and the mapping is not: culling a grid, an endless board and a column of pages are three designs with three sets of tests, and collapsing them here would report three states as one | one viewport document for the suite |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| One zoom engine behind the shared chip | a zoom read-out and a preset ladder per application | two engines behind one chip drift in their preset ladder and their clamp, so the read-out means a different thing per application while looking the same |
+| Zoom is local view state, never a document register | a zoom register on the document, shared like content | a factor in the document makes two users fight over one camera, and it converges nothing: a zoom is a way of looking, and it is nobody else's business |
+| The factor is one number, mapped per application | a shared coordinate space every application projects into | a grid cell, a world unit and a page point are three spaces, and forcing one space on them buys a projection nobody needs: the factor over them is already one and the fixed-point rule is one. Sharing the number and mapping it locally is what lets the chip stay one component |
+| Each application keeps its own clamp | one clamp for every application | it either caps the board or lets a page zoom past use: a board zooms from a bird's eye to a detail and a page from a quarter to four times, so the range is a property of the space, not of the model |
+| Three per-application viewports stand beside this one | one viewport document for the suite | the model is one and the mapping is not: culling a grid, an endless board and a column of pages are three designs with three sets of tests, and collapsing them here would report three states as one |
 
 ---
 

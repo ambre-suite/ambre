@@ -20,26 +20,47 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 `ambre-spec-session.md`, `ambre-spec-sequencer.md`, `ambre-spec-broadcast.md`,
 `ambre-spec-object-store.md` and `ambre-spec-organizations.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `SRV-001` | The relay MUST NOT store or log a plaintext document payload. | `ZK-001`, `ZK-006`; this spec section 3 | none beyond `ZK-006`: reviewer attention, plus the explicit "never log the blob" rule the flush path carries. Nothing refuses the log line that would break it | human-review |
-| `SRV-005` | A non-member MUST receive no metadata about a document -- not its owner, not its kind, not its existence. | audit `H2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::get_document_hidden_from_non_member`, and `::create_document_with_foreign_existing_id_is_not_found` for the same answer on a taken identifier | verified |
-| `SRV-007` | Every update, snapshot and presence frame MUST carry a valid signature by the key the caller's token names; an unsigned or forged frame MUST have no effect. | this spec section 3; `ZK-005` | `ambre_server::ws::handler::message::ed25519_tests::invalid_signature_is_rejected`, `::tampered_ciphertext_rejects_signature`, `::unsigned_ephemeral_is_rejected`; `ws::handler::message::ephemeral_binding_tests::forged_author_key_writes_no_presence`; `routes::tests::handler_tests::create_snapshot_rejects_forged_author` | verified |
-| `SRV-008` | A member who may only read MUST produce no write. | this spec section 3 | `ambre_server::ws::handler::message::delta_size_cap_tests::viewer_role_delta_writes_no_pending` on the live path, and `routes::tests::handler_tests::media_confirm_upload_denied_to_viewer` on the request path | verified |
-| `SRV-011` | A document MUST NOT be left without an owner. | this spec section 3 | `ambre_server::routes::tests::handler_tests::owner_cannot_drop_last_owner`, `::owner_can_leave_when_another_owner_remains` | verified |
-| `SRV-012` | The relay MUST perform no cryptographic operation beyond verifying a signature and minting its own tokens. | this spec section 5; `ZK-004` | crate graph: `deny.toml` refuses the cipher, exchange and secret-sharing crates in this process, and the continuous-integration `deny` job fails the manifest that adds one | verified |
-| `SRV-013` | A failure of the rate limiter MUST close the sign-in tier, never open it. | audit `M6`; this spec section 3 | none, and **the rule fails today**: the limiter runs inside the nested router, which strips the prefix its classifier matches on, so no request is ever read as a sign-in request. `ambre_server::middleware::rate_limit::tests::only_auth_tier_fails_closed` asserts the tier's own answer and never reaches the classification -- section 6 | unverified |
-| `SRV-014` | Relay code MUST contain no unchecked memory access. | README pillar "Security" | measured zero across the workspace, and this crate carries no crate-level refusal of it: two crates of seventeen do (`ambre-spec-testing.md section 8`) | unverified |
-| `SRV-015` | Only an owner MUST be able to remove a member or re-key a document. | this spec section 3 | `ambre_server::routes::tests::handler_tests::rotate_key_denied_to_editor`, `::revoke_then_rotate_replaces_owner_key`, `::delete_document_only_by_owner` | verified |
-| `SRV-016` | A caller MUST NOT grant a role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::share::tests::editor_cannot_grant_owner`, `::owner_can_grant_any_valid_role`, `::doc_role_rank_ordering` | verified |
-| `SRV-070` | A caller MUST NOT change a member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::editor_cannot_demote_owner_via_invite`. The invitation is also the role-change path, so this is the half a clamp on the granted role alone leaves open | verified |
-| `SRV-017` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | none, and **the rule fails today**: the delete removes the rows and nothing else, so the document's sequence counter and its per-author clock hash stay in the ephemeral store with no expiry. Answered by the `A deleted document leaves nothing` Story | unverified |
-| `SRV-018` | A route that reads a document row MUST require an authenticated caller. | this spec section 3 | none, and **the rule fails today**: the single-document route accepts an anonymous caller, queries the register, and only then answers not-found. The answer is right and the query runs first -- section 6 | unverified |
-| `SRV-019` | The rate limiter MUST bucket a request by its authenticated caller, or by the socket peer when there is none. | audit `M6` | `ambre_server::middleware::rate_limit::tests::client_ip_from_forwarded_header`, `::client_ip_falls_back_to_remote`, `::client_ip_ignores_empty_forwarded`. A forwarded address is read only where the deployment declares a proxy, and no test drives that switch | unverified |
-| `SRV-020` | A failure of a backing service MUST reach the caller as a generic error, never as its cause. | `ZK-006`; this spec section 3 | `ambre_server::error::tests::infrastructure_errors_return_internal_server_error_message`, `::oidc_error_is_infrastructure_level`, `::application_errors_return_their_message` | verified |
-| `SRV-021` | Any instance MUST be able to serve any client: no request state MUST live in the process. | this spec section 3 | none. Every store is external and the one process-wide object is the fan-out hub, which holds no request; nothing boots two instances to observe it. The one exception is stated by `ambre-spec-session.md`, `SRV-024` | unverified |
-| `SRV-068` | A cross-origin request MUST be refused unless the deployment names its origin. | audit `M17`; this spec section 3 | `ambre_server::cors_tests::parses_and_trims_multiple_origins`, `::empty_list_yields_no_origins`. The permissive fallback is reachable only in development mode and is announced at start-up | verified |
-| `SRV-069` | The page that loads the client MUST be served cross-origin isolated. | `ambre-spec-architecture.md section 2` | none. The relay serves the requests and not the page, so the two headers are the deployment's obligation on whatever serves the page and the worker bootstrap; nothing in continuous integration reads them back | unverified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SRV-012` | `INV` | The relay MUST perform no cryptographic operation beyond verifying a signature and minting its own tokens. | this spec section 5; `ZK-004` | crate graph: `deny.toml` refuses the cipher, the exchange and the passphrase derivation in this process, and the continuous-integration `deny` job fails the manifest that adds one. `ed25519-dalek` is the one grant, which is exactly the two operations named | verified |
+| `SRV-011` | `INV` | A document MUST NOT be left without an owner. | this spec section 3 | `ambre_server::routes::tests::handler_tests::owner_cannot_drop_last_owner` asserts the refusal, `::owner_can_leave_when_another_owner_remains` asserts the case that must still work -- both ends, so neither rots into the other | verified |
+| `SRV-001` | `INV` | The relay MUST NOT store or log a plaintext document payload. | `ZK-001`, `ZK-006`; this spec section 3 | none beyond `ZK-006`: reviewer attention, plus the explicit "never log the blob" rule the flush path carries. Nothing refuses the log line that would break it | human-review |
+| `SRV-014` | `INV` | Relay code MUST contain no unchecked memory access. | README pillar "Security" | measured zero across the workspace, and this crate carries no crate-level refusal of it: two crates of seventeen do (`ambre-spec-testing.md section 8`) | unverified |
+| `SRV-021` | `INV` | Any instance MUST be able to serve any client: no request state MUST live in the process. | this spec section 3 | none. Every store is external and the one process-wide object is the fan-out hub, which holds no request; nothing boots two instances to observe it. The one exception is stated by `ambre-spec-session.md`, `SRV-024` | unverified |
+| `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated. | `ambre-spec-architecture.md section 2` | none. The relay serves the requests and not the page, so the two headers are the deployment's obligation on whatever serves the page and the worker bootstrap; nothing in continuous integration reads them back | unverified |
+
+### 1.2 A request is classified and limited
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SRV-013` | `FAIL` | A failure of the rate limiter MUST close the sign-in tier, never open it. | audit `M6`; this spec section 3 | `ambre_server::middleware::rate_limit::tests::only_auth_tier_fails_closed` asserts the sign-in tier refuses on an outage and that the other two stay open, which is the trade the audit asked for | verified |
+| `SRV-093` | `POST` | A sign-in request MUST be classified into the sign-in tier. | audit `M6`; this spec section 3 | none, and **the rule fails today**: `rate_limit::tests::classify_auth_path` feeds the classifier `/api/auth/login` and it answers correctly, but the limiter runs inside the nested router, which has already stripped `/api`. The classifier never sees a path it can match, so every sign-in is counted against the ordinary tier and `SRV-013` guards a tier nothing is ever in -- section 6 | unverified |
+| `SRV-019` | `POST` | The rate limiter MUST bucket a request by its authenticated caller. | audit `M6` | none. No test drives a bucketed request at all: the three `client_ip_*` cases cover reading an address out of a header, not choosing which bucket a request lands in | unverified |
+| `SRV-094` | `POST` | A request with no authenticated caller MUST be bucketed by its socket peer. | audit `M6` | `ambre_server::middleware::rate_limit::tests::client_ip_from_forwarded_header`, `::client_ip_falls_back_to_remote`, `::client_ip_ignores_empty_forwarded` cover the address the fallback reads. A forwarded address is trusted only where the deployment declares a proxy, and no test drives that switch | unverified |
+| `SRV-095` | `FRAME` | The limiter MUST NOT put two callers in one bucket. | audit `M6`; this spec section 3 | none. The bucket key is the tier prefix and the caller, so distinctness follows from the caller being distinct; nothing asserts it. A forwarded header trusted where no proxy strips it puts every caller behind one address, and one client then exhausts the tier for all of them | unverified |
+
+### 1.3 A request is answered
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SRV-020` | `POST` | A failure of a backing service MUST reach the caller as a generic error. | `ZK-006`; this spec section 3 | `ambre_server::error::tests::infrastructure_errors_return_internal_server_error_message` drives four store failures and asserts one status and one message for all of them; `::oidc_error_is_infrastructure_level` adds the provider | verified |
+| `SRV-096` | `FRAME` | An error answered to a caller MUST NOT carry the cause behind it. | `ZK-006`; this spec section 3 | `ambre_server::error::tests::infrastructure_errors_return_internal_server_error_message` asserts a store's own text is replaced rather than wrapped, and `::application_errors_return_their_message` asserts the other side, that a real application error keeps its message. It holds on the request path alone: the socket encodes its own error frames and one of them forwards a store's text verbatim (`ambre-spec-sequencer.md`, `SRV-081`) | verified |
+| `SRV-068` | `FAIL` | A cross-origin request MUST be refused unless the deployment names its origin. | audit `M17`; this spec section 3 | `ambre_server::cors_tests::parses_and_trims_multiple_origins`, `::empty_list_yields_no_origins` assert the list the refusal is read off. The permissive fallback is reachable only in development mode and is announced at start-up | verified |
+| `SRV-005` | `FAIL` | A non-member MUST receive no metadata about a document -- not its owner, not its kind, not its existence. | audit `H2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::get_document_hidden_from_non_member` asserts a not-found rather than a forbidden, which is what hides existence; `::create_document_with_foreign_existing_id_is_not_found` asserts the same answer on a taken identifier, so a caller cannot probe the namespace | verified |
+| `SRV-018` | `POST` | A route that reads a document row MUST require an authenticated caller. | this spec section 3 | none, and **the rule fails today**: the single-document route accepts an anonymous caller, queries the register, and only then answers not-found. The answer is right and the query runs first, so the register is read on behalf of nobody -- section 6 | unverified |
+
+### 1.4 A document is written, shared or deleted
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SRV-007` | `FAIL` | Every update, snapshot and presence frame MUST carry a valid signature by the key the caller's token names; an unsigned or forged frame MUST have no effect. | this spec section 3; `ZK-005` | `ambre_server::ws::handler::message::ed25519_tests::invalid_signature_is_rejected`, `::tampered_ciphertext_rejects_signature` and `::unsigned_ephemeral_is_rejected` assert the refusals; `ephemeral_binding_tests::forged_author_key_writes_no_presence` and `routes::tests::handler_tests::create_snapshot_rejects_forged_author` assert the absence of effect on both paths | verified |
+| `SRV-008` | `FAIL` | A member who may only read MUST produce no write. | this spec section 3 | `ambre_server::ws::handler::message::delta_size_cap_tests::viewer_role_delta_writes_no_pending` asserts the live path leaves the queue empty; `routes::tests::handler_tests::media_confirm_upload_denied_to_viewer` asserts the request path refuses. A viewer holds the document key and its own signing key, so this gate is the only thing between it and an accepted delta | verified |
+| `SRV-015` | `FAIL` | Only an owner MUST be able to remove a member or re-key a document. | this spec section 3 | `ambre_server::routes::tests::handler_tests::rotate_key_denied_to_editor`, `::delete_document_only_by_owner` assert the refusals; `::revoke_then_rotate_replaces_owner_key` asserts the owner's own path still completes | verified |
+| `SRV-016` | `FAIL` | A caller MUST NOT grant a role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::share::tests::editor_cannot_grant_owner`; `::owner_can_grant_any_valid_role` and `::doc_role_rank_ordering` pin the ordering the clamp is read off | verified |
+| `SRV-070` | `FAIL` | A caller MUST NOT change a member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::editor_cannot_demote_owner_via_invite`. The invitation is also the role-change path, so this is the half a clamp on the granted role alone leaves open | verified |
+| `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | none, and **the rule fails today**: the delete removes the rows and nothing else, so the document's sequence counter and its per-author clock hash stay in the ephemeral store with no expiry. Answered by the `A deleted document leaves nothing` Story | unverified |
 
 * **Budget.** the per-operation targets of `ambre-spec-budgets.md section 3`, and the roughly
   50 KB per open document of `ambre-spec-budgets.md section 6`. Every relay row of that
@@ -47,15 +68,25 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   bench measures the relay today, which is the `The performance budgets given a mechanism` Story.
 * **Boundary.** this document is the relay side of the boundary
   `ambre-spec-zero-knowledge.md` draws. `SRV-001` keeps the payload out of the process and
-  out of the logs, `SRV-012` refuses the relay the ability to open one, and `SRV-005` keeps the
-  routing metadata itself behind the membership check.
-* **Verification.** 10 `verified`, 7 `unverified`, 1 `human-review`, 0 `unimplemented`. What holds is
+  out of the logs, `SRV-012` refuses the relay the ability to open one, `SRV-005` keeps the
+  routing metadata itself behind the membership check, and `SRV-096` keeps a store's own words out
+  of an answer.
+* **Verification.** 12 `verified`, 9 `unverified`, 1 `human-review`, 0 `unimplemented`. What holds is
   what a request test can drive: the roles, the rank clamps, the signature gate, the error mapping,
   the non-member answer and the origin list. What is loose is every rule about the process or the
-  deployment rather than the request -- the limiter's own classification, the state a delete leaves,
-  the claim that two instances are interchangeable, and the two headers the page owes. Three rules
-  are stated as failing on a reading of the code.
-
+  deployment rather than the request -- the state a delete leaves, the claim that two instances are
+  interchangeable, and the two headers the page owes. Two conjunctions came apart and one of them is
+  the worst finding of this pass. `SRV-013` claimed the sign-in tier fails closed, and its test
+  asserts exactly that -- of a tier no request is ever classified into. `classify_auth_path` feeds
+  the classifier `/api/auth/login` and gets the right answer, while the limiter runs inside the
+  nested router that has already stripped `/api`: the function is right, the test is right, and in
+  production the classifier never sees a path it can match. `SRV-093` is that half, and it fails.
+  `SRV-019` claimed two bucketing rules with one mechanism between them, and the three tests cited
+  cover neither -- they read an address out of a header, which is `SRV-094`'s input and not a bucket
+  choice. Two rows are new: `SRV-095` says two callers may not share a bucket, which is what a
+  forwarded header trusted without a proxy in front of it destroys; and `SRV-096` is the ban inside
+  the error mapping, `verified` on the request path and, as the sequencer already states, bypassed
+  on the socket, which encodes its own frames and forwards a store's text verbatim.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -188,20 +219,20 @@ declares their tables and nothing serves them (`ambre-spec-broadcast.md`, `SRV-0
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The relay is blind by capability, not by discipline | a rule that says "do not decrypt" is held by review; a process that cannot link a cipher cannot decrypt whatever anyone writes. The manifest is the check, and re-granting a capability is an edit a reviewer meets (`SRV-012`, `ZK-004`) | trusting the code to avoid the operation, which is what the manifest allowed until three unused cipher crates were found declared in it |
-| The one crypto library the relay links is the signature one | verifying a signature is the only cryptographic act the relay has a reason to perform. Importing the project's own crypto crate would put the document key and the master seed in reach of this process for one call it does not need | depending on `ambre-crypto`, which is the shape every other crate takes |
-| Every fact lives in one store | a fact in two stores is a fact that disagrees with itself after any partial failure. The register is the authority, the ephemeral store is a cache with an owner, and object storage holds only what neither can | mirroring the sequence into the register, which would make a Redis reset invisible and a Redis write a two-phase commit |
-| A non-member gets the same answer as a caller of a document that does not exist | telling an arbitrary caller that a document exists, and who owns it, leaks the shape of everyone's workspace to anyone holding an identifier. One answer for both cases leaks nothing and costs the legitimate caller nothing (`SRV-005`) | a distinct `403`, which is what the route did before audit `H2` |
-| A role is ranked, and both the grant and the target are clamped against the caller | roles that are a set of strings make every new capability a new comparison, written once per route and forgotten once. A rank is one comparison, and clamping the target closes the re-invite path a grant clamp leaves open (`SRV-016`) | a capability check per route, which is where the editor-demotes-owner path came from |
-| The wire format is binary on the socket and textual on the requests | the socket carries a frame per keystroke burst and a compact encoding is what makes that affordable; the request surface is read by operators and tools, and a binary body would cost them a decoder for no measurable gain | one encoding for both |
-| The relay terminates no transport of its own | a reverse proxy already terminates the modern transports, and putting a QUIC stack inside this process makes an operational concern a code concern. The relay speaks the simplest protocol to something that speaks every other | terminating the modern transport in this process |
-| A document's kind is named after the application, in the project's own vocabulary | the kinds are a closed set the register checks, and naming them after the generic object -- a spreadsheet, a document, a board -- puts a second vocabulary beside the product's own, so every reader has to hold a translation table | naming a kind after the generic object it resembles |
-| The queries are written out, against a compile-time check | the queries here are the boundary's own enforcement -- a membership filter, a scoped lookup, a transaction over a re-key -- and an object mapper both hides them and blocks the asynchronous path. A checked query is the abstraction that keeps them readable and still fails the build when a column moves | an object-relational mapper over the register |
-| Cross-origin access is refused by default | a permissive origin is one line, ships silently, and is exactly the mistake nobody notices until it is exploited. A deployment that names no origin gets none, and the permissive fallback exists only in development mode and announces itself (`SRV-068`) | a permissive default, adjusted per deployment |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The relay is blind by capability, not by discipline | trusting the code to avoid the operation | it is what the manifest allowed until three unused cipher crates were found declared in it. A rule that says "do not decrypt" is held by review; a process that cannot link a cipher cannot decrypt whatever anyone writes. The manifest is the check, and re-granting a capability is an edit a reviewer meets (`SRV-012`, `ZK-004`). |
+| The one crypto library the relay links is the signature one | depending on `ambre-crypto` | it is the shape every other crate takes, and here it would put the document key and the master seed in reach of this process for one call it does not need. Verifying a signature is the only cryptographic act the relay has a reason to perform. |
+| Every fact lives in one store | mirroring the sequence into the register | it would make a Redis reset invisible and a Redis write a two-phase commit. A fact in two stores is a fact that disagrees with itself after any partial failure: the register is the authority, the ephemeral store is a cache with an owner, and object storage holds only what neither can. |
+| A non-member gets the answer of a document that does not exist | a distinct `403` | it is what the route did before audit `H2`: telling an arbitrary caller that a document exists, and who owns it, leaks the shape of everyone's workspace to anyone holding an identifier. One answer for both cases leaks nothing and costs the legitimate caller nothing (`SRV-005`). |
+| A role is ranked, and the grant and the target are both clamped | a capability check per route | it is where the editor-demotes-owner path came from. Roles that are a set of strings make every new capability a new comparison, written once per route and forgotten once; a rank is one comparison, and clamping the target closes the re-invite path a grant clamp leaves open (`SRV-016`). |
+| The wire format is binary on the socket and textual on the requests | one encoding for both | the socket carries a frame per keystroke burst and a compact encoding is what makes that affordable; the request surface is read by operators and tools, and a binary body would cost them a decoder for no measurable gain. |
+| The relay terminates no transport of its own | terminating the modern transport in this process | a reverse proxy already terminates the modern transports, and putting a QUIC stack inside this process makes an operational concern a code concern. The relay speaks the simplest protocol to something that speaks every other. |
+| A document's kind is named after the application | naming a kind after the generic object it resembles | the kinds are a closed set the register checks, and naming them after the generic object -- a spreadsheet, a document, a board -- puts a second vocabulary beside the product's own, so every reader has to hold a translation table. |
+| The queries are written out, against a compile-time check | an object-relational mapper over the register | it hides the queries and blocks the asynchronous path. The queries here are the boundary's own enforcement -- a membership filter, a scoped lookup, a transaction over a re-key -- and a checked query is the abstraction that keeps them readable and still fails the build when a column moves. |
+| Cross-origin access is refused by default | a permissive default, adjusted per deployment | a permissive origin is one line, ships silently, and is exactly the mistake nobody notices until it is exploited. A deployment that names no origin gets none, and the permissive fallback exists only in development mode and announces itself (`SRV-068`). |
 
 ---
 

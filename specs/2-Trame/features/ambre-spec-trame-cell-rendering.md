@@ -1,7 +1,8 @@
 # AMBRE -- FEATURE: CELL RENDERING (ALIGNMENT, WRAP AND OVERFLOW)
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- text is laid out and spilled; sparklines and charts are not drawn.
+**Implementation:** partial -- sparklines and charts are not drawn, and the automatic alignment
+misreads a formatted number (section 5).
 
 > A label wider than its column runs over the empty cells beside it. Put a value in the next cell
 > and the label stops at its own edge, because something is now there to hide.
@@ -17,28 +18,35 @@ how far it may run past its column, and where it is cut. All of it is UI-thread 
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TRAME-UI-093` | A cell the user did not align MUST put a number right and anything else left. | this spec section 3 | none. `render::content::cell_alignment` resolves it by parsing the text, and no test drives the resolution | unverified |
-| `TRAME-UI-094` | The alignment control MUST resolve an automatic alignment the way the renderer does. | this spec section 3 | none, and the rule is carried by two copies of the parse: `cell_alignment` on the UI thread, `style_state_event` on the Logic thread | unverified |
-| `TRAME-UI-095` | A cell that does not wrap MUST spill only over neighbours that are empty. | this spec section 3 | `ambre_trame::render::tests::spill_width_stops_at_first_non_empty_neighbour` | verified |
-| `TRAME-UI-096` | A spill MUST run in the direction the text is aligned in. | this spec section 3 | none. The three branches -- left spills right, right spills left, centred both -- are in `draw_cells_on`, and no test enters any of them | unverified |
-| `TRAME-UI-097` | A cell that wraps MUST stay inside its own box. | this spec section 3 | none. Wrap excludes the cell from the spill branch, and nothing asserts the clip that follows | unverified |
-| `TRAME-UI-098` | Text taller than its row MUST be cut, never painted over the row below. | this spec section 3 | partial: `ambre_trame::render::tests::draw_cells_on_fills_each_and_counts_nonempty_text` asserts the clip stack unwinds; nothing asserts a clip was pushed | unverified |
-| `TRAME-UI-099` | A vertical alignment MUST NOT lift text above the top of its cell. | this spec section 3 | none. `cell_v_offset` clamps the offset at zero, and no test passes it text taller than the box | unverified |
-| `TRAME-UI-100` | Glyphs MUST scale with the zoom, like the row heights and column widths. | this spec section 3 | none. The font size is multiplied by the layout zoom in `draw_cells_on`, and the render tests all run at zoom one | unverified |
-| `TRAME-UI-020` | A sparkline MUST be derived on the UI thread from `DisplayViewport` data alone; it MUST NOT require a second round trip to the Logic thread. | this spec section 5 | not built -- lands with the "Post-V1 surface" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `TRAME-UI-021` | A chart MUST be clipped to its host cell range and MUST NOT paint outside the grid. | this spec section 5 | not built -- lands with the "Post-V1 surface" Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-UI-093` | `OBS` | A cell the user did not align MUST put a number right and anything else left. | this spec section 3 | none, and the code does the **opposite** on three formats. `render::content::cell_alignment` parses the text it is handed, and that text is already formatted (`TRAME-157`), so a currency, a percentage and a fraction stop parsing as numbers and align left | unverified |
+| `TRAME-UI-094` | `OBS` | The alignment control MUST resolve an automatic alignment the way the renderer does. | this spec section 3 | none, and the code does the **opposite**: the two copies of the parse read two different texts -- `cell_alignment` the formatted text, `style_state_event` the computed value -- so a percentage cell reports numeric to the toolbar and draws left in the grid | unverified |
+| `TRAME-UI-095` | `OBS` | A cell that does not wrap MUST spill only over neighbours that are empty. | this spec section 3 | `ambre_trame::render::tests::spill_width_stops_at_first_non_empty_neighbour`, over an occupied neighbour, an immediate one and the grid edge | verified |
+| `TRAME-UI-096` | `OBS` | A spill MUST run in the direction the text is aligned in. | this spec section 3 | none. The three branches -- left spills right, right spills left, centred both ways -- are in `draw_cells_on`, and no test enters any of them | unverified |
+| `TRAME-UI-097` | `OBS` | A cell that wraps MUST stay inside its own box. | this spec section 3 | none. Wrap excludes the cell from the spill branch and clips it to its own rect. The one test that draws a cell draws one that fits, so it reaches neither half | unverified |
+| `TRAME-UI-098` | `OBS` | Text taller than its row MUST be cut, never painted over the row below. | this spec section 3 | none. The cited test was read as partial for asserting the clip stack unwinds; its cell fits its box, so no clip is pushed and the assertion holds over an empty stack | unverified |
+| `TRAME-UI-099` | `OBS` | A vertical alignment MUST NOT lift text above the top of its cell. | this spec section 3 | none. `cell_v_offset` clamps the offset at zero, and no test passes it text taller than the box -- though it is a free function the render tier already reaches, like `spill_width` | unverified |
+| `TRAME-UI-100` | `OBS` | Glyphs MUST scale with the zoom, like the row heights and column widths. | this spec section 3 | none. The font size is multiplied by the layout zoom in `draw_cells_on`, and every render fixture builds a layout at zoom one | unverified |
+| `TRAME-UI-139` | `OBS` | A fill and a border MUST be cut at the cell's own edge, whatever its text does. | this spec section 3 | none. The fill takes the cell rect and is emitted before the spill clip is pushed, so only glyphs cross a column edge; the one fill test counts the fills and reads neither rect | unverified |
+| `TRAME-UI-020` | `INV` | A sparkline MUST be derived on the UI thread from the viewport data alone, with no round trip to the Logic thread. | this spec section 5 | not built -- lands with the "Post-V1 surface" Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `TRAME-UI-021` | `OBS` | A chart MUST be clipped to the cell range that hosts it. | this spec section 5 | not built -- lands with the "Post-V1 surface" Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `TRAME-UI-140` | `OBS` | A chart MUST NOT paint outside the grid. | this spec section 5 | not built -- lands with the "Post-V1 surface" Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 * **Budget.** the frame phases of `ambre-spec-budgets.md section 2` -- the text layout, the
   vertex batch build and the GPU pass. `CANVAS-005` is the rule that holds them, and nothing
   measures it.
 * **Boundary.** none: the renderer paints view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path.
-* **Verification.** 1 `verified`, 7 `unverified`, 2 `unimplemented`. The one that holds is the one
-  that was extracted into a pure function of a layout and an emptiness predicate. Everything else
-  lives inside `draw_cells_on`, which needs a font context and a recording surface to reach -- both
-  of which the render tests already build. This is a testable surface that is not tested.
+* **Verification.** 1 `verified`, 8 `unverified`, 3 `unimplemented`. The one that holds is the one
+  extracted into a pure function of a layout and an emptiness predicate; everything else lives
+  inside `draw_cells_on`, which the render tests already reach. Two rows changed hands, both
+  downward. `TRAME-UI-093` and `TRAME-UI-094` were untested rules and are rules the code answers
+  with something else: the renderer resolves the automatic alignment on the **formatted** text and
+  the toolbar on the **computed** value, so a percentage cell disagrees with itself -- section 5.
+  `TRAME-UI-098` was `partial` and is `none`: the test it cited draws a cell that fits, which
+  pushes no clip at all. The two new rows are a claim section 3 made and no row carried, and the
+  second half of the chart rule.
 
 ---
 
@@ -123,22 +131,23 @@ holds text, at the grid edge, or once the overflow is covered.
 | wraps | broken into lines inside its own box, and cut there (`TRAME-UI-097`) |
 | holds newlines, or wraps taller than its row | cut at the row's bottom edge (`TRAME-UI-098`) |
 
-A fill and a border are always cut to the owning cell: only glyphs ever cross a column edge.
+A fill and a border are always cut to the owning cell: only glyphs ever cross a column edge
+(`TRAME-UI-139`).
 
 **Zoom** scales the glyph size the same way the per-axis metrics scale the column widths and row
 heights, so a zoomed grid is the same layout, not a different one.
 
 ---
 
-## 4. DECISIONS
+## 4. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| Text spills over empty neighbours instead of ending in an ellipsis | a spreadsheet's labels are routinely wider than their column, and every spreadsheet a user has met spills them. An ellipsis would hide text that has room to be read | cutting at the column edge and marking the cut |
-| The renderer shapes left-aligned and positions the run itself | the text engine's own alignment needs a finite advance, and the unbounded layout an overflowing cell needs has none -- centred text would be pushed off the surface | letting the text engine align inside a bounded layout |
-| A row's height is measured on the Logic thread | the height belongs to the axis, which is document state shared with the header strip and the resize drag; a height measured on the UI thread would be a second answer | remeasuring wrapped text on the UI thread each frame |
-| Only a single line may spill | multi-line text already claims vertical room its neighbours do not expect; letting it claim horizontal room too makes the overlap unbounded in both axes | spilling every line of a wrapped cell |
-| Colour is resolved late, from the palette | a cell carries a colour or it carries nothing, and nothing must mean the current theme's colour -- resolved at paint time, so a theme switch needs no document write | resolving the theme colour into the cell when it is stored |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| Text spills over empty neighbours | cutting at the column edge and marking the cut | an ellipsis would hide text that has room to be read. A spreadsheet's labels are routinely wider than their column, and every spreadsheet a user has met spills them. |
+| The renderer shapes left-aligned and positions the run itself | letting the text engine align inside a bounded layout | the text engine's own alignment needs a finite advance, and the unbounded layout an overflowing cell needs has none -- centred text would be pushed off the surface. |
+| A row's height is measured on the Logic thread | remeasuring wrapped text on the UI thread each frame | the height belongs to the axis, which is document state shared with the header strip and the resize drag; a height measured on the UI thread would be a second answer. |
+| Only a single line may spill | spilling every line of a wrapped cell | multi-line text already claims vertical room its neighbours do not expect; letting it claim horizontal room too makes the overlap unbounded in both axes. |
+| Colour is resolved late, from the palette | resolving the theme colour into the cell when it is stored | a cell carries a colour or it carries nothing, and nothing must mean the current theme's colour. Stored, it freezes one theme into the document, so a theme switch would need a document write over every cell. |
 
 ---
 
@@ -155,6 +164,17 @@ heights, so a zoomed grid is the same layout, not a different one.
 * **A number too wide for its column is spilled or cut like a label.** A spreadsheet shows a row of
   hashes instead, because a cut number reads as a smaller number. Trame has no such marker
   (`features/ambre-spec-trame-number-formats.md section 5`).
-* **The style surface has no test.** Seven rows above say `none` or `partial`, and all seven are
-  reachable from the render tests that already exist -- they build a font context, a recording
-  surface and a grid layout, and they only ever draw plain cells.
+* **The automatic alignment reads the formatted text, not the value** (`TRAME-UI-093`,
+  `TRAME-UI-094`). The Logic thread formats a cell before it packs it, so the renderer parses
+  `314.2%`, `3.14 EUR` or `3 2/16` and finds no number, and a value the user reads as a number is
+  drawn left. The toolbar's copy of the parse reads the computed value instead and reports the same
+  cell as numeric, so the alignment control shows right while the grid draws left. One parse read
+  by both sides, on one text, is the fix; which text is the open question, and
+  `features/ambre-spec-trame-number-formats.md section 5` states the same split from the format's
+  side.
+* **A merged block never spills.** `draw_merges_on` clips every master to its span rect, so a label
+  wider than its merge is cut where a label wider than its column would run on. Nothing here or in
+  `features/ambre-spec-trame-cell-merges.md` says whether that is the intent.
+* **The style surface has no test.** Nine rows above say `none`, and all nine are reachable from the
+  render tests that already exist -- they build a font context, a recording surface and a grid
+  layout, and they only ever draw one plain cell that fits its box at zoom one.

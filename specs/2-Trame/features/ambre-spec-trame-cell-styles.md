@@ -17,32 +17,58 @@ to one writer's cell, never to a blend neither user asked for.
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TRAME-092` | A style MUST stay on the cell it was applied to, and MUST NOT follow the cursor. | this spec section 3 | `ambre_trame::logic::tests::group1::bold_stays_on_the_cell_not_the_selection` | verified |
-| `TRAME-093` | Styling a selection MUST be one undo item, never one per cell. | this spec section 3 | `ambre_trame::logic::tests::group1::selection_style_is_a_single_undo` | verified |
-| `TRAME-094` | Styling a selection MUST reach a peer as one delta that carries every cell. | this spec section 3 | `ambre_trame::logic::tests::group7::batched_formatting_broadcasts_complete_delta` | verified |
-| `TRAME-095` | A style MUST survive a reload. | this spec section 3 | `ambre_trame::logic::tests::group1::formatting_survives_snapshot_roundtrip`, `::set_cell_style_round_trips_and_formats_numbers` | verified |
-| `TRAME-096` | A cell returned to the default style MUST leave no entry behind. | this spec section 6 | none. `write_cell_style` deletes the key when the record equals the default, and no test reads the container back to see it gone | unverified |
-| `TRAME-097` | The toolbar MUST report the style of the active cell. | this spec section 4 | `ambre_trame::logic::tests::group1::bold_stays_on_the_cell_not_the_selection`; the chrome half is `ambre_trame::tests::chrome_ui::style_applied_mirrors_into_style_state` | verified |
-| `TRAME-098` | A cell a merge covers MUST NOT take a style of its own. | this spec section 3 | none. `set_cell_style` skips every cell in `covered`, and nothing drives a restyle across a merge | unverified |
-| `TRAME-099` | A border preset MUST reach only the edges that preset names. | this spec section 4 | none. The ten presets resolve to per-cell edges in `logic/styles.rs`, and no test applies one | unverified |
-| `TRAME-100` | A border a user asked for MUST NOT be overpainted by a grid line. | this spec section 4 | none. The border pass runs after the grid lines in `draw_grid`, which is a call order nothing asserts | unverified |
-| `TRAME-101` | A border the user did not colour MUST follow the active theme. | this spec section 6 | none, and the code does the opposite: `BORDER_DEFAULT` in `render/content.rs` is one literal grey for both themes | unverified |
-| `TRAME-FEAT-017` | Conditional formatting MUST apply the first matching rule in ascending priority order, and stop there. | this spec section 3 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-FEAT-018` | A conditional format MUST produce a display-time `style_override` and MUST NOT mutate the stored cell style. | this spec section 3 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-FEAT-019` | A `Formula` conditional rule MUST resolve its relative references from the cell being evaluated, not from the rule's anchor. | this spec section 3 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-092` | `INV` | A style MUST stay on the cell it was applied to, and MUST NOT follow the cursor. | this spec section 3 | `ambre_trame::logic::tests::group1::bold_stays_on_the_cell_not_the_selection` | verified |
+| `TRAME-186` | `INV` | A cell the toolbar calls a number MUST be a cell the grid aligns as one. | this spec section 6 | none, and the two sides disagree: the toolbar tests the cell's raw text, the grid tests the text after its number format, so a cell in any format that does not render as plain digits is a number on one side and text on the other | unverified |
+| `TRAME-095` | `IO` | A style MUST survive a reload. | this spec section 3 | `ambre_trame::logic::tests::group1::formatting_survives_snapshot_roundtrip`, `::set_cell_style_round_trips_and_formats_numbers` | verified |
+| `TRAME-187` | `IO` | A stored style a reload cannot read MUST NOT come back as the default style with no notice. | this spec section 6 | none, and the code does the opposite: `reseed_styles` skips an unreadable record, and a cell whose row or column is gone, so the cell reopens unstyled and nothing is reported | unverified |
+| `TRAME-097` | `OBS` | The toolbar MUST report the style of the active cell. | this spec section 4 | `ambre_trame::logic::tests::group1::bold_stays_on_the_cell_not_the_selection`; the chrome half is `ambre_trame::tests::chrome_ui::style_applied_mirrors_into_style_state` | verified |
+| `TRAME-188` | `OBS` | When the cursor sits inside a merged block, the toolbar MUST report the style the user sees, which is the block's. | this spec section 6 | none, and the code does the opposite: the cursor lands on a covered cell unresolved, so the toolbar reads that cell's own empty style while reporting the block as merged | unverified |
+| `TRAME-100` | `OBS` | A border a user asked for MUST NOT be overpainted by a grid line. | this spec section 4 | none. The border pass runs after the grid lines and after the merge repaint in the screen renderer, which is a call order nothing asserts | unverified |
+| `TRAME-101` | `OBS` | A border the user did not colour MUST follow the active theme. | this spec section 6 | none, and the code does the opposite: `BORDER_DEFAULT` in `render/content.rs` is one literal grey for both themes | unverified |
+
+### 1.2 Format the selected cells
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-189` | `PRE` | A formatting gesture MUST carry at least one attribute the user changed. | this spec section 6 | none. Nothing reads the patch before running: an empty one still creates every row and column the selection reaches and lands an undo item that changes nothing | unverified |
+| `TRAME-093` | `POST` | Styling a selection MUST be one undo item, never one per cell. | this spec section 3 | `ambre_trame::logic::tests::group1::selection_style_is_a_single_undo` | verified |
+| `TRAME-094` | `POST` | Styling a selection MUST reach a peer as one delta that carries every cell. | this spec section 3 | `ambre_trame::logic::tests::group7::batched_formatting_broadcasts_complete_delta` | verified |
+| `TRAME-096` | `POST` | A cell returned to the default style MUST leave no style entry behind. | this spec section 6 | none. `write_cell_style` deletes the key when the record equals the default, and no test reads the container back to see it gone | unverified |
+| `TRAME-190` | `POST` | A border a user drew MUST reach the document and come back out to the grid. | this spec section 4 | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`, `::subset_style_edit_does_not_tear_a_whole_cell_rewrite` -- both carry a border preset through the gesture and compare the four resulting edges after a document exchange and a viewport read | verified |
+| `TRAME-099` | `POST` | A border preset MUST reach only the edges that preset names. | this spec section 4 | none. The two tests behind `TRAME-190` carry a preset over one cell, where every perimeter preset resolves to the same four edges and every interior one resolves to none, so the ten presets are indistinguishable there | unverified |
+| `TRAME-098` | `FRAME` | A cell a merge covers MUST NOT take a style of its own. | this spec section 3 | none. `set_cell_style` skips every cell in `covered`, and nothing drives a restyle across a merge | unverified |
+| `TRAME-191` | `FRAME` | Styling a selection MUST NOT change the value of any cell in it. | this spec section 2 | none. Style and value are separate registers and the run writes only the style one, but no test formats a cell holding a value and reads that value back | unverified |
+| `TRAME-192` | `FRAME` | Styling a selection MUST NOT move the cursor or change what is selected. | this spec section 4 | none. Every toolbar control writes the current selection and expects to keep it, and nothing asserts the selection after a run | unverified |
+| `TRAME-193` | `FAIL` | Given a cell the document cannot hold, a formatting gesture MUST tell the user, and MUST NOT draw a style it did not store. | this spec section 6 | none, and the code does the opposite: past the materialization cap the style is kept in memory and drawn, the persist is dropped, and the only trace is a log line | unverified |
+
+### 1.3 Recolour a cell from a rule
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TRAME-FEAT-017` | `POST` | Conditional formatting MUST apply the first matching rule in ascending priority order, and stop there. | this spec section 3 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-FEAT-018` | `POST` | A conditional format MUST produce a display-time override of the cell's style. | this spec section 3 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-FEAT-019` | `POST` | A `Formula` conditional rule MUST resolve its relative references from the cell being evaluated, not from the rule's anchor. | this spec section 3 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-FEAT-028` | `FRAME` | A conditional format MUST NOT change the cell's stored style. | this spec section 3; section 5 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6). It is the half `TRAME-FEAT-018` was carrying, and it is the one the "a style is stored, a conditional format is not" decision rests on | unimplemented |
 
 * **Budget.** none: a restyle is one LWW register write, and `ambre-spec-budgets.md`
   budgets no style operation. What the styles add to memory sits inside the `LoroDoc` holder of
   `ambre-spec-budgets.md section 6`.
 * **Boundary.** none of its own: a style is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 5 `verified`, 5 `unverified`, 3 `unimplemented`. The five that hold are the
-  five the single-register model was built to hold: where a style lives, how it undoes, how it
-  broadcasts, how it reloads, what the toolbar reads. Every rule about **borders** is loose, and
-  one of them -- the default border colour -- is a rule the code is known to break. The convergence
-  rule itself is `TRAME-016`, in `ambre-spec-trame-schema.md section 1`.
+* **Verification.** 6 `verified`, 12 `unverified`, 4 `unimplemented`. Five of the six that hold are
+  the five the single-register model was built to hold: where a style lives, how it undoes, how it
+  broadcasts, how it reloads, what the toolbar reads. The sixth is new and was already true: the two
+  convergence tests carry a border preset through the gesture and read the four edges back, so a
+  border does reach the document -- what stays open is which edges a preset picks (`TRAME-099`),
+  because both tests style a single cell. The gesture had no frame conditions at all and now has
+  three, and no refusal at all and now has one the code is known to break (`TRAME-193`). Two rows
+  read `and the code does the opposite`: the default border colour and that refusal, plus two more
+  in the state table. The convergence rule itself is `TRAME-016`, in
+  `ambre-spec-trame-schema.md section 1`.
 
 ---
 
@@ -202,17 +228,17 @@ segments, because the shared surface carries no dash parameter.
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| One register per cell holds the whole style | a fan-out over per-attribute registers tore a border's presence from its colour, and dropped a colour-only cell on reload. One register makes a concurrent restyle race exactly once. The rule is cross-app and normative in `ambre-spec-architecture.md section 2`; Toile's elements follow it | eleven per-sheet registers, one per attribute, which is what the code carried |
-| Concurrency is whole-cell last-writer-wins | per-attribute merge needs a server that can order plaintext content; a blind relay never sees any, so the only ordering available is per-register | faking a per-attribute merge, which would restore the fan-out that was removed |
-| A style is stored, a conditional format is not | a rule that recolours on a value must recompute when the value changes; storing its result would make the document depend on evaluation order | writing the computed colour into the cell's style |
-| Bold and italic travel as commands, not as patch fields | they are the two attributes with a keyboard chord and a shared toolbar toggle, so they already have a `CommandId`; the record still stores them beside the rest | a fourteenth `StylePatch` field for each, duplicating the command path |
-| The toolbar reflects the active cell, not the selection | a selection of mixed styles has no single state to show, and Excel and Sheets both answer with the anchor. One cell is also one lookup | resolving a common state over the selection, which needs a tri-state on every control |
-| A covered cell takes no style | it renders blank under its master, so a style on it is invisible -- and an `All` border on it would draw edges *inside* the merged block | styling every cell in the rectangle, master or not |
-| A shared style dictionary is refused | deduplication costs a dereference per read and needs a reclamation policy, because Loro never collects an orphaned entry | a `styles` map with an `"s"` indirection from each cell |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| One register per cell holds the whole style | eleven per-sheet registers, one per attribute | it is what the code carried: the fan-out tore a border's presence from its colour, and dropped a colour-only cell on reload. One register makes a concurrent restyle race exactly once. The rule is cross-app and normative in `ambre-spec-architecture.md section 2`; Toile's elements follow it. |
+| Concurrency is whole-cell last-writer-wins | faking a per-attribute merge | it would restore the fan-out that was removed. A real per-attribute merge needs a server that can order plaintext content; a blind relay never sees any, so the only ordering available is per-register. |
+| A style is stored, a conditional format is not | writing the computed colour into the cell's style | a rule that recolours on a value must recompute when the value changes; storing its result would make the document depend on evaluation order. |
+| Bold and italic travel as commands | a fourteenth `StylePatch` field for each | it duplicates the command path they already have: they are the two attributes with a keyboard chord and a shared toolbar toggle, so they already carry a `CommandId`. The record still stores them beside the rest. |
+| The toolbar reflects the active cell | resolving a common state over the selection | it needs a tri-state on every control, for a selection of mixed styles that has no single state to show. Excel and Sheets both answer with the anchor, and one cell is also one lookup. |
+| A covered cell takes no style | styling every cell in the rectangle, master or not | a covered cell renders blank under its master, so a style on it is invisible -- and an `All` border on it would draw edges *inside* the merged block. |
+| A shared style dictionary is refused | a `styles` map with an `"s"` indirection from each cell | deduplication costs a dereference per read and needs a reclamation policy, because Loro never collects an orphaned entry. |
 
 ---
 
@@ -228,9 +254,33 @@ segments, because the shared surface carries no dash parameter.
 * **A user fill colour is not a palette colour, and `TRAME-UI-012` says every fill must be.** That
   row is `verified`, by a test whose fixture holds one unstyled cell. The rule needs the exception
   written into it: a colour the *user* chose is not a hardcoded product colour.
-* **Nothing tests a border.** Three of the five `unverified` rows are the border model -- the preset
-  resolution, the paint order, the default colour. The preset resolution is a pure function of a
-  rectangle and a merge map, so it is the cheapest of the three to close.
+* **A border is carried, but its geometry is not tested.** The two convergence tests run a preset
+  through the gesture and compare the four edges after an exchange (`TRAME-190`), so the register,
+  the pack and the paint path all carry it. Both style one cell, where the ten presets collapse into
+  two answers. The preset resolution is a pure function of a rectangle and a merge map, so it is the
+  cheapest row in the document to close (`TRAME-099`); the paint order and the default colour
+  (`TRAME-100`, `TRAME-101`) need the screen.
+* **A style the store refuses is still drawn.** Past the materialization cap the run keeps the style
+  in memory and paints it, drops the persist, and logs. The user sees a formatted cell that no peer
+  will ever see and that a reload will not bring back (`TRAME-193`). The value path has the same
+  cap; what makes this one worse is that a dropped value shows as a blank cell, and a dropped style
+  shows as a cell that looks stored.
+* **The toolbar and the grid do not agree on what a number is.** Both resolve it by parsing the
+  cell's text, but the toolbar parses the raw text and the renderer parses the text after its number
+  format. A cell formatted as a percentage or a currency is a number to the toolbar and text to
+  `HAlign::Auto` (`TRAME-186`). A comment in `style_state_event` claims the two are the same
+  heuristic.
+* **A merged block reports no style.** The cursor lands on a covered cell without being resolved to
+  its master, so the toolbar reads the covered cell's own style -- empty -- while correctly
+  reporting the block as merged (`TRAME-188`). The block on screen carries the master's style.
+* **An empty patch is not free.** Nothing checks that a formatting gesture changes anything, and the
+  run materializes every row and column its selection reaches before it looks at the patch. A patch
+  that changes nothing therefore grows the document and lands an undo item (`TRAME-189`). The same
+  order makes `TRAME-096` narrower than it reads: the style entry does go, the rows and columns the
+  cell needed stay.
+* **A style that will not decode is dropped in silence.** `reseed_styles` skips a record postcard
+  cannot read and a cell whose row or column is gone, so the cell reopens unstyled with no notice
+  (`TRAME-187`).
 * **A style has no clear-formatting command.** A user restores the default by reversing every
   control that was used. `write_cell_style` already drops a defaulted cell, so the store is ready
   for a command that does not exist.

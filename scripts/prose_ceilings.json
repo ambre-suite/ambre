@@ -2141,7 +2141,7 @@
     "para": 0,
     "passive": 5
   },
-  "specs/1-Foundations/ambre-invariant-ledger.md": {
+  "specs/1-Foundations/ambre-contract-ledger.md": {
     "ascii": 0,
     "latin": 0,
     "long": 0,
@@ -2151,30 +2151,30 @@
   "specs/1-Foundations/ambre-spec-accessibility.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 5,
-    "para": 0,
-    "passive": 7
+    "long": 7,
+    "para": 1,
+    "passive": 8
   },
   "specs/1-Foundations/ambre-spec-adaptive-layout.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 5,
+    "long": 8,
     "para": 0,
-    "passive": 13
+    "passive": 14
   },
   "specs/1-Foundations/ambre-spec-architecture.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 10,
-    "para": 0,
-    "passive": 14
+    "long": 13,
+    "para": 1,
+    "passive": 16
   },
   "specs/1-Foundations/ambre-spec-broadcast.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 14,
-    "para": 0,
-    "passive": 18
+    "long": 17,
+    "para": 1,
+    "passive": 21
   },
   "specs/1-Foundations/ambre-spec-budgets.md": {
     "ascii": 0,
@@ -2186,197 +2186,197 @@
   "specs/1-Foundations/ambre-spec-chrome.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 13,
-    "para": 0,
-    "passive": 6
+    "long": 17,
+    "para": 1,
+    "passive": 7
   },
   "specs/1-Foundations/ambre-spec-clipboard.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 9,
-    "para": 0,
+    "long": 11,
+    "para": 1,
     "passive": 14
   },
   "specs/1-Foundations/ambre-spec-commands.md": {
     "ascii": 0,
     "latin": 0,
     "long": 16,
-    "para": 0,
-    "passive": 20
+    "para": 1,
+    "passive": 21
   },
   "specs/1-Foundations/ambre-spec-delta-order.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 15,
-    "para": 0,
-    "passive": 19
+    "long": 16,
+    "para": 1,
+    "passive": 21
   },
   "specs/1-Foundations/ambre-spec-design-tokens.md": {
     "ascii": 0,
     "latin": 0,
     "long": 9,
     "para": 0,
-    "passive": 10
+    "passive": 11
   },
   "specs/1-Foundations/ambre-spec-docfile.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 7,
-    "para": 0,
-    "passive": 9
+    "long": 9,
+    "para": 1,
+    "passive": 11
   },
   "specs/1-Foundations/ambre-spec-drawing-surface.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 8,
+    "long": 10,
     "para": 0,
-    "passive": 12
+    "passive": 13
   },
   "specs/1-Foundations/ambre-spec-find.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 15,
-    "para": 0,
-    "passive": 4
+    "long": 16,
+    "para": 1,
+    "passive": 5
   },
   "specs/1-Foundations/ambre-spec-fixtures.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 20,
-    "para": 0,
-    "passive": 26
+    "long": 24,
+    "para": 1,
+    "passive": 27
   },
   "specs/1-Foundations/ambre-spec-frame.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 9,
-    "para": 0,
-    "passive": 12
+    "long": 14,
+    "para": 1,
+    "passive": 13
   },
   "specs/1-Foundations/ambre-spec-high-density.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 8,
+    "long": 11,
     "para": 0,
-    "passive": 11
+    "passive": 14
   },
   "specs/1-Foundations/ambre-spec-key-rotation.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 7,
-    "para": 0,
-    "passive": 17
+    "long": 11,
+    "para": 1,
+    "passive": 20
   },
   "specs/1-Foundations/ambre-spec-key-verification.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 13,
-    "para": 0,
-    "passive": 19
+    "long": 14,
+    "para": 1,
+    "passive": 21
   },
   "specs/1-Foundations/ambre-spec-launcher.md": {
     "ascii": 0,
     "latin": 0,
     "long": 9,
-    "para": 0,
-    "passive": 12
+    "para": 1,
+    "passive": 15
   },
   "specs/1-Foundations/ambre-spec-media.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 8,
+    "long": 12,
     "para": 0,
-    "passive": 8
+    "passive": 9
   },
   "specs/1-Foundations/ambre-spec-membership.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 9,
-    "para": 0,
-    "passive": 15
+    "long": 12,
+    "para": 1,
+    "passive": 18
   },
   "specs/1-Foundations/ambre-spec-message-bus.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 7,
-    "para": 0,
-    "passive": 12
+    "long": 11,
+    "para": 1,
+    "passive": 16
   },
   "specs/1-Foundations/ambre-spec-object-store.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 11,
-    "para": 0,
-    "passive": 11
+    "long": 13,
+    "para": 1,
+    "passive": 12
   },
   "specs/1-Foundations/ambre-spec-organizations.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 9,
-    "para": 0,
-    "passive": 12
+    "long": 11,
+    "para": 1,
+    "passive": 13
   },
   "specs/1-Foundations/ambre-spec-pdf-export.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 8,
+    "long": 7,
     "para": 0,
     "passive": 8
   },
   "specs/1-Foundations/ambre-spec-presence.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 11,
-    "para": 0,
-    "passive": 11
+    "long": 12,
+    "para": 1,
+    "passive": 13
   },
   "specs/1-Foundations/ambre-spec-render-assets.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 12,
-    "para": 0,
-    "passive": 12
+    "long": 13,
+    "para": 1,
+    "passive": 19
   },
   "specs/1-Foundations/ambre-spec-schema-version.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 7,
-    "para": 0,
-    "passive": 12
+    "long": 9,
+    "para": 1,
+    "passive": 13
   },
   "specs/1-Foundations/ambre-spec-sealed-envelope.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 11,
-    "para": 0,
-    "passive": 12
+    "long": 14,
+    "para": 1,
+    "passive": 15
   },
   "specs/1-Foundations/ambre-spec-sequencer.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 16,
-    "para": 0,
-    "passive": 21
+    "long": 21,
+    "para": 1,
+    "passive": 23
   },
   "specs/1-Foundations/ambre-spec-server.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 15,
-    "para": 0,
-    "passive": 6
+    "long": 18,
+    "para": 1,
+    "passive": 5
   },
   "specs/1-Foundations/ambre-spec-session.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 12,
-    "para": 0,
-    "passive": 11
+    "long": 17,
+    "para": 1,
+    "passive": 16
   },
   "specs/1-Foundations/ambre-spec-sync.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 16,
-    "para": 0,
+    "long": 22,
+    "para": 1,
     "passive": 12
   },
   "specs/1-Foundations/ambre-spec-testing.md": {
@@ -2389,51 +2389,51 @@
   "specs/1-Foundations/ambre-spec-text-editor.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 13,
-    "para": 0,
-    "passive": 5
+    "long": 17,
+    "para": 1,
+    "passive": 7
   },
   "specs/1-Foundations/ambre-spec-text-input.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 12,
-    "para": 0,
-    "passive": 7
+    "long": 14,
+    "para": 1,
+    "passive": 10
   },
   "specs/1-Foundations/ambre-spec-ui.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 12,
-    "para": 0,
-    "passive": 14
+    "long": 15,
+    "para": 1,
+    "passive": 19
   },
   "specs/1-Foundations/ambre-spec-undo.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 4,
-    "para": 0,
+    "long": 7,
+    "para": 1,
     "passive": 7
   },
   "specs/1-Foundations/ambre-spec-zero-knowledge.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 8,
+    "long": 9,
     "para": 0,
     "passive": 9
   },
   "specs/1-Foundations/ambre-spec-zoom.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 6,
+    "long": 7,
     "para": 0,
     "passive": 6
   },
   "specs/2-Trame/ambre-spec-trame-schema.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 2,
+    "long": 5,
     "para": 0,
-    "passive": 5
+    "passive": 7
   },
   "specs/2-Trame/ambre-trame-inventory.md": {
     "ascii": 0,
@@ -2445,184 +2445,184 @@
   "specs/2-Trame/features/ambre-spec-trame-autofill.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 2,
+    "long": 8,
     "para": 0,
     "passive": 4
   },
   "specs/2-Trame/features/ambre-spec-trame-cell-editing.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 11,
-    "para": 0,
-    "passive": 9
+    "long": 15,
+    "para": 1,
+    "passive": 11
   },
   "specs/2-Trame/features/ambre-spec-trame-cell-merges.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 6,
+    "long": 9,
     "para": 0,
-    "passive": 9
+    "passive": 10
   },
   "specs/2-Trame/features/ambre-spec-trame-cell-rendering.md": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 5,
-    "para": 0,
-    "passive": 8
-  },
-  "specs/2-Trame/features/ambre-spec-trame-cell-styles.md": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 7,
-    "para": 0,
-    "passive": 8
-  },
-  "specs/2-Trame/features/ambre-spec-trame-clipboard.md": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 2,
-    "para": 0,
-    "passive": 4
-  },
-  "specs/2-Trame/features/ambre-spec-trame-context-menu.md": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 3,
-    "para": 0,
-    "passive": 8
-  },
-  "specs/2-Trame/features/ambre-spec-trame-engine.md": {
     "ascii": 0,
     "latin": 0,
     "long": 11,
     "para": 1,
     "passive": 9
   },
+  "specs/2-Trame/features/ambre-spec-trame-cell-styles.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 13,
+    "para": 1,
+    "passive": 11
+  },
+  "specs/2-Trame/features/ambre-spec-trame-clipboard.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 6,
+    "para": 0,
+    "passive": 8
+  },
+  "specs/2-Trame/features/ambre-spec-trame-context-menu.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 9,
+    "para": 0,
+    "passive": 12
+  },
+  "specs/2-Trame/features/ambre-spec-trame-engine.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 16,
+    "para": 2,
+    "passive": 9
+  },
   "specs/2-Trame/features/ambre-spec-trame-find-replace.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 3,
-    "para": 0,
-    "passive": 4
+    "long": 5,
+    "para": 1,
+    "passive": 5
   },
   "specs/2-Trame/features/ambre-spec-trame-formula-engine.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 11,
+    "long": 17,
+    "para": 0,
+    "passive": 11
+  },
+  "specs/2-Trame/features/ambre-spec-trame-function-library.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 8,
+    "para": 0,
+    "passive": 5
+  },
+  "specs/2-Trame/features/ambre-spec-trame-grid-viewport.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 19,
+    "para": 0,
+    "passive": 17
+  },
+  "specs/2-Trame/features/ambre-spec-trame-headers.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 10,
+    "para": 1,
+    "passive": 15
+  },
+  "specs/2-Trame/features/ambre-spec-trame-import-export.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 15,
+    "para": 1,
+    "passive": 10
+  },
+  "specs/2-Trame/features/ambre-spec-trame-named-ranges.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 5,
+    "para": 0,
+    "passive": 11
+  },
+  "specs/2-Trame/features/ambre-spec-trame-number-formats.md": {
+    "ascii": 0,
+    "latin": 0,
+    "long": 12,
     "para": 0,
     "passive": 8
   },
-  "specs/2-Trame/features/ambre-spec-trame-function-library.md": {
+  "specs/2-Trame/features/ambre-spec-trame-pdf-export.md": {
     "ascii": 0,
     "latin": 0,
     "long": 4,
     "para": 0,
     "passive": 3
   },
-  "specs/2-Trame/features/ambre-spec-trame-grid-viewport.md": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 11,
-    "para": 0,
-    "passive": 9
-  },
-  "specs/2-Trame/features/ambre-spec-trame-headers.md": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 6,
-    "para": 0,
-    "passive": 10
-  },
-  "specs/2-Trame/features/ambre-spec-trame-import-export.md": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 11,
-    "para": 0,
-    "passive": 12
-  },
-  "specs/2-Trame/features/ambre-spec-trame-named-ranges.md": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 4,
-    "para": 0,
-    "passive": 8
-  },
-  "specs/2-Trame/features/ambre-spec-trame-number-formats.md": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 6,
-    "para": 0,
-    "passive": 5
-  },
-  "specs/2-Trame/features/ambre-spec-trame-pdf-export.md": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 0,
-    "para": 0,
-    "passive": 2
-  },
   "specs/2-Trame/features/ambre-spec-trame-resize.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 5,
+    "long": 9,
     "para": 0,
-    "passive": 9
+    "passive": 15
   },
   "specs/2-Trame/features/ambre-spec-trame-rows-and-columns.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 4,
+    "long": 9,
     "para": 0,
-    "passive": 8
+    "passive": 10
   },
   "specs/2-Trame/features/ambre-spec-trame-selection.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 20,
-    "para": 0,
-    "passive": 12
+    "long": 24,
+    "para": 1,
+    "passive": 13
   },
   "specs/2-Trame/features/ambre-spec-trame-shared-filter.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 3,
+    "long": 5,
     "para": 0,
-    "passive": 9
+    "passive": 10
   },
   "specs/2-Trame/features/ambre-spec-trame-sheets.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 5,
+    "long": 9,
     "para": 0,
     "passive": 3
   },
   "specs/2-Trame/features/ambre-spec-trame-sort.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 3,
-    "para": 0,
-    "passive": 8
+    "long": 10,
+    "para": 1,
+    "passive": 12
   },
   "specs/2-Trame/features/ambre-spec-trame-status-bar.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 3,
+    "long": 4,
     "para": 0,
-    "passive": 6
+    "passive": 8
   },
   "specs/2-Trame/features/ambre-spec-trame-undo.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 1,
+    "long": 3,
     "para": 0,
-    "passive": 5
+    "passive": 7
   },
   "specs/3-Toile/ambre-spec-toile-schema.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 5,
+    "long": 8,
     "para": 0,
-    "passive": 7
+    "passive": 9
   },
   "specs/3-Toile/ambre-toile-inventory.md": {
     "ascii": 0,
@@ -2634,205 +2634,205 @@
   "specs/3-Toile/features/ambre-spec-toile-auto-layout.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 5,
-    "para": 0,
-    "passive": 12
+    "long": 14,
+    "para": 1,
+    "passive": 13
   },
   "specs/3-Toile/features/ambre-spec-toile-board-rendering.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 8,
+    "long": 12,
     "para": 0,
-    "passive": 8
+    "passive": 14
   },
   "specs/3-Toile/features/ambre-spec-toile-clipboard.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 9,
-    "para": 0,
-    "passive": 13
+    "long": 17,
+    "para": 1,
+    "passive": 20
   },
   "specs/3-Toile/features/ambre-spec-toile-comments.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 6,
-    "para": 0,
+    "long": 10,
+    "para": 1,
     "passive": 15
   },
   "specs/3-Toile/features/ambre-spec-toile-connectors.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 8,
-    "para": 0,
-    "passive": 11
+    "long": 17,
+    "para": 1,
+    "passive": 17
   },
   "specs/3-Toile/features/ambre-spec-toile-elements.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 3,
+    "long": 11,
     "para": 0,
     "passive": 10
   },
   "specs/3-Toile/features/ambre-spec-toile-embeds.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 20,
+    "long": 29,
     "para": 0,
-    "passive": 18
+    "passive": 29
   },
   "specs/3-Toile/features/ambre-spec-toile-engine.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 14,
+    "long": 22,
     "para": 0,
-    "passive": 12
+    "passive": 21
   },
   "specs/3-Toile/features/ambre-spec-toile-find.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 5,
+    "long": 14,
     "para": 0,
-    "passive": 7
+    "passive": 10
   },
   "specs/3-Toile/features/ambre-spec-toile-frames.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 5,
+    "long": 10,
     "para": 0,
     "passive": 9
   },
   "specs/3-Toile/features/ambre-spec-toile-freehand.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 6,
-    "para": 0,
-    "passive": 12
+    "long": 9,
+    "para": 1,
+    "passive": 14
   },
   "specs/3-Toile/features/ambre-spec-toile-groups.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 4,
+    "long": 12,
     "para": 0,
-    "passive": 5
+    "passive": 11
   },
   "specs/3-Toile/features/ambre-spec-toile-import-export.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 11,
+    "long": 12,
     "para": 0,
-    "passive": 17
+    "passive": 21
   },
   "specs/3-Toile/features/ambre-spec-toile-links.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 5,
-    "para": 0,
-    "passive": 11
+    "long": 8,
+    "para": 1,
+    "passive": 14
   },
   "specs/3-Toile/features/ambre-spec-toile-media.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 6,
-    "para": 0,
-    "passive": 10
+    "long": 14,
+    "para": 1,
+    "passive": 21
   },
   "specs/3-Toile/features/ambre-spec-toile-menus.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 7,
-    "para": 0,
-    "passive": 13
+    "long": 16,
+    "para": 1,
+    "passive": 16
   },
   "specs/3-Toile/features/ambre-spec-toile-pdf-export.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 1,
-    "para": 0,
-    "passive": 10
+    "long": 9,
+    "para": 1,
+    "passive": 16
   },
   "specs/3-Toile/features/ambre-spec-toile-presence.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 9,
-    "para": 0,
-    "passive": 13
+    "long": 17,
+    "para": 1,
+    "passive": 14
   },
   "specs/3-Toile/features/ambre-spec-toile-presentation.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 8,
+    "long": 17,
     "para": 0,
-    "passive": 14
+    "passive": 22
   },
   "specs/3-Toile/features/ambre-spec-toile-reactions.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 4,
+    "long": 11,
     "para": 0,
-    "passive": 10
+    "passive": 13
   },
   "specs/3-Toile/features/ambre-spec-toile-selection.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 5,
+    "long": 13,
     "para": 0,
-    "passive": 7
+    "passive": 9
   },
   "specs/3-Toile/features/ambre-spec-toile-status-bar.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 3,
-    "para": 0,
-    "passive": 7
+    "long": 10,
+    "para": 1,
+    "passive": 10
   },
   "specs/3-Toile/features/ambre-spec-toile-styles.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 10,
-    "para": 0,
-    "passive": 11
+    "long": 17,
+    "para": 1,
+    "passive": 21
   },
   "specs/3-Toile/features/ambre-spec-toile-text-editing.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 7,
-    "para": 0,
-    "passive": 9
+    "long": 16,
+    "para": 1,
+    "passive": 19
   },
   "specs/3-Toile/features/ambre-spec-toile-tools.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 8,
+    "long": 14,
     "para": 0,
-    "passive": 9
+    "passive": 13
   },
   "specs/3-Toile/features/ambre-spec-toile-undo.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 1,
-    "para": 0,
-    "passive": 2
+    "long": 3,
+    "para": 1,
+    "passive": 5
   },
   "specs/3-Toile/features/ambre-spec-toile-vector-paths.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 7,
-    "para": 0,
-    "passive": 14
+    "long": 9,
+    "para": 1,
+    "passive": 18
   },
   "specs/3-Toile/features/ambre-spec-toile-viewport.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 12,
+    "long": 18,
     "para": 0,
-    "passive": 15
+    "passive": 18
   },
   "specs/3-Toile/features/ambre-spec-toile-z-order.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 6,
-    "para": 0,
-    "passive": 7
+    "long": 10,
+    "para": 1,
+    "passive": 11
   },
   "specs/4-Prose/ambre-prose-inventory.md": {
     "ascii": 0,
@@ -2844,133 +2844,133 @@
   "specs/4-Prose/ambre-spec-prose-schema.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 8,
+    "long": 10,
     "para": 0,
-    "passive": 13
+    "passive": 15
   },
   "specs/4-Prose/features/ambre-spec-prose-accessibility.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 7,
-    "para": 0,
-    "passive": 9
+    "long": 16,
+    "para": 1,
+    "passive": 14
   },
   "specs/4-Prose/features/ambre-spec-prose-clipboard.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 7,
+    "long": 8,
     "para": 0,
     "passive": 13
   },
   "specs/4-Prose/features/ambre-spec-prose-comments.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 10,
+    "long": 11,
     "para": 0,
-    "passive": 26
+    "passive": 27
   },
   "specs/4-Prose/features/ambre-spec-prose-cross-references.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 8,
-    "para": 0,
-    "passive": 17
+    "long": 18,
+    "para": 1,
+    "passive": 19
   },
   "specs/4-Prose/features/ambre-spec-prose-engine.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 27,
+    "long": 29,
     "para": 0,
-    "passive": 17
+    "passive": 22
   },
   "specs/4-Prose/features/ambre-spec-prose-find-replace.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 6,
+    "long": 7,
     "para": 0,
-    "passive": 4
+    "passive": 8
   },
   "specs/4-Prose/features/ambre-spec-prose-footnotes.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 6,
-    "para": 0,
-    "passive": 17
+    "long": 14,
+    "para": 1,
+    "passive": 20
   },
   "specs/4-Prose/features/ambre-spec-prose-headers-footers.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 8,
+    "long": 13,
     "para": 0,
-    "passive": 24
+    "passive": 25
   },
   "specs/4-Prose/features/ambre-spec-prose-headings.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 6,
+    "long": 10,
     "para": 0,
-    "passive": 12
+    "passive": 14
   },
   "specs/4-Prose/features/ambre-spec-prose-images.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 19,
+    "long": 22,
     "para": 0,
-    "passive": 18
+    "passive": 19
   },
   "specs/4-Prose/features/ambre-spec-prose-import-export.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 22,
+    "long": 25,
     "para": 0,
-    "passive": 12
+    "passive": 13
   },
   "specs/4-Prose/features/ambre-spec-prose-inline-styles.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 7,
+    "long": 9,
     "para": 0,
-    "passive": 12
+    "passive": 13
   },
   "specs/4-Prose/features/ambre-spec-prose-lists.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 6,
+    "long": 8,
     "para": 0,
-    "passive": 10
+    "passive": 12
   },
   "specs/4-Prose/features/ambre-spec-prose-page-rendering.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 6,
+    "long": 9,
     "para": 0,
-    "passive": 13
+    "passive": 14
   },
   "specs/4-Prose/features/ambre-spec-prose-pagination.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 24,
+    "long": 28,
     "para": 0,
-    "passive": 27
+    "passive": 29
   },
   "specs/4-Prose/features/ambre-spec-prose-pdf-export.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 3,
+    "long": 9,
     "para": 0,
-    "passive": 3
+    "passive": 7
   },
   "specs/4-Prose/features/ambre-spec-prose-ruler.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 9,
+    "long": 11,
     "para": 0,
     "passive": 5
   },
   "specs/4-Prose/features/ambre-spec-prose-selection.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 12,
+    "long": 15,
     "para": 0,
     "passive": 10
   },
@@ -2984,65 +2984,65 @@
   "specs/4-Prose/features/ambre-spec-prose-spell-check.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 5,
-    "para": 0,
-    "passive": 18
+    "long": 13,
+    "para": 1,
+    "passive": 19
   },
   "specs/4-Prose/features/ambre-spec-prose-table-of-contents.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 8,
-    "para": 0,
+    "long": 12,
+    "para": 1,
     "passive": 13
   },
   "specs/4-Prose/features/ambre-spec-prose-tables.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 8,
+    "long": 9,
     "para": 0,
     "passive": 16
   },
   "specs/4-Prose/features/ambre-spec-prose-text-editing.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 7,
+    "long": 8,
     "para": 0,
-    "passive": 9
+    "passive": 10
   },
   "specs/4-Prose/features/ambre-spec-prose-toolbar.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 11,
+    "long": 12,
     "para": 0,
-    "passive": 5
+    "passive": 6
   },
   "specs/4-Prose/features/ambre-spec-prose-track-changes.md": {
     "ascii": 0,
     "latin": 0,
     "long": 12,
     "para": 0,
-    "passive": 24
+    "passive": 26
   },
   "specs/4-Prose/features/ambre-spec-prose-undo.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 5,
+    "long": 6,
     "para": 0,
-    "passive": 8
+    "passive": 10
   },
   "specs/4-Prose/features/ambre-spec-prose-viewport.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 12,
+    "long": 14,
     "para": 0,
-    "passive": 8
+    "passive": 9
   },
   "specs/4-Prose/features/ambre-spec-prose-word-count.md": {
     "ascii": 0,
     "latin": 0,
-    "long": 6,
-    "para": 0,
-    "passive": 11
+    "long": 12,
+    "para": 1,
+    "passive": 13
   },
   "specs/Todo/ambre-murmure.md": {
     "ascii": 0,
@@ -3075,9 +3075,9 @@
   "specs/ambre-spec-template.md": {
     "ascii": 1,
     "latin": 0,
-    "long": 6,
-    "para": 0,
-    "passive": 11
+    "long": 26,
+    "para": 1,
+    "passive": 17
   },
   "specs/security-audit.md": {
     "ascii": 0,

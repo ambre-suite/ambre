@@ -18,27 +18,94 @@ whole design, and everything below follows from it.
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `TOILE-021` | A nested Ambre document MUST be stored as a reference; its content MUST NOT be inlined into this board. | this spec section 3 | `ambre_toile::logic::convergence_tests::doc_embed_reference_survives_the_crdt_round_trip`, `::doc_embed_with_an_unreadable_reference_falls_back_to_a_frame` | verified |
-| `TOILE-083` | A reference this board cannot read MUST still paint as a placeholder; its element MUST NOT vanish. | this spec section 3 | `ambre_toile::logic::convergence_tests::doc_embed_with_an_unreadable_reference_falls_back_to_a_frame` | verified |
-| `TOILE-084` | A nested document MUST carry its own permission: what a user may do on the board MUST NOT decide what they may do inside it. | this spec section 3; `ambre-spec-architecture.md section 2` | `ambre_logic::dispatch::tests::an_embedded_child_is_gated_by_its_own_role_not_the_boards`, `::owning_the_board_grants_nothing_on_a_document_embedded_in_it` | verified |
-| `TOILE-085` | Copying an embed MUST produce a second reference to the same document, never a copy of that document. | this spec section 3 | none. The copy captures whatever scalar fields the element carries, so the reference rides along by construction, and no test names an embed among them -- section 6 | unverified |
-| `TOILE-086` | A user MUST be able to place another Ambre document on the board. | this spec section 4 | not built -- lands with the "Embeds on the board" Story (`ambre-roadmap.md` E4) | unimplemented |
-| `TOILE-087` | A user MUST be able to place a web page on the board. | this spec section 4 | not built -- lands with the "Embeds on the board" Story (`ambre-roadmap.md` E4) | unimplemented |
-| `TOILE-088` | A web page on the board MUST reach neither the board, its keys nor its storage. | README pillar "E2EE"; this spec section 4 | not built -- lands with the "Embeds on the board" Story (`ambre-roadmap.md` E4); nothing renders a web page today, so nothing sandboxes one | unimplemented |
-| `TOILE-UI-015` | A pointer event handed to a child MUST arrive in the child's own pixels, through zoom and rotation. | this spec section 3 | `ambre_toile::ui::embed::tests::a_child_pixel_is_a_screen_pixel`, `::transform_survives_a_rotated_embed`, `::child_size_scales_with_zoom`, `::child_origin_is_the_embeds_top_left`, `::screen_aabb_contains_a_rotated_quad` | verified |
-| `TOILE-UI-016` | At most one embed MUST hold focus, and focus MUST be dropped when its element leaves the frame. | this spec section 3 | `ambre_toile::ui::embed::tests::only_the_focused_embed_comes_back_focused`, `::focus_is_dropped_when_its_element_leaves_the_frame`, `::escape_blurs_only_when_something_is_focused`, `::a_click_outside_returns_focus_to_the_board`, `::a_drag_from_an_embed_does_not_focus_it` | verified |
-| `TOILE-UI-017` | A child's session MUST close only after its embed has stayed out of view for the whole debounce. | this spec section 3 | `ambre_toile::ui::embed::tests::close_waits_the_full_debounce`, `::a_scroll_oscillation_never_thrashes_the_session`, `::returning_before_the_deadline_cancels_the_close` | verified |
-| `TOILE-UI-090` | One session MUST serve one nested document, however many embeds point at it. | this spec section 3 | `ambre_toile::ui::embed::tests::a_visible_embed_opens_once_and_only_once`, `::two_embeds_of_the_same_document_share_one_session` | verified |
-| `TOILE-UI-091` | A click MUST enter an embed and a drag MUST NOT, so moving an embed and editing it stay two gestures. | this spec section 4 | `ambre_toile::ui::embed::tests::a_click_on_an_embed_focuses_it`, `::a_drag_from_an_embed_does_not_focus_it`, `::a_click_on_the_already_focused_embed_is_not_rearmed`, `::a_drag_leaves_an_existing_focus_untouched` | verified |
-| `TOILE-UI-092` | A locked embed MUST NOT take focus. | this spec section 4 | `ambre_toile::ui::embed::tests::embed_at_picks_the_topmost_and_skips_locked` | verified |
-| `TOILE-UI-093` | `Escape` MUST return focus to the board rather than reach the child. | this spec section 4 | `ambre_toile::ui::embed::tests::escape_blurs_only_when_something_is_focused`, plus type-level: the capture arm names `Escape` as its one exclusion, so no branch can forward it | verified |
-| `TOILE-UI-094` | Closing the board MUST close every child at once, with no debounce. | this spec section 3 | `ambre_toile::ui::embed::tests::close_all_takes_every_child_immediately` | verified |
-| `TOILE-UI-095` | The board MUST NOT name the child's view type. | `ambre-spec-architecture.md section 4` | type-level: `ambre-toile` does not depend on `ambre-app`, so no signature in the crate can name `AppView` | verified |
-| `TOILE-UI-096` | A child MUST be painted in its embed's own frame: a rotated embed MUST paint its child rotated. | this spec section 3 | none, and **the rule fails today**: the paint shifts to the bounding box corner and applies no rotation, while the pointer maps through it -- section 6 | unverified |
-| `TOILE-UI-097` | Each embed MUST paint its own child: two embeds of one document MUST NOT share one view. | this spec section 3 | none, and **the rule fails today**: the child views are keyed by document, so two embeds share one and resize it against each other -- section 6 | unverified |
-| `TOILE-UI-098` | A child's events MUST NOT reach the parent's view or the board's chrome. | this spec section 3 | none, and **the rule fails today**: the child's route dies with its view while its session outlives it by the debounce -- section 6 | unverified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-021` | INV | A nested Ambre document MUST be stored as a reference; its content MUST NOT be inlined into this board. | this spec section 3 | `ambre_toile::logic::convergence_tests::doc_embed_reference_survives_the_crdt_round_trip` | verified |
+| `TOILE-084` | INV | A nested document MUST carry its own permission: what a user may do on the board MUST NOT decide what they may do inside it. | this spec section 3; `ambre-spec-architecture.md section 2` | `ambre_logic::dispatch::tests::an_embedded_child_is_gated_by_its_own_role_not_the_boards`, `::owning_the_board_grants_nothing_on_a_document_embedded_in_it` | verified |
+| `TOILE-088` | INV | A web page on the board MUST reach neither the board, its keys nor its storage. | README pillar "E2EE"; this spec section 4 | not built -- lands with the "Embeds on the board" Story (`ambre-roadmap.md` E4); nothing renders a web page today, so nothing sandboxes one | unimplemented |
+| `TOILE-224` | INV | Which embed is entered MUST be this user's own view state: a peer entering an embed MUST NOT change what this user has focused. | this spec section 5 | `ambre_toile::logic::convergence_tests::doc_embed_reference_survives_the_crdt_round_trip` asserts the derived focus is false whatever the document holds, so no field carries it | verified |
+| `TOILE-UI-016` | INV | At most one embed MUST hold focus. | this spec section 3 | `ambre_toile::ui::embed::tests::only_the_focused_embed_comes_back_focused`; the focus is one `Option<ElementId>`, so a second is unrepresentable | verified |
+| `TOILE-UI-090` | INV | One session MUST serve one nested document, however many embeds point at it. | this spec section 3 | `ambre_toile::ui::embed::tests::a_visible_embed_opens_once_and_only_once`, `::two_embeds_of_the_same_document_share_one_session` | verified |
+| `TOILE-UI-095` | INV | The board MUST NOT name the child's view type. | `ambre-spec-architecture.md section 4` | type-level: `ambre-toile` does not depend on `ambre-app`, so no signature in the crate can name `AppView` | verified |
+| `TOILE-UI-098` | INV | A child's events MUST NOT reach the parent's view or the board's chrome. | this spec section 3 | none, and **the rule fails today**: the child's route dies with its view while its session outlives it by the debounce -- section 6 | unverified |
+| `TOILE-083` | OBS | A reference this board cannot read MUST still paint as a placeholder rather than vanish from the board. | this spec section 3 | `ambre_toile::logic::convergence_tests::doc_embed_with_an_unreadable_reference_falls_back_to_a_frame` | verified |
+| `TOILE-UI-096` | OBS | A rotated embed MUST paint its child rotated. | this spec section 3 | none, and **the rule fails today**: the paint shifts to the bounding box corner and applies no rotation, while the pointer maps through it -- section 6 | unverified |
+| `TOILE-UI-097` | OBS | Each embed MUST paint its own child: two embeds of one document MUST NOT share one view. | this spec section 3 | none, and **the rule fails today**: the child views are keyed by document, so two embeds share one and resize it against each other -- section 6 | unverified |
+| `TOILE-UI-320` | OBS | A child MUST paint its own overlay: its selection, its caret and its handles MUST be visible inside the embed. | this spec section 3 | none, and **the rule fails today**: the launcher paints each child's content and never its overlay, so an embedded document shows no selection at all -- section 6 | unverified |
+
+### 1.2 Put a document or a page on the board
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-086` | POST | A user MUST be able to place another Ambre document on the board. | this spec section 4 | not built -- lands with the "Embeds on the board" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `TOILE-087` | POST | A user MUST be able to place a web page on the board. | this spec section 4 | not built -- lands with the "Embeds on the board" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `TOILE-225` | FRAME | Placing an embed MUST NOT touch the document it points at. | this spec section 3 | not built -- lands with the "Embeds on the board" Story (`ambre-roadmap.md` E4) | unimplemented |
+
+### 1.3 Click into an embed
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-UI-091` | POST | A click on an embed MUST enter it, so that moving an embed and editing it stay two gestures. | this spec section 4 | `ambre_toile::ui::embed::tests::a_click_on_an_embed_focuses_it` | verified |
+| `TOILE-UI-321` | POST | The click MUST enter the topmost embed under the pointer. | this spec section 4 | `ambre_toile::ui::embed::tests::embed_at_picks_the_topmost_and_skips_locked` | verified |
+| `TOILE-UI-322` | FRAME | The click that enters MUST NOT reach the child. | this spec section 4 | structural, and the construction is the proof: focus is granted by the release, so both events of the entering click are dispatched while the board still holds focus and the capture arm is not reached | verified |
+| `TOILE-UI-323` | FRAME | A click on the embed that already holds focus MUST NOT return focus to the board. | this spec section 4 | `ambre_toile::ui::embed::tests::a_click_on_the_already_focused_embed_is_not_rearmed` | verified |
+| `TOILE-UI-092` | FAIL | A locked embed MUST refuse focus, and MUST NOT shadow a live embed beneath it. | this spec section 4 | `ambre_toile::ui::embed::tests::embed_at_picks_the_topmost_and_skips_locked` | verified |
+
+### 1.4 Drag an embed across the board
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-UI-324` | POST | A press released past the click slop MUST move the embed on the board and MUST NOT enter it. | this spec section 4 | `ambre_toile::ui::embed::tests::a_drag_from_an_embed_does_not_focus_it` | verified |
+| `TOILE-UI-325` | FRAME | A drag starting on another embed MUST leave the current focus where it is. | this spec section 4 | `ambre_toile::ui::embed::tests::a_drag_leaves_an_existing_focus_untouched` | verified |
+
+### 1.5 Point and type inside an entered embed
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-UI-015` | POST | A pointer event handed to a child MUST arrive in the child's own pixels, through zoom and rotation. | this spec section 3 | `ambre_toile::ui::embed::tests::a_child_pixel_is_a_screen_pixel`, `::transform_survives_a_rotated_embed`, `::child_size_scales_with_zoom`, `::child_origin_is_the_embeds_top_left`, `::screen_aabb_contains_a_rotated_quad` | verified |
+| `TOILE-UI-326` | POST | A key, a character, a composition step and a wheel MUST reach the child verbatim. | this spec section 4 | none. The board's capture arm forwards each kind, but what the launcher does with it before the child sees it has no test anywhere -- section 6 | unverified |
+| `TOILE-UI-327` | FRAME | An event handed to the child MUST NOT also run the board's own handlers. | this spec section 3 | structural, and the construction is the proof: the capture arm returns before the dispatch match, so no board handler can be reached on a captured event | verified |
+| `TOILE-UI-328` | FAIL | A pointer event whose position cannot be mapped into the child MUST be dropped, not handed over unmapped. | this spec section 3 | none, and **the rule fails today**: the remap falls back to the screen position, so the child receives a coordinate from the board's space -- section 6 | unverified |
+| `TOILE-UI-329` | FAIL | A wheel outside the entered embed MUST pan the board rather than scroll the child. | this spec section 4 | none, and **the rule fails today**: the capture arm bounds pointer events to the embed's quad and captures every wheel unconditionally -- section 6 | unverified |
+
+### 1.6 Leave an embed
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-UI-093` | POST | `Escape` MUST return focus to the board. | this spec section 4 | `ambre_toile::ui::embed::tests::escape_blurs_only_when_something_is_focused` | verified |
+| `TOILE-UI-330` | POST | A click outside the entered embed MUST return focus to the board. | this spec section 4 | `ambre_toile::ui::embed::tests::a_click_outside_returns_focus_to_the_board` | verified |
+| `TOILE-UI-331` | FRAME | `Escape` MUST NOT reach the child. | this spec section 4 | type-level: the capture arm names `Escape` as its one exclusion, so no branch can forward it | verified |
+| `TOILE-UI-332` | FRAME | Returning focus to the board MUST NOT close the child's session. | this spec section 3 | structural, and the construction is the proof: focus and sessions are two registries, and the blur path names neither the open set nor the frame clock | verified |
+
+### 1.7 Draw one frame of a board carrying embeds
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-UI-333` | POST | An embed entering the culled set MUST open its document's session. | this spec section 3 | `ambre_toile::ui::embed::tests::a_visible_embed_opens_once_and_only_once` | verified |
+| `TOILE-UI-017` | POST | A child's session MUST close only after its embed has stayed out of view for the whole debounce. | this spec section 3 | `ambre_toile::ui::embed::tests::close_waits_the_full_debounce`, `::a_scroll_oscillation_never_thrashes_the_session`, `::returning_before_the_deadline_cancels_the_close` | verified |
+| `TOILE-UI-334` | POST | Focus MUST be dropped when the element that held it leaves the frame. | this spec section 3 | `ambre_toile::ui::embed::tests::focus_is_dropped_when_its_element_leaves_the_frame` | verified |
+| `TOILE-UI-335` | POST | A child whose own content changed MUST repaint the board it sits on. | this spec section 3 | none. The launcher pumps each child and raises the board's repaint when a child plans one, and `ambre-app` has no test for any of it -- section 6 | unverified |
+| `TOILE-UI-336` | FRAME | A frame where no embed entered and none left MUST send no session command. | this spec section 3 | `ambre_toile::ui::embed::tests::a_visible_embed_opens_once_and_only_once`, `::a_scroll_oscillation_never_thrashes_the_session` | verified |
+| `TOILE-UI-337` | FRAME | The published embeds MUST be those of the current culled set and no others. | this spec section 3 | `ambre_toile::ui::embed::tests::a_board_with_no_embeds_publishes_nothing`, `::only_the_focused_embed_comes_back_focused` | verified |
+| `TOILE-UI-338` | FAIL | An open the board could not send MUST be sent on a later frame. | this spec section 3 | none, and **the rule fails today**: the session is recorded open before the command is queued, so a full channel loses it for good and the embed stays a placeholder -- section 6 | unverified |
+| `TOILE-UI-339` | FAIL | A close the board could not send MUST be sent on a later frame. | this spec section 3 | none, and **the rule fails today**: the session is forgotten before the command is queued, so a full channel leaks the child until the page is left -- section 6 | unverified |
+| `TOILE-UI-340` | FAIL | An event for a child that its channel cannot take MUST NOT be dropped in silence. | `ambre-spec-message-bus.md section 5`; this spec section 3 | none, and **the rule fails today**: the relay diverts the event and ignores a full child channel, so the child misses a delta the board already applied -- section 6 | unverified |
+
+### 1.8 Leave the board
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-UI-094` | POST | Closing the board MUST close every child at once, with no debounce. | this spec section 3 | `ambre_toile::ui::embed::tests::close_all_takes_every_child_immediately` | verified |
+| `TOILE-UI-341` | FRAME | A second close MUST send nothing. | this spec section 3 | `ambre_toile::ui::embed::tests::close_all_takes_every_child_immediately` | verified |
+
+### 1.9 Copy an embed
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-085` | POST | Copying an embed MUST produce a second reference to the same document. | this spec section 3 | none. The copy captures whatever scalar fields the element carries, so the reference rides along by construction, and no test names an embed among them -- section 6 | unverified |
+| `TOILE-226` | FRAME | Copying an embed MUST NOT copy the document it points at. | this spec section 3 | none, for the same reason as `TOILE-085`: nothing exercises a copy of an embed at all -- section 6 | unverified |
 
 * **Budget.** none of its own, and that is the open question rather than the answer: a child is a
   whole document view painting inside the board's own frame, so an embed spends the board's 16 ms
@@ -48,11 +115,14 @@ status values are normative in `ambre-spec-template.md`.
   (`TOILE-021`). A child is opened through the ordinary document path, with its own key, its own
   session and its own permission (`TOILE-084`), so nesting adds no flow the sync layer does not
   already seal. The web page is the exception, and `TOILE-088` is the rule that would hold it.
-* **Verification.** 12 `verified`, 4 `unverified`, 3 `unimplemented`. What is held is everything the
-  board can decide alone: the reference, the transform, the focus arbitration and the session
-  lifecycle, on fifteen host tests. What is loose is everything the launcher does with the answer --
-  the paint, the input route and the event fan-out have no test anywhere, because `ambre-app` runs
-  on the wasm tier and its suite covers two helpers.
+* **Verification.** 27 `verified`, 13 `unverified`, 4 `unimplemented`. What is held is everything
+  the board can decide alone: the reference, the transform, the focus arbitration and the session
+  lifecycle, on twenty-one host tests, every one of them cited. What is loose is everything the
+  launcher does with the answer -- the paint, the input route and the event fan-out have no test
+  anywhere, because `ambre-app` runs on the wasm tier and its suite covers two helpers. Five of the
+  thirteen loose rules are known to fail today, and three of those five were found by writing the
+  frame conditions down: a session command the board drops is never re-sent (`TOILE-UI-338`,
+  `TOILE-UI-339`), and an event a child's channel refuses is dropped in silence (`TOILE-UI-340`).
 
 ---
 
@@ -68,6 +138,12 @@ its own content, with the peers it has rather than the ones the board has.
 | copies the embed and pastes it | watches | two references to one document (`TOILE-085`) | two boxes showing one document: an edit in either appears in both | none (`TOILE-085`) |
 | may read the board and not the child | may edit the child and not the board | each document's own membership (`TOILE-084`) | Alice cannot type in the embed; Bob cannot move it | `ambre_logic::dispatch::tests::an_embedded_child_is_gated_by_its_own_role_not_the_boards` |
 | pans until the embed leaves the screen | edits the child meanwhile | the child's own edits, converged as always | Alice's board keeps the session alive for the debounce, then closes it (`TOILE-UI-017`) | `ui::embed::tests::close_waits_the_full_debounce` |
+
+**What this table cannot see.** Every row above is one user's board and one user's session. The
+rules that break are the ones between the two: a child that misses a delta its board already
+applied (`TOILE-UI-340`) shows Bob's edit to Bob and not to Alice, and no row of a convergence
+table reaches it, because the divergence is between two views of one client rather than between two
+peers.
 
 ---
 
@@ -160,13 +236,13 @@ an embed already on the board answers to.
 
 | Trigger | What happens |
 |---|---|
-| a click on an embed | it takes focus, and the click itself does not reach the child (`TOILE-UI-091`) |
-| a drag from an embed | the board moves it; focus is untouched (`TOILE-UI-091`) |
-| a click on an embed that is locked | nothing: a locked embed is not enterable (`TOILE-UI-092`) |
+| a click on an embed | the topmost one under the pointer takes focus, and the click itself does not reach the child (`TOILE-UI-091`, `TOILE-UI-321`, `TOILE-UI-322`) |
+| a drag from an embed | the board moves it; focus is untouched (`TOILE-UI-324`, `TOILE-UI-325`) |
+| a click on an embed that is locked | nothing: a locked embed is not enterable, and it does not shadow a live embed beneath it (`TOILE-UI-092`) |
 | a pointer event inside the focused embed | the child's, remapped into its pixels (`TOILE-UI-015`) |
-| a key, a character, a composition step, a wheel, while an embed is focused | the child's, verbatim |
+| a key, a character, a composition step, a wheel, while an embed is focused | the child's, verbatim (`TOILE-UI-326`) -- and the wheel goes to the child wherever the pointer is (`TOILE-UI-329`) |
 | `Escape` | focus returns to the board (`TOILE-UI-093`) |
-| a click outside the focused embed | focus returns to the board |
+| a click outside the focused embed | focus returns to the board (`TOILE-UI-330`) |
 | leaving the board | every child session closes at once (`TOILE-UI-094`) |
 
 | Trigger, once it exists | What must happen |
@@ -177,18 +253,18 @@ an embed already on the board answers to.
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The board keeps a reference, never the content | the child has its own key and its own membership, so inlining it would hand a reader of the board a document they were never granted, and would give the relay an embedding table to read | copying the child's content into the board, one key for two documents |
-| The launcher paints the child, not the board | the closed set of application views lives downstream of every application crate, so a board painting a child would name a type above itself, which is the dependency cycle the launcher exists to break | a view trait the board could hold, which re-introduces the cycle through an object instead of a name |
-| The raw event crosses into the child, not a command | building the child's command needs the child view's own state, which the board may not name; the child is the only layer that can translate its own input | an envelope command wrapping the child's, which cannot be built on the board's side and routes around nothing, since the registry is flat |
-| The registry is flat and a child is an ordinary entry | one lookup reaches the child, its outcome fans out normally, and its permission is resolved per document rather than inherited | nesting the registry to mirror the board, which makes every lookup recursive and every permission a question about a parent |
-| Focus is view-local, never document state | two users looking at one board are in different documents at the same moment, and a shared focus would drag one into the other's embed | a focus field in the document, which converges to one focus for everybody |
-| Entering an embed is a click, moving it is a drag | both gestures start with a press on the same box, so only the release can tell them apart; without the split, dragging an embed would type into it | focusing on press, which makes an embed unmovable |
-| A session survives a pan for the debounce | visibility flips on every pan, and re-opening costs a membership fetch, a key unwrap and a snapshot, so binding the session to the cull set would storm the socket on a scroll oscillation | closing the instant the embed leaves the screen |
-| A rotated embed clips to its bounding box | the clip is rectangular and resolved against the transform at push time, and rotating a nested document is a degenerate gesture | withholding rotation from an embed, which makes it the one element with a missing handle |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The board keeps a reference, never the content | copying the child's content into the board, one key for two documents | the child has its own key and its own membership, so inlining it hands a reader of the board a document they were never granted, and gives the relay an embedding table to read |
+| The launcher paints the child, not the board | a view trait the board could hold | the closed set of application views lives downstream of every application crate, so a board painting a child names a type above itself. A trait re-introduces that cycle through an object instead of a name, and the cycle is what the launcher exists to break |
+| The raw event crosses into the child, not a command | an envelope command wrapping the child's | building the child's command needs the child view's own state, which the board may not name, so the envelope cannot be built on the board's side. It routes around nothing either, since the registry is flat |
+| The registry is flat and a child is an ordinary entry | nesting the registry to mirror the board | it makes every lookup recursive and every permission a question about a parent. Flat, one lookup reaches the child, its outcome fans out normally, and its permission is resolved per document rather than inherited |
+| Focus is view-local, never document state | a focus field in the document | it converges to one focus for everybody. Two users looking at one board are in different documents at the same moment, so a shared focus drags one into the other's embed |
+| Entering an embed is a click, moving it is a drag | focusing on the press | both gestures start with a press on the same box, so only the release can tell them apart. Focusing on the press makes an embed unmovable, and without the split a drag types into it |
+| A session survives a pan for the debounce | closing the instant the embed leaves the screen | visibility flips on every pan, and re-opening costs a membership fetch, a key unwrap and a snapshot, so binding the session to the cull set storms the socket on a scroll oscillation |
+| A rotated embed clips to its bounding box | withholding rotation from an embed | it makes an embed the one element with a missing handle. The clip is rectangular and resolved against the transform at push time, and rotating a nested document is a degenerate gesture |
 
 ---
 
@@ -217,7 +293,29 @@ an embed already on the board answers to.
   while its session stays open for five more seconds. An event arriving in that window finds no
   route and falls through to the board's own stream and to the board's chrome mirrors -- and a Toile
   nested in a Toile emits exactly the event the parent board applies to itself.
-* **The launcher half has no test.** Fifteen host tests cover what the board decides. The child
+* **A session command the board cannot send is lost** (`TOILE-UI-338`, `TOILE-UI-339`). The open
+  set is written before the command is queued: an open marks the document open and then pushes
+  `OpenDocument`, a close forgets it and then pushes `CloseDocument`. When the channel to Logic is
+  full the command is warned about and dropped, and the set already says the work is done -- so no
+  later frame retries. A lost open leaves that embed a blank placeholder until the board is left; a
+  lost close leaves the child's session open with nothing left that names it, which `close_all`
+  cannot reclaim either. The comment at the drop site claims the next frame retries the open and
+  that the board's close reclaims the leak; neither is true of the code beneath it.
+* **An event a child's channel refuses is dropped in silence** (`TOILE-UI-340`). The relay diverts
+  every event tagged with a live child's document to that child's own channel, and handles only a
+  disconnected one. A full channel falls through the `if` and then past the `continue`: the event
+  reaches neither the child nor the board. It is a CRDT delta, so the child's view is behind its own
+  document until something else redraws it from scratch.
+* **A wheel is captured wherever the pointer is** (`TOILE-UI-329`). Pointer events are routed to the
+  child only while the cursor is inside its quad, which is what lets a click outside return focus.
+  The wheel arm has no such test: while any embed holds focus, every wheel on the board scrolls that
+  child, so the board cannot be panned or zoomed until the user clicks out. The asymmetry is not a
+  decision anybody wrote down.
+* **A child never paints its overlay** (`TOILE-UI-320`). The launcher paints each child's content
+  into the embed's rect and stops there; `paint_overlay` is called for the top-level view only. An
+  embedded spreadsheet shows its cells and never its selection, its caret or its handles, so a user
+  typing into it cannot see where they are typing.
+* **The launcher half has no test.** Twenty-one host tests cover what the board decides. The child
   reconciliation, the paint, the clip, the input remap and the event fan-out have none: `ambre-app`
   compiles for wasm only and its suite covers a base64 codec and a frame counter. The half that was
   hard is the half that is unverified.
@@ -229,6 +327,7 @@ an embed already on the board answers to.
   the floating bar are surfaces of the top-level document, so a child is built against a throwaway
   set of them. A user editing an embedded spreadsheet gets no formula bar, and nothing says what
   they should get instead.
-* **A copied embed is a second reference, and no test says so** (`TOILE-085`). The copy captures the
-  element's scalar fields whatever they are, so the reference survives by accident of that
-  generality rather than by a rule anything checks.
+* **A copied embed is a second reference, and no test says so** (`TOILE-085`, `TOILE-226`). The copy
+  captures the element's scalar fields whatever they are, so the reference survives by accident of
+  that generality rather than by a rule anything checks -- and nothing says the child document
+  itself is left alone either.

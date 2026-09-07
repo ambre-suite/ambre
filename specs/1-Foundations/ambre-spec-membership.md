@@ -20,22 +20,42 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, shared with
 `ambre-spec-sync.md` and the four other documents of this layer.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `SYNC-010` | A shared document key MUST be wrapped for the invitee's exchange key alone. | this spec section 3 | `ambre_sync::sharing::tests::invite_request_wraps_for_the_invitee_only`; `ambre_crypto::tests::kek_binds_peer_identity`, `::wrap_unwrap_roundtrip` | verified |
-| `SYNC-012` | A failed unwrap of a document key MUST NOT be replaced by a freshly generated one. | derived (audit `H3`) | none. The unwrap failure now stops the open and surfaces an authentication error, and no test drives an unwrappable key row to see it: the open path runs only in the browser | unverified |
-| `SYNC-014` | An ephemeral frame MUST reach the Logic thread under the identity the member directory maps its author key to. | this spec section 3 | `ambre_sync::ephemeral_tests::author_resolves_to_the_member_behind_the_signing_key`; `ambre_sync::sharing::tests::presence_directory_maps_valid_entries`, `::list_members_refreshes_the_presence_directory` | verified |
-| `SYNC-015` | An ephemeral frame whose author key matches no member MUST be dropped, never delivered under a guessed identity. | this spec section 3 | `ambre_sync::ephemeral_tests::unknown_author_key_is_not_resolved`; `ambre_sync::sharing::tests::presence_directory_skips_unparsable_rows_without_inventing_ids` | verified |
-| `SYNC-016` | The role carried on the ready signal MUST be this client's own row in the members answer. | this spec section 3; `ambre-spec-message-bus.md` | `ambre_sync::sharing::tests::own_role_reads_our_own_row`, `::own_role_reads_writable_roles`; `ambre_sync::updates::tests::document_ready_carries_the_role_on_both_paths` | verified |
-| `SYNC-017` | A role that cannot be resolved MUST default to the read-only one, never to a writable one. | this spec section 3 | `ambre_sync::sharing::tests::own_role_falls_back_to_viewer_when_unresolvable` | verified |
-| `SYNC-034` | A recipient MUST unwrap against the exchange key of whoever wrapped, never against its own. | this spec section 3 | `ambre_crypto::tests::ecdh_symmetric`, `::kek_binds_peer_identity` hold the primitive. The choice of which key to use is a branch in the client with a fallback for an older relay, and no test takes either side of it | unverified |
-| `SYNC-035` | A wrap MUST be refused for a peer key with no contribution, rather than sealed under a predictable secret. | audit `M14`; this spec section 3 | `ambre_crypto::tests::weak_peer_public_key_rejected`; `ambre_sync::sharing::tests::invite_request_propagates_bad_pubkey`, `::decode_exchange_pubkey_rejects_bad_input` | verified |
-| `SYNC-073` | The key that wraps a document key MUST bind the two identities the wrap travels between. | audit `M14`; this spec section 3 | `ambre_crypto::tests::kek_binds_peer_identity` | verified |
-| `SYNC-036` | The re-fetched invitee key MUST equal the one the user confirmed, before anything is wrapped. | `ambre-spec-key-verification.md` | `ambre_sync::sharing::tests::invite_pin_mismatch_refuses_and_never_wraps`, `::fetch_invitee_key_emits_key_and_matching_fingerprint` | verified |
-| `SYNC-037` | The member directory MUST be rebuilt whenever membership changes, so a revoked member stops resolving. | this spec section 3 | `ambre_sync::sharing::tests::list_members_refreshes_the_presence_directory`; `ambre_sync::ephemeral_tests::refreshing_the_directory_drops_revoked_members` | verified |
-| `SYNC-038` | The member list shown to the user MUST NOT carry an invented identity. | this spec section 3 | none, and **the rule fails today**: a member row whose identifier does not parse is given a freshly generated one, so the list shows a person nothing can act on and a revoke aimed at that row addresses nobody -- section 6 | unverified |
-| `SYNC-039` | No key material MUST cross to the Logic thread on a member row. | `ZK-002` | type-level: the member row the bus declares carries an identity, a name, an address and a role, and no key field, so there is no shape for one to travel in | verified |
-| `SYNC-040` | A transient failure of the members request MUST NOT be read as a document that does not exist. | this spec section 3 | none, and **the rule fails today**: a network failure and a genuine absence take the same branch, so the open generates a throwaway key, marks the document local and never hydrates -- section 6 | unverified |
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SYNC-039` | `INV` | No key material MUST cross to the Logic thread on a member row. | `ZK-002` | type-level: the member row the bus declares carries an identity, a name, an address and a role, and no key field, so there is no shape for one to travel in | verified |
+| `SYNC-092` | `INV` | The wrapped key, the member directory and this client's role MUST come from one answer, never from two fetches. | this spec section 3 | none. One request returns all three and the open reads them together, so the rule is held by the request having been written that way. Nothing refuses a second fetch, and a second fetch is exactly how the three drift: a role read after a revocation no longer matches the directory the presence layer resolves against | unverified |
+| `SYNC-038` | `INV` | The member list shown to the user MUST NOT carry an invented identity. | this spec section 3 | none, and **the rule fails today**: a member row whose identifier does not parse is given a freshly generated one, so the list shows a person nothing can act on and a revoke aimed at that row addresses nobody -- section 6. The presence directory takes the opposite branch and drops the row, which is `SYNC-015` | unverified |
+
+### 1.2 A document is shared with someone
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SYNC-036` | `POST` | The re-fetched invitee key MUST equal the one the user confirmed. | `ambre-spec-key-verification.md` | `ambre_sync::sharing::tests::invite_pin_mismatch_refuses_and_never_wraps` serves a substituted key at the second phase and asserts a 409 naming the change; `::fetch_invitee_key_emits_key_and_matching_fingerprint` asserts the fingerprint the user reads is the one that will be compared | verified |
+| `SYNC-010` | `POST` | A shared document key MUST be wrapped for the invitee's exchange key alone. | this spec section 3 | `ambre_sync::sharing::tests::invite_request_wraps_for_the_invitee_only` asserts the invitee unwraps and a third party's key fails closed; `ambre_crypto::tests::kek_binds_peer_identity`, `::wrap_unwrap_roundtrip` hold the primitive under it | verified |
+| `SYNC-073` | `POST` | The key that wraps a document key MUST bind the two identities the wrap travels between. | audit `M14`; this spec section 3 | `ambre_crypto::tests::kek_binds_peer_identity` asserts a key derived for one pair does not open for another, which is what keeps a wrap from being replayed between members | verified |
+| `SYNC-035` | `FAIL` | A wrap MUST be refused for a peer key with no contribution, rather than sealed under a predictable secret. | audit `M14`; this spec section 3 | `ambre_crypto::tests::weak_peer_public_key_rejected` refuses the key at the primitive; `ambre_sync::sharing::tests::invite_request_propagates_bad_pubkey`, `::decode_exchange_pubkey_rejects_bad_input` assert the refusal survives the layer above rather than being swallowed | verified |
+| `SYNC-093` | `FRAME` | A refused invitation MUST wrap nothing: no request MUST leave beyond the one that fetched the key. | `ambre-spec-key-verification.md`; audit `M14` | `ambre_sync::sharing::tests::invite_pin_mismatch_refuses_and_never_wraps` asserts exactly one call was made -- the search -- so no wrap ran and no share request fired. It is the row that makes the pin comparison worth anything: refusing after the wrap has left tells the attacker the key anyway | verified |
+
+### 1.3 A document is opened, and its key unwrapped
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SYNC-016` | `POST` | The role carried on the ready signal MUST be this client's own row in the members answer. | this spec section 3; `ambre-spec-message-bus.md`, `BUS-008` | `ambre_sync::sharing::tests::own_role_reads_our_own_row` asserts a peer holding owner does not raise ours; `::own_role_reads_writable_roles` covers the writable side, and `ambre_sync::updates::tests::document_ready_carries_the_role_on_both_paths` asserts both open paths carry it | verified |
+| `SYNC-017` | `FAIL` | A role that cannot be resolved MUST default to the read-only one, never to a writable one. | this spec section 3 | `ambre_sync::sharing::tests::own_role_falls_back_to_viewer_when_unresolvable` drives both unresolvable cases -- no session identity yet, and no row for us in the answer -- and asserts the viewer role each time | verified |
+| `SYNC-034` | `POST` | A recipient MUST unwrap against the exchange key of whoever wrapped, never against its own. | this spec section 3 | `ambre_crypto::tests::ecdh_symmetric`, `::kek_binds_peer_identity` hold the primitive. The choice of which key to use is a branch in the client with a fallback for an older relay, and no test takes either side of it | unverified |
+| `SYNC-040` | `FAIL` | A transient failure of the members request MUST NOT be read as a document that does not exist. | this spec section 3 | none, and **the rule fails today**: a network failure and a genuine absence take the same branch, so the open generates a throwaway key, marks the document local and never hydrates -- section 6 | unverified |
+| `SYNC-012` | `FRAME` | A failed unwrap of a document key MUST NOT be replaced by a freshly generated one. | derived (audit `H3`) | none. The unwrap failure now stops the open and surfaces an authentication error, and no test drives an unwrappable key row to see it: the open path runs only in the browser. A generated key here forks the document in silence -- every edit after it is unreadable to every other member | unverified |
+
+### 1.4 An ephemeral frame is attributed
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `SYNC-014` | `POST` | An ephemeral frame MUST reach the Logic thread under the identity the member directory maps its author key to. | this spec section 3 | `ambre_sync::ephemeral_tests::author_resolves_to_the_member_behind_the_signing_key`; `ambre_sync::sharing::tests::presence_directory_maps_valid_entries`, `::list_members_refreshes_the_presence_directory` assert the directory the resolution reads | verified |
+| `SYNC-037` | `POST` | The member directory MUST be rebuilt whenever membership changes. | this spec section 3 | `ambre_sync::sharing::tests::list_members_refreshes_the_presence_directory` asserts the members answer replaces it | verified |
+| `SYNC-015` | `FAIL` | An ephemeral frame whose author key matches no member MUST be dropped, never delivered under a guessed identity. | this spec section 3 | `ambre_sync::ephemeral_tests::unknown_author_key_is_not_resolved`; `ambre_sync::sharing::tests::presence_directory_skips_unparsable_rows_without_inventing_ids` asserts three malformed rows vanish and only the sound one survives -- a fabricated identity here would attribute a cursor to the wrong person | verified |
+| `SYNC-094` | `FRAME` | Rebuilding the directory MUST NOT keep an entry the new membership does not carry. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_sync::ephemeral_tests::refreshing_the_directory_drops_revoked_members` asserts a key that resolved before the rebuild resolves to nothing after it. A merge instead of a replacement would leave a revoked member's cursor on the document for as long as the tab stays open | verified |
 
 * **Budget.** the key exchange costs one elliptic-curve operation per member at open, about 150 us
   each on mobile, charged to the crypto rows of `ambre-spec-budgets.md section 1`. The
@@ -44,12 +64,20 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
   seals each copy for one exchange key. What the relay learns is who is a member of what, which is
   the membership metadata `ambre-spec-zero-knowledge.md` accepts. No plaintext key and no
   private key ever leaves the Sync worker (`SYNC-002`, `SYNC-039`).
-* **Verification.** 10 `verified`, 4 `unverified`, 0 `unimplemented`. What holds is every pure
+* **Verification.** 12 `verified`, 5 `unverified`, 0 `unimplemented`. What holds is every pure
   transform: the wrap for one invitee, the identity pair it binds, the refusal of a weak key, the
   pin comparison, the directory build and the role resolution, all extracted out of the browser and
-  all covered. What is loose is the four branches that only run against a live relay -- and two of
-  them are stated as failing.
-
+  all covered. What is loose is the branches that only run against a live relay -- and two of them
+  are stated as failing. This document had no conjunction to break: it was already one rule per row,
+  which is what ten `verified` rows over pure functions look like. What the pass added is three rows
+  the tests were already holding and no rule claimed. `SYNC-093` is the frame condition of a refused
+  invitation -- the pin test asserts exactly one request left, so nothing was wrapped, and refusing
+  after a wrap has gone out would hand the attacker the key it was meant to protect. `SYNC-094` is
+  the frame condition of the rebuild: the directory is replaced rather than merged, and a merge
+  would leave a revoked member resolving for as long as the tab stays open. `SYNC-092` is the
+  document's own thesis, stated in its opening paragraph and claimed by no row until now: the key,
+  the directory and the role come from one answer, and nothing refuses the second fetch that would
+  let them drift apart.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -148,17 +176,19 @@ authority: the role here hides what the relay would refuse anyway.
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| One answer carries the key, the directory and the role | the three change together -- an invite adds a key, a member and a role in one act -- and they are read at the same instant, at open. Fetching them apart means three round trips and three moments at which they disagree | a request per question, which is what a reader expects and what makes a stale directory possible |
-| The recipient unwraps against the wrapper's key | the exchange is symmetric, so only one of the two public keys yields the secret, and the relay is the only party that knows which member wrapped. Recording the wrapper per row makes it answerable with no extra state on the client | unwrapping against the member's own key, which happens to work for a single-member document and fails silently on the first shared one |
-| The directory maps signing keys, and lives in the Sync worker | the signing key is per session and per device, so presence keyed on it shows one collaborator twice. The resolution has to happen where signatures are verified, which is this worker and nowhere else | resolving in the Logic thread, which would need the keys to cross the boundary `SYNC-039` closes |
-| An unresolvable author is dropped | presence is best-effort and self-correcting: the next frame arrives a moment later. An identity guessed from the payload is a peer's own claim, which is exactly what keying on a resolved identity exists to refuse | trusting an identifier in the payload, or attributing the frame to the first member |
-| An unresolvable role is the read-only one | the role is a user-experience gate, so the failure directions are asymmetric: hiding an affordance the user has costs a click through a menu, offering one the relay refuses costs a confusing error after the edit | defaulting to the owning role, or refusing the open |
-| A failed unwrap stops the open | a random key opens the document and then poisons it: this client seals its edits under a key nobody else holds, and every peer sees a commitment failure on content that looks like ordinary history | opening with a fresh key and repairing later, which was the behaviour audit `H3` found |
-| Membership is the relay's table | a document that carried its own membership would need a delta to add a member, so the relay could not answer "who may read this" without opening the document, and no invite could reach someone who cannot yet decrypt | membership as a CRDT container inside the document |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| One answer carries the key, the directory and the role | a request per question | it is what a reader expects and what makes a stale directory possible: the three change together -- an invite adds a key, a member and a role in one act -- and they are read at the same instant, at open. Apart they cost three round trips and three moments at which they disagree |
+| The recipient unwraps against the wrapper's key | unwrapping against the member's own key | it happens to work for a single-member document and fails silently on the first shared one. The exchange is symmetric, so only one of the two public keys yields the secret, and the relay is the only party that knows which member wrapped |
+| The directory maps signing keys, and lives in the Sync worker | resolving in the Logic thread | it would need the keys to cross the boundary `SYNC-039` closes. The resolution has to happen where signatures are verified, which is this worker and nowhere else |
+| An unresolvable author is dropped | trusting an identifier in the payload | an identity guessed from the payload is a peer's own claim, which is exactly what keying on a resolved identity exists to refuse |
+| An unresolvable author is dropped | attributing the frame to the first member | it puts a name on a frame nobody can vouch for, and it is wrong silently. Presence is best-effort and self-correcting instead: the next frame arrives a moment later |
+| An unresolvable role is the read-only one | defaulting to the owning role | offering an affordance the relay refuses costs a confusing error after the edit, where hiding one the user has costs a click through a menu. The role is a user-experience gate, so the failure directions are asymmetric |
+| An unresolvable role is the read-only one | refusing the open | it turns a gate on affordances into a gate on reading, for a value that is missing rather than denied |
+| A failed unwrap stops the open | opening with a fresh key and repairing later | it was the behaviour audit `H3` found: a random key opens the document and then poisons it, because this client seals its edits under a key nobody else holds, and every peer sees a commitment failure on content that looks like ordinary history |
+| Membership is the relay's table | membership as a CRDT container inside the document | adding a member would take a delta, so the relay could not answer "who may read this" without opening the document, and no invite could reach someone who cannot yet decrypt |
 
 ---
 

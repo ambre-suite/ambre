@@ -18,14 +18,19 @@ That is what makes the file match the screen, and what leaves only the paginatio
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`. The prefix is `PDF`.
 
-| ID | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|
-| `PDF-001` | A page MUST be drawn by the application's own screen walk, retargeted to the shared surface; there MUST be no second, PDF-only renderer. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | Trame's primitives are surface-generic, driven through a recording surface (`ambre_trame::render::tests::draw_cells_on_fills_each_and_counts_nonempty_text`, `::draw_grid_lines_on_strokes_with_grid_color`, `::col_headers_draw_bg_separator_and_active_tint`); Toile drives the same walk against the PDF surface; Prose design-only | verified |
-| `PDF-002` | An export MUST emit no CRDT delta: it reads the document and produces bytes, changing nothing. | this spec section 3 | none. Toile derives every page through a read-only camera pass and no test asserts that no container mutated; Trame and Prose are unbuilt | unverified |
-| `PDF-003` | After an export, the UI thread MUST do nothing but hand the finished file to the browser. | this spec section 4 | none. Toile hands the bytes to a download and Trame and Prose have no driver; no test reads the handoff back | unverified |
-| `PDF-004` | Two exports of one unchanged document MUST produce identical bytes. | this spec section 3 | Toile `ambre_toile::logic::interop::pdf_export::tests::export_is_byte_stable`, under the `pdf` feature that `just test-native` enables; Trame and Prose unbuilt | verified |
-| `PDF-005` | A word on the page MUST stay selectable and searchable: each glyph run MUST carry its mapping back to characters, not glyph shapes alone. | this spec section 3; `ambre-spec-drawing-surface.md section 5` | not built -- lands with the "One selectable PDF" Story (`ambre-roadmap.md` E8); the shared surface writes no `ToUnicode` mapping, so every export drops the characters (`ambre-spec-drawing-surface.md section 5`) | unimplemented |
-| `PDF-006` | An export MUST be pure vector: it MUST NOT rasterize text, rules or shapes. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | type-level: the shared surface offers only vector primitives, so text and rules have no raster path; a picture reaches the page as its own pixels, and no test forbids an application pre-rasterizing one | unverified |
+### 1.1 Export the document as a PDF
+
+One gesture, from the command to the finished file. Every rule below binds that run: what each page
+is drawn by, what the bytes owe, and what the export must leave alone.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `PDF-001` | `POST` | A page MUST be drawn by the application's own screen walk, retargeted to the shared surface, and by no second PDF-only renderer. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | structural, and the construction is the proof where the export exists: `crates/ambre-toile/src/logic/interop/pdf_export.rs` imports `paint_content` from `crates/ambre-toile/src/ui/render.rs` and runs it against a krilla page, so the page walk and the screen walk are one function and a second renderer would be a second function that does not exist. `ambre_toile::logic::interop::pdf_export::tests::export_yields_a_pdf` drives it. Trame's primitives are surface-generic and driven through a recording surface (`ambre_trame::render::tests::draw_cells_on_fills_each_and_counts_nonempty_text`, `::draw_grid_lines_on_strokes_with_grid_color`, `::col_headers_draw_bg_separator_and_active_tint`), and it aims them at no page yet; Prose design-only | verified |
+| `PDF-004` | `POST` | Two exports of one unchanged document MUST produce identical bytes. | this spec section 3 | Toile `ambre_toile::logic::interop::pdf_export::tests::export_is_byte_stable`, under the `pdf` feature that `just test-native` enables; Trame and Prose unbuilt | verified |
+| `PDF-006` | `POST` | An export MUST be pure vector: it MUST NOT rasterize text, rules or shapes. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | type-level: the shared surface offers only vector primitives, so text and rules have no raster path. A picture reaches the page as its own pixels, and no test forbids an application pre-rasterizing one | unverified |
+| `PDF-005` | `POST` | A word on the page MUST stay selectable and searchable: each glyph run MUST carry its mapping back to characters, not glyph shapes alone. | this spec section 3; `ambre-spec-drawing-surface.md section 5` | not built -- lands with `One selectable PDF` (`ambre-roadmap.md` E8). The shared surface writes no `ToUnicode` mapping, so every export drops the characters (`ambre-spec-drawing-surface.md section 5`) | unimplemented |
+| `PDF-003` | `POST` | After an export, the UI thread MUST do nothing but hand the finished file to the browser. | this spec section 4 | none. Toile hands the bytes to a download and Trame and Prose have no driver; no test reads the handoff back | unverified |
+| `PDF-002` | `FRAME` | An export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | none. Toile derives every page through a read-only camera pass and no test asserts that no container mutated; Trame and Prose are unbuilt | unverified |
 
 * **Budget.** the per-application export rows of `ambre-spec-budgets.md section 1` (Toile 50 slides,
   Prose 100 pages); the writer's own weight is `ambre-spec-budgets.md section 5`, billed once to the
@@ -49,8 +54,7 @@ same bytes.
 |---|---|---|---|---|
 | exports a document | exports the same document, untouched | nothing: an export writes nothing (`PDF-002`) | the same bytes, twice (`PDF-004`) | Toile `logic::interop::pdf_export::tests::export_is_byte_stable` |
 
-Each application adds the scenarios that turn on its own page format -- a paper size, a deck order, a
-margin -- in its own pdf-export document.
+Each application adds the scenarios its own page format turns on, in its own pdf-export document.
 
 ---
 
@@ -67,12 +71,10 @@ margin -- in its own pdf-export document.
 3. the pages assemble into one file, byte for byte the same on an unchanged document (`PDF-004`);
 4. the UI thread hands the bytes to the browser and changes nothing on screen (`PDF-003`).
 
-**The surface and the writer** are `ambre-spec-drawing-surface.md`: the `Surface` trait, the krilla
-back end, and the `ambre-pdf` crate compiled behind a feature so it never enters the startup bundle
-(`CANVAS-025`, `CANVAS-028`). This document adds no drawing primitive of its own.
-
-**The fonts** the page shaping needs are seeded on the Logic thread (`ambre-spec-render-assets.md`),
-because shaping needs a font database and that thread has no GPU side to borrow one from.
+**The surface, the writer and the fonts** are `ambre-spec-drawing-surface.md` and
+`ambre-spec-render-assets.md`: the `Surface` trait, the krilla back end, the `ambre-pdf` crate
+behind a feature, and the font database the shaping needs (`CANVAS-025`, `CANVAS-028`). This
+document adds no primitive of its own.
 
 **What a page is, and how a document is paginated,** is each application's own: a grid cut into
 pages, a deck of slides, a column of pages (section 6).
@@ -92,21 +94,20 @@ pages, a deck of slides, a column of pages (section 6).
 | an export entry, in a menu | asks the Logic thread to build the pages and assemble the file |
 | the answer | the UI thread wraps the bytes in a browser download (`PDF-003`) |
 
-The user sees no progress beyond the shared interop report; the gesture that starts an export, and
-the report it raises, are each application's own. No editor offers the entry on every path yet
-(section 6).
+The gesture that starts an export and the report it raises are each application's own, and no
+editor offers the entry on every path yet (section 6).
 
 ---
 
-## 5. DECISIONS
+## 5. REJECTED ALTERNATIVES
 
-| Decision | Rationale | Rejected alternative |
-|---|---|---|
-| The page is drawn by the screen's own walk | a second renderer drifts from the first the day either changes, and the promise of the feature is that the file matches the screen | a PDF-specific walk, which duplicates every element kind in every application |
-| The export runs in the Logic thread | a large document takes seconds to assemble, and the UI thread owes the visible frame its sixteen milliseconds; the shaper the export needs is already there | exporting on the UI thread, next to the GPU surface, which stalls the editor for the length of the file |
-| An export writes nothing and is byte-stable | an export is a read, and two peers exporting one document must produce one file, so nothing about it may reach the document or another peer | an export that records a page setup or a cursor as it runs |
-| Each glyph run carries its source range | a page that looks right and cannot be searched, selected or read aloud is a picture of a document | writing glyphs by index alone, which is what a naive writer does and what makes a file unsearchable |
-| The output is vector | a page printed at any size stays sharp, and the shared surface already emits paths and glyphs | rasterizing each page, which trades every advantage of the format for a simpler writer |
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The page is drawn by the screen's own walk | a PDF-specific walk | it duplicates every element kind in every application, and the second renderer drifts from the first the day either changes. The promise of the feature is that the file matches the screen |
+| The export runs in the Logic thread | exporting on the UI thread, next to the GPU surface | a large document takes seconds to assemble and the UI thread owes the visible frame its sixteen milliseconds, so it stalls the editor for the length of the file. The shaper the export needs is already in the Logic thread |
+| An export writes nothing and is byte-stable | an export that records a page setup or a cursor as it runs | an export is a read, and two peers exporting one document must produce one file. A recorded setup reaches the document, so it reaches the other peer and the undo history |
+| Each glyph run carries its source range | writing glyphs by index alone | it is what a naive writer does, and it is what makes a file unsearchable: a page that looks right and cannot be searched, selected or read aloud is a picture of a document |
+| The output is vector | rasterizing each page and embedding the pixels | it trades every property the format is for: a raster page does not zoom, its text is not searchable, and its size grows with the page count. The shared surface already emits paths and glyphs, so the vector path is also the shorter one |
 
 ---
 
