@@ -46,6 +46,7 @@ mod fixtures;
 mod groups;
 mod import;
 mod presence;
+pub use presence::PRESENCE_TTL_MS;
 mod presentation;
 mod reactions;
 
@@ -119,11 +120,22 @@ pub struct ToileState {
     /// (`toile-reactions`) and to tag outbound presence with a stable
     /// identity. Same field as `trame-engine`.
     my_user_id: Option<UserId>,
-    /// Remote peers' latest presence (cursors, live strokes, lasers, selections),
-    /// keyed by canonical `UserId`. Ephemeral: never in Loro, never
-    /// persisted, rebuilt from inbound frames. The local peer's own presence is
-    /// not stored here (the UI draws its own cursor).
-    presence: HashMap<UserId, PresencePayload>,
+    /// This session's display name, seeded from `SessionReady` beside the
+    /// `UserId` and stamped on every outbound presence sample
+    /// (`TOILE-UI-076`). Cosmetic: it decides neither identity nor colour
+    /// (`PRESENCE-004`).
+    my_name: Option<String>,
+    /// Remote peers' latest presence (cursors, live strokes, lasers, selections)
+    /// and the local clock each was last seen at, keyed by canonical `UserId`.
+    /// Ephemeral: never in Loro, never persisted, rebuilt from inbound frames.
+    /// The local peer's own presence is not stored here (the UI draws its own
+    /// cursor). A peer whose last sample is older than the TTL is dropped, which
+    /// is how a departure travels with no departure signal (`TOILE-185`).
+    presence: HashMap<UserId, (PresencePayload, i64)>,
+    /// The latest wall clock a local `Presence` command carried, and the only
+    /// clock this thread has (`toile-presence`). Monotonic: it never moves
+    /// backwards, whatever the machine's own clock does.
+    now_ms: i64,
     /// Presentation (focus) mode toggle (`toile-presentation`). Local/per-viewer,
     /// never in Loro and never synced -- only the slide sequence is shared.
     present: bool,
@@ -218,7 +230,9 @@ impl ToileState {
             exported_vv: VersionVector::default(),
             undo,
             my_user_id: None,
+            my_name: None,
             presence: HashMap::new(),
+            now_ms: 0,
             present: false,
             playback: PlaybackState::default(),
             broadcasting: false,
@@ -240,6 +254,14 @@ impl ToileState {
     /// The canonical `UserId` for this session, if the session is authenticated.
     pub fn user_id(&self) -> Option<UserId> {
         self.my_user_id
+    }
+
+    /// Seed this session's display name, from the same `SessionReady` that
+    /// carries the `UserId`. It rides every outbound presence sample so a
+    /// collaborator reads a name rather than a hex prefix (`TOILE-UI-076`), and
+    /// it decides nothing (`PRESENCE-004`).
+    pub fn set_display_name(&mut self, name: String) {
+        self.my_name = Some(name);
     }
 
     /// Whether this viewer is broadcasting its playback position. Test /
@@ -363,7 +385,7 @@ impl ToileState {
                 self.viewport = vp;
                 ToileOutcome::display_only(vec![self.viewport_event()])
             }
-            ToileCommand::Presence(payload) => self.broadcast_presence(&payload),
+            ToileCommand::Presence { payload, now_ms } => self.broadcast_presence(&payload, now_ms),
         }
     }
 

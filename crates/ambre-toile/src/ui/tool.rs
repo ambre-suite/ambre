@@ -44,6 +44,10 @@ pub enum Tool {
     /// than a thread: a thread is born with its first message, so nothing is
     /// written until the user posts (`TOILE-UI-307`).
     Comment,
+    /// The highlighter (`TOILE-UI-074`, `toile-presence`): a drag streams a
+    /// laser point to the other peers and leaves no element behind. It writes
+    /// nothing at all -- the trail is presence, relayed and forgotten.
+    Laser,
     Hand,
 }
 
@@ -500,6 +504,9 @@ pub struct ToolMachine {
     pen: Vec<PenNode>,
     /// True while a pen node's control handle is being dragged.
     pen_dragging: bool,
+    /// The highlighter's live point while it is held down (`TOILE-UI-074`).
+    /// Read by the presence sampler each frame; it never becomes an element.
+    laser: Option<Point>,
     /// Last world cursor, for the pen's live segment preview.
     cursor: Point,
 }
@@ -518,6 +525,7 @@ impl ToolMachine {
             draft: None,
             pen: Vec::new(),
             pen_dragging: false,
+            laser: None,
             cursor: Point::ZERO,
         }
     }
@@ -537,7 +545,26 @@ impl ToolMachine {
     /// True while a gesture is in flight (drag, stroke, or a pen path being
     /// built): the view keeps repainting and routes moves here.
     pub fn is_active(&self) -> bool {
-        self.select.is_dragging() || self.draft.is_some() || !self.pen.is_empty()
+        self.select.is_dragging()
+            || self.draft.is_some()
+            || !self.pen.is_empty()
+            || self.laser.is_some()
+    }
+
+    /// The highlighter's live point, or `None` when it is not held down
+    /// (`TOILE-UI-074`). The presence sampler reads it each frame; nothing else
+    /// does, because the trail is never board state.
+    pub fn laser(&self) -> Option<Point> {
+        self.laser
+    }
+
+    /// The in-flight freehand samples, so a peer sees the stroke before it
+    /// commits (`TOILE-UI-217`). `None` when no stroke is being drawn.
+    pub fn live_stroke(&self) -> Option<&[StrokePoint]> {
+        match &self.draft {
+            Some(Draft::Draw { points }) => Some(points),
+            _ => None,
+        }
     }
 
     /// Abort any in-flight gesture (Escape / focus loss / tool switch).
@@ -546,6 +573,7 @@ impl ToolMachine {
         self.draft = None;
         self.pen.clear();
         self.pen_dragging = false;
+        self.laser = None;
     }
 
     /// Handle Escape at the tool layer: cancel any in-flight gesture and, if
@@ -612,6 +640,10 @@ impl ToolMachine {
                 self.draft = Some(Draft::Comment { at: world });
                 ToolOutcome::None
             }
+            Tool::Laser => {
+                self.laser = Some(world);
+                ToolOutcome::None
+            }
             Tool::Connector => {
                 if let Some(id) = hit_topmost(&display.nodes, world) {
                     let b = element_bounds(display, &id).unwrap_or_default();
@@ -649,6 +681,13 @@ impl ToolMachine {
             }
             Some(Draft::Place { .. }) | Some(Draft::Comment { .. }) => ToolOutcome::None,
             None => {
+                // The highlighter streams while it is held down and writes
+                // nothing (`TOILE-UI-074`): the point rides the next presence
+                // sample, and the board never hears about it.
+                if self.laser.is_some() {
+                    self.laser = Some(world);
+                    return ToolOutcome::None;
+                }
                 if self.tool == Tool::Pen {
                     if self.pen_dragging
                         && let Some(node) = self.pen.last_mut()
@@ -664,6 +703,11 @@ impl ToolMachine {
     }
 
     pub fn pointer_up(&mut self, world: Point, display: &DisplayViewport) -> ToolOutcome {
+        // Lifting the highlighter clears the point, which is what tells the
+        // other peers to drop the trail (`TOILE-UI-222`).
+        if self.laser.take().is_some() {
+            return ToolOutcome::None;
+        }
         if let Some(draft) = self.draft.take() {
             return match draft {
                 Draft::Shape {
@@ -1646,6 +1690,35 @@ mod tests {
             }
             other => panic!("expected a point anchor, got {other:?}"),
         }
+    }
+
+    /// The highlighter is a tool a user picks, and it writes nothing
+    /// (`TOILE-UI-074`): the point rides the next presence sample, the release
+    /// clears it, and the board hears about none of it.
+    #[test]
+    fn the_highlighter_streams_a_point_and_writes_nothing() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Laser);
+        let disp = empty_display();
+        let cam = cam();
+
+        let press = Point::new(10.0, 10.0);
+        assert!(m.laser().is_none(), "nothing streams before the press");
+        assert!(matches!(
+            m.pointer_down(press, to_screen(&cam, press), &[], &disp, &cam, None),
+            ToolOutcome::None
+        ));
+        assert_eq!(m.laser(), Some(press));
+
+        let moved = Point::new(30.0, 20.0);
+        assert!(matches!(m.pointer_move(moved), ToolOutcome::None));
+        assert_eq!(m.laser(), Some(moved), "the point follows the pointer");
+
+        // The release clears the point, which is what tells the peers to drop
+        // the trail; and no command was ever produced.
+        assert!(matches!(m.pointer_up(moved, &disp), ToolOutcome::None));
+        assert!(m.laser().is_none());
+        assert!(!m.is_active());
     }
 
     #[test]

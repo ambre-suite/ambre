@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: LIVE PRESENCE
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- Toile receives and paints; nothing in the suite broadcasts.
+**Implementation:** partial -- Toile sends, receives and paints; Trame and Prose do neither.
 
 > Where the other collaborators are, right now: a position in each peer's colour, their name beside
 > it, and what they hold selected. A presence sample is relayed and forgotten -- nothing of it
@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PRESENCE-005` | `INV` | The peer set MUST be keyed by `UserId`: one collaborator on two devices MUST NOT render as two. | this spec section 3 | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history`, on the assertions that a second peer is tracked under its own identity and neither displaces the other | verified |
 | `PRESENCE-006` | `INV` | A peer's colour MUST be derived from that `UserId` by the shared cross-app helper. | this spec section 3; this spec section 5 | `ambre_draw::peer::tests::stable_and_pure`, `::distinct_seeds_usually_differ`, `::opaque` | verified |
 | `PRESENCE-004` | `INV` | A peer's display name MUST be cosmetic: it MUST NOT decide identity, colour or permission. | this spec section 3 | none. `PRESENCE-002` and `PRESENCE-003` leave the name nothing to decide, and no test drives a sample whose name contradicts its resolved author | unverified |
-| `PRESENCE-007` | `INV` | A presence anchor MUST name identities that survive a structural edit, never positions. | this spec section 3 | not built -- lands with the "Live presence on the board" Story (`ambre-roadmap.md` E4). Toile's anchor is an `ElementId` and satisfies it; the two anchors that must be resolved, Trame's and Prose's, have no crate | unimplemented |
+| `PRESENCE-007` | `INV` | A presence anchor MUST name identities that survive a structural edit, never positions. | this spec section 3 | type-level in the one application that broadcasts: Toile's payload anchors a selection by `ElementId` and a pointer by a world point, and declares no screen coordinate at all, so a structural edit cannot invalidate one. Trame's and Prose's payloads are specified and built by neither, so nothing holds them | verified |
 
 ### 1.2 Send a presence sample
 
@@ -45,11 +45,11 @@ An inbound frame is opened, its author resolved, and the peer set updated for th
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `PRESENCE-009` | `POST` | The event delivered to the view MUST carry the whole live peer set, so a departed peer is an absent entry. | this spec section 3 | none, and **the rule fails today**: Toile emits one event per inbound frame and the view accumulates, so a peer who leaves is painted for good -- section 6, and `TOILE-UI-075` | unverified |
-| `PRESENCE-010` | `POST` | A remote position MUST snap when its new sample is not adjacent to the previous one. | this spec section 4 | not built -- lands with the "Live presence on the board" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `PRESENCE-009` | `POST` | The event delivered to the view MUST carry the whole live peer set, so a departed peer is an absent entry. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_peer_who_stops_sending_leaves_the_live_set`, which reads the set an event carries after a peer ages out, and `ambre_toile::ui::presence::tests::a_peer_absent_from_the_set_stops_being_painted` on the view that adopts it. Toile is the one application that broadcasts; Trame and Prose specify the shape and build neither | verified |
+| `PRESENCE-010` | `POST` | A remote position MUST snap when its new sample is not adjacent to the previous one. | this spec section 4 | structural, and the construction is the proof: the overlay paints the sample it holds and tweens nothing, so no position is ever interpolated across a jump. A smoothing pass would need this row back as a real assertion | verified |
 | `PRESENCE-012` | `FRAME` | Applying a presence sample MUST NOT change the document or its history. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history`, on the assertions that the snapshot and the element count are identical either side of the apply | verified |
 | `PRESENCE-013` | `FAIL` | A presence frame that does not decode MUST be dropped without an error. | this spec section 3; derived | `ambre_toile::logic::convergence_tests::apply_ephemeral_drops_a_malformed_frame`: it feeds four arbitrary bytes and asserts the apply answers with nothing rather than raising | verified |
-| `PRESENCE-008` | `FAIL` | An anchor that resolves to no live target MUST be dropped without an error. | this spec section 3 | not built -- lands with the "Live presence on the board" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `PRESENCE-008` | `FAIL` | An anchor that resolves to no live target MUST be dropped without an error. | this spec section 3 | `ambre_toile::ui::presence::tests::selection_ghosts_outline_visible_elements_only`, whose peer selects an element the frame does not carry: one ghost is painted, the other is dropped, and nothing is raised | verified |
 
 * **Budget.** the presence overlay under 1 ms per frame, a row of
   `ambre-spec-budgets.md section 2`, written against Toile's twenty cursors and their trails
@@ -59,12 +59,15 @@ An inbound frame is opened, its author resolved, and the peer set updated for th
   `DocumentKey`: the relay reads `document_id`, `pub_key` and `counter` and nothing else. The author
   is resolved to a `UserId` in `ambre-sync` before the frame reaches an application, so no peer can
   paint a position under another user's name (`SYNC-014`, `SYNC-015`).
-* **Verification.** 8 `verified`, 2 `unverified`, 3 `unimplemented`. The identity half is held end
-  to end, by the seal, the author resolution and Toile's convergence tests. The two gaps are where
-  the three applications disagree, and both are named in section 6: nothing sends a sample in any
-  application, and Toile's event shape is the one that keeps a departed peer on the screen. The
-  three rows the pass added are all held by assertions that were already running and that no row
-  claimed. `PRESENCE-001` bundled the broadcast with the promise that nothing reaches the document,
+* **Verification.** 12 `verified`, 1 `unverified`, 0 `unimplemented`. The identity half is held end
+  to end, by the seal, the author resolution and Toile's convergence tests, and the live-set rule is
+  now held by the one application that broadcasts: a peer that stops sending leaves the set, and the
+  view that adopts it stops painting them. What stays open is where the three applications disagree,
+  and section 6 names it: Trame and Prose specify a payload and send nothing, so every rule here
+  rests on Toile alone, and three rows read `verified` on that one application: the anchor shape,
+  the absent smoothing and the dropped anchor are Toile's construction, and a second sender inherits
+  none of them. The three rows an earlier pass added are all held by assertions that were already
+  running and that no row claimed. `PRESENCE-001` bundled the broadcast with the promise that nothing reaches the document,
   and those are a postcondition and a frame condition on two different sides of the wire, so
   `PRESENCE-011` and `PRESENCE-012` state them per direction. `PRESENCE-013` is a refusal the suite
   drives -- a frame of four arbitrary bytes is dropped rather than raised -- and no row said so.
@@ -86,7 +89,7 @@ absence is the rule.
 | sends a sample naming herself "Bob" | edits | Bob's edit | the position attributed to Alice, the sender Sync resolved | none -- `PRESENCE-004` |
 | jumps to the far end of the document | watches | nothing | her position disappear and reappear there, with no slide between | none -- `PRESENCE-010` |
 | inserts a row, a shape or a paragraph above Bob's position | watches | Alice's insert | Bob's position still on the same cell, shape or word | none -- `PRESENCE-007` |
-| closes the document | watches | nothing | Alice's position off Bob's screen | none, and it fails -- `PRESENCE-009` |
+| closes the document | watches | nothing | Alice's position off Bob's screen | `ambre_toile::logic::convergence_tests::a_peer_who_stops_sending_leaves_the_live_set` |
 
 ---
 
@@ -216,21 +219,23 @@ not draw a cursor sliding through thirty-nine pages they never visited.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing in the suite broadcasts a sample.** Toile receives, keys, routes and paints, and no
-  gesture in any of the three applications emits one (`TOILE-UI-073`). The receiving half being
-  wired end to end is what makes the gap invisible in every test that exists.
-* **Toile's event shape contradicts `PRESENCE-009`.** It emits `PeerPresence { user_id, presence }`
-  once per inbound frame and the view accumulates a per-peer mirror, with a removal path nothing
-  calls. Trame and Prose both specify the whole set and neither is built, so the decision above is
-  taken from two designs against one implementation. The correction is Toile's to make, and
-  `TOILE-UI-075` is the row that carries it.
+* **One application broadcasts.** Toile sends, receives, keys, routes and paints; Trame and Prose
+  specify a payload and emit nothing, so every rule here is held by one implementation
+  (`TRAME-UI-*` and the Prose engine both wait on their own Stories).
+* **A departure is a timeout.** The relay says nothing when a peer closes a document, so the live
+  set is what has been heard from recently: Toile ages a peer out ten seconds after their last
+  sample, against a two-second heartbeat. `PRESENCE-009` holds with nothing added to the transport,
+  and the cost is a few seconds of a stale cursor and a blink for a peer behind a stalled network. A
+  leave message from the relay would replace the timeout, and no document asks for one.
 * **Nothing bounds the sample rate.** No document says how often a move broadcasts, and the frame
-  budget above is the paint cost alone.
+  budget above is the paint cost alone. Toile sends at most one sample per rendered frame, which is
+  a coalescing rule and not a rate.
 * **Nothing rules on a viewer against an editor.** Every peer paints the same overlay whatever their
   role (`ambre-spec-membership.md`).
-* **The label has no source in two of the three.** Toile prints a hex prefix of the `UserId` because
-  nothing hands the overlay the display name the member list already carries (`TOILE-UI-076`), and
-  Prose has never said where the name in its payload comes from.
+* **The label's source is a session, not a directory.** Toile stamps the name its own `SessionReady`
+  carried, so a peer is named by what they told the relay about themselves, not by what the member
+  list holds (`TOILE-UI-076`). `PRESENCE-004` is what makes that safe -- the name decides nothing --
+  and Prose has never said where the name in its payload comes from.
 * **Nothing rules on presence against optimistic local text.** Prose paints text that is not yet in
   the document, so a remote anchor inside the same block resolves against a document the screen does
   not show (`features/ambre-spec-prose-text-editing.md`).

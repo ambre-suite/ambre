@@ -19,15 +19,15 @@
   `human-review` and `qa-manual` carry no ceiling: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2354 rows: 1594 shipped, of which 805 loose. 760 unbuilt.**
+**2354 rows: 1601 shipped, of which 802 loose. 753 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 183 | 206 | 400 |  | 789 |
-| `unverified` | 300 | 201 | 299 |  | 800 |
+| `verified` | 187 | 206 | 406 |  | 799 |
+| `unverified` | 299 | 201 | 297 |  | 797 |
 | `human-review` | 5 |  |  |  | 5 |
 | `qa-manual` |  |  |  |  | 0 |
-| `unimplemented` | 64 | 56 | 49 | 591 | 760 |
+| `unimplemented` | 61 | 56 | 45 | 591 | 753 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -59,7 +59,7 @@
 | `ambre-spec-object-store.md` | 12 | 12 | 3 | 9 |  |
 | `ambre-spec-organizations.md` | 11 | 10 | 5 | 5 | 1 |
 | `ambre-spec-pdf-export.md` | 6 | 5 | 2 | 3 | 1 |
-| `ambre-spec-presence.md` | 13 | 10 | 8 | 2 | 3 |
+| `ambre-spec-presence.md` | 13 | 13 | 12 | 1 |  |
 | `ambre-spec-render-assets.md` | 14 | 11 | 3 | 8 | 3 |
 | `ambre-spec-schema-version.md` | 12 | 4 | 0 | 4 | 8 |
 | `ambre-spec-sealed-envelope.md` | 17 | 17 | 8 | 9 |  |
@@ -115,7 +115,7 @@
 | `ambre-spec-toile-media.md` | 28 | 28 | 22 | 6 |  |
 | `ambre-spec-toile-menus.md` | 47 | 47 | 29 | 18 |  |
 | `ambre-spec-toile-pdf-export.md` | 14 | 13 | 9 | 4 | 1 |
-| `ambre-spec-toile-presence.md` | 24 | 20 | 13 | 7 | 4 |
+| `ambre-spec-toile-presence.md` | 24 | 24 | 19 | 5 |  |
 | `ambre-spec-toile-presentation.md` | 41 | 40 | 29 | 11 | 1 |
 | `ambre-spec-toile-reactions.md` | 32 | 29 | 19 | 10 | 3 |
 | `ambre-spec-toile-selection.md` | 28 | 27 | 14 | 13 | 1 |

@@ -51,6 +51,7 @@ pub fn resolve(id: IconId) -> Option<icondata::Icon> {
         "note-outline" => icondata::MdiNoteOutline,
         "format-text" => icondata::MdiFormatText,
         "comment-outline" => icondata::MdiCommentOutline,
+        "cursor-pointer" => icondata::MdiCursorPointer,
         "comment-multiple-outline" => icondata::MdiCommentMultipleOutline,
         "hand-back-right" => icondata::MdiHandBackRight,
         _ => return None,

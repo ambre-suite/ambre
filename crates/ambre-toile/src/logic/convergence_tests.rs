@@ -20,7 +20,7 @@ use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, NodeId, PathType,
     ShapeKind, StrokePoint, ThreadId,
 };
-use crate::logic::state::ToileState;
+use crate::logic::state::{PRESENCE_TTL_MS, ToileState};
 
 // -----------------------------------------------------------------------------
 // Lifecycle unit tests
@@ -405,14 +405,31 @@ fn find_ignores_non_text_elements_and_empty_query() {
 // Ephemeral presence
 // -----------------------------------------------------------------------------
 
-fn peer_presence(events: Vec<ToileEvent>) -> crate::logic::command::PresenceUpdate {
+/// The live peer set the events carry (`PRESENCE-009`): one event, the whole
+/// set, which the view adopts as it stands.
+fn live_set(events: Vec<ToileEvent>) -> Vec<crate::logic::command::PresenceUpdate> {
     events
         .into_iter()
         .find_map(|e| match e {
-            ToileEvent::PeerPresence(u) => Some(u),
+            ToileEvent::PeerPresence(peers) => Some(peers),
             _ => None,
         })
         .expect("expected a PeerPresence event")
+}
+
+/// A presence sample with a cursor and nothing else.
+fn sample_at(x: f64, y: f64) -> PresencePayload {
+    PresencePayload {
+        cursor: Some(Point::new(x, y)),
+        ..PresencePayload::default()
+    }
+}
+
+/// Broadcast `payload` from `st` at `now_ms` and return the ephemeral frame.
+fn presence_frame(st: &mut ToileState, payload: PresencePayload, now_ms: i64) -> Vec<u8> {
+    st.handle_command(ToileCommand::Presence { payload, now_ms })
+        .ephemeral
+        .expect("presence broadcasts an ephemeral frame")
 }
 
 #[test]
@@ -427,18 +444,23 @@ fn identity_is_seeded_and_read_back() {
 
 #[test]
 fn presence_command_broadcasts_ephemeral_only() {
-    // A local presence sample rides the ephemeral leg: no display event, no CRDT
-    // delta (the UI draws its own cursor).
+    // A local presence sample rides the ephemeral leg: no display event while
+    // the live set is unchanged, and no CRDT delta (the UI draws its own
+    // cursor).
     let mut st = ToileState::new();
     let a = create_sticky(&mut st, Point::ZERO, "note");
     let payload = PresencePayload {
+        name: None,
         cursor: Some(Point::new(12.0, 34.0)),
         selection: vec![a],
         live_stroke: None,
         laser: Some(Point::new(50.0, 60.0)),
         present_slide: None,
     };
-    let out = st.handle_command(ToileCommand::Presence(payload));
+    let out = st.handle_command(ToileCommand::Presence {
+        payload,
+        now_ms: 1_000,
+    });
     assert!(out.display.is_empty(), "presence emits no display event");
     assert!(out.update.is_none(), "presence is never a CRDT delta");
     assert!(
@@ -448,11 +470,123 @@ fn presence_command_broadcasts_ephemeral_only() {
 }
 
 #[test]
+fn the_outbound_sample_carries_the_session_display_name() {
+    // TOILE-UI-076: the name comes from the session this thread already holds,
+    // so a collaborator reads a name and not a hex prefix. It is cosmetic
+    // (`PRESENCE-004`): it travels beside the sample and decides nothing.
+    let mut sender = ToileState::new();
+    sender.set_display_name("Ada".to_owned());
+    let frame = presence_frame(&mut sender, sample_at(1.0, 2.0), 0);
+
+    let mut rx = ToileState::new();
+    let peers = live_set(rx.apply_ephemeral(UserId::new(), &frame));
+    assert_eq!(peers.len(), 1);
+    assert_eq!(peers[0].presence.name.as_deref(), Some("Ada"));
+
+    // A session with no name yet sends none, and the receiver falls back to the
+    // short handle rather than paint an empty chip.
+    let mut anonymous = ToileState::new();
+    let frame = presence_frame(&mut anonymous, sample_at(3.0, 4.0), 0);
+    let peers = live_set(rx.apply_ephemeral(UserId::new(), &frame));
+    assert!(peers.iter().any(|p| p.presence.name.is_none()));
+}
+
+#[test]
+fn a_peer_who_stops_sending_leaves_the_live_set() {
+    // TOILE-185 / TOILE-UI-075 / PRESENCE-009: a departure is the absence of an
+    // entry. No departure signal exists anywhere; the peer ages out against the
+    // clock the local samples carry, and the event that says so is the whole
+    // set.
+    let mut sender = ToileState::new();
+    let frame = presence_frame(&mut sender, sample_at(5.0, 5.0), 0);
+
+    let mut rx = ToileState::new();
+    // The receiver's clock starts at the first local sample.
+    rx.handle_command(ToileCommand::Presence {
+        payload: PresencePayload::default(),
+        now_ms: 1_000,
+    });
+    let alice = UserId::new();
+    assert_eq!(live_set(rx.apply_ephemeral(alice, &frame)).len(), 1);
+
+    // Still inside the TTL: Alice is live, and the local sample says nothing new.
+    let out = rx.handle_command(ToileCommand::Presence {
+        payload: PresencePayload::default(),
+        now_ms: 1_000 + PRESENCE_TTL_MS - 1,
+    });
+    assert!(out.display.is_empty(), "nothing left the set yet");
+    assert!(rx.peer_presence(&alice).is_some());
+
+    // Past it: the set changes, and the event that announces it is empty.
+    let out = rx.handle_command(ToileCommand::Presence {
+        payload: PresencePayload::default(),
+        now_ms: 1_000 + PRESENCE_TTL_MS + 1,
+    });
+    assert!(
+        live_set(out.display).is_empty(),
+        "a peer past its TTL is an absent entry"
+    );
+    assert!(rx.peer_presence(&alice).is_none());
+}
+
+#[test]
+fn a_clock_that_steps_backwards_ages_nobody() {
+    // The local clock is monotonic: an NTP correction or a suspended tab must
+    // not empty the board of every peer at once.
+    let mut sender = ToileState::new();
+    let frame = presence_frame(&mut sender, sample_at(1.0, 1.0), 0);
+
+    let mut rx = ToileState::new();
+    rx.handle_command(ToileCommand::Presence {
+        payload: PresencePayload::default(),
+        now_ms: 100_000,
+    });
+    let alice = UserId::new();
+    rx.apply_ephemeral(alice, &frame);
+
+    rx.handle_command(ToileCommand::Presence {
+        payload: PresencePayload::default(),
+        now_ms: 0,
+    });
+    assert!(
+        rx.peer_presence(&alice).is_some(),
+        "a clock stepping back keeps the peer"
+    );
+}
+
+#[test]
+fn a_sample_replaces_the_peers_presence_whole() {
+    // TOILE-178: a field a sender leaves out is a field the receiver clears. A
+    // merge of the two samples would keep the stale selection.
+    let mut sender = ToileState::new();
+    let a = create_sticky(&mut sender, Point::ZERO, "note");
+    let with_selection = PresencePayload {
+        cursor: Some(Point::new(1.0, 1.0)),
+        selection: vec![a],
+        laser: Some(Point::new(2.0, 2.0)),
+        ..PresencePayload::default()
+    };
+    let first = presence_frame(&mut sender, with_selection, 0);
+    let second = presence_frame(&mut sender, sample_at(9.0, 9.0), 0);
+
+    let mut rx = ToileState::new();
+    let alice = UserId::new();
+    rx.apply_ephemeral(alice, &first);
+    rx.apply_ephemeral(alice, &second);
+
+    let now = rx.peer_presence(&alice).expect("Alice is live");
+    assert_eq!(now.cursor, Some(Point::new(9.0, 9.0)));
+    assert!(now.selection.is_empty(), "the selection was not kept");
+    assert!(now.laser.is_none(), "the laser was not kept");
+}
+
+#[test]
 fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
     // #2 / DoD: an inbound presence frame yields a PeerPresence keyed by the
     // resolved UserId and mutates neither the doc nor its history.
     let mut sender = ToileState::new();
     let payload = PresencePayload {
+        name: None,
         cursor: Some(Point::new(7.0, 8.0)),
         selection: Vec::new(),
         live_stroke: Some(vec![StrokePoint {
@@ -463,32 +597,29 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
         laser: None,
         present_slide: None,
     };
-    let frame = sender
-        .handle_command(ToileCommand::Presence(payload.clone()))
-        .ephemeral
-        .expect("presence frame");
+    let frame = presence_frame(&mut sender, payload.clone(), 0);
 
     let mut rx = ToileState::new();
     let before = rx.export_snapshot();
     let count_before = rx.element_count();
 
     let alice = UserId::new();
-    let update = peer_presence(rx.apply_ephemeral(alice, &frame));
-    assert_eq!(update.user_id, alice);
-    assert_eq!(update.presence, payload);
+    let peers = live_set(rx.apply_ephemeral(alice, &frame));
+    assert_eq!(peers.len(), 1);
+    assert_eq!(peers[0].user_id, alice);
+    assert_eq!(peers[0].presence, payload);
     assert_eq!(rx.peer_presence(&alice), Some(&payload));
 
     // Non-mutating: the CRDT snapshot and element set are untouched.
     assert_eq!(rx.export_snapshot(), before);
     assert_eq!(rx.element_count(), count_before);
 
-    // A second peer is tracked independently, keyed by its own UserId.
+    // A second peer is tracked independently, keyed by its own UserId, and the
+    // set carries both.
     let bob = UserId::new();
-    let bob_frame = sender
-        .handle_command(ToileCommand::Presence(PresencePayload::default()))
-        .ephemeral
-        .expect("presence frame");
-    let _ = rx.apply_ephemeral(bob, &bob_frame);
+    let bob_frame = presence_frame(&mut sender, PresencePayload::default(), 0);
+    let peers = live_set(rx.apply_ephemeral(bob, &bob_frame));
+    assert_eq!(peers.len(), 2, "the event carries the whole live set");
     assert!(rx.peer_presence(&alice).is_some());
     assert_eq!(rx.peer_presence(&bob), Some(&PresencePayload::default()));
 }

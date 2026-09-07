@@ -43,6 +43,9 @@ impl LogicState {
                     if let Some(user_id) = self.my_user_id {
                         state.set_user_id(user_id);
                     }
+                    if let Some(name) = &self.my_display_name {
+                        state.set_display_name(name);
+                    }
                     slot.insert(LiveDoc::new(state));
                 }
                 let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
@@ -109,6 +112,9 @@ impl LogicState {
                     // otherwise the later `SessionReady` sweep covers this slot.
                     if let Some(user_id) = self.my_user_id {
                         state.set_user_id(user_id);
+                    }
+                    if let Some(name) = &self.my_display_name {
+                        state.set_display_name(name);
                     }
                     slot.insert(LiveDoc::new(state));
                 }
@@ -181,10 +187,17 @@ impl LogicState {
                 // `SessionReady` also seeds the canonical `UserId`: capture
                 // it for later opens and push it into every already-open document
                 // before forwarding the event verbatim to the UI.
-                if let RestEvent::SessionReady { user_id, .. } = &evt {
+                if let RestEvent::SessionReady {
+                    user_id,
+                    display_name,
+                    ..
+                } = &evt
+                {
                     self.my_user_id = Some(*user_id);
+                    self.my_display_name = Some(display_name.clone());
                     for doc in self.docs.values_mut() {
                         doc.state.set_user_id(*user_id);
+                        doc.state.set_display_name(display_name);
                     }
                 }
                 self.send_to_ui(UiEvent::Rest { id, evt });

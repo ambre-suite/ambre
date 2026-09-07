@@ -1302,12 +1302,17 @@ pub fn main() {
                 // the current presenter so the Follow affordance appears. The event
                 // still flows to the view below for the overlay pass.
                 UiEvent::Viewport {
-                    event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::PeerPresence(u)),
+                    event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::PeerPresence(peers)),
                     ..
                 } => {
-                    if u.presence.present_slide.is_some() {
-                        presenter_peer_toile.set(Some(u.user_id));
-                    }
+                    // The event is the whole live set (`PRESENCE-009`), so a
+                    // presenter who left it stops being offered to follow.
+                    presenter_peer_toile.set(
+                        peers
+                            .iter()
+                            .find(|p| p.presence.present_slide.is_some())
+                            .map(|p| p.user_id),
+                    );
                 }
                 _ => {}
             }

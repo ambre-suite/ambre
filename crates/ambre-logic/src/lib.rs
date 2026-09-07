@@ -161,6 +161,17 @@ impl DocState {
             DocState::Trame(_) => {}
         }
     }
+
+    /// Seed the session's display name beside the `UserId`, from the same
+    /// `SessionReady`. Toile stamps it on every outbound presence sample so a
+    /// collaborator reads a name rather than a hex prefix (`TOILE-UI-076`); it
+    /// is cosmetic and decides nothing (`PRESENCE-004`).
+    fn set_display_name(&mut self, name: &str) {
+        match self {
+            DocState::Toile(state) => state.set_display_name(name.to_owned()),
+            DocState::Trame(_) => {}
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -220,6 +231,10 @@ struct LogicState {
     /// that keys per-user state (Toile reactions, presence identity) always has
     /// it before the first edit.
     my_user_id: Option<UserId>,
+    /// The session's display name, from the same `SessionReady`. Seeded into a
+    /// document opened afterwards, so a board opened later still labels this
+    /// peer's cursor (`TOILE-UI-076`).
+    my_display_name: Option<String>,
     /// P3 responses this Logic thread issued on behalf of a document
     /// (`toile-media`): a `RequestId` present here routes its answering
     /// `RestEvent` (or correlated `ApiError`) back into the owning engine instead
@@ -251,6 +266,7 @@ impl LogicState {
             to_persist,
             docs: HashMap::new(),
             my_user_id: None,
+            my_display_name: None,
             rest_routes: HashMap::new(),
             export_cx: None,
         }

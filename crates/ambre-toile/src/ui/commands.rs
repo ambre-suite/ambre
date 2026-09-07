@@ -136,6 +136,7 @@ describe! {
     TOOL_STICKY: palette::TOOL_STICKY, "Sticky note", Some(IconId("note-outline")), &[letter('n')], TOOL;
     TOOL_TEXT: palette::TOOL_TEXT, "Text", Some(IconId("format-text")), &[letter('t')], TOOL;
     TOOL_COMMENT: palette::TOOL_COMMENT, "Comment", Some(IconId("comment-outline")), &[letter('m')], TOOL;
+    TOOL_LASER: palette::TOOL_LASER, "Highlighter", Some(IconId("cursor-pointer")), &[letter('l')], TOOL;
     TOOL_HAND: palette::TOOL_HAND, "Hand", Some(IconId("hand-back-right")), &[letter('h')], TOOL;
     FIND_OPEN: FIND, "Find", None, &[KeyBinding::primary('f')], FIND_REPLACE;
     COMMENTS_OPEN: menu_bar::COMMENTS, "Comments", Some(IconId("comment-multiple-outline")), &[], VIEW;

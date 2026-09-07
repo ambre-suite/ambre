@@ -1081,8 +1081,18 @@ pub enum ToileCommand {
     // `toile-engine`) --
     /// A local presence sample (cursor move, live-stroke sample, laser point,
     /// selection) to broadcast to peers. Produces a `SendEphemeral` payload and
-    /// no display event / CRDT delta: the local cursor is drawn by the UI itself.
-    Presence(PresencePayload),
+    /// no CRDT delta: the local cursor is drawn by the UI itself.
+    ///
+    /// `now_ms` is the UI thread's wall clock, which the Logic thread does not
+    /// hold (`features/ambre-spec-toile-comments.md section 5`, the same
+    /// argument). It never travels: it ages the peers this client knows about,
+    /// so one that stopped sending leaves the live set (`TOILE-185`). The UI
+    /// sends a sample on every gesture and a heartbeat while idle, so the clock
+    /// always advances.
+    Presence {
+        payload: PresencePayload,
+        now_ms: i64,
+    },
 }
 
 impl ToileCommand {
@@ -1114,7 +1124,7 @@ impl ToileCommand {
                 | Self::CopyElements { .. }
                 // Ephemeral only: a viewer still shows a cursor
                 // (`toile-presence`).
-                | Self::Presence(_)
+                | Self::Presence { .. }
         )
     }
 }
@@ -1133,6 +1143,12 @@ impl ToileCommand {
 /// in `ambre-sync`, so a peer cannot spoof another user's cursor.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PresencePayload {
+    /// The sender's display name, cosmetic and forgeable
+    /// (`1-Foundations/ambre-spec-presence.md`, `PRESENCE-004`): it labels a
+    /// cursor and decides neither identity, nor colour, nor permission -- both
+    /// come from the `UserId` the transport resolved. `None` falls back to a
+    /// short handle derived from that id.
+    pub name: Option<String>,
     /// World-space pointer; `None` means the pointer left the board.
     pub cursor: Option<Point>,
     /// The peer's current selection, drawn as halos. Empty = nothing selected.
@@ -1209,10 +1225,14 @@ pub enum ToileEvent {
     /// state, never synced and never an undo item.
     FindResults(FindResults),
     DanglingConnector(ConnectorId),
-    /// A remote peer's cursor / live stroke / laser / selection to render,
-    /// keyed by the canonical `UserId` (`toile-presence`). Ephemeral, never
-    /// persisted.
-    PeerPresence(PresenceUpdate),
+    /// The whole live peer set to render, each entry keyed by the canonical
+    /// `UserId` (`toile-presence`, `PRESENCE-009`). Ephemeral, never persisted.
+    ///
+    /// The set, not one peer: the view replaces its mirror with it, so a peer
+    /// who stopped sending is an absent entry and stops being painted, with no
+    /// departure signal anywhere in the workspace (`TOILE-UI-075`,
+    /// `TOILE-185`).
+    PeerPresence(Vec<PresenceUpdate>),
     /// Local undo/redo stack availability, driving the chrome affordances
     /// (`toile-undo`).
     UndoState {

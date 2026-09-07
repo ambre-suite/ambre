@@ -27,7 +27,9 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 
 use ambre_bus::UserId;
-use ambre_bus::app::toile::{DisplayNode, DisplayViewport, ElementId, PresencePayload};
+use ambre_bus::app::toile::{
+    DisplayNode, DisplayViewport, ElementId, PresencePayload, PresenceUpdate,
+};
 use ambre_canvas::TextCache;
 use ambre_draw::{
     Affine, Alignment, BezPath, Brush, Color, DrawSurface, FontContext, Point,
@@ -47,6 +49,55 @@ const CURSOR_SIZE_PX: f64 = 14.0;
 /// Name-label font size, in logical pixels.
 const LABEL_FONT_PX: f32 = 12.0;
 
+/// How long a laser sample stays visible, in milliseconds. Long enough to read a
+/// gesture across the board, short enough that a highlighter held still leaves
+/// nothing behind (`TOILE-UI-077`).
+const LASER_FADE_MS: f64 = 1_200.0;
+
+/// How often the local peer sends a sample while nothing changes, in
+/// milliseconds. It is what keeps this client in the others' live set
+/// (`PRESENCE-009`), and what advances the Logic thread's only clock, so it must
+/// stay well under `PRESENCE_TTL_MS`: several heartbeats may be lost before a
+/// peer is aged out.
+pub const PRESENCE_HEARTBEAT_MS: f64 = 2_000.0;
+
+/// The broadcast schedule for this peer's own presence (`TOILE-UI-073`). Pure:
+/// it decides whether the sample built this frame is worth sending, and holds
+/// nothing else.
+///
+/// A sample goes out when it differs from the last one sent -- a moved pointer,
+/// a changed selection, a stroke sample, a laser point -- or when the heartbeat
+/// is due. The gesture path is what carries the latency; the heartbeat only says
+/// "still here".
+#[derive(Default)]
+pub struct PresenceSender {
+    last: Option<PresencePayload>,
+    last_sent_ms: f64,
+}
+
+impl PresenceSender {
+    /// The sample to broadcast this frame, or `None` when nothing changed and
+    /// the heartbeat is not due yet.
+    pub fn due(&mut self, sample: PresencePayload, now_ms: f64) -> Option<PresencePayload> {
+        let changed = self.last.as_ref() != Some(&sample);
+        let heartbeat = now_ms - self.last_sent_ms >= PRESENCE_HEARTBEAT_MS;
+        if !changed && !heartbeat {
+            return None;
+        }
+        self.last = Some(sample.clone());
+        self.last_sent_ms = now_ms;
+        Some(sample)
+    }
+
+    /// Forget what was sent, so the next frame sends afresh. The seam for a
+    /// document swap: the board these samples described is not the one the view
+    /// is about to paint.
+    pub fn reset(&mut self) {
+        self.last = None;
+        self.last_sent_ms = 0.0;
+    }
+}
+
 /// The render-thread mirror of every peer's latest presence. Fed by
 /// `ToileEvent::PeerPresence`, drained each overlay frame by [`Self::paint`].
 #[derive(Default)]
@@ -58,35 +109,40 @@ pub struct PeerCursors {
 /// a single laser point; the trail is accumulated render-side).
 struct PeerState {
     presence: PresencePayload,
-    laser_trail: VecDeque<Point>,
+    /// Laser samples with the frame clock each arrived at, so the trail fades by
+    /// age rather than by rank (`TOILE-UI-077`): a highlighter held still melts
+    /// away instead of freezing its tail.
+    laser_trail: VecDeque<(Point, f64)>,
 }
 
 impl PeerCursors {
-    /// Fold one `PeerPresence` update in, replacing the peer's presence and
-    /// extending (or clearing) its laser trail. A laser point pushes onto the
-    /// ring buffer (capped at [`LASER_TRAIL_MAX`]); `laser = None` clears it, so
-    /// the trail vanishes as soon as the peer lifts the highlighter.
-    pub fn update(&mut self, user_id: UserId, presence: PresencePayload) {
-        let state = self.peers.entry(user_id).or_insert_with(|| PeerState {
-            presence: PresencePayload::default(),
-            laser_trail: VecDeque::new(),
-        });
-        match presence.laser {
-            Some(p) => {
-                state.laser_trail.push_back(p);
-                while state.laser_trail.len() > LASER_TRAIL_MAX {
-                    state.laser_trail.pop_front();
+    /// Adopt the whole live peer set (`PRESENCE-009`): every entry replaces that
+    /// peer's presence, and a peer absent from the set is dropped, trail
+    /// included -- which is how a departure is painted without a departure
+    /// signal (`TOILE-UI-075`, `TOILE-185`).
+    ///
+    /// A laser point extends the peer's trail (a ring buffer capped at
+    /// [`LASER_TRAIL_MAX`], each sample stamped `now_ms`); `laser = None` clears
+    /// it, so the trail vanishes as soon as the peer lifts the highlighter.
+    pub fn adopt(&mut self, peers: Vec<PresenceUpdate>, now_ms: f64) {
+        self.peers
+            .retain(|id, _| peers.iter().any(|p| &p.user_id == id));
+        for PresenceUpdate { user_id, presence } in peers {
+            let state = self.peers.entry(user_id).or_insert_with(|| PeerState {
+                presence: PresencePayload::default(),
+                laser_trail: VecDeque::new(),
+            });
+            match presence.laser {
+                Some(p) => {
+                    state.laser_trail.push_back((p, now_ms));
+                    while state.laser_trail.len() > LASER_TRAIL_MAX {
+                        state.laser_trail.pop_front();
+                    }
                 }
+                None => state.laser_trail.clear(),
             }
-            None => state.laser_trail.clear(),
+            state.presence = presence;
         }
-        state.presence = presence;
-    }
-
-    /// Drop a peer that has left (a future Sync-level departure signal); also the
-    /// reset seam on a document swap.
-    pub fn remove(&mut self, user_id: &UserId) {
-        self.peers.remove(user_id);
     }
 
     /// Forget every peer (document swap).
@@ -100,7 +156,9 @@ impl PeerCursors {
     }
 
     /// Paint every known peer's presence into the top overlay pass, in screen
-    /// space above all content. Pure over `DrawSurface`: host-testable.
+    /// space above all content. `now_ms` is the frame clock, which ages the
+    /// laser trails (`TOILE-UI-077`). Pure over `DrawSurface`: host-testable.
+    #[allow(clippy::too_many_arguments)]
     pub fn paint<S: DrawSurface>(
         &self,
         surface: &mut S,
@@ -108,6 +166,7 @@ impl PeerCursors {
         cam: &ViewportTransform,
         font_cx: &mut FontContext,
         text_cache: &mut TextCache,
+        now_ms: f64,
     ) {
         let w2s = cam.world_to_screen();
         // Deterministic peer order so the overlay draw log is stable for tests
@@ -117,7 +176,7 @@ impl PeerCursors {
         for (user_id, state) in peers {
             let color = peer_color(user_id);
             paint_peer(
-                surface, user_id, state, &color, vp, &w2s, font_cx, text_cache,
+                surface, user_id, state, &color, vp, &w2s, font_cx, text_cache, now_ms,
             );
         }
     }
@@ -134,6 +193,7 @@ fn paint_peer<S: DrawSurface>(
     w2s: &Affine,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
+    now_ms: f64,
 ) {
     let p = &state.presence;
 
@@ -155,34 +215,62 @@ fn paint_peer<S: DrawSurface>(
 
     // 3. Laser trail: a fading highlighter trail, oldest -> newest, each segment
     // a touch more opaque so the trail melts behind the moving point.
-    paint_laser(surface, &state.laser_trail, color, w2s);
+    paint_laser(surface, &state.laser_trail, color, w2s, now_ms);
 
     // 4. Cursor + name chip at the peer's pointer, if the pointer is on-board.
     if let Some(cursor) = p.cursor {
         let screen = *w2s * cursor;
-        paint_cursor(surface, screen, user_id, color, font_cx, text_cache);
+        let label = peer_label(user_id, p.name.as_deref());
+        paint_cursor(surface, screen, &label, color, font_cx, text_cache);
     }
 }
 
-/// Stroke the laser ring buffer as a recency-faded polyline. Each segment's
-/// alpha rises toward the head so the trail decays smoothly without a timer.
+/// Stroke the laser ring buffer as an age-faded polyline: a segment's alpha
+/// falls with how long ago it arrived, and one older than [`LASER_FADE_MS`] is
+/// not drawn at all. Fading by age rather than by rank is what makes a
+/// highlighter held still fade out instead of freezing its tail
+/// (`TOILE-UI-077`).
 fn paint_laser<S: DrawSurface>(
     surface: &mut S,
-    trail: &VecDeque<Point>,
+    trail: &VecDeque<(Point, f64)>,
     color: &Color,
     w2s: &Affine,
+    now_ms: f64,
 ) {
     if trail.len() < 2 {
         return;
     }
-    let n = trail.len();
-    for i in 1..n {
-        let a = *w2s * trail[i - 1];
-        let b = *w2s * trail[i];
-        // Newest segment fully opaque, tail fades to ~10%.
-        let t = i as f32 / n as f32;
-        let faded = color.with_alpha(0.1 + 0.9 * t);
-        surface.stroke_line(a.x, a.y, b.x, b.y, faded, 3.0);
+    for i in 1..trail.len() {
+        let (pa, _) = trail[i - 1];
+        let (pb, tb) = trail[i];
+        let alpha = laser_alpha(tb, now_ms);
+        if alpha <= 0.0 {
+            continue;
+        }
+        let a = *w2s * pa;
+        let b = *w2s * pb;
+        surface.stroke_line(a.x, a.y, b.x, b.y, color.with_alpha(alpha), 3.0);
+    }
+}
+
+/// The alpha of a laser segment that arrived at `sample_ms`, read at `now_ms`:
+/// opaque when fresh, zero once [`LASER_FADE_MS`] has passed. A sample from the
+/// future (a clock that stepped back) reads as fresh rather than as invisible.
+pub fn laser_alpha(sample_ms: f64, now_ms: f64) -> f32 {
+    let age = (now_ms - sample_ms).max(0.0);
+    if age >= LASER_FADE_MS {
+        return 0.0;
+    }
+    (1.0 - age / LASER_FADE_MS) as f32
+}
+
+/// What a peer's chip reads: the display name their sample carried, or a short
+/// handle derived from the id when it carried none (`TOILE-UI-076`). A blank
+/// name is no name: it would paint an empty chip.
+pub fn peer_label(user_id: &UserId, name: Option<&str>) -> String {
+    match name.map(str::trim) {
+        Some(n) if !n.is_empty() => n.to_string(),
+        _ => short_handle(user_id),
     }
 }
 
@@ -190,7 +278,7 @@ fn paint_laser<S: DrawSurface>(
 fn paint_cursor<S: DrawSurface>(
     surface: &mut S,
     at: Point,
-    user_id: &UserId,
+    label: &str,
     color: &Color,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
@@ -206,13 +294,11 @@ fn paint_cursor<S: DrawSurface>(
     arrow.close_path();
     surface.fill_path(&arrow, &Brush::Solid(*color));
 
-    // Name chip: a short label in the peer colour, right of the pointer. Until
-    // the `UserId` -> display-name directory lands (SYNC P4), the label is the
-    // id's short hex prefix -- a stable, human-distinguishable handle.
-    let label = short_handle(user_id);
+    // Name chip: the peer's label in their colour, right of the pointer. What
+    // the label reads is `peer_label`; it decides nothing (`PRESENCE-004`).
     let layout = text_cache.get_or_build(
         font_cx,
-        &label,
+        label,
         LABEL_FONT_PX,
         200.0,
         Alignment::Start,
@@ -329,11 +415,22 @@ mod tests {
     }
 
     fn paint(cursors: &PeerCursors, vp: &DisplayViewport) -> RecordingSurface {
+        paint_at(cursors, vp, 0.0)
+    }
+
+    /// Paint at a frame clock, for the trail's age fade.
+    fn paint_at(cursors: &PeerCursors, vp: &DisplayViewport, now_ms: f64) -> RecordingSurface {
         let mut surface = RecordingSurface::new();
         let mut font_cx = FontContext::new();
         let mut tc = TextCache::new(1.0);
-        cursors.paint(&mut surface, vp, &cam(), &mut font_cx, &mut tc);
+        cursors.paint(&mut surface, vp, &cam(), &mut font_cx, &mut tc, now_ms);
         surface
+    }
+
+    /// Adopt a one-peer live set at clock zero, the shape every test below used
+    /// before the set replaced the per-peer update (`PRESENCE-009`).
+    fn adopt_one(cursors: &mut PeerCursors, user_id: UserId, presence: PresencePayload) {
+        cursors.adopt(vec![PresenceUpdate { user_id, presence }], 0.0);
     }
 
     #[test]
@@ -348,7 +445,8 @@ mod tests {
     #[test]
     fn cursor_draws_arrow_and_label_chip() {
         let mut cursors = PeerCursors::default();
-        cursors.update(
+        adopt_one(
+            &mut cursors,
             user(3),
             PresencePayload {
                 cursor: Some(Point::new(0.0, 0.0)),
@@ -367,7 +465,8 @@ mod tests {
     #[test]
     fn selection_ghosts_outline_visible_elements_only() {
         let mut cursors = PeerCursors::default();
-        cursors.update(
+        adopt_one(
+            &mut cursors,
             user(5),
             PresencePayload {
                 // "a" is on-board, "gone" is culled out -> only one box.
@@ -388,7 +487,8 @@ mod tests {
             y,
             pressure: 1.0,
         };
-        cursors.update(
+        adopt_one(
+            &mut cursors,
             user(9),
             PresencePayload {
                 live_stroke: Some(vec![sp(0.0, 0.0), sp(10.0, 10.0), sp(20.0, 5.0)]),
@@ -404,7 +504,8 @@ mod tests {
         let mut cursors = PeerCursors::default();
         // Three successive laser samples -> a 3-point trail -> 2 faded segments.
         for i in 0..3 {
-            cursors.update(
+            adopt_one(
+                &mut cursors,
                 user(11),
                 PresencePayload {
                     laser: Some(Point::new(i as f64 * 10.0, 0.0)),
@@ -416,27 +517,157 @@ mod tests {
         assert_eq!(s.count(|o| matches!(o, DrawOp::StrokeLine { .. })), 2);
 
         // Lifting the highlighter (laser = None) clears the trail.
-        cursors.update(user(11), PresencePayload::default());
+        adopt_one(&mut cursors, user(11), PresencePayload::default());
         let s = paint(&cursors, &vp_with(vec![]));
         assert_eq!(s.count(|o| matches!(o, DrawOp::StrokeLine { .. })), 0);
+    }
+
+    /// TOILE-UI-075 / TOILE-185: a peer absent from the live set stops being
+    /// painted, trail included. No departure signal exists anywhere; the set is
+    /// the whole answer (`PRESENCE-009`).
+    #[test]
+    fn a_peer_absent_from_the_set_stops_being_painted() {
+        let mut cursors = PeerCursors::default();
+        let (a, b) = (user(1), user(2));
+        let at = |x: f64| PresencePayload {
+            cursor: Some(Point::new(x, 0.0)),
+            laser: Some(Point::new(x, 1.0)),
+            ..Default::default()
+        };
+        cursors.adopt(
+            vec![
+                PresenceUpdate {
+                    user_id: a,
+                    presence: at(0.0),
+                },
+                PresenceUpdate {
+                    user_id: b,
+                    presence: at(10.0),
+                },
+            ],
+            0.0,
+        );
+        assert_eq!(
+            paint(&cursors, &vp_with(vec![])).count(|o| matches!(o, DrawOp::FillPath { .. })),
+            2,
+            "one arrow per live peer"
+        );
+
+        // Bob left: the next set carries Alice alone.
+        cursors.adopt(
+            vec![PresenceUpdate {
+                user_id: a,
+                presence: at(0.0),
+            }],
+            0.0,
+        );
+        let s = paint(&cursors, &vp_with(vec![]));
+        assert_eq!(
+            s.count(|o| matches!(o, DrawOp::FillPath { .. })),
+            1,
+            "the departed peer is gone"
+        );
+
+        // And an empty set paints nothing at all.
+        cursors.adopt(Vec::new(), 0.0);
+        assert!(cursors.is_empty());
+        assert!(paint(&cursors, &vp_with(vec![])).ops().is_empty());
+    }
+
+    /// TOILE-UI-077: the trail fades by age. A highlighter held still keeps
+    /// sending the same point, and the trail must still melt away.
+    #[test]
+    fn a_still_highlighter_fades_out() {
+        let mut cursors = PeerCursors::default();
+        for _ in 0..3 {
+            cursors.adopt(
+                vec![PresenceUpdate {
+                    user_id: user(7),
+                    presence: PresencePayload {
+                        laser: Some(Point::new(5.0, 5.0)),
+                        ..Default::default()
+                    },
+                }],
+                0.0,
+            );
+        }
+        // Read at the sample clock: the segments are there.
+        assert_eq!(
+            paint_at(&cursors, &vp_with(vec![]), 0.0)
+                .count(|o| matches!(o, DrawOp::StrokeLine { .. })),
+            2
+        );
+        // Read a fade later, with no new sample: nothing is drawn.
+        assert_eq!(
+            paint_at(&cursors, &vp_with(vec![]), LASER_FADE_MS + 1.0)
+                .count(|o| matches!(o, DrawOp::StrokeLine { .. })),
+            0,
+            "an aged trail is not painted"
+        );
+        assert_eq!(laser_alpha(0.0, 0.0), 1.0);
+        assert_eq!(laser_alpha(0.0, LASER_FADE_MS), 0.0);
+        // A sample from the future reads as fresh, never as invisible.
+        assert_eq!(laser_alpha(100.0, 0.0), 1.0);
+    }
+
+    /// TOILE-UI-076: the chip reads the name the sample carried, and falls back
+    /// to the short handle when it carried none -- or a blank one.
+    #[test]
+    fn the_label_is_the_name_the_sample_carried() {
+        let id = user(42);
+        assert_eq!(peer_label(&id, Some("Ada")), "Ada");
+        assert_eq!(peer_label(&id, None), short_handle(&id));
+        assert_eq!(peer_label(&id, Some("   ")), short_handle(&id));
+    }
+
+    /// TOILE-UI-073: a sample goes out when it changed, and otherwise only on
+    /// the heartbeat -- which is what keeps this peer in the others' live set.
+    #[test]
+    fn a_sample_is_sent_on_a_change_or_on_the_heartbeat() {
+        let mut sender = PresenceSender::default();
+        let at = |x: f64| PresencePayload {
+            cursor: Some(Point::new(x, 0.0)),
+            ..Default::default()
+        };
+        assert!(sender.due(at(0.0), 0.0).is_some(), "the first sample sends");
+        assert!(
+            sender.due(at(0.0), 1.0).is_none(),
+            "an unchanged sample waits for the heartbeat"
+        );
+        assert!(
+            sender.due(at(1.0), 2.0).is_some(),
+            "a moved pointer sends at once"
+        );
+        assert!(
+            sender.due(at(1.0), 2.0 + PRESENCE_HEARTBEAT_MS).is_some(),
+            "an idle peer still says it is there"
+        );
+        // A document swap forgets what was sent, so the new board sends afresh.
+        sender.reset();
+        assert!(sender.due(at(1.0), 2.0 + PRESENCE_HEARTBEAT_MS).is_some());
     }
 
     #[test]
     fn two_peers_get_distinct_colours() {
         let mut cursors = PeerCursors::default();
-        cursors.update(
-            user(1),
-            PresencePayload {
-                cursor: Some(Point::new(0.0, 0.0)),
-                ..Default::default()
-            },
-        );
-        cursors.update(
-            user(2),
-            PresencePayload {
-                cursor: Some(Point::new(5.0, 5.0)),
-                ..Default::default()
-            },
+        cursors.adopt(
+            vec![
+                PresenceUpdate {
+                    user_id: user(1),
+                    presence: PresencePayload {
+                        cursor: Some(Point::new(0.0, 0.0)),
+                        ..Default::default()
+                    },
+                },
+                PresenceUpdate {
+                    user_id: user(2),
+                    presence: PresencePayload {
+                        cursor: Some(Point::new(5.0, 5.0)),
+                        ..Default::default()
+                    },
+                },
+            ],
+            0.0,
         );
         let s = paint(&cursors, &vp_with(vec![]));
         // Two arrows, each its own peer colour.

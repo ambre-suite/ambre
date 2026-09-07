@@ -23,7 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|
 | `TOILE-UI-036` | INV | Exactly one tool MUST be active on the board. | this spec section 2 | structural, and the type is the proof: the machine holds one `ambre_toile::ui::tool::Tool` and every arm replaces it, so a second active tool has nowhere to live | verified |
 | `TOILE-UI-243` | INV | The board MUST NOT let the active tool reach the Logic thread: it decides what a pointer event means, and nothing more. | this spec section 4; `UI-THREAD-004` | structural, and the type is the proof: no `ToileCommand` carries a tool, and a tool `CommandId` is absent from the command-to-application map, so the only thing that crosses is the command a gesture produced | verified |
-| `TOILE-UI-244` | INV | A palette button and its bare key MUST arm the same tool. | this spec section 2; section 3 | `ambre_toile::ui::palette::tests::tool_keys_round_trip_key_to_command_to_tool` walks key to command to tool for all eight, `::tool_for_command_maps_every_tool_id` and `::tool_chords_are_distinct` for the map and the collisions. The chord arms the default note colour and a swatch button arms its own, which is the same tool and not the same colour | verified |
+| `TOILE-UI-244` | INV | A palette button and its bare key MUST arm the same tool. | this spec section 2; section 3 | `ambre_toile::ui::palette::tests::tool_keys_round_trip_key_to_command_to_tool` walks key to command to tool for every one of them, `::tool_for_command_maps_every_tool_id` and `::tool_chords_are_distinct` for the map and the collisions. The chord arms the default note colour and a swatch button arms its own, which is the same tool and not the same colour | verified |
 | `TOILE-UI-039` | OBS | The canvas cursor MUST say what the armed tool will do. | this spec section 3 | `ambre_toile::ui::palette::tests::cursor_reflects_the_active_tool` asserts the note cursor, the crosshair, the grab hand and the arrow | verified |
 | `TOILE-UI-245` | OBS | Over a single selection, the cursor MUST follow the hovered handle and tilt with the element. | this spec section 3 | `ambre_toile::ui::palette::tests::resize_cursor_uses_native_keywords_when_axis_aligned` for the upright case, `::resize_cursor_rotates_continuously_when_the_element_is_rotated` for the exact angle, and `ambre_toile::ui::tool::tests::hover_handle_follows_the_element_rotation` for the handle the hover picks | verified |
 | `TOILE-UI-246` | OBS | An in-flight drag MUST keep one cursor for the whole gesture, wherever the pointer wanders. | this spec section 3 | `ambre_toile::ui::tool::tests::gesture_cursor_reflects_the_in_flight_drag` asserts the cursor each drag opens with; that it then holds is the construction, since the handle is captured at press and read back unchanged | verified |
@@ -112,6 +112,8 @@ pub enum Tool {
     Connector,          // drag from one element anchor to another
     Draw,               // freehand: sample, stream, commit on release
     Text,               // click to place a text element
+    Comment,            // drop a comment thread (`features/ambre-spec-toile-comments.md`)
+    Laser,              // the highlighter: a trail the peers see and the board never keeps
     Hand,               // pan only
 }
 ```
@@ -131,6 +133,8 @@ create-then-restyle.
 | Shape | drag a rectangle | `CreateElement` at the drag rectangle, or at the default size |
 | Connector | anchor to anchor | `CreateConnector`; a release on empty board emits nothing |
 | Draw | press, move, release | one `CommitStroke` carrying the raw samples |
+| Comment | click | none: the composer opens, and the thread is born with its first message (`features/ambre-spec-toile-comments.md`) |
+| Laser | press, move, release | none: the point rides the presence sample and is never board state (`features/ambre-spec-toile-presence.md`) |
 | Hand | drag | none: the camera moves (`features/ambre-spec-toile-viewport.md`) |
 
 **Steps, on a gesture:**
@@ -198,7 +202,7 @@ the board returns to Select, ready to type into (`TOILE-UI-038`).
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
-| One explicit machine owns every gesture | a handler per tool, each free to emit what it wants | eight tools times press, move and release is a matrix, and spreading it over the features that own each element makes "one command per gesture" a rule nobody can check. One machine makes it a property of one module |
+| One explicit machine owns every gesture | a handler per tool, each free to emit what it wants | every tool times press, move and release is a matrix, and spreading it over the features that own each element makes "one command per gesture" a rule nobody can check. One machine makes it a property of one module |
 | Nothing is written while the pointer is down | streaming the transform as it moves | a drag at 60 frames a second is sixty operations, sixty history entries and sixty deltas for one user action. The presence path already streams it without touching the document |
 | The preview transforms the object, not a box | drawing the selection box alone during the gesture | a user resizing a note wants to see the text reflow, and an outline says where it will land, not what it will look like |
 | A degenerate gesture emits nothing | committing whatever the gesture described, however small | a click is how a user cancels, and a zero-area shape or a connector to nowhere is an element only an undo can remove. The transform handles are the corner the code has not reached: they commit whatever they were, moved or not (`TOILE-UI-252`) |

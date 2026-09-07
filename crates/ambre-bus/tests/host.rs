@@ -271,7 +271,10 @@ fn read_only_and_local_commands_are_not_mutating() {
         AppCommand::Toile(ToileCommand::SetViewport(ToileViewport::default())),
         AppCommand::Toile(ToileCommand::RequestSnapshot),
         // Toile: ephemeral only -- a viewer still shows a cursor (`toile-presence`).
-        AppCommand::Toile(ToileCommand::Presence(PresencePayload::default())),
+        AppCommand::Toile(ToileCommand::Presence {
+            payload: PresencePayload::default(),
+            now_ms: 0,
+        }),
     ];
     for cmd in cases {
         assert!(

@@ -18,7 +18,8 @@ use std::collections::HashMap;
 use ambre_bus::app::toile::CommentAnchor;
 use ambre_bus::app::toile::{
     ClipboardPayload as ToileClipboardPayload, DisplayElement, DisplayGeom, DisplayNode,
-    DisplayViewport, ElementId, ElementKind, ThreadId, ToileCommand, ToileEvent, Viewport,
+    DisplayViewport, ElementId, ElementKind, PresencePayload, ThreadId, ToileCommand, ToileEvent,
+    Viewport,
 };
 use ambre_bus::{AppCommand, AppEvent, DocumentId, LogicCommand, UiEvent};
 use ambre_canvas::{
@@ -35,7 +36,7 @@ use super::comments::{self, CommentDraft};
 use super::edit::{EditIntent, InlineEditor};
 use super::embed;
 use super::hit::hit_topmost;
-use super::presence::PeerCursors;
+use super::presence::{PeerCursors, PresenceSender};
 use super::present::{DEFAULT_TRANSITION_MS, Transition};
 use super::reactions;
 use super::render;
@@ -111,6 +112,12 @@ const DUPLICATE_NUDGE: f64 = 10.0;
 /// hides for the next (`toile-tools`). ~530 ms is the familiar desktop
 /// cadence.
 const CARET_BLINK_MS: f64 = 530.0;
+
+/// How many trailing samples of an in-flight freehand stroke ride a presence
+/// frame (`TOILE-UI-217`). Presence is relayed and forgotten, and a stroke can
+/// run to thousands of samples: a peer needs to see where the pen is, and the
+/// finished stroke reaches them as a CRDT delta when it commits.
+const LIVE_STROKE_TAIL: usize = 64;
 
 /// Max press-to-release travel (screen px) still treated as a click, not a drag,
 /// for click-to-edit (`toile-text-editing`): beyond it the gesture is a move and
@@ -321,6 +328,10 @@ pub struct ToileView {
     /// `UserId` resolution that keys inbound frames); the render pass is exercised
     /// against synthetic events.
     presence: PeerCursors,
+    /// The broadcast schedule for this peer's own presence
+    /// (`toile-presence`, `TOILE-UI-073`): it decides whether the sample built
+    /// this frame is worth sending, and holds nothing else.
+    presence_out: PresenceSender,
 
     /// Presentation focus mode (`toile-presentation`): driven by
     /// `PresentModeChanged`, it makes the content pass hide the board grid so the
@@ -490,6 +501,7 @@ impl ToileView {
             pending_fit: false,
             last_stats_sel: Vec::new(),
             presence: PeerCursors::default(),
+            presence_out: PresenceSender::default(),
             present: false,
             transition: None,
             anim_overrides: HashMap::new(),
@@ -635,12 +647,12 @@ impl ToileView {
                     self.queue_viewport();
                 }
             }
-            // Remote presence (`toile-presence`): fold the peer's latest sample
-            // into the render mirror and mark the overlay dirty so the cursor /
-            // ghosts / laser repaint. Keyed by the sender's canonical `UserId`
-            // (spoof-proof, `toile-presence`).
-            ToileEvent::PeerPresence(update) => {
-                self.presence.update(update.user_id, update.presence);
+            // Remote presence (`toile-presence`): adopt the whole live set, so a
+            // peer absent from it stops being painted with no departure signal
+            // (`PRESENCE-009`, `TOILE-UI-075`). Each entry is keyed by the
+            // sender's canonical `UserId` (spoof-proof, `TOILE-177`).
+            ToileEvent::PeerPresence(peers) => {
+                self.presence.adopt(peers, self.frame_now_ms);
                 self.data_dirty = true;
             }
             ToileEvent::Error(e) => {
@@ -1253,6 +1265,47 @@ impl ToileView {
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn drain_quick_style(&mut self) {}
+
+    // -- Presence (`toile-presence`) ---------------------------------------
+
+    /// Build this peer's presence sample from live view state: the pointer in
+    /// world space, the selection, the in-flight freehand stroke and the
+    /// highlighter point. The sample replaces the peer's presence whole on every
+    /// receiver, so a field that is over reads as absent rather than as stale
+    /// (`TOILE-178`).
+    fn presence_sample(&self) -> PresencePayload {
+        PresencePayload {
+            // The name is stamped by the Logic thread, which holds the session
+            // (`TOILE-UI-076`).
+            name: None,
+            cursor: Some(self.cam.screen_to_world() * self.last_pointer),
+            selection: self.selection.clone(),
+            // The tail alone: a sample rides the wire on every gesture frame,
+            // and a long stroke would resend its whole history each time. What
+            // a peer needs is where the pen is now; the finished stroke arrives
+            // as a delta when it commits.
+            live_stroke: self
+                .machine
+                .live_stroke()
+                .map(|pts| pts[pts.len().saturating_sub(LIVE_STROKE_TAIL)..].to_vec()),
+            laser: self.machine.laser(),
+            // The presentation broadcast rides its own frame, emitted by the
+            // Logic thread on a slide change (`toile-presentation`).
+            present_slide: None,
+        }
+    }
+
+    /// Send this peer's sample if it changed or the heartbeat is due
+    /// (`TOILE-UI-073`). Lossy: a dropped sample is corrected by the next one,
+    /// and presence must never displace an edit on a full channel.
+    fn broadcast_presence(&mut self, now_ms: f64) {
+        if let Some(payload) = self.presence_out.due(self.presence_sample(), now_ms) {
+            self.send_lossy(ToileCommand::Presence {
+                payload,
+                now_ms: now_ms as i64,
+            });
+        }
+    }
 
     // -- Comments bridge (`toile-comments`) --------------------------------
 
@@ -2283,6 +2336,12 @@ impl ToileView {
             }
         }
 
+        // Broadcast this peer's gesture (`TOILE-UI-073`). Once per frame, so a
+        // pointer stream that outruns the display costs one sample; and on a
+        // heartbeat while nothing changes, which is what keeps this client in
+        // the others' live set and advances the Logic thread's only clock.
+        self.broadcast_presence(now_ms);
+
         let any_dirty = self.needs_full
             || self.viewport_changed
             || self.data_dirty
@@ -2368,8 +2427,14 @@ impl ToileView {
         // ghosts, live strokes and laser trails, above content, in each peer's
         // cross-app colour.
         if !self.presence.is_empty() {
-            self.presence
-                .paint(surface, &self.display, &self.cam, font_cx, text_cache);
+            self.presence.paint(
+                surface,
+                &self.display,
+                &self.cam,
+                font_cx,
+                text_cache,
+                self.frame_now_ms,
+            );
         }
 
         // Reaction badges (`toile-reactions`): a chip row under each
@@ -2593,6 +2658,7 @@ impl ToileView {
         self.edit_pointer_down = false;
         self.machine.cancel();
         self.presence.clear();
+        self.presence_out.reset();
         self.present = false;
         self.transition = None;
         self.anim_overrides.clear();
