@@ -597,6 +597,36 @@ pub struct CommentThread {
     pub messages: Vec<CommentMessage>,
 }
 
+/// One pin of the derived viewport (`toile-comments`, `TOILE-026`). Carries
+/// where the pin sits, how many messages the thread holds and whether it is
+/// resolved -- and no body (`TOILE-205`).
+///
+/// `at` is a world point: the anchor point itself, or the top-right corner of
+/// the anchored element, which the pin follows through every move. The painter
+/// maps it to screen and draws a constant-size marker there (`TOILE-UI-022`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct CommentPin {
+    pub thread: ThreadId,
+    pub at: Point,
+    pub messages: u32,
+    pub resolved: bool,
+}
+
+/// One row of the board-wide thread list (`toile-comments`). The panel shows
+/// every thread, including one whose anchor element is gone
+/// (`TOILE-FEAT-016`), so this list is read from the whole document and not
+/// from the culled viewport. `preview` is the opening message, so a reader
+/// recognises the thread before opening it; the rest of the conversation
+/// arrives only when the thread is opened (`TOILE-205`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct CommentSummary {
+    pub id: ThreadId,
+    pub anchor: CommentAnchor,
+    pub resolved: bool,
+    pub messages: u32,
+    pub preview: String,
+}
+
 // -----------------------------------------------------------------------------
 // Auto-layout spec (`toile-auto-layout`) -- the CRDT design intent carried
 // by a frame. The pure `solve_layout` solver that turns this spec + child sizes
@@ -927,6 +957,14 @@ pub enum ToileCommand {
         thread: ThreadId,
         resolved: bool,
     },
+    /// Read comments back for the panel, which holds no state of its own
+    /// (`TOILE-UI-023`). `Some(thread)` reads that one thread whole and answers
+    /// [`CommentThreadData`](ToileEvent::CommentThreadData); `None` reads the
+    /// board-wide list and answers [`CommentList`](ToileEvent::CommentList).
+    /// A pure read: no commit, no delta, no undo item.
+    ReadComments {
+        thread: Option<ThreadId>,
+    },
 
     // -- Vector boolean ops (`toile-vector-paths`) --
     /// Combine the selected shape / path elements with a boolean rule
@@ -1210,6 +1248,15 @@ pub enum ToileEvent {
     /// A thread must take the focus (`toile-comments`): the comment tool just
     /// dropped it, or a click landed on its pin. The panel opens on it.
     CommentThreadOpened(ThreadId),
+    /// Every thread of the board, in id order (`toile-comments`): the answer to
+    /// a `ReadComments { thread: None }`. A thread whose anchor element is gone
+    /// is in it, because the discussion outlives the drawing
+    /// (`TOILE-FEAT-016`).
+    CommentList(Vec<CommentSummary>),
+    /// One whole thread, bodies included (`toile-comments`): the answer to a
+    /// `ReadComments { thread: Some(..) }`. This is the only path a message body
+    /// takes to the UI (`TOILE-205`).
+    CommentThreadData(CommentThread),
     /// A foreign-file import applied successfully
     /// (`toile-import-export`). Carries the lossy-import summary the UI
     /// surfaces: how many elements landed and which unsupported constructs were
@@ -1246,6 +1293,12 @@ pub struct DisplayViewport {
     /// `HashMap`) so iteration order is deterministic -- the derived viewport
     /// must equal a full rebuild byte-for-byte (convergence tests).
     pub reactions: BTreeMap<TargetId, ReactionTally>,
+    /// The comment pins to paint (`toile-comments`, `TOILE-026`): one entry per
+    /// thread whose anchor resolves inside this camera. Message bodies never
+    /// ride here -- a thread is read when it is opened (`TOILE-205`) -- and a
+    /// thread whose anchor element is gone carries no pin (`TOILE-025`).
+    /// Ordered by thread id, so the derived viewport equals a full rebuild.
+    pub pins: Vec<CommentPin>,
 }
 
 #[derive(Clone, Debug)]

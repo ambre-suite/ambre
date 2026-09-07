@@ -42,6 +42,8 @@ pub const TOOL_DRAW: CommandId = CommandId("toile.tool.draw");
 pub const TOOL_STICKY: CommandId = CommandId("toile.tool.sticky");
 /// Text element.
 pub const TOOL_TEXT: CommandId = CommandId("toile.tool.text");
+/// Drop a comment thread (`toile-comments`, `TOILE-UI-042`).
+pub const TOOL_COMMENT: CommandId = CommandId("toile.tool.comment");
 /// Pan-only hand.
 pub const TOOL_HAND: CommandId = CommandId("toile.tool.hand");
 
@@ -55,6 +57,7 @@ pub const TOOL_COMMANDS: &[CommandId] = &[
     TOOL_DRAW,
     TOOL_STICKY,
     TOOL_TEXT,
+    TOOL_COMMENT,
     TOOL_HAND,
 ];
 
@@ -72,6 +75,7 @@ pub fn tool_for_command(id: CommandId) -> Option<Tool> {
         // palette's colour picker arms Sticky(colour) directly.
         TOOL_STICKY => Some(Tool::Sticky(STICKY_DEFAULT_FILL)),
         TOOL_TEXT => Some(Tool::Text),
+        TOOL_COMMENT => Some(Tool::Comment),
         TOOL_HAND => Some(Tool::Hand),
         _ => None,
     }
@@ -121,7 +125,9 @@ pub fn cursor_css(tool: Tool) -> &'static str {
         Tool::Select => "default",
         Tool::Hand => "grab",
         Tool::Sticky(_) => STICKY_CURSOR,
-        Tool::Text | Tool::Shape(_) | Tool::Pen | Tool::Connector | Tool::Draw => "crosshair",
+        Tool::Text | Tool::Shape(_) | Tool::Pen | Tool::Connector | Tool::Draw | Tool::Comment => {
+            "crosshair"
+        }
     }
 }
 
@@ -299,6 +305,7 @@ mod tests {
             ('d', TOOL_DRAW, Tool::Draw),
             ('n', TOOL_STICKY, Tool::Sticky(STICKY_DEFAULT_FILL)),
             ('t', TOOL_TEXT, Tool::Text),
+            ('m', TOOL_COMMENT, Tool::Comment),
             ('h', TOOL_HAND, Tool::Hand),
         ];
         for (c, id, tool) in cases {
@@ -314,7 +321,7 @@ mod tests {
         // the keyboard).
         let mut keymap = Keymap::new();
         bind_tool_keys(&mut keymap);
-        let mut ids: Vec<CommandId> = ['v', 'p', 'r', 'c', 'd', 'n', 't', 'h']
+        let mut ids: Vec<CommandId> = ['v', 'p', 'r', 'c', 'd', 'n', 't', 'm', 'h']
             .into_iter()
             .filter_map(|c| keymap.resolve(KeyBinding::new(Modifiers::NONE, Key::char(c))))
             .collect();

@@ -185,6 +185,7 @@ mod tests {
         PdfPage {
             viewport: DisplayViewport {
                 reactions: Default::default(),
+                pins: Vec::new(),
                 viewport: Default::default(),
                 nodes: vec![rect_node("a", Rect::new(10.0, 10.0, 90.0, 90.0))],
             },

@@ -315,6 +315,7 @@ impl ToileState {
             ToileCommand::ResolveThread { thread, resolved } => {
                 self.resolve_thread(&thread, resolved)
             }
+            ToileCommand::ReadComments { thread } => self.read_comments(thread.as_ref()),
             ToileCommand::BooleanOp {
                 op,
                 ids,

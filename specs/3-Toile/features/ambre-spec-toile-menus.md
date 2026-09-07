@@ -222,11 +222,13 @@ specified in their own document, and this one restates none of them.
   accelerator for each.
 * **No entry opens the menu from the keyboard.** The shared component navigates by keyboard once
   open, and nothing opens it, so a user without a pointer reaches none of these commands.
-* **Three surfaces the design names carry no entry.** Align and distribute, the link and the
-  comment appear in the described menus and in none of the built ones, because none of the three
-  commands exists in the workspace. Two of them are Stories --
-  "Align and distribute" and "Hyperlinks and go-to-frame" (`ambre-roadmap.md` E4) -- and the third
-  lands with "Comments".
+* **Two surfaces the design names carry no entry.** Align and distribute and the link appear in the
+  described menus and in none of the built ones, because neither command exists in the workspace.
+  Both are Stories -- "Align and distribute" and "Hyperlinks and go-to-frame"
+  (`ambre-roadmap.md` E4).
+* **The comment entry opens the panel and comments on nothing.** The View menu opens the board-wide
+  list, and no context-menu entry drops a thread on the element under the cursor: the tool and the
+  pin are the only ways in (`features/ambre-spec-toile-comments.md section 4`).
 * **A refused command answers with nothing.** The board refuses some commands -- a locked element
   ignores a move -- and no rule states what the user is told when an entry produces no change. Three
   refusals on this surface are already silent: an id the resolver does not know (`TOILE-UI-152`), a

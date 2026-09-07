@@ -61,6 +61,7 @@ impl ToileState {
         DisplayViewport {
             viewport: vp,
             reactions: self.reaction_tallies(&visible),
+            pins: self.comment_pins(&visible, &vp),
             nodes,
         }
     }

@@ -110,7 +110,7 @@ model and the GPU vector canvas.
 | `[x]` Toile interop | MVP | the SVG and image converters, the SVG serializer, the media upload round trip and the PDF pages of a deck, all Logic-side |
 | `[x]` The new-document type picker | MVP | create any kind of document from the launcher, not only a spreadsheet |
 | `[x]` `ARCH P6` -- the cross-app plane | MVP | who a peer is, what they are allowed to do, and the plane that runs one document inside another: its own session, its own permission, its own event stream, painted and driven by the launcher |
-| `[ ]` Comments | MVP | anchored comment threads with replies and resolve, their pins on the board, and the side panel |
+| `[x]` Comments | MVP | anchored comment threads with replies and resolve, their pins on the board, and the side panel |
 | `[ ]` Live presence on the board | MVP | this peer's cursor, selection and stroke reach the others, the highlighter becomes a tool, a peer who leaves stops being painted, and a label is a name. The render half ships and receives nothing |
 | `[ ]` Order the deck | MVP | a panel that adds a frame to the presentation, reorders it and removes it, and a deleted frame that leaves it. Playback, the transition and the speaker notes ship and have no deck to run on |
 | `[ ]` The Toile interop surface | MVP | a file dropped or picked reaches the importer at the drop point, an export entry hands the bytes to the browser, and the lossy-import report reaches the user. Every converter ships and no gesture calls one |

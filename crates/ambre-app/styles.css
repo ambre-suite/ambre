@@ -2551,3 +2551,152 @@ input[type="radio"] {
         padding: 12px 14px;
     }
 }
+
+/* ---------------------------------------------------------------------------
+   Comments panel and drop composer (toile-comments). The panel is pinned
+   top-right over the canvas, opened by the View menu, a click on a pin or a
+   fresh thread; the composer is a one-field popover placed where the comment
+   tool clicked. Both read their colours from the tokens, like every other
+   chrome surface.
+   --------------------------------------------------------------------------- */
+.ambre-comments-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 320px;
+    max-height: 70vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    padding: 8px;
+    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    color: var(--text);
+}
+.ambre-comments-title {
+    display: flex;
+    align-items: center;
+}
+.ambre-comments-heading {
+    flex: 1 1 auto;
+    font-weight: 600;
+    font-size: 15px;
+}
+.ambre-comments-panel button {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+}
+.ambre-comments-panel button:hover {
+    background: var(--surface-hover);
+}
+.ambre-comments-close {
+    border-color: transparent;
+    color: var(--text-dim);
+}
+.ambre-comments-filter {
+    display: flex;
+    gap: 6px;
+}
+.ambre-comments-filter-btn[aria-pressed="true"] {
+    background: var(--surface-2);
+    border-color: var(--accent);
+}
+.ambre-comments-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.ambre-comments-row-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+}
+.ambre-comments-preview {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ambre-comments-count,
+.ambre-comments-resolved {
+    flex: 0 0 auto;
+    color: var(--text-dim);
+    font-size: 11px;
+}
+.ambre-comments-thread {
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.ambre-comments-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.ambre-comments-author {
+    font-weight: 600;
+}
+.ambre-comments-time {
+    margin-left: 6px;
+    color: var(--text-dim);
+    font-size: 11px;
+}
+.ambre-comments-body {
+    margin: 2px 0 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.ambre-comments-reply {
+    display: flex;
+    gap: 6px;
+}
+.ambre-comments-input,
+.ambre-comment-composer-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 4px 6px;
+    font-size: 13px;
+}
+.ambre-comment-composer {
+    display: flex;
+    gap: 6px;
+    width: 260px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    padding: 6px;
+    font-family: Roboto, system-ui, -apple-system, sans-serif;
+}
+.ambre-comment-composer-post {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+}
+.ambre-comment-composer-post:hover {
+    background: var(--surface-hover);
+}

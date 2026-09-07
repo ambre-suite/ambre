@@ -390,6 +390,7 @@ mod tests {
 
     fn viewport(nodes: Vec<DisplayElement>) -> DisplayViewport {
         DisplayViewport {
+            pins: Vec::new(),
             reactions: Default::default(),
             viewport: Viewport::default(),
             nodes: nodes.into_iter().map(DisplayNode::Element).collect(),

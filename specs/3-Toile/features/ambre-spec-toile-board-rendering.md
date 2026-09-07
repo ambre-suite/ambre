@@ -179,9 +179,9 @@ override at all, which is what stops a fade half-way (`TOILE-UI-085`).
 * **The tessellation cache is the canvas layer's, and unmeasured here.** The tolerance bucketing this
   feature relies on is owned by `ambre-spec-drawing-surface.md`; no test of this crate observes a
   cache hit.
-* **Comment pins are not painted, and nothing carries one.** This document said the visible set
-  held a field for them. It does not: the only thing beside the sequence is the reaction tally. The
-  whole subject lands with the "Comments" Story (`ambre-roadmap.md` E4) and its rules live with it.
+* **The comment pins paint outside this walk.** They ride the visible set beside the reaction
+  tallies, and their pass is the last overlay of the frame rather than a node of the content walk,
+  so no rule of this document covers them (`features/ambre-spec-toile-comments.md section 4`).
 * **Two rows read `verified` on assertions that can hold vacuously.** The card ink and the rotated
   body are asserted by looping over the glyph runs the surface recorded, and a host with no font
   shapes none -- both tests say so themselves. `TOILE-UI-265` is `unverified` for it and

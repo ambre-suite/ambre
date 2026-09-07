@@ -233,6 +233,11 @@ struct Wiring {
     /// the canvas view applies it on top of the live common style as one
     /// `RestyleElements` over the selection.
     toile_quick_style: RwSignal<Option<toile_chrome::StyleEdit>>,
+    /// The comments panel's signals (`toile-comments`): the canvas view writes
+    /// the list, the open thread and the drop composer, and drains the intents
+    /// the panel and the composer emit. The panel holds nothing of its own
+    /// (`TOILE-UI-023`).
+    toile_comments: toile_chrome::CommentSignals,
     /// Status-bar selection aggregates (`trame-status-bar`); `None` on a single
     /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
@@ -490,6 +495,16 @@ pub fn main() {
     // edits from `toile_quick_style`, mirroring the inspector's model / restyle pair.
     let toile_float_bar = RwSignal::new(None::<toile_chrome::FloatBar>);
     let toile_quick_style = RwSignal::new(None::<toile_chrome::StyleEdit>);
+    // Comments (`toile-comments`): the panel and the drop composer read what
+    // the view published and write back one intent at a time, the same seam as
+    // the inspector's model / restyle pair.
+    let toile_comments = toile_chrome::CommentSignals {
+        panel: RwSignal::new(false),
+        list: RwSignal::new(Vec::new()),
+        open: RwSignal::new(None),
+        draft: RwSignal::new(None),
+        intent: RwSignal::new(None),
+    };
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
     // boot the dark theme. `theme_ctl` is the single source of truth for the
@@ -670,6 +685,7 @@ pub fn main() {
         toile_restyle,
         toile_float_bar,
         toile_quick_style,
+        toile_comments,
         sheets,
         active_sheet,
     );
@@ -1366,6 +1382,13 @@ pub fn main() {
     let ch_toile_restyle = RwSignal::new(None::<ambre_bus::app::toile::ElementStyle>);
     let ch_toile_float_bar = RwSignal::new(None::<toile_chrome::FloatBar>);
     let ch_toile_quick_style = RwSignal::new(None::<toile_chrome::StyleEdit>);
+    let ch_toile_comments = toile_chrome::CommentSignals {
+        panel: RwSignal::new(false),
+        list: RwSignal::new(Vec::new()),
+        open: RwSignal::new(None),
+        draft: RwSignal::new(None),
+        intent: RwSignal::new(None),
+    };
     let ch_formula_ref = RwSignal::new(String::new());
     let ch_formula_text = RwSignal::new(String::new());
     let ch_formula_action = RwSignal::new(None::<FormulaAction>);
@@ -1405,6 +1428,7 @@ pub fn main() {
                 ch_toile_restyle,
                 ch_toile_float_bar,
                 ch_toile_quick_style,
+                ch_toile_comments,
             )),
             // Trame, or any non-Toile embed (only Trame/Toile are paintable views;
             // a stray type falls back to Trame rather than crash the frame).
@@ -1458,6 +1482,7 @@ pub fn main() {
                     toile_restyle,
                     toile_float_bar,
                     toile_quick_style,
+                    toile_comments,
                 ))
             } else {
                 AppView::Trame(TrameView::new(

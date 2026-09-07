@@ -12,6 +12,7 @@
 // ============================================================================
 
 pub mod commands;
+pub mod comments;
 pub mod edit;
 pub mod embed;
 pub mod find;

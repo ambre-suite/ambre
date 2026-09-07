@@ -14,9 +14,11 @@
 
 use std::collections::HashMap;
 
+#[cfg(target_arch = "wasm32")]
+use ambre_bus::app::toile::CommentAnchor;
 use ambre_bus::app::toile::{
     ClipboardPayload as ToileClipboardPayload, DisplayElement, DisplayGeom, DisplayNode,
-    DisplayViewport, ElementId, ElementKind, ToileCommand, ToileEvent, Viewport,
+    DisplayViewport, ElementId, ElementKind, ThreadId, ToileCommand, ToileEvent, Viewport,
 };
 use ambre_bus::{AppCommand, AppEvent, DocumentId, LogicCommand, UiEvent};
 use ambre_canvas::{
@@ -27,6 +29,9 @@ use ambre_draw::{BoundingBox, FontContext, Point, Rect, Vec2};
 
 use crate::logic::animate::AnimatedElement;
 
+#[cfg(target_arch = "wasm32")]
+use super::comments::CommentIntent;
+use super::comments::{self, CommentDraft};
 use super::edit::{EditIntent, InlineEditor};
 use super::embed;
 use super::hit::hit_topmost;
@@ -284,6 +289,17 @@ pub struct ToileView {
     /// style), the same seam as `restyle`. Wasm-only.
     #[cfg(target_arch = "wasm32")]
     quick_style: RwSignal<Option<super::floatbar::StyleEdit>>,
+    /// The comment panel's signals (`toile-comments`): the view publishes the
+    /// list and the open thread it read back from Logic, and drains the panel's
+    /// intents. The panel holds nothing of its own (`TOILE-UI-023`). Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    comments: super::comments::CommentSignals,
+
+    /// The element a thread the panel opened is anchored to, awaiting the
+    /// `SelectionStats` reply that carries its bounds so the camera can come to
+    /// it (`TOILE-UI-309`). The same channel as the find focus, and checked
+    /// after it. `cfg`-agnostic so the dispatch arm stays uniform.
+    pending_comment_focus: Option<ElementId>,
 
     /// Set while a Fit / Zoom-to-selection awaits the `SelectionStats` reply whose
     /// bounds it will frame (`toile-viewport`). The reply treats
@@ -400,6 +416,7 @@ impl ToileView {
         >,
         #[cfg(target_arch = "wasm32")] float_bar: RwSignal<Option<super::floatbar::FloatBar>>,
         #[cfg(target_arch = "wasm32")] quick_style: RwSignal<Option<super::floatbar::StyleEdit>>,
+        #[cfg(target_arch = "wasm32")] comments: super::comments::CommentSignals,
     ) -> Self {
         if !embedded {
             text_input.focus();
@@ -412,6 +429,7 @@ impl ToileView {
             cam: ViewportTransform::new(canvas_width, canvas_height),
             display: DisplayViewport {
                 reactions: Default::default(),
+                pins: Vec::new(),
                 viewport: Viewport::default(),
                 nodes: Vec::new(),
             },
@@ -466,6 +484,9 @@ impl ToileView {
             float_bar,
             #[cfg(target_arch = "wasm32")]
             quick_style,
+            #[cfg(target_arch = "wasm32")]
+            comments,
+            pending_comment_focus: None,
             pending_fit: false,
             last_stats_sel: Vec::new(),
             presence: PeerCursors::default(),
@@ -602,9 +623,13 @@ impl ToileView {
                         self.needs_full = true;
                         self.queue_viewport();
                     }
-                } else if self.pending_find_focus.take().is_some()
+                } else if (self.pending_find_focus.take().is_some()
+                    || self.pending_comment_focus.take().is_some())
                     && let Some(bounds) = stats.bounds
                 {
+                    // The same channel serves the find focus and a thread the
+                    // panel opened, whose anchor element may sit off-screen
+                    // (`TOILE-UI-309`).
                     self.cam.center = bounds.center();
                     self.needs_full = true;
                     self.queue_viewport();
@@ -688,10 +713,23 @@ impl ToileView {
             ToileEvent::ImportFailed(reason) => {
                 tracing::warn!("Toile import failed: {reason}");
             }
-            // A thread changed or asks for the focus (`toile-comments`). The
-            // pins travel on `DisplayViewport`, and a later slice of the Story
-            // opens the panel. The canvas repaints for neither event today.
-            ToileEvent::CommentsUpdated(_) | ToileEvent::CommentThreadOpened(_) => {}
+            // A thread changed (`toile-comments`). The pins ride the display
+            // viewport, so ask for a fresh one; and the panel holds no state of
+            // its own, so re-read the list and the thread it shows
+            // (`TOILE-UI-310`).
+            ToileEvent::CommentsUpdated(thread) => {
+                self.queue_viewport();
+                self.reread_comments(&thread);
+            }
+            // A thread takes the focus (`toile-comments`): the comment tool
+            // just dropped it, or a click landed on its pin. Open the panel on
+            // it (`TOILE-UI-082`, `TOILE-UI-307`).
+            ToileEvent::CommentThreadOpened(thread) => self.open_thread(thread),
+            // The board-wide list, and one whole thread: the answers to a
+            // `ReadComments`. Both go straight to the panel's signals, which are
+            // the panel's only source (`TOILE-UI-023`).
+            ToileEvent::CommentList(list) => self.publish_comment_list(list),
+            ToileEvent::CommentThreadData(thread) => self.publish_comment_thread(thread),
         }
     }
 
@@ -771,6 +809,16 @@ impl ToileView {
                     self.gesture_commit_pending = true;
                 }
                 self.send_edit(cmd);
+            }
+            // The comment tool dropped a thread (`TOILE-UI-042`): open the
+            // composer where the click landed, so the user types there
+            // (`TOILE-UI-307`). Nothing is written until they post: a thread is
+            // born with its first message.
+            ToolOutcome::Comment(anchor) => {
+                let at = self.css_point(self.last_pointer);
+                self.open_composer(CommentDraft { anchor, at });
+                // A drop is a one-shot action, like a sticky placement.
+                self.set_tool(Tool::Select);
             }
         }
         // The overlay preview is derived from live machine state each event.
@@ -998,6 +1046,21 @@ impl ToileView {
             self.panning = Some(screen);
             return true;
         }
+        // A pin answers before the board does (`TOILE-UI-082`): a click on it
+        // opens its thread, and the element under it stays unselected
+        // (`TOILE-UI-308`). Only the Select tool picks pins -- a creation tool
+        // still places where it clicks.
+        if let comments::BoardPress::Thread(thread) = comments::press_target(
+            self.machine.tool() == Tool::Select,
+            button,
+            &self.display.pins,
+            &self.cam.world_to_screen(),
+            screen,
+        ) {
+            self.open_thread(thread);
+            self.publish_cursor(screen);
+            return true;
+        }
         let world = self.cam.screen_to_world() * screen;
         // Arm a possible embed focus (`toile-embeds`). Consumes
         // nothing: the board's own gesture runs below either way, and the grant is
@@ -1191,6 +1254,166 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn drain_quick_style(&mut self) {}
 
+    // -- Comments bridge (`toile-comments`) --------------------------------
+
+    /// Open `thread` in the panel: ask Logic for it whole (the board carries no
+    /// body, `TOILE-205`) and show the panel (`TOILE-UI-082`).
+    fn open_thread(&mut self, thread: ThreadId) {
+        self.show_comments_panel();
+        self.send_edit(ToileCommand::ReadComments {
+            thread: Some(thread),
+        });
+    }
+
+    /// Re-read what the panel shows after `thread` changed (`TOILE-UI-310`):
+    /// the board-wide list always, and the open thread when it is that one. The
+    /// panel keeps no answer of its own (`TOILE-UI-023`).
+    #[cfg(target_arch = "wasm32")]
+    fn reread_comments(&mut self, thread: &ThreadId) {
+        if !self.comments.panel.get_untracked() {
+            return;
+        }
+        self.send_edit(ToileCommand::ReadComments { thread: None });
+        let showing = self.comments.open.get_untracked().map(|t| t.id);
+        if showing.as_ref() == Some(thread) {
+            self.send_edit(ToileCommand::ReadComments {
+                thread: Some(thread.clone()),
+            });
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn reread_comments(&mut self, _thread: &ThreadId) {}
+
+    /// Show the panel and refresh its board-wide list.
+    #[cfg(target_arch = "wasm32")]
+    fn show_comments_panel(&mut self) {
+        self.comments.panel.set(true);
+        self.send_edit(ToileCommand::ReadComments { thread: None });
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn show_comments_panel(&mut self) {}
+
+    /// Publish the board-wide list the panel renders.
+    #[cfg(target_arch = "wasm32")]
+    fn publish_comment_list(&mut self, list: Vec<ambre_bus::app::toile::CommentSummary>) {
+        self.comments.list.set(list);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn publish_comment_list(&mut self, _list: Vec<ambre_bus::app::toile::CommentSummary>) {}
+
+    /// Publish the one thread the panel shows whole.
+    #[cfg(target_arch = "wasm32")]
+    fn publish_comment_thread(&mut self, thread: ambre_bus::app::toile::CommentThread) {
+        self.comments.open.set(Some(thread));
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn publish_comment_thread(&mut self, _thread: ambre_bus::app::toile::CommentThread) {}
+
+    /// Open the composer the comment tool dropped (`TOILE-UI-307`).
+    #[cfg(target_arch = "wasm32")]
+    fn open_composer(&mut self, draft: CommentDraft) {
+        self.comments.draft.set(Some(draft));
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn open_composer(&mut self, _draft: CommentDraft) {}
+
+    /// Drop everything the panel shows: a route change leaves the board whose
+    /// threads these are.
+    #[cfg(target_arch = "wasm32")]
+    fn clear_comments(&mut self) {
+        self.comments.panel.set(false);
+        self.comments.list.set(Vec::new());
+        self.comments.open.set(None);
+        self.comments.draft.set(None);
+        self.comments.intent.set(None);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn clear_comments(&mut self) {}
+
+    /// Drain the intent the panel or the composer emitted this frame. The DOM
+    /// names no camera and holds no command channel, so the view carries each
+    /// one out (`TOILE-UI-023`). Wasm-only; a host no-op keeps `update`
+    /// cfg-agnostic.
+    #[cfg(target_arch = "wasm32")]
+    fn drain_comment_intent(&mut self) {
+        let Some(intent) = self.comments.intent.get_untracked() else {
+            return;
+        };
+        self.comments.intent.set(None);
+        match intent {
+            CommentIntent::Post(body) => {
+                // An empty post is not a thread: leave the composer open rather
+                // than close it on a stray Enter.
+                if body.is_empty() {
+                    return;
+                }
+                let Some(draft) = self.comments.draft.get_untracked() else {
+                    return;
+                };
+                self.comments.draft.set(None);
+                self.send_edit(ToileCommand::CreateComment {
+                    anchor: draft.anchor,
+                    body,
+                    ts: wall_clock_ms(),
+                });
+            }
+            CommentIntent::Discard => self.comments.draft.set(None),
+            CommentIntent::Reply { thread, body } => {
+                if body.is_empty() {
+                    return;
+                }
+                self.send_edit(ToileCommand::ReplyComment {
+                    thread,
+                    body,
+                    ts: wall_clock_ms(),
+                });
+            }
+            CommentIntent::Resolve { thread, resolved } => {
+                self.send_edit(ToileCommand::ResolveThread { thread, resolved });
+            }
+            CommentIntent::Focus { thread, anchor } => {
+                self.focus_thread(&anchor);
+                self.open_thread(thread);
+            }
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn drain_comment_intent(&mut self) {}
+
+    /// Bring the camera to a thread's anchor (`TOILE-UI-309`). A point anchor is
+    /// its own target; an element anchor may sit outside the culled set, so the
+    /// view asks Logic for its bounds and recentres when the answer lands, the
+    /// same round trip as the find focus.
+    #[cfg(target_arch = "wasm32")]
+    fn focus_thread(&mut self, anchor: &CommentAnchor) {
+        match anchor {
+            CommentAnchor::Point { x, y } => {
+                self.cam.center = Point::new(*x, *y);
+                self.needs_full = true;
+                self.queue_viewport();
+            }
+            CommentAnchor::Element(id) => {
+                self.pending_comment_focus = Some(id.clone());
+                self.send_edit(ToileCommand::RequestSelectionStats {
+                    ids: vec![id.clone()],
+                });
+            }
+        }
+    }
+
+    /// A physical-pixel screen point in the CSS pixels a `position: fixed` DOM
+    /// overlay is placed in, the same mapping as the floating selection toolbar.
+    #[cfg(target_arch = "wasm32")]
+    fn css_point(&self, screen: Point) -> Point {
+        let dpr = device_pixel_ratio();
+        let (ox, oy) = canvas_client_offset();
+        Point::new(ox + screen.x / dpr, oy + screen.y / dpr)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn css_point(&self, screen: Point) -> Point {
+        screen
+    }
+
     /// Apply the tool the DOM palette / keyboard selected
     /// (`toile-tools`): if the shared signal differs from the
     /// machine's current tool, switch (which cancels any in-flight gesture and
@@ -1237,6 +1460,12 @@ impl ToileView {
             return;
         }
         match id {
+            // The View menu's comments entry (`toile-comments` section 4): open
+            // the panel on the whole board. UI-only, like the zoom actions.
+            mb::COMMENTS => {
+                self.show_comments_panel();
+                return;
+            }
             mb::ZOOM_IN => {
                 self.cam.zoom_by_center(super::viewport::ZOOM_STEP);
                 self.needs_full = true;
@@ -1962,6 +2191,10 @@ impl ToileView {
         // (`toile-styles`).
         self.drain_quick_style();
 
+        // Apply the comment panel's / composer's intent this frame
+        // (`toile-comments`).
+        self.drain_comment_intent();
+
         // Apply the tool the DOM palette / keyboard selected this frame
         // (`toile-tools`).
         self.apply_active_tool();
@@ -2151,6 +2384,19 @@ impl ToileView {
             self.theme.palette(),
         );
 
+        // Comment pins (`toile-comments`): painted last of the board overlays,
+        // so no content and no other overlay hides one (`TOILE-UI-306`), and in
+        // screen space, so a pin keeps one size through the zoom
+        // (`TOILE-UI-022`).
+        comments::paint_pins(
+            surface,
+            &self.display,
+            &self.cam.world_to_screen(),
+            font_cx,
+            text_cache,
+            self.theme.palette(),
+        );
+
         // Inline text editor: flush queued intents, draw caret/selection/glyphs,
         // and perform a deferred commit + close (`toile-text-editing`). Drawn
         // above content.
@@ -2327,6 +2573,7 @@ impl ToileView {
         self.document_id = document_id;
         self.display = DisplayViewport {
             reactions: Default::default(),
+            pins: Vec::new(),
             viewport: Viewport::default(),
             nodes: Vec::new(),
         };
@@ -2336,6 +2583,8 @@ impl ToileView {
         self.find_hits.clear();
         self.find_focus = None;
         self.pending_find_focus = None;
+        self.pending_comment_focus = None;
+        self.clear_comments();
         self.editor = None;
         self.edit_pending_open = None;
         self.edit_open_on_create = false;
@@ -2372,6 +2621,14 @@ fn set_caret_pipe(pipe: &ambre_canvas::TextInput, origin: ambre_draw::Point, car
 }
 
 /// The browser device pixel ratio (physical px per CSS px), or 1.0 off the web.
+/// The author's wall clock in milliseconds, stamped on a comment command
+/// (`toile-comments` section 5). The Logic thread holds no clock, and nothing
+/// orders by this one (`TOILE-FEAT-012`): the reader sees it, and that is all.
+#[cfg(target_arch = "wasm32")]
+fn wall_clock_ms() -> i64 {
+    js_sys::Date::now() as i64
+}
+
 #[cfg(target_arch = "wasm32")]
 fn device_pixel_ratio() -> f64 {
     web_sys::window()

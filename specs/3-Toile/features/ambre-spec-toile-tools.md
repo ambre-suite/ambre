@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE TOOLS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the eight tools, the palette and the cursor are built; the comment tool is not.
+**Implementation:** implemented.
 
 > A user picks a tool and the board obeys one rule: the gesture shows what it will make, and the
 > release makes it once. `Escape` takes it back and re-arms Select.
@@ -77,8 +77,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `TOILE-UI-042` | POST | The comment tool MUST drop a thread where it clicks, on an element or on empty board. | this spec section 5; `features/ambre-spec-toile-comments.md section 4` | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
-| `TOILE-UI-261` | FRAME | Dropping a thread MUST NOT change the board: no element is created, moved or selected. | this spec section 5; `features/ambre-spec-toile-comments.md section 4` | not built -- lands with the "Comments" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `TOILE-UI-042` | POST | The comment tool MUST drop a thread where it clicks, on an element or on empty board. | this spec section 3; `features/ambre-spec-toile-comments.md section 4` | `ambre_toile::ui::tool::tests::the_comment_tool_drops_a_thread_where_it_clicks`, which reads an element anchor off a click on a note and a point anchor off a click on empty board | verified |
+| `TOILE-UI-261` | FRAME | Dropping a thread MUST NOT change the board: no element is created, moved or selected. | this spec section 3; `features/ambre-spec-toile-comments.md section 4` | `ambre_toile::ui::tool::tests::the_comment_tool_drops_a_thread_where_it_clicks`, on the outcome it reads back: the drop yields an anchor and never a command, so nothing reaches the document | verified |
 
 * **Budget.** the content hit-test and input dispatch under 0.2 ms, one row of
   `ambre-spec-budgets.md section 2`, and the view-state update under 0.5 ms on the same
@@ -88,7 +88,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the machine is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What it emits is a command; what it streams mid-gesture is
   presence, sealed by the Sync worker like any other frame (`ZK-005`).
-* **Verification.** 18 `verified`, 8 `unverified`, 2 `unimplemented`. The growth is the split and
+* **Verification.** 20 `verified`, 8 `unverified`, 0 `unimplemented`. The growth is the split and
   not new coverage: twenty-four distinct tests held the document before and twenty-four hold it
   now, and the count rose because nine flat rows carried more than one rule each. What the split
   bought is three refusals nobody could see while they were folded into a claim that read as
@@ -211,9 +211,6 @@ the board returns to Select, ready to type into (`TOILE-UI-038`).
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The comment tool** (`TOILE-UI-042`). The tool set has no comment entry, and the command it would
-  emit exists nowhere in the workspace, while three sections describe the behaviour. It is the
-  largest unbuilt subject in the application, and it lands whole with its Story.
 * **The pen has no node editing.** A path is built across clicks and committed once; dragging the
   nodes of a committed path is described and unbuilt, so a path is editable by its box alone.
 * **The connector routing has one shape.** Every connector is created straight, with an arrow at the

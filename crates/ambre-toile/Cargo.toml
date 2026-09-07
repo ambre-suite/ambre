@@ -83,6 +83,10 @@ leptos = { workspace = true }
 # Context-menu entry icons (`toile-menus`): every entry glyph comes from
 # `icondata`, rendered through `leptos-icons` inside `ambre-chrome::ContextMenu`.
 leptos_icons = { workspace = true }
+# The author's wall clock, which rides a comment command because the Logic
+# thread holds none (`toile-comments` section 5). `std::time` is unavailable on
+# wasm32-unknown-unknown.
+js-sys = { workspace = true }
 
 [dev-dependencies]
 # Headless render tests: RecordingSurface mock DrawSurface + FixedClock.

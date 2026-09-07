@@ -61,6 +61,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_restyle,
         toile_float_bar,
         toile_quick_style,
+        toile_comments,
         sort_dialog,
         chrome_status,
         sheets,
@@ -1035,6 +1036,28 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 on_command=on_command
                 on_style=Callback::new(move |s: toile_chrome::StyleEdit| {
                     toile_quick_style.set(Some(s))
+                })
+            />
+        })}
+
+        // Toile comments (`toile-comments`): the board-wide thread list with the
+        // one thread it shows whole, and the composer the comment tool opens
+        // where the user clicked. Both hold nothing of their own
+        // (`TOILE-UI-023`): they render what the canvas view read back from the
+        // board and hand every action to it as one intent.
+        {boot_is_toile.then(|| view! {
+            <toile_chrome::CommentsPanel
+                state=toile_comments.panel
+                list=toile_comments.list
+                open=toile_comments.open
+                on_intent=Callback::new(move |i: toile_chrome::CommentIntent| {
+                    toile_comments.intent.set(Some(i))
+                })
+            />
+            <toile_chrome::CommentComposer
+                draft=toile_comments.draft
+                on_intent=Callback::new(move |i: toile_chrome::CommentIntent| {
+                    toile_comments.intent.set(Some(i))
                 })
             />
         })}

@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-005` | INV | The visible set MUST be resolved from the spatial index, and MUST NOT drop an element that meets the viewport. | this spec section 3 | `ambre_toile::logic::index::tests::query_visible_culls_offscreen`, `::remove_then_query_is_empty`, `ambre_toile::logic::convergence_tests::viewport_culls_offscreen_nodes` | verified |
 | `TOILE-207` | INV | The answer the UI receives MUST carry nothing the camera does not meet. | this spec section 3 | none, and **the rule fails today**: the derivation culls elements against the index and walks connectors unconditionally, so every connector of the board is routed and shipped at every camera. `viewport_culls_offscreen_nodes` filters `DisplayNode::Connector` out of what it asserts on, so no test can see it. Answered by the "Engine and render optimization" Story | unverified |
 | `TOILE-017` | CONC | Two peers exchanging the same operations in any interleaving MUST converge to the same board and the same derived caches. | this spec section 2; `ambre-spec-testing.md` | `ambre_toile::logic::convergence_tests::two_peers_converge`, `::caches_match_a_full_rebuild` (proptest over create, move, resize, rotate, restyle, delete, reorder, group, ungroup, connect, stroke, frame, slide order, auto-layout and react) | verified |
-| `TOILE-208` | INV | The answer the UI receives MUST carry no presence sample and no acknowledgement. | this spec section 3 | type-level: `DisplayViewport` has three fields -- the camera, the paint order and the reaction tallies -- and no display event acknowledges a command; the absence is the proof | verified |
+| `TOILE-208` | INV | The answer the UI receives MUST carry no presence sample and no acknowledgement. | this spec section 3 | type-level: `DisplayViewport` has four fields -- the camera, the paint order, the reaction tallies and the comment pins -- and no display event acknowledges a command; the absence is the proof | verified |
 | `TOILE-023` | INV | `ambre-toile` MUST contain no `unsafe`. | README pillar "Security" | measured zero `unsafe` in the crate, but no `#![forbid(unsafe_code)]` on its root -- a claim, not a mechanism (`ambre-spec-testing.md`, the mechanism ladder) | unverified |
 | `TOILE-089` | INV | A command handler MUST NOT send on a channel: it returns an outcome, and nothing else. | this spec section 3; `ambre-spec-message-bus.md` | type-level: `ToileState` holds no sink and no sender, and every handler returns `ToileOutcome` by value; the absence is the proof | verified |
 | `TOILE-UI-099` | INV | Every board mutation MUST leave the UI thread as a command; the UI MUST NOT write board state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level: the three outbound paths of `ui/view.rs` (`send_lossy`, `send_edit`, `send_open`) each hand a command to the Logic channel; there is no other sender, and `TOILE-UI-001` bans the CRDT on this side | verified |
@@ -315,7 +315,8 @@ recursion: the child is an ordinary entry keyed by its own document id. Why that
 
 The answer is one culled, paint-ordered snapshot of the board, built for the visible set alone. It
 carries the camera it was culled against, a single back-to-front sequence of elements and connectors,
-and the reaction tallies of the visible targets. It carries no board data beyond that: the render
+the reaction tallies of the visible targets, and the comment pins whose anchor resolves in it. It
+carries no board data beyond that: the render
 side never links the CRDT (`TOILE-UI-001`), and one snapshot per relevant change is the whole
 contract between the two threads.
 
@@ -328,6 +329,9 @@ pub struct DisplayViewport {
     /// Derived on read, never stored
     /// (`features/ambre-spec-toile-reactions.md`).
     pub reactions: BTreeMap<TargetId, ReactionTally>,
+    /// Where each pin sits, its message count and its resolved state, and no
+    /// body (`features/ambre-spec-toile-comments.md`).
+    pub pins:      Vec<CommentPin>,
 }
 
 pub enum DisplayNode {

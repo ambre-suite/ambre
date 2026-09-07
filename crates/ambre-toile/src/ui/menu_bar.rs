@@ -46,6 +46,9 @@ pub const ZOOM_TO_SELECTION: CommandId = CommandId("toile.view.zoom_to_selection
 pub const POINTER_AUTO: CommandId = CommandId("toile.view.pointer_auto");
 pub const POINTER_MOUSE: CommandId = CommandId("toile.view.pointer_mouse");
 pub const POINTER_TRACKPAD: CommandId = CommandId("toile.view.pointer_trackpad");
+/// Open the comments panel on the whole board (`toile-comments` section 4). A
+/// UI-only intent: the panel is chrome, and the board keeps no open flag.
+pub const COMMENTS: CommandId = CommandId("toile.view.comments");
 /// Enter presentation mode (the deck panel of `toile-presentation`). A stub
 /// here: the panel is owned by that feature, not this surface.
 pub const PRESENT: CommandId = CommandId("toile.present.start");
@@ -63,6 +66,7 @@ pub const MENU_BAR_COMMANDS: &[CommandId] = &[
     POINTER_AUTO,
     POINTER_MOUSE,
     POINTER_TRACKPAD,
+    COMMENTS,
     PRESENT,
 ];
 
@@ -133,6 +137,8 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
             row(POINTER_AUTO),
             row(POINTER_MOUSE),
             row(POINTER_TRACKPAD),
+            MenuRow::Separator,
+            row(COMMENTS),
         ],
         MenuId::Object => vec![
             row(menu::GROUP),

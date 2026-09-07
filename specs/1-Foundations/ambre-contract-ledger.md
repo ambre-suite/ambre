@@ -19,15 +19,15 @@
   `human-review` and `qa-manual` carry no ceiling: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2354 rows: 1580 shipped, of which 806 loose. 774 unbuilt.**
+**2354 rows: 1594 shipped, of which 805 loose. 760 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 183 | 206 | 385 |  | 774 |
-| `unverified` | 300 | 201 | 300 |  | 801 |
+| `verified` | 183 | 206 | 400 |  | 789 |
+| `unverified` | 300 | 201 | 299 |  | 800 |
 | `human-review` | 5 |  |  |  | 5 |
 | `qa-manual` |  |  |  |  | 0 |
-| `unimplemented` | 64 | 56 | 63 | 591 | 774 |
+| `unimplemented` | 64 | 56 | 49 | 591 | 760 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -102,7 +102,7 @@
 | `ambre-spec-toile-auto-layout.md` | 23 | 23 | 17 | 6 |  |
 | `ambre-spec-toile-board-rendering.md` | 26 | 26 | 10 | 16 |  |
 | `ambre-spec-toile-clipboard.md` | 17 | 17 | 11 | 6 |  |
-| `ambre-spec-toile-comments.md` | 29 | 17 | 11 | 6 | 12 |
+| `ambre-spec-toile-comments.md` | 29 | 29 | 24 | 5 |  |
 | `ambre-spec-toile-connectors.md` | 26 | 25 | 11 | 14 | 1 |
 | `ambre-spec-toile-elements.md` | 28 | 26 | 19 | 7 | 2 |
 | `ambre-spec-toile-embeds.md` | 44 | 40 | 27 | 13 | 4 |
@@ -122,7 +122,7 @@
 | `ambre-spec-toile-status-bar.md` | 13 | 13 | 7 | 6 |  |
 | `ambre-spec-toile-styles.md` | 30 | 30 | 17 | 13 |  |
 | `ambre-spec-toile-text-editing.md` | 35 | 34 | 3 | 31 | 1 |
-| `ambre-spec-toile-tools.md` | 28 | 26 | 18 | 8 | 2 |
+| `ambre-spec-toile-tools.md` | 28 | 28 | 20 | 8 |  |
 | `ambre-spec-toile-undo.md` | 6 | 6 | 2 | 4 |  |
 | `ambre-spec-toile-vector-paths.md` | 13 | 13 | 5 | 8 |  |
 | `ambre-spec-toile-viewport.md` | 31 | 29 | 15 | 14 | 2 |

@@ -2545,6 +2545,268 @@ fn replying_to_a_missing_thread_is_a_rejected_no_op() {
     );
 }
 
+/// The pins the board would paint for the default camera.
+fn pins(st: &ToileState) -> Vec<crate::logic::command::CommentPin> {
+    st.debug_viewport().pins
+}
+
+/// The events one `ReadComments` answers.
+fn read_comments(st: &mut ToileState, thread: Option<ThreadId>) -> Vec<ToileEvent> {
+    let out = st.handle_command(ToileCommand::ReadComments { thread });
+    assert!(out.update.is_none(), "a read must not mutate the doc");
+    out.display
+}
+
+#[test]
+fn a_fresh_thread_is_open_anchored_and_carries_its_first_message() {
+    // TOILE-FEAT-070: the three clauses of a drop, read back off the document.
+    let mut st = ToileState::new();
+    st.set_user_id(UserId::new());
+    let e = create_sticky(&mut st, Point::ZERO, "note");
+    let t = comment_on(&mut st, CommentAnchor::Element(e.clone()), "the point", 11);
+
+    let thread = st.comment_thread(&t).expect("the thread reads back");
+    assert!(!thread.resolved, "a dropped thread is open");
+    assert_eq!(thread.anchor, CommentAnchor::Element(e));
+    assert_eq!(
+        thread
+            .messages
+            .iter()
+            .map(|m| m.body.clone())
+            .collect::<Vec<_>>(),
+        vec!["the point".to_owned()],
+        "the thread carries the message it was dropped with"
+    );
+}
+
+#[test]
+fn a_reply_lands_at_the_end_of_the_thread() {
+    // TOILE-FEAT-071: the rule is an order, not a count. A reply inserted before
+    // an earlier one fails here.
+    let mut st = ToileState::new();
+    st.set_user_id(UserId::new());
+    let t = comment_on(&mut st, CommentAnchor::Point { x: 0.0, y: 0.0 }, "one", 0);
+    for body in ["two", "three"] {
+        st.handle_command(ToileCommand::ReplyComment {
+            thread: t.clone(),
+            body: body.to_owned(),
+            ts: 0,
+        });
+    }
+    assert_eq!(
+        bodies(&st, &t),
+        vec!["one".to_owned(), "two".to_owned(), "three".to_owned()]
+    );
+}
+
+#[test]
+fn correcting_a_message_leaves_its_neighbours_as_they_read() {
+    // TOILE-FEAT-072: the frame half of a correction, which needs an untouched
+    // neighbour to read back.
+    let mut st = ToileState::new();
+    st.set_user_id(UserId::new());
+    let t = comment_on(&mut st, CommentAnchor::Point { x: 0.0, y: 0.0 }, "first", 0);
+    st.handle_command(ToileCommand::ReplyComment {
+        thread: t.clone(),
+        body: "secnd".to_owned(),
+        ts: 0,
+    });
+    st.handle_command(ToileCommand::ReplyComment {
+        thread: t.clone(),
+        body: "third".to_owned(),
+        ts: 0,
+    });
+
+    // Correct the middle message: insert the missing letter.
+    st.handle_command(ToileCommand::EditComment {
+        thread: t.clone(),
+        message: 1,
+        delta: TextDelta {
+            at: 3,
+            delete: 0,
+            insert: "o".to_owned(),
+        },
+    });
+
+    assert_eq!(
+        bodies(&st, &t),
+        vec!["first".to_owned(), "second".to_owned(), "third".to_owned()],
+        "only the corrected message changed"
+    );
+}
+
+#[test]
+fn a_reply_moves_neither_the_pin_nor_the_resolved_flag() {
+    // TOILE-FEAT-073: writing in a thread touches the message list alone.
+    let mut st = ToileState::new();
+    st.set_user_id(UserId::new());
+    let anchor = CommentAnchor::Point { x: 12.0, y: -4.0 };
+    let t = comment_on(&mut st, anchor.clone(), "open it", 0);
+    st.handle_command(ToileCommand::ResolveThread {
+        thread: t.clone(),
+        resolved: true,
+    });
+    st.handle_command(ToileCommand::ReplyComment {
+        thread: t.clone(),
+        body: "one more".to_owned(),
+        ts: 0,
+    });
+
+    let thread = st.comment_thread(&t).expect("the thread reads back");
+    assert_eq!(thread.anchor, anchor, "a reply does not move the pin");
+    assert!(thread.resolved, "a reply does not reopen the thread");
+}
+
+#[test]
+fn a_resolve_keeps_every_message_body() {
+    // TOILE-FEAT-074: a settled point stays readable. A resolve that blanked the
+    // message it kept fails here.
+    let mut st = ToileState::new();
+    st.set_user_id(UserId::new());
+    let t = comment_on(&mut st, CommentAnchor::Point { x: 0.0, y: 0.0 }, "why", 0);
+    st.handle_command(ToileCommand::ReplyComment {
+        thread: t.clone(),
+        body: "because".to_owned(),
+        ts: 0,
+    });
+    st.handle_command(ToileCommand::ResolveThread {
+        thread: t.clone(),
+        resolved: true,
+    });
+    assert_eq!(
+        bodies(&st, &t),
+        vec!["why".to_owned(), "because".to_owned()]
+    );
+}
+
+#[test]
+fn two_peers_answering_one_brand_new_thread_both_keep_their_reply() {
+    // TOILE-FEAT-068: the birth seeding. A lazily created message list would let
+    // each peer mint a rival container, and Loro would keep one.
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    a.set_user_id(UserId::new());
+    b.set_user_id(UserId::new());
+
+    let t = comment_on(&mut a, CommentAnchor::Point { x: 0.0, y: 0.0 }, "seed", 0);
+    b.apply_remote(&a.export_snapshot());
+
+    let ra = a.handle_command(ToileCommand::ReplyComment {
+        thread: t.clone(),
+        body: "from A".to_owned(),
+        ts: 0,
+    });
+    let rb = b.handle_command(ToileCommand::ReplyComment {
+        thread: t.clone(),
+        body: "from B".to_owned(),
+        ts: 0,
+    });
+    b.apply_remote(&ra.update.expect("A's reply broadcasts a delta"));
+    a.apply_remote(&rb.update.expect("B's reply broadcasts a delta"));
+
+    let merged = bodies(&a, &t);
+    assert_eq!(merged, bodies(&b, &t), "both peers read the same thread");
+    assert_eq!(merged.len(), 3, "neither reply wrote over the other");
+    assert!(merged.contains(&"from A".to_owned()) && merged.contains(&"from B".to_owned()));
+}
+
+#[test]
+fn a_pin_carries_its_place_its_count_and_its_state() {
+    // TOILE-026: the board is told where each pin sits, how many messages it
+    // holds and whether it is resolved.
+    let mut st = ToileState::new();
+    st.set_user_id(UserId::new());
+    let e = create_sticky(&mut st, Point::new(10.0, 20.0), "note");
+    let on_element = comment_on(&mut st, CommentAnchor::Element(e), "about it", 0);
+    st.handle_command(ToileCommand::ReplyComment {
+        thread: on_element.clone(),
+        body: "agreed".to_owned(),
+        ts: 0,
+    });
+    let on_board = comment_on(&mut st, CommentAnchor::Point { x: 5.0, y: 6.0 }, "here", 0);
+    st.handle_command(ToileCommand::ResolveThread {
+        thread: on_board.clone(),
+        resolved: true,
+    });
+
+    let pins = pins(&st);
+    let element_pin = pins
+        .iter()
+        .find(|p| p.thread == on_element)
+        .expect("the anchored thread has a pin");
+    assert_eq!(element_pin.messages, 2);
+    assert!(!element_pin.resolved);
+    // The pin sits on the element it is about: its top-right corner.
+    assert_eq!(element_pin.at, Point::new(90.0, 20.0));
+
+    let board_pin = pins
+        .iter()
+        .find(|p| p.thread == on_board)
+        .expect("the free-point thread has a pin");
+    assert_eq!(board_pin.at, Point::new(5.0, 6.0));
+    assert!(board_pin.resolved);
+}
+
+#[test]
+fn a_pin_leaves_the_board_with_its_anchor_element() {
+    // TOILE-025: a pin whose element is gone is not painted -- and the thread
+    // itself stays, which `a_thread_survives_the_deletion_of_its_anchor_element`
+    // holds.
+    let mut st = ToileState::new();
+    st.set_user_id(UserId::new());
+    let e = create_sticky(&mut st, Point::ZERO, "note");
+    let t = comment_on(&mut st, CommentAnchor::Element(e.clone()), "about it", 0);
+    assert_eq!(pins(&st).len(), 1);
+
+    st.handle_command(ToileCommand::DeleteElements { ids: vec![e] });
+
+    assert!(pins(&st).is_empty(), "a dangling pin is not painted");
+    assert_eq!(
+        st.comment_thread_ids(),
+        vec![t],
+        "and the thread is untouched"
+    );
+}
+
+#[test]
+fn the_board_carries_no_body_and_a_read_carries_them_all() {
+    // TOILE-205: a thread is read when it is opened. The pin type has no body
+    // field at all, so the compiler holds half of this; the other half is that
+    // the read answers with the bodies, and it is the only thing that does.
+    let mut st = ToileState::new();
+    st.set_user_id(UserId::new());
+    let t = comment_on(
+        &mut st,
+        CommentAnchor::Point { x: 0.0, y: 0.0 },
+        "the body",
+        0,
+    );
+
+    // The board-wide list carries the opening line and the counts, no more.
+    let list = read_comments(&mut st, None);
+    let Some(ToileEvent::CommentList(rows)) = list.first() else {
+        panic!("expected a CommentList, got {list:?}");
+    };
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, t);
+    assert_eq!(rows[0].messages, 1);
+    assert_eq!(rows[0].preview, "the body");
+
+    // The whole thread, bodies included, only on an explicit read.
+    let one = read_comments(&mut st, Some(t.clone()));
+    let Some(ToileEvent::CommentThreadData(thread)) = one.first() else {
+        panic!("expected a CommentThreadData, got {one:?}");
+    };
+    assert_eq!(thread.id, t);
+    assert_eq!(thread.messages[0].body, "the body");
+
+    // An unknown thread answers nothing rather than an empty thread.
+    assert!(
+        read_comments(&mut st, Some(ElementId("ghost".to_owned()))).is_empty(),
+        "a missing thread answers nothing"
+    );
+}
+
 // -----------------------------------------------------------------------------
 // 2-peer CRDT convergence property test (DoD)
 // -----------------------------------------------------------------------------

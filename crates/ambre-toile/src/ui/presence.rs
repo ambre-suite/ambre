@@ -248,7 +248,9 @@ fn paint_cursor<S: DrawSurface>(
 
 /// A short, human-distinguishable handle for a peer: the first 8 hex chars of
 /// the canonical `UserId`. Placeholder until the display-name directory lands.
-fn short_handle(user_id: &UserId) -> String {
+/// The comment panel names a message's author with the same handle, so one peer
+/// reads the same on the board and in a thread.
+pub fn short_handle(user_id: &UserId) -> String {
     let bytes = user_id.as_bytes();
     format!(
         "{:02x}{:02x}{:02x}{:02x}",
@@ -315,6 +317,7 @@ mod tests {
 
     fn vp_with(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
+            pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
             nodes,

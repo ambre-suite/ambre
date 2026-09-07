@@ -35,8 +35,8 @@ use wasm_bindgen::JsCast;
 use crate::ui::Tool;
 use crate::ui::commands as registry;
 use crate::ui::palette::{
-    STICKY_SWATCHES, TOOL_CONNECTOR, TOOL_DRAW, TOOL_HAND, TOOL_PEN, TOOL_SELECT, TOOL_SHAPE,
-    TOOL_STICKY, TOOL_TEXT, tool_for_command,
+    STICKY_SWATCHES, TOOL_COMMENT, TOOL_CONNECTOR, TOOL_DRAW, TOOL_HAND, TOOL_PEN, TOOL_SELECT,
+    TOOL_SHAPE, TOOL_STICKY, TOOL_TEXT, tool_for_command,
 };
 
 use super::icons;
@@ -164,6 +164,7 @@ pub fn ToolPalette(active: RwSignal<Tool>) -> impl IntoView {
             {tool_button(active, TOOL_DRAW)}
             {sticky_button(active)}
             {tool_button(active, TOOL_TEXT)}
+            {tool_button(active, TOOL_COMMENT)}
             <span class="sep"></span>
             {tool_button(active, TOOL_HAND)}
         </div>

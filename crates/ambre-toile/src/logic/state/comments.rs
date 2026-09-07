@@ -35,16 +35,24 @@
 //! [`COMMENT_ORIGIN`](super::COMMENT_ORIGIN), which the `UndoManager` excludes
 //! (`TOILE-FEAT-017`).
 
+use std::collections::HashSet;
+
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
 use ambre_bus::UserId;
 
 use crate::logic::command::{
-    CommentAnchor, CommentMessage, CommentThread, TextDelta, ToileEvent, ToileOutcome,
+    CommentAnchor, CommentMessage, CommentPin, CommentSummary, CommentThread, TextDelta,
+    ToileEvent, ToileOutcome, Viewport,
 };
 use crate::logic::model::{ElementId, ThreadId};
 
 use super::{COMMENT_ORIGIN, COMMENTS, ToileState};
+
+/// How many characters of the opening message the board-wide list carries. The
+/// panel shows a row per thread, and a row is a line: the rest of the
+/// conversation arrives when the thread is opened (`TOILE-205`).
+const PREVIEW_CHARS: usize = 80;
 
 /// The thread's anchor: `Binary(postcard(CommentAnchor))`.
 const ANCHOR: &str = "anchor";
@@ -254,6 +262,93 @@ impl ToileState {
             resolved,
             messages,
         })
+    }
+
+    /// Every thread of the board as a list row (`TOILE-UI-023`): the panel
+    /// renders these and keeps none of its own. A thread whose anchor element is
+    /// gone is in the list, because the discussion outlives the drawing
+    /// (`TOILE-FEAT-016`); only the pin derivation skips it (`TOILE-025`).
+    pub fn comment_summaries(&self) -> Vec<CommentSummary> {
+        self.comment_thread_ids()
+            .into_iter()
+            .filter_map(|id| {
+                let thread = self.comment_thread(&id)?;
+                let preview = thread
+                    .messages
+                    .first()
+                    .map(|m| m.body.chars().take(PREVIEW_CHARS).collect())
+                    .unwrap_or_default();
+                Some(CommentSummary {
+                    id: thread.id,
+                    anchor: thread.anchor,
+                    resolved: thread.resolved,
+                    messages: thread.messages.len() as u32,
+                    preview,
+                })
+            })
+            .collect()
+    }
+
+    /// The pins to paint for camera `vp` (`TOILE-026`): one per thread whose
+    /// anchor resolves here. An element anchor resolves to the element's
+    /// top-right corner, so the pin follows the element through every move
+    /// (`TOILE-024`); a point anchor resolves when the camera contains it. A
+    /// thread whose anchor element is gone yields no pin and is left untouched
+    /// (`TOILE-025`). No body travels (`TOILE-205`).
+    ///
+    /// Walked in thread-id order, so two peers on one document derive the same
+    /// sequence.
+    pub(super) fn comment_pins(
+        &self,
+        visible: &HashSet<ElementId>,
+        vp: &Viewport,
+    ) -> Vec<CommentPin> {
+        let camera = vp.to_world_rect();
+        self.comment_thread_ids()
+            .into_iter()
+            .filter_map(|id| {
+                let thread = self.comment_thread(&id)?;
+                let at = match &thread.anchor {
+                    CommentAnchor::Element(element) => {
+                        // Culled, or deleted: a culled element is off-camera and a
+                        // deleted one has no rect at all (`TOILE-025`).
+                        if !visible.contains(element) {
+                            return None;
+                        }
+                        let rect = self.element_rect(element)?;
+                        kurbo::Point::new(rect.x1, rect.y0)
+                    }
+                    CommentAnchor::Point { x, y } => {
+                        let at = kurbo::Point::new(*x, *y);
+                        if !camera.contains(at) {
+                            return None;
+                        }
+                        at
+                    }
+                };
+                Some(CommentPin {
+                    thread: thread.id,
+                    at,
+                    messages: thread.messages.len() as u32,
+                    resolved: thread.resolved,
+                })
+            })
+            .collect()
+    }
+
+    /// Answer the panel's read (`TOILE-UI-023`): one whole thread, or the
+    /// board-wide list. A pure read -- no commit, no delta, no undo item. An
+    /// unknown thread answers nothing rather than an empty thread, so the panel
+    /// keeps showing what it has.
+    pub(super) fn read_comments(&self, thread: Option<&ThreadId>) -> ToileOutcome {
+        let events = match thread {
+            Some(id) => match self.comment_thread(id) {
+                Some(t) => vec![ToileEvent::CommentThreadData(t)],
+                None => Vec::new(),
+            },
+            None => vec![ToileEvent::CommentList(self.comment_summaries())],
+        };
+        ToileOutcome::display_only(events)
     }
 
     /// The thread's map container, or `None` when no thread carries `id`.

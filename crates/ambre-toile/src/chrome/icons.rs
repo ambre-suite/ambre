@@ -50,6 +50,8 @@ pub fn resolve(id: IconId) -> Option<icondata::Icon> {
         "draw" => icondata::MdiDraw,
         "note-outline" => icondata::MdiNoteOutline,
         "format-text" => icondata::MdiFormatText,
+        "comment-outline" => icondata::MdiCommentOutline,
+        "comment-multiple-outline" => icondata::MdiCommentMultipleOutline,
         "hand-back-right" => icondata::MdiHandBackRight,
         _ => return None,
     };

@@ -13,8 +13,8 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    Anchor, DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, EndCaps,
-    InitContent, PathType, ShapeKind, StrokePoint, ToileCommand,
+    Anchor, CommentAnchor, DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind,
+    EndCaps, InitContent, PathType, ShapeKind, StrokePoint, ToileCommand,
 };
 use ambre_draw::{Affine, BezPath, Point, Rect, Size};
 use kurbo::Shape;
@@ -39,6 +39,11 @@ pub enum Tool {
     Connector,
     Draw,
     Text,
+    /// Drop a comment thread where it clicks, on an element or on empty board
+    /// (`TOILE-UI-042`, `toile-comments`). The click opens a composer rather
+    /// than a thread: a thread is born with its first message, so nothing is
+    /// written until the user posts (`TOILE-UI-307`).
+    Comment,
     Hand,
 }
 
@@ -412,6 +417,10 @@ pub enum ToolOutcome {
     SelectionChanged(Vec<ElementId>),
     /// A committed document mutation to forward to Logic.
     Command(ToileCommand),
+    /// The comment tool dropped a thread here (`TOILE-UI-042`): the view opens
+    /// the composer at the click, and the thread is created only once the first
+    /// message is posted (`TOILE-UI-307`).
+    Comment(CommentAnchor),
 }
 
 /// A local, unsynced overlay to paint while a gesture is in flight.
@@ -474,6 +483,9 @@ enum Draft {
         at: Point,
         fill: Option<u32>,
     },
+    /// A click-placed comment thread, resolved to its anchor on release
+    /// (`TOILE-UI-042`).
+    Comment { at: Point },
 }
 
 /// The active-tool state machine. Replaces the bare `SelectTool` the view drove
@@ -596,6 +608,10 @@ impl ToolMachine {
                 });
                 ToolOutcome::None
             }
+            Tool::Comment => {
+                self.draft = Some(Draft::Comment { at: world });
+                ToolOutcome::None
+            }
             Tool::Connector => {
                 if let Some(id) = hit_topmost(&display.nodes, world) {
                     let b = element_bounds(display, &id).unwrap_or_default();
@@ -631,7 +647,7 @@ impl ToolMachine {
                 points.push(stroke_point(world));
                 ToolOutcome::None
             }
-            Some(Draft::Place { .. }) => ToolOutcome::None,
+            Some(Draft::Place { .. }) | Some(Draft::Comment { .. }) => ToolOutcome::None,
             None => {
                 if self.tool == Tool::Pen {
                     if self.pen_dragging
@@ -697,6 +713,16 @@ impl ToolMachine {
                             style: draw_style(),
                         })
                     }
+                }
+                Draft::Comment { at } => {
+                    // The element under the release owns the pin, so it follows
+                    // that element through every move (`TOILE-024`); an empty
+                    // board keeps a free world point.
+                    let anchor = match hit_topmost(&display.nodes, world) {
+                        Some(id) => CommentAnchor::Element(id),
+                        None => CommentAnchor::Point { x: at.x, y: at.y },
+                    };
+                    ToolOutcome::Comment(anchor)
                 }
                 Draft::Place { kind, at, fill } => {
                     let size = if kind == ElementKind::Sticky {
@@ -782,7 +808,7 @@ impl ToolMachine {
                         .map(|p| Point::new(p.x as f64, p.y as f64))
                         .collect(),
                 )),
-                Draft::Place { .. } => None,
+                Draft::Place { .. } | Draft::Comment { .. } => None,
             };
         }
         if !self.pen.is_empty() {
@@ -1192,6 +1218,7 @@ mod tests {
 
     fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
+            pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
             nodes,
@@ -1584,6 +1611,40 @@ mod tests {
                 assert_eq!(size, ambre_draw::Size::new(100.0, 100.0));
             }
             other => panic!("expected CreateElement, got {other:?}"),
+        }
+    }
+
+    /// The comment tool drops a thread where it clicks (`TOILE-UI-042`): on the
+    /// element under the click, so the pin follows it (`TOILE-024`), and on a
+    /// free world point when the board is empty there. It writes nothing: the
+    /// view opens the composer, and the thread is born with its first message
+    /// (`TOILE-UI-307`).
+    #[test]
+    fn the_comment_tool_drops_a_thread_where_it_clicks() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Comment);
+        let cam = cam();
+        let disp = viewport(vec![rect_elem("note", Rect::new(0.0, 0.0, 40.0, 40.0))]);
+
+        // On the note.
+        let on_note = Point::new(20.0, 20.0);
+        m.pointer_down(on_note, to_screen(&cam, on_note), &[], &disp, &cam, None);
+        match m.pointer_up(on_note, &disp) {
+            ToolOutcome::Comment(CommentAnchor::Element(id)) => {
+                assert_eq!(id, ElementId("note".to_owned()));
+            }
+            other => panic!("expected an element anchor, got {other:?}"),
+        }
+
+        // On empty board.
+        let empty = Point::new(300.0, 300.0);
+        m.set_tool(Tool::Comment);
+        m.pointer_down(empty, to_screen(&cam, empty), &[], &disp, &cam, None);
+        match m.pointer_up(empty, &disp) {
+            ToolOutcome::Comment(CommentAnchor::Point { x, y }) => {
+                assert_eq!((x, y), (empty.x, empty.y));
+            }
+            other => panic!("expected a point anchor, got {other:?}"),
         }
     }
 

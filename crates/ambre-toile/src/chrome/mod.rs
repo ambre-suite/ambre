@@ -11,6 +11,7 @@
 // (`ui::find`) stay in the always-compiled `ui` module so they are host-tested.
 // ============================================================================
 
+mod comments;
 mod find;
 mod floatbar;
 mod menu;
@@ -20,7 +21,13 @@ mod presenter;
 mod status;
 mod style;
 
+pub use comments::{CommentComposer, CommentsPanel};
 pub use find::{FindPanel, FindQuery};
+
+// The pins, the pick, the badge and the panel's filter are pure and host-tested
+// in `ui::comments` (like `ui::find`); the launcher names them through
+// `toile_chrome`.
+pub use crate::ui::comments::{CommentDraft, CommentIntent, CommentSignals, ThreadFilter};
 pub use floatbar::SelectionToolbar;
 pub use menu::context_entries_for;
 pub use menu_bar::TopMenuBar;

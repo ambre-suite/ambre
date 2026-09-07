@@ -329,6 +329,7 @@ dependencies = [
  "i_overlay",
  "icondata",
  "image",
+ "js-sys",
  "krilla",
  "kurbo",
  "leptos",
