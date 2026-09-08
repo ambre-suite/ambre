@@ -63,6 +63,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_quick_style,
         toile_comments,
         toile_deck,
+        toile_dropped_file,
         sort_dialog,
         chrome_status,
         sheets,
@@ -144,6 +145,12 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // the canvas is created by the AppShell).
     let ctx_menu = RwSignal::new(None::<(f64, f64)>);
     install_canvas_context_menu(ctx_menu);
+    // A file dropped on a board reaches the importer at the point it landed on
+    // (`toile-import-export`). Same reason the listener lives here: the canvas
+    // belongs to the AppShell, not to the view that paints into it.
+    if boot_is_toile {
+        install_canvas_file_drop(toile_dropped_file, toasts);
+    }
 
     // Toile cursor feedback (toile-tools): reflect the active tool on
     // the canvas element as a CSS cursor (crosshair while a creation tool is
@@ -191,6 +198,10 @@ pub(crate) fn AppRoot() -> impl IntoView {
             if boot_is_toile {
                 if id == toile_chrome::FIND {
                     find_state_toile.set(true);
+                } else if id == toile_chrome::IMPORT_FILE {
+                    // The file dialog is the shell's (`TOILE-IO-020`): the board
+                    // learns of the file only once its bytes are read.
+                    open_board_import_picker(toile_dropped_file, toasts);
                 } else {
                     toile_menu_cmd.set(Some(id));
                 }

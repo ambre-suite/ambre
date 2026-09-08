@@ -126,6 +126,47 @@ const LIVE_STROKE_TAIL: usize = 64;
 /// edit is not armed.
 const CLICK_SLOP: f64 = 4.0;
 
+/// Hand `data` to the browser as a download named `filename`
+/// (`TOILE-IO-085`). A `Blob` behind an object URL, clicked through a detached
+/// anchor: the same path Trame's CSV export takes, because the browser offers no
+/// other. Best effort -- a blob the browser refuses is logged, never fatal.
+#[cfg(target_arch = "wasm32")]
+fn trigger_download(filename: &str, data: &[u8]) {
+    use wasm_bindgen::JsCast;
+    let array = js_sys::Uint8Array::from(data);
+    let parts = js_sys::Array::new();
+    parts.push(&array.buffer());
+    let blob = match web_sys::Blob::new_with_u8_array_sequence(&parts) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!("Toile: download blob failed: {e:?}");
+            return;
+        }
+    };
+    let url = match web_sys::Url::create_object_url_with_blob(&blob) {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::warn!("Toile: download URL failed: {e:?}");
+            return;
+        }
+    };
+    let anchor = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.create_element("a").ok())
+        .and_then(|e| e.dyn_into::<web_sys::HtmlAnchorElement>().ok());
+    if let Some(anchor) = anchor {
+        anchor.set_href(&url);
+        anchor.set_download(filename);
+        anchor.click();
+    }
+    let _ = web_sys::Url::revoke_object_url(&url);
+}
+
+/// Host-build stub: no DOM to download into outside the browser. Kept so the
+/// exhaustive event dispatch compiles in the headless tests.
+#[cfg(not(target_arch = "wasm32"))]
+fn trigger_download(_filename: &str, _data: &[u8]) {}
+
 pub struct ToileView {
     document_id: DocumentId,
     to_logic: flume::Sender<LogicCommand>,
@@ -308,6 +349,13 @@ pub struct ToileView {
     /// holds nothing of its own. Wasm-only.
     #[cfg(target_arch = "wasm32")]
     deck: super::deck::DeckSignals,
+    /// A file the shell read for the board (`toile-import-export`): a drop on
+    /// the canvas, or a pick from the File menu. Drained each frame in `update`
+    /// and sent to the importer at the world point under the drop
+    /// (`TOILE-IO-023`). The shell owns the dialog and the bytes; the view owns
+    /// the camera. Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    dropped_file: RwSignal<Option<super::interop::DroppedFile>>,
 
     /// The element a thread the panel opened is anchored to, awaiting the
     /// `SelectionStats` reply that carries its bounds so the camera can come to
@@ -436,6 +484,7 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] quick_style: RwSignal<Option<super::floatbar::StyleEdit>>,
         #[cfg(target_arch = "wasm32")] comments: super::comments::CommentSignals,
         #[cfg(target_arch = "wasm32")] deck: super::deck::DeckSignals,
+        #[cfg(target_arch = "wasm32")] dropped_file: RwSignal<Option<super::interop::DroppedFile>>,
     ) -> Self {
         if !embedded {
             text_input.focus();
@@ -507,6 +556,8 @@ impl ToileView {
             comments,
             #[cfg(target_arch = "wasm32")]
             deck,
+            #[cfg(target_arch = "wasm32")]
+            dropped_file,
             pending_comment_focus: None,
             pending_fit: false,
             last_stats_sel: Vec::new(),
@@ -759,6 +810,13 @@ impl ToileView {
             // a history step, a remote delta or a deleted frame. Re-read what
             // the panel shows; it keeps no answer of its own.
             ToileEvent::DeckChanged => self.reread_deck(),
+            // An export produced a file (`toile-import-export`). The Logic
+            // thread holds the board and serialized the bytes; the UI thread
+            // owns the DOM, so the download is triggered here (`TOILE-IO-085`).
+            // Nothing on the board changed.
+            ToileEvent::ExportComplete { filename, data } => {
+                trigger_download(&filename, &data);
+            }
         }
     }
 
@@ -2175,7 +2233,8 @@ impl ToileView {
                 Some(true)
             }
             // Wheel pans/zooms the board under the editor (it follows the element
-            // each paint); let the normal handler run.
+            // each paint); let the normal handler run. A dropped file is the
+            // board's, not the text's: the same fall-through.
             InputEvent::Wheel { .. } => None,
         }
     }
@@ -2344,6 +2403,7 @@ impl ToileView {
         // Apply the comment panel's / composer's intent this frame
         // (`toile-comments`).
         self.drain_comment_intent();
+        self.drain_dropped_file();
         self.drain_deck_intent();
 
         // Apply the tool the DOM palette / keyboard selected this frame
@@ -2640,6 +2700,49 @@ impl ToileView {
             | InputEvent::CompositionEnd { .. } => false,
         }
     }
+
+    // -- Interop bridge (`toile-import-export`) ----------------------------
+
+    /// Drain the file the shell read for us this frame (`TOILE-IO-020`). The
+    /// shell owns the file dialog and the drop listener; the view owns the
+    /// camera, so it is the one place that can say where the drop landed in the
+    /// world (`TOILE-IO-023`). Wasm-only; a host no-op keeps `update`
+    /// cfg-agnostic.
+    #[cfg(target_arch = "wasm32")]
+    fn drain_dropped_file(&mut self) {
+        let Some(file) = self.dropped_file.get_untracked() else {
+            return;
+        };
+        self.dropped_file.set(None);
+        // A file with no drop point came from the picker: it lands in the middle
+        // of what the viewer is looking at, never off screen.
+        let screen = file.at.unwrap_or(Point::new(
+            self.cam.size.width / 2.0,
+            self.cam.size.height / 2.0,
+        ));
+        let at = self.cam.screen_to_world() * screen;
+        let cmd = match file.mime.as_str() {
+            "image/svg+xml" => ToileCommand::ImportSvg {
+                bytes: file.bytes,
+                at,
+            },
+            m if m.starts_with("image/") => ToileCommand::ImportImage {
+                bytes: file.bytes,
+                mime: m.to_owned(),
+                at,
+            },
+            // The shell asks `ui::interop::accepts` before it reads a file, so a
+            // type reaching here at all is a bug on that side, not a user error:
+            // drop it rather than send the board something no converter reads.
+            other => {
+                tracing::warn!("Toile: no converter reads {other}");
+                return;
+            }
+        };
+        self.send_edit(cmd);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn drain_dropped_file(&mut self) {}
 
     /// Resolve a copy/cut synchronously inside the native clipboard event
     /// (`toile-clipboard`).

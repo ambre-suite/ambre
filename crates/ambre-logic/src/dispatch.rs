@@ -864,6 +864,7 @@ mod tests {
             command: AppCommand::Toile(ToileCommand::ImportImage {
                 bytes: solid_png(8, 8),
                 mime: "image/png".into(),
+                at: kurbo::Point::ZERO,
             }),
         });
         assert_eq!(

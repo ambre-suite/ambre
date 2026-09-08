@@ -7,6 +7,7 @@
 // ============================================================================
 
 use super::*;
+use ambre_draw::Point;
 
 /// Convert a canvas-relative anchor (CSS px, as published by the view for the
 /// active cell) into client-space coordinates, by adding the canvas's viewport
@@ -392,6 +393,123 @@ pub(crate) fn install_canvas_context_menu(ctx_menu: RwSignal<Option<(f64, f64)>>
         let _ = canvas.add_event_listener_with_callback("contextmenu", cb.as_ref().unchecked_ref());
         cb.forget();
     });
+}
+
+/// Attach `dragover` / `drop` to the canvas so a file dropped on the board
+/// reaches the importer at the point it landed on (`TOILE-IO-020`,
+/// `TOILE-IO-023`). Runs in a post-mount effect, like the context menu.
+///
+/// The drop point is converted to physical pixels here, the same scaling the
+/// pointer path applies, because that is the space the canvas view works in. The
+/// bytes are read off the main thread and published into the shared signal the
+/// view drains next frame; the board decides what it can read
+/// (`toile_chrome::accepts_file`), so the launcher holds no format list.
+pub(crate) fn install_canvas_file_drop(
+    dropped: RwSignal<Option<toile_chrome::DroppedFile>>,
+    toasts: Toasts,
+) {
+    Effect::new(move |_| {
+        let Some(canvas) = leptos::prelude::document().get_element_by_id("ambre-canvas") else {
+            return;
+        };
+        // Without a `dragover` that prevents the default, the browser navigates
+        // away to the dropped file and the drop never fires.
+        let over = Closure::<dyn FnMut(web_sys::DragEvent)>::new(|e: web_sys::DragEvent| {
+            e.prevent_default();
+        });
+        let _ = canvas.add_event_listener_with_callback("dragover", over.as_ref().unchecked_ref());
+        over.forget();
+
+        let dpr = web_sys::window()
+            .map(|w| w.device_pixel_ratio())
+            .unwrap_or(1.0);
+        let cb = Closure::<dyn FnMut(web_sys::DragEvent)>::new(move |e: web_sys::DragEvent| {
+            e.prevent_default();
+            let Some(file) = e
+                .data_transfer()
+                .and_then(|dt| dt.files())
+                .and_then(|fs| fs.get(0))
+            else {
+                return;
+            };
+            let at = Point::new(e.offset_x() as f64 * dpr, e.offset_y() as f64 * dpr);
+            read_file_into(file, Some(at), dropped, toasts);
+        });
+        let _ = canvas.add_event_listener_with_callback("drop", cb.as_ref().unchecked_ref());
+        cb.forget();
+    });
+}
+
+/// Open a transient `<input type="file">` for a board import (`TOILE-IO-020`).
+/// The picker offers what the board reads and nothing else; a file picked this
+/// way has no drop point, so the view lands it in the middle of the viewport.
+pub(crate) fn open_board_import_picker(
+    dropped: RwSignal<Option<toile_chrome::DroppedFile>>,
+    toasts: Toasts,
+) {
+    let Some(document) = web_sys::window().and_then(|w| w.document()) else {
+        return;
+    };
+    let Some(input) = document
+        .create_element("input")
+        .ok()
+        .and_then(|e| e.dyn_into::<web_sys::HtmlInputElement>().ok())
+    else {
+        return;
+    };
+    input.set_type("file");
+    let _ = input.set_attribute("accept", toile_chrome::IMPORT_ACCEPT);
+    let picker = input.clone();
+    let onchange = Closure::<dyn FnMut()>::new(move || {
+        if let Some(file) = picker.files().and_then(|fs| fs.get(0)) {
+            read_file_into(file, None, dropped, toasts);
+        }
+    });
+    input.set_onchange(Some(onchange.as_ref().unchecked_ref()));
+    onchange.forget();
+    input.click();
+}
+
+/// Read `file` into memory and publish it for the board, or tell the user why
+/// not (`TOILE-IO-022`). A type no converter reads is refused before the bytes
+/// are read, so a dropped video never costs a copy of itself.
+fn read_file_into(
+    file: web_sys::File,
+    at: Option<Point>,
+    dropped: RwSignal<Option<toile_chrome::DroppedFile>>,
+    toasts: Toasts,
+) {
+    // The browser leaves the type empty for a format it does not know; fall back
+    // to the extension, which is all an `.svg` drop carries on some platforms.
+    let mut mime = file.type_();
+    if mime.is_empty() && file.name().to_ascii_lowercase().ends_with(".svg") {
+        mime = "image/svg+xml".to_owned();
+    }
+    if !toile_chrome::accepts_file(&mime) {
+        toasts.warning(format!(
+            "Ambre cannot bring a {} file onto a board",
+            label(&mime)
+        ));
+        return;
+    }
+    wasm_bindgen_futures::spawn_local(async move {
+        match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
+            Ok(buf) => {
+                let bytes = js_sys::Uint8Array::new(&buf).to_vec();
+                dropped.set(Some(toile_chrome::DroppedFile { bytes, mime, at }));
+            }
+            Err(_) => toasts.warning("Could not read the file"),
+        }
+    });
+}
+
+/// A media type as a user reads it: the subtype alone (`png`), or a word for a
+/// file whose type the browser could not name at all.
+fn label(mime: &str) -> String {
+    match mime.rsplit('/').next() {
+        Some(sub) if !sub.is_empty() => sub.to_owned(),
+        _ => "file of that kind".to_owned(),
+    }
 }
 
 /// Whether a keyboard event targets an editable element (a text `<input>` /

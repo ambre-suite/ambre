@@ -15,7 +15,7 @@
 //! and yields **no** commands, so a caller applying the batch can never land a
 //! partial board.
 
-use kurbo::{BezPath, Rect};
+use kurbo::{BezPath, Point, Rect};
 
 use crate::logic::command::ToileCommand;
 use crate::logic::model::{Anchor, ElementKind, ElementStyle, EndCaps, PathType};
@@ -97,6 +97,35 @@ pub struct ImportBatch {
     pub media: Vec<MediaBlob>,
     /// What was imported and what was dropped (unsupported constructs,).
     pub report: ImportReport,
+}
+
+/// Translate every element of `batch` so the batch's top-left corner sits at
+/// `at` (`TOILE-IO-023`). A file lands where the user dropped it, whatever
+/// coordinates it carried: an SVG drawn around its own origin and a raster that
+/// has none both arrive under the pointer.
+///
+/// Pure and total: a batch that creates nothing is left alone, and the offset is
+/// the same for every slot, so the drawing keeps its internal geometry -- the
+/// groups, the connectors and the media all name slots, never coordinates.
+pub fn place_batch_at(batch: &mut ImportBatch, at: Point) {
+    let mut origin: Option<Point> = None;
+    for cmd in &batch.commands {
+        if let ToileCommand::CreateElement { at: p, .. } = cmd {
+            origin = Some(match origin {
+                Some(o) => Point::new(o.x.min(p.x), o.y.min(p.y)),
+                None => *p,
+            });
+        }
+    }
+    let Some(origin) = origin else {
+        return;
+    };
+    let delta = at - origin;
+    for cmd in &mut batch.commands {
+        if let ToileCommand::CreateElement { at: p, .. } = cmd {
+            *p += delta;
+        }
+    }
 }
 
 /// Import outcome summary surfaced to the UI. `imported` counts created

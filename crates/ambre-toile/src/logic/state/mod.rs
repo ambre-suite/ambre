@@ -38,6 +38,7 @@ mod connectors;
 mod derive;
 mod docfile;
 mod elements;
+mod export;
 mod find;
 /// The per-app half of `shape_of` / `canonical_dump` (`fixtures`). Fixture
 /// code (I4): behind the non-default `fixtures` feature, never in a client build.
@@ -372,8 +373,9 @@ impl ToileState {
                 backward,
             } => self.find(&query, options, from.as_ref(), backward),
             ToileCommand::RequestSelectionStats { ids } => self.selection_stats(&ids),
-            ToileCommand::ImportSvg { bytes } => self.import_svg_bytes(&bytes),
-            ToileCommand::ImportImage { bytes, mime: _ } => self.import_image_bytes(&bytes),
+            ToileCommand::ImportSvg { bytes, at } => self.import_svg_bytes(&bytes, at),
+            ToileCommand::ImportImage { bytes, mime: _, at } => self.import_image_bytes(&bytes, at),
+            ToileCommand::ExportSvg => self.export_svg_document(),
             ToileCommand::ImportFigma { .. } | ToileCommand::ImportMiro { .. } => {
                 // Figma / Miro converters land in a later interop slice; the board
                 // is untouched until then (atomicity).

@@ -21,9 +21,11 @@
 
 use ambre_bus::UserId;
 use ambre_bus::app::toile::TextDelta;
-use ambre_bus::app::toile::{DeckFrame, DeckView, ElementId};
+use ambre_bus::app::toile::{DeckFrame, DeckView, ElementId, ToileEvent};
+use ambre_bus::{AppEvent, UiEvent};
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::ContextMenu;
+use ambre_chrome::{ToastHost, Toasts};
 use ambre_commands::CommandId;
 use ambre_toile::chrome::{
     DeckIntent, DeckMove, DeckPanel, FloatBar, PresenterIntent, PresenterPanel, SelStats,
@@ -665,5 +667,78 @@ fn deck_panel_empty_deck_invites_a_first_slide() {
     owner.set();
     let (root, _fired) = mount_deck(Vec::new(), vec![deck_frame("a", "One")]);
     assert!(root.query_selector(".ambre-deck-empty").unwrap().is_some());
+    root.remove();
+}
+
+// -- The interop notifications (`toile-import-export`) ------------------------
+
+/// Mount a live toast host and hand `event` to Toile's notifier, returning the
+/// container so the test can read what the user would see.
+fn mount_notified(event: ToileEvent) -> web_sys::Element {
+    let toasts = Toasts::new();
+    let root = mount_in_container(move || view! { <ToastHost toasts=toasts /> });
+    ambre_toile::chrome::notify_event(
+        &toasts,
+        &UiEvent::Viewport {
+            document_id: ambre_core::DocumentId::new(),
+            event: AppEvent::Toile(event),
+        },
+    );
+    root
+}
+
+/// An import report reaches the user, and a lossy one says what it dropped
+/// (`TOILE-IO-022`).
+#[wasm_bindgen_test]
+fn an_import_report_reaches_the_user() {
+    let owner = Owner::new();
+    owner.set();
+    let root = mount_notified(ToileEvent::ImportReport {
+        imported: 4,
+        skipped: vec!["gradient".to_owned()],
+    });
+    let toast = root
+        .query_selector(".ambre-toast")
+        .unwrap()
+        .expect("the report is on screen, not in the log");
+    let text = toast.text_content().unwrap_or_default();
+    assert!(text.contains("Imported 4 elements"), "{text}");
+    assert!(text.contains("gradient"), "{text}");
+    root.remove();
+}
+
+/// A file that never mapped says so: without a word the user cannot tell the
+/// drop from a miss (`TOILE-IO-022`).
+#[wasm_bindgen_test]
+fn a_refused_file_reaches_the_user() {
+    let owner = Owner::new();
+    owner.set();
+    let root = mount_notified(ToileEvent::ImportFailed("not an SVG".to_owned()));
+    let text = root
+        .query_selector(".ambre-toast")
+        .unwrap()
+        .expect("the refusal is on screen")
+        .text_content()
+        .unwrap_or_default();
+    assert!(text.contains("not an SVG"), "{text}");
+    root.remove();
+}
+
+/// An export confirms which file left (`TOILE-IO-021`).
+#[wasm_bindgen_test]
+fn a_finished_export_names_its_file() {
+    let owner = Owner::new();
+    owner.set();
+    let root = mount_notified(ToileEvent::ExportComplete {
+        filename: "board.svg".to_owned(),
+        data: Vec::new(),
+    });
+    let text = root
+        .query_selector(".ambre-toast")
+        .unwrap()
+        .expect("the export is on screen")
+        .text_content()
+        .unwrap_or_default();
+    assert!(text.contains("board.svg"), "{text}");
     root.remove();
 }

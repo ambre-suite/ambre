@@ -56,6 +56,13 @@ pub const PRESENT: CommandId = CommandId("toile.present.start");
 /// reorders it and removes it (`TOILE-FEAT-026`). A UI-only intent, like
 /// [`COMMENTS`]: the panel is chrome, and the board keeps no open flag.
 pub const DECK: CommandId = CommandId("toile.present.deck");
+/// Bring a file onto the board through a picker (`TOILE-IO-020`). A UI-only
+/// intent: the launcher owns the file dialog, and the board learns of the file
+/// only once its bytes are read.
+pub const IMPORT_FILE: CommandId = CommandId("toile.file.import");
+/// Take the board out as an SVG document (`TOILE-IO-021`). Resolves to a board
+/// command: the Logic thread holds the board and serializes it.
+pub const EXPORT_SVG: CommandId = CommandId("toile.file.export_svg");
 
 /// Every id the menu bar introduces (not shared with `ui::menu`). Used by the
 /// view to recognise the ids it must resolve locally, and by tests.
@@ -73,6 +80,8 @@ pub const MENU_BAR_COMMANDS: &[CommandId] = &[
     COMMENTS,
     PRESENT,
     DECK,
+    IMPORT_FILE,
+    EXPORT_SVG,
 ];
 
 // -- Menu grouping -------------------------------------------------------------
@@ -118,7 +127,12 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
         // File is thin in the MVP: the share dialog is app-agnostic chrome (E2),
         // and there is no local "save" (the board lives in `LoroDoc`). Only the
         // presentation entry point lands here for now.
-        MenuId::File => vec![row(PRESENT)],
+        MenuId::File => vec![
+            row(IMPORT_FILE),
+            row(EXPORT_SVG),
+            MenuRow::Separator,
+            row(PRESENT),
+        ],
         MenuId::Edit => vec![
             row(UNDO),
             row(REDO),
@@ -173,6 +187,10 @@ pub fn menu_bar_edit(id: CommandId) -> Option<ToileCommand> {
         // controls of toile-presentation will layer on the resulting
         // PresentModeChanged signal later.
         PRESENT => Some(ToileCommand::EnterPresent { focus: true }),
+        // The board is on the Logic thread, so the serialization is too; the
+        // bytes come back as an event the view hands to the browser
+        // (`TOILE-IO-085`).
+        EXPORT_SVG => Some(ToileCommand::ExportSvg),
         _ => None,
     }
 }

@@ -1,7 +1,8 @@
 # AMBRE -- FEATURE: IMPORT AND EXPORT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the converters and the native round trip ship; no gesture reaches any of them.
+**Implementation:** partial -- a file comes on and the board goes out; the foreign formats and the
+showcase bundle are not built.
 
 > A user brings a drawing that came from somewhere else onto the board, and hands the board back as
 > a file someone without Ambre can open. Every conversion runs on the user's own machine.
@@ -30,13 +31,14 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `TOILE-IO-020` | POST | A user MUST be able to bring a file onto the board, by a drop or by a picker. | this spec section 4 | not built -- lands with the "The Toile interop surface" Story (`ambre-roadmap.md` E4); the commands exist and nothing emits them | unimplemented |
+| `TOILE-IO-020` | POST | A user MUST be able to bring a file onto the board, by a drop or by a picker. | this spec section 4 | DOM glue, held by using the application (`1-Foundations/ambre-spec-testing.md section 2`): two canvas listeners and one `<input type="file">`, whose every decidable part is a row of its own -- what the board reads (`TOILE-IO-098`), where the file lands (`TOILE-IO-023`) and what the user is told (`TOILE-IO-022`) | qa-manual |
+| `TOILE-IO-098` | FAIL | A file of a type no converter reads MUST be refused with a word, and MUST NOT be read into memory. | this spec section 4 | `ambre_toile::ui::interop::tests::a_format_no_converter_reads_is_refused`, `::every_format_a_converter_reads_is_accepted`, `::the_picker_offers_only_what_the_gate_accepts` holds the picker's filter against the same gate, so a file the dialog offers is never one the board then drops | verified |
 | `TOILE-IO-001` | POST | The whole file MUST become one undoable batch: one undo MUST take the import back. | this spec section 3 | `ambre_toile::logic::state::import::tests::import_is_one_undo_group` undoes a five-element import in one step, `::import_rebuilds_nested_groups` a three-element one carrying two groups, `::svg_import_takes_the_fast_path` asserts the single delta | verified |
 | `TOILE-IO-002` | POST | An import MUST NOT trust foreign geometry: every coordinate MUST be clamped to the world. | this spec section 3 | `ambre_toile::logic::interop::limits::tests::coord_clamp_bounds_and_sanitizes`, `::rect_clamp_keeps_non_negative_extent`, `ambre_toile::logic::interop::tests::coordinates_are_clamped_to_the_world_bound` | verified |
 | `TOILE-IO-072` | POST | A coordinate that is not a number MUST become zero, never poison the geometry it lands in. | this spec section 3 | `ambre_toile::logic::interop::limits::tests::coord_clamp_bounds_and_sanitizes` asserts a NaN and an infinity both collapse to zero | verified |
 | `TOILE-IO-070` | POST | An import MUST say how many elements it created. | this spec section 3 | `ambre_toile::logic::state::import::tests::import_is_one_undo_group` asserts the count matches the file; `::import_rebuilds_nested_groups` that it counts the three elements and not the two groups the import rebuilt | verified |
-| `TOILE-IO-022` | POST | An import report MUST reach the user: a construct dropped in silence MUST NOT be the outcome. | this spec section 4 | none, and **the rule fails today**: the event carries the report and the view writes it to the diagnostic log, where no user reads it -- section 6 | unverified |
-| `TOILE-IO-023` | POST | An imported file MUST land where the user put it, never at a fixed point of the world. | this spec section 4 | none, and **the rule fails today**: a raster lands at the world origin and an SVG at its own coordinates, and no command carries a drop point -- section 6 | unverified |
+| `TOILE-IO-022` | POST | An import report MUST reach the user: a construct dropped in silence MUST NOT be the outcome. | this spec section 4 | `ambre_toile::tests::chrome_ui::an_import_report_reaches_the_user` reads the toast a lossy import raises, `::a_refused_file_reaches_the_user` the one a file that never mapped raises; the wording is `ambre_toile::ui::interop::message_tests::a_clean_import_reports_its_count`, `::a_lossy_import_names_what_it_dropped`, `::a_long_list_of_dropped_constructs_is_counted` | verified |
+| `TOILE-IO-023` | POST | An imported file MUST land where the user put it, never at a fixed point of the world. | this spec section 4 | `ambre_toile::logic::state::import::tests::an_import_lands_on_the_drop_point`; the placement itself is `ambre_toile::logic::interop::tests::a_batch_lands_with_its_corner_on_the_drop_point`, `::placing_a_batch_that_creates_nothing_is_a_no_op` | verified |
 | `TOILE-IO-028` | POST | A large import MUST NOT freeze the Logic thread: it MUST apply in bounded batches that yield. | this spec section 3; `ambre-spec-budgets.md` | none, and **the rule fails today**: the whole batch is applied in one synchronous pass, and no progress event exists -- section 6 | unverified |
 | `TOILE-IO-071` | FRAME | An import MUST NOT change an element the board already held. | this spec section 3 | none. Every test of the apply pass starts from an empty board, so nothing holds the rule on a populated one -- section 6 | unverified |
 | `TOILE-IO-073` | FAIL | A file the converter cannot read MUST import nothing, and MUST leave the board as it was. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_broken_file_fails_without_touching_the_board`, `ambre_toile::logic::interop::tests::malformed_svg_fails_to_parse` | verified |
@@ -63,8 +65,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `TOILE-IO-021` | POST | A user MUST be able to take the board out as a file. | this spec section 4 | not built -- lands with the "The Toile interop surface" Story (`ambre-roadmap.md` E4); no export command exists on the bus | unimplemented |
-| `TOILE-IO-085` | POST | The exported bytes MUST reach the browser's download path. | this spec section 4 | not built -- lands with the "The Toile interop surface" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `TOILE-IO-021` | POST | A user MUST be able to take the board out as a file. | this spec section 4 | `ambre_toile::logic::state::export::tests::the_board_exports_as_an_svg_document` walks the board into the serializer and reads the element back out of the file, `::an_empty_board_exports_an_empty_document`; `ambre_toile::tests::chrome_ui::a_finished_export_names_its_file` holds the confirmation | verified |
+| `TOILE-IO-085` | POST | The exported bytes MUST reach the browser's download path. | this spec section 4 | DOM glue, held by using the application (`1-Foundations/ambre-spec-testing.md section 2`): a `Blob` behind an object URL, clicked through a detached anchor. The bytes it is handed are `TOILE-IO-021` | qa-manual |
 | `TOILE-IO-004` | POST | An export MUST be deterministic: the same board yields a byte-stable structure. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::export_is_deterministic`, `::rect_serializes_with_fixed_attrs`, `::text_body_is_escaped`, `::float_formatter_trims`, `ambre_toile::logic::interop::tests::round_trip_rect_is_stable`, `::round_trip_path_geometry_survives` | verified |
 | `TOILE-IO-025` | POST | An element the SVG serializer cannot express MUST be reported, never dropped in silence. | this spec section 3 | none, and **the rule fails today**: a sticky, a connector, a group, an embed and a stroke each serialize to nothing, and the export has no report at all -- section 6 | unverified |
 | `TOILE-IO-026` | POST | An exported element MUST carry its rotation. | this spec section 3 | none, and **the rule fails today**: the serializer reads the rotation field and writes no transform, so every element leaves axis-aligned -- section 6 | unverified |
@@ -72,7 +74,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-087` | POST | An exported picture MUST leave with its pixels, never with an address no reader can resolve. | this spec section 3 | none, and **the rule fails today**: a picture exports as a reference to its content address, which no reader outside Ambre can follow -- section 6 | unverified |
 | `TOILE-IO-088` | POST | Exported text MUST carry the size and the colour it was drawn with. | this spec section 3 | none, and **the rule fails today**: text exports as a body at a point, with neither a size nor a paint, so it comes back in the default of whatever opens it -- section 6 | unverified |
 | `TOILE-IO-017` | POST | The PNG render-back MUST run offscreen, on the UI thread's own surface. | this spec section 3 | not built -- lands with the "PNG export" Story (`ambre-roadmap.md` E6); it needs a real GPU adapter, so its belt is wasm-tier | unimplemented |
-| `TOILE-IO-024` | FRAME | An export MUST NOT change the board: it MUST emit no CRDT delta. | this spec section 3 | none. Both serializers take a read-only view and neither is driven from a live board, so no test can assert the empty outcome yet | unverified |
+| `TOILE-IO-024` | FRAME | An export MUST NOT change the board: it MUST emit no CRDT delta. | this spec section 3 | `ambre_toile::logic::state::export::tests::exporting_twice_yields_the_same_bytes_and_changes_nothing`; every export in that module asserts the empty update on its way through | verified |
 | `TOILE-IO-097` | FRAME | A PNG export MUST NOT block the visible frame. | this spec section 3 | not built -- lands with the "PNG export" Story (`ambre-roadmap.md` E6); it needs a real GPU adapter, so its belt is wasm-tier | unimplemented |
 
 ### 1.5 Open an `.ambre` file
@@ -112,14 +114,15 @@ status values are normative in `ambre-spec-template.md`.
   the pixels an import produces reach the relay as ciphertext alone
   (`features/ambre-spec-toile-media.md section 1`, `TOILE-IO-013`). The showcase bundle is the one
   deliberate exit from the zero-knowledge boundary, and `TOILE-IO-096` makes it say so.
-* **Verification.** 20 `verified`, 17 `unverified`, 15 `unimplemented`. Seven rows stated two rules
-  at once, and in each the covered half hid the uncovered one: a parse failure behind atomicity, a
-  bound behind a clamp, a typed rejection behind an untouched board. Three rules were already held
-  and never written down -- the reported count is elements and not groups, opening a file repaints
-  once, and the `<image>` row of the table in section 3 has a test no row had claimed. Eight state a
-  rule the code answers with something else, and section 6 names each. The mechanisms this document
-  cites grew by one across the pass: the split redistributed the coverage it already had, it did not
-  manufacture any.
+* **Budget check.** the 5 000-node SVG import is now a conversion a user can start, so the budget
+  row it cites has a caller at last; nothing measures it yet, which is `TOILE-IO-028`.
+* **Verification.** 25 `verified`, 14 `unverified`, 12 `unimplemented`, 2 `qa-manual`. The surface
+  landed: the drop point, the export and the report each moved from "the rule fails today" to a test
+  of its own, and the two rows left are the DOM glue underneath them -- a pair of canvas listeners
+  and a click on a detached anchor, which no belt of this workspace reaches and a person catches by
+  using the application. Every decidable half of that glue is a row beside it. The fourteen gaps are
+  what they were: eight rules the code answers with something else, and six the code holds and no
+  test drives.
 
 ---
 
@@ -134,7 +137,8 @@ joins the example to the test that holds it.
 | imports a file | imports the same file | two sets of elements, each minted by its own peer | two imports, never one merged drawing | none |
 | imports a drawing, then undoes | watches | the board as before the import (`TOILE-IO-001`) | the drawing leaves in one step, on both boards | `logic::state::import::tests::import_is_one_undo_group` |
 | imports a broken file | watches | nothing (`TOILE-IO-073`) | an error on Alice's screen and no change on Bob's | `logic::state::import::tests::a_broken_file_fails_without_touching_the_board` |
-| exports the board | moves an element | the move alone: the export writes nothing (`TOILE-IO-024`) | Bob's move; Alice's file holds the board she exported | none |
+| exports the board | moves an element | the move alone: the export writes nothing (`TOILE-IO-024`) | Bob's move; Alice's file holds the board she exported | `logic::state::export::tests::exporting_twice_yields_the_same_bytes_and_changes_nothing` |
+| drops a drawing on an empty corner | watches | the drawing, at that corner (`TOILE-IO-023`) | the elements where Alice dropped them, on both boards | `logic::state::import::tests::an_import_lands_on_the_drop_point` |
 | saves an `.ambre` file | opens it | the same board state (`TOILE-IO-010`) | the same elements, styles and deck | `logic::state::docfile::tests::round_trip_preserves_the_document_state` |
 
 ---
@@ -240,21 +244,25 @@ group, an embed and a freehand stroke write nothing at all (`TOILE-IO-025`).
 
 ## 4. SURFACE
 
-**There is none** (`TOILE-IO-020`, `TOILE-IO-021`). No drop handler, no file picker and no menu entry
-emits an import command: the File menu carries one row, and it starts the presentation
-(`features/ambre-spec-toile-menus.md section 4`). Nothing serializes a live board either, because no
-code maps the visible document into the view model the SVG serializer reads.
-
-| Trigger, once it exists | What must happen |
+| Trigger | Behaviour |
 |---|---|
-| a file dropped on the board | the file is converted and applied at the drop point (`TOILE-IO-023`) |
-| the File menu import entry | a picker opens, and the chosen file takes the same path |
-| the File menu export entry | the Logic thread serializes and answers with the bytes |
-| the answer | the UI thread hands the bytes to the browser; no board state changes (`TOILE-IO-024`) |
+| a file dropped on the board | it is converted and applied at the drop point (`TOILE-IO-020`, `TOILE-IO-023`) |
+| the File menu's import entry | a picker opens on the formats the board reads, and the chosen file takes the same path, landing in the middle of the viewport (`TOILE-IO-098`) |
+| a file of a type no converter reads | it is refused before its bytes are read, by name (`TOILE-IO-098`) |
+| the File menu's export entry | the Logic thread serializes the board and answers with the bytes (`TOILE-IO-021`) |
+| the answer | the UI thread hands the bytes to the browser, and no board state changes (`TOILE-IO-085`, `TOILE-IO-024`) |
+| an import that landed | a notice says how many elements arrived, and what was dropped (`TOILE-IO-022`) |
 
-**What the user is told today.** The report of a lossy import reaches the view and becomes a line in
-the diagnostic log (`TOILE-IO-022`). A failure becomes a warning in the same log. Neither is a
-surface a user can read.
+**The shell owns the file, the board owns the point.** The canvas belongs to the launcher, so the
+two listeners and the picker live there; the camera belongs to the view, so it is the view that
+turns a drop point into a world point. What the launcher must not hold is a list of formats: it asks
+the board what it reads (`TOILE-IO-098`), which is why the picker's filter and the drop gate can be
+held against each other by a test rather than by a reviewer.
+
+**A refusal is a sentence, not a log line.** Every outcome a user must see -- the count an import
+brought in, the constructs it dropped, a file no converter reads, the file an export produced --
+reaches the same transient notice (`TOILE-IO-022`). The diagnostic log keeps only what a developer
+reads: a blob the browser refused, a media type that reached the view past its own gate.
 
 ---
 
@@ -275,16 +283,13 @@ surface a user can read.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No gesture reaches any of it** (`TOILE-IO-020`, `TOILE-IO-021`). Four import commands are on the
-  bus and two of them are handled; their only callers are tests. There is no export command at all,
-  and the serializer's input type has no producer: `ExportElement` is a view model nothing builds
-  from a board. The engine half of the feature is complete and unreachable.
-* **The report is a log line** (`TOILE-IO-022`). The event names every construct the file lost, and
-  the view writes two counts to the diagnostic log. A user who imports a file with gradients is told
-  nothing.
-* **An import ignores where the user is** (`TOILE-IO-023`). A raster lands at the world origin,
-  wherever the camera happens to be; an SVG lands at its own coordinates. Neither command carries a
-  drop point, so the surface that will exist has nowhere to put one.
+* **Two foreign formats are still refused by name** (`TOILE-IO-014`, `TOILE-IO-094`). The Figma and
+  Miro commands are on the bus and answer with a typed refusal; the surface now offers neither, so a
+  user meets the gap at the picker rather than at the board.
+* **The drop and the download are held by a person** (`TOILE-IO-020`, `TOILE-IO-085`). Two canvas
+  listeners, one `<input type="file">` and a click on a detached anchor: no belt of this workspace
+  drives a `DataTransfer` or watches a file leave a browser. Everything decidable around them is a
+  row with a test -- the formats, the drop point, the notice -- so what is left is the glue itself.
 * **The export drops five kinds and says nothing** (`TOILE-IO-025`). A sticky, a connector, a group,
   an embed and a freehand stroke serialize to nothing. The import path has a report and the export
   path has no equivalent, so the loss is invisible on the way out.

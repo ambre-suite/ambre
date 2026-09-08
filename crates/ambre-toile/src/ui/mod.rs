@@ -20,6 +20,7 @@ pub mod find;
 pub mod floatbar;
 pub mod grid;
 pub mod hit;
+pub mod interop;
 pub mod menu;
 pub mod menu_bar;
 pub mod palette;

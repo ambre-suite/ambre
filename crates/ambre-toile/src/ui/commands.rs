@@ -75,6 +75,8 @@ const VIEW: CommandCategory = CommandCategory("view");
 const TOOL: CommandCategory = CommandCategory("tool");
 const PRESENT: CommandCategory = CommandCategory("present");
 const FIND_REPLACE: CommandCategory = CommandCategory("find");
+/// Bringing a file onto the board, and taking the board out as one.
+const FILE: CommandCategory = CommandCategory("file");
 /// Commands that belong to the application shell rather than the board.
 const GENERAL: CommandCategory = CommandCategory("general");
 
@@ -128,6 +130,8 @@ describe! {
     POINTER_MOUSE: menu_bar::POINTER_MOUSE, "Pointer: mouse (wheel zooms)", None, &[], VIEW;
     POINTER_TRACKPAD: menu_bar::POINTER_TRACKPAD, "Pointer: trackpad (wheel pans)", None, &[], VIEW;
     PRESENT_START: menu_bar::PRESENT, "Start presentation", None, &[], PRESENT;
+    IMPORT_FILE: menu_bar::IMPORT_FILE, "Import a file...", Some(IconId("file-import-outline")), &[], FILE;
+    EXPORT_SVG: menu_bar::EXPORT_SVG, "Export as SVG", Some(IconId("file-export-outline")), &[], FILE;
     PRESENT_DECK: menu_bar::DECK, "Order the deck", Some(IconId("view-carousel-outline")), &[], PRESENT;
     TOOL_SELECT: palette::TOOL_SELECT, "Select", Some(IconId("cursor-default")), &[letter('v')], TOOL;
     TOOL_PEN: palette::TOOL_PEN, "Pen", Some(IconId("vector-polyline")), &[letter('p')], TOOL;

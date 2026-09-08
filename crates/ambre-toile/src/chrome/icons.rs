@@ -55,6 +55,8 @@ pub fn resolve(id: IconId) -> Option<icondata::Icon> {
         "comment-multiple-outline" => icondata::MdiCommentMultipleOutline,
         "hand-back-right" => icondata::MdiHandBackRight,
         "view-carousel-outline" => icondata::MdiViewCarouselOutline,
+        "file-import-outline" => icondata::MdiFileImportOutline,
+        "file-export-outline" => icondata::MdiFileExportOutline,
         _ => return None,
     };
     Some(icon)

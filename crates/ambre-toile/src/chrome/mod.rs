@@ -17,6 +17,8 @@ mod find;
 mod floatbar;
 mod menu;
 mod menu_bar;
+mod notify;
+pub use notify::notify_event;
 mod palette;
 mod presenter;
 mod status;
@@ -28,6 +30,11 @@ pub use deck::DeckPanel;
 // The deck panel's pure model (the label and the three order edits) is
 // host-tested in `ui::deck`; the launcher names it through `toile_chrome`.
 pub use crate::ui::deck::{DeckIntent, DeckSignals, Move as DeckMove};
+
+// What the board reads from the file system is pure and host-tested in
+// `ui::interop`: the shell asks the board rather than holding a format list of
+// its own (`toile-import-export`).
+pub use crate::ui::interop::{DroppedFile, IMPORT_ACCEPT, accepts as accepts_file};
 pub use find::{FindPanel, FindQuery};
 
 // The pins, the pick, the badge and the panel's filter are pure and host-tested
@@ -74,6 +81,7 @@ use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
 
 pub use crate::ui::commands::PALETTE;
 pub use crate::ui::find::FIND;
+pub use crate::ui::menu_bar::IMPORT_FILE;
 
 /// The document type Toile's landing "new document" button creates.
 pub const DOC_TYPE: DocType = DocType::Toile;

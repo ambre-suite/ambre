@@ -242,6 +242,10 @@ struct Wiring {
     /// the board's frames and drains the panel's intents. The panel holds no
     /// order of its own.
     toile_deck: toile_chrome::DeckSignals,
+    /// A file the shell read for the board (`toile-import-export`): a drop on
+    /// the canvas or a pick from the File menu. The canvas view drains it and
+    /// lands it at the drop point (`TOILE-IO-023`).
+    toile_dropped_file: RwSignal<Option<toile_chrome::DroppedFile>>,
     /// Status-bar selection aggregates (`trame-status-bar`); `None` on a single
     /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
@@ -516,6 +520,9 @@ pub fn main() {
         view: RwSignal::new(Default::default()),
         intent: RwSignal::new(None),
     };
+    // Interop (`toile-import-export`): the shell reads the file, the view lands
+    // it where the user dropped it.
+    let toile_dropped_file = RwSignal::new(None::<toile_chrome::DroppedFile>);
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
     // boot the dark theme. `theme_ctl` is the single source of truth for the
@@ -698,6 +705,7 @@ pub fn main() {
         toile_quick_style,
         toile_comments,
         toile_deck,
+        toile_dropped_file,
         sheets,
         active_sheet,
     );
@@ -992,6 +1000,10 @@ pub fn main() {
             // errors, sheet-lifecycle errors, sort/filter completion) as toasts.
             // The app owns the event->toast mapping; the launcher names no variant.
             trame_chrome::notify_event(&toasts, &ev);
+            // Surface Toile's interop outcomes -- the lossy-import report, a
+            // refused file, a finished export -- as toasts (`TOILE-IO-022`). The
+            // app owns the event->toast mapping; the launcher names no variant.
+            toile_chrome::notify_event(&toasts, &ev);
             match &ev {
                 // Non-fatal sync warnings surface as a transient warning toast.
                 // They never reach the fatal path: the session keeps running and
@@ -1411,6 +1423,7 @@ pub fn main() {
         view: RwSignal::new(Default::default()),
         intent: RwSignal::new(None),
     };
+    let ch_toile_dropped_file = RwSignal::new(None::<toile_chrome::DroppedFile>);
     let ch_formula_ref = RwSignal::new(String::new());
     let ch_formula_text = RwSignal::new(String::new());
     let ch_formula_action = RwSignal::new(None::<FormulaAction>);
@@ -1452,6 +1465,7 @@ pub fn main() {
                 ch_toile_quick_style,
                 ch_toile_comments,
                 ch_toile_deck,
+                ch_toile_dropped_file,
             )),
             // Trame, or any non-Toile embed (only Trame/Toile are paintable views;
             // a stray type falls back to Trame rather than crash the frame).
@@ -1507,6 +1521,7 @@ pub fn main() {
                     toile_quick_style,
                     toile_comments,
                     toile_deck,
+                    toile_dropped_file,
                 ))
             } else {
                 AppView::Trame(TrameView::new(

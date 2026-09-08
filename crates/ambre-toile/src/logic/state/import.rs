@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::RestEvent;
+use kurbo::Point;
 use loro::{LoroMap, LoroValue};
 
 use crate::logic::command::{
@@ -16,7 +17,7 @@ use crate::logic::command::{
 };
 use crate::logic::interop::{
     ContentHash, ImportBatch, ImportError, ImportRef, ImportReport, Limits, MediaBlob,
-    import_raster, import_svg,
+    import_raster, import_svg, place_batch_at,
 };
 use crate::logic::model::ElementId;
 
@@ -55,15 +56,15 @@ pub(super) struct PendingImport {
 
 impl ToileState {
     /// Convert a dropped SVG document and apply it (`toile-import-export`).
-    pub(super) fn import_svg_bytes(&mut self, bytes: &[u8]) -> ToileOutcome {
-        self.begin_import(import_svg(bytes, &Limits::default()))
+    pub(super) fn import_svg_bytes(&mut self, bytes: &[u8], at: Point) -> ToileOutcome {
+        self.begin_import(import_svg(bytes, &Limits::default()), at)
     }
 
     /// Convert a dropped raster image and apply it (`toile-import-export`). The mime
     /// is re-derived from the bytes by the decoder; the parameter is accepted for
     /// the command surface but not needed here.
-    pub(super) fn import_image_bytes(&mut self, bytes: &[u8]) -> ToileOutcome {
-        self.begin_import(import_raster(bytes, &Limits::default()))
+    pub(super) fn import_image_bytes(&mut self, bytes: &[u8], at: Point) -> ToileOutcome {
+        self.begin_import(import_raster(bytes, &Limits::default()), at)
     }
 
     /// Route a converted batch: a parse / limit failure aborts with `ImportFailed`
@@ -71,13 +72,21 @@ impl ToileState {
     /// now in one undo group; a media-bearing batch is stashed as a
     /// [`PendingImport`] and issues one `UploadMedia` request per blob, applying
     /// nothing until every real hash returns (`toile-media`).
-    fn begin_import(&mut self, converted: Result<ImportBatch, ImportError>) -> ToileOutcome {
-        let batch = match converted {
+    fn begin_import(
+        &mut self,
+        converted: Result<ImportBatch, ImportError>,
+        at: Point,
+    ) -> ToileOutcome {
+        let mut batch = match converted {
             Ok(b) => b,
             Err(e) => {
                 return ToileOutcome::display_only(vec![ToileEvent::ImportFailed(e.to_string())]);
             }
         };
+        // The file lands where the user put it, before anything is applied
+        // (`TOILE-IO-023`): the media round trip may hold the batch for a while,
+        // and the drop point is a fact of the gesture, not of the answer.
+        place_batch_at(&mut batch, at);
         if batch.media.is_empty() {
             return self.finish_import(batch);
         }
@@ -554,6 +563,7 @@ mod tests {
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect x="0" y="0" width="5" height="5" fill="#ff0000"/></svg>"##;
         let out = st.handle_command(ToileCommand::ImportSvg {
             bytes: svg.to_vec(),
+            at: Point::ZERO,
         });
         // No media -> applied synchronously, one CRDT delta, no service request.
         assert!(out.update.is_some());
@@ -563,11 +573,36 @@ mod tests {
         assert_eq!(st.pending_import_count(), 0);
     }
 
+    /// A file lands where the user dropped it, not at the coordinates it carried
+    /// (`TOILE-IO-023`).
+    #[test]
+    fn an_import_lands_on_the_drop_point() {
+        let mut st = ToileState::new();
+        // The rect sits at (40, 40) inside the drawing; dropped at (300, 200) it
+        // must be the batch's top-left corner that moves there.
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect x="40" y="40" width="5" height="5"/></svg>"##;
+        st.handle_command(ToileCommand::ImportSvg {
+            bytes: svg.to_vec(),
+            at: Point::new(300.0, 200.0),
+        });
+        let id = st
+            .layer_order()
+            .iter()
+            .find_map(|n| match n {
+                crate::logic::model::NodeId::Element(e) => Some(e.clone()),
+                _ => None,
+            })
+            .expect("the import created one element");
+        let r = st.bounds_of(&id).expect("the element has bounds");
+        assert_eq!((r.x0, r.y0), (300.0, 200.0));
+    }
+
     #[test]
     fn a_broken_file_fails_without_touching_the_board() {
         let mut st = ToileState::new();
         let out = st.handle_command(ToileCommand::ImportSvg {
             bytes: b"this is not svg".to_vec(),
+            at: Point::ZERO,
         });
         assert!(
             out.display
@@ -584,6 +619,7 @@ mod tests {
         let out = st.handle_command(ToileCommand::ImportImage {
             bytes: solid_png(8, 8),
             mime: "image/png".to_owned(),
+            at: Point::ZERO,
         });
         // Async: one upload issued, nothing applied yet.
         assert_eq!(out.requests.len(), 1);
@@ -620,6 +656,7 @@ mod tests {
         let out = st.handle_command(ToileCommand::ImportImage {
             bytes: solid_png(8, 8),
             mime: "image/png".to_owned(),
+            at: Point::ZERO,
         });
         let id = first_upload_id(&out);
         let failed = st.handle_service_error(id, "S3 PUT 500".to_owned());

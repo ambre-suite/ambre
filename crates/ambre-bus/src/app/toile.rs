@@ -1084,22 +1084,36 @@ pub enum ToileCommand {
     /// is encrypted + uploaded via the Sync media plane before the batch lands
     /// (`toile-import-export`). Answered by [`ToileEvent::ImportReport`] on
     /// success or [`ToileEvent::ImportFailed`] if the file never mapped.
+    /// `at` is the world point the file lands on: the drop point, or the centre
+    /// of the viewport when the picker started the import. The whole batch is
+    /// translated so its top-left corner sits there, because a file must land
+    /// where the user put it and never at a fixed point of the world
+    /// (`TOILE-IO-023`).
     ImportSvg {
         bytes: Vec<u8>,
+        at: Point,
     },
-    /// Import a raster image (PNG / JPG) dropped onto the board.
+    /// Import a raster image (PNG / JPG) dropped onto the board. `at` as above.
     ImportImage {
         bytes: Vec<u8>,
         mime: String,
+        at: Point,
     },
-    /// Import a Figma document (a `.fig` JSON export).
+    /// Import a Figma document (a `.fig` JSON export). `at` as above.
     ImportFigma {
         bytes: Vec<u8>,
+        at: Point,
     },
-    /// Import a Miro board (a JSON export).
+    /// Import a Miro board (a JSON export). `at` as above.
     ImportMiro {
         bytes: Vec<u8>,
+        at: Point,
     },
+    /// Serialize the board to an SVG document and hand the bytes back
+    /// (`toile-import-export`). Read-only: no commit, no delta, no undo item
+    /// (`TOILE-IO-024`). Answered by [`ExportComplete`](ToileEvent::ExportComplete),
+    /// which the UI thread turns into a browser download (`TOILE-IO-085`).
+    ExportSvg,
 
     // -- Persistence / compaction (no CRDT mutation) --
     RequestSnapshot,
@@ -1152,6 +1166,7 @@ impl ToileCommand {
                 | Self::RequestSelectionStats { .. }
                 | Self::RequestSnapshot
                 | Self::CopyElements { .. }
+                | Self::ExportSvg
                 | Self::ReadComments { .. }
                 | Self::ReadDeck
                 // Ephemeral only: a viewer still shows a cursor
@@ -1329,6 +1344,14 @@ pub enum ToileEvent {
     /// safety-limit breach, or a media upload failure): the board is unchanged
     /// (`toile-import-export`, atomicity). Carries a human-facing reason.
     ImportFailed(String),
+    /// An export produced a file (`toile-import-export`). The Logic thread holds
+    /// the board, so it serializes the bytes; the UI thread owns the DOM, so it
+    /// triggers the download (`TOILE-IO-085`). `filename` already carries the
+    /// right extension.
+    ExportComplete {
+        filename: String,
+        data: Vec<u8>,
+    },
     Error(ToileError),
 }
 

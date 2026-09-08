@@ -8,7 +8,7 @@
 use std::io::Cursor;
 
 use image::ImageFormat;
-use kurbo::{Rect, Shape, Size};
+use kurbo::{Point, Rect, Shape, Size};
 
 use super::*;
 use crate::logic::command::{InitContent, ToileCommand};
@@ -348,4 +348,54 @@ fn base64_encode(data: &[u8]) -> String {
         });
     }
     out
+}
+
+// -- The drop point (`TOILE-IO-023`) ------------------------------------------
+
+/// The batch moves as a whole: its top-left corner lands on the drop point and
+/// the drawing keeps its own internal geometry.
+#[test]
+fn a_batch_lands_with_its_corner_on_the_drop_point() {
+    let mut batch = import_svg(RECT_SVG.as_bytes(), &Limits::default()).expect("rect.svg maps");
+    let before: Vec<Point> = create_points(&batch);
+    assert!(
+        !before.is_empty(),
+        "the fixture creates at least one element"
+    );
+    let corner = before
+        .iter()
+        .fold(before[0], |a, p| Point::new(a.x.min(p.x), a.y.min(p.y)));
+
+    place_batch_at(&mut batch, Point::new(500.0, 400.0));
+
+    let after = create_points(&batch);
+    let delta = Point::new(500.0, 400.0) - corner;
+    for (b, a) in before.iter().zip(&after) {
+        assert_eq!(*a, *b + delta, "every slot moves by the same offset");
+    }
+    let new_corner = after
+        .iter()
+        .fold(after[0], |a, p| Point::new(a.x.min(p.x), a.y.min(p.y)));
+    assert_eq!(new_corner, Point::new(500.0, 400.0));
+}
+
+/// A batch that creates nothing has no corner to place, and placing it writes
+/// nothing rather than inventing an origin.
+#[test]
+fn placing_a_batch_that_creates_nothing_is_a_no_op() {
+    let mut batch = ImportBatch::default();
+    place_batch_at(&mut batch, Point::new(10.0, 10.0));
+    assert!(batch.commands.is_empty());
+}
+
+/// The `at` of every `CreateElement` the batch carries, in slot order.
+fn create_points(batch: &ImportBatch) -> Vec<Point> {
+    batch
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            ToileCommand::CreateElement { at, .. } => Some(*at),
+            _ => None,
+        })
+        .collect()
 }

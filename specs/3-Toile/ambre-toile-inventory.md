@@ -38,7 +38,7 @@
 | `toile-connectors` | A user drags from one shape to another and gets an arrow. | partial | 26 | 14 |
 | `toile-elements` | Everything on a board is an element: a note, a shape, a picture, a frame, a stroke. | partial | 28 | 7 |
 | `toile-embeds` | A board holds more than shapes: a web page, and another Ambre document a user edits in place without leaving the board. | partial | 44 | 13 |
-| `toile-import-export` | A user brings a drawing that came from somewhere else onto the board, and hands the board back as a file someone without Ambre can open. | partial | 52 | 17 |
+| `toile-import-export` | A user brings a drawing that came from somewhere else onto the board, and hands the board back as a file someone without Ambre can open. | partial | 53 | 16 |
 | `toile-pdf-export` | Toile's half of the shared PDF export (`ambre-spec-pdf-export.md`): one page per slide, and the clip that keeps a page to its own frame. | partial | 14 | 4 |
 | `toile-reactions` | A user drops an emoji on a note and everyone sees it, with a count. | partial | 32 | 10 |
 | `toile-selection` | A user clicks an element and gets it, not the one behind it. | partial | 28 | 13 |
@@ -46,4 +46,4 @@
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 31 | 14 |
 | `toile-links` | A user makes an element clickable: it opens a web address, jumps the camera to a frame on this board, or opens another Ambre document. | design-only | 12 |  |
 
-**29 features: 19 implemented, 9 partial, 1 design-only. 740 contract rows, 292 loose.**
+**29 features: 19 implemented, 9 partial, 1 design-only. 741 contract rows, 291 loose.**
