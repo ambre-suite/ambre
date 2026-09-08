@@ -530,6 +530,32 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
 }
 
 #[test]
+fn a_departure_message_drops_the_peer_at_once() {
+    // PRESENCE-014: the relay says a peer stopped watching, so the live set
+    // loses them now rather than at the end of the TTL. The timeout stays the
+    // fallback for a message that never arrives.
+    let mut sender = ToileState::new();
+    let frame = presence_frame(&mut sender, sample_at(3.0, 3.0), 0);
+
+    let mut rx = ToileState::new();
+    let alice = UserId::new();
+    assert_eq!(live_set(rx.apply_ephemeral(alice, &frame)).len(), 1);
+
+    let events = rx.peer_left(alice);
+    assert!(
+        live_set(events).is_empty(),
+        "the departure hands back the set that remains"
+    );
+    assert!(rx.peer_presence(&alice).is_none());
+
+    // A peer nobody was painting is not a change: no event, no repaint.
+    assert!(
+        rx.peer_left(UserId::new()).is_empty(),
+        "a departure for an unknown peer says nothing"
+    );
+}
+
+#[test]
 fn a_clock_that_steps_backwards_ages_nobody() {
     // The local clock is monotonic: an NTP correction or a suspended tab must
     // not empty the board of every peer at once.

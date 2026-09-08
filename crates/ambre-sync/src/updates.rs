@@ -941,6 +941,50 @@ mod tests {
             .count()
     }
 
+    /// A departure is attributed by the member directory, exactly like a cursor
+    /// (`PRESENCE-014`): the relay names the key, and the key resolves to the
+    /// `UserId` the view keys presence by. A key nobody knows is dropped rather
+    /// than attributed to a guess -- the peer then ages out of the live set.
+    #[test]
+    fn peer_left_resolves_the_key_the_relay_named() {
+        let (mut state, rx, doc, _key, signing_key, _snap) = setup();
+        let pub_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let alice = UserId::new();
+        state
+            .documents
+            .get_mut(&doc)
+            .expect("document")
+            .signing_keys
+            .insert(*pub_key.as_array(), alice);
+
+        state.handle_ws_message(WsServerMsg::PeerLeft {
+            document_id: doc,
+            pub_key: pub_key.clone(),
+        });
+        let events = drain(&rx);
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                LogicEvent::PeerLeft { document_id, user_id }
+                    if *document_id == doc && *user_id == alice
+            )),
+            "the departure names the resolved user: {events:?}"
+        );
+
+        // A key the member directory does not carry is dropped in silence.
+        let stranger = PublicKey::from_array([7u8; 32]);
+        state.handle_ws_message(WsServerMsg::PeerLeft {
+            document_id: doc,
+            pub_key: stranger,
+        });
+        assert!(
+            !drain(&rx)
+                .iter()
+                .any(|e| matches!(e, LogicEvent::PeerLeft { .. })),
+            "an unattributable departure is dropped"
+        );
+    }
+
     /// A server document opened over a live WS is only fully hydrated once its
     /// post-open catch-up replay (`MissingUpdates`) lands -- the snapshot does
     /// not cover deltas committed after it, and a delta-only document has NO

@@ -105,6 +105,20 @@ impl ToileState {
         events
     }
 
+    /// A peer said they were leaving (`PRESENCE-014`): the relay saw them
+    /// unsubscribe or their connection close, and `ambre-sync` resolved the key
+    /// it named. Drop them and hand the view the set that remains.
+    ///
+    /// A peer nobody was painting yields nothing: a departure the client never
+    /// saw arrive is not a change, and an empty event would repaint the overlay
+    /// for nothing. The TTL still covers the case where this message is lost.
+    pub fn peer_left(&mut self, user_id: UserId) -> Vec<ToileEvent> {
+        if self.presence.remove(&user_id).is_none() {
+            return Vec::new();
+        }
+        vec![self.live_presence_event()]
+    }
+
     /// Advance the local clock and drop every peer whose last sample is older
     /// than [`PRESENCE_TTL_MS`]. `true` when the set changed, which is what
     /// makes a departure observable without a departure signal (`TOILE-185`).

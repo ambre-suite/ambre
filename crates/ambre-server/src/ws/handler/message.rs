@@ -69,6 +69,29 @@ pub(crate) fn handle_unsubscribe(conn: &mut WsConnectionState, document_id: Docu
     conn.doc_write_allowed.remove(&document_id);
 }
 
+/// Tell everyone still watching `document_id` that this connection's peer
+/// stopped (`PRESENCE-014`): drop their presence field and broadcast one
+/// `PeerLeft`. Called on a clean unsubscribe and once per subscription when the
+/// connection closes.
+///
+/// The message carries the document id and the author key, both of which the
+/// relay already routes on, and nothing else (`ZK-001`). Fire-and-forget: a
+/// failed Redis call leaves the peer to age out of the live set, which is what
+/// happened before this message existed.
+pub(crate) async fn announce_departure(
+    state: &Arc<AppState>,
+    document_id: &DocumentId,
+    signing_pubkey: &ambre_core::PublicKey,
+) {
+    let _ =
+        redis_ops::doc_presence_remove(&state.redis, document_id, &signing_pubkey.to_hex()).await;
+    let broadcast = encode_server_msg(&WsServerMsg::PeerLeft {
+        document_id: *document_id,
+        pub_key: signing_pubkey.clone(),
+    });
+    let _ = redis_ops::doc_broadcast(&state.redis, document_id, &broadcast).await;
+}
+
 pub(crate) async fn handle_update(
     state: &Arc<AppState>,
     conn: &mut WsConnectionState,

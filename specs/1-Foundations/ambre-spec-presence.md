@@ -49,6 +49,7 @@ An inbound frame is opened, its author resolved, and the peer set updated for th
 | `PRESENCE-010` | `POST` | A remote position MUST snap when its new sample is not adjacent to the previous one. | this spec section 4 | structural, and the construction is the proof: the overlay paints the sample it holds and tweens nothing, so no position is ever interpolated across a jump. A smoothing pass would need this row back as a real assertion | verified |
 | `PRESENCE-012` | `FRAME` | Applying a presence sample MUST NOT change the document or its history. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history`, on the assertions that the snapshot and the element count are identical either side of the apply | verified |
 | `PRESENCE-013` | `FAIL` | A presence frame that does not decode MUST be dropped without an error. | this spec section 3; derived | `ambre_toile::logic::convergence_tests::apply_ephemeral_drops_a_malformed_frame`: it feeds four arbitrary bytes and asserts the apply answers with nothing rather than raising | verified |
+| `PRESENCE-014` | `POST` | A peer who stops watching a document MUST leave the live set on the relay's word, not on a timeout, and MUST leave it whether they closed the document or their connection died. | this spec section 3; `ambre-spec-broadcast.md`, `SRV-097` | `ambre_sync::updates::tests::peer_left_resolves_the_key_the_relay_named` on the attribution, and `ambre_toile::logic::convergence_tests::a_departure_message_drops_the_peer_at_once` on the set the view is handed. That the relay says it on both paths is `SRV-097`, whose announcement no test drives | verified |
 | `PRESENCE-008` | `FAIL` | An anchor that resolves to no live target MUST be dropped without an error. | this spec section 3 | `ambre_toile::ui::presence::tests::selection_ghosts_outline_visible_elements_only`, whose peer selects an element the frame does not carry: one ghost is painted, the other is dropped, and nothing is raised | verified |
 
 * **Budget.** the presence overlay under 1 ms per frame, a row of
@@ -59,10 +60,9 @@ An inbound frame is opened, its author resolved, and the peer set updated for th
   `DocumentKey`: the relay reads `document_id`, `pub_key` and `counter` and nothing else. The author
   is resolved to a `UserId` in `ambre-sync` before the frame reaches an application, so no peer can
   paint a position under another user's name (`SYNC-014`, `SYNC-015`).
-* **Verification.** 12 `verified`, 1 `unverified`, 0 `unimplemented`. The identity half is held end
-  to end, by the seal, the author resolution and Toile's convergence tests, and the live-set rule is
-  now held by the one application that broadcasts: a peer that stops sending leaves the set, and the
-  view that adopts it stops painting them. What stays open is where the three applications disagree,
+* **Verification.** 13 `verified`, 1 `unverified`, 0 `unimplemented`. The identity half is held end
+  to end, by the seal, the author resolution and Toile's convergence tests, and a departure travels
+  twice over: the relay says it, and the client ages a peer out if that word is lost. What stays open is where the three applications disagree,
   and section 6 names it: Trame and Prose specify a payload and send nothing, so every rule here
   rests on Toile alone, and three rows read `verified` on that one application: the anchor shape,
   the absent smoothing and the dropped anchor are Toile's construction, and a second sender inherits
@@ -89,7 +89,7 @@ absence is the rule.
 | sends a sample naming herself "Bob" | edits | Bob's edit | the position attributed to Alice, the sender Sync resolved | none -- `PRESENCE-004` |
 | jumps to the far end of the document | watches | nothing | her position disappear and reappear there, with no slide between | none -- `PRESENCE-010` |
 | inserts a row, a shape or a paragraph above Bob's position | watches | Alice's insert | Bob's position still on the same cell, shape or word | none -- `PRESENCE-007` |
-| closes the document | watches | nothing | Alice's position off Bob's screen | `ambre_toile::logic::convergence_tests::a_peer_who_stops_sending_leaves_the_live_set` |
+| closes the document | watches | nothing | Alice's position off Bob's screen | `ambre_toile::logic::convergence_tests::a_departure_message_drops_the_peer_at_once` |
 
 ---
 
@@ -128,8 +128,21 @@ relabels their own cursor, and nothing else.
 
 **Why the set travels whole.** Presence is a stream of samples, not a stream of changes. A lost
 frame must cost one late position, never a position that stays on the screen for good. A full set
-makes the departure of a peer the absence of an entry, which no dropped message can corrupt, and it
-is what removes the need for a departure signal that no application has.
+makes the departure of a peer the absence of an entry, which no dropped message can corrupt.
+
+**How a departure travels** (`PRESENCE-014`). The relay is the one party that knows a peer stopped
+watching: it sees the unsubscribe, and it sees the socket close. It drops that peer's presence
+entry and says so on the document's channel, naming the document and the author key it already
+routes on and nothing else (`SRV-098`). `ambre-sync` resolves that key through the member directory,
+exactly as it resolves the author of a sample, so a departure cannot be attributed to a peer who
+did not leave; a key it cannot resolve is dropped. The application then removes the peer and hands
+the view the set that remains.
+
+**And why the client still ages a peer out.** The message is best effort, like everything on this
+plane: a relay restart, a lost publish or a client that reconnects mid-departure loses it. Each
+application therefore drops a peer it has not heard from in a while, which is the floor under
+`PRESENCE-014` rather than a second mechanism -- when the message arrives, the peer is already gone
+before the timeout runs.
 
 **The anchor is the variation point.** Each application names the identities its own document mints,
 because a position is what a concurrent structural edit invalidates (`PRESENCE-007`).
@@ -222,11 +235,10 @@ not draw a cursor sliding through thirty-nine pages they never visited.
 * **One application broadcasts.** Toile sends, receives, keys, routes and paints; Trame and Prose
   specify a payload and emit nothing, so every rule here is held by one implementation
   (`TRAME-UI-*` and the Prose engine both wait on their own Stories).
-* **A departure is a timeout.** The relay says nothing when a peer closes a document, so the live
-  set is what has been heard from recently: Toile ages a peer out ten seconds after their last
-  sample, against a two-second heartbeat. `PRESENCE-009` holds with nothing added to the transport,
-  and the cost is a few seconds of a stale cursor and a blink for a peer behind a stalled network. A
-  leave message from the relay would replace the timeout, and no document asks for one.
+* **A stalled network is not a departure.** The relay names a peer who unsubscribed and one whose
+  socket closed. A peer whose network stalls without dropping the socket is named by nobody: they
+  leave on the client's own timeout, ten seconds after their last sample, and blink back on the
+  next one.
 * **Nothing bounds the sample rate.** No document says how often a move broadcasts, and the frame
   budget above is the paint cost alone. Toile sends at most one sample per rendered frame, which is
   a coalescing rule and not a rate.

@@ -688,6 +688,28 @@ impl SyncState {
                 });
             }
 
+            WsServerMsg::PeerLeft {
+                document_id,
+                pub_key,
+            } => {
+                // A departure is attributed by the same path as a cursor: the
+                // relay names the key, and the member list resolves it
+                // (`PRESENCE-014`, `PRESENCE-003`). A key we cannot attribute is
+                // dropped -- the peer then ages out of the live set, which is
+                // what happened before this message existed.
+                let Some(doc_state) = self.documents.get(&document_id) else {
+                    return;
+                };
+                let Some(user_id) = doc_state.resolve_ephemeral_author(*pub_key.as_array()) else {
+                    tracing::debug!("Sync: dropping PeerLeft from an unattributable key");
+                    return;
+                };
+                self.send_to_logic(LogicEvent::PeerLeft {
+                    document_id,
+                    user_id,
+                });
+            }
+
             WsServerMsg::MissingUpdates {
                 document_id,
                 updates,

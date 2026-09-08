@@ -28,7 +28,7 @@ accumulates. Trame's slice is `2-Trame/features/ambre-spec-trame-selection.md se
 | `TOILE-016` | INV | A cell of presence MUST NOT reach the document, the history or a file: it is relayed and forgotten. | this spec section 3; `SYNC-014` | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` asserts the snapshot and the element count are the same after an inbound sample; `::presence_command_broadcasts_ephemeral_only` asserts an outbound one carries no delta | verified |
 | `TOILE-177` | INV | A sample MUST be keyed by the identity the transport resolved, never by anything the payload carries: no peer can paint under another user's name. | this spec section 3; `SYNC-015` | the payload declares no identity field at all (section 3), and `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` tracks two senders independently under the ids it is handed. The resolution itself is `PRESENCE-002` | verified |
 | `TOILE-178` | INV | A sample MUST replace the peer's presence whole: a field a sender leaves out is a field the receiver clears, not one it keeps. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_sample_replaces_the_peers_presence_whole`, which sends a bare cursor after a sample carrying a selection and a laser, and reads both back gone | verified |
-| `TOILE-185` | INV | The client MUST NOT keep a departed peer's presence: the sample, and the in-flight stroke it carries, MUST be dropped. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_peer_who_stops_sending_leaves_the_live_set`, which ages a peer past the TTL and reads the entry gone from the engine and from the set the event carries | verified |
+| `TOILE-185` | INV | The client MUST NOT keep a departed peer's presence: the sample, and the in-flight stroke it carries, MUST be dropped. | this spec section 3; `1-Foundations/ambre-spec-presence.md`, `PRESENCE-014` | `ambre_toile::logic::convergence_tests::a_departure_message_drops_the_peer_at_once` on the relay's word, and `::a_peer_who_stops_sending_leaves_the_live_set` on the timeout under it; both read the entry gone from the engine and from the set the event carries | verified |
 | `TOILE-UI-014` | OBS | Every peer MUST be painted in their own colour, the same colour that peer carries in the other applications. | this spec section 4 | `ambre_toile::ui::presence::tests::two_peers_get_distinct_colours` asserts two peers fill in two colours; the colour is `ambre_draw::peer_color` over the resolved id, held across applications by `PRESENCE-006` | verified |
 | `TOILE-UI-216` | OBS | A peer's pointer MUST be painted as an arrow with a label chip beside it. | this spec section 4 | `ambre_toile::ui::presence::tests::cursor_draws_arrow_and_label_chip` asserts the filled arrow, the chip and the one glyph run | verified |
 | `TOILE-UI-078` | OBS | A selection ghost MUST outline only the elements the board paints this frame. | this spec section 4 | `ambre_toile::ui::presence::tests::selection_ghosts_outline_visible_elements_only` asserts one outline for a selection of two, one of which is culled out | verified |
@@ -70,8 +70,9 @@ accumulates. Trame's slice is `2-Trame/features/ambre-spec-trame-selection.md se
   under another user's name (`SYNC-014`, `SYNC-015`).
 * **Verification.** 19 `verified`, 5 `unverified`, 0 `unimplemented`. The four unbuilt rows were one
   hole with four edges -- this board received presence and sent none -- and the hole is closed: a
-  sample leaves on every gesture and on a heartbeat, the highlighter is a tool, a peer who stops
-  sending leaves the live set, and a label is the name the session carries. Correcting the event
+  sample leaves on every gesture and on a heartbeat, the highlighter is a tool, a peer who leaves
+  goes -- on the relay's word, and on a timeout when that word is lost -- and a label is the name
+  the session carries. Correcting the event
   shape is what closed two of them at once: a departure is the absence of an entry
   (`PRESENCE-009`), so no departure signal was needed, and `TOILE-185` and `TOILE-UI-075` fell to
   the same change. `TOILE-178` and `TOILE-UI-077` were `unverified` and failing, and both are now
@@ -144,6 +145,16 @@ exists anywhere in the workspace.
 3. the Logic thread stamps the session's display name on it (`TOILE-UI-076`), ages its own peers
    against the clock, and hands the frame to Sync.
 
+**Steps, when a peer leaves** (`PRESENCE-014`):
+
+1. the relay saw them unsubscribe, or their socket close, and says so on the document's channel;
+2. `ambre-sync` resolves the key it named through the member directory, exactly as it resolves the
+   author of a sample, and drops a key it cannot attribute;
+3. the peer is removed and the set that remains travels to the view.
+
+The timeout stays underneath as the floor: a lost departure costs the few seconds of a stale cursor
+it cost before the message existed, and no peer is kept for good either way.
+
 **Steps, when a peer's sample arrives:**
 
 1. the frame is decoded and keyed by the `UserId` the transport resolved, never by anything the
@@ -210,11 +221,10 @@ nothing hands it the display name the member list already carries (`TOILE-UI-076
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A departure is a timeout, not a signal.** The relay says nothing when a peer closes a board, so
-  a peer leaves the live set when their samples stop -- ten seconds of silence, against a two-second
-  heartbeat. It is what makes `TOILE-UI-075` hold with nothing added to the transport, and it is
-  also its own limit: a peer who closed the board is painted for a few seconds more, and a peer
-  behind a stalled network blinks out and back.
+* **A departure is announced, and a stall is not.** The relay names a peer who unsubscribed or whose
+  socket closed, so a board someone closes empties at once. What it cannot name is a peer whose
+  network stalled without dropping the socket: that one still leaves on the ten-second timeout, and
+  blinks back on the next sample.
 * **A pointer never leaves the board.** The host raises no pointer-leave event, so `cursor: None` --
   the way the payload says *the pointer is off the board* -- is produced by nothing: a peer's arrow
   sits where it last was until they leave the set. The field is the sender's to fill and no gesture

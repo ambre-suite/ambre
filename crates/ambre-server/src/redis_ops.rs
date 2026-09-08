@@ -524,6 +524,26 @@ pub async fn doc_presence_update(
     Ok(())
 }
 
+/// Drop a member's presence field when they stop watching a document: a clean
+/// unsubscribe or a closed connection (`1-Foundations/ambre-spec-presence.md`,
+/// `PRESENCE-014`). The per-field TTL of `doc_presence_update` is the fallback
+/// for a connection that dies without either; this is the prompt path.
+///
+/// Removing a field nobody wrote is not an error: the relay drops what it holds
+/// and says so on the document channel either way.
+pub async fn doc_presence_remove(
+    redis: &Client,
+    document_id: &ambre_core::DocumentId,
+    pub_key_hex: &str,
+) -> Result<(), AppError> {
+    let key = format!("doc:{document_id}:presence");
+    redis
+        .hdel(&key, pub_key_hex)
+        .await
+        .map_err(|e| AppError::Redis(format!("presence remove: {e}")))?;
+    Ok(())
+}
+
 /// Redis key for the per-document clock hash.
 #[allow(dead_code)]
 pub fn format_doc_clocks_key(document_id: &ambre_core::DocumentId) -> String {
@@ -870,6 +890,36 @@ mod redis_integration_tests {
         assert_eq!(map.len(), 2);
         assert_eq!(map.get(&7).map(Vec::as_slice), Some(&[1u8, 2, 3][..]));
         assert_eq!(map.get(&8).map(Vec::as_slice), Some(&[4u8, 5][..]));
+
+        let _ = redis.del([key.as_str()]).await;
+    }
+
+    /// PRESENCE-014: a peer who stops watching is removed from the presence
+    /// hash now, rather than left to the field's TTL.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn presence_field_is_dropped_on_departure() {
+        let redis = connect_redis().await;
+        let doc = ambre_core::DocumentId::new();
+        let key = format!("doc:{doc}:presence");
+        let pk = "0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de0badc0de";
+        let _ = redis.del([key.as_str()]).await;
+
+        doc_presence_update(&redis, &doc, pk, "blob", 15)
+            .await
+            .unwrap();
+        let present: bool = redis.hexists(&key, pk).await.unwrap();
+        assert!(present, "the sample is in the hash");
+
+        doc_presence_remove(&redis, &doc, pk).await.unwrap();
+        let present: bool = redis.hexists(&key, pk).await.unwrap();
+        assert!(!present, "the departure removed the field");
+
+        // Removing a field nobody wrote is not an error: a connection that never
+        // sent presence still announces its departure.
+        doc_presence_remove(&redis, &doc, "never-wrote")
+            .await
+            .unwrap();
 
         let _ = redis.del([key.as_str()]).await;
     }

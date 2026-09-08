@@ -254,6 +254,12 @@ async fn handle_ws(
                 }
             }
             WsClientMsg::Unsubscribe { document_id } => {
+                // Announce the departure to the peers still on the document
+                // before the subscription goes (`PRESENCE-014`), so their live
+                // set drops this peer at once rather than on a timeout.
+                if conn.doc_subscriptions.contains(&document_id) {
+                    announce_departure(&state, &document_id, &conn.signing_pubkey).await;
+                }
                 handle_unsubscribe(&mut conn, document_id);
                 pubsub
                     .unsubscribe(doc_pubsub_channel(&document_id), connection_id.clone())
@@ -322,6 +328,10 @@ async fn handle_ws(
     // Deregister every channel this connection watched from the hub (the hub
     // drops its Redis subscription when the last interested connection leaves).
     for doc_id in &conn.doc_subscriptions {
+        // A closed connection is a departure from every document it watched
+        // (`PRESENCE-014`): the peers still there hear it now instead of
+        // waiting out the presence field's TTL.
+        announce_departure(&state, doc_id, &conn.signing_pubkey).await;
         pubsub
             .unsubscribe(doc_pubsub_channel(doc_id), connection_id.clone())
             .await;

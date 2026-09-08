@@ -306,6 +306,27 @@ impl LogicState {
         }
     }
 
+    /// A peer stopped watching a document (`PRESENCE-014`): drop them from the
+    /// document's live set and hand the view the set that remains. Ephemeral
+    /// throughout -- nothing here touches the CRDT or the history.
+    pub(crate) fn peer_left(&mut self, document_id: DocumentId, user_id: UserId) {
+        let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
+            return;
+        };
+        let events: Vec<AppEvent> = match doc {
+            // Trame keeps no peer set yet (`trame-engine`).
+            DocState::Trame(_) => Vec::new(),
+            DocState::Toile(state) => state
+                .peer_left(user_id)
+                .into_iter()
+                .map(AppEvent::Toile)
+                .collect(),
+        };
+        for event in events {
+            self.send_to_ui(UiEvent::Presence { document_id, event });
+        }
+    }
+
     /// Export a document's CRDT snapshot for compaction.
     pub(crate) fn export_snapshot(&self, document_id: DocumentId) -> Option<Vec<u8>> {
         match &self.docs.get(&document_id)?.state {

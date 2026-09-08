@@ -23,6 +23,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
 | `SRV-045` | `INV` | One process MUST hold one live subscription per channel, whatever the number of connections watching it. | this spec section 3 | none, and none is possible without a second connection: the hub is one task holding one stream, which the type makes true, and nothing in continuous integration opens two sockets on one document to observe it | unverified |
+| `SRV-098` | `INV` | What the relay says about a departure MUST be what it already routes on: the document and the author key, and nothing else. | `ambre-spec-zero-knowledge.md`, `ZK-001`; this spec section 3 | type-level: the message declares a document id and a public key and has no other field, so there is nothing else for it to carry | verified |
 | `SRV-050` | `INV` | A presence entry MUST stay opaque to the relay. | `ZK-005`; this spec section 3 | none of its own: the relay stores the frame's ciphertext as it received it and decodes nothing, which is an absence rather than a check. The two `ephemeral_binding_tests` hold the entry a forged sender never gets, which is `SRV-007` and not this rule | unverified |
 
 ### 1.2 A connection opens, and closes
@@ -56,6 +57,7 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
 | `SRV-072` | `POST` | A presence entry MUST expire on its own. | this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::presence_field_self_expires` asserts the field is gone after its own life runs out, on the database tier. A person who disappears without a clean exit prunes themselves | verified |
+| `SRV-097` | `POST` | A person who stops watching a document MUST be dropped from its presence entries, and the others MUST be told, whether they left cleanly or their connection died. | this spec section 3; `1-Foundations/ambre-spec-presence.md`, `PRESENCE-014` | `ambre_server::redis_ops::redis_integration_tests::presence_field_is_dropped_on_departure` on the entry, on the database tier. The announcement itself is unread: it is one publish inside the socket handler, and no test drives a socket to its close | unverified |
 | `SRV-089` | `FRAME` | Recording a presence entry MUST NOT touch the document's history: it MUST take no number and reach no store the replay reads. | this spec section 3; `ambre-spec-sequencer.md`, `SRV-006` | none. `handle_ephemeral` calls neither the ordering script nor the delta queue, so the separation is held by the two paths having been written apart; no test asserts the queue is still empty after a presence frame | unverified |
 
 ### 1.6 A channel frame is relayed
@@ -77,11 +79,12 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
   author key -- opaque, and `ZK-005` is the rule (`SRV-050`). Who left a document is the other thing
   a fan-out could leak, and `SRV-088` is what keeps it to the one person it concerns. The token that
   opens the socket travels in its address, which is the leak `SRV-031` states.
-* **Verification.** 4 `verified`, 9 `unverified`, 3 `unimplemented`. What holds is what a handler
-  test can drive: the two caps, the rate bucket and the presence entry's own expiry. What is loose
-  is everything about the connection rather than the message -- the subscription gate, the
-  mid-session removal, the single subscription per channel, the fan-out between instances, the
-  close code -- because each needs a live socket, and the suite drives handlers rather than sockets
+* **Verification.** 5 `verified`, 10 `unverified`, 3 `unimplemented`. What holds is what a handler
+  test can drive: the two caps, the rate bucket, the presence entry's own expiry and its removal on
+  a departure. What is loose is everything about the connection rather than the message -- the
+  subscription gate, the mid-session removal, the single subscription per channel, the fan-out
+  between instances, the close code, and now the departure announcement itself -- because each needs
+  a live socket, and the suite drives handlers rather than sockets
   (`ambre-spec-testing.md section 9`). No conjunction came apart here: this document was already one
   rule per row, and `SRV-010` is the near miss -- a refusal, a notice and an absence of effect read
   as three, but a `FAIL` is exactly those three and its test asserts all of them. What the pass
@@ -161,6 +164,12 @@ names nobody.
 **Why the sender is served its own broadcast.** A client importing its own change is a no-op, and
 excluding the sender would mean the fan-out knowing which connection wrote -- a filter on the hot
 path for nothing.
+
+**A departure is announced.** When a person unsubscribes, and once per document they watched when
+their socket closes, the relay drops their presence entry and publishes one departure on the
+document's channel. It names the document and the author key, which are what it routes on already,
+so it says nothing it did not already know (`SRV-091`). The per-entry expiry stays underneath as
+the fallback for a socket that dies without either path running (`SRV-072`).
 
 **One subscription per channel per process.** The ephemeral store keeps a subscription per
 connection to it, and the relay holds one connection to that store, so two sockets watching one

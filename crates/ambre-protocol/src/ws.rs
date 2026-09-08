@@ -8,7 +8,7 @@
 
 use crate::messages::Seq;
 use crate::{Ephemeral, SeqUpdate, Update};
-use ambre_core::{ChannelId, DocType, DocumentId, SnapshotId};
+use ambre_core::{ChannelId, DocType, DocumentId, PublicKey, SnapshotId};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -71,6 +71,24 @@ pub enum WsServerMsg {
 
     /// Encrypted ephemeral.
     Ephemeral(Ephemeral),
+
+    /// A peer stopped watching a document: they unsubscribed, or their
+    /// connection closed. Broadcast on the document channel to everyone still
+    /// there, so a departure is a message and not a timeout
+    /// (`1-Foundations/ambre-spec-presence.md`, `PRESENCE-014`).
+    ///
+    /// It carries what the relay already routes on -- a document id and an
+    /// author key -- and nothing else: no content, and no claim about why the
+    /// peer left (`ambre-spec-zero-knowledge.md`). The recipient resolves the
+    /// key to a `UserId` exactly as it does for an ephemeral, so a departure is
+    /// attributed by the same spoof-proof path as a cursor.
+    ///
+    /// Best-effort, like presence itself: a lost `PeerLeft` leaves the peer to
+    /// age out of the live set.
+    PeerLeft {
+        document_id: DocumentId,
+        pub_key: PublicKey,
+    },
 
     /// Response to RequestMissing.
     MissingUpdates {

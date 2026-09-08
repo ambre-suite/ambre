@@ -65,6 +65,18 @@ pub enum LogicEvent {
         payload: Vec<u8>,
     },
 
+    /// A peer stopped watching a document (`PRESENCE-014`): they unsubscribed,
+    /// or their connection closed. `user_id` is resolved from the departing
+    /// `pub_key` the relay named, by the same path an ephemeral takes, so a
+    /// departure cannot be attributed to a peer who did not leave.
+    ///
+    /// Best-effort, like presence itself: a lost message leaves the peer to age
+    /// out of the live set instead.
+    PeerLeft {
+        document_id: DocumentId,
+        user_id: UserId,
+    },
+
     /// Initial hydration of a freshly opened document is complete: the Sync
     /// thread has fetched members and the latest snapshot (if any) and emitted
     /// it ahead of this event. Fires exactly once per open, for both the

@@ -235,6 +235,13 @@ impl LogicState {
                 self.apply_ephemeral(document_id, from_user_id, &payload);
             }
 
+            LogicEvent::PeerLeft {
+                document_id,
+                user_id,
+            } => {
+                self.peer_left(document_id, user_id);
+            }
+
             LogicEvent::SnapshotNeeded { document_id } => {
                 if let Some(payload) = self.export_snapshot(document_id) {
                     self.send_to_sync(SyncCommand::SendSnapshot {
