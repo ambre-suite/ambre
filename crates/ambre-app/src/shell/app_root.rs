@@ -62,6 +62,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_float_bar,
         toile_quick_style,
         toile_comments,
+        toile_deck,
         sort_dialog,
         chrome_status,
         sheets,
@@ -1058,6 +1059,20 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 draft=toile_comments.draft
                 on_intent=Callback::new(move |i: toile_chrome::CommentIntent| {
                     toile_comments.intent.set(Some(i))
+                })
+            />
+        })}
+
+        // The deck panel (`toile-presentation`): the surface that adds a frame
+        // to the presentation, reorders it and removes it (`TOILE-FEAT-026`).
+        // It holds no order of its own -- it renders the frames the canvas view
+        // read back from the board and hands each edit to it as one intent.
+        {boot_is_toile.then(|| view! {
+            <toile_chrome::DeckPanel
+                state=toile_deck.panel
+                view=toile_deck.view
+                on_intent=Callback::new(move |i: toile_chrome::DeckIntent| {
+                    toile_deck.intent.set(Some(i))
                 })
             />
         })}

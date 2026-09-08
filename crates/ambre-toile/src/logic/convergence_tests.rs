@@ -1288,6 +1288,87 @@ fn slide_order_dedups_repeated_frames() {
 }
 
 #[test]
+fn set_slide_order_unchanged_writes_nothing() {
+    let mut st = ToileState::new();
+    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    st.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![a.clone(), b.clone()],
+    });
+    let out = st.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![a.clone(), b.clone()],
+    });
+    assert!(
+        out.update.is_none(),
+        "writing the order already held must produce neither a commit nor a delta"
+    );
+    assert_eq!(st.slide_order(), vec![a, b]);
+}
+
+#[test]
+fn shorter_deck_clamps_the_active_slide() {
+    let mut st = ToileState::new();
+    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let c = create_frame(&mut st, Point::new(600.0, 0.0), Size::new(200.0, 200.0));
+    st.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![a.clone(), b, c],
+    });
+    st.handle_command(ToileCommand::GotoSlide(2));
+    assert_eq!(st.playback().1, 2);
+
+    st.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![a.clone()],
+    });
+    assert_eq!(
+        st.playback().1,
+        0,
+        "a deck shorter than the viewer's cursor clamps it to the new last slide"
+    );
+}
+
+#[test]
+fn deleting_a_frame_drops_its_slide() {
+    let mut st = ToileState::new();
+    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let c = create_frame(&mut st, Point::new(600.0, 0.0), Size::new(200.0, 200.0));
+    st.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![a.clone(), b.clone(), c.clone()],
+    });
+    st.handle_command(ToileCommand::GotoSlide(2));
+
+    st.handle_command(ToileCommand::DeleteElements {
+        ids: vec![b.clone()],
+    });
+    assert_eq!(
+        st.slide_order(),
+        vec![a.clone(), c.clone()],
+        "the deck must hold only slides whose frame still exists"
+    );
+    assert_eq!(
+        st.playback().1,
+        1,
+        "the shortened deck clamps the viewer's cursor like any other write"
+    );
+
+    // The frame and the slide left in one write, so one undo brings both back.
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(st.slide_order(), vec![a, b, c]);
+}
+
+#[test]
+fn deleting_an_element_seeds_no_deck() {
+    let mut st = ToileState::new();
+    let r = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::DeleteElements { ids: vec![r] });
+    assert!(
+        st.slide_order().is_empty(),
+        "deleting an element on a board with no deck must not seed a presentation"
+    );
+}
+
+#[test]
 fn playback_bounds() {
     let mut st = ToileState::new();
     let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));

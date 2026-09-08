@@ -21,12 +21,13 @@
 
 use ambre_bus::UserId;
 use ambre_bus::app::toile::TextDelta;
+use ambre_bus::app::toile::{DeckFrame, DeckView, ElementId};
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::ContextMenu;
 use ambre_commands::CommandId;
 use ambre_toile::chrome::{
-    FloatBar, PresenterIntent, PresenterPanel, SelStats, SelectionToolbar, StatusBar, StyleEdit,
-    StyleModel, ToolPalette, TopMenuBar,
+    DeckIntent, DeckMove, DeckPanel, FloatBar, PresenterIntent, PresenterPanel, SelStats,
+    SelectionToolbar, StatusBar, StyleEdit, StyleModel, ToolPalette, TopMenuBar,
 };
 use ambre_toile::ui::Tool;
 use ambre_toile::ui::menu::{self, CtxScope};
@@ -569,3 +570,100 @@ fn presenter_follow_button_fires_with_peer() {
 // signal update, which the bare wasm-bindgen-test harness does not drive (no async
 // spawner installed by `mount_to`), so it is covered by the pure `notes_delta`
 // model + the app-level wiring rather than a flaky async DOM assertion here.
+
+// -- The deck panel (`toile-presentation`) ------------------------------------
+
+/// A deck row for the fixtures below: an id and a title.
+fn deck_frame(id: &str, name: &str) -> DeckFrame {
+    DeckFrame {
+        id: ElementId(id.to_owned()),
+        name: name.to_owned(),
+    }
+}
+
+/// Mount a `DeckPanel` over a deck and a pool of frames off it, returning the
+/// container and the signal that captures emitted intents.
+fn mount_deck(
+    slides: Vec<DeckFrame>,
+    off_deck: Vec<DeckFrame>,
+) -> (web_sys::Element, RwSignal<Option<DeckIntent>>) {
+    let state = RwSignal::new(true);
+    let view = RwSignal::new(DeckView { slides, off_deck });
+    let fired = RwSignal::new(None::<DeckIntent>);
+    let on_intent = Callback::new(move |i: DeckIntent| fired.set(Some(i)));
+    let root = mount_in_container(move || {
+        view! { <DeckPanel state=state view=view on_intent=on_intent /> }
+    });
+    (root, fired)
+}
+
+/// The deck reads in playback order, an unnamed frame by its rank
+/// (`TOILE-FEAT-026`).
+#[wasm_bindgen_test]
+fn deck_panel_lists_the_slides_in_order() {
+    let owner = Owner::new();
+    owner.set();
+    let (root, _fired) = mount_deck(
+        vec![deck_frame("a", "Agenda"), deck_frame("b", "")],
+        Vec::new(),
+    );
+    let names = root
+        .query_selector_all(".ambre-deck-list .ambre-deck-name")
+        .unwrap();
+    assert_eq!(names.length(), 2);
+    assert_eq!(
+        names.item(0).unwrap().text_content().as_deref(),
+        Some("Agenda")
+    );
+    assert_eq!(
+        names.item(1).unwrap().text_content().as_deref(),
+        Some("Frame 2")
+    );
+    root.remove();
+}
+
+/// Adding, reordering and removing each leave the panel as one intent
+/// (`TOILE-FEAT-026`): the panel writes no order of its own.
+#[wasm_bindgen_test]
+fn deck_panel_edits_fire_intents() {
+    let owner = Owner::new();
+    owner.set();
+    let (root, fired) = mount_deck(
+        vec![deck_frame("a", "One"), deck_frame("b", "Two")],
+        vec![deck_frame("c", "Three")],
+    );
+
+    assert!(click_by_aria(&root, "Move down"));
+    assert_eq!(
+        fired.get_untracked(),
+        Some(DeckIntent::Shift(0, DeckMove::Down)),
+        "the first row's only reorder step is downwards"
+    );
+
+    assert!(click_by_aria(&root, "Remove from deck"));
+    assert_eq!(fired.get_untracked(), Some(DeckIntent::Remove(0)));
+
+    let add: web_sys::HtmlElement = root
+        .query_selector(".ambre-deck-add-btn")
+        .unwrap()
+        .unwrap()
+        .dyn_into()
+        .unwrap();
+    add.click();
+    assert_eq!(
+        fired.get_untracked(),
+        Some(DeckIntent::Add(ElementId("c".to_owned())))
+    );
+    root.remove();
+}
+
+/// A board with no deck says so rather than showing an empty list
+/// (`TOILE-FEAT-026`).
+#[wasm_bindgen_test]
+fn deck_panel_empty_deck_invites_a_first_slide() {
+    let owner = Owner::new();
+    owner.set();
+    let (root, _fired) = mount_deck(Vec::new(), vec![deck_frame("a", "One")]);
+    assert!(root.query_selector(".ambre-deck-empty").unwrap().is_some());
+    root.remove();
+}

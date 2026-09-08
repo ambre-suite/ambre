@@ -73,6 +73,7 @@ pub(crate) fn mount_shell(
     toile_float_bar: RwSignal<Option<toile_chrome::FloatBar>>,
     toile_quick_style: RwSignal<Option<toile_chrome::StyleEdit>>,
     toile_comments: toile_chrome::CommentSignals,
+    toile_deck: toile_chrome::DeckSignals,
     sheets: RwSignal<Vec<(String, String)>>,
     active_sheet: RwSignal<String>,
 ) {
@@ -178,6 +179,7 @@ pub(crate) fn mount_shell(
             toile_float_bar,
             toile_quick_style,
             toile_comments,
+            toile_deck,
             sort_dialog,
             chrome_status,
             sheets,

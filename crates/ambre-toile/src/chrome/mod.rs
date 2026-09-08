@@ -12,6 +12,7 @@
 // ============================================================================
 
 mod comments;
+mod deck;
 mod find;
 mod floatbar;
 mod menu;
@@ -22,6 +23,11 @@ mod status;
 mod style;
 
 pub use comments::{CommentComposer, CommentsPanel};
+pub use deck::DeckPanel;
+
+// The deck panel's pure model (the label and the three order edits) is
+// host-tested in `ui::deck`; the launcher names it through `toile_chrome`.
+pub use crate::ui::deck::{DeckIntent, DeckSignals, Move as DeckMove};
 pub use find::{FindPanel, FindQuery};
 
 // The pins, the pick, the badge and the panel's filter are pure and host-tested

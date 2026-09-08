@@ -54,6 +54,7 @@ pub fn resolve(id: IconId) -> Option<icondata::Icon> {
         "cursor-pointer" => icondata::MdiCursorPointer,
         "comment-multiple-outline" => icondata::MdiCommentMultipleOutline,
         "hand-back-right" => icondata::MdiHandBackRight,
+        "view-carousel-outline" => icondata::MdiViewCarouselOutline,
         _ => return None,
     };
     Some(icon)

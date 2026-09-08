@@ -270,6 +270,10 @@ fn read_only_and_local_commands_are_not_mutating() {
         AppCommand::Toile(ToileCommand::ExitPresent),
         AppCommand::Toile(ToileCommand::SetViewport(ToileViewport::default())),
         AppCommand::Toile(ToileCommand::RequestSnapshot),
+        // Toile: pure reads a viewer must keep (`toile-comments`,
+        // `toile-presentation`): both answer with a projection and write nothing.
+        AppCommand::Toile(ToileCommand::ReadComments { thread: None }),
+        AppCommand::Toile(ToileCommand::ReadDeck),
         // Toile: ephemeral only -- a viewer still shows a cursor (`toile-presence`).
         AppCommand::Toile(ToileCommand::Presence {
             payload: PresencePayload::default(),

@@ -14,10 +14,11 @@
 
 pub use ambre_bus::app::toile::{
     BoolOp, ClipConnector, ClipElement, ClipMembership, ClipValue, ClipboardPayload, CommentAnchor,
-    CommentMessage, CommentPin, CommentSummary, CommentThread, DisplayConnector, DisplayElement,
-    DisplayGeom, DisplayNode, DisplayViewport, End, FindOptions, FindResults, InitContent,
-    PresencePayload, PresenceUpdate, Reaction, ReactionKind, ReactionTally, SelectionStats,
-    SlideChange, TextDelta, ToileCommand, ToileError, ToileEvent, Viewport, ZTarget,
+    CommentMessage, CommentPin, CommentSummary, CommentThread, DeckFrame, DeckView,
+    DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, FindOptions,
+    FindResults, InitContent, PresencePayload, PresenceUpdate, Reaction, ReactionKind,
+    ReactionTally, SelectionStats, SlideChange, TextDelta, ToileCommand, ToileError, ToileEvent,
+    Viewport, ZTarget,
 };
 pub use ambre_bus::rest::RequestId;
 

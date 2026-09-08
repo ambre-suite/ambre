@@ -33,6 +33,8 @@ use crate::logic::animate::AnimatedElement;
 #[cfg(target_arch = "wasm32")]
 use super::comments::CommentIntent;
 use super::comments::{self, CommentDraft};
+#[cfg(target_arch = "wasm32")]
+use super::deck::{self, DeckIntent};
 use super::edit::{EditIntent, InlineEditor};
 use super::embed;
 use super::hit::hit_topmost;
@@ -301,6 +303,11 @@ pub struct ToileView {
     /// intents. The panel holds nothing of its own (`TOILE-UI-023`). Wasm-only.
     #[cfg(target_arch = "wasm32")]
     comments: super::comments::CommentSignals,
+    /// The deck panel's signals (`toile-presentation`): the view publishes the
+    /// frames it read back from Logic and drains the panel's intents. The panel
+    /// holds nothing of its own. Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    deck: super::deck::DeckSignals,
 
     /// The element a thread the panel opened is anchored to, awaiting the
     /// `SelectionStats` reply that carries its bounds so the camera can come to
@@ -428,6 +435,7 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] float_bar: RwSignal<Option<super::floatbar::FloatBar>>,
         #[cfg(target_arch = "wasm32")] quick_style: RwSignal<Option<super::floatbar::StyleEdit>>,
         #[cfg(target_arch = "wasm32")] comments: super::comments::CommentSignals,
+        #[cfg(target_arch = "wasm32")] deck: super::deck::DeckSignals,
     ) -> Self {
         if !embedded {
             text_input.focus();
@@ -497,6 +505,8 @@ impl ToileView {
             quick_style,
             #[cfg(target_arch = "wasm32")]
             comments,
+            #[cfg(target_arch = "wasm32")]
+            deck,
             pending_comment_focus: None,
             pending_fit: false,
             last_stats_sel: Vec::new(),
@@ -742,6 +752,13 @@ impl ToileView {
             // the panel's only source (`TOILE-UI-023`).
             ToileEvent::CommentList(list) => self.publish_comment_list(list),
             ToileEvent::CommentThreadData(thread) => self.publish_comment_thread(thread),
+            // The board's frames: the answer to a `ReadDeck`. Straight to the
+            // deck panel's signals, its only source (`TOILE-FEAT-026`).
+            ToileEvent::DeckData(view) => self.publish_deck(view),
+            // The deck moved under this viewer (`toile-presentation`): a write,
+            // a history step, a remote delta or a deleted frame. Re-read what
+            // the panel shows; it keeps no answer of its own.
+            ToileEvent::DeckChanged => self.reread_deck(),
         }
     }
 
@@ -1383,6 +1400,16 @@ impl ToileView {
     #[cfg(not(target_arch = "wasm32"))]
     fn clear_comments(&mut self) {}
 
+    /// Drop everything the deck panel shows: a closed document leaves no deck.
+    #[cfg(target_arch = "wasm32")]
+    fn clear_deck(&mut self) {
+        self.deck.panel.set(false);
+        self.deck.view.set(Default::default());
+        self.deck.intent.set(None);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn clear_deck(&mut self) {}
+
     /// Drain the intent the panel or the composer emitted this frame. The DOM
     /// names no camera and holds no command channel, so the view carries each
     /// one out (`TOILE-UI-023`). Wasm-only; a host no-op keeps `update`
@@ -1432,6 +1459,70 @@ impl ToileView {
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn drain_comment_intent(&mut self) {}
+
+    // -- Deck bridge (`toile-presentation`) --------------------------------
+
+    /// Show the deck panel and read the board's frames into it.
+    #[cfg(target_arch = "wasm32")]
+    fn show_deck_panel(&mut self) {
+        self.deck.panel.set(true);
+        self.send_edit(ToileCommand::ReadDeck);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    #[allow(dead_code, reason = "the menu bar that calls it is wasm-only")]
+    fn show_deck_panel(&mut self) {}
+
+    /// Re-read the deck after it changed, while the panel is open.
+    #[cfg(target_arch = "wasm32")]
+    fn reread_deck(&mut self) {
+        if self.deck.panel.get_untracked() {
+            self.send_edit(ToileCommand::ReadDeck);
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn reread_deck(&mut self) {}
+
+    /// Publish the frames the panel renders.
+    #[cfg(target_arch = "wasm32")]
+    fn publish_deck(&mut self, view: ambre_bus::app::toile::DeckView) {
+        self.deck.view.set(view);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn publish_deck(&mut self, _view: ambre_bus::app::toile::DeckView) {}
+
+    /// Drain the intent the deck panel emitted this frame. Each edit answers
+    /// with the whole new order, which is the only shape `SetSlideOrder` takes;
+    /// an edit the model refuses (a frame already on the deck, a rank past its
+    /// end) sends nothing, so it costs no undo item.
+    #[cfg(target_arch = "wasm32")]
+    fn drain_deck_intent(&mut self) {
+        let Some(intent) = self.deck.intent.get_untracked() else {
+            return;
+        };
+        self.deck.intent.set(None);
+        let order: Vec<ambre_bus::app::toile::FrameId> = self
+            .deck
+            .view
+            .get_untracked()
+            .slides
+            .into_iter()
+            .map(|f| f.id)
+            .collect();
+        let next = match intent {
+            DeckIntent::Add(frame) => deck::add(&order, &frame),
+            DeckIntent::Remove(at) => deck::remove(&order, at),
+            DeckIntent::Shift(at, to) => deck::shift(&order, at, to),
+            DeckIntent::Goto(at) => {
+                self.send_edit(ToileCommand::GotoSlide(at));
+                return;
+            }
+        };
+        if let Some(order) = next {
+            self.send_edit(ToileCommand::SetSlideOrder { order });
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn drain_deck_intent(&mut self) {}
 
     /// Bring the camera to a thread's anchor (`TOILE-UI-309`). A point anchor is
     /// its own target; an element anchor may sit outside the culled set, so the
@@ -1517,6 +1608,12 @@ impl ToileView {
             // the panel on the whole board. UI-only, like the zoom actions.
             mb::COMMENTS => {
                 self.show_comments_panel();
+                return;
+            }
+            // The Present menu's deck entry (`toile-presentation` section 4):
+            // open the ordering panel. UI-only, like the comments entry.
+            mb::DECK => {
+                self.show_deck_panel();
                 return;
             }
             mb::ZOOM_IN => {
@@ -2247,6 +2344,7 @@ impl ToileView {
         // Apply the comment panel's / composer's intent this frame
         // (`toile-comments`).
         self.drain_comment_intent();
+        self.drain_deck_intent();
 
         // Apply the tool the DOM palette / keyboard selected this frame
         // (`toile-tools`).
@@ -2650,6 +2748,7 @@ impl ToileView {
         self.pending_find_focus = None;
         self.pending_comment_focus = None;
         self.clear_comments();
+        self.clear_deck();
         self.editor = None;
         self.edit_pending_open = None;
         self.edit_open_on_create = false;

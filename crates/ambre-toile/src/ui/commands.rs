@@ -128,6 +128,7 @@ describe! {
     POINTER_MOUSE: menu_bar::POINTER_MOUSE, "Pointer: mouse (wheel zooms)", None, &[], VIEW;
     POINTER_TRACKPAD: menu_bar::POINTER_TRACKPAD, "Pointer: trackpad (wheel pans)", None, &[], VIEW;
     PRESENT_START: menu_bar::PRESENT, "Start presentation", None, &[], PRESENT;
+    PRESENT_DECK: menu_bar::DECK, "Order the deck", Some(IconId("view-carousel-outline")), &[], PRESENT;
     TOOL_SELECT: palette::TOOL_SELECT, "Select", Some(IconId("cursor-default")), &[letter('v')], TOOL;
     TOOL_PEN: palette::TOOL_PEN, "Pen", Some(IconId("vector-polyline")), &[letter('p')], TOOL;
     TOOL_SHAPE: palette::TOOL_SHAPE, "Shape", Some(IconId("shape-outline")), &[letter('r')], TOOL;

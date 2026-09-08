@@ -628,6 +628,31 @@ pub struct CommentSummary {
 }
 
 // -----------------------------------------------------------------------------
+// Deck (`toile-presentation`) -- the projection the ordering panel reads.
+// -----------------------------------------------------------------------------
+
+/// One frame the deck panel lists (`toile-presentation`). `name` is the frame's
+/// title, empty until the user names one: the panel labels an unnamed frame
+/// from its rank, which is a presentation concern and stays out of the engine.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeckFrame {
+    pub id: FrameId,
+    pub name: String,
+}
+
+/// The board's frames, split by whether the deck names them
+/// (`toile-presentation`): the answer to a [`ReadDeck`](ToileCommand::ReadDeck).
+/// `slides` is the deck in playback order, and a slide whose frame is gone is
+/// not in it -- the deck holds only live frames (`TOILE-FEAT-027`). `off_deck`
+/// is every other frame, in paint order, so the panel can offer them for adding
+/// without deriving an order of its own.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DeckView {
+    pub slides: Vec<DeckFrame>,
+    pub off_deck: Vec<DeckFrame>,
+}
+
+// -----------------------------------------------------------------------------
 // Auto-layout spec (`toile-auto-layout`) -- the CRDT design intent carried
 // by a frame. The pure `solve_layout` solver that turns this spec + child sizes
 // into positions lives in the engine (`ambre_toile::logic::autolayout`); only the
@@ -965,6 +990,11 @@ pub enum ToileCommand {
     ReadComments {
         thread: Option<ThreadId>,
     },
+    /// Read the board's frames back for the deck panel, which holds no state of
+    /// its own (`toile-presentation`). Answers
+    /// [`DeckData`](ToileEvent::DeckData). A pure read: no commit, no delta, no
+    /// undo item.
+    ReadDeck,
 
     // -- Vector boolean ops (`toile-vector-paths`) --
     /// Combine the selected shape / path elements with a boolean rule
@@ -1122,6 +1152,8 @@ impl ToileCommand {
                 | Self::RequestSelectionStats { .. }
                 | Self::RequestSnapshot
                 | Self::CopyElements { .. }
+                | Self::ReadComments { .. }
+                | Self::ReadDeck
                 // Ephemeral only: a viewer still shows a cursor
                 // (`toile-presence`).
                 | Self::Presence { .. }
@@ -1277,6 +1309,14 @@ pub enum ToileEvent {
     /// `ReadComments { thread: Some(..) }`. This is the only path a message body
     /// takes to the UI (`TOILE-205`).
     CommentThreadData(CommentThread),
+    /// The board's frames, deck first: the answer to a
+    /// [`ReadDeck`](ToileCommand::ReadDeck). Goes straight to the deck panel's
+    /// signals, which are the panel's only source (`toile-presentation`).
+    DeckData(DeckView),
+    /// The shared deck changed under this viewer (`toile-presentation`): a
+    /// local write reordered it, or a deleted frame left it. The panel holds no
+    /// authoritative state, so it re-reads on this event.
+    DeckChanged,
     /// A foreign-file import applied successfully
     /// (`toile-import-export`). Carries the lossy-import summary the UI
     /// surfaces: how many elements landed and which unsupported constructs were

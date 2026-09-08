@@ -272,6 +272,7 @@ impl ToileState {
     }
 
     pub(super) fn delete_elements(&mut self, ids: &[ElementId]) -> ToileOutcome {
+        let deck_before = self.slide_order();
         if !self.delete_from_doc(ids) {
             return ToileOutcome::display_only(Vec::new());
         }
@@ -279,7 +280,9 @@ impl ToileState {
 
         self.rematerialize_layers();
         self.recompute_groups();
-        self.emit_with_update(vec![self.viewport_event()])
+        let mut events = vec![self.viewport_event()];
+        events.extend(self.deck_change(&deck_before));
+        self.emit_with_update(events)
     }
 
     /// Remove `ids` (and, for groups, their whole subtree) from the CRDT and the
@@ -324,6 +327,11 @@ impl ToileState {
             NodeId::Element(e) => !del.contains(e),
             NodeId::Connector(c) => !orphan_conns.contains(c),
         });
+        // A deleted frame leaves the deck in the same write, so the two never
+        // disagree (`TOILE-FEAT-027`): a dead entry would be counted in the deck
+        // length and stop the camera when a viewer reached it, and the PDF
+        // export already skips it.
+        self.drop_slides(&del);
         for id in &expanded {
             self.bounds.remove(id);
             self.index.remove(id);

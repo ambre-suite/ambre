@@ -52,6 +52,10 @@ pub const COMMENTS: CommandId = CommandId("toile.view.comments");
 /// Enter presentation mode (the deck panel of `toile-presentation`). A stub
 /// here: the panel is owned by that feature, not this surface.
 pub const PRESENT: CommandId = CommandId("toile.present.start");
+/// Open the deck panel: the surface that adds a frame to the presentation,
+/// reorders it and removes it (`TOILE-FEAT-026`). A UI-only intent, like
+/// [`COMMENTS`]: the panel is chrome, and the board keeps no open flag.
+pub const DECK: CommandId = CommandId("toile.present.deck");
 
 /// Every id the menu bar introduces (not shared with `ui::menu`). Used by the
 /// view to recognise the ids it must resolve locally, and by tests.
@@ -68,6 +72,7 @@ pub const MENU_BAR_COMMANDS: &[CommandId] = &[
     POINTER_TRACKPAD,
     COMMENTS,
     PRESENT,
+    DECK,
 ];
 
 // -- Menu grouping -------------------------------------------------------------
@@ -152,7 +157,7 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
             row(menu::LOCK),
             row(menu::UNLOCK),
         ],
-        MenuId::Present => vec![row(PRESENT)],
+        MenuId::Present => vec![row(PRESENT), row(DECK)],
     }
 }
 

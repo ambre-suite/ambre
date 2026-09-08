@@ -238,6 +238,10 @@ struct Wiring {
     /// the panel and the composer emit. The panel holds nothing of its own
     /// (`TOILE-UI-023`).
     toile_comments: toile_chrome::CommentSignals,
+    /// The deck panel's signals (`toile-presentation`): the canvas view writes
+    /// the board's frames and drains the panel's intents. The panel holds no
+    /// order of its own.
+    toile_deck: toile_chrome::DeckSignals,
     /// Status-bar selection aggregates (`trame-status-bar`); `None` on a single
     /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
@@ -505,6 +509,13 @@ pub fn main() {
         draft: RwSignal::new(None),
         intent: RwSignal::new(None),
     };
+    // The deck (`toile-presentation`): the panel renders the frames the view
+    // read back and answers with one order edit at a time.
+    let toile_deck = toile_chrome::DeckSignals {
+        panel: RwSignal::new(false),
+        view: RwSignal::new(Default::default()),
+        intent: RwSignal::new(None),
+    };
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
     // boot the dark theme. `theme_ctl` is the single source of truth for the
@@ -686,6 +697,7 @@ pub fn main() {
         toile_float_bar,
         toile_quick_style,
         toile_comments,
+        toile_deck,
         sheets,
         active_sheet,
     );
@@ -1394,6 +1406,11 @@ pub fn main() {
         draft: RwSignal::new(None),
         intent: RwSignal::new(None),
     };
+    let ch_toile_deck = toile_chrome::DeckSignals {
+        panel: RwSignal::new(false),
+        view: RwSignal::new(Default::default()),
+        intent: RwSignal::new(None),
+    };
     let ch_formula_ref = RwSignal::new(String::new());
     let ch_formula_text = RwSignal::new(String::new());
     let ch_formula_action = RwSignal::new(None::<FormulaAction>);
@@ -1434,6 +1451,7 @@ pub fn main() {
                 ch_toile_float_bar,
                 ch_toile_quick_style,
                 ch_toile_comments,
+                ch_toile_deck,
             )),
             // Trame, or any non-Toile embed (only Trame/Toile are paintable views;
             // a stray type falls back to Trame rather than crash the frame).
@@ -1488,6 +1506,7 @@ pub fn main() {
                     toile_float_bar,
                     toile_quick_style,
                     toile_comments,
+                    toile_deck,
                 ))
             } else {
                 AppView::Trame(TrameView::new(

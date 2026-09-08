@@ -9,6 +9,8 @@
 //! Loro and never synced. This mirrors the durable-intent vs momentary-gesture
 //! split already used for presence (`toile-presence`).
 
+use std::collections::HashSet;
+
 use ambre_bus::UserId;
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
@@ -21,10 +23,12 @@ use crate::logic::interop::{PageSize, PdfPage};
 use crate::ui::viewport::{FIT_PAD, ViewportTransform};
 
 use crate::logic::command::{
-    PresencePayload, SlideChange, TextDelta, ToileError, ToileEvent, ToileOutcome,
+    DeckFrame, DeckView, PresencePayload, SlideChange, TextDelta, ToileError, ToileEvent,
+    ToileOutcome,
 };
-use crate::logic::model::{ElementId, FrameId};
+use crate::logic::model::{ElementId, FrameId, NodeId};
 
+use super::codec::str_of;
 use super::{CHILDREN, CONFIG, NOTES, ORDER, PRESENTATION, ToileState};
 
 impl ToileState {
@@ -67,7 +71,52 @@ impl ToileState {
         // Clamp the local cursor to the new deck length (empty deck -> 0).
         let len = target.len();
         self.playback.active = self.playback.active.min(len.saturating_sub(1));
-        self.emit_with_update(Vec::new())
+        self.emit_with_update(vec![ToileEvent::DeckChanged])
+    }
+
+    /// The board's frames for the deck panel (`TOILE-FEAT-026`): the deck in
+    /// playback order, then every other frame in paint order. A pure read -- no
+    /// commit, no delta, no undo item.
+    ///
+    /// A slide naming a frame the board no longer holds is dropped here as well
+    /// as at deletion (`TOILE-FEAT-027`), so a deck merged from a peer that
+    /// deleted a frame concurrently still lists only frames the panel can show.
+    pub(super) fn read_deck(&self) -> ToileOutcome {
+        let deck = self.slide_order();
+        let slides: Vec<DeckFrame> = deck
+            .iter()
+            .filter(|id| self.is_frame(id))
+            .map(|id| self.deck_frame(id))
+            .collect();
+        let off_deck: Vec<DeckFrame> = self
+            .layer_order()
+            .iter()
+            .filter_map(|node| match node {
+                NodeId::Element(id) => Some(id),
+                NodeId::Connector(_) => None,
+            })
+            .filter(|id| self.is_frame(id) && !deck.contains(id))
+            .map(|id| self.deck_frame(id))
+            .collect();
+        ToileOutcome::display_only(vec![ToileEvent::DeckData(DeckView { slides, off_deck })])
+    }
+
+    /// Whether `id` still names a frame on the board.
+    fn is_frame(&self, id: &ElementId) -> bool {
+        self.element_map(id)
+            .is_some_and(|em| str_of(&em, "type") == "frame")
+    }
+
+    /// One deck row: the frame's id and its title, empty until it is named.
+    fn deck_frame(&self, id: &ElementId) -> DeckFrame {
+        let name = self
+            .element_map(id)
+            .map(|em| str_of(&em, "name"))
+            .unwrap_or_default();
+        DeckFrame {
+            id: id.clone(),
+            name,
+        }
     }
 
     /// The shared slide sequence, in playback order. Empty if no deck exists.
@@ -375,6 +424,39 @@ impl ToileState {
     #[cfg(feature = "pdf")]
     fn content_bounds(&self) -> Option<Rect> {
         self.bounds.values().copied().reduce(|acc, r| acc.union(r))
+    }
+
+    /// Drop every slide whose frame is in `deleted` (`TOILE-FEAT-027`), without
+    /// committing: the caller owns the commit, so a deletion and the deck it
+    /// prunes are one undo item and can never be seen apart.
+    ///
+    /// A board with no deck, or a deletion naming no slide, writes nothing --
+    /// deleting a note must not seed a presentation.
+    pub(super) fn drop_slides(&mut self, deleted: &HashSet<&ElementId>) -> bool {
+        let Some(list) = self.order_list() else {
+            return false;
+        };
+        let before = slide_order_of(&list);
+        let dead: HashSet<&str> = deleted.iter().map(|id| id.as_str()).collect();
+        let kept: Vec<String> = before
+            .iter()
+            .filter(|id| !dead.contains(id.as_str()))
+            .cloned()
+            .collect();
+        if kept.len() == before.len() {
+            return false;
+        }
+        if let LoroValue::List(items) = list.get_deep_value()
+            && !items.is_empty()
+        {
+            let _ = list.delete(0, items.len());
+        }
+        for id in &kept {
+            let _ = list.push(id.as_str());
+        }
+        // Clamp this viewer's cursor, as a shorter deck does anywhere else.
+        self.playback.active = self.playback.active.min(kept.len().saturating_sub(1));
+        true
     }
 
     // -- container helpers -----------------------------------------------------

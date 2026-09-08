@@ -13,6 +13,7 @@
 
 pub mod commands;
 pub mod comments;
+pub mod deck;
 pub mod edit;
 pub mod embed;
 pub mod find;

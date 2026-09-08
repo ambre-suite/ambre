@@ -2700,3 +2700,111 @@ input[type="radio"] {
 .ambre-comment-composer-post:hover {
     background: var(--surface-hover);
 }
+
+/* -- The deck panel (toile-presentation) -------------------------------------
+   The surface that builds a presentation: the deck in playback order, each row
+   carrying its rank and its three edits, then the frames still off it. Same
+   floating card as the comments panel, so the two read as one family. */
+.ambre-deck-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 280px;
+    max-height: 70vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    padding: 8px;
+    font-family: Roboto, system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    color: var(--text);
+}
+.ambre-deck-title {
+    display: flex;
+    align-items: center;
+}
+.ambre-deck-heading {
+    flex: 1 1 auto;
+    font-weight: 600;
+    font-size: 15px;
+}
+.ambre-deck-panel button {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+}
+.ambre-deck-panel button:hover:not(:disabled) {
+    background: var(--surface-hover);
+}
+.ambre-deck-panel button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+.ambre-deck-close {
+    border-color: transparent;
+    color: var(--text-dim);
+}
+.ambre-deck-list,
+.ambre-deck-pool {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.ambre-deck-row,
+.ambre-deck-pool-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.ambre-deck-goto,
+.ambre-deck-add-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: left;
+}
+.ambre-deck-rank {
+    flex: 0 0 auto;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+}
+.ambre-deck-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ambre-deck-plus {
+    flex: 0 0 auto;
+    color: var(--text-dim);
+}
+.ambre-deck-add {
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.ambre-deck-subhead {
+    color: var(--text-dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.ambre-deck-empty {
+    margin: 0;
+    color: var(--text-dim);
+}

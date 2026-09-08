@@ -61,7 +61,7 @@ use crate::logic::command::{
     PresencePayload, SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome,
 };
 use crate::logic::index::{SpatialIndex, Viewport};
-use crate::logic::model::{ConnectorId, ElementId, NodeId, PlaybackState};
+use crate::logic::model::{ConnectorId, ElementId, FrameId, NodeId, PlaybackState};
 
 // Root container names.
 const ELEMENTS: &str = "elements";
@@ -343,6 +343,7 @@ impl ToileState {
                 ids,
                 keep_sources,
             } => self.boolean_op(op, &ids, keep_sources),
+            ToileCommand::ReadDeck => self.read_deck(),
             ToileCommand::Undo => self.apply_history(true),
             ToileCommand::Redo => self.apply_history(false),
             ToileCommand::CreateConnector {
@@ -399,8 +400,11 @@ impl ToileState {
             tracing::warn!("Toile: remote import failed: {e}");
             return vec![ToileEvent::Error(ToileError::NoSuchElement(String::new()))];
         }
+        let deck_before = self.slide_order();
         self.rebuild_caches();
-        vec![self.viewport_event()]
+        let mut events = vec![self.viewport_event()];
+        events.extend(self.deck_change(&deck_before));
+        events
     }
 
     /// Apply a batch of remote deltas (a server history replay on open) as one
@@ -412,6 +416,7 @@ impl ToileState {
         if updates.is_empty() {
             return Vec::new();
         }
+        let deck_before = self.slide_order();
         let mut any_ok = false;
         for update in updates {
             match self.doc.import(update) {
@@ -423,7 +428,9 @@ impl ToileState {
             return vec![ToileEvent::Error(ToileError::NoSuchElement(String::new()))];
         }
         self.rebuild_caches();
-        vec![self.viewport_event()]
+        let mut events = vec![self.viewport_event()];
+        events.extend(self.deck_change(&deck_before));
+        events
     }
 
     /// Full CRDT snapshot for local persistence / compaction / SnapshotNeeded.
@@ -464,8 +471,19 @@ impl ToileState {
         if !changed {
             return ToileOutcome::display_only(vec![self.undo_state_event()]);
         }
+        let deck_before = self.slide_order();
         self.rebuild_caches();
-        self.emit_with_update(vec![self.viewport_event(), self.undo_state_event()])
+        let mut events = vec![self.viewport_event(), self.undo_state_event()];
+        events.extend(self.deck_change(&deck_before));
+        self.emit_with_update(events)
+    }
+
+    /// `DeckChanged` when the deck is no longer `before` (`toile-presentation`).
+    /// Every write that can move the deck without naming it -- a history step, a
+    /// remote delta, a deleted frame -- calls this, because the panel holds no
+    /// authoritative state and would otherwise show a deck nobody has.
+    pub(super) fn deck_change(&self, before: &[FrameId]) -> Option<ToileEvent> {
+        (self.slide_order() != before).then_some(ToileEvent::DeckChanged)
     }
 
     pub(super) fn undo_state_event(&self) -> ToileEvent {
