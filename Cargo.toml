@@ -253,6 +253,20 @@ version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0"
 
+# A test run executes the dependency graph, it does not only compile it:
+# Argon2id hashes 64 MiB three times over per derivation, and the CRDT engine
+# replays 256 generated op programs per convergence property. Unoptimized, those
+# two tests alone took 33 s of the 42 s the native tier spent running. Optimized,
+# the whole tier runs in 3 s. A dependency is compiled once and cached, so this
+# is paid at the first build and refunded on every run after it; our own crates
+# stay unoptimized, which is what keeps an incremental rebuild short.
+[profile.dev.package."*"]
+opt-level = 3
+# Dependency debug info is never stepped through, and it is most of what makes
+# `target/` tens of gigabytes. Dropping it cuts the tree and the link step that
+# writes it out; a backtrace through our own crates keeps its symbols.
+debug = false
+
 [profile.release]
 opt-level = 3
 lto = true

@@ -90,24 +90,22 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # test-native -- pure Rust on the native x86_64 target (the spec's "host"
-  # tier): workspace logic + the server, zero external dependency.
+  # tier): the whole workspace, the server and the feature-gated belts included,
+  # zero external dependency.
   # ---------------------------------------------------------------------------
   test-native:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # This job builds the workspace three times over into one `target/`: the
-      # default feature set, then the `fixtures` one (non-default by design --
-      # `ambre-spec-fixtures.md` §5 keeps the fixture machinery out of any client
-      # build, so `cargo test --workspace` cannot reach it), then the native
-      # server stack (tokio / sqlx / aws-sdk-s3), which is excluded from
-      # `default-members` and pulls a dependency tree of its own. That overflowed
-      # the runner's free space at the last step -- `No space left on device`
-      # while archiving `libtokio.rlib`, with every test up to that point green.
+      # The tier is one `cargo test` line over one feature set (see the
+      # `test-native` recipe), so it builds the workspace once. It used to run
+      # four lines under four sets, each of which cargo caches separately: four
+      # copies of the workspace in one `target/`, which overflowed the runner
+      # while archiving `libtokio.rlib` with every test up to that point green.
       #
       # The hosted image ships ~30 GB of toolchains no Rust job here touches.
-      # Dropping them buys back an order of magnitude more than the build needs,
-      # and the `df` leaves the real figure in the log so the next squeeze is
+      # Dropping them keeps the margin wide now that the build no longer needs
+      # it, and the `df` leaves the real figure in the log so the next squeeze is
       # diagnosable rather than guessed at.
       - name: Free runner disk space
         run: |

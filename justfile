@@ -24,37 +24,38 @@ lint:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets -- -D warnings
 
-# The server is excluded from `default-members` (native target), so it is
-# named explicitly with a second invocation.
-
-# The fixture machinery sits behind a non-default `fixtures` feature
-# (`ambre-spec-fixtures.md` §5: `ambre-logic` ships to wasm, so the loader and
-# driver must not be reachable from a client build). `cargo test --workspace`
-# passes no `--features`, so it cannot reach that code at all -- hence the extra
-# line. `FIXTURES P1` replaces it with `just fixtures-check`, which adds the
-# golden drift gate on top of the same belts.
+# **One invocation for the whole tier.** The native tier used to run four
+# `cargo test` lines under four feature sets. Cargo caches a build per set, so
+# the tier compiled the workspace four times over and kept all four: 21 min from
+# a clean tree and a `target/` of 18 GB, past the 10 GB the shared CI cache
+# holds, so the job's cache was evicted about as often as it was restored. The
+# union of the four sets runs every test the four ran, from one build: 10 min
+# 40 s cold, 4.9 GB on disk.
 #
-# **One invocation for the fixture belts.**
-# `--features ambre-logic/fixtures` propagates to `ambre-core` / `ambre-trame` /
-# `ambre-toile` (each declares the forward), so their gated code is compiled and
-# type-checked as a dependency here. Naming `ambre-trame` as a package too would
-# rebuild its whole test harness under a second feature set for no coverage --
-# it owns no `fixtures`-gated test -- and this job already carries the workspace
-# build plus the native server stack on one runner disk.
+# `--workspace` reaches `ambre-server` too: the package is excluded from
+# `default-members` (a native target that would break a wasm32 build), which
+# `--workspace` overrides.
 #
-# **`ambre-toile` is a separate case: it owns 8 tests behind its `pdf` feature**
-# (`logic::interop::pdf_export`, `logic::state::presentation::pdf_tests`), which
-# `cargo test --workspace` cannot reach because it enables no optional feature.
-# They had never executed in CI. A test that never runs verifies nothing, so the
-# feature gets its own line rather than a caveat in `toile-interop §1`
-# (`TOILE-IO-005`).
+# `--features ambre-logic/fixtures` reaches the fixture machinery, non-default by
+# design (`ambre-spec-fixtures.md` §5: `ambre-logic` ships to wasm, so the loader
+# and the driver must not be reachable from a client build). It propagates to
+# `ambre-core` / `ambre-trame` / `ambre-toile`, each of which declares the
+# forward. `FIXTURES P1` replaces this recipe with `just fixtures-check`, which
+# adds the golden drift gate on top of the same belts.
+#
+# `--features ambre-toile/pdf` reaches the 8 tests behind that feature
+# (`logic::interop::pdf_export`, `logic::state::presentation::pdf_tests`,
+# `TOILE-IO-005`). A test that never runs verifies nothing.
+#
+# No feature here is read negatively -- no `cfg(not(feature = ...))` exists in
+# the workspace -- so enabling both changes no test's outcome. The `lint` recipe
+# still compiles the workspace with no feature at all, which is what holds the
+# other half: that the gated code is genuinely optional.
 
-# native tier: workspace logic + the fixture belts + the server, on native x86_64.
+# native tier: the whole workspace, fixture belts and PDF export included, on
+# native x86_64, in one build.
 test-native:
-    cargo test --workspace
-    cargo test -p ambre-core -p ambre-logic --features ambre-logic/fixtures
-    cargo test -p ambre-toile --features pdf
-    cargo test -p ambre-server
+    cargo test --workspace --features ambre-logic/fixtures,ambre-toile/pdf
 
 # The `db` feature flips the `cfg_attr(not(feature = "db"), ignore = ...)` gate
 # off so the otherwise ignored tests run. Bring services up first with
