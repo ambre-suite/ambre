@@ -19,12 +19,12 @@
   `human-review` and `qa-manual` carry no ceiling: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2357 rows: 1604 shipped, of which 803 loose. 753 unbuilt.**
+**2357 rows: 1604 shipped, of which 805 loose. 753 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 189 | 206 | 406 |  | 801 |
-| `unverified` | 300 | 201 | 297 |  | 798 |
+| `verified` | 187 | 206 | 406 |  | 799 |
+| `unverified` | 302 | 201 | 297 |  | 800 |
 | `human-review` | 5 |  |  |  | 5 |
 | `qa-manual` |  |  |  |  | 0 |
 | `unimplemented` | 61 | 56 | 45 | 591 | 753 |
@@ -59,7 +59,7 @@
 | `ambre-spec-object-store.md` | 12 | 12 | 3 | 9 |  |
 | `ambre-spec-organizations.md` | 11 | 10 | 5 | 5 | 1 |
 | `ambre-spec-pdf-export.md` | 6 | 5 | 2 | 3 | 1 |
-| `ambre-spec-presence.md` | 14 | 14 | 13 | 1 |  |
+| `ambre-spec-presence.md` | 14 | 14 | 11 | 3 |  |
 | `ambre-spec-render-assets.md` | 14 | 11 | 3 | 8 | 3 |
 | `ambre-spec-schema-version.md` | 12 | 4 | 0 | 4 | 8 |
 | `ambre-spec-sealed-envelope.md` | 17 | 17 | 8 | 9 |  |
