@@ -132,6 +132,7 @@ describe! {
     PRESENT_START: menu_bar::PRESENT, "Start presentation", None, &[], PRESENT;
     IMPORT_FILE: menu_bar::IMPORT_FILE, "Import a file...", Some(IconId("file-import-outline")), &[], FILE;
     EXPORT_SVG: menu_bar::EXPORT_SVG, "Export as SVG", Some(IconId("file-export-outline")), &[], FILE;
+    EXPORT_PDF: menu_bar::EXPORT_PDF, "Export deck as PDF", Some(IconId("file-pdf-box")), &[], FILE;
     PRESENT_DECK: menu_bar::DECK, "Order the deck", Some(IconId("view-carousel-outline")), &[], PRESENT;
     TOOL_SELECT: palette::TOOL_SELECT, "Select", Some(IconId("cursor-default")), &[letter('v')], TOOL;
     TOOL_PEN: palette::TOOL_PEN, "Pen", Some(IconId("vector-polyline")), &[letter('p')], TOOL;

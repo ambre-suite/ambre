@@ -376,6 +376,14 @@ impl ToileState {
             ToileCommand::ImportSvg { bytes, at } => self.import_svg_bytes(&bytes, at),
             ToileCommand::ImportImage { bytes, mime: _, at } => self.import_image_bytes(&bytes, at),
             ToileCommand::ExportSvg => self.export_svg_document(),
+            // Served by the Logic thread, which holds the base font faces the
+            // render walk needs (`toile-pdf-export`, `TOILE-IO-029`). Its
+            // dispatcher intercepts the command before the document lookup, so
+            // this arm is reached only by a caller that drives `ToileState`
+            // directly -- and it answers rather than falling silent.
+            ToileCommand::ExportPdf => ToileOutcome::display_only(vec![ToileEvent::ExportFailed(
+                "the deck is exported by the Logic thread, not by the board".to_owned(),
+            )]),
             ToileCommand::ImportFigma { .. } | ToileCommand::ImportMiro { .. } => {
                 // Figma / Miro converters land in a later interop slice; the board
                 // is untouched until then (atomicity).

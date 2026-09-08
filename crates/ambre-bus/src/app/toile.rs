@@ -1114,6 +1114,15 @@ pub enum ToileCommand {
     /// (`TOILE-IO-024`). Answered by [`ExportComplete`](ToileEvent::ExportComplete),
     /// which the UI thread turns into a browser download (`TOILE-IO-085`).
     ExportSvg,
+    /// Render the deck to a PDF, one page per slide, and hand the bytes back
+    /// (`toile-pdf-export`). Read-only, like [`ExportSvg`](Self::ExportSvg), and
+    /// answered the same way -- but the render walk needs the base font faces the
+    /// Main thread fetched at boot, so this one is served by the Logic thread
+    /// itself rather than by the board alone. Answered by
+    /// [`ExportComplete`](ToileEvent::ExportComplete), or by
+    /// [`ExportFailed`](ToileEvent::ExportFailed) when there is no page to draw
+    /// or no font to draw it with.
+    ExportPdf,
 
     // -- Persistence / compaction (no CRDT mutation) --
     RequestSnapshot,
@@ -1167,6 +1176,7 @@ impl ToileCommand {
                 | Self::RequestSnapshot
                 | Self::CopyElements { .. }
                 | Self::ExportSvg
+                | Self::ExportPdf
                 | Self::ReadComments { .. }
                 | Self::ReadDeck
                 // Ephemeral only: a viewer still shows a cursor
@@ -1344,6 +1354,10 @@ pub enum ToileEvent {
     /// safety-limit breach, or a media upload failure): the board is unchanged
     /// (`toile-import-export`, atomicity). Carries a human-facing reason.
     ImportFailed(String),
+    /// An export produced nothing (`toile-pdf-export`): a board with no content,
+    /// or a session whose fonts have not landed yet. The board is unchanged, so
+    /// without a word the user cannot tell the refusal from a lost click.
+    ExportFailed(String),
     /// An export produced a file (`toile-import-export`). The Logic thread holds
     /// the board, so it serializes the bytes; the UI thread owns the DOM, so it
     /// triggers the download (`TOILE-IO-085`). `filename` already carries the

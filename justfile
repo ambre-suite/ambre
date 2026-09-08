@@ -47,15 +47,19 @@ lint:
 # (`logic::interop::pdf_export`, `logic::state::presentation::pdf_tests`,
 # `TOILE-IO-005`). A test that never runs verifies nothing.
 #
+# `--features ambre-logic/toile-pdf` is the same case one crate up. That feature
+# carries the handler that answers `ExportPdf` (`TOILE-IO-029`), and a run
+# without it compiles the refusal arm instead.
+#
 # No feature here is read negatively -- no `cfg(not(feature = ...))` exists in
-# the workspace -- so enabling both changes no test's outcome. The `lint` recipe
-# still compiles the workspace with no feature at all, which is what holds the
-# other half: that the gated code is genuinely optional.
+# the workspace -- so enabling all three changes no test's outcome. The `lint`
+# recipe still compiles the workspace with no feature at all, which is what holds
+# the other half: that the gated code is genuinely optional.
 
 # native tier: the whole workspace, fixture belts and PDF export included, on
 # native x86_64, in one build.
 test-native:
-    cargo test --workspace --features ambre-logic/fixtures,ambre-toile/pdf
+    cargo test --workspace --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf
 
 # The `db` feature flips the `cfg_attr(not(feature = "db"), ignore = ...)` gate
 # off so the otherwise ignored tests run. Bring services up first with

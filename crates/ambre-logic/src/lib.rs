@@ -248,9 +248,9 @@ struct LogicState {
     /// glyphs, so export waits on this. Lives on the Logic thread because that is
     /// where the export pass runs, and the thread cannot fetch it itself.
     ///
-    /// Read by the PDF-export handler (`ExportPdf`, a later slice); seeded now so
-    /// the fonts are warm before the first export.
-    #[allow(dead_code)]
+    /// Read by the PDF-export handler (`data::export_toile_pdf`), and seeded at
+    /// boot so the faces are warm before the first export rather than fetched
+    /// under it.
     export_cx: Option<parley::FontContext>,
 }
 

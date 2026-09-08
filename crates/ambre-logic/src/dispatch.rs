@@ -1048,4 +1048,96 @@ mod tests {
         state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
         assert!(state.export_cx.is_some());
     }
+
+    // -- The deck's PDF export (`toile-pdf-export`, `TOILE-IO-029`) ------------
+    //
+    // This is the one app command the Logic thread serves itself rather than
+    // handing to the document, because the base font faces live here. These
+    // tests hold that routing: the command reaches the handler, and the handler
+    // answers -- with the file or with the reason there is none.
+
+    /// Ask a live board for its deck, and report the Toile event that came back.
+    fn export_pdf_answer(
+        state: &mut LogicState,
+        ui_rx: &flume::Receiver<UiEvent>,
+        doc_id: DocumentId,
+    ) -> ambre_bus::app::toile::ToileEvent {
+        // Whatever seeded the board has already spoken; the export's own answer
+        // is the only event this reads.
+        let _ = ui_rx.drain().count();
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Toile(ToileCommand::ExportPdf),
+        });
+        ui_rx
+            .drain()
+            .find_map(|e| match e {
+                UiEvent::Viewport {
+                    event: AppEvent::Toile(te),
+                    ..
+                } => Some(te),
+                _ => None,
+            })
+            .expect("the export answers")
+    }
+
+    /// A board with a rect on it, so the deck has a page to draw.
+    fn board_with_content(state: &mut LogicState) -> DocumentId {
+        let doc_id = live_toile(state, Role::Owner);
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Toile(ToileCommand::CreateElement {
+                kind: ambre_toile::logic::model::ElementKind::Shape(
+                    ambre_toile::logic::model::ShapeKind::Rect,
+                ),
+                at: kurbo::Point::new(0.0, 0.0),
+                size: kurbo::Size::new(100.0, 60.0),
+                content: ambre_bus::app::toile::InitContent::None,
+                fill: None,
+            }),
+        });
+        doc_id
+    }
+
+    /// Nothing is ever silent: a build without the export compiled in, and a
+    /// session whose fonts have not landed, both answer by name rather than
+    /// leaving the user waiting on a file.
+    #[test]
+    fn a_deck_export_without_fonts_answers_with_a_reason() {
+        let (mut state, ui_rx, _sync) = harness();
+        let doc_id = board_with_content(&mut state);
+        let answer = export_pdf_answer(&mut state, &ui_rx, doc_id);
+        assert!(
+            matches!(answer, ambre_bus::app::toile::ToileEvent::ExportFailed(_)),
+            "an export with no font context must say why"
+        );
+    }
+
+    /// The whole seam, once: the command routes past the document, the render
+    /// walk runs against the seeded faces, and the bytes come back named.
+    #[cfg(feature = "toile-pdf")]
+    #[test]
+    fn a_deck_export_answers_with_the_file() {
+        let (mut state, ui_rx, _sync) = harness();
+        state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
+        let doc_id = board_with_content(&mut state);
+        match export_pdf_answer(&mut state, &ui_rx, doc_id) {
+            ambre_bus::app::toile::ToileEvent::ExportComplete { filename, data } => {
+                assert_eq!(filename, "deck.pdf");
+                assert!(data.starts_with(b"%PDF-"), "a PDF header");
+            }
+            other => panic!("expected the file, got {other:?}"),
+        }
+    }
+
+    /// An export reads the board and writes nothing, so a read-only viewer keeps
+    /// the right to take a copy out (`ARCH-ROLE-GATE`).
+    #[test]
+    fn a_viewer_may_export_the_deck() {
+        let (mut state, ui_rx, _sync) = harness();
+        let doc_id = live_toile(&mut state, Role::Viewer);
+        // The gate drops a refused command before the handler, so an answer at
+        // all is the property under test.
+        let _ = export_pdf_answer(&mut state, &ui_rx, doc_id);
+    }
 }

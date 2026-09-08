@@ -57,6 +57,7 @@ pub fn resolve(id: IconId) -> Option<icondata::Icon> {
         "view-carousel-outline" => icondata::MdiViewCarouselOutline,
         "file-import-outline" => icondata::MdiFileImportOutline,
         "file-export-outline" => icondata::MdiFileExportOutline,
+        "file-pdf-box" => icondata::MdiFilePdfBox,
         _ => return None,
     };
     Some(icon)

@@ -742,3 +742,23 @@ fn a_finished_export_names_its_file() {
     assert!(text.contains("board.svg"), "{text}");
     root.remove();
 }
+
+/// An export that produced nothing says why (`TOILE-IO-048`). Without the toast
+/// the gesture is indistinguishable from one that never arrived: no file lands,
+/// and the board looks exactly as it did.
+#[wasm_bindgen_test]
+fn a_refused_export_says_why() {
+    let owner = Owner::new();
+    owner.set();
+    let root = mount_notified(ToileEvent::ExportFailed(
+        "the fonts are still loading".to_owned(),
+    ));
+    let text = root
+        .query_selector(".ambre-toast")
+        .unwrap()
+        .expect("the refusal is on screen")
+        .text_content()
+        .unwrap_or_default();
+    assert!(text.contains("the fonts are still loading"), "{text}");
+    root.remove();
+}

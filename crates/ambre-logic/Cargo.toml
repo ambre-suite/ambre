@@ -12,6 +12,12 @@ description = "Logic thread — typed command dispatch, per-document state regis
 # `DocState::import_snapshot` / `export_snapshot` are ungated production code
 # (`FIXTURE-007`). Every downstream feature is named explicitly: a Cargo feature never
 # enables its dependency's feature implicitly.
+# The deck's PDF export (`toile-pdf-export`, `TOILE-IO-029`). The render walk
+# runs on this thread because the base font faces do: `LoadFonts` seeds
+# `export_cx` here and nowhere else. Non-default -- it pulls the PDF serializer
+# into the bundle, so a build that never exports does not pay for it.
+toile-pdf = ["ambre-toile/pdf"]
+
 fixtures = [
     "ambre-core/fixtures",
     "ambre-trame/fixtures",

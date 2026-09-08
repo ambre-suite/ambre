@@ -817,6 +817,10 @@ impl ToileView {
             ToileEvent::ExportComplete { filename, data } => {
                 trigger_download(&filename, &data);
             }
+            // Nothing to download: the notice is the shell's (`TOILE-IO-022`).
+            ToileEvent::ExportFailed(reason) => {
+                tracing::warn!("Toile: export failed: {reason}");
+            }
         }
     }
 

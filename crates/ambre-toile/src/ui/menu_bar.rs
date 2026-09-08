@@ -63,6 +63,11 @@ pub const IMPORT_FILE: CommandId = CommandId("toile.file.import");
 /// Take the board out as an SVG document (`TOILE-IO-021`). Resolves to a board
 /// command: the Logic thread holds the board and serializes it.
 pub const EXPORT_SVG: CommandId = CommandId("toile.file.export_svg");
+/// Take the deck out as a PDF, one page per slide (`TOILE-IO-029`). Resolves to
+/// a board command, like [`EXPORT_SVG`], but the render walk runs on the Logic
+/// thread rather than in the board's own state: the pages are drawn, not
+/// serialized, and the base font faces live there.
+pub const EXPORT_PDF: CommandId = CommandId("toile.file.export_pdf");
 
 /// Every id the menu bar introduces (not shared with `ui::menu`). Used by the
 /// view to recognise the ids it must resolve locally, and by tests.
@@ -82,6 +87,7 @@ pub const MENU_BAR_COMMANDS: &[CommandId] = &[
     DECK,
     IMPORT_FILE,
     EXPORT_SVG,
+    EXPORT_PDF,
 ];
 
 // -- Menu grouping -------------------------------------------------------------
@@ -130,6 +136,7 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
         MenuId::File => vec![
             row(IMPORT_FILE),
             row(EXPORT_SVG),
+            row(EXPORT_PDF),
             MenuRow::Separator,
             row(PRESENT),
         ],
@@ -191,6 +198,7 @@ pub fn menu_bar_edit(id: CommandId) -> Option<ToileCommand> {
         // bytes come back as an event the view hands to the browser
         // (`TOILE-IO-085`).
         EXPORT_SVG => Some(ToileCommand::ExportSvg),
+        EXPORT_PDF => Some(ToileCommand::ExportPdf),
         _ => None,
     }
 }
@@ -288,6 +296,31 @@ mod tests {
         for id in [ZOOM_IN, ZOOM_OUT, ZOOM_RESET, ZOOM_FIT, ZOOM_TO_SELECTION] {
             assert!(menu_bar_edit(id).is_none(), "{id:?} should be view-local");
         }
+    }
+
+    /// Both exports are board commands, not view-local intents: the document
+    /// lives on the Logic thread, and so does everything that serializes it.
+    #[test]
+    fn file_menu_exports_resolve_to_board_commands() {
+        let cmds = item_commands(&menu_layout(MenuId::File));
+        assert!(cmds.contains(&EXPORT_SVG));
+        assert!(cmds.contains(&EXPORT_PDF));
+        assert!(matches!(
+            menu_bar_edit(EXPORT_SVG),
+            Some(ToileCommand::ExportSvg)
+        ));
+        assert!(matches!(
+            menu_bar_edit(EXPORT_PDF),
+            Some(ToileCommand::ExportPdf)
+        ));
+    }
+
+    /// An export reads the board and writes nothing, so the role gate must let a
+    /// read-only viewer take a copy out.
+    #[test]
+    fn exports_are_not_mutating() {
+        assert!(!ToileCommand::ExportSvg.is_mutating());
+        assert!(!ToileCommand::ExportPdf.is_mutating());
     }
 
     #[test]

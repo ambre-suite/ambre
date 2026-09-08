@@ -46,7 +46,7 @@
 | Toile reaction tally | < 0.1 ms typical | -- | Logic | one scan of the reactions map on read, never stored -- **none exists** |
 | Toile boolean combination, two typical paths | < 5 ms | -- | Logic | user-initiated and one-shot, off the render frame -- **none exists** |
 | Toile SVG import, 5 000 nodes | < 500 ms | -- | Logic | one-shot user action, off the render thread -- **none exists** |
-| Toile PDF export, 50 slides | < 3 s | -- | Logic | acceptable for an explicit export, off the render frame -- **none exists** |
+| Toile PDF export, 50 slides | < 3 s | -- | Logic | acceptable for an explicit export, off the render frame. It is not off the Logic command loop, so it is also how long the document stops accepting edits (`3-Toile/features/ambre-spec-toile-pdf-export.md`, `TOILE-IO-099`) -- **none exists** |
 | Toile first paint of a picture | < 15 ms | -- | UI | the display-latency budget: the placeholder paints and the network never blocks it -- **none exists** |
 | Toile media cache hit on a revisit | 0 refetch | -- | UI | the bounded local cache (`features/ambre-spec-toile-media.md section 3`) -- **none exists** |
 | Prose local text insert, transaction plus exported delta | < 2 ms | -- | Logic | **none exists**, and no code either |
@@ -207,7 +207,7 @@
 | `docx-rs` | ~300 KB | ~90 KB | Lazily loaded on the first DOCX import or export |
 | `html5ever` plus `markup5ever_rcdom` | ~200 KB | ~60 KB | Lazily loaded on the first HTML import |
 | `pulldown-cmark` and its writer | ~80 KB | ~25 KB | Lazily loaded |
-| `krilla`, billed to `ambre-pdf` | ~400 KB | ~120 KB | Counted once: Prose is the first PDF-exporting consumer, and a second one adds none of it |
+| `krilla`, billed to `ambre-pdf` | ~400 KB | ~120 KB | Counted once. Toile's deck export is the first consumer to link it: the launcher enables `ambre-logic/toile-pdf`, so the writer is in the Main instance from that build on, and Prose's export adds none of it |
 | `loro` | ~400 KB | ~120 KB | Shared by every application |
 | `parley` | ~200 KB | ~60 KB | Shared |
 | `wgpu` plus `lyon` plus `swash` | ~800 KB | ~250 KB | Shared, and the `swash` row above is its glyph half alone |

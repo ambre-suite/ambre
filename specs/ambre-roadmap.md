@@ -113,7 +113,7 @@ model and the GPU vector canvas.
 | `[x]` Comments | MVP | anchored comment threads with replies and resolve, their pins on the board, and the side panel |
 | `[x]` Live presence on the board | MVP | this peer's cursor, selection and stroke reach the others, the highlighter becomes a tool, a peer who leaves stops being painted, and a label is a name. The render half ships and receives nothing |
 | `[x]` Order the deck | MVP | a panel that adds a frame to the presentation, reorders it and removes it, and a deleted frame that leaves it. Playback, the transition and the speaker notes ship and have no deck to run on |
-| `[ ]` The Toile interop surface | MVP | a file dropped or picked reaches the importer at the drop point, an export entry hands the bytes to the browser, and the lossy-import report reaches the user. Every converter ships and no gesture calls one |
+| `[x]` The Toile interop surface | MVP | a file dropped or picked reaches the importer at the drop point, the SVG and PDF export entries hand the bytes to the browser, and the lossy-import report reaches the user |
 | `[ ]` Embeds on the board | MVP | a gesture places a web page or another Ambre document on the board, and a web page renders sealed off from it. The nesting plane ships -- opened, focused, painted and routed -- and nothing puts an embed there |
 | `[ ]` Connector labels | MVP | a caption on an arrow, editable in place |
 | `[ ]` Hyperlinks and go-to-frame | MVP | a link on an element, followed to a URL or to another frame |
@@ -164,6 +164,7 @@ plane touches, and it unblocks Toile's inline rich text and Trame's text colours
 | `[ ]` Clipped paths on the canvas | -- | a shape crossing a clip edge is drawn whole today. Clip it, and give a stroke a screen-constant width |
 | `[ ]` The adaptive chrome | V1 | the navigation, the side panels, the toolbar overflow and the wide data views adapt at the three declared widths. Today two labels and one bottom sheet move, and the regions the design names exist at no width |
 | `[ ]` The stylesheet reads the tokens | V1 | fifty literal colours and five undeclared custom properties in the shell stylesheet bypass the one token source, so a theme switch moves everything except them |
+| `[ ]` The PDF writer is fetched on demand | V1 | `krilla` sits behind a Cargo feature the launcher enables, so every user downloads the writer whether or not they ever export. A feature cannot defer it: the build emits one wasm artifact per instance, so the writer needs a second artifact fetched on the first export, as the budget already prescribes for Prose's interop |
 
 ### Trame
 
@@ -195,6 +196,8 @@ plane touches, and it unblocks Toile's inline rich text and Trame's text colours
 | `[ ]` Large-file import | -- | a very large import stays responsive and reports progress |
 | `[ ]` Figma and Miro import | V1 | open a board exported from either, reporting every construct it had to drop |
 | `[ ]` PNG export | V1 | a board or a frame rendered back to a raster image, without blocking the visible frame |
+| `[ ]` An export does not freeze the board | V1 | the deck's PDF export runs to completion inside the Logic thread's command loop, so a large deck stops every local edit and every remote apply for as long as it takes -- the budget says 3 s at 50 slides, and no benchmark has ever measured it. Take the walk off the loop, and measure it |
+| `[ ]` A deck exports at full resolution | V1 | a picture reaches the page from its inline thumbnail, capped at a 256 px edge, so a deck prints at screen quality. The full blob is ciphertext on the relay and the Logic thread has no path that fetches and opens one; give it that path, which the export must then be able to await |
 | `[ ]` The standalone showcase bundle | V1 | a board exported as a self-contained page that renders without the relay. It leaves the zero-knowledge boundary, and says so |
 
 ---

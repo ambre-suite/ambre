@@ -6,8 +6,46 @@
 // ============================================================================
 
 use super::*;
+// The deck's PDF export is answered here rather than inside `ToileState`, so
+// this file names the two Toile bus types the rest of the module reaches only
+// through `AppCommand` / `AppEvent`.
+use ambre_bus::app::toile::{ToileCommand, ToileEvent};
 
 impl LogicState {
+    /// Render a Toile deck to a PDF and answer with the bytes
+    /// (`toile-pdf-export`, `TOILE-IO-029`). The board is read through a shared
+    /// reference and the fonts through a mutable one, which is why this borrows
+    /// the two fields apart rather than going through `handle_app_command`'s
+    /// single `get_mut`.
+    ///
+    /// Every refusal reaches the user as a `ExportFailed`: a build without the
+    /// export compiled in, a session whose fonts have not landed, a board with
+    /// nothing to draw, and a serializer that gave up all answer by name.
+    fn export_toile_pdf(&mut self, document_id: DocumentId) {
+        let Self {
+            docs, export_cx, ..
+        } = self;
+        let Some(DocState::Toile(state)) = docs.get(&document_id).map(|d| &d.state) else {
+            tracing::warn!("Logic: PDF export asked of a document that is not a board");
+            return;
+        };
+        let answer = match export_pdf_of(state, export_cx.as_mut()) {
+            Ok(data) => ToileEvent::ExportComplete {
+                filename: PDF_FILENAME.to_owned(),
+                data,
+            },
+            Err(reason) => ToileEvent::ExportFailed(reason),
+        };
+        self.dispatch_outcome(
+            document_id,
+            vec![AppEvent::Toile(answer)],
+            None,
+            None,
+            None,
+            Vec::new(),
+        );
+    }
+
     /// Route a typed application command to its document's state, send display
     /// events to the UI Thread, and forward CRDT/ephemeral payloads to Sync.
     ///
@@ -32,6 +70,14 @@ impl LogicState {
                 "Logic: dropping mutating command on doc {document_id}: role {:?} is not writable",
                 doc.role,
             );
+            return;
+        }
+        // The deck's PDF export is the one app command this thread serves itself
+        // (`toile-pdf-export`): the render walk needs the base font faces the
+        // Main thread fetched at boot, and those live here, beside the documents
+        // rather than inside one.
+        if matches!(command, AppCommand::Toile(ToileCommand::ExportPdf)) {
+            self.export_toile_pdf(document_id);
             return;
         }
         let doc = &mut doc.state;
@@ -334,4 +380,34 @@ impl LogicState {
             DocState::Toile(state) => Some(state.export_snapshot()),
         }
     }
+}
+
+/// The name a deck export carries. The board's title is a launcher concern, so
+/// the file is named for what it holds, like the SVG export.
+const PDF_FILENAME: &str = "deck.pdf";
+
+/// The deck as PDF bytes, or the reason there are none. Split out of the handler
+/// so the two builds -- with the export compiled in and without -- differ in one
+/// function and not in the routing around it.
+#[cfg(feature = "toile-pdf")]
+fn export_pdf_of(
+    state: &ToileState,
+    font_cx: Option<&mut parley::FontContext>,
+) -> Result<Vec<u8>, String> {
+    let Some(font_cx) = font_cx else {
+        // The faces are fetched once at boot and never re-requested, so this is
+        // a race with startup, not a dead end: the next attempt succeeds.
+        return Err("the fonts are still loading".to_owned());
+    };
+    state
+        .export_pdf_document(Default::default(), font_cx)
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(not(feature = "toile-pdf"))]
+fn export_pdf_of(
+    _state: &ToileState,
+    _font_cx: Option<&mut parley::FontContext>,
+) -> Result<Vec<u8>, String> {
+    Err("PDF export is not compiled into this build".to_owned())
 }

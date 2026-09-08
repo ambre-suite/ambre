@@ -47,6 +47,11 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         ToileEvent::ExportComplete { filename, .. } => {
             toasts.info(format!("Exported {filename}"));
         }
+        // An export that produced nothing is silent otherwise: no file lands,
+        // and the board looks exactly as it did (`TOILE-IO-029`).
+        ToileEvent::ExportFailed(reason) => {
+            toasts.warning(format!("Export failed: {reason}"));
+        }
         _ => {}
     }
 }
