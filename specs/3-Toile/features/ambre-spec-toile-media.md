@@ -219,12 +219,13 @@ promising a distinction the code does not draw.
   to make the *first paint* instant is read only where no paint happens, and the rule it was written
   for -- the picture shown while the full blob loads -- is still held by nothing.
 * **So every picture is a grey box on screen, and a picture in an exported page.** Two absences
-  compose on the frame path and neither is on the export path: nothing downloads, nothing reads the
-  thumbnail, and `WgpuSurface` implements no `draw_image` at all
-  (`1-Foundations/ambre-spec-drawing-surface.md section 2`), so filling the store would still paint
-  nothing. A user therefore imports a photograph, sees a placeholder, and finds the picture in the
-  PDF -- the inversion of what either path is for. Closing the screen half is two pieces of work,
-  not one: the texture pipeline, then what feeds it.
+  compose on the frame path and neither is on the export path: nothing downloads, and nothing reads
+  the thumbnail. The third is now gone -- `WgpuSurface` uploads a texture, keeps it under a budget
+  and draws it (`1-Foundations/ambre-spec-drawing-surface.md`, `CANVAS-065`, `CANVAS-066`) -- so
+  what remains is the half that fills the store the walk consults. A user therefore still imports a
+  photograph, sees a placeholder, and finds the picture in the PDF. The store lives on the UI
+  thread and the pixels live on the Logic one, so filling it is a bus question, not a render one:
+  no `ToileEvent` carries pixels today.
 * **An entry outlives its last element, and no rule says what should happen.** Deleting a picture
   drops the element and leaves the entry in `media` for good. Eager removal is wrong -- a delete is
   undoable, and another element may share the address -- and no reference count exists. The document

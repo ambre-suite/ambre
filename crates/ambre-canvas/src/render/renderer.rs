@@ -7,7 +7,8 @@
 // ============================================================================
 
 use super::*;
-use ambre_draw::{Color, Rect};
+use ambre_draw::{Color, ImageSource, Rect};
+use std::collections::HashMap;
 
 // ============================================================================
 // Offscreen target
@@ -91,6 +92,7 @@ pub struct QuadRenderer {
     /// Full-color glyph pipeline (color emoji): samples the RGBA color atlas
     /// and outputs the texel directly, ignoring the vertex tint.
     color_glyph_pipeline: wgpu::RenderPipeline,
+    image_pipeline: wgpu::RenderPipeline,
     blit_pipeline: wgpu::RenderPipeline,
 
     // -- Shared uniform (viewport size) --
@@ -105,6 +107,10 @@ pub struct QuadRenderer {
     atlas_bgl: wgpu::BindGroupLayout,
     atlas_sampler: wgpu::Sampler,
     pub atlas: GlyphAtlas,
+
+    // -- Uploaded image textures, keyed by the caller's `ImageKey` --
+    image_sampler: wgpu::Sampler,
+    images: ImageTextures,
 
     // -- Per-layer batches --
     cells: LayerBatches,
@@ -124,6 +130,121 @@ pub struct QuadRenderer {
     // -- Viewport state --
     width: f32,
     height: f32,
+}
+
+/// How much VRAM the uploaded pictures may hold together, mip chains included.
+///
+/// The wgpu row of `ambre-spec-budgets.md section 6` caps textures and buffers
+/// at 20 MB, of which the two glyph atlases already claim up to 20; pictures are
+/// charged their own ceiling rather than sharing an unstated remainder. At four
+/// bytes a texel a full budget is roughly six 1024x1024 photographs, and the
+/// chain adds a third to each.
+const IMAGE_VRAM_BUDGET: usize = 24 * 1024 * 1024;
+
+/// One cached picture: what a draw binds, and what holding it costs.
+struct CacheEntry<T> {
+    payload: T,
+    bytes: usize,
+    /// The size it was uploaded at. A key reused at a different size is content
+    /// that changed behind its identity, so the entry is replaced rather than
+    /// stretched (`ImageSource::key`).
+    width: u32,
+    height: u32,
+    /// Frame ordinal of the last draw that bound it, for eviction.
+    last_used: u64,
+}
+
+/// The uploaded pictures, bounded by `IMAGE_VRAM_BUDGET` and evicted
+/// least-recently-drawn first.
+///
+/// This is a *texture* cache, not the decoded-pixel cache `CANVAS-007` calls
+/// for: that one is CPU-side, shared across applications, and still unbuilt.
+/// The two are not interchangeable -- pixels feed an upload, and what is bound
+/// per draw is what lives here.
+///
+/// It is generic over what it holds so its policy -- when an entry is a hit,
+/// what is dropped when the budget binds -- can be exercised on the host tier,
+/// where no GPU adapter exists to mint a bind group
+/// (`ambre-spec-testing.md section 2`).
+struct ImageCache<T> {
+    map: HashMap<ImageKey, CacheEntry<T>>,
+    bytes: usize,
+    budget: usize,
+    /// Monotonic per-frame counter, stamped onto an entry when it is drawn.
+    clock: u64,
+}
+
+impl<T> ImageCache<T> {
+    fn new(budget: usize) -> Self {
+        Self {
+            map: HashMap::new(),
+            bytes: 0,
+            budget,
+            clock: 0,
+        }
+    }
+
+    /// The payload for `key`, if these exact pixels are already resident. Stamps
+    /// the entry so eviction sees it as recently used.
+    fn get(&mut self, key: ImageKey, width: u32, height: u32) -> Option<&T> {
+        let clock = self.clock;
+        let entry = self.map.get_mut(&key)?;
+        if entry.width != width || entry.height != height {
+            return None;
+        }
+        entry.last_used = clock;
+        Some(&entry.payload)
+    }
+
+    /// The payload for a run being encoded. Unlike `get` this asks no question
+    /// about size: the run was recorded against the entry as uploaded, and an
+    /// entry evicted in between simply is not there.
+    fn bound(&self, key: ImageKey) -> Option<&T> {
+        self.map.get(&key).map(|e| &e.payload)
+    }
+
+    /// Insert an upload, evicting the least recently drawn entries until the
+    /// budget holds again. An image larger than the whole budget is stored
+    /// anyway -- refusing it would paint nothing at all, and the next insert
+    /// evicts it.
+    fn insert(&mut self, key: ImageKey, entry: CacheEntry<T>) {
+        if let Some(old) = self.map.remove(&key) {
+            self.bytes -= old.bytes;
+        }
+        self.bytes += entry.bytes;
+        self.map.insert(key, entry);
+        while self.bytes > self.budget && self.map.len() > 1 {
+            let victim = self
+                .map
+                .iter()
+                .min_by_key(|(_, v)| v.last_used)
+                .map(|(k, _)| *k);
+            match victim {
+                Some(k) => {
+                    if let Some(v) = self.map.remove(&k) {
+                        self.bytes -= v.bytes;
+                    }
+                }
+                None => break,
+            }
+        }
+    }
+}
+
+type ImageTextures = ImageCache<wgpu::BindGroup>;
+
+/// Record one quad's index range against the texture it needs bound.
+///
+/// The run in flight is extended when it already binds this texture and the new
+/// range continues it; anything else opens a run. That is what makes ten copies
+/// of one picture a single draw while keeping two different pictures in the
+/// order the walk drew them -- a merge that ignored order would let the later
+/// picture land under the earlier one.
+fn extend_runs(runs: &mut Vec<ImageRun>, key: ImageKey, start: u32, end: u32) {
+    match runs.last_mut() {
+        Some(run) if run.key == key && run.end == start => run.end = end,
+        _ => runs.push(ImageRun { key, start, end }),
+    }
 }
 
 impl QuadRenderer {
@@ -419,6 +540,67 @@ impl QuadRenderer {
             ],
         });
 
+        // -- Image pipeline --
+        // The same bind-group shape as the atlases (texture + sampler at group
+        // 1), so one layout serves both; what differs is the sampler, which is
+        // trilinear here because a picture is minified and a glyph never is.
+        let image_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("image"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("image.wgsl").into()),
+        });
+        let image_pl_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("image_pl"),
+            bind_group_layouts: &[&uniform_bgl, &atlas_bgl],
+            immediate_size: 0,
+        });
+        let image_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("image"),
+            layout: Some(&image_pl_layout),
+            vertex: wgpu::VertexState {
+                module: &image_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: IMAGE_VERTEX_SIZE as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &image_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+
+        // -- Image sampler --
+        // Trilinear: linear within a mip level and linear between two, so a
+        // picture shrinking under a zoom crosses levels without the visible step
+        // a `Nearest` mipmap filter leaves. `ClampToEdge` keeps the border texel
+        // from wrapping onto the opposite edge of the quad.
+        let image_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("image_sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            ..Default::default()
+        });
+
         // -- Blit sampler --
         // NonFiltering nearest-neighbour: the offscreen is 1:1 with the
         // swapchain so we want exact pixel copy with no interpolation.
@@ -461,6 +643,7 @@ impl QuadRenderer {
             quad_pipeline,
             glyph_pipeline,
             color_glyph_pipeline,
+            image_pipeline,
             blit_pipeline,
             uniform_buf,
             uniform_bg,
@@ -468,6 +651,8 @@ impl QuadRenderer {
             color_atlas_bind_group,
             atlas_bgl,
             atlas_sampler,
+            image_sampler,
+            images: ImageTextures::new(IMAGE_VRAM_BUDGET),
             atlas,
             cells,
             overlay,
@@ -528,6 +713,10 @@ impl QuadRenderer {
     /// uploaded GPU state and can be redrawn from cache (idle frames).
     pub fn begin_frame(&mut self, width: f32, height: f32) {
         self.atlas.begin_frame();
+        // Advance the eviction clock so "least recently drawn" means a frame
+        // count and not an arbitrary order: an image the walk stops drawing is
+        // the first to go when the VRAM budget binds.
+        self.images.clock = self.images.clock.wrapping_add(1);
         self.width = width;
         self.height = height;
     }
@@ -639,6 +828,133 @@ impl QuadRenderer {
         b.quad_vertices
             .extend(vertices.iter().map(|&pos| QuadVertex { pos, color: c }));
         b.quad_indices.extend(indices.iter().map(|&i| base + i));
+    }
+
+    // -- Images ---------------------------------------------------------------
+
+    /// Append one textured quad for `image`, uploading its texture the first
+    /// time this key is seen (`CANVAS-065`).
+    ///
+    /// `corners` are `[tl, tr, br, bl]` in screen space, already mapped through
+    /// the active transform, so a rotated element rotates its picture with it
+    /// rather than stretching an upright one into the box.
+    ///
+    /// A source whose buffer is shorter than its declared size draws nothing:
+    /// the caller decoded it, so a short buffer is its bug, and uploading
+    /// whatever follows in memory would put arbitrary bytes on screen.
+    pub fn push_image(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        image: &ImageSource<'_>,
+        corners: [[f32; 2]; 4],
+    ) {
+        if image.width == 0 || image.height == 0 {
+            return;
+        }
+        let needed = (image.width as usize) * (image.height as usize) * 4;
+        if image.pixels.len() < needed {
+            return;
+        }
+        if self
+            .images
+            .get(image.key, image.width, image.height)
+            .is_none()
+        {
+            let uploaded = self.upload_image(device, queue, image);
+            self.images.insert(image.key, uploaded);
+        }
+        let key = image.key;
+        let b = match self.active_layer {
+            Layer::Content => &mut self.cells,
+            Layer::Overlay => &mut self.overlay,
+        };
+        let base = b.image_vertices.len() as u32;
+        let uv = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+        for (i, c) in corners.iter().enumerate() {
+            b.image_vertices.push(ImageVertex { pos: *c, uv: uv[i] });
+        }
+        let start = b.image_indices.len() as u32;
+        b.image_indices
+            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+        let end = b.image_indices.len() as u32;
+        extend_runs(&mut b.image_runs, key, start, end);
+    }
+
+    /// Upload one picture and its CPU-built mip chain, and mint the bind group
+    /// the image pipeline binds per run.
+    fn upload_image(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        image: &ImageSource<'_>,
+    ) -> CacheEntry<wgpu::BindGroup> {
+        let chain = mipmap::build_chain(image.pixels, image.width, image.height);
+        let levels = mipmap::level_count(image.width, image.height);
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("image_texture"),
+            size: wgpu::Extent3d {
+                width: image.width,
+                height: image.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: levels,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let write = |level: u32, pixels: &[u8], w: u32, h: u32| {
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: level,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                pixels,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(w * 4),
+                    rows_per_image: Some(h),
+                },
+                wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+            );
+        };
+        let level0 = (image.width as usize) * (image.height as usize) * 4;
+        write(0, &image.pixels[..level0], image.width, image.height);
+        let mut bytes = level0;
+        for (i, level) in chain.iter().enumerate() {
+            write(i as u32 + 1, &level.pixels, level.width, level.height);
+            bytes += level.pixels.len();
+        }
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("image_bg"),
+            layout: &self.atlas_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.image_sampler),
+                },
+            ],
+        });
+        CacheEntry {
+            payload: bind_group,
+            bytes,
+            width: image.width,
+            height: image.height,
+            last_used: self.images.clock,
+        }
     }
 
     // -- Glyph geometry -------------------------------------------------------
@@ -906,13 +1222,33 @@ impl QuadRenderer {
             let q_count = self.cells.drawn_quad_indices;
             let g_count = self.cells.drawn_glyph_indices;
             let cg_count = self.cells.drawn_color_glyph_indices;
-            if q_count > 0 || g_count > 0 || cg_count > 0 {
+            let has_images = !self.cells.drawn_image_runs.is_empty();
+            if q_count > 0 || g_count > 0 || cg_count > 0 || has_images {
                 pass.set_bind_group(0, &self.uniform_bg, &[]);
                 if q_count > 0 {
                     pass.set_pipeline(&self.quad_pipeline);
                     pass.set_vertex_buffer(0, self.cells.quad_vb.slice(..));
                     pass.set_index_buffer(self.cells.quad_ib.slice(..), wgpu::IndexFormat::Uint32);
                     pass.draw_indexed(0..q_count, 0, 0..1);
+                }
+                // Pictures sit between the shapes and the text, one draw per
+                // run. That is a paint order, not a z-order: a shape the walk
+                // drew after a picture still lands under it, the same way text
+                // already lands over both. The board's real order is the
+                // `paint-order rewrite` of `ambre-roadmap.md` E6.
+                for (key, start, end) in &self.cells.drawn_image_runs {
+                    // An entry evicted since the upload leaves its run undrawn
+                    // rather than binding another picture's texture.
+                    if let Some(bg) = self.images.bound(*key) {
+                        pass.set_pipeline(&self.image_pipeline);
+                        pass.set_bind_group(1, bg, &[]);
+                        pass.set_vertex_buffer(0, self.cells.image_vb.slice(..));
+                        pass.set_index_buffer(
+                            self.cells.image_ib.slice(..),
+                            wgpu::IndexFormat::Uint32,
+                        );
+                        pass.draw_indexed(*start..*end, 0, 0..1);
+                    }
                 }
                 if g_count > 0 {
                     pass.set_pipeline(&self.glyph_pipeline);
@@ -959,7 +1295,8 @@ impl QuadRenderer {
         let overlay_q = self.overlay.drawn_quad_indices;
         let overlay_g = self.overlay.drawn_glyph_indices;
         let overlay_cg = self.overlay.drawn_color_glyph_indices;
-        if overlay_q > 0 || overlay_g > 0 || overlay_cg > 0 {
+        let overlay_img = !self.overlay.drawn_image_runs.is_empty();
+        if overlay_q > 0 || overlay_g > 0 || overlay_cg > 0 || overlay_img {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("overlay_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -980,6 +1317,18 @@ impl QuadRenderer {
                 pass.set_index_buffer(self.overlay.quad_ib.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..overlay_q, 0, 0..1);
             }
+            for (key, start, end) in &self.overlay.drawn_image_runs {
+                if let Some(bg) = self.images.bound(*key) {
+                    pass.set_pipeline(&self.image_pipeline);
+                    pass.set_bind_group(1, bg, &[]);
+                    pass.set_vertex_buffer(0, self.overlay.image_vb.slice(..));
+                    pass.set_index_buffer(
+                        self.overlay.image_ib.slice(..),
+                        wgpu::IndexFormat::Uint32,
+                    );
+                    pass.draw_indexed(*start..*end, 0, 0..1);
+                }
+            }
             if overlay_g > 0 {
                 pass.set_pipeline(&self.glyph_pipeline);
                 pass.set_bind_group(1, &self.atlas_bind_group, &[]);
@@ -998,5 +1347,126 @@ impl QuadRenderer {
                 pass.draw_indexed(0..overlay_cg, 0, 0..1);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod image_cache_tests {
+    use super::*;
+
+    fn entry(bytes: usize, w: u32, h: u32, last_used: u64) -> CacheEntry<u32> {
+        CacheEntry {
+            payload: w,
+            bytes,
+            width: w,
+            height: h,
+            last_used,
+        }
+    }
+
+    /// A resident picture is a hit, and the hit stamps the frame clock
+    /// (`CANVAS-066`): without the stamp every entry looks equally old and
+    /// eviction picks at random rather than least-recently-drawn.
+    #[test]
+    fn a_hit_stamps_the_entry_with_the_current_frame() {
+        let mut c: ImageCache<u32> = ImageCache::new(1024);
+        c.insert(ImageKey(1), entry(16, 2, 2, 0));
+        c.clock = 7;
+        assert_eq!(c.get(ImageKey(1), 2, 2), Some(&2));
+        assert_eq!(c.map[&ImageKey(1)].last_used, 7);
+    }
+
+    /// A key that comes back at a different size is a miss, so the caller
+    /// re-uploads instead of stretching the old texture over new content
+    /// (`ImageSource::key`).
+    #[test]
+    fn a_key_at_another_size_is_a_miss() {
+        let mut c: ImageCache<u32> = ImageCache::new(1024);
+        c.insert(ImageKey(1), entry(16, 2, 2, 0));
+        assert_eq!(c.get(ImageKey(1), 4, 4), None);
+        assert!(c.get(ImageKey(1), 2, 2).is_some());
+    }
+
+    /// Over budget, the entry drawn longest ago goes first and the recent ones
+    /// stay (`CANVAS-066`). A cache that evicted by insertion order would drop
+    /// the picture the user is looking at to keep one they scrolled past.
+    #[test]
+    fn the_least_recently_drawn_entry_is_evicted_first() {
+        let mut c: ImageCache<u32> = ImageCache::new(100);
+        c.insert(ImageKey(1), entry(40, 1, 1, 5)); // drawn recently
+        c.insert(ImageKey(2), entry(40, 2, 2, 1)); // drawn long ago
+        assert_eq!(c.bytes, 80);
+        c.insert(ImageKey(3), entry(40, 3, 3, 9));
+        assert!(c.bound(ImageKey(2)).is_none(), "the stalest entry stays");
+        assert!(c.bound(ImageKey(1)).is_some());
+        assert!(c.bound(ImageKey(3)).is_some());
+        assert_eq!(c.bytes, 80);
+    }
+
+    /// Re-inserting a key replaces it rather than counting its bytes twice: an
+    /// image re-uploaded at a new size must not leak the budget of the old one.
+    #[test]
+    fn reinserting_a_key_replaces_its_cost() {
+        let mut c: ImageCache<u32> = ImageCache::new(1024);
+        c.insert(ImageKey(1), entry(40, 1, 1, 0));
+        c.insert(ImageKey(1), entry(64, 1, 1, 0));
+        assert_eq!(c.map.len(), 1);
+        assert_eq!(c.bytes, 64);
+    }
+
+    /// One picture larger than the whole budget is kept: evicting down to
+    /// nothing would paint a placeholder where the user put a photograph, and
+    /// the next insert reclaims it anyway.
+    #[test]
+    fn a_lone_oversized_entry_survives() {
+        let mut c: ImageCache<u32> = ImageCache::new(100);
+        c.insert(ImageKey(1), entry(4096, 1, 1, 0));
+        assert!(c.bound(ImageKey(1)).is_some());
+        assert_eq!(c.map.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod image_run_tests {
+    use super::*;
+
+    fn runs_of(spec: &[(u64, u32, u32)]) -> Vec<(u64, u32, u32)> {
+        let mut runs = Vec::new();
+        for (k, s, e) in spec {
+            extend_runs(&mut runs, ImageKey(*k), *s, *e);
+        }
+        runs.iter().map(|r| (r.key.0, r.start, r.end)).collect()
+    }
+
+    /// Consecutive quads of one picture collapse into a single draw
+    /// (`CANVAS-066`): a board showing ten copies of one logo costs one bind and
+    /// one `draw_indexed`, not ten.
+    #[test]
+    fn consecutive_quads_of_one_picture_are_one_run() {
+        assert_eq!(
+            runs_of(&[(7, 0, 6), (7, 6, 12), (7, 12, 18)]),
+            vec![(7, 0, 18)]
+        );
+    }
+
+    /// Two pictures keep the walk's order, and coming back to the first opens a
+    /// third run rather than reopening the first. Merging across the second
+    /// would draw the first picture's later quads underneath it.
+    #[test]
+    fn a_different_picture_opens_a_run_and_order_is_kept() {
+        assert_eq!(
+            runs_of(&[(1, 0, 6), (2, 6, 12), (1, 12, 18)]),
+            vec![(1, 0, 6), (2, 6, 12), (1, 12, 18)]
+        );
+    }
+
+    /// A gap in the index range opens a run even for the same picture: the
+    /// merged draw would otherwise cover indices no quad of this run wrote.
+    #[test]
+    fn a_discontinuous_range_opens_a_run() {
+        assert_eq!(
+            runs_of(&[(1, 0, 6), (1, 12, 18)]),
+            vec![(1, 0, 6), (1, 12, 18)]
+        );
     }
 }

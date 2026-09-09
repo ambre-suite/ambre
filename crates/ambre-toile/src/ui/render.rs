@@ -21,8 +21,8 @@ use ambre_bus::app::toile::{
 };
 use ambre_canvas::{Palette, TextCache};
 use ambre_draw::{
-    Affine, Alignment, BezPath, Brush, Color, DrawSurface, FontContext, ImageSource, Point,
-    PositionedLayoutItem, Rect, Stroke,
+    Affine, Alignment, BezPath, Brush, Color, DrawSurface, FontContext, ImageKey, ImageSource,
+    Point, PositionedLayoutItem, Rect, Stroke,
 };
 
 use crate::logic::animate::AnimatedElement;
@@ -369,6 +369,10 @@ fn paint_element<S: DrawSurface>(
         DisplayGeom::Image(hash) => match images.get(hash) {
             Some(img) => surface.draw_image(
                 &ImageSource {
+                    // The media address already identifies these pixels, so the
+                    // back end recognises the texture it uploaded on an earlier
+                    // frame without hashing the buffer again.
+                    key: ImageKey::from_address(hash),
                     pixels: &img.pixels,
                     width: img.width,
                     height: img.height,

@@ -33,6 +33,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | `CANVAS-061` | `OBS` | A vector edge MUST reach the screen antialiased. | this spec section 2 | not built -- lands with the "Antialiased vector geometry" Story (`ambre-roadmap.md` E6); every screen pipeline runs at one sample and the solid shader returns its vertex colour unmodified, so a diagonal is a hard staircase and only glyphs escape, through their own coverage atlas | unimplemented |
 | `CANVAS-063` | `OBS` | An antialiased edge MUST keep its width in screen pixels at every zoom. | this spec section 2 | not built -- lands with the "Antialiased vector geometry" Story (`ambre-roadmap.md` E6); tessellation is in model space, so a width in model units is a band that thickens as the board zooms in | unimplemented |
 | `CANVAS-064` | `OBS` | Antialiasing MUST NOT mark the inside of a shape: only its silhouette may be softened. | this spec section 2 | not built -- lands with the "Antialiased vector geometry" Story (`ambre-roadmap.md` E6); it is the rule that separates a contour band from a per-triangle coverage term, which softens every internal edge of the tessellation and draws a seam along each one | unimplemented |
+| `CANVAS-065` | `OBS` | A minified picture MUST be sampled through a mip chain, never through its full-size texels alone. | this spec section 2 | `ambre_canvas::render::mipmap::tests::the_chain_halves_down_to_one_texel`, `::a_flat_image_keeps_halving_its_long_axis` hold the descent, `::a_reduced_texel_is_the_mean_of_its_block` the averaging. That the sampler is the trilinear one is held by construction and by no test: no host tier reads a rendered frame (`ambre-spec-testing.md section 2`) | unverified |
+| `CANVAS-066` | `INV` | An uploaded picture MUST be reused across frames, under a bounded budget that drops the least recently drawn first. | this spec section 2; `ambre-spec-budgets.md section 6` | `ambre_canvas::render::renderer::image_cache_tests::the_least_recently_drawn_entry_is_evicted_first`, `::a_hit_stamps_the_entry_with_the_current_frame`, `::reinserting_a_key_replaces_its_cost`, `::a_key_at_another_size_is_a_miss`; the run merge that keeps one picture to one draw is `::consecutive_quads_of_one_picture_are_one_run` | verified |
 
 ### 1.2 Draw one document onto a surface
 
@@ -53,7 +55,7 @@ the walk is not told which.
 * **Boundary.** none: a surface writes to a texture or to a byte buffer, holds no key and opens no
   socket. A PDF the user exports leaves the machine only when the user sends it, and
   `ambre-spec-docfile.md` owns what a plaintext export owes them.
-* **Verification.** 6 `verified`, 3 `unverified`, 4 `unimplemented`. This is still the best-held
+* **Verification.** 7 `verified`, 4 `unverified`, 4 `unimplemented`. This is still the best-held
   document of the rendering layer, and the reason is structural: five of the six verified rules are
   held by the crate graph or by the compiler, which the frame path cannot use because a frame is a
   runtime property. The pass split the two rows whose second half no crate graph can read.
@@ -161,11 +163,26 @@ caller's job. The image is scaled to fill `dest`, so the aspect ratio is the cal
 | Back end | What `draw_image` does | State |
 |---|---|---|
 | `KrillaSurface` | hands the pixels to krilla as a raster image, under its `raster-images` feature | built |
-| `WgpuSurface` | uploads the pixels to a texture and draws a textured quad through the active transform | design; it lands with the screen media cache of `ambre-spec-render-assets.md` |
+| `WgpuSurface` | uploads the pixels once, keeps the texture under a budget, and draws a textured quad through the active transform | built; what has no caller is the cache that would hand it a board's pixels (`3-Toile/features/ambre-spec-toile-media.md`) |
 | a back end without raster support | the default no-op, so a text and vector export still succeeds (`CANVAS-030`) | built |
 
-Until the screen path lands, an image element paints the placeholder rectangle of
-`3-Toile/features/ambre-spec-toile-media.md`, and the trait carries no placeholder logic of its own.
+An element whose pixels have not reached the walk still paints the placeholder rectangle of
+`3-Toile/features/ambre-spec-toile-media.md`; the trait carries no placeholder logic of its own.
+
+**A picture is uploaded once and sampled through a chain** (`CANVAS-065`, `CANVAS-066`). Two
+properties make the screen path what it is. `ImageSource` carries a `key` -- an identity its caller
+already has, Toile's own media address -- so a texture is recognised on the next frame instead of
+the buffer being hashed to find it; and the mip chain is reduced on the CPU at upload, because the
+alternatives are a render pass per level or a compute dispatch, and the dispatch is the stage
+`ambre-spec-frame.md section 4` refuses. The sampler is trilinear, so a picture crossing between two
+levels under a zoom does it without a step. Uploads are bounded by a VRAM budget and evicted
+least-recently-drawn (`ambre-spec-budgets.md section 6`); what that budget does when it binds is
+section 5.
+
+Pictures are drawn between the shapes and the text, one draw per run of consecutive quads sharing a
+texture. That is a paint order, not the board's z-order: a shape drawn after a picture still lands
+under it, exactly as text already lands over both, and the order Toile means is the
+`paint-order rewrite` Story (`ambre-roadmap.md` E6).
 
 **The PDF back end.** The drawing API is on `krilla::surface::Surface`, obtained from
 `page.surface()`, so the wrapper borrows the surface rather than the page. Krilla is top-left and
@@ -237,11 +254,20 @@ The user touches no drawing call. What they see of this document is that two des
   developed on and not on a 1x monitor. The band of section 2 is designed and unbuilt; the three
   rules around it (`CANVAS-062`, `CANVAS-063`, `CANVAS-064`) exist to keep its construction from
   drifting into the alternatives section 4 refuses.
-* **A raster image has no sampling rule.** `draw_image` states how a picture is placed and nothing
-  about how it is sampled: no mip chain, no filter, no anisotropy. The screen back end implements
-  none of it today, and a texture minified without a mip chain aliases into noise that crawls under
-  a pan -- the defect a board of photographs meets first. The rule belongs with the pipeline that
-  will sample, so it is unwritten rather than unheld.
+* **Every upload lands in the frame that first draws it** (`CANVAS-065`). A picture is decoded,
+  reduced and uploaded inside `paint_content`, so twenty pictures becoming visible at once cost
+  twenty chains in that one frame -- a stall exactly when a board is opened. The chain itself is
+  cheap and paid once (the levels under level 0 add a third to the pixel count, not a multiple per
+  level), and the zoom costs nothing at all: the sampler picks a level from its own derivatives, so
+  no frame recomputes anything. What is missing is an upload budget per frame, which would let the
+  last pictures arrive a frame or two later instead of holding the first frame back.
+* **The texture budget thrashes before it refuses** (`CANVAS-066`). Zoomed far out over more
+  pictures than `IMAGE_VRAM_BUDGET` holds, the eviction drops an entry the next frame asks for
+  again, so the same images are re-uploaded and re-reduced every frame -- and the pyramid being
+  evicted is mostly levels that far-out zoom never samples. Truncating the chain to the scale a
+  picture is actually drawn at is what fixes it, and that needs the decoded pixels kept somewhere to
+  re-upload from when the zoom comes back in: the CPU-side cache of `CANVAS-007`, which is unbuilt.
+  Nothing measures where the budget starts to bind.
 * **PDF text is not selectable.** A glyph run carries no `ToUnicode` mapping, so a reader shows the
   shapes and copies nothing. Threading the cluster source text through is a refinement nothing has
   scheduled.

@@ -231,6 +231,7 @@
 |:---|:---|:---|
 | CPU vertex buffers (`QuadRenderer`) | < 5 MB | Proportional to the visible draw-call count |
 | wgpu textures and buffers | < 20 MB | Swap chain, staging buffers, `GlyphAtlas` (2048x2048 R8 = 4 MB). The RGBA color atlas (2048x2048 = 16 MB) is **allocated lazily** on the first color glyph -- a 1x1 placeholder otherwise -- so an emoji-free document pays nothing |
+| Uploaded pictures, mip chains included | < 24 MB | `IMAGE_VRAM_BUDGET`, charged apart from the row above rather than sharing an unstated remainder of it. At four bytes a texel that is roughly six 1024x1024 photographs, each carrying a chain a third its own size. Held by the eviction (`CANVAS-066`) and measured by nothing: the frame where the budget starts to thrash -- evicting a picture the next frame asks for again -- is the figure no bench reads (`ambre-spec-drawing-surface.md section 5`) |
 | View state (content) | < 5 MB | Proportional to the visible content: cells, text runs |
 | Fonts in memory | < 10 MB | Base fonts plus lazily loaded ones |
 | Icon atlas | < 1 MB | Compiled vector blob |

@@ -26,13 +26,14 @@
 //   WgpuSurface   -- frame-scoped DrawSurface. Holds the clip stack.
 //                    Routes pushes to the renderer's currently active layer.
 // ============================================================================
-use ambre_draw::Color;
+use ambre_draw::{Color, ImageKey};
 use bytemuck::{Pod, Zeroable};
 
 // The renderer is split across sibling modules; `atlas`/`renderer`/`surface`
 // reach the shared primitives below (vertex types, `LayerBatches`, helpers) via
 // `use super::*`. Public API is re-exported to keep `render::*` paths stable.
 mod atlas;
+mod mipmap;
 mod renderer;
 mod surface;
 
@@ -67,6 +68,34 @@ struct GlyphVertex {
 
 const GLYPH_VERTEX_SIZE: usize = std::mem::size_of::<GlyphVertex>();
 const INITIAL_GLYPHS: usize = 4096;
+
+// ============================================================================
+// Image pipeline
+// ============================================================================
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct ImageVertex {
+    pos: [f32; 2],
+    uv: [f32; 2],
+}
+
+const IMAGE_VERTEX_SIZE: usize = std::mem::size_of::<ImageVertex>();
+
+/// A stretch of the image index buffer drawn with one texture bound.
+///
+/// Images cannot collapse into a single draw the way quads and glyphs do: each
+/// picture is its own texture, so each needs its own bind group. What a run buys
+/// instead is *order*. The batch is filled in the order the walk drew, and
+/// consecutive quads sharing a texture extend the run they are already in, so a
+/// board of ten copies of one picture costs one draw and two overlapping
+/// pictures keep the walk's own order between them.
+struct ImageRun {
+    key: ImageKey,
+    /// Index range into the layer's image index buffer.
+    start: u32,
+    end: u32,
+}
 // ============================================================================
 // Layer batches
 // ============================================================================
@@ -95,17 +124,28 @@ struct LayerBatches {
     /// color pipeline against the RGBA color atlas.
     color_glyph_vertices: Vec<GlyphVertex>,
     color_glyph_indices: Vec<u32>,
+    /// Image batch: one vertex buffer for the layer, cut into `image_runs` by
+    /// the texture each stretch needs bound.
+    image_vertices: Vec<ImageVertex>,
+    image_indices: Vec<u32>,
+    image_runs: Vec<ImageRun>,
     quad_vb: wgpu::Buffer,
     quad_ib: wgpu::Buffer,
     glyph_vb: wgpu::Buffer,
     glyph_ib: wgpu::Buffer,
     color_glyph_vb: wgpu::Buffer,
     color_glyph_ib: wgpu::Buffer,
+    image_vb: wgpu::Buffer,
+    image_ib: wgpu::Buffer,
     /// Number of quad indices in the last upload. Used as the draw_indexed
     /// upper bound on any subsequent frame that reuses the GPU buffer.
     drawn_quad_indices: u32,
     drawn_glyph_indices: u32,
     drawn_color_glyph_indices: u32,
+    /// The runs of the last upload, kept whole: an idle frame re-encodes the
+    /// same draws against the same buffer, as the `drawn_*` counts do for the
+    /// other three batches.
+    drawn_image_runs: Vec<(ImageKey, u32, u32)>,
     /// Set to `true` by `begin_rebuild()`. When set, `upload_if_rebuilding()`
     /// transfers the CPU vecs to the GPU and refreshes `drawn_*`. Otherwise
     /// the GPU buffer state is preserved across frames.
@@ -151,6 +191,19 @@ impl LayerBatches {
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        // Images are few per frame even on a busy board: start small and grow.
+        let image_vb = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(&format!("{label_prefix}_image_vb")),
+            size: (64 * 4 * IMAGE_VERTEX_SIZE) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let image_ib = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(&format!("{label_prefix}_image_ib")),
+            size: (64 * 6 * 4) as u64,
+            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         Self {
             quad_vertices: Vec::with_capacity(INITIAL_QUADS * 4),
             quad_indices: Vec::with_capacity(INITIAL_QUADS * 6),
@@ -158,15 +211,21 @@ impl LayerBatches {
             glyph_indices: Vec::with_capacity(INITIAL_GLYPHS * 6),
             color_glyph_vertices: Vec::new(),
             color_glyph_indices: Vec::new(),
+            image_vertices: Vec::new(),
+            image_indices: Vec::new(),
+            image_runs: Vec::new(),
             quad_vb,
             quad_ib,
             glyph_vb,
             glyph_ib,
             color_glyph_vb,
             color_glyph_ib,
+            image_vb,
+            image_ib,
             drawn_quad_indices: 0,
             drawn_glyph_indices: 0,
             drawn_color_glyph_indices: 0,
+            drawn_image_runs: Vec::new(),
             rebuilding: false,
         }
     }
@@ -180,6 +239,9 @@ impl LayerBatches {
         self.glyph_indices.clear();
         self.color_glyph_vertices.clear();
         self.color_glyph_indices.clear();
+        self.image_vertices.clear();
+        self.image_indices.clear();
+        self.image_runs.clear();
         self.rebuilding = true;
     }
 
@@ -268,7 +330,34 @@ impl LayerBatches {
                 bytemuck::cast_slice(&self.color_glyph_indices),
             );
         }
+        if !self.image_indices.is_empty() {
+            grow_buffer_if_needed(
+                device,
+                &mut self.image_vb,
+                self.image_vertices.len() * IMAGE_VERTEX_SIZE,
+                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                "image_vb",
+                label_prefix,
+            );
+            grow_buffer_if_needed(
+                device,
+                &mut self.image_ib,
+                self.image_indices.len() * 4,
+                wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                "image_ib",
+                label_prefix,
+            );
+            queue.write_buffer(
+                &self.image_vb,
+                0,
+                bytemuck::cast_slice(&self.image_vertices),
+            );
+            queue.write_buffer(&self.image_ib, 0, bytemuck::cast_slice(&self.image_indices));
+        }
         // Refresh the drawn counts for subsequent encode passes.
+        self.drawn_image_runs.clear();
+        self.drawn_image_runs
+            .extend(self.image_runs.iter().map(|r| (r.key, r.start, r.end)));
         self.drawn_quad_indices = self.quad_indices.len() as u32;
         self.drawn_glyph_indices = self.glyph_indices.len() as u32;
         self.drawn_color_glyph_indices = self.color_glyph_indices.len() as u32;

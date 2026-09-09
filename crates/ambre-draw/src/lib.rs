@@ -32,12 +32,43 @@ pub mod testing;
 /// which keeps `ambre-draw` codec-free (kurbo / peniko / parley only).
 #[derive(Clone, Copy, Debug)]
 pub struct ImageSource<'a> {
+    /// A stable identity for *these* pixels, so a back end that uploads them can
+    /// recognise the same image on a later frame instead of hashing the buffer
+    /// every time it is drawn.
+    ///
+    /// The caller mints it from whatever already identifies the image -- Toile
+    /// folds the leading bytes of the blake2b address it stores in the document.
+    /// Two sources sharing a key MUST carry the same pixels: a back end is free
+    /// to serve the first upload for both, and a key reused for different
+    /// content shows the wrong picture. Distinct content that happens to share a
+    /// key is the caller's bug, not the surface's.
+    pub key: ImageKey,
     /// Non-premultiplied RGBA8 samples, row-major, `width * height * 4` bytes.
     pub pixels: &'a [u8],
     /// Native pixel width of the image.
     pub width: u32,
     /// Native pixel height of the image.
     pub height: u32,
+}
+
+/// The identity of a decoded image, as its caller knows it (`ImageSource::key`).
+///
+/// It is deliberately not a hash of the pixels: hashing megabytes per frame is
+/// the cost this type exists to avoid. It carries no meaning of its own -- only
+/// equality -- so any stable derivation the caller already has will do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ImageKey(pub u64);
+
+impl ImageKey {
+    /// Fold the leading bytes of a content address (a hex digest, typically)
+    /// into a key. Two different addresses collide only if their first bytes do.
+    pub fn from_address(address: &str) -> Self {
+        let mut acc = 0u64;
+        for b in address.as_bytes().iter().take(16) {
+            acc = acc.rotate_left(8) ^ u64::from(*b);
+        }
+        Self(acc)
+    }
 }
 
 /// Monotonic millisecond clock, abstracted so rendering code can measure its

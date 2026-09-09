@@ -6,7 +6,9 @@
 // ============================================================================
 
 use super::*;
-use ambre_draw::{Affine, Brush, Color, DrawSurface, GlyphRun, ParleyBrush, Point, Rect, Stroke};
+use ambre_draw::{
+    Affine, Brush, Color, DrawSurface, GlyphRun, ImageSource, ParleyBrush, Point, Rect, Stroke,
+};
 use kurbo::{BezPath, PathEl, Shape};
 use lyon::math::point as lpoint;
 use lyon::path::{LineCap, LineJoin, Path as LyonPath};
@@ -28,6 +30,10 @@ const PATH_TOLERANCE_PX: f64 = 0.15;
 /// `renderer.active_layer`, set by the caller before each phase.
 pub struct WgpuSurface<'r> {
     renderer: &'r mut QuadRenderer,
+    // Held for `draw_image` alone: a picture is uploaded to a texture the first
+    // frame it is drawn, and every other primitive here only appends vertices.
+    device: &'r wgpu::Device,
+    queue: &'r wgpu::Queue,
     clip_stack: Vec<Rect>,
     // Composed model-to-screen transforms, one entry per live `push_transform`.
     // The top is the transform currently applied to incoming geometry; empty
@@ -37,9 +43,15 @@ pub struct WgpuSurface<'r> {
 }
 
 impl<'r> WgpuSurface<'r> {
-    pub fn new(renderer: &'r mut QuadRenderer) -> Self {
+    pub fn new(
+        renderer: &'r mut QuadRenderer,
+        device: &'r wgpu::Device,
+        queue: &'r wgpu::Queue,
+    ) -> Self {
         Self {
             renderer,
+            device,
+            queue,
             clip_stack: Vec::new(),
             transform_stack: Vec::new(),
         }
@@ -293,6 +305,50 @@ impl DrawSurface for WgpuSurface<'_> {
                     .push_glyph(sx, sy, sw, sh, slot.uv_min, slot.uv_max, color);
             }
         }
+    }
+
+    fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {
+        if dest.width() <= 0.0 || dest.height() <= 0.0 {
+            return;
+        }
+        let t = self.transform();
+        // The four destination corners mapped individually, so a rotated element
+        // carries its picture round with it. Mapping the rect's bounding box
+        // instead -- what `fill_rect` does, correctly, for an axis-aligned
+        // colour -- would leave every picture upright inside a growing box.
+        let corners_world = [
+            (dest.x0, dest.y0),
+            (dest.x1, dest.y0),
+            (dest.x1, dest.y1),
+            (dest.x0, dest.y1),
+        ];
+        let mapped: Vec<Point> = corners_world
+            .iter()
+            .map(|(x, y)| t * Point::new(*x, *y))
+            .collect();
+        // Clip is a bounding-box reject here, as it is for a path: the quad is
+        // textured and trimming it would need the uv range trimmed with it
+        // (`ambre-spec-drawing-surface.md section 5`).
+        if let Some(c) = self.active_clip() {
+            let (xs, ys): (Vec<f64>, Vec<f64>) = mapped.iter().map(|p| (p.x, p.y)).unzip();
+            let bbox = Rect::new(
+                xs.iter().cloned().fold(f64::INFINITY, f64::min),
+                ys.iter().cloned().fold(f64::INFINITY, f64::min),
+                xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            );
+            if bbox.intersect(c).is_zero_area() {
+                return;
+            }
+        }
+        let corners = [
+            [mapped[0].x as f32, mapped[0].y as f32],
+            [mapped[1].x as f32, mapped[1].y as f32],
+            [mapped[2].x as f32, mapped[2].y as f32],
+            [mapped[3].x as f32, mapped[3].y as f32],
+        ];
+        self.renderer
+            .push_image(self.device, self.queue, image, corners);
     }
 
     fn fill_path(&mut self, path: &BezPath, brush: &Brush) {

@@ -378,7 +378,7 @@ impl FrameHost {
                 .begin_frame(gpu.width as f32, gpu.height as f32);
             let t_draw_start = self.perf.now();
             {
-                let mut surface = WgpuSurface::new(&mut gpu.quad_renderer);
+                let mut surface = WgpuSurface::new(&mut gpu.quad_renderer, &gpu.device, &gpu.queue);
                 if content_active {
                     surface.begin_layer(Layer::Content);
                     self.view.paint_content(
@@ -509,7 +509,7 @@ impl FrameHost {
 
         gpu.quad_renderer.begin_frame(w, h);
         {
-            let mut surface = WgpuSurface::new(&mut gpu.quad_renderer);
+            let mut surface = WgpuSurface::new(&mut gpu.quad_renderer, &gpu.device, &gpu.queue);
             surface.begin_layer(Layer::Content);
             surface.fill_rect(Rect::new(0.0, 0.0, w as f64, h as f64), BACKDROP);
 

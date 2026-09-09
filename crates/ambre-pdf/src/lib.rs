@@ -363,6 +363,7 @@ fn line_join(join: kurbo::Join) -> LineJoin {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_draw::ImageKey;
     use krilla::Document;
     use krilla::page::PageSettings;
     use kurbo::{Point as KurboPoint, Stroke as KurboStroke};
@@ -425,6 +426,7 @@ mod tests {
                 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
             ];
             let src = ImageSource {
+                key: ImageKey(1),
                 pixels: &pixels,
                 width: 2,
                 height: 2,
@@ -434,6 +436,7 @@ mod tests {
             s.draw_image(&src, Rect::new(50.0, 50.0, 50.0, 50.0));
             // Malformed source (wrong length): skipped.
             let bad = ImageSource {
+                key: ImageKey(2),
                 pixels: &[0, 1, 2],
                 width: 2,
                 height: 2,
