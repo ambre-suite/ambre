@@ -215,6 +215,24 @@ it, so the chip and the timings panel exist in the spreadsheet alone (`CANVAS-01
 | Animation is a lerp in the frame callback | a declarative keyframe runtime | a transition here is a value moving over a few frames, and the callback already runs every frame. |
 | The perf read-out is a canvas primitive | a per-application HUD | it is what exists today and what `CANVAS-016` withdraws: a frame read-out that exists in one application measures one application. The chip and the panel are wired the same way everywhere or they compare nothing. |
 
+**When the two vector-rasterizer rows are reopened.** Their four arguments do not age together, so
+the refusal is reconsidered on two conditions **met at once**, and not on the state of browser
+compute support alone:
+
+1. WebGPU is the only back end this client ships, so the WebGL2 fallback -- a CPU rasterizer at 5 to
+   10 FPS -- is no longer part of the answer; **and**
+2. a phase of `ambre-spec-budgets.md section 2` is missed on the reference device *because of the
+   cost of the geometry itself*, measured, and not because of how much of it a frame was handed.
+
+The second condition is the one that decides. Two of the four arguments are outside the browser's
+reach: a tile-based mobile GPU is made slower by a compute barrier whatever the runtime does, and a
+grid, a text page and a board are instanced quads plus a glyph atlas, so a generalist path
+rasterizer stays generality we would pay for and not use. A frame missed because the cull handed it
+too many elements is a cull to fix, and reopening this row would answer a question nobody asked.
+
+Nothing here schedules the review: the Story would be written in `ambre-roadmap.md` on the day both
+conditions hold.
+
 ---
 
 ## 5. NOT BUILT, AND NOT YET RULED
