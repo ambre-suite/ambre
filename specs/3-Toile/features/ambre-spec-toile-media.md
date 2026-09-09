@@ -27,8 +27,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-037` | INV | A decoded picture MUST NOT outlive the session: no plaintext pixel MUST reach local storage. | this spec section 3; `ZK-004` | none. The cache is a map in Logic-thread memory and the crate opens no storage handle, so the rule holds by absence; nothing would go red the day a writer appeared | unverified |
 | `TOILE-IO-050` | OBS | A picture whose pixels are resident MUST paint them scaled to its box and rotated with it. | this spec section 4 | `ambre_toile::ui::render::tests::image_paints_pixels_when_resolved_else_placeholder` asserts one image draw at the element box | verified |
 | `TOILE-IO-051` | OBS | A picture whose pixels are not resident MUST paint a placeholder box, never a hole. | this spec section 4 | `::image_paints_pixels_when_resolved_else_placeholder` asserts the fallback fill for the unresolved address in the same walk | verified |
-| `TOILE-IO-034` | OBS | A picture the board names MUST reach the screen: an address MUST resolve to pixels. | this spec section 3; section 4 | none, and **the rule fails today**: no code issues a download, and the store the painter reads is built empty and never filled, so the resident case above is reachable only from its own test -- section 6 | unverified |
-| `TOILE-IO-035` | OBS | A picture MUST show its thumbnail while the full blob loads, so the first paint waits on nothing. | this spec section 3; section 4 | none, and **the rule fails today**: the thumbnail is written into the document on import and read by nothing, and the paint has two states where the surface promises four -- section 6 | unverified |
+| `TOILE-IO-034` | OBS | A picture the board names MUST reach the screen: an address MUST resolve to pixels. | this spec section 3; section 4 | `ambre_toile::logic::state::export::media_request_tests::a_media_request_answers_with_decoded_pixels` holds the Logic half, `ambre_toile::ui::render::tests::only_the_unresolved_pictures_are_asked_for` the UI half. The pixels are the thumbnail's, which is every pixel this side holds (`TOILE-IO-035`, `TOILE-IO-100`) | verified |
+| `TOILE-IO-035` | OBS | A picture MUST show its thumbnail while the full blob loads, so the first paint waits on nothing. | this spec section 3; section 4 | none: the thumbnail is what reaches the screen now (`TOILE-IO-034`), and the clause this row adds is held by nothing -- no download is ever in flight for a paint to happen *during* -- so what a test would separate does not yet exist -- section 6 | unverified |
 
 ### 1.2 Bring a picture in
 
@@ -74,7 +74,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** this document owns Toile's only outbound flow of user content: media blobs, sealed
   by the Sync thread before they leave (`TOILE-IO-013`), plus the routing metadata the relay already
   sees for any document. No board geometry and no pixel leaves in plaintext.
-* **Verification.** 22 `verified`, 6 `unverified`. The growth is the split and not new coverage:
+* **Verification.** 23 `verified`, 5 `unverified`. The growth is the split and not new coverage:
   nineteen distinct tests hold the document where eighteen held it before, and four flat rows cited
   seventeen of them between them -- one row per operation, citing every test that ran near it
   rather than the one that asserts it. Two of those citations were removed as not holding their
@@ -183,11 +183,18 @@ picture looks like before its pixels arrive.
 | there is no thumbnail either | a placeholder box in the element's own style (`TOILE-UI-013`) |
 | the download failed | the same box, and no further request |
 
-**Three of the four rows are the same box today** (`TOILE-IO-034`). Nothing orders a download and
-nothing fills the store the painter consults, so every picture on every board paints the placeholder,
-on screen and in an exported page alike. The painter has two states and not four: pixels resident,
-or nothing (`TOILE-IO-050`, `TOILE-IO-051`). The thumbnail row and the failure row are the surface
-promising a distinction the code does not draw.
+**Two of the four rows are the same box today** (`TOILE-IO-034`). The first two have become one: a
+picture paints its thumbnail, which is every pixel this side holds, so "resident" and "loading" show
+the same image and the painter still has two states rather than four (`TOILE-IO-050`,
+`TOILE-IO-051`). What draws no distinction is the pair below: nothing orders a download, so no fetch
+is ever in flight and none can fail.
+
+**The view asks, the board answers.** The store the painter consults lives on the UI thread and the
+pixels live on the Logic one, so the crossing is a command: a viewport reply names the addresses it
+carries, the view asks for the ones it cannot paint, and each is answered with decoded pixels
+(`RequestMedia`, `MediaDecoded`). Only what survived the cull is asked for, and an address already
+asked for is not asked again -- otherwise a picture the document cannot resolve would be
+re-requested on every frame that fails to paint it.
 
 ---
 
@@ -213,19 +220,17 @@ promising a distinction the code does not draw.
   outside the render tests. The return leg is missing too: the service handler matches the upload
   confirmation alone and drops a download answer on the floor, so wiring the request would not be
   enough.
-* **The thumbnail is read by the export and not by the screen** (`TOILE-IO-035`). Every import
-  encodes one; the deck's PDF export decodes it into the store the walk consults
-  (`features/ambre-spec-toile-pdf-export.md`), and the frame path does not. So the field that exists
-  to make the *first paint* instant is read only where no paint happens, and the rule it was written
-  for -- the picture shown while the full blob loads -- is still held by nothing.
-* **So every picture is a grey box on screen, and a picture in an exported page.** Two absences
-  compose on the frame path and neither is on the export path: nothing downloads, and nothing reads
-  the thumbnail. The third is now gone -- `WgpuSurface` uploads a texture, keeps it under a budget
-  and draws it (`1-Foundations/ambre-spec-drawing-surface.md`, `CANVAS-065`, `CANVAS-066`) -- so
-  what remains is the half that fills the store the walk consults. A user therefore still imports a
-  photograph, sees a placeholder, and finds the picture in the PDF. The store lives on the UI
-  thread and the pixels live on the Logic one, so filling it is a bus question, not a render one:
-  no `ToileEvent` carries pixels today.
+* **A picture never gets sharper than its thumbnail** (`TOILE-IO-035`, `TOILE-IO-100`). Both paths
+  read the same 256 px inline preview: the screen because that is what crosses the bus, the export
+  because that is what the document holds. Nothing downloads the full blob, so the state the rule
+  names -- the thumbnail shown *while* the real pixels arrive -- has no second half to give way to.
+  A board is readable and unprintable, and the row stays `unverified` for want of a distinction to
+  assert rather than for want of a test.
+* **Every picture crosses the bus as raw pixels.** A `MediaDecoded` carries `width * height * 4`
+  bytes. The channel is shared memory and the vector moves rather than copies, so the cost is the
+  decode and the peak, not a memcpy per frame -- but nothing bounds how many answers one viewport
+  reply can produce, and a board opening on thirty pictures decodes thirty thumbnails in one
+  command.
 * **An entry outlives its last element, and no rule says what should happen.** Deleting a picture
   drops the element and leaves the entry in `media` for good. Eager removal is wrong -- a delete is
   undoable, and another element may share the address -- and no reference count exists. The document

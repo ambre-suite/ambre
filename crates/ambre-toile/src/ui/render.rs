@@ -48,6 +48,33 @@ use super::viewport::ViewportTransform;
 /// placeholder -- and `WgpuSurface` implements no `draw_image` either, so a
 /// resident entry would paint nothing at all. Both halves land together
 /// (`ambre-roadmap.md` E6).
+/// The media addresses a display list names and the view cannot paint: not in
+/// the store, not already asked for, each listed once.
+///
+/// It is the culled list that is walked, so only what survived the viewport
+/// query is asked for -- a board of two hundred photographs transfers the ones
+/// on screen (`toile-media`).
+pub fn missing_media(
+    nodes: &[DisplayNode],
+    images: &ImageStore,
+    requested: &std::collections::HashSet<String>,
+) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for node in nodes {
+        let DisplayNode::Element(de) = node else {
+            continue;
+        };
+        let DisplayGeom::Image(hash) = &de.geom else {
+            continue;
+        };
+        if images.contains_key(hash) || requested.contains(hash) || out.iter().any(|h| h == hash) {
+            continue;
+        }
+        out.push(hash.clone());
+    }
+    out
+}
+
 pub struct DecodedImage {
     pub pixels: Vec<u8>,
     pub width: u32,
@@ -1034,6 +1061,54 @@ mod tests {
             .filter(|op| matches!(op, DrawOp::FillPath { .. }))
             .count();
         assert_eq!(fills, 0, "a text element must not paint a card background");
+    }
+
+    /// The walk names the pictures it cannot paint, once each, and skips the
+    /// one already resident (`TOILE-IO-034`). Only these addresses cross the
+    /// bus, so what is off screen is never transferred.
+    #[test]
+    fn only_the_unresolved_pictures_are_asked_for() {
+        let b = Rect::new(0.0, 0.0, 10.0, 10.0);
+        let nodes = vec![
+            elem("a", DisplayGeom::Image("h1".into()), b),
+            elem("b", DisplayGeom::Image("h2".into()), b),
+            // The same picture twice: one request, not two.
+            elem("c", DisplayGeom::Image("h2".into()), b),
+            // Not a picture: it names no address at all.
+            elem("d", DisplayGeom::Rect, b),
+        ];
+        let mut images = ImageStore::new();
+        images.insert(
+            "h1".into(),
+            DecodedImage {
+                pixels: vec![0u8; 4],
+                width: 1,
+                height: 1,
+            },
+        );
+        let asked = missing_media(&nodes, &images, &std::collections::HashSet::new());
+        assert_eq!(asked, vec!["h2".to_owned()]);
+    }
+
+    /// A picture already asked for is not asked for again, which is what stops
+    /// a request going out on every frame that fails to paint it -- including
+    /// for an address the document cannot resolve and never answers.
+    #[test]
+    fn a_pending_request_is_not_repeated() {
+        let b = Rect::new(0.0, 0.0, 10.0, 10.0);
+        let nodes = vec![elem("a", DisplayGeom::Image("h1".into()), b)];
+        let mut pending = std::collections::HashSet::new();
+        pending.insert("h1".to_owned());
+        assert!(missing_media(&nodes, &ImageStore::new(), &pending).is_empty());
+        // With nothing pending, the same list does ask.
+        assert_eq!(
+            missing_media(
+                &nodes,
+                &ImageStore::new(),
+                &std::collections::HashSet::new()
+            ),
+            vec!["h1".to_owned()]
+        );
     }
 
     // An `Image` element whose hash is in the store paints real pixels

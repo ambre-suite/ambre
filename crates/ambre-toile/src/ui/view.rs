@@ -12,7 +12,7 @@
 // the Logic thread (`toile-board-rendering`).
 // ============================================================================
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[cfg(target_arch = "wasm32")]
 use ambre_bus::app::toile::CommentAnchor;
@@ -429,6 +429,12 @@ pub struct ToileView {
     /// with the media cache slice; the field is here so the walk has a stable
     /// source today.
     images: render::ImageStore,
+    /// Addresses already asked for and not yet answered, so a picture is
+    /// requested once rather than on every frame that fails to paint it. An
+    /// address the document cannot resolve is never answered and stays here,
+    /// which is what stops the view asking again for a picture that is not
+    /// there (`toile-media`).
+    media_requested: HashSet<String>,
 
     /// Which `doc_embed` holds input focus, and the click-vs-drag arbitration
     /// that decides it (`toile-embeds`, "Input focus"). View-local,
@@ -569,6 +575,7 @@ impl ToileView {
             gesture_overrides: HashMap::new(),
             gesture_commit_pending: false,
             images: render::ImageStore::new(),
+            media_requested: HashSet::new(),
             embed_focus: embed::EmbedFocus::default(),
             embed_sessions: embed::EmbedSessions::default(),
             child_route: None,
@@ -580,6 +587,26 @@ impl ToileView {
 
     /// Send a lossy command (viewport requests): dropped when the channel is full
     /// (the next coalesced request supersedes it). Never blocks the UI thread.
+    /// Ask the Logic thread for the pixels of every picture the new display
+    /// list names and this view does not hold (`toile-media`).
+    ///
+    /// Driven from the viewport reply rather than from the render walk: the walk
+    /// takes the store by shared reference and paints, and a paint that sends
+    /// commands is a paint that can change what the next paint does. Only what
+    /// survived the cull is named here, so a board of two hundred photographs
+    /// transfers the ones on screen.
+    fn request_missing_media(&mut self) {
+        let wanted =
+            render::missing_media(&self.display.nodes, &self.images, &self.media_requested);
+        if wanted.is_empty() {
+            return;
+        }
+        for h in &wanted {
+            self.media_requested.insert(h.clone());
+        }
+        self.send_lossy(ToileCommand::RequestMedia { hashes: wanted });
+    }
+
     fn send_lossy(&self, cmd: ToileCommand) {
         if self.fatal {
             return;
@@ -632,9 +659,31 @@ impl ToileView {
     /// fail the build here rather than be dropped silently.
     fn dispatch(&mut self, ev: ToileEvent) {
         match ev {
+            // The pixels behind an address this view asked for (`toile-media`).
+            // They land in the store the render walk consults, and the next
+            // frame paints the picture instead of the placeholder.
+            ToileEvent::MediaDecoded {
+                hash,
+                width,
+                height,
+                pixels,
+            } => {
+                self.media_requested.remove(&hash);
+                self.images.insert(
+                    hash,
+                    render::DecodedImage {
+                        pixels,
+                        width,
+                        height,
+                    },
+                );
+                self.data_dirty = true;
+                self.needs_full = true;
+            }
             ToileEvent::ViewportData(dv) => {
                 self.display = dv;
                 self.data_dirty = true;
+                self.request_missing_media();
                 // The recomputed frame now carries the committed transform, so drop
                 // the optimistic post-release preview (`toile-tools`): the
                 // real geometry takes over seamlessly, with no snap-back flicker.

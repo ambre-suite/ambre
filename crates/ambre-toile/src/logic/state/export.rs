@@ -24,6 +24,26 @@ use super::codec::{bin_of, f64_of, kind_from_tags, str_of};
 const SVG_FILENAME: &str = "board.svg";
 
 impl ToileState {
+    /// Decode the thumbnail stored for one media address, if the document
+    /// carries one and it parses (`toile-media`).
+    ///
+    /// The thumbnail is every pixel this thread holds: the full blob is
+    /// ciphertext on the relay and no path here fetches it, so this is the
+    /// resolution both the screen and an exported page get (`TOILE-IO-100`).
+    pub(super) fn decoded_thumbnail(&self, hash: &str) -> Option<(u32, u32, Vec<u8>)> {
+        let loro::LoroValue::Map(entries) = self.doc.get_map(super::MEDIA).get_deep_value() else {
+            return None;
+        };
+        let loro::LoroValue::Map(fields) = entries.get(hash)? else {
+            return None;
+        };
+        let loro::LoroValue::Binary(thumb) = fields.get("thumb")? else {
+            return None;
+        };
+        let rgba = image::load_from_memory(thumb).ok()?.to_rgba8();
+        Some((rgba.width(), rgba.height(), rgba.into_raw()))
+    }
+
     /// Serialize the board to an SVG document (`TOILE-IO-021`). Emits one
     /// [`ExportComplete`](ToileEvent::ExportComplete) carrying the bytes, which
     /// the UI thread hands to the browser (`TOILE-IO-085`).
@@ -254,5 +274,95 @@ mod tests {
         let svg = String::from_utf8(data).expect("the document is text");
         assert!(svg.starts_with("<svg "), "{svg}");
         assert!(svg.ends_with("</svg>\n"), "{svg}");
+    }
+}
+
+#[cfg(test)]
+mod media_request_tests {
+    use crate::logic::command::{ToileCommand, ToileEvent};
+    use crate::logic::interop::{ContentHash, ImportBatch, MediaBlob};
+
+    use super::super::ToileState;
+
+    /// A media entry whose thumbnail is a real PNG, so the decode path under
+    /// test is the one that runs in the application.
+    fn entry_with_thumb(hash: &str, w: u32, h: u32) -> MediaBlob {
+        let img = image::RgbaImage::from_pixel(w, h, image::Rgba([9, 8, 7, 255]));
+        let mut thumb = Vec::new();
+        image::DynamicImage::ImageRgba8(img)
+            .write_to(
+                &mut std::io::Cursor::new(&mut thumb),
+                image::ImageFormat::Png,
+            )
+            .unwrap();
+        MediaBlob {
+            hash: ContentHash(hash.to_owned()),
+            plaintext: vec![0u8; 4],
+            mime: "image/png".to_owned(),
+            width: w,
+            height: h,
+            thumb,
+        }
+    }
+
+    fn board_with_media(hash: &str, w: u32, h: u32) -> ToileState {
+        let mut st = ToileState::new();
+        st.apply_import(ImportBatch {
+            media: vec![entry_with_thumb(hash, w, h)],
+            ..Default::default()
+        });
+        st
+    }
+
+    /// A request is answered with the thumbnail's own pixels (`TOILE-IO-034`).
+    /// This is the crossing the screen path was missing: the pixels live on the
+    /// Logic thread and the store the render walk reads lives on the UI one.
+    #[test]
+    fn a_media_request_answers_with_decoded_pixels() {
+        let mut st = board_with_media("img", 4, 2);
+        let out = st.handle_command(ToileCommand::RequestMedia {
+            hashes: vec!["img".to_owned()],
+        });
+        let answer = out
+            .display
+            .iter()
+            .find_map(|e| match e {
+                ToileEvent::MediaDecoded {
+                    hash,
+                    width,
+                    height,
+                    pixels,
+                } => Some((hash.clone(), *width, *height, pixels.len())),
+                _ => None,
+            })
+            .expect("the request is answered");
+        assert_eq!(answer.0, "img");
+        assert_eq!((answer.1, answer.2), (4, 2));
+        // RGBA8, row-major, no padding: exactly four bytes a texel.
+        assert_eq!(answer.3, 4 * 2 * 4);
+    }
+
+    /// An address the document does not carry is answered with nothing, so the
+    /// element keeps the placeholder it was already painting rather than the
+    /// view waiting on a reply that never comes.
+    #[test]
+    fn an_unknown_address_is_answered_with_nothing() {
+        let mut st = board_with_media("img", 2, 2);
+        let out = st.handle_command(ToileCommand::RequestMedia {
+            hashes: vec!["absent".to_owned()],
+        });
+        assert!(out.display.is_empty());
+    }
+
+    /// Asking for a picture changes no document state (`TOILE-IO-024`): the
+    /// command is read-only, so it emits no CRDT update and nothing to persist.
+    #[test]
+    fn a_media_request_writes_nothing() {
+        let mut st = board_with_media("img", 2, 2);
+        let out = st.handle_command(ToileCommand::RequestMedia {
+            hashes: vec!["img".to_owned()],
+        });
+        assert!(out.update.is_none(), "a read-only command exports no delta");
+        assert!(!ToileCommand::RequestMedia { hashes: Vec::new() }.is_mutating());
     }
 }

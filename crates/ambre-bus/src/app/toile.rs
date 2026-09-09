@@ -824,6 +824,17 @@ pub enum ToileCommand {
         id: ElementId,
         radians: f64,
     },
+    /// Ask for the pixels behind one or more media addresses
+    /// (`toile-media`). Sent by the UI thread when the walk meets a picture
+    /// whose pixels it does not hold, so only what is on screen crosses the
+    /// bus: a board of two hundred photographs pays for the ones in view.
+    ///
+    /// Read-only, and answered per address with `MediaDecoded`. An address the
+    /// document does not carry is answered with nothing -- the element keeps its
+    /// placeholder, which is what it was already painting.
+    RequestMedia {
+        hashes: Vec<String>,
+    },
     RestyleElements {
         ids: Vec<ElementId>,
         style: ElementStyle,
@@ -1179,6 +1190,7 @@ impl ToileCommand {
                 | Self::ExportPdf
                 | Self::ReadComments { .. }
                 | Self::ReadDeck
+                | Self::RequestMedia { .. }
                 // Ephemeral only: a viewer still shows a cursor
                 // (`toile-presence`).
                 | Self::Presence { .. }
@@ -1273,6 +1285,19 @@ pub struct SelectionStats {
 #[derive(Clone, Debug)]
 pub enum ToileEvent {
     ViewportData(DisplayViewport),
+    /// Decoded pixels for one media address (`toile-media`), answering a
+    /// `RequestMedia`. RGBA8, row-major, `width * height * 4` bytes.
+    ///
+    /// These are the *thumbnail's* pixels: it is what the document carries, and
+    /// the full blob is ciphertext on the relay that nothing here fetches. So a
+    /// picture reaches the screen at thumbnail resolution -- readable, not
+    /// printable (`TOILE-IO-100`).
+    MediaDecoded {
+        hash: String,
+        width: u32,
+        height: u32,
+        pixels: Vec<u8>,
+    },
     ElementCreated(ElementId),
     /// Result of `CopyElements`: the UI stashes it and may mirror it to the OS
     /// clipboard for cross-tab paste (`toile-clipboard`).

@@ -345,6 +345,24 @@ impl ToileState {
                 keep_sources,
             } => self.boolean_op(op, &ids, keep_sources),
             ToileCommand::ReadDeck => self.read_deck(),
+            // One answer per address the document resolves; an address it does
+            // not carry is answered with nothing, so the element keeps the
+            // placeholder it is already painting (`toile-media`).
+            ToileCommand::RequestMedia { hashes } => ToileOutcome::display_only(
+                hashes
+                    .iter()
+                    .filter_map(|h| {
+                        self.decoded_thumbnail(h).map(|(width, height, pixels)| {
+                            ToileEvent::MediaDecoded {
+                                hash: h.clone(),
+                                width,
+                                height,
+                                pixels,
+                            }
+                        })
+                    })
+                    .collect(),
+            ),
             ToileCommand::Undo => self.apply_history(true),
             ToileCommand::Redo => self.apply_history(false),
             ToileCommand::CreateConnector {
