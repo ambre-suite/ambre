@@ -19,14 +19,19 @@ pub type MakeChild = Rc<dyn Fn(DocumentId, DocType, Size) -> AppView>;
 /// coordinates are mapped from the canvas into the child's pixel space through
 /// the camera and the embed's transform; every other event forwards unchanged
 /// (a wheel delta and a keystroke are frame-agnostic -- a child pixel is a screen
-/// pixel at the same zoom). If the focused embed has scrolled out (no mapping),
-/// the event forwards verbatim rather than being dropped.
-fn remap_for_child(view: &AppView, ev: &InputEvent) -> InputEvent {
+/// pixel at the same zoom).
+///
+/// `None` when a positional event cannot be mapped -- the focused embed left the
+/// culled frame between the event and this call. The event is then dropped
+/// rather than handed over with a coordinate from the board's own space
+/// (`TOILE-UI-328`), which would land a click at whatever the raw screen point
+/// happens to address inside the child.
+fn remap_for_child(view: &AppView, ev: &InputEvent) -> Option<InputEvent> {
     let map = |x: f64, y: f64| {
         view.embed_to_child_space(Point::new(x, y))
-            .map_or((x, y), |p| (p.x, p.y))
+            .map(|p| (p.x, p.y))
     };
-    match ev {
+    Some(match ev {
         InputEvent::PointerDown {
             x,
             y,
@@ -34,7 +39,7 @@ fn remap_for_child(view: &AppView, ev: &InputEvent) -> InputEvent {
             shift,
             ctrl,
         } => {
-            let (x, y) = map(*x, *y);
+            let (x, y) = map(*x, *y)?;
             InputEvent::PointerDown {
                 x,
                 y,
@@ -44,11 +49,11 @@ fn remap_for_child(view: &AppView, ev: &InputEvent) -> InputEvent {
             }
         }
         InputEvent::PointerMove { x, y } => {
-            let (x, y) = map(*x, *y);
+            let (x, y) = map(*x, *y)?;
             InputEvent::PointerMove { x, y }
         }
         InputEvent::PointerUp { x, y, button, ctrl } => {
-            let (x, y) = map(*x, *y);
+            let (x, y) = map(*x, *y)?;
             InputEvent::PointerUp {
                 x,
                 y,
@@ -57,12 +62,12 @@ fn remap_for_child(view: &AppView, ev: &InputEvent) -> InputEvent {
             }
         }
         InputEvent::DoubleClick { x, y } => {
-            let (x, y) = map(*x, *y);
+            let (x, y) = map(*x, *y)?;
             InputEvent::DoubleClick { x, y }
         }
         // Non-positional events carry no coordinates to rewrite.
         other => other.clone(),
-    }
+    })
 }
 
 pub struct FrameHost {
@@ -70,14 +75,21 @@ pub struct FrameHost {
     view: AppView,
     perf: web_sys::Performance,
 
-    /// The live child views behind the top-level document's visible `doc_embed`s
-    /// keyed by the embedded `DocumentId`. Reconciled every frame against
-    /// [`AppView::visible_embeds`]: a child appears when its embed enters the cull
-    /// set and is dropped when it leaves. Empty unless the top-level view embeds.
-    children: HashMap<DocumentId, AppView>,
+    /// The live child views behind the top-level document's visible `doc_embed`s,
+    /// keyed by the **board element** that carries each reference. Reconciled
+    /// every frame against [`AppView::visible_embeds`]: a child appears when its
+    /// embed enters the cull set and is dropped when it leaves. Empty unless the
+    /// top-level view embeds.
+    ///
+    /// By element, not by document (`TOILE-UI-097`): the session is one per
+    /// document -- that is the board's own registry, and it stays that way -- but
+    /// the paint is one per embed. Keyed by document, two boxes of different
+    /// sizes resized one view against each other every frame, and only one of
+    /// them was ever the right size for it.
+    children: HashMap<ElementId, AppView>,
     /// The last physical canvas size each child was resized to, so a moved /
     /// zoomed embed only triggers a child `resize` when its box actually changes.
-    child_sizes: HashMap<DocumentId, (u32, u32)>,
+    child_sizes: HashMap<ElementId, (u32, u32)>,
     /// The launcher's child-view factory (see [`MakeChild`]). `None` for a host
     /// that never embeds (or before the launcher installs it).
     make_child: Option<MakeChild>,
@@ -137,8 +149,11 @@ impl FrameHost {
         if let Some(child_id) = self.view.child_route()
             && let Some(child) = self.children.get_mut(&child_id)
         {
-            let remapped = remap_for_child(&self.view, ev);
-            child.handle_input(&remapped);
+            // A positional event the board cannot map is dropped, not handed
+            // over unmapped (`TOILE-UI-328`).
+            if let Some(remapped) = remap_for_child(&self.view, ev) {
+                child.handle_input(&remapped);
+            }
         }
         consumed
     }
@@ -155,7 +170,7 @@ impl FrameHost {
             return false;
         };
         let embeds = self.view.visible_embeds();
-        let live: HashSet<DocumentId> = embeds.iter().map(|e| e.document_id).collect();
+        let live: HashSet<ElementId> = embeds.iter().map(|e| e.element.clone()).collect();
         self.children.retain(|id, _| live.contains(id));
         self.child_sizes.retain(|id, _| live.contains(id));
 
@@ -166,17 +181,17 @@ impl FrameHost {
             if w == 0 || h == 0 {
                 continue;
             }
-            if !self.children.contains_key(&e.document_id) {
+            if !self.children.contains_key(&e.element) {
                 let mut child = make_child(e.document_id, e.doc_type, e.child_size);
                 child.resize(w, h);
-                self.children.insert(e.document_id, child);
-                self.child_sizes.insert(e.document_id, (w, h));
+                self.children.insert(e.element.clone(), child);
+                self.child_sizes.insert(e.element.clone(), (w, h));
                 dirty = true;
-            } else if self.child_sizes.get(&e.document_id) != Some(&(w, h)) {
-                if let Some(child) = self.children.get_mut(&e.document_id) {
+            } else if self.child_sizes.get(&e.element) != Some(&(w, h)) {
+                if let Some(child) = self.children.get_mut(&e.element) {
                     child.resize(w, h);
                 }
-                self.child_sizes.insert(e.document_id, (w, h));
+                self.child_sizes.insert(e.element.clone(), (w, h));
                 dirty = true;
             }
         }
@@ -389,11 +404,13 @@ impl FrameHost {
                     );
                     // Paint each visible child over the board's placeholder,
                     // clipped to its embed rect ("Render"). The child draws in
-                    // its own pixel space (origin at the rect's top-left, one child
-                    // pixel per screen pixel at the current zoom). A rotated embed
-                    // clips to its AABB -- accepted ("Clip limitation").
+                    // its own pixel space -- one child pixel per screen pixel at
+                    // the current zoom -- through the embed's own transform, so a
+                    // rotated embed paints its child rotated (`TOILE-UI-096`).
+                    // The clip stays the AABB: `push_clip` is rect-only
+                    // ("Clip limitation").
                     for e in self.view.visible_embeds() {
-                        let Some(child) = self.children.get_mut(&e.document_id) else {
+                        let Some(child) = self.children.get_mut(&e.element) else {
                             continue;
                         };
                         let r = e.screen_rect;
@@ -401,7 +418,7 @@ impl FrameHost {
                             continue;
                         }
                         surface.push_clip(r);
-                        surface.push_transform(Affine::translate((r.x0, r.y0)));
+                        surface.push_transform(e.to_screen);
                         child.paint_content(
                             &mut surface,
                             &mut gpu.font_cx,
@@ -420,6 +437,32 @@ impl FrameHost {
                         &mut gpu.text_cache,
                         &stats,
                     );
+                    // And each child's own overlay over it (`TOILE-UI-320`).
+                    // A selection, a caret and a set of handles are overlay
+                    // content in every app, so a child painted for its content
+                    // alone showed an embedded document with no visible cursor:
+                    // a user typing into it could not see where they were
+                    // typing. Same clip and same transform as the content pass,
+                    // so the two halves of one child land in one place.
+                    for e in self.view.visible_embeds() {
+                        let Some(child) = self.children.get_mut(&e.element) else {
+                            continue;
+                        };
+                        let r = e.screen_rect;
+                        if r.width() < 1.0 || r.height() < 1.0 {
+                            continue;
+                        }
+                        surface.push_clip(r);
+                        surface.push_transform(e.to_screen);
+                        child.paint_overlay(
+                            &mut surface,
+                            &mut gpu.font_cx,
+                            &mut gpu.text_cache,
+                            &stats,
+                        );
+                        surface.pop_transform();
+                        surface.pop_clip();
+                    }
                 }
             }
             gpu.text_cache.evict_if_oversized(5_000);

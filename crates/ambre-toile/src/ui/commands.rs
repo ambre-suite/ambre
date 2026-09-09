@@ -131,6 +131,8 @@ describe! {
     POINTER_TRACKPAD: menu_bar::POINTER_TRACKPAD, "Pointer: trackpad (wheel pans)", None, &[], VIEW;
     PRESENT_START: menu_bar::PRESENT, "Start presentation", None, &[], PRESENT;
     IMPORT_FILE: menu_bar::IMPORT_FILE, "Import a file...", Some(IconId("file-import-outline")), &[], FILE;
+    EMBED_WEB: menu_bar::EMBED_WEB, "Embed a web page...", Some(IconId("web")), &[], FILE;
+    EMBED_DOC: menu_bar::EMBED_DOC, "Embed a document...", Some(IconId("file-document-outline")), &[], FILE;
     EXPORT_SVG: menu_bar::EXPORT_SVG, "Export as SVG", Some(IconId("file-export-outline")), &[], FILE;
     EXPORT_PDF: menu_bar::EXPORT_PDF, "Export deck as PDF", Some(IconId("file-pdf-box")), &[], FILE;
     PRESENT_DECK: menu_bar::DECK, "Order the deck", Some(IconId("view-carousel-outline")), &[], PRESENT;

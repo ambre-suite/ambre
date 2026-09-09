@@ -33,6 +33,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
+use ambre_bus::app::toile::ElementId;
 use ambre_bus::{DocType, DocumentId};
 use ambre_canvas::theme::{FONT_BODY, FONT_HEADING};
 use ambre_canvas::{
@@ -247,11 +248,12 @@ impl AppView {
         }
     }
 
-    /// The child document the last input event was routed into
-    /// (`toile-embeds`, "Input focus"), for `FrameHost` to forward the
-    /// remapped event to. `None` off a Toile, or when the board itself consumed
-    /// the event.
-    fn child_route(&self) -> Option<DocumentId> {
+    /// The embed element the last input event was routed into
+    /// (`toile-embeds`, "Input focus"), for `FrameHost` to forward the remapped
+    /// event to. The element rather than its document: two embeds of one
+    /// document are two child views (`TOILE-UI-097`). `None` off a Toile, or
+    /// when the board itself consumed the event.
+    fn child_route(&self) -> Option<ElementId> {
         match self {
             AppView::Toile(v) => v.child_route(),
             AppView::Trame(_) => None,

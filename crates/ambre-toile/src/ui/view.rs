@@ -56,6 +56,36 @@ use ambre_commands::CommandId;
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::{GetUntracked, RwSignal, Set};
 
+/// Hand one child-session control command to the Logic thread, and report
+/// whether it left (`TOILE-UI-338`, `TOILE-UI-339`).
+///
+/// A free function rather than a method: the session registry is reconciled
+/// while it borrows itself mutably, so the sender it calls cannot also borrow
+/// the whole view. The answer is what makes the reconciliation self-healing --
+/// a refused command is not recorded, so a later frame offers it again.
+///
+/// `fatal` reports success on a send nobody made. The view is tearing down: no
+/// later frame will retry, so a `false` here would keep a dead registry asking
+/// for ever instead of letting it go.
+fn send_session(to_logic: &flume::Sender<LogicCommand>, fatal: bool, cmd: LogicCommand) -> bool {
+    if fatal {
+        return true;
+    }
+    match to_logic.try_send(cmd) {
+        Ok(()) => true,
+        Err(flume::TrySendError::Full(_)) => {
+            // Neither an open nor a close is worth blocking the UI thread for;
+            // both are worth a warning, and both come back on a later frame.
+            tracing::warn!("Toile: UI->Logic channel full, embed session command deferred");
+            false
+        }
+        Err(flume::TrySendError::Disconnected(_)) => {
+            tracing::error!("Toile: UI->Logic channel disconnected");
+            false
+        }
+    }
+}
+
 /// One notch of the mouse wheel maps to this zoom factor (wheel / pinch).
 const ZOOM_PER_WHEEL_PX: f64 = 0.0018;
 
@@ -356,6 +386,13 @@ pub struct ToileView {
     /// the camera. Wasm-only.
     #[cfg(target_arch = "wasm32")]
     dropped_file: RwSignal<Option<super::interop::DroppedFile>>,
+    /// An embed the shell resolved for the board (`TOILE-086`, `TOILE-087`): a
+    /// web address the user typed, or a document they picked. Drained each frame
+    /// like [`Self::dropped_file`], and for the same reason -- the shell owns
+    /// both dialogs, the view owns the camera, so only the view can say where on
+    /// the board the answer lands. Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    placed_embed: RwSignal<Option<super::embed::PlacedEmbed>>,
 
     /// The element a thread the panel opened is anchored to, awaiting the
     /// `SelectionStats` reply that carries its bounds so the camera can come to
@@ -452,7 +489,7 @@ pub struct ToileView {
     /// consumed it. Set by `handle_input`, read once by `FrameHost` right after,
     /// which forwards the (coordinate-remapped) event to that child's own view.
     /// View-local, never CRDT.
-    child_route: Option<DocumentId>,
+    child_route: Option<ElementId>,
 
     /// The latest frame timestamp (ms), captured in `plan_repaint`, used to blink
     /// the inline-edit caret (`toile-text-editing`). Paint has no clock of its own,
@@ -491,6 +528,7 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] comments: super::comments::CommentSignals,
         #[cfg(target_arch = "wasm32")] deck: super::deck::DeckSignals,
         #[cfg(target_arch = "wasm32")] dropped_file: RwSignal<Option<super::interop::DroppedFile>>,
+        #[cfg(target_arch = "wasm32")] placed_embed: RwSignal<Option<super::embed::PlacedEmbed>>,
     ) -> Self {
         if !embedded {
             text_input.focus();
@@ -564,6 +602,8 @@ impl ToileView {
             deck,
             #[cfg(target_arch = "wasm32")]
             dropped_file,
+            #[cfg(target_arch = "wasm32")]
+            placed_embed,
             pending_comment_focus: None,
             pending_fit: false,
             last_stats_sel: Vec::new(),
@@ -1024,24 +1064,24 @@ impl ToileView {
         Some(embed::to_child_space(elem, &self.cam, screen))
     }
 
-    /// The nested document currently holding input focus
-    /// (`toile-embeds`), resolved from the focused board element to its
-    /// embedded `DocumentId` -- the key into `FrameHost`'s child views. `None`
-    /// when the board itself has focus.
-    pub fn focused_child(&self) -> Option<DocumentId> {
+    /// The `doc_embed` element currently holding input focus
+    /// (`toile-embeds`). `None` when the board itself has focus, or when the
+    /// focused element is not an embed.
+    ///
+    /// The **element**, not the document it points at: two embeds of one
+    /// document are two child views, each sized to its own box, and only the one
+    /// under the pointer may take the event (`TOILE-UI-097`).
+    pub fn focused_child(&self) -> Option<ElementId> {
         let id = self.embed_focus.current()?;
-        match &self.find_element(id)?.geom {
-            DisplayGeom::DocEmbed { document_id, .. } => Some(*document_id),
-            _ => None,
-        }
+        matches!(self.find_element(id)?.geom, DisplayGeom::DocEmbed { .. }).then(|| id.clone())
     }
 
     /// The child the last `handle_input` routed into, for `FrameHost` to forward
     /// the (coordinate-remapped) event to (`toile-embeds`, "Input
     /// focus"). Cleared at the start of every `handle_input`, so it reflects only
     /// the latest event.
-    pub fn child_route(&self) -> Option<DocumentId> {
-        self.child_route
+    pub fn child_route(&self) -> Option<ElementId> {
+        self.child_route.clone()
     }
 
     /// Whether `screen` lands inside the focused embed's (rotated) quad. Used to
@@ -1057,24 +1097,20 @@ impl ToileView {
     /// Decide whether the just-arrived event belongs to the focused embed `id`
     /// and so must be handed to the child instead of the board
     /// (`toile-embeds`, "Input focus"). Keystrokes / text / composition
-    /// / wheel go to the child while it holds focus; a pointer event goes to it
-    /// only while the cursor is inside its quad, so a click that lands outside
-    /// still returns focus to the board. `Escape` is never captured -- the board
-    /// needs it to blur (see `handle_key`).
+    /// go to the child while it holds focus; a pointer event goes to it only
+    /// while the cursor is inside its quad, so a click that lands outside still
+    /// returns focus to the board. `Escape` is never captured -- the board needs
+    /// it to blur (see `handle_key`).
+    ///
+    /// A wheel carries no position of its own, so it is bound by where the
+    /// pointer last was (`TOILE-UI-329`). Capturing it unconditionally left the
+    /// board impossible to pan or zoom while any embed held focus -- the wheel
+    /// scrolled the child wherever the cursor was, and only a click outside
+    /// gave the board its own navigation back.
     fn route_to_child(&self, ev: &InputEvent, id: &ElementId) -> bool {
-        match ev {
-            InputEvent::Key { key, .. } => key != "Escape",
-            InputEvent::Text { .. }
-            | InputEvent::CompositionUpdate { .. }
-            | InputEvent::CompositionEnd { .. }
-            | InputEvent::Wheel { .. } => true,
-            InputEvent::PointerDown { x, y, .. }
-            | InputEvent::PointerUp { x, y, .. }
-            | InputEvent::PointerMove { x, y }
-            | InputEvent::DoubleClick { x, y } => {
-                self.screen_in_focused_embed(Point::new(*x, *y), id)
-            }
-        }
+        embed::routes_to_child(ev, self.last_pointer, |p| {
+            self.screen_in_focused_embed(p, id)
+        })
     }
 
     /// A press landed at `world` / `screen`: arm a possible focus grant if it is
@@ -1111,9 +1147,15 @@ impl ToileView {
     /// child"). Driven from `plan_repaint`, the one per-frame hook carrying the
     /// frame clock.
     fn drive_embed_lifecycle(&mut self, now_ms: f64) {
-        for cmd in self.embed_sessions.sync(&self.display, now_ms) {
-            self.send_open(cmd);
-        }
+        // The session set records only what the channel actually took: a command
+        // it refuses is re-offered next frame rather than lost (`TOILE-UI-338`,
+        // `TOILE-UI-339`). `fatal` is the one case that reports success on a
+        // send nobody made -- the view is tearing down and no later frame will
+        // run, so retrying for ever would be the leak instead.
+        let (to_logic, fatal) = (&self.to_logic, self.fatal);
+        self.embed_sessions.sync(&self.display, now_ms, |cmd| {
+            send_session(to_logic, fatal, cmd)
+        });
         // Focus cannot outlive the element that held it: an embed deleted by a
         // peer, or scrolled far enough away to be closed, leaves the board with
         // nothing to route input into.
@@ -1131,35 +1173,12 @@ impl ToileView {
         }
     }
 
-    /// Send a document-session control command (child open / close,
-    /// `toile-embeds`). Unlike `send_edit` this is not addressed to a
-    /// document via `LogicCommand::App`: it manages the child's session itself.
-    fn send_open(&self, cmd: LogicCommand) {
-        if self.fatal {
-            return;
-        }
-        match self.to_logic.try_send(cmd) {
-            Ok(()) => {}
-            Err(flume::TrySendError::Full(_)) => {
-                // Dropping an open would leave a blank embed and dropping a close
-                // would leak a session, so both are worth a warning; neither is
-                // worth blocking the UI thread. The next frame retries the open
-                // (the embed is still in the cull set); a lost close is reclaimed
-                // when the board closes.
-                tracing::warn!("Toile: UI->Logic channel full, embed session command dropped");
-            }
-            Err(flume::TrySendError::Disconnected(_)) => {
-                tracing::error!("Toile: UI->Logic channel disconnected");
-            }
-        }
-    }
-
     /// Close every child session this view opened (`toile-embeds`:
     /// "Closing the Toile closes every child immediately, no debounce").
     fn close_all_embeds(&mut self) {
-        for cmd in self.embed_sessions.close_all() {
-            self.send_open(cmd);
-        }
+        let (to_logic, fatal) = (&self.to_logic, self.fatal);
+        self.embed_sessions
+            .close_all(|cmd| send_session(to_logic, fatal, cmd));
         self.embed_focus.blur();
     }
 
@@ -2457,6 +2476,7 @@ impl ToileView {
         // (`toile-comments`).
         self.drain_comment_intent();
         self.drain_dropped_file();
+        self.drain_placed_embed();
         self.drain_deck_intent();
 
         // Apply the tool the DOM palette / keyboard selected this frame
@@ -2796,6 +2816,58 @@ impl ToileView {
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn drain_dropped_file(&mut self) {}
+
+    /// Drain the embed the shell resolved for us this frame (`TOILE-086`,
+    /// `TOILE-087`). The address has already been through
+    /// [`normalize_web_address`](super::embed::normalize_web_address) on the
+    /// shell's side -- the dialog refuses what it cannot accept, so the user
+    /// learns of a bad address while it is still on screen rather than after a
+    /// box lands on the board. Placing writes a reference and nothing else, so
+    /// it never touches the document it points at (`TOILE-225`). Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    fn drain_placed_embed(&mut self) {
+        let Some(placed) = self.placed_embed.get_untracked() else {
+            return;
+        };
+        self.placed_embed.set(None);
+        // No drop point: a menu entry started this, so it lands in the middle of
+        // what the viewer is looking at, like a picker import.
+        let screen = placed.at.unwrap_or(Point::new(
+            self.cam.size.width / 2.0,
+            self.cam.size.height / 2.0,
+        ));
+        let size = super::embed::DEFAULT_EMBED_SIZE;
+        // The point the user aimed at is the embed's centre, not its corner: a
+        // menu placement centres on the camera, and a drop lands under the
+        // pointer.
+        let centre = self.cam.screen_to_world() * screen;
+        let at = Point::new(centre.x - size.width / 2.0, centre.y - size.height / 2.0);
+        let (kind, content) = match placed.target {
+            super::embed::EmbedTarget::Web(url) => (
+                ElementKind::Embed,
+                ambre_bus::app::toile::InitContent::Embed(url),
+            ),
+            super::embed::EmbedTarget::Document {
+                document_id,
+                doc_type,
+            } => (
+                ElementKind::DocEmbed,
+                ambre_bus::app::toile::InitContent::DocEmbed {
+                    document_id,
+                    doc_type,
+                },
+            ),
+        };
+        self.send_edit(ToileCommand::CreateElement {
+            kind,
+            at,
+            size,
+            content,
+            fill: None,
+        });
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn drain_placed_embed(&mut self) {}
 
     /// Resolve a copy/cut synchronously inside the native clipboard event
     /// (`toile-clipboard`).

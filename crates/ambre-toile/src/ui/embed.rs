@@ -25,7 +25,9 @@ use std::collections::HashMap;
 
 use ambre_bus::app::toile::{DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId};
 use ambre_bus::{DocType, DocumentId, LogicCommand};
-use ambre_draw::{Point, Rect, Size};
+use ambre_draw::{Affine, Point, Rect, Size};
+
+use ambre_canvas::InputEvent;
 
 use super::viewport::ViewportTransform;
 
@@ -59,6 +61,13 @@ pub struct VisibleEmbed {
     /// pixel by construction (both are world units scaled by the camera's zoom),
     /// so this is just the element's world size at the current zoom.
     pub child_size: Size,
+    /// Child pixels -> physical screen pixels: what a painter pushes before
+    /// drawing the child, so a rotated embed paints its child rotated
+    /// (`TOILE-UI-096`). The exact inverse of [`to_child_space`], which is what
+    /// makes the paint and the pointer agree; translating to `screen_rect`'s
+    /// corner instead puts the child straight, in the wrong place, while the
+    /// pointer arrives as though it were turned.
+    pub to_screen: Affine,
     /// View-local focus ("Input focus"): while true, `FrameHost` maps canvas
     /// input into this child and hands it to the child's own `handle_input`.
     pub focused: bool,
@@ -80,6 +89,19 @@ pub fn to_child_space(elem: &DisplayElement, cam: &ViewportTransform, screen: Po
         (local.x - elem.bounds.x0) * cam.zoom,
         (local.y - elem.bounds.y0) * cam.zoom,
     )
+}
+
+/// Map the child's own pixel space onto the screen: the inverse of
+/// [`to_child_space`] (`TOILE-UI-096`).
+///
+/// Read right to left, a child pixel is divided by the zoom to become a world
+/// offset, moved to the element's unrotated origin, turned by the element's own
+/// rotation, and finally taken through the camera.
+pub fn to_screen(elem: &DisplayElement, cam: &ViewportTransform) -> Affine {
+    cam.world_to_screen()
+        * elem.transform
+        * Affine::translate((elem.bounds.x0, elem.bounds.y0))
+        * Affine::scale(1.0 / cam.zoom)
 }
 
 /// The child's canvas size in physical pixels at the current zoom.
@@ -137,7 +159,213 @@ pub fn visible_embeds(
                 doc_type: *doc_type,
                 screen_rect: screen_aabb(e, cam),
                 child_size: child_size(e, cam),
+                to_screen: to_screen(e, cam),
                 focused: focused == Some(&e.id),
+            })
+        })
+        .collect()
+}
+
+// -- Placing an embed ---------------------------------------------------------
+//
+// The gesture that puts an embed on the board (`TOILE-086`, `TOILE-087`). The
+// shell owns both dialogs -- a web address is typed, and the document list is
+// the launcher's -- so what crosses into the view is the answer, not the
+// gesture, exactly as a dropped file does (`ui::interop::DroppedFile`).
+
+/// The default world size of a freshly placed embed. A web page and a nested
+/// document alike land at a readable reading width rather than at a point the
+/// user then has to drag open; the ratio is a browser window's, not a slide's.
+pub const DEFAULT_EMBED_SIZE: Size = Size::new(640.0, 400.0);
+
+/// What a placement dialog answered with.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EmbedTarget {
+    /// A web page, by an address already through [`normalize_web_address`].
+    Web(String),
+    /// Another Ambre document, by reference (`TOILE-021`): the board stores the
+    /// id and never the content.
+    Document {
+        document_id: DocumentId,
+        doc_type: DocType,
+    },
+}
+
+/// An embed the shell resolved and the view has yet to place (`TOILE-086`,
+/// `TOILE-087`). `at` is the drop point in physical pixels, or `None` when a
+/// menu entry started the placement and there is no point to speak of -- the
+/// view then centres it on what the user is looking at, like a picker import.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlacedEmbed {
+    pub target: EmbedTarget,
+    pub at: Option<Point>,
+}
+
+/// Why an address cannot go on the board. One variant per message the user
+/// reads, so the wording lives with the rule rather than at the dialog.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AddressError {
+    /// Nothing was typed.
+    Empty,
+    /// A scheme other than `https`. This is the security-bearing refusal: a
+    /// `javascript:` or a `data:` address in a frame runs in the embedder's
+    /// stead, which is exactly what `TOILE-088` forbids.
+    NotHttps,
+    /// `https://` with nothing after it, or a host carrying a character no host
+    /// may hold.
+    NoHost,
+}
+
+impl AddressError {
+    /// What the dialog shows. Says what to do, not what went wrong.
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::Empty => "Type a web address",
+            Self::NotHttps => "Only https addresses can be embedded",
+            Self::NoHost => "That address has no site in it",
+        }
+    }
+}
+
+/// Turn what a user typed into the address a frame may load, or say why it
+/// cannot (`TOILE-088`).
+///
+/// **Only `https` survives.** A bare `example.com` is read as `https://example.com`;
+/// every explicit scheme other than `https` is refused, `http` included. Two
+/// reasons, and neither is taste: a `javascript:`, `data:` or `blob:` frame
+/// executes with the embedder's own origin as its opener and is the whole of the
+/// attack `TOILE-088` names, and a plain-`http` frame inside a page served over
+/// TLS is blocked by the browser as mixed content -- so accepting one would put a
+/// box on the board that can never paint.
+///
+/// The parse is done by hand rather than through a URL crate: the board needs
+/// the scheme and a non-empty host and nothing else, while a conforming parser
+/// carries the IDNA tables into the wasm bundle for the rest.
+pub fn normalize_web_address(typed: &str) -> Result<String, AddressError> {
+    // A control character or a space inside an address is either a paste
+    // accident or an attempt to hide a scheme from a naive prefix test
+    // (`java\nscript:`), and no legal address needs one: strip the ends, refuse
+    // the middle.
+    let trimmed = typed.trim_matches(|c: char| c.is_whitespace() || c.is_control());
+    if trimmed.is_empty() {
+        return Err(AddressError::Empty);
+    }
+    if trimmed.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err(AddressError::NoHost);
+    }
+
+    let rest = match split_scheme(trimmed) {
+        // An explicit scheme: `https` and nothing else.
+        Some((scheme, rest)) => {
+            if !scheme.eq_ignore_ascii_case("https") {
+                return Err(AddressError::NotHttps);
+            }
+            rest.strip_prefix("//").unwrap_or(rest)
+        }
+        // No scheme at all: the user typed a host, and https is what they get.
+        None => trimmed,
+    };
+
+    // The authority ends at the first `/`, `?` or `#`; what is left must be a
+    // host. A leading `@` would make the host the part after it (userinfo), so
+    // an empty one there is as empty as no host at all.
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = authority.rsplit('@').next().unwrap_or_default();
+    if host.is_empty() || host.starts_with(':') {
+        return Err(AddressError::NoHost);
+    }
+
+    Ok(format!("https://{rest}"))
+}
+
+/// Split `s` at an explicit URL scheme, returning it and the remainder. `None`
+/// when the text carries no scheme -- which a `host:port` deliberately does not,
+/// since what follows its colon is a port rather than a path.
+fn split_scheme(s: &str) -> Option<(&str, &str)> {
+    let colon = s.find(':')?;
+    let (scheme, rest) = s.split_at(colon);
+    let rest = &rest[1..];
+    // RFC 3986: a scheme starts with a letter and holds letters, digits and
+    // `+ - .` -- and a `host:8080` matches that too, which is why the digits
+    // after the colon are what tells the two apart.
+    let shaped = !scheme.is_empty()
+        && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+        && scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
+    let is_port = {
+        let digits = rest.split(['/', '?', '#']).next().unwrap_or_default();
+        !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+    };
+    (shaped && !is_port).then_some((scheme, rest))
+}
+
+/// Whether an input event belongs to the focused embed's child rather than to
+/// the board ("Input focus").
+///
+/// `inside` answers whether a screen point lands in the focused embed's quad,
+/// and `last_pointer` is where the cursor was last seen. Split out of the view
+/// so the routing rule is host-tested: `ToileView` is not natively
+/// constructible, and this is where the two rules that matter live --
+///
+/// * `Escape` is never captured (`TOILE-UI-331`): the board needs it to blur,
+///   and a child that swallowed it would trap the user inside the embed;
+/// * a wheel is bound by the pointer, not by focus alone (`TOILE-UI-329`). It
+///   carries no position of its own, so capturing it unconditionally made the
+///   board impossible to pan or zoom while any embed held focus.
+pub fn routes_to_child<F>(ev: &InputEvent, last_pointer: Point, inside: F) -> bool
+where
+    F: Fn(Point) -> bool,
+{
+    match ev {
+        InputEvent::Key { key, .. } => key != "Escape",
+        // Typing has no position at all: it follows focus, as a caret does.
+        InputEvent::Text { .. }
+        | InputEvent::CompositionUpdate { .. }
+        | InputEvent::CompositionEnd { .. } => true,
+        InputEvent::Wheel { .. } => inside(last_pointer),
+        InputEvent::PointerDown { x, y, .. }
+        | InputEvent::PointerUp { x, y, .. }
+        | InputEvent::PointerMove { x, y }
+        | InputEvent::DoubleClick { x, y } => inside(Point::new(*x, *y)),
+    }
+}
+
+/// One web `embed` in the current culled frame, projected to screen space for
+/// the shell to place its frame over (`TOILE-088`). The board itself paints only
+/// the placeholder box: a web page is DOM, and the canvas has no way to hold one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VisibleWebEmbed {
+    /// The board element carrying the address: the shell's key for its frame.
+    pub element: ElementId,
+    /// The address, as stored -- already normalized when it was placed.
+    pub url: String,
+    /// Where the frame goes, in physical screen pixels: the AABB of the
+    /// element's quad, like a nested document's.
+    pub screen_rect: Rect,
+}
+
+/// The web `embed`s of `display`, projected for the shell. Order follows the
+/// display walk, which is z-order, so frames stacked in sequence reproduce the
+/// board's own stacking.
+pub fn visible_web_embeds(
+    display: &DisplayViewport,
+    cam: &ViewportTransform,
+) -> Vec<VisibleWebEmbed> {
+    display
+        .nodes
+        .iter()
+        .filter_map(|node| {
+            let DisplayNode::Element(e) = node else {
+                return None;
+            };
+            let DisplayGeom::Embed(url) = &e.geom else {
+                return None;
+            };
+            Some(VisibleWebEmbed {
+                element: e.id.clone(),
+                url: url.clone(),
+                screen_rect: screen_aabb(e, cam),
             })
         })
         .collect()
@@ -246,23 +474,37 @@ pub struct EmbedSessions {
 }
 
 impl EmbedSessions {
-    /// Reconcile against the culled frame at `now_ms` and return the session
-    /// commands to send: an `OpenDocument` for each child that just appeared, a
-    /// `CloseDocument` for each that has been gone past the debounce. A child
-    /// that reappears before its deadline has its close cancelled silently.
-    pub fn sync(&mut self, display: &DisplayViewport, now_ms: f64) -> Vec<LogicCommand> {
-        let mut cmds = Vec::new();
-
-        for (document_id, doc_type) in embedded_docs(display) {
+    /// Reconcile against the culled frame at `now_ms`, handing each session
+    /// command to `send` and recording it only once `send` reports it left
+    /// (`TOILE-UI-338`, `TOILE-UI-339`).
+    ///
+    /// The order is the whole point. Writing the open set first and sending
+    /// afterwards loses a command for good on a full channel: the set already
+    /// says the work is done, so no later frame retries it -- a dropped open
+    /// leaves a blank placeholder until the board is left, and a dropped close
+    /// leaks a child session nothing names any more. Recording on the answer
+    /// instead makes both self-healing: the embed is still in the cull set next
+    /// frame, so the open is re-offered; the child is still in the open set, so
+    /// the close is re-offered on the frame after its deadline.
+    ///
+    /// `send` returns whether the command left. A caller that cannot send (a
+    /// full channel, a disconnected one) returns `false` and the state stays as
+    /// it was.
+    pub fn sync<F>(&mut self, display: &DisplayViewport, now_ms: f64, mut send: F)
+    where
+        F: FnMut(LogicCommand) -> bool,
+    {
+        for (document_id, doc_type) in embedded_docs(display).collect::<Vec<_>>() {
             match self.open.get_mut(&document_id) {
-                // Back in view: cancel any pending close.
+                // Back in view: cancel any pending close. Local, nothing to send.
                 Some(pending) => *pending = None,
                 None => {
-                    self.open.insert(document_id, None);
-                    cmds.push(LogicCommand::OpenDocument {
+                    if send(LogicCommand::OpenDocument {
                         document_id,
                         doc_type,
-                    });
+                    }) {
+                        self.open.insert(document_id, None);
+                    }
                 }
             }
         }
@@ -275,10 +517,11 @@ impl EmbedSessions {
             .collect();
         for document_id in gone {
             match self.open[&document_id] {
-                // Deadline reached: close for real.
+                // Deadline reached: close for real, if the channel takes it.
                 Some(deadline) if now_ms >= deadline => {
-                    self.open.remove(&document_id);
-                    cmds.push(LogicCommand::CloseDocument { document_id });
+                    if send(LogicCommand::CloseDocument { document_id }) {
+                        self.open.remove(&document_id);
+                    }
                 }
                 // Counting down.
                 Some(_) => {}
@@ -289,16 +532,21 @@ impl EmbedSessions {
                 }
             }
         }
-        cmds
     }
 
     /// Close every child at once, with no debounce: the board itself is going
-    /// away (a route change), so its embeds go with it.
-    pub fn close_all(&mut self) -> Vec<LogicCommand> {
-        std::mem::take(&mut self.open)
-            .into_keys()
-            .map(|document_id| LogicCommand::CloseDocument { document_id })
-            .collect()
+    /// away (a route change), so its embeds go with it. A child whose close
+    /// `send` refuses stays in the set, so a caller that retries can still
+    /// reclaim it (`TOILE-UI-339`).
+    pub fn close_all<F>(&mut self, mut send: F)
+    where
+        F: FnMut(LogicCommand) -> bool,
+    {
+        self.open.retain(|document_id, _| {
+            !send(LogicCommand::CloseDocument {
+                document_id: *document_id,
+            })
+        });
     }
 
     /// Whether `document_id` currently has a session (open or closing).
@@ -357,7 +605,12 @@ mod tests {
         (a.x - b.x).abs() < 1e-6 && (a.y - b.y).abs() < 1e-6
     }
 
-    fn doc_embed(id: &str, document_id: DocumentId, bounds: Rect, rot: f64) -> DisplayElement {
+    pub(super) fn doc_embed(
+        id: &str,
+        document_id: DocumentId,
+        bounds: Rect,
+        rot: f64,
+    ) -> DisplayElement {
         DisplayElement {
             id: ElementId(id.to_owned()),
             kind: ElementKind::DocEmbed,
@@ -378,7 +631,7 @@ mod tests {
         }
     }
 
-    fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
+    pub(super) fn viewport(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
             pins: Vec::new(),
             viewport: Viewport::default(),
@@ -466,6 +719,60 @@ mod tests {
     }
 
     // -- Publishing for FrameHost ---------------------------------------------
+
+    /// `TOILE-UI-096`: what the painter pushes is the exact inverse of what the
+    /// pointer undoes. One half of the mapping proved and the other contradicting
+    /// it is what put a rotated embed's child straight, in the wrong corner,
+    /// while its pointer arrived turned.
+    #[test]
+    fn the_paint_transform_is_the_inverse_of_the_pointer_transform() {
+        let bounds = Rect::new(40.0, 30.0, 240.0, 130.0);
+        for rot in [0.0, 0.4, std::f64::consts::FRAC_PI_2, -1.1] {
+            for zoom in [0.5, 1.0, 2.5] {
+                let e = doc_embed("e", DocumentId::new(), bounds, rot);
+                let cam = ViewportTransform {
+                    zoom,
+                    size: Size::new(800.0, 600.0),
+                    ..Default::default()
+                };
+                let paint = to_screen(&e, &cam);
+                // Round-trip a handful of child pixels: paint them onto the
+                // screen, then map them back the way a pointer event is mapped.
+                for child in [
+                    Point::new(0.0, 0.0),
+                    Point::new(10.0, 4.0),
+                    Point::new(199.0, 99.0),
+                ] {
+                    let back = to_child_space(&e, &cam, paint * child);
+                    assert!(
+                        approx(back, child),
+                        "rot={rot} zoom={zoom}: {child:?} came back as {back:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The child's origin lands where the element's own top-left is, not where
+    /// its bounding box begins: the two differ the moment the embed is turned.
+    #[test]
+    fn the_paint_origin_is_the_elements_corner_not_its_bounding_box() {
+        let bounds = Rect::new(0.0, 0.0, 200.0, 100.0);
+        let e = doc_embed("e", DocumentId::new(), bounds, 0.6);
+        let cam = ViewportTransform {
+            size: Size::new(800.0, 600.0),
+            ..Default::default()
+        };
+        let origin = to_screen(&e, &cam) * Point::new(0.0, 0.0);
+        let aabb = screen_aabb(&e, &cam);
+        assert!(
+            (origin.x - aabb.x0).abs() > 1.0 || (origin.y - aabb.y0).abs() > 1.0,
+            "a turned embed's corner must not be its bounding box's corner"
+        );
+        // And it is the element's own top-left, taken through the camera.
+        let expect = cam.world_to_screen() * e.transform * Point::new(bounds.x0, bounds.y0);
+        assert!(approx(origin, expect));
+    }
 
     #[test]
     fn only_the_focused_embed_comes_back_focused() {
@@ -621,6 +928,37 @@ mod tests {
 
     // -- Session lifecycle + debounce -----------------------------------------
 
+    /// Reconcile with a channel that takes everything, returning what was sent.
+    fn sync(s: &mut EmbedSessions, dv: &DisplayViewport, now_ms: f64) -> Vec<LogicCommand> {
+        let mut sent = Vec::new();
+        s.sync(dv, now_ms, |cmd| {
+            sent.push(cmd);
+            true
+        });
+        sent
+    }
+
+    /// Reconcile with a channel that refuses everything, returning what it was
+    /// offered. Nothing may be recorded from it.
+    fn sync_refused(s: &mut EmbedSessions, dv: &DisplayViewport, now_ms: f64) -> Vec<LogicCommand> {
+        let mut offered = Vec::new();
+        s.sync(dv, now_ms, |cmd| {
+            offered.push(cmd);
+            false
+        });
+        offered
+    }
+
+    /// Close every child through a channel that takes everything.
+    fn close_all(s: &mut EmbedSessions) -> Vec<LogicCommand> {
+        let mut sent = Vec::new();
+        s.close_all(|cmd| {
+            sent.push(cmd);
+            true
+        });
+        sent
+    }
+
     fn opened(cmds: &[LogicCommand]) -> Vec<DocumentId> {
         cmds.iter()
             .filter_map(|c| match c {
@@ -654,12 +992,12 @@ mod tests {
         let child = DocumentId::new();
         let dv = board_with(child);
 
-        assert_eq!(opened(&s.sync(&dv, 0.0)), vec![child]);
+        assert_eq!(opened(&sync(&mut s, &dv, 0.0)), vec![child]);
         assert!(s.is_open(&child));
         // Still visible on later frames: no second open. A re-open costs a
         // members fetch, a key unwrap and a snapshot hydration.
-        assert!(s.sync(&dv, 16.0).is_empty());
-        assert!(s.sync(&dv, 32.0).is_empty());
+        assert!(sync(&mut s, &dv, 16.0).is_empty());
+        assert!(sync(&mut s, &dv, 32.0).is_empty());
     }
 
     #[test]
@@ -667,17 +1005,17 @@ mod tests {
         let mut s = EmbedSessions::default();
         let child = DocumentId::new();
         let empty = viewport(Vec::new());
-        s.sync(&board_with(child), 0.0);
+        sync(&mut s, &board_with(child), 0.0);
 
         // Leaves the cull set: the countdown starts, nothing is sent yet.
-        assert!(s.sync(&empty, 1_000.0).is_empty());
+        assert!(sync(&mut s, &empty, 1_000.0).is_empty());
         // One millisecond short of the deadline: still nothing.
         let almost = 1_000.0 + EMBED_CLOSE_DEBOUNCE_MS - 1.0;
-        assert!(s.sync(&empty, almost).is_empty());
+        assert!(sync(&mut s, &empty, almost).is_empty());
         assert!(s.is_open(&child), "closed before the debounce elapsed");
         // Deadline reached.
         assert_eq!(
-            closed(&s.sync(&empty, 1_000.0 + EMBED_CLOSE_DEBOUNCE_MS)),
+            closed(&sync(&mut s, &empty, 1_000.0 + EMBED_CLOSE_DEBOUNCE_MS)),
             vec![child]
         );
         assert!(!s.is_open(&child));
@@ -689,15 +1027,15 @@ mod tests {
         let child = DocumentId::new();
         let dv = board_with(child);
         let empty = viewport(Vec::new());
-        assert_eq!(opened(&s.sync(&dv, 0.0)), vec![child]);
+        assert_eq!(opened(&sync(&mut s, &dv, 0.0)), vec![child]);
 
         // Pan the embed in and out well within the debounce, many times over --
         // the failure mode this exists for. Binding the session straight to the
         // cull set would storm the WebSocket here.
         for i in 1..50 {
             let t = i as f64 * 100.0;
-            assert!(s.sync(&empty, t).is_empty(), "close storm at {t}");
-            assert!(s.sync(&dv, t + 50.0).is_empty(), "open storm at {t}");
+            assert!(sync(&mut s, &empty, t).is_empty(), "close storm at {t}");
+            assert!(sync(&mut s, &dv, t + 50.0).is_empty(), "open storm at {t}");
         }
         assert!(s.is_open(&child));
     }
@@ -708,18 +1046,18 @@ mod tests {
         let child = DocumentId::new();
         let dv = board_with(child);
         let empty = viewport(Vec::new());
-        s.sync(&dv, 0.0);
+        sync(&mut s, &dv, 0.0);
 
-        s.sync(&empty, 0.0); // countdown armed for t = 5000
-        s.sync(&dv, 4_000.0); // back in view: cancelled
+        sync(&mut s, &empty, 0.0); // countdown armed for t = 5000
+        sync(&mut s, &dv, 4_000.0); // back in view: cancelled
         // Past the ORIGINAL deadline with the embed visible: nothing closes.
-        assert!(s.sync(&dv, 6_000.0).is_empty());
+        assert!(sync(&mut s, &dv, 6_000.0).is_empty());
         assert!(s.is_open(&child));
         // And the next departure gets a fresh full window, not the old deadline.
-        assert!(s.sync(&empty, 6_000.0).is_empty());
-        assert!(s.sync(&empty, 10_000.0).is_empty());
+        assert!(sync(&mut s, &empty, 6_000.0).is_empty());
+        assert!(sync(&mut s, &empty, 10_000.0).is_empty());
         assert_eq!(
-            closed(&s.sync(&empty, 6_000.0 + EMBED_CLOSE_DEBOUNCE_MS)),
+            closed(&sync(&mut s, &empty, 6_000.0 + EMBED_CLOSE_DEBOUNCE_MS)),
             vec![child]
         );
     }
@@ -732,15 +1070,76 @@ mod tests {
             DisplayNode::Element(doc_embed("e1", a, Rect::new(0.0, 0.0, 10.0, 10.0), 0.0)),
             DisplayNode::Element(doc_embed("e2", b, Rect::new(20.0, 0.0, 30.0, 10.0), 0.0)),
         ]);
-        s.sync(&dv, 0.0);
+        sync(&mut s, &dv, 0.0);
 
         // The board is going away: no debounce, and the registry is emptied so a
         // later frame cannot close them twice.
         let got: std::collections::HashSet<DocumentId> =
-            closed(&s.close_all()).into_iter().collect();
+            closed(&close_all(&mut s)).into_iter().collect();
         assert_eq!(got, std::collections::HashSet::from([a, b]));
-        assert!(s.close_all().is_empty());
+        assert!(close_all(&mut s).is_empty());
         assert!(!s.is_open(&a) && !s.is_open(&b));
+    }
+
+    /// `TOILE-UI-338`: an open the channel refuses is offered again on the next
+    /// frame. Recording it before it left is what used to lose it for good --
+    /// the set said the work was done, so no frame retried and the embed stayed
+    /// a blank placeholder until the board was left.
+    #[test]
+    fn an_open_the_channel_refuses_comes_back_next_frame() {
+        let mut s = EmbedSessions::default();
+        let child = DocumentId::new();
+        let dv = board_with(child);
+
+        assert_eq!(opened(&sync_refused(&mut s, &dv, 0.0)), vec![child]);
+        assert!(!s.is_open(&child), "a refused open records nothing");
+        // The embed is still in the cull set, so the next frame offers it again.
+        assert_eq!(opened(&sync(&mut s, &dv, 16.0)), vec![child]);
+        assert!(s.is_open(&child));
+        // And once it is through, it is not offered a third time.
+        assert!(sync(&mut s, &dv, 32.0).is_empty());
+    }
+
+    /// `TOILE-UI-339`: a close the channel refuses is offered again, so a full
+    /// channel defers the session rather than leaking it. Forgetting the child
+    /// before the command left used to leave a session open with nothing that
+    /// named it -- which `close_all` could not reclaim either.
+    #[test]
+    fn a_close_the_channel_refuses_comes_back_next_frame() {
+        let mut s = EmbedSessions::default();
+        let child = DocumentId::new();
+        let dv = board_with(child);
+        let empty = viewport(Vec::new());
+        sync(&mut s, &dv, 0.0);
+
+        sync(&mut s, &empty, 0.0); // countdown armed
+        let past = EMBED_CLOSE_DEBOUNCE_MS + 1.0;
+        assert_eq!(closed(&sync_refused(&mut s, &empty, past)), vec![child]);
+        assert!(s.is_open(&child), "a refused close forgets nothing");
+        // Still past the deadline: offered again, and taken this time.
+        assert_eq!(closed(&sync(&mut s, &empty, past + 16.0)), vec![child]);
+        assert!(!s.is_open(&child));
+    }
+
+    /// `TOILE-UI-339` on the way out: a child whose close the channel refuses
+    /// stays in the registry, so a caller that tries again can still reclaim it.
+    #[test]
+    fn close_all_keeps_what_the_channel_refused() {
+        let mut s = EmbedSessions::default();
+        let (a, b) = (DocumentId::new(), DocumentId::new());
+        let dv = viewport(vec![
+            DisplayNode::Element(doc_embed("e1", a, Rect::new(0.0, 0.0, 10.0, 10.0), 0.0)),
+            DisplayNode::Element(doc_embed("e2", b, Rect::new(20.0, 0.0, 30.0, 10.0), 0.0)),
+        ]);
+        sync(&mut s, &dv, 0.0);
+
+        // Only `a` gets through; `b` is refused and must survive the sweep.
+        s.close_all(
+            |cmd| matches!(cmd, LogicCommand::CloseDocument { document_id } if document_id == a),
+        );
+        assert!(!s.is_open(&a), "the close that left is done");
+        assert!(s.is_open(&b), "the close that did not leave is still owed");
+        assert_eq!(closed(&close_all(&mut s)), vec![b]);
     }
 
     #[test]
@@ -758,7 +1157,303 @@ mod tests {
                 0.0,
             )),
         ]);
-        assert_eq!(opened(&s.sync(&dv, 0.0)), vec![child]);
-        assert!(s.sync(&dv, 16.0).is_empty());
+        assert_eq!(opened(&sync(&mut s, &dv, 0.0)), vec![child]);
+        assert!(sync(&mut s, &dv, 16.0).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod address_tests {
+    use super::{AddressError, normalize_web_address};
+
+    /// A host typed on its own is the common case, and it is https.
+    #[test]
+    fn a_bare_host_becomes_an_https_address() {
+        assert_eq!(
+            normalize_web_address("example.com"),
+            Ok("https://example.com".to_owned())
+        );
+        assert_eq!(
+            normalize_web_address("  example.com/a/b?q=1#top  "),
+            Ok("https://example.com/a/b?q=1#top".to_owned())
+        );
+    }
+
+    /// A port is not a scheme, however much its colon looks like one.
+    #[test]
+    fn a_host_with_a_port_keeps_its_port() {
+        assert_eq!(
+            normalize_web_address("example.com:8443/x"),
+            Ok("https://example.com:8443/x".to_owned())
+        );
+    }
+
+    #[test]
+    fn an_https_address_survives_verbatim() {
+        assert_eq!(
+            normalize_web_address("https://example.com/a"),
+            Ok("https://example.com/a".to_owned())
+        );
+        // The scheme is compared without case, and normalized on the way out.
+        assert_eq!(
+            normalize_web_address("HTTPS://Example.COM/A"),
+            Ok("https://Example.COM/A".to_owned())
+        );
+    }
+
+    /// `TOILE-088`: the schemes that would run in the board's stead never reach
+    /// a frame. This is the security-bearing assertion of the whole feature.
+    #[test]
+    fn a_scheme_that_could_run_in_the_boards_stead_is_refused() {
+        for typed in [
+            "javascript:alert(1)",
+            "JaVaScRiPt:alert(1)",
+            "data:text/html,<script>alert(1)</script>",
+            "blob:https://example.com/abc",
+            "vbscript:msgbox",
+            "file:///etc/passwd",
+            "about:blank",
+        ] {
+            assert_eq!(
+                normalize_web_address(typed),
+                Err(AddressError::NotHttps),
+                "{typed} must not reach a frame"
+            );
+        }
+    }
+
+    /// A scheme split by a control character is the classic way past a prefix
+    /// test, so the control character is refused before the scheme is read.
+    #[test]
+    fn a_scheme_hidden_behind_a_control_character_is_refused() {
+        for typed in ["java\nscript:alert(1)", "java\tscript:alert(1)"] {
+            assert!(
+                normalize_web_address(typed).is_err(),
+                "{typed:?} must not be accepted"
+            );
+        }
+        // Leading control characters are stripped, and the scheme beneath them
+        // is then read for what it is.
+        assert_eq!(
+            normalize_web_address("\u{0}\njavascript:alert(1)"),
+            Err(AddressError::NotHttps)
+        );
+    }
+
+    /// Plain http is refused rather than silently upgraded: a frame served over
+    /// http inside a page served over TLS is blocked as mixed content, so
+    /// accepting it would put a box on the board that can never paint.
+    #[test]
+    fn plain_http_is_refused_and_not_upgraded() {
+        assert_eq!(
+            normalize_web_address("http://example.com"),
+            Err(AddressError::NotHttps)
+        );
+    }
+
+    #[test]
+    fn an_address_with_no_site_in_it_is_refused() {
+        assert_eq!(normalize_web_address(""), Err(AddressError::Empty));
+        assert_eq!(normalize_web_address("   "), Err(AddressError::Empty));
+        assert_eq!(normalize_web_address("https://"), Err(AddressError::NoHost));
+        assert_eq!(
+            normalize_web_address("https:///a"),
+            Err(AddressError::NoHost)
+        );
+        assert_eq!(
+            normalize_web_address("https://@/a"),
+            Err(AddressError::NoHost)
+        );
+        assert_eq!(
+            normalize_web_address("https://:8080/a"),
+            Err(AddressError::NoHost)
+        );
+        assert_eq!(
+            normalize_web_address("example .com"),
+            Err(AddressError::NoHost)
+        );
+    }
+
+    /// Every refusal has a sentence, and none of them is empty.
+    #[test]
+    fn every_refusal_says_what_to_do() {
+        for e in [
+            AddressError::Empty,
+            AddressError::NotHttps,
+            AddressError::NoHost,
+        ] {
+            assert!(!e.message().is_empty(), "{e:?}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod web_embed_tests {
+    use ambre_bus::DocumentId;
+    use ambre_bus::app::toile::{DisplayGeom, DisplayNode};
+    use ambre_draw::{Rect, Size};
+
+    use super::tests::{doc_embed, viewport};
+    use super::{DisplayElement, ViewportTransform, visible_web_embeds};
+
+    /// A web `embed` element: the doc-embed helper with its geometry swapped, so
+    /// the two kinds are built from one place.
+    fn web(id: &str, bounds: Rect, url: &str) -> DisplayElement {
+        let mut e = doc_embed(id, DocumentId::new(), bounds, 0.0);
+        e.geom = DisplayGeom::Embed(url.to_owned());
+        e
+    }
+
+    fn cam() -> ViewportTransform {
+        ViewportTransform {
+            size: Size::new(800.0, 600.0),
+            ..Default::default()
+        }
+    }
+
+    /// The shell is handed the web embeds and nothing else: a nested document is
+    /// a child view, not a frame, and the two lists must not cross.
+    #[test]
+    fn only_web_embeds_are_published_for_the_shell() {
+        let page = web("w", Rect::new(0.0, 0.0, 100.0, 50.0), "https://example.com");
+        let nested = doc_embed("s", DocumentId::new(), Rect::new(0.0, 0.0, 10.0, 10.0), 0.0);
+        let dv = viewport(vec![
+            DisplayNode::Element(page),
+            DisplayNode::Element(nested),
+        ]);
+
+        let got = visible_web_embeds(&dv, &cam());
+        assert_eq!(got.len(), 1, "one frame, for the one web embed");
+        assert_eq!(got[0].url, "https://example.com");
+        assert_eq!(got[0].element.0, "w");
+    }
+
+    /// A board with no web embed asks the shell for no frame at all.
+    #[test]
+    fn a_board_with_no_web_embed_publishes_nothing() {
+        let dv = viewport(vec![DisplayNode::Element(doc_embed(
+            "s",
+            DocumentId::new(),
+            Rect::new(0.0, 0.0, 10.0, 10.0),
+            0.0,
+        ))]);
+        assert!(visible_web_embeds(&dv, &cam()).is_empty());
+    }
+
+    /// The frame goes where the element is, through the camera: a rotated embed
+    /// yields the box containing its quad, like a nested document's.
+    #[test]
+    fn the_frame_follows_the_element_through_the_camera() {
+        let dv = viewport(vec![DisplayNode::Element(web(
+            "w",
+            Rect::new(0.0, 0.0, 100.0, 50.0),
+            "https://example.com",
+        ))]);
+
+        let mut zoomed = cam();
+        zoomed.zoom = 2.0;
+        let one = visible_web_embeds(&dv, &cam())[0].screen_rect;
+        let two = visible_web_embeds(&dv, &zoomed)[0].screen_rect;
+        assert!(
+            (two.width() - 2.0 * one.width()).abs() < 1e-9,
+            "the frame scales with the camera"
+        );
+    }
+}
+
+#[cfg(test)]
+mod routing_tests {
+    use ambre_canvas::InputEvent;
+    use ambre_draw::{Point, Rect};
+
+    use super::routes_to_child;
+
+    /// The focused embed's quad: a 100x50 box at the origin, in screen space.
+    fn quad() -> impl Fn(Point) -> bool {
+        |p: Point| Rect::new(0.0, 0.0, 100.0, 50.0).contains(p)
+    }
+
+    fn wheel() -> InputEvent {
+        InputEvent::Wheel {
+            dx: 0.0,
+            dy: 10.0,
+            delta_mode: 0,
+            ctrl_key: false,
+        }
+    }
+
+    /// `TOILE-UI-329`: a wheel with the pointer outside the embed is the board's,
+    /// so a focused embed no longer freezes the board's own pan and zoom.
+    #[test]
+    fn a_wheel_outside_the_embed_stays_with_the_board() {
+        let outside = Point::new(400.0, 400.0);
+        assert!(!routes_to_child(&wheel(), outside, quad()));
+    }
+
+    /// And inside it is the child's: scrolling an embedded document works
+    /// exactly where the user is pointing.
+    #[test]
+    fn a_wheel_inside_the_embed_is_the_childs() {
+        let inside = Point::new(50.0, 25.0);
+        assert!(routes_to_child(&wheel(), inside, quad()));
+    }
+
+    /// `TOILE-UI-331`: `Escape` is the board's whatever the pointer is doing --
+    /// it is the only way out of an embed, so a child that swallowed it would
+    /// trap the user inside.
+    #[test]
+    fn escape_never_reaches_the_child() {
+        let ev = InputEvent::Key {
+            key: "Escape".to_owned(),
+            ctrl: false,
+            shift: false,
+            alt: false,
+            meta: false,
+        };
+        for at in [Point::new(50.0, 25.0), Point::new(400.0, 400.0)] {
+            assert!(!routes_to_child(&ev, at, quad()));
+        }
+    }
+
+    /// Typing follows focus and not the pointer: a caret has a position, a
+    /// keystroke does not.
+    #[test]
+    fn typing_follows_focus_not_the_pointer() {
+        let outside = Point::new(400.0, 400.0);
+        for ev in [
+            InputEvent::Text {
+                text: "a".to_owned(),
+            },
+            InputEvent::Key {
+                key: "Enter".to_owned(),
+                ctrl: false,
+                shift: false,
+                alt: false,
+                meta: false,
+            },
+        ] {
+            assert!(routes_to_child(&ev, outside, quad()));
+        }
+    }
+
+    /// A pointer event is bound by its own position, which is what lets a click
+    /// outside return focus to the board (`TOILE-UI-330`).
+    #[test]
+    fn a_pointer_event_is_bound_by_its_own_position() {
+        let far = Point::new(400.0, 400.0);
+        let down = |x, y| InputEvent::PointerDown {
+            x,
+            y,
+            button: 0,
+            shift: false,
+            ctrl: false,
+        };
+        // The pointer's own coordinates decide, not `last_pointer`.
+        assert!(routes_to_child(&down(50.0, 25.0), far, quad()));
+        assert!(!routes_to_child(
+            &down(400.0, 400.0),
+            Point::new(50.0, 25.0),
+            quad()
+        ));
     }
 }

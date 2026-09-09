@@ -34,6 +34,7 @@ pub use crate::ui::deck::{DeckIntent, DeckSignals, Move as DeckMove};
 // What the board reads from the file system is pure and host-tested in
 // `ui::interop`: the shell asks the board rather than holding a format list of
 // its own (`toile-import-export`).
+pub use crate::ui::embed::{AddressError, EmbedTarget, PlacedEmbed, normalize_web_address};
 pub use crate::ui::interop::{DroppedFile, IMPORT_ACCEPT, accepts as accepts_file};
 pub use find::{FindPanel, FindQuery};
 
@@ -81,7 +82,7 @@ use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
 
 pub use crate::ui::commands::PALETTE;
 pub use crate::ui::find::FIND;
-pub use crate::ui::menu_bar::IMPORT_FILE;
+pub use crate::ui::menu_bar::{EMBED_DOC, EMBED_WEB, IMPORT_FILE};
 
 /// The document type Toile's landing "new document" button creates.
 pub const DOC_TYPE: DocType = DocType::Toile;

@@ -60,6 +60,14 @@ pub const DECK: CommandId = CommandId("toile.present.deck");
 /// intent: the launcher owns the file dialog, and the board learns of the file
 /// only once its bytes are read.
 pub const IMPORT_FILE: CommandId = CommandId("toile.file.import");
+/// Put a web page on the board (`TOILE-087`). A UI-only intent: the shell owns
+/// the dialog that takes the address, and the board learns of it only once the
+/// address has passed `ui::embed::normalize_web_address`.
+pub const EMBED_WEB: CommandId = CommandId("toile.file.embed_web");
+/// Put another Ambre document on the board (`TOILE-086`). A UI-only intent for
+/// the same reason: only the launcher knows which documents this user may open,
+/// so only it can offer the list.
+pub const EMBED_DOC: CommandId = CommandId("toile.file.embed_doc");
 /// Take the board out as an SVG document (`TOILE-IO-021`). Resolves to a board
 /// command: the Logic thread holds the board and serializes it.
 pub const EXPORT_SVG: CommandId = CommandId("toile.file.export_svg");
@@ -86,6 +94,8 @@ pub const MENU_BAR_COMMANDS: &[CommandId] = &[
     PRESENT,
     DECK,
     IMPORT_FILE,
+    EMBED_WEB,
+    EMBED_DOC,
     EXPORT_SVG,
     EXPORT_PDF,
 ];
@@ -135,6 +145,9 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
         // presentation entry point lands here for now.
         MenuId::File => vec![
             row(IMPORT_FILE),
+            row(EMBED_WEB),
+            row(EMBED_DOC),
+            MenuRow::Separator,
             row(EXPORT_SVG),
             row(EXPORT_PDF),
             MenuRow::Separator,
@@ -321,6 +334,21 @@ mod tests {
     fn exports_are_not_mutating() {
         assert!(!ToileCommand::ExportSvg.is_mutating());
         assert!(!ToileCommand::ExportPdf.is_mutating());
+    }
+
+    /// The two placement entries are UI-only intents (`TOILE-086`,
+    /// `TOILE-087`): the shell owns the dialog, and the board is handed the
+    /// answer -- an address or a document -- never the gesture.
+    #[test]
+    fn the_placement_entries_are_shell_intents() {
+        let cmds = item_commands(&menu_layout(MenuId::File));
+        for id in [EMBED_WEB, EMBED_DOC] {
+            assert!(cmds.contains(&id), "File missing {id:?}");
+            assert!(
+                menu_bar_edit(id).is_none(),
+                "{id:?} must resolve in the shell, not to a board command"
+            );
+        }
     }
 
     #[test]

@@ -32,7 +32,7 @@
 #![cfg(target_arch = "wasm32")]
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 use ambre_bus::sync_warning::SyncWarningCode;
@@ -113,6 +113,110 @@ struct TofuPrompt {
     fingerprint: String,
     /// `false` = New (first invitation), `true` = Changed (diverged from the pin).
     changed: bool,
+}
+
+/// The child fan-out registry: every live view of a nested document, by
+/// document. A list rather than a slot -- two embeds of one document are two
+/// views (`TOILE-UI-097`).
+type ChildRoutes = Rc<RefCell<HashMap<DocumentId, Vec<flume::Sender<UiEvent>>>>>;
+
+/// What a child's channel could not take yet, oldest first, by document
+/// (`TOILE-UI-340`).
+type ChildBacklog = Rc<RefCell<HashMap<DocumentId, VecDeque<UiEvent>>>>;
+
+/// How many events may wait for one child before the oldest are dropped.
+///
+/// A child is pumped once per frame, so a backlog only forms on a burst larger
+/// than the channel itself. Past this the client is saturated for good and no
+/// amount of memory fixes it; the real answer is the busy signal `BUS-016`
+/// prescribes, which lands with its own Story. Until then the bound is what
+/// keeps a stalled child from growing without limit, and it says so out loud.
+const CHILD_BACKLOG_LIMIT: usize = CHANNEL_CAPACITY;
+
+/// Hand `ev` to every live view of `id`, deferring what a full channel refuses
+/// (`TOILE-UI-340`).
+///
+/// The old path dropped it: a `Full` fell through the disconnected test and then
+/// past the `continue`, so the event reached neither the child nor the board. It
+/// is a CRDT delta, so the child's view then sat behind its own document until
+/// something else redrew it from scratch.
+///
+/// A document with anything already waiting takes the new event straight to the
+/// back of its queue: a child must not see a later delta before an earlier one.
+fn send_to_child(routes: &ChildRoutes, backlog: &ChildBacklog, id: DocumentId, ev: UiEvent) {
+    if backlog.borrow().get(&id).is_some_and(|q| !q.is_empty()) {
+        defer_for_child(backlog, id, ev);
+        return;
+    }
+    if !offer_to_child(routes, id, &ev) {
+        defer_for_child(backlog, id, ev);
+    }
+}
+
+/// Offer `ev` to each live view of `id`, dropping the senders whose view is
+/// gone. Reports whether every remaining one took it; `false` means at least one
+/// channel was full and the event must be re-offered.
+fn offer_to_child(routes: &ChildRoutes, id: DocumentId, ev: &UiEvent) -> bool {
+    let mut routes = routes.borrow_mut();
+    let Some(senders) = routes.get_mut(&id) else {
+        // No view left at all: the document is no longer shown, so the event has
+        // nowhere to go and nothing to be behind.
+        return true;
+    };
+    let mut all_took_it = true;
+    senders.retain(|tx| match tx.try_send(ev.clone()) {
+        Ok(()) => true,
+        // The child view was dropped; reclaim its slot.
+        Err(flume::TrySendError::Disconnected(_)) => false,
+        Err(flume::TrySendError::Full(_)) => {
+            all_took_it = false;
+            true
+        }
+    });
+    // The entry stays even with no sender left in it, and that emptiness is what
+    // holds `TOILE-UI-098`. A child view is dropped the frame its embed leaves
+    // the culled set, while its session stays open for the whole close debounce:
+    // an event arriving in that window used to find no route and fall through to
+    // the board's own stream and chrome mirrors -- and a Toile nested in a Toile
+    // emits exactly the event the parent board would then apply to itself. An
+    // empty entry absorbs it instead, and the next view of that document pushes
+    // its sender back into the same slot.
+    //
+    // What is left is a few dozen bytes per document embedded at least once in
+    // this session, which nothing reclaims. Bounded by the boards a user opens,
+    // and the trade the other way is a delta applied to the wrong document.
+    all_took_it
+}
+
+/// Queue `ev` for `id`, oldest first, and say so when the bound forces a drop.
+fn defer_for_child(backlog: &ChildBacklog, id: DocumentId, ev: UiEvent) {
+    let mut backlog = backlog.borrow_mut();
+    let queue = backlog.entry(id).or_default();
+    queue.push_back(ev);
+    if queue.len() > CHILD_BACKLOG_LIMIT {
+        queue.pop_front();
+        tracing::error!("embedded document {id}: backlog full, an event was dropped");
+    }
+}
+
+/// Re-offer every deferred event, oldest first, stopping at the first one a
+/// channel still refuses so the order is kept (`TOILE-UI-340`).
+fn flush_child_backlog(routes: &ChildRoutes, backlog: &ChildBacklog) {
+    let ids: Vec<DocumentId> = backlog.borrow().keys().copied().collect();
+    for id in ids {
+        loop {
+            let Some(ev) = backlog.borrow().get(&id).and_then(|q| q.front().cloned()) else {
+                break;
+            };
+            if !offer_to_child(routes, id, &ev) {
+                break;
+            }
+            backlog.borrow_mut().get_mut(&id).map(VecDeque::pop_front);
+        }
+        if backlog.borrow().get(&id).is_some_and(VecDeque::is_empty) {
+            backlog.borrow_mut().remove(&id);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -246,6 +350,9 @@ struct Wiring {
     /// the canvas or a pick from the File menu. The canvas view drains it and
     /// lands it at the drop point (`TOILE-IO-023`).
     toile_dropped_file: RwSignal<Option<toile_chrome::DroppedFile>>,
+    /// The embed the shell's address dialog / document picker resolved, awaiting
+    /// the view that will land it on the board (`toile-embeds`).
+    toile_placed_embed: RwSignal<Option<toile_chrome::PlacedEmbed>>,
     /// Status-bar selection aggregates (`trame-status-bar`); `None` on a single
     /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
@@ -385,12 +492,19 @@ pub fn main() {
     // Per-document Logic->UI fan-out for nested `doc_embed` children. A
     // child view built by `make_child` (below) registers a demultiplexed sender
     // here; the relay routes every doc-tagged event whose `document_id` is a live
-    // child to that channel instead of the shared top-level `view_tx`, so a
+    // child to those channels instead of the shared top-level `view_tx`, so a
     // child's stream never reaches the parent view (which ignores `document_id`).
-    // Dropping the child drops its receiver, so the relay reclaims the slot on its
+    // Dropping a child drops its receiver, so the relay reclaims that slot on its
     // next send to it.
-    let child_routes: Rc<RefCell<HashMap<DocumentId, flume::Sender<UiEvent>>>> =
-        Rc::new(RefCell::new(HashMap::new()));
+    //
+    // A LIST of senders per document, not one: two embeds of a single document
+    // are two views (`TOILE-UI-097`), each with its own channel, and both must
+    // see the document's events. One slot per document had the second
+    // registration evict the first, leaving that embed painting a view nothing
+    // fed.
+    let child_routes: ChildRoutes = Rc::new(RefCell::new(HashMap::new()));
+    // What a child's channel could not take yet (`TOILE-UI-340`).
+    let child_backlog: ChildBacklog = Rc::new(RefCell::new(HashMap::new()));
 
     // Command keymap (the keyboard view of the registry). The active app binds
     // its own chords -- the launcher names none. Populated once the boot document
@@ -523,6 +637,9 @@ pub fn main() {
     // Interop (`toile-import-export`): the shell reads the file, the view lands
     // it where the user dropped it.
     let toile_dropped_file = RwSignal::new(None::<toile_chrome::DroppedFile>);
+    // Embeds (`toile-embeds`): the shell owns the address dialog and the document
+    // picker, the view lands the answer on the board.
+    let toile_placed_embed = RwSignal::new(None::<toile_chrome::PlacedEmbed>);
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
     // boot the dark theme. `theme_ctl` is the single source of truth for the
@@ -706,6 +823,7 @@ pub fn main() {
         toile_comments,
         toile_deck,
         toile_dropped_file,
+        toile_placed_embed,
         sheets,
         active_sheet,
     );
@@ -845,6 +963,7 @@ pub fn main() {
     // The relay's view of the child fan-out registry: read to route a
     // nested document's events, pruned when a child receiver has been dropped.
     let child_routes_relay = Rc::clone(&child_routes);
+    let child_backlog_relay = Rc::clone(&child_backlog);
 
     // SPA route binding, polled each frame on the main thread (where the `!Send`
     // canvas handle lives, so it stays OUT of the Leptos tree). The client URL is
@@ -972,22 +1091,22 @@ pub fn main() {
             }
         }
 
+        // Re-offer what a child's channel could not take on an earlier turn
+        // (`TOILE-UI-340`). Ordered, and ahead of the fresh stream, so a child
+        // never sees a later delta before an earlier one.
+        flush_child_backlog(&child_routes_relay, &child_backlog_relay);
+
         while let Ok(ev) = logic_to_ui_rx.try_recv() {
-            // Fan a nested child's stream out to its own view channel and
+            // Fan a nested child's stream out to its own view channels and
             // skip every top-level chrome mirror below: a child's events must not
             // drive the parent's formula bar, zoom chip or status band. Only a
             // document that is a LIVE child is diverted; the top-level document's
             // events (and untagged service events) fall through unchanged.
-            if let Some(id) = ev.routed_document_id() {
-                let mut routes = child_routes_relay.borrow_mut();
-                if let Some(child_tx) = routes.get(&id) {
-                    if let Err(flume::TrySendError::Disconnected(_)) = child_tx.try_send(ev) {
-                        // The child view was dropped; reclaim its slot. The event
-                        // is for a document no longer shown, so dropping it is fine.
-                        routes.remove(&id);
-                    }
-                    continue;
-                }
+            if let Some(id) = ev.routed_document_id()
+                && child_routes_relay.borrow().contains_key(&id)
+            {
+                send_to_child(&child_routes_relay, &child_backlog_relay, id, ev);
+                continue;
             }
             // Mirror authoritative command-toggle state into the chrome store.
             // The active app owns the event->toggle mapping; the launcher names
@@ -1424,6 +1543,7 @@ pub fn main() {
         intent: RwSignal::new(None),
     };
     let ch_toile_dropped_file = RwSignal::new(None::<toile_chrome::DroppedFile>);
+    let ch_toile_placed_embed = RwSignal::new(None::<toile_chrome::PlacedEmbed>);
     let ch_formula_ref = RwSignal::new(String::new());
     let ch_formula_text = RwSignal::new(String::new());
     let ch_formula_action = RwSignal::new(None::<FormulaAction>);
@@ -1441,7 +1561,9 @@ pub fn main() {
         let (child_tx, child_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
         child_routes_factory
             .borrow_mut()
-            .insert(document_id, child_tx);
+            .entry(document_id)
+            .or_default()
+            .push(child_tx);
         match doc_type {
             ambre_bus::DocType::Toile => AppView::Toile(ToileView::new(
                 document_id,
@@ -1466,6 +1588,7 @@ pub fn main() {
                 ch_toile_comments,
                 ch_toile_deck,
                 ch_toile_dropped_file,
+                ch_toile_placed_embed,
             )),
             // Trame, or any non-Toile embed (only Trame/Toile are paintable views;
             // a stray type falls back to Trame rather than crash the frame).
@@ -1522,6 +1645,7 @@ pub fn main() {
                     toile_comments,
                     toile_deck,
                     toile_dropped_file,
+                    toile_placed_embed,
                 ))
             } else {
                 AppView::Trame(TrameView::new(

@@ -64,6 +64,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         toile_comments,
         toile_deck,
         toile_dropped_file,
+        toile_placed_embed,
         sort_dialog,
         chrome_status,
         sheets,
