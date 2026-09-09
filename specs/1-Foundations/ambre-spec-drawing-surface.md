@@ -30,6 +30,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | `CANVAS-055` | `INV` | The PDF back end MUST NOT be in the startup bundle. | this spec section 2; `ambre-spec-budgets.md section 5` | crate graph: `ambre-app` declares neither `krilla` nor `ambre-pdf`, and Toile's `pdf` feature is off by default, so nothing links krilla into a client build | verified |
 | `CANVAS-028` | `INV` | The PDF back end MUST run in the Logic thread. | this spec section 2 | none. It is the half the crate graph does not hold: keeping krilla out of the startup bundle says nothing about which thread calls it, and a PDF built on the UI thread would block the frame for as long as the document is long | unverified |
 | `CANVAS-030` | `INV` | A surface that does not implement an optional primitive MUST do nothing, never fail. | this spec section 2 | type-level: each optional method carries a default empty body, so a back end that omits it compiles and draws nothing | verified |
+| `CANVAS-061` | `OBS` | A vector edge MUST reach the screen antialiased. | this spec section 2 | not built -- lands with the "Antialiased vector geometry" Story (`ambre-roadmap.md` E6); every screen pipeline runs at one sample and the solid shader returns its vertex colour unmodified, so a diagonal is a hard staircase and only glyphs escape, through their own coverage atlas | unimplemented |
+| `CANVAS-063` | `OBS` | An antialiased edge MUST keep its width in screen pixels at every zoom. | this spec section 2 | not built -- lands with the "Antialiased vector geometry" Story (`ambre-roadmap.md` E6); tessellation is in model space, so a width in model units is a band that thickens as the board zooms in | unimplemented |
+| `CANVAS-064` | `OBS` | Antialiasing MUST NOT mark the inside of a shape: only its silhouette may be softened. | this spec section 2 | not built -- lands with the "Antialiased vector geometry" Story (`ambre-roadmap.md` E6); it is the rule that separates a contour band from a per-triangle coverage term, which softens every internal edge of the tessellation and draws a seam along each one | unimplemented |
 
 ### 1.2 Draw one document onto a surface
 
@@ -41,6 +44,7 @@ the walk is not told which.
 | `CANVAS-029` | `POST` | One render walk MUST serve the screen and the page. | this spec section 2 | none. The trait declares no screen type, so the rule holds by its signature, and no test walks one document onto both surfaces and compares what each recorded | unverified |
 | `CANVAS-027` | `POST` | Every `push_clip` and `push_transform` MUST be matched by its pop before the surface is finished. | this spec section 2 | `ambre_pdf::tests::zero_area_clip_stays_balanced` holds the degenerate case, where an unbalanced push corrupts the rest of the page | verified |
 | `CANVAS-056` | `FRAME` | A drawing primitive MUST NOT hold screen-only state. | this spec section 2 | none. It is the half `CANVAS-029` carried, and the one an implementation breaks rather than a caller: nothing refuses a back end that reads a frame counter or a device pixel ratio behind the trait, and the page then stops matching the screen one primitive at a time | unverified |
+| `CANVAS-062` | `FRAME` | Antialiasing MUST NOT add a render pass, a compute dispatch or a multisampled attachment. | this spec section 2; `ambre-spec-frame.md section 5` | not built -- lands with the "Antialiased vector geometry" Story (`ambre-roadmap.md` E6); it is the rule that keeps the edge treatment inside the decision `ambre-spec-frame.md` already took against a compute rasterizer, and a WebGL2 back end has no compute stage to run one on | unimplemented |
 
 * **Budget.** the krilla row of `ambre-spec-budgets.md section 5` -- about 400 KB raw, about
   120 KB gzipped, counted once for the whole suite and kept out of the startup bundle by
@@ -49,7 +53,7 @@ the walk is not told which.
 * **Boundary.** none: a surface writes to a texture or to a byte buffer, holds no key and opens no
   socket. A PDF the user exports leaves the machine only when the user sends it, and
   `ambre-spec-docfile.md` owns what a plaintext export owes them.
-* **Verification.** 6 `verified`, 3 `unverified`, 0 `unimplemented`. This is still the best-held
+* **Verification.** 6 `verified`, 3 `unverified`, 4 `unimplemented`. This is still the best-held
   document of the rendering layer, and the reason is structural: five of the six verified rules are
   held by the crate graph or by the compiler, which the frame path cannot use because a frame is a
   runtime property. The pass split the two rows whose second half no crate graph can read.
@@ -135,6 +139,21 @@ transform's scale -- the square root of the linear part's determinant -- so a zo
 smooth. The output vertices go through the active transform into the solid-colour quad batch, with
 no pipeline of their own.
 
+**Edges.** A filled or stroked path reaches the screen as a triangle soup with a hard boundary, so
+its silhouette is softened by geometry rather than by the pipeline (`CANVAS-061`): the tessellator
+emits, around the outline it already walked, a band whose outer vertices carry zero alpha and whose
+inner vertices carry the fill's own. The interpolator does the gradient, so no fragment derivative
+and no second pipeline is involved -- the band rides the existing vertex buffer and the existing
+draw call (`CANVAS-062`), which is what keeps a WebGL2 back end drawing the same frame as a WebGPU
+one.
+
+Two properties follow from where the band is generated. It is built in model space like the rest of
+the mesh, so its width is divided by the transform's scale exactly as `PATH_TOLERANCE_PX` is, and a
+zoomed board keeps a one-pixel edge rather than a thickening halo (`CANVAS-063`). And it is built
+from the outline alone, never from the interior triangulation, so no edge inside the shape is
+softened and no seam is drawn across it (`CANVAS-064`) -- the failure that a coverage term computed
+per fragment would produce instead (section 4).
+
 **Images.** `ImageSource<'a> { pixels: &'a [u8], width: u32, height: u32 }` is a borrow over
 already-decoded RGBA8, row-major and without stride padding (`CANVAS-026`). Decoding is the
 caller's job. The image is scaled to fill `dest`, so the aspect ratio is the caller's too.
@@ -187,6 +206,10 @@ The user touches no drawing call. What they see of this document is that two des
 | krilla, with default features off | a PDF writer of our own | the format is the dependency either way, and writing it here means owning fonts, compression and conformance for a chunk that is fetched on a user's first export |
 | An optional primitive defaults to a no-op | every method required | it is the same trait with a worse migration: each new primitive breaks every surface on the day it is declared. With a no-op default a back end gains a capability when it can, and until then an export loses that one element instead of failing |
 | An image arrives decoded | the surface decoding what it is handed | a codec dependency in `ambre-draw` reaches every crate that draws, including the ones that never show a picture, and it puts a parser for untrusted bytes in the middle of the render path |
+| The silhouette is softened by a tessellated band | MSAA on the offscreen | it is the one antialiasing a mobile frame cannot absorb: a multisampled attachment multiplies the bandwidth of the render target on every frame, including the frames where nothing moved, and the device density that makes the aliasing bearable is exactly the one that makes the attachment expensive (`ambre-spec-budgets.md section 1`) |
+| The silhouette is softened by a tessellated band | a supersampled offscreen, resolved on blit | it is uniformly correct and it costs four times the fragments and four times the target memory, on top of a buffer already sized in physical pixels. At a device ratio of 3 it renders the page at nine times its CSS area to soften an edge |
+| The silhouette is softened by a tessellated band | a coverage term per triangle, from the fragment derivatives | the tessellator emits a triangle soup, so every internal edge is a boundary too: two adjacent triangles each cover half of the edge they share, the blend lands short of opaque, and a pale seam is drawn along every edge inside the shape (`CANVAS-064`). It is cheaper than the band and it looks worse than the aliasing it removes |
+| The silhouette is softened by a tessellated band | a compute-shader path rasterizer (`vello`) | the same refusal `ambre-spec-frame.md section 5` already made for the pipeline, and for the same reasons: serial compute passes cost more per dispatch in a browser than the frame has to spend, and a WebGL2 back end has no compute stage at all. Antialiasing is not the reason to reopen it (`CANVAS-062`) |
 | The clip and transform stacks are the caller's to balance | a surface that closes what the caller left open | it hides the walk's bug and picks an arbitrary order to close it in. krilla has one instruction stack and the screen surface has a vector, so a contract both obey is cheaper than a stack that guesses: an unbalanced push is a bug in the walk, and it shows up as a corrupt page |
 
 ---
@@ -204,6 +227,21 @@ The user touches no drawing call. What they see of this document is that two des
 * **A stroke scales with the zoom.** Tessellation is in model units, so the transform scales the
   stroke width. That is right for a board that zooms and wrong for a hairline, which needs the
   width divided by the transform scale. It lands with the same Story as the clip.
+* **Nothing is antialiased but the glyphs** (`CANVAS-061`). Every screen pipeline is built at one
+  sample (`sample_count: 1`, the default `MultisampleState`), the solid shader returns its vertex
+  colour with no coverage term, and the final blit is `FilterMode::Nearest` by design -- the
+  offscreen is 1:1 with the swapchain. So a diagonal or a curve is a hard staircase. Glyphs escape
+  it because their coverage is rasterized on the CPU into an `R8Unorm` atlas and multiplied in the
+  shader; the vector geometry has no equivalent. A high-density display hides it by paying twice the
+  pixels (`ambre-spec-high-density.md`), which is why it reads as acceptable on the machines it is
+  developed on and not on a 1x monitor. The band of section 2 is designed and unbuilt; the three
+  rules around it (`CANVAS-062`, `CANVAS-063`, `CANVAS-064`) exist to keep its construction from
+  drifting into the alternatives section 4 refuses.
+* **A raster image has no sampling rule.** `draw_image` states how a picture is placed and nothing
+  about how it is sampled: no mip chain, no filter, no anisotropy. The screen back end implements
+  none of it today, and a texture minified without a mip chain aliases into noise that crawls under
+  a pan -- the defect a board of photographs meets first. The rule belongs with the pipeline that
+  will sample, so it is unwritten rather than unheld.
 * **PDF text is not selectable.** A glyph run carries no `ToUnicode` mapping, so a reader shows the
   shapes and copies nothing. Threading the cluster source text through is a refinement nothing has
   scheduled.

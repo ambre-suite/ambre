@@ -38,11 +38,16 @@ use super::viewport::ViewportTransform;
 /// A decoded raster image ready to paint: non-premultiplied RGBA8 pixels
 /// (row-major, `width * height * 4` bytes) plus native dimensions.
 ///
-/// Keyed by the element's blake2b media hash (`DisplayGeom::Image`). The
-/// screen renderer fills this from its media cache and the PDF export path
-/// decodes it from the `media` LoroMap (`toile-media`); a hash absent
-/// from the map means the pixels have not arrived yet, so the element paints a
-/// placeholder box instead until a later frame carries them.
+/// Keyed by the element's blake2b media hash (`DisplayGeom::Image`). A hash
+/// absent from the map means the pixels have not arrived, so the element paints
+/// a placeholder box instead until a later frame carries them.
+///
+/// **Only the PDF export fills this today**, from the thumbnail each entry
+/// carries in the `media` LoroMap (`toile-media`). The screen path builds it in
+/// `AppView::new` and never inserts, so every picture on every board paints the
+/// placeholder -- and `WgpuSurface` implements no `draw_image` either, so a
+/// resident entry would paint nothing at all. Both halves land together
+/// (`ambre-roadmap.md` E6).
 pub struct DecodedImage {
     pub pixels: Vec<u8>,
     pub width: u32,

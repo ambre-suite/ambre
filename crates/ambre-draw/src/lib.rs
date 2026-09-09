@@ -139,8 +139,14 @@ pub trait DrawSurface {
     ///
     /// Default no-op: a surface without raster support (e.g. a base
     /// `KrillaSurface` built without the raster feature) still renders text and
-    /// vector geometry. `WgpuSurface` uploads the pixels to a texture and draws
-    /// a textured quad; `KrillaSurface` hands them to krilla as a raster image.
+    /// vector geometry. `KrillaSurface` hands the pixels to krilla as a raster
+    /// image.
+    ///
+    /// **`WgpuSurface` does not implement this method.** The screen back end has
+    /// no texture pipeline, so on the GPU this call is the default no-op above
+    /// and a picture never reaches a frame -- design, not oversight, and it
+    /// lands with the screen media cache (`ambre-spec-drawing-surface.md`
+    /// section 2, `ambre-spec-render-assets.md`).
     ///
     /// Per `toile-media`, a Toile image whose pixels have not yet
     /// arrived from the media cache is painted as a placeholder rect by the

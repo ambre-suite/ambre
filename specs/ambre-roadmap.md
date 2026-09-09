@@ -160,6 +160,8 @@ plane touches, and it unblocks Toile's inline rich text and Trame's text colours
 | :--- | :--- | :--- |
 | `[ ]` `ARCH P4` -- offline durability | -- | edit while offline and lose nothing on reconnect |
 | `[ ]` `CANVAS P2` -- frame quality | -- | frame profiling, allocation-free painting, dynamic theme, content accessibility, translation and right-to-left |
+| `[ ]` Antialiased vector geometry | V1 | every screen pipeline runs at one sample and the solid shader carries no coverage term, so a diagonal or a curve is a hard staircase. Only glyphs escape, through a CPU-rasterized coverage atlas. A high-density display hides it by paying twice the pixels; a 1x monitor does not |
+| `[ ]` Pictures on the screen | V1 | `WgpuSurface` implements no `draw_image`, so the GPU has no texture path and an image element paints a placeholder whatever the media cache holds. It needs the pipeline, a mip chain and a filter -- a minified texture with no mip chain crawls under a pan -- and then the cache that feeds it |
 | `[ ]` The icon pipeline | -- | vector icons on the canvas. The last open item of `CANVAS P0` |
 | `[ ]` Clipped paths on the canvas | -- | a shape crossing a clip edge is drawn whole today. Clip it, and give a stroke a screen-constant width |
 | `[ ]` The adaptive chrome | V1 | the navigation, the side panels, the toolbar overflow and the wide data views adapt at the three declared widths. Today two labels and one bottom sheet move, and the regions the design names exist at no width |

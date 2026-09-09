@@ -213,14 +213,18 @@ promising a distinction the code does not draw.
   outside the render tests. The return leg is missing too: the service handler matches the upload
   confirmation alone and drops a download answer on the floor, so wiring the request would not be
   enough.
-* **The thumbnail is written and never read** (`TOILE-IO-035`). Every import encodes one and puts it
-  in the document; no reader consults it. The field that exists to make the first paint instant costs
-  bytes in the document and buys nothing -- the same shape as the stroke pressure and the reaction
-  timestamp, and the third field of its kind in this application.
-* **So every picture is a grey box.** The two absences compose: no download, no thumbnail read. A
-  user who imports a photograph sees the placeholder, and so does the PDF export
-  (`features/ambre-spec-toile-pdf-export.md section 5`). The import path that produces the picture is
-  itself unreachable, which is why nobody has met the defect.
+* **The thumbnail is read by the export and not by the screen** (`TOILE-IO-035`). Every import
+  encodes one; the deck's PDF export decodes it into the store the walk consults
+  (`features/ambre-spec-toile-pdf-export.md`), and the frame path does not. So the field that exists
+  to make the *first paint* instant is read only where no paint happens, and the rule it was written
+  for -- the picture shown while the full blob loads -- is still held by nothing.
+* **So every picture is a grey box on screen, and a picture in an exported page.** Two absences
+  compose on the frame path and neither is on the export path: nothing downloads, nothing reads the
+  thumbnail, and `WgpuSurface` implements no `draw_image` at all
+  (`1-Foundations/ambre-spec-drawing-surface.md section 2`), so filling the store would still paint
+  nothing. A user therefore imports a photograph, sees a placeholder, and finds the picture in the
+  PDF -- the inversion of what either path is for. Closing the screen half is two pieces of work,
+  not one: the texture pipeline, then what feeds it.
 * **An entry outlives its last element, and no rule says what should happen.** Deleting a picture
   drops the element and leaves the entry in `media` for good. Eager removal is wrong -- a delete is
   undoable, and another element may share the address -- and no reference count exists. The document

@@ -47,6 +47,8 @@
 | Toile boolean combination, two typical paths | < 5 ms | -- | Logic | user-initiated and one-shot, off the render frame -- **none exists** |
 | Toile SVG import, 5 000 nodes | < 500 ms | -- | Logic | one-shot user action, off the render thread -- **none exists** |
 | Toile PDF export, 50 slides | < 3 s | -- | Logic | acceptable for an explicit export, off the render frame. It is not off the Logic command loop, so it is also how long the document stops accepting edits (`3-Toile/features/ambre-spec-toile-pdf-export.md`, `TOILE-IO-099`) -- **none exists** |
+| Coverage levels across a 30-degree vector edge | >= 8 of 256 | -- | UI | the antialiasing quality figure, measured rather than eyeballed: rendered headless, the alpha histogram along the edge is the mechanism, and a pipeline with no coverage term yields exactly 2 (`CANVAS-061`, `ambre-spec-drawing-surface.md`) -- **none exists** |
+| Antialiasing band width, at any zoom | 1.0 physical px +/- 0.25 | -- | UI | measured at both ends of the zoom range on one shape; a band tessellated in model units and not divided by the transform scale fails it as the board zooms in (`CANVAS-063`) -- **none exists** |
 | Toile first paint of a picture | < 15 ms | -- | UI | the display-latency budget: the placeholder paints and the network never blocks it -- **none exists** |
 | Toile media cache hit on a revisit | 0 refetch | -- | UI | the bounded local cache (`features/ambre-spec-toile-media.md section 3`) -- **none exists** |
 | Prose local text insert, transaction plus exported delta | < 2 ms | -- | Logic | **none exists**, and no code either |
@@ -110,6 +112,7 @@
 | Glyph rasterization (Swash) on a new glyph | ~0 ms nominal | UI | Atlas hit |
 | Build the vertex batch (dirty only) | < 1 ms | UI | `QuadRenderer::begin_frame` plus the scene draw. Zero allocation in steady state |
 | GPU upload and render pass | < 1 ms | UI | `write_buffer` plus up to 3 draw calls per layer (quads, mask glyphs, color glyphs). Typical 0.3-0.5 ms |
+| Antialiasing band, share of a tessellated path | < 15 % of its vertices, < 5 % of the batch build | UI | The silhouette band of `ambre-spec-drawing-surface.md section 2` (`CANVAS-061`). It adds vertices to a buffer and a draw call that already exist, so it is charged against the two rows above and against nothing else: no pass, no dispatch, no attachment (`CANVAS-062`) -- **none exists** |
 | Toile board paint, 2 000 visible elements | < 16 ms | UI | The whole frame for a busy board, and the reason the cull is the engine's job (`features/ambre-spec-toile-board-rendering.md`) |
 | Toile pan and zoom, input to paint | < 15 ms | UI | The camera is applied locally, so the gesture never waits on the Logic thread (`features/ambre-spec-toile-viewport.md`) |
 | Toile presence overlay, 20 cursors and their trails | < 1 ms | UI | Instanced quads and small ring buffers (`features/ambre-spec-toile-presence.md`) |
