@@ -17,7 +17,7 @@
 // (`TOILE-018`), so the inspector edits on top of `base` and emits one `RestyleElements`.
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayNode, DisplayViewport, ElementId, ElementStyle};
+use ambre_bus::app::toile::{ConnectorId, DisplayNode, DisplayViewport, ElementId, ElementStyle};
 
 /// Which style attributes differ across the current selection. A set flag means
 /// the inspector shows a mixed-state indicator for that field rather than a value;
@@ -70,6 +70,20 @@ pub struct StyleModel {
 /// `None` when nothing selectable is in the selection. Pure: reads only the
 /// `DisplayViewport` and the selection ids. Connectors are not addressed by the
 /// element inspector, so only `DisplayElement`s contribute.
+/// The inspector's model for a selected arrow: its own style, nothing mixed.
+/// An arrow is always a selection of one, so no field can diverge
+/// (`toile-connectors`).
+pub fn arrow_style_scope(id: &ConnectorId, display: &DisplayViewport) -> Option<StyleModel> {
+    let base = display.nodes.iter().find_map(|n| match n {
+        DisplayNode::Connector(c) if &c.id == id => Some(c.style.clone()),
+        _ => None,
+    })?;
+    Some(StyleModel {
+        base,
+        mixed: MixedFlags::default(),
+    })
+}
+
 pub fn style_scope_for(selection: &[ElementId], display: &DisplayViewport) -> Option<StyleModel> {
     // Resolve the selected ids to their displayed styles, in selection order.
     let mut styles = selection.iter().filter_map(|id| {

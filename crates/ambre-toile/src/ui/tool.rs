@@ -929,7 +929,7 @@ fn draw_style() -> ambre_bus::app::toile::ElementStyle {
 }
 
 /// World AABB of a single element (`None` if not in the current viewport).
-fn element_bounds(display: &DisplayViewport, id: &ElementId) -> Option<Rect> {
+pub(crate) fn element_bounds(display: &DisplayViewport, id: &ElementId) -> Option<Rect> {
     selection_bounds(std::slice::from_ref(id), display)
 }
 
@@ -997,7 +997,7 @@ fn anchor_point(b: Rect, a: Anchor) -> Point {
 }
 
 /// The cardinal anchor of `b` closest to world point `p`.
-fn nearest_anchor(b: Rect, p: Point) -> Anchor {
+pub(crate) fn nearest_anchor(b: Rect, p: Point) -> Anchor {
     [Anchor::Top, Anchor::Bottom, Anchor::Left, Anchor::Right]
         .into_iter()
         .min_by(|a1, a2| {

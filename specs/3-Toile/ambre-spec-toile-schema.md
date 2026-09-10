@@ -152,7 +152,7 @@ lock and the style, and reads the box from the derived cache.
 | `path_type` | String | `s` straight, `e` elbow, `c` curved | built |
 | `arrow_start`, `arrow_end` | `bool` | the two end caps | built |
 | `label` | Text | the edge caption, seeded empty at birth | built |
-| `style` | Binary | `postcard(ElementStyle)` | design |
+| `style` | Binary | `postcard(ElementStyle)`, seeded at birth | built |
 
 **Absence is a value** (`TOILE-230`). No `link` key means no hyperlink; no `autolayout` key means
 free positioning; an empty `presentation` map means no deck; no `reactions` key under a target

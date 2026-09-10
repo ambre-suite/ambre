@@ -191,6 +191,13 @@ pub(super) fn write_connector(
     let _ = cm.insert("path_type", encode_path_type(path_type));
     let _ = cm.insert("arrow_start", arrows.start);
     let _ = cm.insert("arrow_end", arrows.end);
+    // The style register is seeded like an element's: an LWW binary the
+    // deriver reads back, so an arrow carries its own colour and width rather
+    // than borrowing a default (`TOILE-046`).
+    let _ = cm.insert(
+        "style",
+        LoroValue::Binary(ElementStyle::default().to_bytes().into()),
+    );
     // The caption is seeded at birth, not on first edit. Seeding here gives
     // every peer the same `LoroText` container (it travels in the creation
     // delta) before anyone types, so two concurrent captions merge inside one

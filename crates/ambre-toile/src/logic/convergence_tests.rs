@@ -185,8 +185,11 @@ fn create_connector(st: &mut ToileState) -> ConnectorId {
             end: true,
         },
     });
+    // The newest connector is the last node in the paint order, which is where
+    // a create puts it; taking the first would answer an earlier arrow.
     st.layer_order()
         .iter()
+        .rev()
         .find_map(|n| match n {
             NodeId::Connector(c) => Some(c.clone()),
             NodeId::Element(_) => None,
@@ -205,6 +208,59 @@ fn caption(st: &ToileState, id: &ConnectorId) -> String {
             _ => None,
         })
         .expect("the connector is in the viewport")
+}
+
+/// Read a connector's style back out of the derived viewport.
+fn conn_style(st: &ToileState, id: &ConnectorId) -> ElementStyle {
+    st.debug_viewport()
+        .nodes
+        .iter()
+        .find_map(|n| match n {
+            DisplayNode::Connector(c) if &c.id == id => Some(c.style.clone()),
+            _ => None,
+        })
+        .expect("the connector is in the viewport")
+}
+
+/// `TOILE-046`: an arrow carries its own style, so it can be coloured and
+/// thickened without touching any other arrow.
+#[test]
+fn an_arrow_carries_its_own_style() {
+    let mut st = ToileState::new();
+    let one = create_connector(&mut st);
+    let two = create_connector(&mut st);
+    let red = ElementStyle {
+        stroke: Some(0xFFCC_2222),
+        stroke_w: 6.0,
+        ..Default::default()
+    };
+
+    let out = st.handle_command(ToileCommand::RestyleConnector {
+        id: one.clone(),
+        style: red.clone(),
+    });
+    assert!(out.update.is_some(), "a restyle broadcasts a delta");
+    let got = conn_style(&st, &one);
+    assert_eq!(got.stroke, red.stroke);
+    assert_eq!(got.stroke_w, red.stroke_w);
+    // The second arrow is untouched: the register is per connector.
+    assert_eq!(conn_style(&st, &two).stroke, ElementStyle::default().stroke);
+}
+
+/// A restyle aimed at an arrow the board does not hold is refused whole.
+#[test]
+fn restyling_a_missing_arrow_is_refused() {
+    let mut st = ToileState::new();
+    let out = st.handle_command(ToileCommand::RestyleConnector {
+        id: ConnectorId("nope".into()),
+        style: ElementStyle::default(),
+    });
+    assert!(out.update.is_none(), "a refused restyle writes nothing");
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::Error(ToileError::NoSuchConnector(_)))),
+    );
 }
 
 /// A caption written on an arrow comes back on the arrow's display node.

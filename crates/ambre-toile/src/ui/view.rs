@@ -18,8 +18,8 @@ use std::collections::{HashMap, HashSet};
 use ambre_bus::app::toile::CommentAnchor;
 use ambre_bus::app::toile::{
     ClipboardPayload as ToileClipboardPayload, ConnectorId, DisplayConnector, DisplayElement,
-    DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, PresencePayload, ThreadId,
-    ToileCommand, ToileEvent, Viewport,
+    DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, End, PresencePayload,
+    ThreadId, ToileCommand, ToileEvent, Viewport,
 };
 use ambre_bus::{AppCommand, AppEvent, DocumentId, LogicCommand, UiEvent};
 use ambre_canvas::{
@@ -30,6 +30,7 @@ use ambre_draw::{BoundingBox, FontContext, Point, Rect, Vec2};
 
 use crate::logic::animate::AnimatedElement;
 
+use super::arrow;
 #[cfg(target_arch = "wasm32")]
 use super::comments::CommentIntent;
 use super::comments::{self, CommentDraft};
@@ -213,6 +214,13 @@ pub struct ToileView {
     /// Local selection (never persisted; a peer's selection is presence,
     /// `toile-selection`).
     selection: Vec<ElementId>,
+    /// The selected arrow (`toile-connectors`). Exclusive with
+    /// [`selection`](Self::selection): an arrow has no box, so it never joins a
+    /// marquee, a group or a transform, and selecting one clears the other.
+    arrow: Option<ConnectorId>,
+    /// An endpoint drag in flight: the arrow, the end being dragged, and where
+    /// the pointer is. The write happens on release (`toile-connectors`).
+    arrow_drag: Option<(ConnectorId, End)>,
     /// Entered group scope (`toile-groups` / `toile-selection`):
     /// while `Some(g)`, a click selects a member inside `g` rather than the whole
     /// group. Entered by double-clicking a grouped element (peels one nesting level
@@ -548,6 +556,8 @@ impl ToileView {
             },
             machine: ToolMachine::new(),
             selection: Vec::new(),
+            arrow: None,
+            arrow_drag: None,
             group_scope: None,
             preview: None,
             find_hits: Vec::new(),
@@ -725,6 +735,19 @@ impl ToileView {
                 self.display = dv;
                 self.data_dirty = true;
                 self.request_missing_media();
+                // A selected arrow that is no longer in the frame is a deleted
+                // arrow, so the selection goes with it. This reads absence as
+                // deletion, which holds only while connectors are not culled
+                // (`TOILE-045`): the day they are, an arrow panned off screen
+                // would deselect itself, and this must ask the board instead.
+                if self
+                    .arrow
+                    .as_ref()
+                    .is_some_and(|c| arrow::path_of(&self.display, c).is_none())
+                {
+                    self.arrow = None;
+                    self.arrow_drag = None;
+                }
                 // The recomputed frame now carries the committed transform, so drop
                 // the optimistic post-release preview (`toile-tools`): the
                 // real geometry takes over seamlessly, with no snap-back flicker.
@@ -1238,6 +1261,14 @@ impl ToileView {
         // Capture the selection before the click settles it, to detect a press on
         // an already-selected element (the click-to-edit trigger,
         // `toile-text-editing`).
+        // A press on an endpoint handle of the selected arrow starts a re-aim and
+        // consumes the event: the board's own gesture must not also run
+        // (`toile-connectors`).
+        if button == 0 && self.machine.tool() == Tool::Select && self.grab_arrow_handle(world) {
+            self.publish_cursor(screen);
+            self.needs_full = true;
+            return true;
+        }
         let prev_selection = self.selection.clone();
         let out = self.machine.pointer_down(
             world,
@@ -1253,6 +1284,16 @@ impl ToileView {
         // A first click only selects (the element was not selected before, so
         // nothing is armed); a second click enters edit on release, unless a drag
         // turns it into a move.
+        // Settle the arrow selection against what the click landed on. An
+        // element always wins -- it is what the user sees on top -- so an arrow
+        // is selected only where nothing else is (`toile-connectors`).
+        if button == 0 && self.machine.tool() == Tool::Select {
+            self.arrow = if self.selection.is_empty() {
+                label::connector_at(&self.display.nodes, world)
+            } else {
+                None
+            };
+        }
         self.click_edit_candidate = (button == 0 && self.machine.tool() == Tool::Select)
             .then(|| match self.selection.as_slice() {
                 [id] if *prev_selection == *self.selection && self.is_text_editable(id) => {
@@ -1262,6 +1303,66 @@ impl ToileView {
             })
             .flatten();
         self.publish_cursor(screen);
+        self.needs_full = true;
+        true
+    }
+
+    // -- The selected arrow (`toile-connectors`) ------------------------------
+
+    /// Start a re-aim when `world` presses an endpoint handle of the selected
+    /// arrow. The handle radius is a screen distance, so it is taken back into
+    /// world units by the zoom: a handle is equally easy to grab at any scale.
+    fn grab_arrow_handle(&mut self, world: Point) -> bool {
+        let Some(id) = self.arrow.clone() else {
+            return false;
+        };
+        let Some(path) = arrow::path_of(&self.display, &id) else {
+            return false;
+        };
+        let tol = arrow::HANDLE_R / self.cam.zoom;
+        let Some(end) = arrow::handle_at(path, world, tol) else {
+            return false;
+        };
+        // The preview runs from the end that stays put to the pointer, which is
+        // the same rubber band the connector tool draws.
+        let anchored = match arrow::endpoints(path) {
+            Some((from, to)) => match end {
+                End::From => to,
+                End::To => from,
+            },
+            None => world,
+        };
+        self.preview = Some(Preview::Connector {
+            from: anchored,
+            to: world,
+        });
+        self.arrow_drag = Some((id, end));
+        true
+    }
+
+    /// Drag the grabbed endpoint. Returns whether a re-aim is in flight.
+    fn drag_arrow_handle(&mut self, world: Point) -> bool {
+        if self.arrow_drag.is_none() {
+            return false;
+        }
+        if let Some(Preview::Connector { to, .. }) = self.preview.as_mut() {
+            *to = world;
+        }
+        self.needs_full = true;
+        true
+    }
+
+    /// Finish a re-aim: the endpoint moves to the element under the pointer, and
+    /// a release over empty board leaves the arrow where it was rather than
+    /// breaking it. Returns whether a re-aim was in flight.
+    fn release_arrow_handle(&mut self, world: Point) -> bool {
+        let Some((id, end)) = self.arrow_drag.take() else {
+            return false;
+        };
+        self.preview = None;
+        if let Some(cmd) = arrow::retarget_on_release(&id, end, &self.display, world) {
+            self.send_edit(cmd);
+        }
         self.needs_full = true;
         true
     }
@@ -1290,6 +1391,10 @@ impl ToileView {
             }
             None => self.selection.clear(),
         }
+        // The context menu addresses elements only, so a right-click drops the
+        // arrow rather than offering entries that would do nothing to it
+        // (`toile-connectors` section 6).
+        self.arrow = None;
         self.needs_full = true;
         self.publish_ctx_scope();
     }
@@ -1305,10 +1410,12 @@ impl ToileView {
         // The style inspector shares the same publish point
         // (`toile-menus`): both are pure functions of the
         // selection x the current display.
-        self.style_model.set(super::style::style_scope_for(
-            &self.selection,
-            &self.display,
-        ));
+        self.style_model.set(match self.arrow.as_ref() {
+            Some(c) if self.selection.is_empty() => {
+                super::style::arrow_style_scope(c, &self.display)
+            }
+            _ => super::style::style_scope_for(&self.selection, &self.display),
+        });
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn publish_ctx_scope(&self) {}
@@ -1349,6 +1456,12 @@ impl ToileView {
         };
         self.restyle.set(None);
         if self.selection.is_empty() {
+            // An arrow takes the same edit through its own command
+            // (`toile-connectors`).
+            if let Some(id) = self.arrow.clone() {
+                self.send_edit(ToileCommand::RestyleConnector { id, style });
+                self.needs_full = true;
+            }
             return;
         }
         self.send_edit(ToileCommand::RestyleElements {
@@ -1405,6 +1518,14 @@ impl ToileView {
         };
         self.quick_style.set(None);
         if self.selection.is_empty() {
+            if let Some(id) = self.arrow.clone()
+                && let Some(model) = super::style::arrow_style_scope(&id, &self.display)
+            {
+                let mut style = model.base;
+                edit.apply_to(&mut style);
+                self.send_edit(ToileCommand::RestyleConnector { id, style });
+                self.needs_full = true;
+            }
             return;
         }
         let mut style = super::style::style_scope_for(&self.selection, &self.display)
@@ -1820,12 +1941,18 @@ impl ToileView {
             }
             return;
         }
-        let cmds = super::menu::resolve_menu_command(
-            id,
-            &self.selection,
-            self.group_scope.as_ref(),
-            &self.display,
-        );
+        // With an arrow selected the element selection is empty, so the ordinary
+        // resolution would answer nothing. An arrow has a table of its own
+        // (`toile-connectors`).
+        let cmds = match self.arrow.as_ref() {
+            Some(c) if self.selection.is_empty() => arrow::arrow_command_for(id, c),
+            _ => super::menu::resolve_menu_command(
+                id,
+                &self.selection,
+                self.group_scope.as_ref(),
+                &self.display,
+            ),
+        };
         for cmd in cmds {
             self.send_edit(cmd);
         }
@@ -1835,6 +1962,7 @@ impl ToileView {
     /// Select every displayed element (local, never synced). Shared by `Ctrl+A`
     /// and the context-menu "Select all" entry (`toile-selection`).
     fn select_all(&mut self) {
+        self.arrow = None;
         self.selection = self
             .display
             .nodes
@@ -1854,6 +1982,12 @@ impl ToileView {
             self.cam.pan_by_screen(screen - prev);
             self.panning = Some(screen);
             self.queue_viewport();
+            return true;
+        }
+        if self.arrow_drag.is_some() {
+            let world = self.cam.screen_to_world() * screen;
+            self.drag_arrow_handle(world);
+            self.publish_cursor(screen);
             return true;
         }
         if self.machine.is_active() {
@@ -1884,6 +2018,12 @@ impl ToileView {
         // the board. Runs before the gesture end below so a click that only
         // focuses still lets the Select tool finish its selection normally.
         self.settle_embed_press(screen);
+        if self.arrow_drag.is_some() {
+            let world = self.cam.screen_to_world() * screen;
+            self.release_arrow_handle(world);
+            self.publish_cursor(screen);
+            return true;
+        }
         let mut consumed = false;
         if self.machine.is_active() {
             let world = self.cam.screen_to_world() * screen;
@@ -2113,6 +2253,10 @@ impl ToileView {
                 if !self.selection.is_empty() {
                     self.selection.clear();
                 }
+                // An arrow deselects on the same Escape, and an in-flight re-aim
+                // is abandoned without a write (`toile-connectors`).
+                self.arrow = None;
+                self.arrow_drag = None;
                 // Leave any entered group scope (`toile-groups`):
                 // the next click selects whole groups again.
                 self.group_scope = None;
@@ -2123,6 +2267,9 @@ impl ToileView {
                 if !self.selection.is_empty() {
                     let ids = std::mem::take(&mut self.selection);
                     self.send_edit(ToileCommand::DeleteElements { ids });
+                    self.needs_full = true;
+                } else if let Some(id) = self.arrow.take() {
+                    self.send_edit(ToileCommand::DeleteConnector { id });
                     self.needs_full = true;
                 }
                 true
@@ -2745,6 +2892,7 @@ impl ToileView {
             &self.find_hits,
             self.find_focus.as_ref(),
             &self.gesture_overrides,
+            self.arrow.as_ref(),
         );
 
         // Remote presence overlay (`toile-presence`): cursors, selection

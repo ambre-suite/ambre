@@ -222,7 +222,9 @@ impl ToileState {
         Some(DisplayConnector {
             id: id.clone(),
             path,
-            style: ElementStyle::default(),
+            // A connector minted before the field existed reads back an empty
+            // binary, which decodes to the default: the same look it had.
+            style: ElementStyle::from_bytes(&bin_of(&cm, "style")),
             arrows: conn.arrows,
             label: connector_label(&cm),
         })

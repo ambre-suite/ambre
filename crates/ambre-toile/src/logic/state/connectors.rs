@@ -7,7 +7,9 @@ use std::collections::HashSet;
 use loro::{LoroMap, LoroValue};
 
 use crate::logic::command::{End, ToileError, ToileEvent, ToileOutcome};
-use crate::logic::model::{Anchor, ConnectorId, ElementId, EndCaps, NodeId, PathType};
+use crate::logic::model::{
+    Anchor, ConnectorId, ElementId, ElementStyle, EndCaps, NodeId, PathType,
+};
 
 use super::codec::{connector_label_or_seed, encode_anchor, map_str, write_connector};
 use super::{CONNECTORS, LAYERS, ToileState};
@@ -91,6 +93,22 @@ impl ToileState {
             events.push(ToileEvent::DanglingConnector(id));
         }
         self.emit_with_update(events)
+    }
+
+    /// Overwrite an arrow's style register, whole. A connector carries no lock
+    /// flag -- locking is an element affordance -- so the write is
+    /// unconditional once the arrow resolves.
+    pub(super) fn restyle_connector(
+        &mut self,
+        id: ConnectorId,
+        style: ElementStyle,
+    ) -> ToileOutcome {
+        let Some(cm) = self.connector_map(&id) else {
+            return self.err_no_connector(&id);
+        };
+        let _ = cm.insert("style", LoroValue::Binary(style.to_bytes().into()));
+        self.doc.commit();
+        self.emit_with_update(vec![self.viewport_event()])
     }
 
     /// Overwrite an arrow's caption. The caption is a `LoroText`, and the whole

@@ -481,7 +481,7 @@ pub enum ZTarget {
 }
 
 /// Which endpoint of a connector to retarget.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum End {
     From,
     To,
@@ -1043,6 +1043,12 @@ pub enum ToileCommand {
     },
     DeleteConnector {
         id: ConnectorId,
+    },
+    /// Overwrite an arrow's style register, whole, like `RestyleElements` does
+    /// for an element (`toile-connectors`).
+    RestyleConnector {
+        id: ConnectorId,
+        style: ElementStyle,
     },
     /// Overwrite an arrow's caption. The whole caption travels, and the handler
     /// diffs it into the `label` char-CRDT, so two peers captioning one arrow

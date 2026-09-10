@@ -16,8 +16,8 @@
 use std::collections::HashMap;
 
 use ambre_bus::app::toile::{
-    DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId,
-    ElementStyle, ShapeKind,
+    ConnectorId, DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport,
+    ElementId, ElementStyle, ShapeKind,
 };
 use ambre_canvas::{Palette, TextCache};
 use ambre_draw::{
@@ -196,6 +196,10 @@ fn polyline_path(pts: &[Point]) -> BezPath {
     }
     p
 }
+
+/// Stroke width, in screen pixels, of the line traced over a selected arrow.
+/// Heavier than the arrow itself so the selection reads at any zoom.
+const ARROW_SELECT_W: f64 = 3.0;
 
 /// Fill then stroke a path from an element's style.
 fn fill_and_stroke<S: DrawSurface>(surface: &mut S, path: &BezPath, style: &ElementStyle) {
@@ -633,10 +637,19 @@ pub fn paint_overlay<S: DrawSurface>(
     // preview bounds instead of the committed geometry, so they stay glued to the
     // object during the drag. Empty at rest.
     gesture: &HashMap<ElementId, AnimatedElement>,
+    // The selected arrow, if one is (`toile-connectors`). Exclusive with
+    // `selection`, so at most one of the two boxes is drawn.
+    arrow: Option<&ConnectorId>,
 ) {
     // Live gesture preview (world -> screen), a thin outline / trail.
     if let Some(p) = preview {
         paint_preview(surface, p, cam, palette);
+    }
+
+    // A selected arrow gets its line traced in the selection colour and a handle
+    // on each end, which is what a re-aim grabs (`toile-connectors`).
+    if let Some(id) = arrow {
+        paint_arrow_selection(surface, id, vp, cam, palette);
     }
 
     // Find highlights: outline every matching element visible in the
@@ -826,6 +839,35 @@ fn paint_find_highlights<S: DrawSurface>(
 }
 
 /// A small filled square handle centered on `p`.
+/// Trace a selected arrow and put a handle on each end. The arrow has no box:
+/// a rectangle around a diagonal line would cover half the diagram and say
+/// nothing about which end a drag would move, so the line itself is the
+/// selection feedback (`toile-connectors`).
+fn paint_arrow_selection<S: DrawSurface>(
+    surface: &mut S,
+    id: &ConnectorId,
+    vp: &DisplayViewport,
+    cam: &ViewportTransform,
+    palette: &Palette,
+) {
+    let Some(path) = super::arrow::path_of(vp, id) else {
+        return; // the arrow left the culled set, or an endpoint is gone
+    };
+    let Some((from, to)) = super::arrow::endpoints(path) else {
+        return;
+    };
+    surface.push_transform(cam.world_to_screen());
+    surface.stroke_path(
+        path,
+        &Brush::Solid(palette.selection),
+        &Stroke::new(ARROW_SELECT_W / cam.zoom.max(1e-3)),
+    );
+    surface.pop_transform();
+    let w2s = cam.world_to_screen();
+    draw_handle(surface, w2s * from, palette);
+    draw_handle(surface, w2s * to, palette);
+}
+
 fn draw_handle<S: DrawSurface>(surface: &mut S, p: Point, palette: &Palette) {
     let h = HANDLE_SIZE_PX / 2.0;
     surface.fill_rect(
@@ -1270,6 +1312,7 @@ mod tests {
             &[],
             None,
             &HashMap::new(),
+            None,
         );
         // 4 corner handles + 1 rotate handle = 5 filled squares (corners-only).
         let handle_fills = surface
@@ -1318,6 +1361,7 @@ mod tests {
             &[],
             None,
             &gesture,
+            None,
         );
         // The selection box is stroked at the preview bounds, not the committed rect.
         let expected = world_rect_to_screen(preview_bounds, &cam);
@@ -1326,6 +1370,92 @@ mod tests {
             .iter()
             .any(|o| matches!(o, DrawOp::StrokeRect { rect, .. } if *rect == expected));
         assert!(has_box, "selection box must follow the live preview bounds");
+    }
+
+    /// A selected arrow is traced and gets exactly two handles -- one per end --
+    /// and no selection box: an arrow has no rectangle to draw
+    /// (`toile-connectors`).
+    #[test]
+    fn a_selected_arrow_gets_two_handles_and_no_box() {
+        let mut path = ambre_draw::BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.line_to((100.0, 0.0));
+        let vp = DisplayViewport {
+            pins: Vec::new(),
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes: vec![DisplayNode::Connector(DisplayConnector {
+                id: ConnectorId("c".into()),
+                path,
+                style: ElementStyle::default(),
+                arrows: ambre_bus::app::toile::EndCaps {
+                    start: false,
+                    end: true,
+                },
+                label: String::new(),
+            })],
+        };
+        let mut surface = RecordingSurface::new();
+        let selected = ConnectorId("c".into());
+        paint_overlay(
+            &mut surface,
+            &[],
+            &vp,
+            &cam(),
+            &LIGHT_PALETTE,
+            None,
+            &[],
+            None,
+            &HashMap::new(),
+            Some(&selected),
+        );
+        let handles = surface
+            .ops()
+            .iter()
+            .filter(|o| matches!(o, DrawOp::FillRect { .. }))
+            .count();
+        assert_eq!(handles, 2, "one handle per end");
+        assert!(
+            !surface
+                .ops()
+                .iter()
+                .any(|o| matches!(o, DrawOp::StrokeRect { .. })),
+            "an arrow carries no selection box"
+        );
+        assert!(
+            surface
+                .ops()
+                .iter()
+                .any(|o| matches!(o, DrawOp::StrokePath { .. })),
+            "the arrow's own line is traced"
+        );
+    }
+
+    /// An arrow the display no longer holds paints nothing: a stale selection
+    /// leaves no handles floating on the board.
+    #[test]
+    fn a_vanished_arrow_paints_nothing() {
+        let vp = DisplayViewport {
+            pins: Vec::new(),
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes: Vec::new(),
+        };
+        let mut surface = RecordingSurface::new();
+        let selected = ConnectorId("gone".into());
+        paint_overlay(
+            &mut surface,
+            &[],
+            &vp,
+            &cam(),
+            &LIGHT_PALETTE,
+            None,
+            &[],
+            None,
+            &HashMap::new(),
+            Some(&selected),
+        );
+        assert!(surface.ops().is_empty(), "nothing is painted");
     }
 
     #[test]
@@ -1351,6 +1481,7 @@ mod tests {
             &hits,
             Some(&ElementId("b".into())),
             &HashMap::new(),
+            None,
         );
         // No selection => no handles, only the two hit outlines (one per match).
         let strokes = surface
@@ -1406,6 +1537,7 @@ mod tests {
             &[],
             None,
             &HashMap::new(),
+            None,
         );
         // The box must NOT be a `stroke_rect` (that degrades to an upright AABB on
         // the WgpuSurface); it is drawn as rotated `stroke_line` edges instead.
