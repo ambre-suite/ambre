@@ -9,7 +9,7 @@ use loro::{LoroMap, LoroValue};
 use crate::logic::command::{End, ToileError, ToileEvent, ToileOutcome};
 use crate::logic::model::{Anchor, ConnectorId, ElementId, EndCaps, NodeId, PathType};
 
-use super::codec::{encode_anchor, map_str, write_connector};
+use super::codec::{connector_label_or_seed, encode_anchor, map_str, write_connector};
 use super::{CONNECTORS, LAYERS, ToileState};
 
 impl ToileState {
@@ -91,6 +91,23 @@ impl ToileState {
             events.push(ToileEvent::DanglingConnector(id));
         }
         self.emit_with_update(events)
+    }
+
+    /// Overwrite an arrow's caption. The caption is a `LoroText`, and the whole
+    /// body is diffed into it rather than replacing it, so two peers typing on
+    /// one arrow converge character by character (`TOILE-047`).
+    pub(super) fn set_connector_label(&mut self, id: ConnectorId, text: &str) -> ToileOutcome {
+        let Some(cm) = self.connector_map(&id) else {
+            return self.err_no_connector(&id);
+        };
+        let Some(label) = connector_label_or_seed(&cm) else {
+            return self.err_no_connector(&id);
+        };
+        // The diff is bounded by the caption's length, which a caption is; a
+        // timeout here would silently drop the edit, so none is set.
+        let _ = label.update(text, loro::UpdateOptions::default());
+        self.doc.commit();
+        self.emit_with_update(vec![self.viewport_event()])
     }
 
     pub(super) fn delete_connector(&mut self, id: ConnectorId) -> ToileOutcome {

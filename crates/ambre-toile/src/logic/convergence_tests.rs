@@ -166,6 +166,122 @@ fn delete_drops_owned_connectors() {
     assert_eq!(st.layer_order(), &[NodeId::Element(b)]);
 }
 
+// -----------------------------------------------------------------------------
+// Connector captions (toile-connectors)
+// -----------------------------------------------------------------------------
+
+/// Join two fresh rects with a straight arrow and answer its minted id.
+fn create_connector(st: &mut ToileState) -> ConnectorId {
+    let a = create_rect(st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(st, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::CreateConnector {
+        from: a,
+        from_anch: Anchor::Right,
+        to: b,
+        to_anch: Anchor::Left,
+        path_type: PathType::Straight,
+        arrows: EndCaps {
+            start: false,
+            end: true,
+        },
+    });
+    st.layer_order()
+        .iter()
+        .find_map(|n| match n {
+            NodeId::Connector(c) => Some(c.clone()),
+            NodeId::Element(_) => None,
+        })
+        .expect("a create leaves the connector in the paint order")
+}
+
+/// Read a connector's caption back out of the derived viewport -- the same
+/// string the UI paints.
+fn caption(st: &ToileState, id: &ConnectorId) -> String {
+    st.debug_viewport()
+        .nodes
+        .iter()
+        .find_map(|n| match n {
+            DisplayNode::Connector(c) if &c.id == id => Some(c.label.clone()),
+            _ => None,
+        })
+        .expect("the connector is in the viewport")
+}
+
+/// A caption written on an arrow comes back on the arrow's display node.
+#[test]
+fn a_caption_reaches_the_viewport() {
+    let mut st = ToileState::new();
+    let c = create_connector(&mut st);
+    assert_eq!(caption(&st, &c), "", "an arrow is born without a caption");
+    let out = st.handle_command(ToileCommand::SetConnectorLabel {
+        id: c.clone(),
+        text: "owns".into(),
+    });
+    assert!(out.update.is_some(), "a caption broadcasts a delta");
+    assert_eq!(caption(&st, &c), "owns");
+}
+
+/// A caption on an arrow nobody holds is refused, and writes nothing.
+#[test]
+fn captioning_a_missing_arrow_is_refused() {
+    let mut st = ToileState::new();
+    let out = st.handle_command(ToileCommand::SetConnectorLabel {
+        id: ConnectorId("nope".into()),
+        text: "hi".into(),
+    });
+    assert!(out.update.is_none(), "a refused caption writes nothing");
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::Error(ToileError::NoSuchConnector(_)))),
+    );
+}
+
+/// `TOILE-047`: two peers captioning one arrow converge character by character.
+/// The whole caption travels on the wire, but the handler diffs it into the
+/// `label` char-CRDT, so neither side's typing is dropped whole.
+#[test]
+fn concurrent_captions_converge() {
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    let c = create_connector(&mut a);
+    // B takes the board, and with it the caption container seeded at birth.
+    b.apply_remote(&a.export_snapshot());
+
+    // Both start from "cost" and edit a different end of it, unaware of each
+    // other: A prepends, B appends.
+    a.handle_command(ToileCommand::SetConnectorLabel {
+        id: c.clone(),
+        text: "cost".into(),
+    });
+    b.apply_remote(&a.export_snapshot());
+
+    let da = a
+        .handle_command(ToileCommand::SetConnectorLabel {
+            id: c.clone(),
+            text: "unit cost".into(),
+        })
+        .update
+        .expect("A's caption broadcasts a delta");
+    let db = b
+        .handle_command(ToileCommand::SetConnectorLabel {
+            id: c.clone(),
+            text: "cost in EUR".into(),
+        })
+        .update
+        .expect("B's caption broadcasts a delta");
+
+    b.apply_remote(&da);
+    a.apply_remote(&db);
+
+    let merged = caption(&a, &c);
+    assert_eq!(merged, caption(&b, &c), "concurrent captions diverged");
+    assert!(
+        merged.contains("unit") && merged.contains("EUR"),
+        "both edits must survive a merge, got {merged:?}"
+    );
+}
+
 #[test]
 fn reorder_to_back_moves_node() {
     let mut st = ToileState::new();

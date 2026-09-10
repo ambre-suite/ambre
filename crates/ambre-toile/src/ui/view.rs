@@ -17,9 +17,9 @@ use std::collections::{HashMap, HashSet};
 #[cfg(target_arch = "wasm32")]
 use ambre_bus::app::toile::CommentAnchor;
 use ambre_bus::app::toile::{
-    ClipboardPayload as ToileClipboardPayload, DisplayElement, DisplayGeom, DisplayNode,
-    DisplayViewport, ElementId, ElementKind, PresencePayload, ThreadId, ToileCommand, ToileEvent,
-    Viewport,
+    ClipboardPayload as ToileClipboardPayload, ConnectorId, DisplayConnector, DisplayElement,
+    DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, PresencePayload, ThreadId,
+    ToileCommand, ToileEvent, Viewport,
 };
 use ambre_bus::{AppCommand, AppEvent, DocumentId, LogicCommand, UiEvent};
 use ambre_canvas::{
@@ -35,9 +35,10 @@ use super::comments::CommentIntent;
 use super::comments::{self, CommentDraft};
 #[cfg(target_arch = "wasm32")]
 use super::deck::{self, DeckIntent};
-use super::edit::{EditIntent, InlineEditor};
+use super::edit::{EditIntent, EditTarget, InlineEditor};
 use super::embed;
 use super::hit::hit_topmost;
+use super::label;
 use super::presence::{PeerCursors, PresenceSender};
 use super::present::{DEFAULT_TRANSITION_MS, Transition};
 use super::reactions;
@@ -1925,6 +1926,17 @@ impl ToileView {
                 self.open_editor(hit);
                 return true;
             }
+            // No element under the pointer: a double-click on an arrow (its line
+            // or its caption) opens the caption editor on it
+            // (`toile-connectors`). An element that is there wins, whatever it
+            // is, so entering a group keeps working over a connector behind it.
+            if hit_topmost(&self.display.nodes, world).is_none()
+                && let Some(c) = label::connector_at(&self.display.nodes, world)
+            {
+                self.open_label_editor(c);
+                self.needs_full = true;
+                return true;
+            }
         }
         let out = self.machine.double_click(world);
         // Select tool: a double-click on a grouped element enters its scope,
@@ -2165,14 +2177,80 @@ impl ToileView {
         }
     }
 
-    /// The edited element's text origin (top-left screen corner + padding) and
-    /// wrap width in screen pixels, plus its full screen rect (for hit tests).
-    fn edit_geometry(&self, e: &DisplayElement) -> (Point, f32, Rect) {
-        let sb = world_rect_to_screen(e.bounds, &self.cam);
+    /// The text origin (top-left screen corner + padding) and wrap width in
+    /// screen pixels of a world box, plus its full screen rect (for hit tests).
+    fn edit_geometry_of(&self, world: Rect) -> (Point, f32, Rect) {
+        let sb = world_rect_to_screen(world, &self.cam);
         let pad = InlineEditor::pad(self.cam.zoom);
         let origin = Point::new(sb.x0 + pad, sb.y0 + pad);
         let wrap_w = (sb.width() - 2.0 * pad).max(1.0) as f32;
         (origin, wrap_w, sb)
+    }
+
+    /// The edited element's text origin, wrap width and screen rect.
+    fn edit_geometry(&self, e: &DisplayElement) -> (Point, f32, Rect) {
+        self.edit_geometry_of(e.bounds)
+    }
+
+    /// A displayed connector by id (linear over the culled set, like
+    /// [`find_element`](Self::find_element)).
+    fn find_connector(&self, id: &ConnectorId) -> Option<&DisplayConnector> {
+        self.display.nodes.iter().find_map(|n| match n {
+            DisplayNode::Connector(c) if &c.id == id => Some(c),
+            _ => None,
+        })
+    }
+
+    /// The screen geometry the active editor writes into, plus the rotation its
+    /// overlay rides: an element's box carries the element's angle, a connector
+    /// caption's box is the arrow's mid-arc box and never rotates
+    /// (`toile-connectors`). `None` when the target has left the culled set.
+    fn edit_target_geometry(&self) -> Option<(Point, f32, Rect, f64)> {
+        match self.editor.as_ref()?.target() {
+            EditTarget::Element(id) => {
+                let e = self.find_element(id)?;
+                let (origin, wrap_w, sb) = self.edit_geometry(e);
+                let rot = super::tool::element_rotation(&self.display, id);
+                Some((origin, wrap_w, sb, rot))
+            }
+            EditTarget::ConnectorLabel(id) => {
+                let world = label::label_rect(&self.find_connector(id)?.path)?;
+                let (origin, wrap_w, sb) = self.edit_geometry_of(world);
+                Some((origin, wrap_w, sb, 0.0))
+            }
+        }
+    }
+
+    /// Optimistically set a connector's caption in the local display, the
+    /// counterpart of [`patch_element_text`](Self::patch_element_text).
+    fn patch_connector_label(&mut self, id: &ConnectorId, text: &str) {
+        if let Some(DisplayNode::Connector(c)) = self
+            .display
+            .nodes
+            .iter_mut()
+            .find(|n| matches!(n, DisplayNode::Connector(c) if &c.id == id))
+        {
+            c.label = text.to_owned();
+        }
+    }
+
+    /// Open the inline editor on a connector's caption (`toile-connectors`).
+    /// No-op for an arrow that is not on screen.
+    fn open_label_editor(&mut self, id: ConnectorId) {
+        let Some(c) = self.find_connector(&id) else {
+            return;
+        };
+        let text = c.label.clone();
+        self.editor = Some(InlineEditor::open_label(id, &text, self.theme.palette()));
+        // A caption is not an element: nothing is selected while it is edited,
+        // and the previous selection would otherwise take the next Delete.
+        self.selection.clear();
+        self.edit_closing = false;
+        self.edit_pointer_down = false;
+        self.edit_dirty = true;
+        self.needs_full = true;
+        self.text_input.clear();
+        self.text_input.focus();
     }
 
     /// The single selected Sticky / Text element, if the selection is exactly one
@@ -2230,13 +2308,10 @@ impl ToileView {
     /// Map a screen point into the edited element's local editor frame, or `None`
     /// when the point falls outside the element (a click there closes the edit).
     fn edit_local_point(&self, screen: Point) -> Option<Point> {
-        let id = self.editor.as_ref()?.id().clone();
-        let e = self.find_element(&id)?;
-        let (origin, _w, sb) = self.edit_geometry(e);
+        let (origin, _w, sb, rot) = self.edit_target_geometry()?;
         // Unrotate the pointer about the element center into its axis-aligned
         // frame, so clicks land on the rotated in-edit text (mirror of the overlay
         // rotation in `drive_editor`, `toile-text-editing`).
-        let rot = super::tool::element_rotation(&self.display, &id);
         let p = if rot != 0.0 {
             render::rotate_about(sb.center(), -rot) * screen
         } else {
@@ -2381,19 +2456,14 @@ impl ToileView {
         if self.editor.is_none() {
             return;
         }
-        let id = self.editor.as_ref().unwrap().id().clone();
-        // Resolve the edited element's screen geometry (may have scrolled out).
-        let geom = self.find_element(&id).map(|e| self.edit_geometry(e));
+        let target = self.editor.as_ref().unwrap().target().clone();
+        // Resolve the edited target's screen geometry (may have scrolled out).
+        let geom = self.edit_target_geometry();
 
         match geom {
-            Some((origin, wrap_w, sb)) => {
+            Some((origin, wrap_w, sb, rot)) => {
                 let zoom = self.cam.zoom;
                 let palette = self.theme.palette();
-                // A rotated element keeps its rotation while editing: rotate the
-                // whole overlay about the element's screen-space center, matching
-                // the static text pass (`render::text_rotation`,
-                // `toile-text-editing`).
-                let rot = super::tool::element_rotation(&self.display, &id);
                 // Blink the caret on a ~1s cycle so it visibly signals "you can
                 // type here" (`toile-text-editing`). `editor.is_some()` keeps the
                 // overlay redrawing every frame, so the toggle animates.
@@ -2410,6 +2480,13 @@ impl ToileView {
                 let rotated = rot != 0.0;
                 if rotated {
                     surface.push_transform(render::rotate_about(sb.center(), rot));
+                }
+                // A caption is edited over whatever the arrow crosses, so the
+                // box gets the same plate the static caption paints -- here at
+                // its full width, which is also the wrap width being typed into
+                // (`toile-connectors`).
+                if target.connector().is_some() {
+                    render::paint_label_plate(surface, sb, palette);
                 }
                 ed.render(surface, origin, palette, caret_on && !self.edit_closing);
                 if rotated {
@@ -2432,8 +2509,16 @@ impl ToileView {
                 // the pre-edit body for the frames before the CRDT round-trip
                 // returns a fresh viewport (`toile-viewport`). The incoming
                 // viewport carries the same text.
-                self.patch_element_text(&id, &text);
-                self.send_edit(ToileCommand::SetText { id, text });
+                match target {
+                    EditTarget::Element(id) => {
+                        self.patch_element_text(&id, &text);
+                        self.send_edit(ToileCommand::SetText { id, text });
+                    }
+                    EditTarget::ConnectorLabel(id) => {
+                        self.patch_connector_label(&id, &text);
+                        self.send_edit(ToileCommand::SetConnectorLabel { id, text });
+                    }
+                }
             }
             self.editor = None;
             self.edit_closing = false;
@@ -2629,7 +2714,7 @@ impl ToileView {
             self.theme.palette(),
             font_cx,
             text_cache,
-            self.editor.as_ref().map(|e| e.id()),
+            self.editor.as_ref().map(|e| e.target()),
             &self.images,
             // A manual gesture preview and a slide transition are mutually
             // exclusive (`toile-tools`); prefer the gesture override while

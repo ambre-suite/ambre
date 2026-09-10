@@ -1044,6 +1044,14 @@ pub enum ToileCommand {
     DeleteConnector {
         id: ConnectorId,
     },
+    /// Overwrite an arrow's caption. The whole caption travels, and the handler
+    /// diffs it into the `label` char-CRDT, so two peers captioning one arrow
+    /// converge character by character instead of one body winning
+    /// (`toile-connectors`).
+    SetConnectorLabel {
+        id: ConnectorId,
+        text: String,
+    },
 
     // -- Freehand --
     CommitStroke {
@@ -1492,4 +1500,7 @@ pub struct DisplayConnector {
     pub path: BezPath,
     pub style: ElementStyle,
     pub arrows: EndCaps,
+    /// The edge caption, empty when the arrow carries none. Read from the
+    /// connector's `label` char-CRDT (`toile-connectors`).
+    pub label: String,
 }

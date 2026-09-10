@@ -380,6 +380,7 @@ impl ToileState {
                 anch,
             } => self.retarget_connector(id, endpoint, to, anch),
             ToileCommand::DeleteConnector { id } => self.delete_connector(id),
+            ToileCommand::SetConnectorLabel { id, text } => self.set_connector_label(id, &text),
             ToileCommand::CommitStroke { points, style } => self.commit_stroke(points, style),
             ToileCommand::CopyElements { ids } => self.copy_elements(&ids),
             ToileCommand::PasteElements { payload, at } => self.paste_elements(&payload, at),

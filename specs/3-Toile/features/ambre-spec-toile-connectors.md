@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: CONNECTORS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- a straight arrow is drawn and routed; it cannot be selected, styled or
-captioned, and two of the three path kinds have no sender.
+**Implementation:** partial -- a straight arrow is drawn, routed and captioned; it cannot be
+selected or styled, and two of the three path kinds have no sender.
 
 > A user drags from one shape to another and gets an arrow. Moving either shape keeps the arrow
 > attached: it is drawn between the two, not placed on the board.
@@ -31,7 +31,9 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-045` | INV | A connector MUST be culled with the viewport, like an element. | this spec section 3 | none, and **the rule fails today**: the visible-set walk tests the culled set for an element and emits every connector on the board unconditionally, because no connector is in the spatial index -- section 6 | unverified |
 | `TOILE-046` | INV | A connector MUST carry its own style, so an arrow can be coloured and thickened. | this spec section 3 | none, and **the rule fails today**: the field is `design` in the format, no command writes it, and the deriver hands out a default style for every connector -- section 6 | unverified |
 | `TOILE-167` | INV | Every path kind and every anchor the format stores MUST be reachable: a shape the document can hold is one a user can make. | this spec section 3 | none, and the rule fails today -- section 6 | unverified |
-| `TOILE-047` | CONC | A caption on a connector MUST converge character by character, like a note body. | this spec section 3 | not built -- lands with the "Connector labels" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `TOILE-047` | CONC | A caption on a connector MUST converge character by character, like a note body. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_captions_converge` holds two peers editing opposite ends of one caption and asserts both survive the merge | verified |
+| `TOILE-UI-346` | OBS | A caption MUST be painted on the arrow it belongs to, over a plate, so it stays readable where it crosses the line. | this spec section 4 | none. The paint pass runs after the element bodies and fills a plate sized to the laid-out text, and no test reads a painted frame | unverified |
+| `TOILE-232` | INV | A caption MUST store what it says and never where it sits: its place on the arrow is recomputed on read, like the arrow's own geometry (`TOILE-006`). | this spec section 3 | `ambre_toile::ui::label::tests::a_straight_arrow_anchors_at_its_midpoint`, `::an_elbow_anchors_half_way_along_the_run`; the format holds one text and no position (`ambre-spec-toile-schema.md section 3`) | verified |
 
 ### 1.2 Drag an arrow from one shape to another
 
@@ -55,7 +57,17 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-173` | FRAME | Re-aiming MUST NOT touch the path kind, the end caps, or the connector's place in the paint order. | this spec section 3 | none. The handler writes the two fields of the one endpoint, and no test reads the rest of the map afterwards | unverified |
 | `TOILE-174` | FAIL | Given an arrow the board does not hold, re-aiming MUST answer an error and MUST leave the document unchanged (`TOILE-036`). | this spec section 3 | none. The handler returns the error before any write, and no test names a connector nobody minted | unverified |
 
-### 1.4 Delete a shape an arrow touches
+### 1.4 Caption an arrow
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `TOILE-UI-344` | POST | A double-click on an arrow MUST open an editor on its caption, in place on the arrow. | this spec section 4 | none for the gesture: the view is not host-constructible. Its geometry half is held -- `ambre_toile::ui::label::tests::a_click_on_the_line_picks_the_arrow` and `::the_top_most_arrow_wins` hold which arrow a point lands on | unverified |
+| `TOILE-UI-345` | POST | Leaving the editor MUST send the caption, and MUST send nothing when it comes back as it opened. | this spec section 4 | `ambre_canvas::editor::tests::an_unchanged_buffer_commits_nothing` holds the half that decides: a buffer equal to its seed answers `None` and the close sends nothing. Nothing drives the close path itself | unverified |
+| `TOILE-UI-347` | POST | A click on a caption MUST aim at the arrow that carries it, and an arrow with no caption MUST NOT claim the space one would occupy. | this spec section 4 | `ambre_toile::ui::label::tests::a_click_on_the_caption_picks_the_arrow` asserts both halves on the same point | verified |
+| `TOILE-UI-348` | FRAME | Captioning MUST NOT touch what the arrow joins, how it runs, its caps, or its place in the paint order: a caption is a word on an arrow, not a change to it. | this spec section 3 | none. The handler resolves one connector map and writes one text inside it, and no test reads the rest of the map afterwards | unverified |
+| `TOILE-233` | FAIL | Given an arrow the board does not hold, captioning MUST answer an error and MUST leave the document unchanged (`TOILE-036`). | this spec section 3 | `ambre_toile::logic::convergence_tests::captioning_a_missing_arrow_is_refused` asserts the error and that no delta is broadcast | verified |
+
+### 1.5 Delete a shape an arrow touches
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
@@ -68,17 +80,16 @@ status values are normative in `ambre-spec-template.md`.
   connector on the board rather than once per visible connector, and no bench measures either.
 * **Boundary.** none of its own: a connector lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`).
-* **Verification.** 11 `verified`, 14 `unverified`, 1 `unimplemented`. The rows went 8 to 26 and the
-  distinct mechanisms 8 to 11: the split manufactured no coverage. Nine of the eleven held rows rest
-  on a mechanism, and the three new names are tests that already existed and that nothing pointed
-  at -- the whole drag surface was written down without an id. The rest is second assertions inside
-  tests already cited, which is why a delete now holds three rows instead of one. One row lost its
-  status: the concurrent dangling was held by a test that deletes an endpoint on one peer, which
-  garbage-collects the connector rather than dangling it, so the cited run answers `TOILE-042` and
-  not the rule above it. That same test does hold a frame condition nobody had written. What stays
-  loose is everything the user cannot reach: no arrow can be selected, so re-aiming and deleting one
-  are unheld by construction, and four rows describe a shape the format stores and no gesture
-  produces.
+* **Verification.** 15 `verified`, 18 `unverified`, 0 `unimplemented`. The caption added seven rows and
+  four held ones, on five new tests: two peers typing on one caption, a caption refused on an arrow
+  nobody holds, the anchor on a line and on a bend, and the click that reaches an arrow through its
+  words. The one `unimplemented` row is gone -- the caption is built, and the rule that says it
+  converges is held by a two-peer run rather than by the note that it will be. What the caption
+  could not hold is the gesture: the view is not host-constructible, so the double-click that opens
+  the editor and the close that sends the caption rest on their pure halves -- which arrow a point
+  lands on, and whether an unchanged buffer commits -- and not on the path between them. What stays
+  loose is otherwise unchanged: no arrow can be selected, so re-aiming and deleting one are unheld
+  by construction, and four rows describe a shape the format stores and no gesture produces.
 
 ---
 
@@ -91,6 +102,7 @@ status values are normative in `ambre-spec-template.md`.
 | deletes the shape | keeps the arrow, offline | the arrow, referencing an element nobody holds | nothing painted where the arrow was, and the arrow still in the document | `logic::connector::tests::missing_endpoint_yields_none` holds the half that is painted; nothing reads the document afterwards (`TOILE-007`) |
 | re-aims an arrow at a shape she just deleted | watches | the arrow bound to a missing element | nothing painted, and an announcement no surface reads (`TOILE-044`) | `logic::convergence_tests::retarget_to_missing_element_reports_dangling` |
 | drags a shape an arrow ends at, for a second | watches | the shape's new position, and no connector write at all | the arrow re-routed on every frame (`TOILE-164`) | none |
+| types `unit cost` on an arrow's caption | types `cost in EUR` on the same caption, offline | one caption holding both edits, merged character by character | the same caption on both screens, neither user's typing dropped (`TOILE-047`) | `logic::convergence_tests::concurrent_captions_converge` |
 
 ---
 
@@ -139,9 +151,25 @@ referencing a removed id at either end, removes those connector maps, and strips
 order inside the delete's own commit (`TOILE-042`). Under concurrency the cleanup can lose the race,
 which is exactly the dangling case above.
 
+**Steps, when an arrow is captioned:** the handler resolves the connector map, takes its `label`
+text and **diffs** the whole caption into it rather than replacing it, so two peers typing on one
+arrow merge inside one text instead of one body winning (`TOILE-047`). The caption travels whole on
+the wire because the surface holds a plain buffer; the char-CRDT is what the document stores.
+
+The `label` container is seeded **at the connector's birth**, not on the first caption. Seeding at
+creation puts the same container on every peer, inside the creation delta, before anyone types; a
+lazy seed on each peer would mint rival containers under one key and LWW would drop a caption whole.
+A connector minted before the field existed is the one lazy seed left, and the one window where that
+can happen.
+
+**Steps, when a caption is placed:** the routed path is measured, and the caption's box is centred on
+the point half-way along it by arc length. Nothing about that is stored (`TOILE-232`): moving an
+endpoint re-routes the arrow and carries the caption with it, at no write.
+
 **Code:**
 
 * `crates/ambre-toile/src/logic/connector.rs` -- the anchor resolution and the three path kinds;
+* `ui/label.rs` -- the caption's anchor, its box, and which arrow a click lands on;
 * `logic/state/connectors.rs` -- create, retarget, delete, and the "which connectors touch these
   elements" query the delete uses;
 * `logic/state/derive.rs` -- the connector arm of the visible-set walk;
@@ -156,14 +184,23 @@ which is exactly the dangling case above.
 | the connector tool, dragged from one element to another | `CreateConnector` between the two nearest anchors, always straight (`TOILE-UI-211`, `TOILE-UI-212`) |
 | the connector tool, released over empty board | nothing: an arrow needs two elements (`TOILE-UI-213`) |
 | the connector tool, released over the element the drag started on | nothing: an arrow to itself is not a diagram (`TOILE-UI-214`) |
+| a double-click on an arrow's line or its caption, with no element under the pointer | nothing yet: the caption editor opens in place on the arrow (`TOILE-UI-344`) |
+| leaving that editor -- `Escape`, or a click away | `SetConnectorLabel`, and nothing at all when the caption comes back as it opened (`TOILE-UI-345`) |
 
 **What the drawer sees.** A preview line from the source anchor to the pointer while the drag is in
 flight, local and uncommitted (`features/ambre-spec-toile-tools.md`). The anchor picked at each end
 is the nearest side of the element under the pointer.
 
-**What no surface offers.** Selecting an arrow, deleting one, re-aiming one, colouring one, or
-captioning one. The two commands that would serve the first three exist and nothing sends them,
-because the pick walk drops every connector before testing geometry (`TOILE-UI-035`).
+**What the captioner sees.** The words centred on the arrow, over a plate in the board colour so
+they stay readable where they cross the line (`TOILE-UI-346`). An arrow with no caption paints
+nothing there and claims no space: the click target is the line alone (`TOILE-UI-347`). While the
+editor is open the selection is empty, so a `Delete` typed mid-caption deletes a character and not
+the shapes that were selected before.
+
+**What no surface offers.** Selecting an arrow, deleting one, re-aiming one, or colouring one. The
+two commands that would serve the first three exist and nothing sends them, because the pick walk
+drops every connector before testing geometry (`TOILE-UI-035`). The caption reaches its arrow
+without that walk, through a pick of its own.
 
 ---
 
@@ -188,9 +225,12 @@ because the pick walk drops every connector before testing geometry (`TOILE-UI-0
 * **A connector has no style** (`TOILE-046`). The format declares the field as `design`, no
   command writes it, and the deriver hands the UI thread a default style for every connector, so
   every arrow on every board is the same colour and the same width.
-* **A connector cannot be reached** (`TOILE-UI-035`). It cannot be selected, so the retarget and
-  delete commands have no sender, and the caption editor three sections describe has nothing to open
-  on. The selection half of that is the first thing the "Connector labels" Story has to build.
+* **A connector still cannot be selected** (`TOILE-UI-035`). The caption is reached by a pick of its
+  own -- a double-click resolves the arrow under the pointer without going through the selection --
+  so a captioned arrow is not a selected arrow. The retarget and delete commands therefore still
+  have no sender, an arrow cannot be reordered by hand, and the style inspector and the floating
+  toolbar address elements only. Making a connector a first-class selection means widening every
+  container that holds an `ElementId`, which is its own Story, not a side effect of a caption.
 * **The announcement goes nowhere** (`TOILE-044`). The dangling event reaches the view, which drops
   it, so the repair affordance the design names does not exist and a dangling arrow is
   indistinguishable from no arrow.
@@ -206,6 +246,12 @@ because the pick walk drops every connector before testing geometry (`TOILE-UI-0
 * **A create trusts its endpoints** (`TOILE-168`). The handler validates neither id, so a command
   from a peer running older code, or a replayed undo item, writes an arrow to an element that is not
   there and the board carries it silently.
+* **A caption has no style and one size.** It is painted in the theme's text ink at a fixed world
+  size in the default family, because a connector carries no style of its own (`TOILE-046`). Until
+  that row holds, a caption cannot be coloured, resized or emphasised.
+* **A caption's box is fixed, not fitted.** The wrap width and the click box are a constant, chosen
+  before the font context exists (the editor opens outside the paint pass). A caption longer than
+  the box wraps onto a second line rather than widening, and a very long one runs past its plate.
 * **A connector between two elements inside a rotated frame is routed against boxes, not corners.**
   The anchor resolution reads the rotation-expanded box, so an arrow to a rotated shape lands on that
   box's side rather than on the shape's own edge.

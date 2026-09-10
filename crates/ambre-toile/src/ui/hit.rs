@@ -16,7 +16,7 @@ use kurbo::{ParamCurveNearest, Shape};
 
 /// A shape at or above this world distance from a thin stroke's outline is a
 /// miss; below it, a hit. Keeps hair-thin lines and open paths clickable.
-const MIN_STROKE_PICK: f64 = 4.0;
+pub(crate) const MIN_STROKE_PICK: f64 = 4.0;
 
 /// Exact hit-test of one element against a world-space point. `false` for a
 /// `Group` (it paints nothing; selection resolves through membership,).
@@ -81,7 +81,7 @@ fn path_contains(path: &BezPath, local: Point) -> bool {
 }
 
 /// Minimum distance from `local` to any segment of `path` (world units).
-fn path_outline_distance(path: &BezPath, local: Point) -> f64 {
+pub(crate) fn path_outline_distance(path: &BezPath, local: Point) -> f64 {
     path.segments()
         .map(|seg| seg.nearest(local, 1e-3).distance_sq)
         .fold(f64::INFINITY, f64::min)

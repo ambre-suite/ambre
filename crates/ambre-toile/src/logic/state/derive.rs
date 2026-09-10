@@ -21,7 +21,8 @@ use crate::logic::stroke::smooth_stroke;
 
 use super::ToileState;
 use super::codec::{
-    bin_of, bool_of, doc_type_from_tag, f64_of, kind_from_tags, read_connector, str_of,
+    bin_of, bool_of, connector_label, doc_type_from_tag, f64_of, kind_from_tags, read_connector,
+    str_of,
 };
 
 impl ToileState {
@@ -223,6 +224,7 @@ impl ToileState {
             path,
             style: ElementStyle::default(),
             arrows: conn.arrows,
+            label: connector_label(&cm),
         })
     }
 }

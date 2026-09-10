@@ -11,9 +11,9 @@
 // Every editing operation delegates to the core.
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayElement, ElementId};
+use ambre_bus::app::toile::{ConnectorId, DisplayElement, ElementId, ElementStyle};
 use ambre_canvas::{Palette, TextEditor, TextEditorStyle};
-use ambre_draw::{BoundingBox, Color, DrawSurface, FontContext, Point};
+use ambre_draw::{Alignment, BoundingBox, Color, DrawSurface, FontContext, Point};
 
 // Re-export the shared intent type so the view keeps its `super::edit::EditIntent`
 // import path (the enum lives in the shared core now).
@@ -23,10 +23,39 @@ pub use ambre_canvas::EditIntent;
 /// matching the sticky / text body inset.
 const TEXT_PAD: f64 = 4.0;
 
-/// An in-progress inline edit of one sticky / text element.
+/// What an inline edit is writing into: an element's body, or the caption of a
+/// connector (`toile-connectors`). The two differ in where the box comes from
+/// and which command the commit sends; everything between open and close is the
+/// same editor.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EditTarget {
+    Element(ElementId),
+    ConnectorLabel(ConnectorId),
+}
+
+impl EditTarget {
+    /// The element under edit, or `None` when a caption is.
+    pub fn element(&self) -> Option<&ElementId> {
+        match self {
+            Self::Element(id) => Some(id),
+            Self::ConnectorLabel(_) => None,
+        }
+    }
+
+    /// The connector whose caption is under edit, or `None` when an element is.
+    pub fn connector(&self) -> Option<&ConnectorId> {
+        match self {
+            Self::ConnectorLabel(id) => Some(id),
+            Self::Element(_) => None,
+        }
+    }
+}
+
+/// An in-progress inline edit of one sticky / text element, or of one connector
+/// caption.
 pub struct InlineEditor {
-    /// The element being edited (its body is authoritative here until close).
-    id: ElementId,
+    /// What is being edited (its body is authoritative here until close).
+    target: EditTarget,
     /// The shared editor core (PlainEditor + intent queue + pinned style).
     core: TextEditor,
 }
@@ -55,14 +84,35 @@ impl InlineEditor {
             color,
         };
         Self {
-            id: elem.id.clone(),
+            target: EditTarget::Element(elem.id.clone()),
             core: TextEditor::new(text, style),
         }
     }
 
-    /// The element currently under edit.
-    pub fn id(&self) -> &ElementId {
-        &self.id
+    /// Open an editor on a connector's caption, seeded with `text`. A caption
+    /// has no element to take a style from: it uses the default body font at a
+    /// fixed world size and the theme's text ink, centred in its box so the
+    /// words sit on the arrow rather than beside it (`toile-connectors`).
+    pub fn open_label(id: ConnectorId, text: &str, palette: &Palette) -> Self {
+        let font = ElementStyle::default().font;
+        let style = TextEditorStyle {
+            weight: font.weight,
+            italic: font.italic,
+            family: font.family,
+            base_size: super::label::LABEL_FONT_SIZE,
+            color: palette.cell_text,
+        };
+        let mut core = TextEditor::new(text, style);
+        core.set_alignment(Alignment::Center);
+        Self {
+            target: EditTarget::ConnectorLabel(id),
+            core,
+        }
+    }
+
+    /// What is currently under edit.
+    pub fn target(&self) -> &EditTarget {
+        &self.target
     }
 
     /// Inner padding in screen pixels at the given zoom.

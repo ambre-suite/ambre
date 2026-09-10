@@ -6,7 +6,7 @@
 //! `use super::codec::*`.
 
 use kurbo::{Affine, Point, Rect, Vec2};
-use loro::{LoroMap, LoroValue};
+use loro::{LoroMap, LoroText, LoroValue};
 
 use crate::logic::command::{ClipValue, InitContent};
 use crate::logic::connector::Connector;
@@ -191,6 +191,39 @@ pub(super) fn write_connector(
     let _ = cm.insert("path_type", encode_path_type(path_type));
     let _ = cm.insert("arrow_start", arrows.start);
     let _ = cm.insert("arrow_end", arrows.end);
+    // The caption is seeded at birth, not on first edit. Seeding here gives
+    // every peer the same `LoroText` container (it travels in the creation
+    // delta) before anyone types, so two concurrent captions merge inside one
+    // text. A lazy seed on each peer would mint rival containers under the same
+    // key, and LWW would drop one side's caption whole (`TOILE-047`).
+    let _ = cm.insert_container(LABEL, LoroText::new());
+}
+
+/// The connector field holding the edge caption.
+pub(super) const LABEL: &str = "label";
+
+/// The caption text of a connector map, empty when the connector predates the
+/// field or carries none.
+pub(super) fn connector_label(cm: &LoroMap) -> String {
+    cm.get(LABEL)
+        .and_then(|v| v.into_container().ok())
+        .and_then(|c| c.into_text().ok())
+        .map(|t| t.to_string())
+        .unwrap_or_default()
+}
+
+/// The caption `LoroText` of a connector map, seeding one for a connector
+/// minted before the field existed. The seed is the LWW-collision window
+/// `write_connector` avoids for every connector it makes.
+pub(super) fn connector_label_or_seed(cm: &LoroMap) -> Option<LoroText> {
+    if let Some(text) = cm
+        .get(LABEL)
+        .and_then(|v| v.into_container().ok())
+        .and_then(|c| c.into_text().ok())
+    {
+        return Some(text);
+    }
+    cm.insert_container(LABEL, LoroText::new()).ok()
 }
 
 pub(super) fn read_connector(id: ConnectorId, cm: &LoroMap) -> Option<Connector> {

@@ -115,7 +115,8 @@ model and the GPU vector canvas.
 | `[x]` Order the deck | MVP | a panel that adds a frame to the presentation, reorders it and removes it, and a deleted frame that leaves it. Playback, the transition and the speaker notes ship and have no deck to run on |
 | `[x]` The Toile interop surface | MVP | a file dropped or picked reaches the importer at the drop point, the SVG and PDF export entries hand the bytes to the browser, and the lossy-import report reaches the user |
 | `[x]` Embeds on the board | MVP | a gesture places a web page or another Ambre document on the board, and a web page renders sealed off from it. The nesting plane ships -- opened, focused, painted and routed -- and nothing puts an embed there |
-| `[ ]` Connector labels | MVP | a caption on an arrow, editable in place |
+| `[x]` Connector labels | MVP | a caption on an arrow, editable in place |
+| `[ ]` An arrow can be selected | MVP | click an arrow to select it, then delete, re-aim, restyle or reorder it |
 | `[ ]` Hyperlinks and go-to-frame | MVP | a link on an element, followed to a URL or to another frame |
 | `[ ]` Align and distribute | MVP | align or space a selection evenly, as one undo item |
 | `[ ]` No delta is lost on an export error | MVP | Toile drops a change when an export fails; Trame retries it. Align Toile on Trame |

@@ -101,7 +101,7 @@ code uses.
 | `elements/{id}/notes` | Text | -- | speaker notes | none: char-CRDT | presentation | built |
 | `connectors` | Map | `connector_id` | one connector map | the connector entry | connectors | built |
 | `connectors/{id}` | Map | a field name, per the table below | per field | the field | connectors | built |
-| `connectors/{id}/label` | Text | -- | the edge caption | none: char-CRDT | connectors | design |
+| `connectors/{id}/label` | Text | -- | the edge caption | none: char-CRDT | connectors | built |
 | `layers` | MovableList | position | `"E:{element_id}"` or `"C:{connector_id}"` | list order, no LWW | z-order | built |
 | `media` | Map | `blake2b` content hash | one media map | the media entry | media | built |
 | `media/{hash}` | Map | `w`, `h`, `mime`, `thumb` | `i64`, `i64`, String, Binary | the key | media | built |
@@ -151,6 +151,7 @@ lock and the style, and reads the box from the derived cache.
 | `from_anch`, `to_anch` | String | `t`, `b`, `l`, `r`, `c`, or `f:{u}:{v}` for a free anchor | built |
 | `path_type` | String | `s` straight, `e` elbow, `c` curved | built |
 | `arrow_start`, `arrow_end` | `bool` | the two end caps | built |
+| `label` | Text | the edge caption, seeded empty at birth | built |
 | `style` | Binary | `postcard(ElementStyle)` | design |
 
 **Absence is a value** (`TOILE-230`). No `link` key means no hyperlink; no `autolayout` key means

@@ -141,6 +141,14 @@ impl TextEditor {
         }
     }
 
+    /// Range the lines differently inside the wrap width. The default is
+    /// [`Alignment::Start`]; a Toile connector caption centres itself on the
+    /// arrow, so it asks for [`Alignment::Center`]. Set once at open: the flush
+    /// re-applies the style and the geometry, never the alignment.
+    pub fn set_alignment(&mut self, align: Alignment) {
+        self.editor.set_alignment(align);
+    }
+
     /// Re-pin the style (the host may recompute it per frame, e.g. on a font /
     /// size change). Applied at the next [`flush`](Self::flush).
     pub fn set_style(&mut self, style: TextEditorStyle) {
@@ -552,6 +560,22 @@ mod tests {
         ed.push(EditIntent::DeleteSelection);
         ed.flush(&mut fcx, 1000.0, 1.0);
         assert_eq!(ed.text(), "");
+    }
+
+    /// An edit that leaves the buffer as it opened commits nothing: the close
+    /// path asks for a body and gets `None`, so no command is sent for a caret
+    /// that only moved (`toile-connectors`, `toile-text-editing`).
+    #[test]
+    fn an_unchanged_buffer_commits_nothing() {
+        let mut fcx = FontContext::default();
+        let mut ed = TextEditor::new("cost", style());
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        ed.push(left());
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.committed_text(), None, "a caret move is not an edit");
+        ed.push(EditIntent::Insert("!".to_owned()));
+        ed.flush(&mut fcx, 1000.0, 1.0);
+        assert_eq!(ed.committed_text().as_deref(), Some("cos!t"));
     }
 
     #[test]

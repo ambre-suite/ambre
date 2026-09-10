@@ -22,7 +22,7 @@ use ambre_bus::app::toile::{
 use ambre_canvas::{Palette, TextCache};
 use ambre_draw::{
     Affine, Alignment, BezPath, Brush, Color, DrawSurface, FontContext, ImageKey, ImageSource,
-    Point, PositionedLayoutItem, Rect, Stroke,
+    Point, PositionedLayoutItem, Rect, Size, Stroke,
 };
 
 use crate::logic::animate::AnimatedElement;
@@ -223,7 +223,7 @@ pub fn paint_content<S: DrawSurface>(
     palette: &Palette,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-    editing: Option<&ElementId>,
+    editing: Option<&super::edit::EditTarget>,
     // Decoded image pixels for this frame, keyed by media hash. An `Image`
     // element whose hash is present paints real pixels via `draw_image`; one
     // absent paints a placeholder box (`toile-media`). Empty on a board
@@ -270,7 +270,7 @@ pub fn paint_content<S: DrawSurface>(
         };
         // Skip the element under inline edit: its live buffer is painted by the
         // editor overlay instead.
-        if editing == Some(&e.id) {
+        if editing.and_then(|t| t.element()) == Some(&e.id) {
             continue;
         }
         paint_text(
@@ -284,6 +284,80 @@ pub fn paint_content<S: DrawSurface>(
             text_cache,
             anim.get(&e.id),
         );
+    }
+
+    // 4. Connector captions, in the same screen-space pass. They come after the
+    // element bodies so a caption stays readable over whatever the arrow
+    // crosses (`toile-connectors`).
+    for node in &vp.nodes {
+        let DisplayNode::Connector(c) = node else {
+            continue;
+        };
+        if c.label.is_empty() || editing.and_then(|t| t.connector()) == Some(&c.id) {
+            continue;
+        }
+        paint_label(surface, c, cam, palette, font_cx, text_cache);
+    }
+}
+
+/// The board-coloured plate a caption sits on, so the words are readable where
+/// they cross the arrow. Shared by the static pass and the inline editor, which
+/// is why it is not inlined into either.
+pub(crate) fn paint_label_plate<S: DrawSurface>(surface: &mut S, plate: Rect, palette: &Palette) {
+    surface.fill_path(
+        &roundrect_path(plate, 3.0),
+        &Brush::Solid(palette.content_bg),
+    );
+}
+
+/// Draw a connector's caption in screen space, centred on the arrow's mid-arc
+/// point, over a plate in the board colour so the words are readable where they
+/// cross the line they belong to (`toile-connectors`).
+fn paint_label<S: DrawSurface>(
+    surface: &mut S,
+    c: &DisplayConnector,
+    cam: &ViewportTransform,
+    palette: &Palette,
+    font_cx: &mut FontContext,
+    text_cache: &mut TextCache,
+) {
+    let Some(world) = super::label::label_rect(&c.path) else {
+        return;
+    };
+    let sb = world_rect_to_screen(world, cam);
+    let pad = super::edit::InlineEditor::pad(cam.zoom);
+    let wrap_w = (sb.width() - 2.0 * pad).max(1.0) as f32;
+    let font_size = (super::label::LABEL_FONT_SIZE as f64 * cam.zoom) as f32;
+    let style = ElementStyle::default();
+    let layout = text_cache.get_or_build_font(
+        font_cx,
+        &c.label,
+        font_size,
+        wrap_w,
+        Alignment::Center,
+        false,
+        false,
+        Some(style.font.family.as_str()),
+        false,
+    );
+    // The plate hugs the laid-out text rather than the (fixed) caption box, so a
+    // short caption does not punch a wide hole in the board.
+    let (tw, th) = (layout.width() as f64, layout.height() as f64);
+    paint_label_plate(
+        surface,
+        Rect::from_center_size(sb.center(), Size::new(tw + 2.0 * pad, th + 2.0 * pad)),
+        palette,
+    );
+    let brush = Brush::Solid(palette.cell_text);
+    for line in layout.lines() {
+        for item in line.items() {
+            let PositionedLayoutItem::GlyphRun(run) = item else {
+                continue;
+            };
+            let tx = sb.x0 + pad + run.offset() as f64;
+            let ty = sb.y0 + pad + run.baseline() as f64;
+            surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+        }
     }
 }
 

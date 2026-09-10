@@ -30,7 +30,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-226` | INV | The whole edge of the selection box MUST be grabbable, even though only the corners draw a square. | this spec section 3 | `ambre_toile::ui::tool::tests::edge_handle_at_picks_sides_corners_and_misses` | verified |
 | `TOILE-UI-227` | INV | A handle MUST answer a hover only when exactly one element is selected, the select tool is armed and no drag is in flight. | this spec section 3 | `ambre_toile::ui::tool::tests::hover_handle_only_for_a_single_select_at_rest` | verified |
 | `TOILE-UI-228` | INV | A selection MUST NOT reach any container: it is per user and per moment. | this spec section 4; `ambre-spec-toile-schema.md section 2` | verified: structural, and the absence is the proof -- the id list is a field on the view and the schema declares no container for it | verified |
-| `TOILE-UI-035` | INV | A connector MUST be pickable, so it can be selected, styled and captioned. | this spec section 2; `features/ambre-spec-toile-connectors.md section 3` | not built -- lands with the "Connector labels" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `TOILE-UI-035` | INV | A connector MUST be pickable: a click on an arrow, on its line or on its caption, MUST be able to name it. | this spec section 2; `features/ambre-spec-toile-connectors.md section 3` | `ambre_toile::ui::label::tests::a_click_on_the_line_picks_the_arrow`, `::a_click_on_the_caption_picks_the_arrow`, `::the_top_most_arrow_wins` | verified |
+| `TOILE-UI-349` | INV | A picked connector MUST be selectable, so an arrow can be deleted, re-aimed, restyled and reordered like anything else on the board. | this spec section 2; `features/ambre-spec-toile-connectors.md section 6` | not built -- lands with the "An arrow can be selected" Story (`ambre-roadmap.md` E4). The pick above answers the caption alone; the element walk still drops every connector, and every container that holds a selection holds `ElementId` | unimplemented |
 | `TOILE-UI-034` | OBS | The selection box and its handles MUST follow a single element's rotation. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_rotates_box_and_handles_for_a_rotated_element`, `ambre_toile::ui::tool::tests::hover_handle_follows_the_element_rotation` | verified |
 | `TOILE-UI-229` | OBS | A single selection MUST wear four corner squares and a rotate handle above the top edge. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_draws_box_and_handles_for_single_selection` | verified |
 | `TOILE-UI-230` | OBS | A multi-selection MUST wear an upright union box and no resize handle, having no shared angle to resize along. | this spec section 3; section 4 | none: no test paints a two-element selection | unverified |
@@ -79,11 +80,13 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: a selection is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It leaves the client only as presence, which the Sync worker
   seals like any other frame (`ZK-005`).
-* **Verification.** 14 `verified`, 13 `unverified`, 1 `unimplemented`, over twenty distinct
+* **Verification.** 15 `verified`, 13 `unverified`, 1 `unimplemented`, over twenty-one distinct
   mechanisms where the flat table cited nineteen. Almost nothing new is proved: one row cited seven
   hit tests for one conjunction, and the split hands each test the rule it actually asserts. The
   gaps are the gestures, not the geometry -- the scope is entered and left by handlers no test
-  drives, and four rules on the marquee and select-all fail today.
+  drives, and four rules on the marquee and select-all fail today. One row split in two when the
+  connector caption shipped: an arrow can now be named by a click, which is held, and still cannot
+  be selected, which is not built.
 
 ---
 
