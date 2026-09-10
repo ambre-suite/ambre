@@ -301,6 +301,7 @@ impl ToileState {
                 fill,
             } => self.create_element(kind, at, size, content, fill),
             ToileCommand::MoveElements { ids, delta } => self.move_elements(&ids, delta),
+            ToileCommand::AlignElements { ids, op } => self.align_elements(&ids, op),
             ToileCommand::ResizeElement { id, new } => self.resize_element(&id, new),
             ToileCommand::RotateElement { id, radians } => self.rotate_element(&id, radians),
             ToileCommand::RestyleElements { ids, style } => self.restyle_elements(&ids, style),

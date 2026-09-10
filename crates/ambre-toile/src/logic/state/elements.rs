@@ -8,6 +8,7 @@ use std::collections::HashSet;
 use kurbo::{Point, Rect, Vec2};
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
+use crate::logic::align::{AlignOp, align_deltas};
 use crate::logic::command::{InitContent, ToileError, ToileEvent, ToileOutcome, ZTarget};
 use crate::logic::index::ElementBounds;
 use crate::logic::model::{
@@ -209,6 +210,67 @@ impl ToileState {
             let _ = em.insert("y", y);
             self.update_bounds(id, &em);
             touched = true;
+        }
+        if !touched {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        self.recompute_groups();
+        self.doc.commit();
+        self.emit_with_update(vec![self.viewport_event()])
+    }
+
+    /// Align or distribute the named nodes, as one batch and one undo item
+    /// (`TOILE-037`).
+    ///
+    /// The boxes are the derived, rotation-expanded ones the picker and the
+    /// selection box already use, so a rotated element aligns by what the user
+    /// sees rather than by an edge hidden under its own tilt. A group is one box
+    /// and its whole subtree takes the group's translation, which is what
+    /// `move_elements` does for a drag. A locked element is dropped before the
+    /// union is measured: it cannot move, and letting it set the reference edge
+    /// would let a locked background swallow the whole operation (`TOILE-234`).
+    pub(super) fn align_elements(&mut self, ids: &[ElementId], op: AlignOp) -> ToileOutcome {
+        // Selection order, deduplicated: an id repeated in the selection would
+        // otherwise weigh twice in a distribution.
+        let mut seen = HashSet::new();
+        let mut movable = Vec::new();
+        for id in ids {
+            if !seen.insert(id.clone()) {
+                continue;
+            }
+            let Some(bounds) = self.bounds.get(id).copied() else {
+                continue; // an id nobody minted, or a stale selection
+            };
+            if self
+                .element_map(id)
+                .is_some_and(|em| bool_of(&em, "locked"))
+            {
+                continue;
+            }
+            movable.push((id.clone(), bounds));
+        }
+        let boxes: Vec<Rect> = movable.iter().map(|(_, b)| *b).collect();
+        let deltas = align_deltas(&boxes, op);
+
+        let mut touched = false;
+        for ((id, _), delta) in movable.iter().zip(deltas) {
+            if delta == Vec2::ZERO {
+                continue;
+            }
+            let mut leaves = HashSet::new();
+            self.collect_leaves(id, &mut leaves);
+            for leaf in &leaves {
+                let Some(em) = self.element_map(leaf) else {
+                    continue;
+                };
+                if bool_of(&em, "locked") {
+                    continue; // a locked leaf inside a moving group stays put
+                }
+                let _ = em.insert("x", f64_of(&em, "x") + delta.x);
+                let _ = em.insert("y", f64_of(&em, "y") + delta.y);
+                self.update_bounds(leaf, &em);
+                touched = true;
+            }
         }
         if !touched {
             return ToileOutcome::display_only(Vec::new());
@@ -441,6 +503,7 @@ mod inner_tests {
 
     use kurbo::{Point, Size};
 
+    use crate::logic::align::AlignOp;
     use crate::logic::command::{InitContent, ToileCommand};
     use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
     use crate::logic::state::ToileState;
@@ -488,5 +551,130 @@ mod inner_tests {
         // One Undo removes the whole batch (creates + restyle + group).
         st.handle_command(ToileCommand::Undo);
         assert_eq!(st.element_count(), 0);
+    }
+
+    /// A rect of `w` x 10 at `(x, y)`, committed on its own so each fixture is
+    /// its own undo item and the alignment under test is the last one.
+    fn rect(st: &mut ToileState, x: f64, y: f64, w: f64) -> crate::logic::model::ElementId {
+        let id = st
+            .create_element_inner(
+                ElementKind::Shape(ShapeKind::Rect),
+                Point::new(x, y),
+                Size::new(w, 10.0),
+                InitContent::None,
+                None,
+            )
+            .expect("create");
+        st.doc.commit();
+        id
+    }
+
+    /// `TOILE-037`: the whole batch is one undo item, and one Undo puts every
+    /// element back where it was.
+    #[test]
+    fn an_alignment_is_one_undo_item() {
+        let mut st = ToileState::new();
+        let a = rect(&mut st, 0.0, 0.0, 10.0);
+        let b = rect(&mut st, 40.0, 30.0, 10.0);
+        let c = rect(&mut st, 90.0, 60.0, 10.0);
+        let before: Vec<_> = [&a, &b, &c]
+            .map(|id| st.bounds_of(id).expect("bounds"))
+            .into();
+
+        st.handle_command(ToileCommand::AlignElements {
+            ids: vec![a.clone(), b.clone(), c.clone()],
+            op: AlignOp::Left,
+        });
+        assert!(
+            [&a, &b, &c]
+                .iter()
+                .all(|id| st.bounds_of(id).expect("bounds").x0 == 0.0)
+        );
+
+        st.handle_command(ToileCommand::Undo);
+        let after: Vec<_> = [&a, &b, &c]
+            .map(|id| st.bounds_of(id).expect("bounds"))
+            .into();
+        assert_eq!(before, after, "one undo unwinds the whole batch");
+    }
+
+    /// `TOILE-204`: an element the selection does not name keeps its place, and
+    /// so does the axis the operation does not work on.
+    #[test]
+    fn an_alignment_moves_only_what_it_names() {
+        let mut st = ToileState::new();
+        let a = rect(&mut st, 0.0, 0.0, 10.0);
+        let b = rect(&mut st, 40.0, 30.0, 10.0);
+        let bystander = rect(&mut st, 500.0, 500.0, 10.0);
+
+        st.handle_command(ToileCommand::AlignElements {
+            ids: vec![a, b.clone()],
+            op: AlignOp::Right,
+        });
+        assert_eq!(st.bounds_of(&bystander).expect("bounds").x0, 500.0);
+        assert_eq!(st.bounds_of(&b).expect("bounds").y0, 30.0);
+    }
+
+    /// `TOILE-234`: a locked element neither moves nor sets the reference edge.
+    #[test]
+    fn a_locked_element_takes_no_part() {
+        let mut st = ToileState::new();
+        let background = rect(&mut st, -500.0, 0.0, 10.0);
+        let a = rect(&mut st, 0.0, 0.0, 10.0);
+        let b = rect(&mut st, 40.0, 0.0, 10.0);
+        st.handle_command(ToileCommand::LockElements {
+            ids: vec![background.clone()],
+            locked: true,
+        });
+
+        st.handle_command(ToileCommand::AlignElements {
+            ids: vec![background.clone(), a.clone(), b.clone()],
+            op: AlignOp::Left,
+        });
+        assert_eq!(st.bounds_of(&background).expect("bounds").x0, -500.0);
+        // The union is the two unlocked boxes, so they meet at 0, not at -500.
+        assert_eq!(st.bounds_of(&a).expect("bounds").x0, 0.0);
+        assert_eq!(st.bounds_of(&b).expect("bounds").x0, 0.0);
+    }
+
+    /// A group aligns by its own box and carries its subtree, the way a drag
+    /// does.
+    #[test]
+    fn a_group_aligns_as_one_box() {
+        let mut st = ToileState::new();
+        let a = rect(&mut st, 100.0, 0.0, 10.0);
+        let b = rect(&mut st, 130.0, 0.0, 10.0);
+        let group = st.group_inner(&[a.clone(), b.clone()]).expect("group");
+        st.doc.commit();
+        st.rematerialize_layers();
+        st.recompute_groups();
+        let far = rect(&mut st, 0.0, 40.0, 10.0);
+
+        st.handle_command(ToileCommand::AlignElements {
+            ids: vec![group.clone(), far],
+            op: AlignOp::Left,
+        });
+        // The group's left edge lands on the union edge, and both members moved
+        // by the same amount.
+        assert_eq!(st.bounds_of(&group).expect("bounds").x0, 0.0);
+        assert_eq!(st.bounds_of(&a).expect("bounds").x0, 0.0);
+        assert_eq!(st.bounds_of(&b).expect("bounds").x0, 30.0);
+    }
+
+    /// An alignment that would write nothing writes nothing: no commit, so no
+    /// undo item and no delta for the peers.
+    #[test]
+    fn an_alignment_that_changes_nothing_mints_no_undo_item() {
+        let mut st = ToileState::new();
+        let a = rect(&mut st, 0.0, 0.0, 10.0);
+        let b = rect(&mut st, 0.0, 40.0, 10.0);
+        st.handle_command(ToileCommand::AlignElements {
+            ids: vec![a.clone(), b],
+            op: AlignOp::Left,
+        });
+        // The last undo item is still the second create, which it unwinds.
+        st.handle_command(ToileCommand::Undo);
+        assert_eq!(st.element_count(), 1);
+        assert!(st.bounds_of(&a).is_some());
     }
 }

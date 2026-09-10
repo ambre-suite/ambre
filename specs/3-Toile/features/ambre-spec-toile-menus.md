@@ -28,6 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-123` | `OBS` | The View menu MUST show all five zoom actions. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::view_menu_exposes_all_zoom_actions` asserts the five zoom ids are present | verified |
 | `TOILE-UI-124` | `OBS` | The Edit menu MUST show undo and redo, and MUST reuse the clipboard ids rather than mint its own. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::edit_menu_carries_undo_redo_and_reuses_clipboard_ids` asserts undo and redo, then asserts the copy and select-all ids are the context menu's own | verified |
 | `TOILE-UI-125` | `OBS` | The Object menu MUST reuse the group, z-order and lock ids. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::object_menu_reuses_z_order_and_lock_ids` asserts the six ids are the ones the context menu emits | verified |
+| `TOILE-UI-355` | `OBS` | The Object menu MUST carry the six alignments and the two distributions, and each MUST resolve against the selection rather than to a board command of its own. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::the_align_entries_sit_under_object` asserts the eight ids are in the layout and that none of them resolves through `menu_bar_edit`; `ambre_toile::ui::menu::tests::an_align_id_resolves_to_one_batch_over_the_selection` asserts what each one becomes | verified |
 | `TOILE-UI-047` | `OBS` | A context-menu entry MUST be left out when it does not apply to the selection under the cursor. | this spec section 3 | none: the entry builder is wasm-only and reached by no test. What is covered is the scope the builder reads -- section 1.2 -- not the omission it performs | unverified |
 | `TOILE-UI-126` | `OBS` | An entry that would move or remove a locked element MUST be left out when the selection is locked. | this spec section 3 | none, and **the rule fails today**: the builder gates only group, ungroup, lock, unlock and the frame pair; cut, delete, duplicate and the four z-order rows are pushed unconditionally, so a locked element is offered every one of them | unverified |
 | `TOILE-UI-052` | `OBS` | A shortcut shown beside an entry MUST be the one the keymap binds. | this spec section 3 | none. `ambre_toile::ui::menu_bar::tests::shortcuts_render_canonically` covers how a binding renders, not that the rendered binding is the one bound: the canvas decodes most board chords itself, outside the keymap the bar reads | unverified |
@@ -93,7 +94,7 @@ status values are normative in `ambre-spec-template.md`.
   by the feature that owns the command.
 * **Boundary.** none: a menu is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. What an entry commits leaves as a command.
-* **Verification.** 29 `verified`, 18 `unverified`, against 24 distinct mechanisms -- one more than
+* **Verification.** 30 `verified`, 18 `unverified`, against 25 distinct mechanisms -- one more than
   the seven rows cited before the split, and the gain is a single test no row had claimed. The
   ledger did not grow: a cell naming ten tests for one rule now states ten rules, each naming the
   assertion that holds it, and four of the twenty-nine hold by construction. What the split
@@ -159,7 +160,8 @@ command with no selection to read, which is why that map is a pure function.
 |---|---|
 | empty board | paste, select all |
 | one unlocked element | cut, copy, duplicate, delete; the four z-order moves; lock; add to or remove from the frame containing it; a reaction |
-| several elements | the same, plus group |
+| several elements | the same, plus group and the six alignments |
+| three or more elements | the same, plus the two distributions |
 | a group | the same, plus ungroup |
 | a locked element | unlock -- and, today, every entry that would move or remove it as well (`TOILE-UI-126`) |
 
@@ -178,7 +180,7 @@ user (`TOILE-UI-050`).
 |---|---|
 | Edit | undo, redo, the clipboard entries the context menu also carries, and select all |
 | View | zoom in, zoom out, 100 %, fit the board, fit the selection, the pointer mode, the panels |
-| Object | group and ungroup, the four z-order moves, lock and unlock |
+| Object | group and ungroup, the four z-order moves, lock and unlock, the six alignments and the two distributions, and the two link entries |
 | File | bringing a file onto the board and taking the board out as one (`features/ambre-spec-toile-import-export.md section 4`), then the presentation entry point |
 | Present | the presentation entry point, listed in both, and the deck panel (`features/ambre-spec-toile-presentation.md section 4`) |
 
@@ -223,10 +225,11 @@ specified in their own document, and this one restates none of them.
   accelerator for each.
 * **No entry opens the menu from the keyboard.** The shared component navigates by keyboard once
   open, and nothing opens it, so a user without a pointer reaches none of these commands.
-* **Two surfaces the design names carry no entry.** Align and distribute and the link appear in the
-  described menus and in none of the built ones, because neither command exists in the workspace.
-  Both are Stories -- "Align and distribute" and "Hyperlinks and go-to-frame"
-  (`ambre-roadmap.md` E4).
+* **The context menu hides the align rows by count alone.** The six alignments appear from two
+  selected elements and the two distributions from three, and neither gate reads the lock: a pair
+  where one element is locked is still offered every alignment, and the operation then moves one
+  box and refuses the other (`TOILE-234`, `features/ambre-spec-toile-elements.md`). It is the same
+  hole as `TOILE-UI-126`, in a newer row.
 * **The comment entry opens the panel and comments on nothing.** The View menu opens the board-wide
   list, and no context-menu entry drops a thread on the element under the cursor: the tool and the
   pin are the only ways in (`features/ambre-spec-toile-comments.md section 4`).

@@ -201,6 +201,16 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
             row(menu::LOCK),
             row(menu::UNLOCK),
             MenuRow::Separator,
+            row(menu::ALIGN_LEFT),
+            row(menu::ALIGN_HCENTER),
+            row(menu::ALIGN_RIGHT),
+            row(menu::ALIGN_TOP),
+            row(menu::ALIGN_VCENTER),
+            row(menu::ALIGN_BOTTOM),
+            MenuRow::Separator,
+            row(menu::DISTRIBUTE_H),
+            row(menu::DISTRIBUTE_V),
+            MenuRow::Separator,
             row(LINK_SET),
             row(LINK_CLEAR),
         ],
@@ -394,6 +404,30 @@ mod tests {
             menu::UNLOCK,
         ] {
             assert!(cmds.contains(&id), "Object missing {id:?}");
+        }
+    }
+
+    /// The Object menu carries the six alignments and the two distributions,
+    /// and each resolves against the selection rather than to a direct board
+    /// command.
+    #[test]
+    fn the_align_entries_sit_under_object() {
+        let cmds = item_commands(&menu_layout(MenuId::Object));
+        for id in [
+            menu::ALIGN_LEFT,
+            menu::ALIGN_HCENTER,
+            menu::ALIGN_RIGHT,
+            menu::ALIGN_TOP,
+            menu::ALIGN_VCENTER,
+            menu::ALIGN_BOTTOM,
+            menu::DISTRIBUTE_H,
+            menu::DISTRIBUTE_V,
+        ] {
+            assert!(cmds.contains(&id), "{id:?} missing from the Object menu");
+            assert!(
+                menu_bar_edit(id).is_none(),
+                "{id:?} needs the selection a menu id does not carry"
+            );
         }
     }
 }

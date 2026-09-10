@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: ELEMENTS ON THE BOARD
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the lifecycle ships; the lock misses the delete, half the commands
-swallow an id nobody minted, and align has no code.
+**Implementation:** partial -- the lifecycle ships, align and distribute with it; the lock misses
+the delete, and half the commands swallow an id nobody minted.
 
 > Everything on a board is an element: a note, a shape, a picture, a frame, a stroke. One set of
 > operations moves them, resizes them, rotates them, restyles them, locks them and deletes them,
@@ -78,8 +78,10 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `TOILE-037` | POST | Aligning or distributing a selection MUST be one convergent batch and one undo item. | this spec section 4 | not built -- lands with the "Align and distribute" Story (`ambre-roadmap.md` E4) | unimplemented |
-| `TOILE-204` | FRAME | Aligning or distributing MUST NOT move an element the selection does not hold. | this spec section 4 | not built -- lands with the "Align and distribute" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `TOILE-037` | POST | Aligning or distributing a selection MUST be one convergent batch and one undo item. | this spec section 4 | `ambre_toile::logic::state::elements::inner_tests::an_alignment_is_one_undo_item`, which reads every box back after one `Undo`; the convergence half is the 2-peer property test `logic::convergence_tests::two_peers_converge`, whose operation strategy now draws an align over every live element -- the one operation that rewrites the whole board's coordinates at once | verified |
+| `TOILE-204` | FRAME | Aligning or distributing MUST NOT move an element the selection does not hold, and MUST NOT move any element on the axis it does not work on. | this spec section 4 | `ambre_toile::logic::state::elements::inner_tests::an_alignment_moves_only_what_it_names`, which reads back a bystander and the untouched axis of a named box | verified |
+| `TOILE-234` | FRAME | A locked element MUST take no part in an alignment: it MUST NOT move, and it MUST NOT set the edge the others align to. | this spec section 4 | `ambre_toile::logic::state::elements::inner_tests::a_locked_element_takes_no_part`, where a locked box 500 units to the left neither moves nor drags the others onto its edge | verified |
+| `TOILE-235` | PRE | An alignment MUST need two boxes and a distribution MUST need three; below that, and where every translation comes out zero, the operation MUST write nothing -- no commit, no undo item, no delta. | this spec section 4 | `ambre_toile::logic::align::tests::a_lone_box_is_already_aligned` and `::a_pair_has_nothing_to_distribute` for the counts, `ambre_toile::logic::state::elements::inner_tests::an_alignment_that_changes_nothing_mints_no_undo_item` for the silent handler | verified |
 
 * **Budget.** a command that writes one register and re-derives the visible set under 1 ms, the
   transform-command row of `ambre-spec-budgets.md section 1`. No bench measures it. A move over a
@@ -87,13 +89,13 @@ status values are normative in `ambre-spec-template.md`.
   multiplier (`features/ambre-spec-toile-tools.md`).
 * **Boundary.** none of its own: an element lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). No lifecycle command opens a socket or holds a key.
-* **Verification.** 19 `verified`, 7 `unverified`, 2 `unimplemented`. The count grows and the
-  evidence does not: twelve tests back it, one fewer than the flat table cited, and six of the
-  nineteen are structural rows whose proof is the shape of the handler rather than an assertion.
-  What the split bought is the refusals a conjunction was hiding. The lock is one line now instead
-  of a clause, and it is `unverified` across five commands; a missing id is two lines, one refused
-  and one swallowed; a seed that does not match its kind had no test of its own and was riding on
-  the row that holds the derived kind.
+* **Verification.** 23 `verified`, 7 `unverified`, 0 `unimplemented`. Align and distribute closed
+  the last two and opened two more, and it is the best-evidenced corner of the table: nine tests over
+  the pure geometry, five over the handler, and a place in the 2-peer property strategy, which is
+  what lets `TOILE-037` claim convergence rather than assert it. Elsewhere the count still grows
+  faster than the evidence: six of the twenty-three are structural rows whose proof is the shape of
+  the handler, the lock is `unverified` across five commands, and a missing id is two lines, one
+  refused and one swallowed.
 
 ---
 
@@ -132,6 +134,7 @@ kind is that document's field table.
 | `RestyleElements { ids, style }` | one whole style register per element (`TOILE-018`) |
 | `SetText { id, text }` | the whole body of a note or a text element (`TOILE-030`) |
 | `LockElements { ids, locked }` | the advisory lock, set or cleared |
+| `AlignElements { ids, op }` | one of eight one-shot batches over the selection: six alignments and two distributions (`TOILE-037`) |
 | `DeleteElements { ids }` | the removal, cascading through a group's members |
 
 **Steps, when an element is created:**
@@ -183,15 +186,29 @@ geometry is tested on the UI thread (`features/ambre-spec-toile-selection.md`).
 | an arrow key, alone or with `Shift` | `MoveElements` by one world unit, or ten |
 | the style controls | `RestyleElements` (`features/ambre-spec-toile-styles.md`) |
 | Lock and Unlock, in the object menu or the context menu | `LockElements` (`features/ambre-spec-toile-menus.md`) |
+| the eight align and distribute entries, in the object menu or the context menu | `AlignElements` (`features/ambre-spec-toile-menus.md`) |
 
 **What a lock looks like.** A locked element shows no handles and cannot be picked, so it stops
 absorbing clicks over a background someone drew on
 (`features/ambre-spec-toile-selection.md`). The flag binds only the commands that read it, and the
 delete is not one of them (`TOILE-033`).
 
-**Align and distribute** (`TOILE-037`) is designed and unbuilt: no command, no menu entry, no
-button. What it will do is align a selection to a shared edge or centre of its union box, and space
-three or more elements evenly along one axis, as one undo item.
+**Align and distribute** (`TOILE-037`) is one command, `AlignElements { ids, op }`, over eight
+operations: six put every selected box on an edge or a centre line of the selection's **union box**,
+and two equalize the **gaps** between three or more boxes with the extremes pinned. The reference is
+always the selection itself, never the viewport and never a frame, so the selection as a whole never
+moves.
+
+The boxes are the derived rotation-expanded ones the picker already uses, so a rotated element
+aligns by what the user sees. A group is one box and carries its subtree, the way a drag does. A
+locked element is dropped before the union is measured (`TOILE-234`): it cannot move, and a locked
+full-page background setting the reference edge would swallow the whole operation. Every translation
+lands under one `doc.commit()`, so a peer sees a whole alignment or none of it.
+
+The entries are the eight rows of the **Object menu**, and the context menu shows them only where
+they apply -- the six alignments from two selected elements, the two distributions from three
+(`features/ambre-spec-toile-menus.md`). No keyboard chord and no toolbar button: the floating
+selection toolbar carries style, not geometry.
 
 ---
 
@@ -201,6 +218,9 @@ three or more elements evenly along one axis, as one undo item.
 | :--- | :--- | :--- |
 | Every kind shares one lifecycle | frame-specific and group-specific commands, which the earlier design carried | they duplicate move, resize, rotate, delete and reorder once per kind, and split the paint order across as many structures. A frame, a group and a note differ only by the content they carry, so a move is a move |
 | Align and distribute is a batch of coordinates | a persisted alignment rule on the container | it makes two peers fight over a constraint neither can see. The result is a set of positions, and the positions are what converges |
+| A distribution equalizes the gaps between boxes | equalizing the distance between their centres | on a board of notes and shapes the sizes differ, and even centres leave uneven whitespace -- the thing the user is actually looking at. Even centres are the office-suite convention; even gaps are the whiteboard one, and Toile is a whiteboard |
+| A distribution keeps the extremes where they are, even when the boxes overlap | clamping the gap at zero, the way the auto-layout solver does | pinning the extremes is what makes the operation idempotent and what makes two peers agree on the result. A clamp would push an extreme, so running it twice would walk the selection across the board |
+| A locked element is dropped before the union is measured | keeping it in the union as an immovable guide | a guide is a feature nobody asked for here, and the failure mode is severe: a locked background covering the board makes every alignment snap the selection to a corner of the page |
 | A create is one commit, and an import is one commit for the whole batch | a commit inside every write | it makes an import of 400 elements 400 undo items. A user placing a note wants one undo and a user importing a file wants one undo, and both need the same handler, so the write and the commit are separate steps |
 | The lock refuses the write rather than hiding the element | a visual lock state, with the refusal on the transform | greying the element out would make a board built of colour unreadable, and locking exists so a user can draw over a background and keep clicking through it |
 | The bounds cache holds the rotated box | indexing the unrotated rectangle | it loses a rotated element at the edge of the screen. The index answers "what might be visible", and a rotated element sticks out of its own rectangle; over-approximating there costs one exact test per candidate and never drops a hit |
@@ -226,8 +246,13 @@ three or more elements evenly along one axis, as one undo item.
   been exercised against a locked element.
 * **Nothing measures the birth rectangle** (`TOILE-188`). A create writes the size it is given, so a
   zero or negative one mints an element that occupies no pixel and answers no pick.
-* **Align and distribute has no code** (`TOILE-037`). The command, its operation enumeration and the
-  inspector row that would emit it are all specified and absent from the workspace.
+* **Align and distribute has no chord and no button** (`TOILE-037`). It is reachable from the Object
+  menu and the context menu only. The floating selection toolbar carries style, and neither the
+  style inspector nor the keyboard offers it.
+* **Nothing aligns an arrow** (`TOILE-037`). The command names elements, so a selected connector --
+  which has a selection of its own now (`features/ambre-spec-toile-connectors.md`) -- is not
+  something the operation can take. An arrow has no box to align, only two ends, and what a
+  distribution would mean for one is not designed.
 * **Nothing asserts the per-kind default** (`TOILE-035`). A note is born yellow and square and
   everything else white; the only tests near it drive the picked colour and the paint, so a change to
   the seeded default would fail nothing.

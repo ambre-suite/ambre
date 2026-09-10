@@ -118,7 +118,7 @@ model and the GPU vector canvas.
 | `[x]` Connector labels | MVP | a caption on an arrow, editable in place |
 | `[x]` An arrow can be selected | MVP | click an arrow to select it, then delete, re-aim, restyle or reorder it |
 | `[x]` Hyperlinks and go-to-frame | MVP | a link on an element, followed to a URL or to another frame |
-| `[ ]` Align and distribute | MVP | align or space a selection evenly, as one undo item |
+| `[x]` Align and distribute | MVP | align or space a selection evenly, as one undo item |
 | `[ ]` No delta is lost on an export error | MVP | Toile drops a change when an export fails; Trame retries it. Align Toile on Trame |
 
 ---

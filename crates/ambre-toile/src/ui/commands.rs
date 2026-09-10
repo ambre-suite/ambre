@@ -111,6 +111,14 @@ describe! {
     SEND_BACK: menu::SEND_BACK, "Send to back", Some(IconId("arrange-send-to-back")), &[], OBJECT;
     LOCK: menu::LOCK, "Lock", Some(IconId("lock")), &[], OBJECT;
     UNLOCK: menu::UNLOCK, "Unlock", Some(IconId("lock-open-variant")), &[], OBJECT;
+    ALIGN_LEFT: menu::ALIGN_LEFT, "Align left", Some(IconId("align-horizontal-left")), &[], OBJECT;
+    ALIGN_HCENTER: menu::ALIGN_HCENTER, "Align horizontal centres", Some(IconId("align-horizontal-center")), &[], OBJECT;
+    ALIGN_RIGHT: menu::ALIGN_RIGHT, "Align right", Some(IconId("align-horizontal-right")), &[], OBJECT;
+    ALIGN_TOP: menu::ALIGN_TOP, "Align top", Some(IconId("align-vertical-top")), &[], OBJECT;
+    ALIGN_VCENTER: menu::ALIGN_VCENTER, "Align vertical centres", Some(IconId("align-vertical-center")), &[], OBJECT;
+    ALIGN_BOTTOM: menu::ALIGN_BOTTOM, "Align bottom", Some(IconId("align-vertical-bottom")), &[], OBJECT;
+    DISTRIBUTE_H: menu::DISTRIBUTE_H, "Distribute horizontally", Some(IconId("align-horizontal-distribute")), &[], OBJECT;
+    DISTRIBUTE_V: menu::DISTRIBUTE_V, "Distribute vertically", Some(IconId("align-vertical-distribute")), &[], OBJECT;
     ADD_TO_FRAME: menu::ADD_TO_FRAME, "Add to frame", Some(IconId("image-frame")), &[], OBJECT;
     REMOVE_FROM_FRAME: menu::REMOVE_FROM_FRAME, "Remove from frame", Some(IconId("selection-drag")), &[], OBJECT;
     SELECT_ALL: menu::SELECT_ALL, "Select all", Some(IconId("select-all")), &[KeyBinding::primary('a')], SELECTION;

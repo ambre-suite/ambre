@@ -6,6 +6,7 @@
 //! [`stroke`] smoothing. The UI renderer, presentation mode and interop paths
 //! arrive in later crates / slices (Epic `E4`).
 
+pub mod align;
 pub mod animate;
 pub mod autolayout;
 pub mod boolean;
@@ -17,6 +18,7 @@ pub mod model;
 pub mod state;
 pub mod stroke;
 
+pub use align::align_deltas;
 pub use animate::{AnimatedElement, FrameSnapshot, SnapElement, ease_in_out_cubic, smart_animate};
 pub use autolayout::{Align, AutoLayout, Direction, Sizing, solve_layout};
 pub use boolean::boolean_op;

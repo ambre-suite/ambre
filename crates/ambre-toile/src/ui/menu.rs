@@ -23,8 +23,8 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    DisplayElement, DisplayNode, DisplayViewport, ElementId, ElementKind, NodeId, Reaction,
-    ReactionKind, ToileCommand, ZTarget,
+    AlignOp, DisplayElement, DisplayNode, DisplayViewport, ElementId, ElementKind, NodeId,
+    Reaction, ReactionKind, ToileCommand, ZTarget,
 };
 use ambre_commands::CommandId;
 use kurbo::{Rect, Vec2};
@@ -69,6 +69,29 @@ pub const BACKWARD: CommandId = CommandId("toile.z.backward");
 pub const LOCK: CommandId = CommandId("toile.lock.lock");
 /// Unlock the selection.
 pub const UNLOCK: CommandId = CommandId("toile.lock.unlock");
+
+// -- Align and distribute (`toile-elements section 1.7`) ----------------
+// Eight one-shot batches over the selection: six put every box on an edge or
+// centre line of the selection's union box, two equalize the gaps between three
+// or more. Nothing is persisted -- the result is a set of coordinates, and the
+// coordinates are what converges.
+
+/// Put every selected box on the left edge of the selection.
+pub const ALIGN_LEFT: CommandId = CommandId("toile.align.left");
+/// Centre every selected box on the vertical mid-line of the selection.
+pub const ALIGN_HCENTER: CommandId = CommandId("toile.align.hcenter");
+/// Put every selected box on the right edge of the selection.
+pub const ALIGN_RIGHT: CommandId = CommandId("toile.align.right");
+/// Put every selected box on the top edge of the selection.
+pub const ALIGN_TOP: CommandId = CommandId("toile.align.top");
+/// Centre every selected box on the horizontal mid-line of the selection.
+pub const ALIGN_VCENTER: CommandId = CommandId("toile.align.vcenter");
+/// Put every selected box on the bottom edge of the selection.
+pub const ALIGN_BOTTOM: CommandId = CommandId("toile.align.bottom");
+/// Equalize the horizontal gaps between three or more selected boxes.
+pub const DISTRIBUTE_H: CommandId = CommandId("toile.align.distribute_h");
+/// Equalize the vertical gaps between three or more selected boxes.
+pub const DISTRIBUTE_V: CommandId = CommandId("toile.align.distribute_v");
 /// Add the selection to the frame that contains it.
 pub const ADD_TO_FRAME: CommandId = CommandId("toile.frame.add");
 /// Remove the selection from its containing frame.
@@ -111,6 +134,14 @@ pub const COMMANDS: &[CommandId] = &[
     BACKWARD,
     LOCK,
     UNLOCK,
+    ALIGN_LEFT,
+    ALIGN_HCENTER,
+    ALIGN_RIGHT,
+    ALIGN_TOP,
+    ALIGN_VCENTER,
+    ALIGN_BOTTOM,
+    DISTRIBUTE_H,
+    DISTRIBUTE_V,
     ADD_TO_FRAME,
     REMOVE_FROM_FRAME,
     SELECT_ALL,
@@ -276,6 +307,17 @@ pub fn resolve_menu_command(
             ids: ids(),
             locked: false,
         }],
+        // Align and distribute: one batch over the whole selection, whatever
+        // the operation. Logic owns the arithmetic -- it holds the boxes, and
+        // the culled display does not carry the ones off screen.
+        ALIGN_LEFT => align(selection, AlignOp::Left),
+        ALIGN_HCENTER => align(selection, AlignOp::HCenter),
+        ALIGN_RIGHT => align(selection, AlignOp::Right),
+        ALIGN_TOP => align(selection, AlignOp::Top),
+        ALIGN_VCENTER => align(selection, AlignOp::VCenter),
+        ALIGN_BOTTOM => align(selection, AlignOp::Bottom),
+        DISTRIBUTE_H => align(selection, AlignOp::DistributeH),
+        DISTRIBUTE_V => align(selection, AlignOp::DistributeV),
         // Frame membership: the frame is the geometric container of the selection.
         // Logic stays authoritative on membership (the display exposes no
         // parent-frame edge), so Remove is a best-effort against that container.
@@ -317,6 +359,14 @@ fn react_each(selection: &[ElementId], reaction: Option<Reaction>) -> Vec<ToileC
             reaction: reaction.clone(),
         })
         .collect()
+}
+
+/// The one align / distribute batch for the whole selection.
+fn align(selection: &[ElementId], op: AlignOp) -> Vec<ToileCommand> {
+    vec![ToileCommand::AlignElements {
+        ids: selection.to_vec(),
+        op,
+    }]
 }
 
 /// One `Reorder` command per selected element, targeting `to`.
@@ -627,5 +677,37 @@ mod tests {
         let dv = viewport(vec![]);
         assert!(resolve_menu_command(PASTE, &[], None, &dv).is_empty());
         assert!(resolve_menu_command(SELECT_ALL, &[], None, &dv).is_empty());
+    }
+
+    /// Every align id resolves to one batch over the whole selection: the
+    /// arithmetic is Logic's, because the culled display does not carry the
+    /// boxes that sit off screen.
+    #[test]
+    fn an_align_id_resolves_to_one_batch_over_the_selection() {
+        let dv = viewport(vec![
+            elem("a", ElementKind::Sticky, r(0.0, 0.0, 10.0, 10.0), false),
+            elem("b", ElementKind::Sticky, r(40.0, 0.0, 10.0, 10.0), false),
+        ]);
+        let sel = [eid("a"), eid("b")];
+        for (id, want) in [
+            (ALIGN_LEFT, AlignOp::Left),
+            (ALIGN_HCENTER, AlignOp::HCenter),
+            (ALIGN_RIGHT, AlignOp::Right),
+            (ALIGN_TOP, AlignOp::Top),
+            (ALIGN_VCENTER, AlignOp::VCenter),
+            (ALIGN_BOTTOM, AlignOp::Bottom),
+            (DISTRIBUTE_H, AlignOp::DistributeH),
+            (DISTRIBUTE_V, AlignOp::DistributeV),
+        ] {
+            let out = resolve_menu_command(id, &sel, None, &dv);
+            assert!(
+                matches!(
+                    out.as_slice(),
+                    [ToileCommand::AlignElements { ids, op }]
+                        if ids.as_slice() == sel && *op == want
+                ),
+                "{id:?} resolved to {out:?}"
+            );
+        }
     }
 }

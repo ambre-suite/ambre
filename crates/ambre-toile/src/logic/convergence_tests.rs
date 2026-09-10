@@ -11,6 +11,7 @@ use proptest::prelude::*;
 
 use ambre_bus::UserId;
 
+use crate::logic::align::AlignOp;
 use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
 use crate::logic::command::{
     CommentAnchor, DisplayGeom, DisplayNode, End, InitContent, PresencePayload, Reaction,
@@ -3407,6 +3408,12 @@ enum PeerOp {
         emoji: bool,
         weight: i32,
     },
+    // Align / distribute -- one batch rewriting the coordinates of every live
+    // element at once. Two peers aligning the same board concurrently write the
+    // same registers, which is exactly where a batch could tear.
+    AlignAll {
+        op: u8,
+    },
 }
 
 fn op_strategy() -> impl Strategy<Value = PeerOp> {
@@ -3437,6 +3444,7 @@ fn op_strategy() -> impl Strategy<Value = PeerOp> {
             dir,
             gap
         }),
+        (0u8..8).prop_map(|op| PeerOp::AlignAll { op }),
         (0usize..6, any::<bool>(), -2i32..3).prop_map(|(nth, emoji, weight)| PeerOp::ReactNth {
             nth,
             emoji,
@@ -3479,6 +3487,22 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
             }),
             None => return None,
         },
+        PeerOp::AlignAll { op } => {
+            let op = [
+                AlignOp::Left,
+                AlignOp::HCenter,
+                AlignOp::Right,
+                AlignOp::Top,
+                AlignOp::VCenter,
+                AlignOp::Bottom,
+                AlignOp::DistributeH,
+                AlignOp::DistributeV,
+            ][usize::from(*op) % 8];
+            st.handle_command(ToileCommand::AlignElements {
+                ids: ids.clone(),
+                op,
+            })
+        }
         PeerOp::RestyleNth { nth: n, fill } => match nth(*n) {
             Some(id) => {
                 let style = ElementStyle {

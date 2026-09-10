@@ -13,9 +13,10 @@
 
 use crate::ui::commands as registry;
 use crate::ui::menu::{
-    ADD_TO_FRAME, BACKWARD, BRING_FRONT, COPY, CUT, CtxScope, DELETE, DUPLICATE, FORWARD, GROUP,
-    LOCK, PASTE, REACT_CHECK, REACT_CLEAR, REACT_HEART, REACT_PARTY, REACT_THUMBSUP,
-    REMOVE_FROM_FRAME, SELECT_ALL, SEND_BACK, UNGROUP, UNLOCK,
+    ADD_TO_FRAME, ALIGN_BOTTOM, ALIGN_HCENTER, ALIGN_LEFT, ALIGN_RIGHT, ALIGN_TOP, ALIGN_VCENTER,
+    BACKWARD, BRING_FRONT, COPY, CUT, CtxScope, DELETE, DISTRIBUTE_H, DISTRIBUTE_V, DUPLICATE,
+    FORWARD, GROUP, LOCK, PASTE, REACT_CHECK, REACT_CLEAR, REACT_HEART, REACT_PARTY,
+    REACT_THUMBSUP, REMOVE_FROM_FRAME, SELECT_ALL, SEND_BACK, UNGROUP, UNLOCK,
 };
 use ambre_chrome::MenuEntry;
 use ambre_chrome::commands::{CommandId, Locale};
@@ -93,6 +94,27 @@ pub fn context_entries_for(scope: &CtxScope) -> Vec<MenuEntry> {
         }
         if scope.any_locked {
             push_all(&mut entries, &[UNLOCK]);
+        }
+    }
+
+    // Align and distribute: an alignment needs two boxes to have a reference
+    // edge, a distribution needs three to have an interior gap. Below those
+    // counts the rows are omitted rather than shown inert (the Trame pattern).
+    if scope.count >= 2 {
+        entries.push(MenuEntry::separator());
+        push_all(
+            &mut entries,
+            &[
+                ALIGN_LEFT,
+                ALIGN_HCENTER,
+                ALIGN_RIGHT,
+                ALIGN_TOP,
+                ALIGN_VCENTER,
+                ALIGN_BOTTOM,
+            ],
+        );
+        if scope.count >= 3 {
+            push_all(&mut entries, &[DISTRIBUTE_H, DISTRIBUTE_V]);
         }
     }
 

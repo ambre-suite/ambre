@@ -708,6 +708,26 @@ pub enum Direction {
     Wrap,
 }
 
+/// What an [`ToileCommand::AlignElements`] does to the selection it names
+/// (`toile-elements section 1.7`).
+///
+/// The six alignments put every box on one edge or centre line of the
+/// selection's union box; the two distributions pin the extreme boxes and
+/// equalize the gaps between the rest. Distinct from [`Align`], which is a
+/// persisted auto-layout rule on a frame: this one is a one-shot batch of
+/// coordinates and the document keeps no trace of it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AlignOp {
+    Left,
+    HCenter,
+    Right,
+    Top,
+    VCenter,
+    Bottom,
+    DistributeH,
+    DistributeV,
+}
+
 /// Distribution of children along the main axis within the free space
 /// (`toile-auto-layout`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -853,6 +873,19 @@ pub enum ToileCommand {
     MoveElements {
         ids: Vec<ElementId>,
         delta: Vec2,
+    },
+    /// Align or distribute a selection (`toile-elements section 1.7`). One
+    /// batch, one undo item: the handler computes every translation from the
+    /// boxes of the named nodes and writes them under a single commit, so no
+    /// peer ever sees half an alignment.
+    ///
+    /// `ids` are the selected nodes, not their leaves: a group aligns by its own
+    /// box and carries its subtree along. An id nobody minted is skipped, and a
+    /// locked element takes no part -- neither moved nor counted in the union
+    /// (`TOILE-234`).
+    AlignElements {
+        ids: Vec<ElementId>,
+        op: AlignOp,
     },
     ResizeElement {
         id: ElementId,
