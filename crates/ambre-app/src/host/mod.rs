@@ -44,7 +44,7 @@ use ambre_draw::{
     Affine, Alignment, Brush, Color, DrawSurface, Point, PositionedLayoutItem, Rect, Size,
 };
 use ambre_toile::ui::ToileView;
-use ambre_toile::ui::embed::VisibleEmbed;
+use ambre_toile::ui::embed::{VisibleEmbed, VisibleWebEmbed};
 use ambre_trame::ui::TrameView;
 
 use base64::Engine as _;
@@ -54,6 +54,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 // (AppView, DocSwitcher, helpers) via `use super::*`.
 mod frame;
 mod run;
+mod web_embed;
 
 pub use frame::{FrameHost, MakeChild};
 pub use run::run_with;
@@ -244,6 +245,16 @@ impl AppView {
     fn visible_embeds(&self) -> Vec<VisibleEmbed> {
         match self {
             AppView::Toile(v) => v.visible_embeds(),
+            AppView::Trame(_) => Vec::new(),
+        }
+    }
+
+    /// The web pages this view wants framed, projected to screen space
+    /// (`TOILE-088`). Only a Toile embeds a page; every other app returns an
+    /// empty set, so the shell mounts no frame for it.
+    fn visible_web_embeds(&self) -> Vec<VisibleWebEmbed> {
+        match self {
+            AppView::Toile(v) => v.visible_web_embeds(),
             AppView::Trame(_) => Vec::new(),
         }
     }

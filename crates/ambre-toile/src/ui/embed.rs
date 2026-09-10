@@ -341,8 +341,24 @@ pub struct VisibleWebEmbed {
     /// The address, as stored -- already normalized when it was placed.
     pub url: String,
     /// Where the frame goes, in physical screen pixels: the AABB of the
-    /// element's quad, like a nested document's.
+    /// element's quad, like a nested document's. What the board clips to.
     pub screen_rect: Rect,
+    /// The frame's own layout size, in world units -- the element's size, and
+    /// **not** a function of the zoom.
+    ///
+    /// A page is laid out at this size once and then scaled by the transform
+    /// below, so zooming the board moves a frame rather than reflowing the page
+    /// inside it. Sizing the frame in screen pixels instead would re-run the
+    /// page's layout on every wheel notch, at a cost the board does not control.
+    pub layout_size: Size,
+    /// Layout units -> physical screen pixels: where the frame sits, turned by
+    /// the element's own rotation. A caller working in CSS pixels divides by the
+    /// device pixel ratio.
+    pub to_screen: Affine,
+    /// View-local focus, on the same arbitration as a nested document's: a click
+    /// enters, a drag moves. Until it is entered the frame must let the pointer
+    /// through to the board, or the embed could never be moved or resized.
+    pub focused: bool,
 }
 
 /// The web `embed`s of `display`, projected for the shell. Order follows the
@@ -351,6 +367,7 @@ pub struct VisibleWebEmbed {
 pub fn visible_web_embeds(
     display: &DisplayViewport,
     cam: &ViewportTransform,
+    focused: Option<&ElementId>,
 ) -> Vec<VisibleWebEmbed> {
     display
         .nodes
@@ -366,6 +383,11 @@ pub fn visible_web_embeds(
                 element: e.id.clone(),
                 url: url.clone(),
                 screen_rect: screen_aabb(e, cam),
+                layout_size: Size::new(e.bounds.width(), e.bounds.height()),
+                to_screen: cam.world_to_screen()
+                    * e.transform
+                    * Affine::translate((e.bounds.x0, e.bounds.y0)),
+                focused: focused == Some(&e.id),
             })
         })
         .collect()
@@ -575,17 +597,26 @@ fn references(display: &DisplayViewport, document_id: &DocumentId) -> bool {
     embedded_docs(display).any(|(id, _)| &id == document_id)
 }
 
-/// The `doc_embed` under a world point, if any: the topmost one whose bounds
-/// contain it. Used to resolve a click to a focus target ("Input focus").
-/// Mirrors `hit::exact_hit`'s rule for this geometry (bounds in the local frame),
+/// The embed under a world point, if any: the topmost one whose bounds contain
+/// it. Used to resolve a click to a focus target ("Input focus"). Mirrors
+/// `hit::exact_hit`'s rule for this geometry (bounds in the local frame),
 /// including the `locked` skip -- a locked embed is not interactive.
+///
+/// Both kinds, because the gesture is the same for both: a click enters, a drag
+/// moves. What entering means differs -- a nested document takes canvas events
+/// through the board, a web page takes DOM events directly from its frame -- and
+/// that is settled downstream of this.
 pub fn embed_at(display: &DisplayViewport, world: Point) -> Option<&DisplayElement> {
     display
         .nodes
         .iter()
         .rev()
         .filter_map(|node| match node {
-            DisplayNode::Element(e) if matches!(e.geom, DisplayGeom::DocEmbed { .. }) => Some(e),
+            DisplayNode::Element(e)
+                if matches!(e.geom, DisplayGeom::DocEmbed { .. } | DisplayGeom::Embed(_)) =>
+            {
+                Some(e)
+            }
             _ => None,
         })
         .find(|e| !e.locked && e.bounds.contains(e.transform.inverse() * world))
@@ -1322,7 +1353,7 @@ mod web_embed_tests {
             DisplayNode::Element(nested),
         ]);
 
-        let got = visible_web_embeds(&dv, &cam());
+        let got = visible_web_embeds(&dv, &cam(), None);
         assert_eq!(got.len(), 1, "one frame, for the one web embed");
         assert_eq!(got[0].url, "https://example.com");
         assert_eq!(got[0].element.0, "w");
@@ -1337,7 +1368,32 @@ mod web_embed_tests {
             Rect::new(0.0, 0.0, 10.0, 10.0),
             0.0,
         ))]);
-        assert!(visible_web_embeds(&dv, &cam()).is_empty());
+        assert!(visible_web_embeds(&dv, &cam(), None).is_empty());
+    }
+
+    /// A page is laid out once, at the element's world size, and moved by the
+    /// transform: zooming the board must not reflow the page inside the frame.
+    #[test]
+    fn the_frames_layout_size_does_not_move_with_the_zoom() {
+        let dv = viewport(vec![DisplayNode::Element(web(
+            "w",
+            Rect::new(0.0, 0.0, 100.0, 50.0),
+            "https://example.com",
+        ))]);
+        let mut zoomed = cam();
+        zoomed.zoom = 3.0;
+        let one = visible_web_embeds(&dv, &cam(), None)[0].layout_size;
+        let two = visible_web_embeds(&dv, &zoomed, None)[0].layout_size;
+        assert_eq!(
+            one, two,
+            "the page's layout size is the element's, not the camera's"
+        );
+        assert_eq!(one, ambre_draw::Size::new(100.0, 50.0));
+        // The zoom lives in the transform instead.
+        let at = visible_web_embeds(&dv, &zoomed, None)[0].to_screen;
+        let far = at * ambre_draw::Point::new(100.0, 0.0);
+        let near = at * ambre_draw::Point::new(0.0, 0.0);
+        assert!(((far - near).hypot() - 300.0).abs() < 1e-9);
     }
 
     /// The frame goes where the element is, through the camera: a rotated embed
@@ -1352,8 +1408,8 @@ mod web_embed_tests {
 
         let mut zoomed = cam();
         zoomed.zoom = 2.0;
-        let one = visible_web_embeds(&dv, &cam())[0].screen_rect;
-        let two = visible_web_embeds(&dv, &zoomed)[0].screen_rect;
+        let one = visible_web_embeds(&dv, &cam(), None)[0].screen_rect;
+        let two = visible_web_embeds(&dv, &zoomed, None)[0].screen_rect;
         assert!(
             (two.width() - 2.0 * one.width()).abs() < 1e-9,
             "the frame scales with the camera"

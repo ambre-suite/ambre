@@ -5,6 +5,31 @@
 
 use super::super::*;
 
+/// Resolve what the user typed into an address the board may hold, and place it
+/// (`TOILE-087`, `TOILE-088`).
+///
+/// A refusal stays in the dialog: the user reads it beside the field they typed
+/// into and fixes it there, rather than finding a box on the board that never
+/// paints. `normalize_web_address` is the gate -- only `https` survives it, so
+/// nothing that could run in the board's stead reaches a frame.
+fn place_web_embed(
+    typed: RwSignal<String>,
+    error: RwSignal<Option<&'static str>>,
+    open: RwSignal<bool>,
+    placed: RwSignal<Option<toile_chrome::PlacedEmbed>>,
+) {
+    match toile_chrome::normalize_web_address(&typed.get_untracked()) {
+        Ok(url) => {
+            placed.set(Some(toile_chrome::PlacedEmbed {
+                target: toile_chrome::EmbedTarget::Web(url),
+                at: None,
+            }));
+            open.set(false);
+        }
+        Err(e) => error.set(Some(e.message())),
+    }
+}
+
 /// The single root view, rendered inside `<Router>` so it can read the client
 /// route. Renders the persistent chrome + canvas and overlays the landing on the
 /// `/` route. The document binding (open/close, canvas swap, rAF gate) is driven
@@ -117,6 +142,19 @@ pub(crate) fn AppRoot() -> impl IntoView {
         move |()| raf.resume()
     });
 
+    // Embed a web page (`TOILE-087`). The shell owns the dialog because it owns
+    // the DOM; the board is handed an address that has already been through
+    // `normalize_web_address`, so a refusal is read while the dialog is still on
+    // screen rather than after a box lands on the board.
+    let embed_web_open = RwSignal::new(false);
+    let embed_web_text = RwSignal::new(String::new());
+    let embed_web_error = RwSignal::new(None::<&'static str>);
+    // Embed another Ambre document (`TOILE-086`). Only the launcher knows which
+    // documents this user may open, so only it can offer the list. It reads the
+    // names the document list already carries and opens nothing, so placing an
+    // embed never touches the document it points at (`TOILE-225`).
+    let embed_doc_open = RwSignal::new(false);
+
     // TOFU verification modal (`ambre-spec-key-verification.md`). `tofu_open` mirrors
     // `tofu_prompt` (Some => open): the relay sets the prompt on a New/Changed
     // key, and this effect drives the native `<dialog>` accordingly. Same rAF
@@ -203,6 +241,19 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     // The file dialog is the shell's (`TOILE-IO-020`): the board
                     // learns of the file only once its bytes are read.
                     open_board_import_picker(toile_dropped_file, toasts);
+                } else if id == toile_chrome::EMBED_WEB {
+                    embed_web_text.set(String::new());
+                    embed_web_error.set(None);
+                    embed_web_open.set(true);
+                } else if id == toile_chrome::EMBED_DOC {
+                    // Refresh the list rather than trust whatever the landing
+                    // screen last fetched: a document shared since then is one
+                    // the user expects to find here.
+                    let _ = tx.try_send(LogicCommand::Rest {
+                        id: RequestId::next(),
+                        cmd: RestCommand::ListDocuments,
+                    });
+                    embed_doc_open.set(true);
                 } else {
                     toile_menu_cmd.set(Some(id));
                 }
@@ -860,6 +911,108 @@ pub(crate) fn AppRoot() -> impl IntoView {
 
                 <div class="ambre-dialog-actions">
                     <button on:click=move |_| share_open.set(false)>"Close"</button>
+                </div>
+            </div>
+        </Dialog>
+
+        // Embed a web page (`TOILE-087`). The address is normalized here, at the
+        // one place the user can still read the refusal (`TOILE-088`).
+        <Dialog
+            open=embed_web_open
+            on_open=on_open
+            on_close=on_close
+            class="ambre-embed-web"
+        >
+            <div class="ambre-embed-panel">
+                <h2>"Embed a web page"</h2>
+                <input
+                    type="url"
+                    placeholder="example.com"
+                    prop:value=move || embed_web_text.get()
+                    on:input=move |ev| {
+                        embed_web_text.set(event_target_value(&ev));
+                        embed_web_error.set(None);
+                    }
+                    on:keydown=move |ev: web_sys::KeyboardEvent| {
+                        if ev.key() == "Enter" {
+                            place_web_embed(
+                                embed_web_text,
+                                embed_web_error,
+                                embed_web_open,
+                                toile_placed_embed,
+                            );
+                        }
+                    }
+                />
+                <p class="ambre-embed-error" aria-live="polite">
+                    {move || embed_web_error.get().unwrap_or("")}
+                </p>
+                <div class="ambre-dialog-actions">
+                    <button on:click=move |_| embed_web_open.set(false)>"Cancel"</button>
+                    <button on:click=move |_| {
+                        place_web_embed(
+                            embed_web_text,
+                            embed_web_error,
+                            embed_web_open,
+                            toile_placed_embed,
+                        );
+                    }>"Embed"</button>
+                </div>
+            </div>
+        </Dialog>
+
+        // Embed another Ambre document (`TOILE-086`). The list is the one the
+        // launcher already holds: this opens no document, so it touches none
+        // (`TOILE-225`). The board itself is not offered -- a board embedding
+        // itself is a session that opens a session that opens a session.
+        <Dialog
+            open=embed_doc_open
+            on_open=on_open
+            on_close=on_close
+            class="ambre-embed-doc"
+        >
+            <div class="ambre-embed-panel">
+                <h2>"Embed a document"</h2>
+                <ul class="ambre-embed-docs">
+                    <For
+                        each=move || {
+                            let here = current_doc.get();
+                            docs.get()
+                                .into_iter()
+                                .filter(|d| Some(d.document_id) != here)
+                                .collect::<Vec<_>>()
+                        }
+                        key=|d| d.document_id
+                        let:doc
+                    >
+                        {
+                            let (document_id, doc_type) = (doc.document_id, doc.doc_type);
+                            let label = doc
+                                .name
+                                .clone()
+                                .unwrap_or_else(|| "Untitled".to_owned());
+                            view! {
+                                <li>
+                                    <button on:click=move |_| {
+                                        toile_placed_embed
+                                            .set(
+                                                Some(toile_chrome::PlacedEmbed {
+                                                    target: toile_chrome::EmbedTarget::Document {
+                                                        document_id,
+                                                        doc_type,
+                                                    },
+                                                    at: None,
+                                                }),
+                                            );
+                                        embed_doc_open.set(false);
+                                    }>{label}</button>
+                                </li>
+                            }
+                        }
+                    </For>
+                </ul>
+                <div class="ambre-dialog-actions">
+                    <button on:click=move |_| embed_doc_open.set(false)>"Cancel"</button>
                 </div>
             </div>
         </Dialog>

@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: EMBEDS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the nesting plane is built end to end; nothing puts an embed on the
-board, and a web page has no renderer.
+**Implementation:** implemented -- the nesting plane, the two placement gestures and the sandboxed
+web frame.
 
 > A board holds more than shapes: a web page, and another Ambre document a user edits in place
 > without leaving the board.
@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|
 | `TOILE-021` | INV | A nested Ambre document MUST be stored as a reference; its content MUST NOT be inlined into this board. | this spec section 3 | `ambre_toile::logic::convergence_tests::doc_embed_reference_survives_the_crdt_round_trip` | verified |
 | `TOILE-084` | INV | A nested document MUST carry its own permission: what a user may do on the board MUST NOT decide what they may do inside it. | this spec section 3; `ambre-spec-architecture.md section 2` | `ambre_logic::dispatch::tests::an_embedded_child_is_gated_by_its_own_role_not_the_boards`, `::owning_the_board_grants_nothing_on_a_document_embedded_in_it` | verified |
-| `TOILE-088` | INV | A web page on the board MUST reach neither the board, its keys nor its storage. | README pillar "E2EE"; this spec section 4 | not built -- lands with the "Embeds on the board" Story (`ambre-roadmap.md` E4); nothing renders a web page today, so nothing sandboxes one | unimplemented |
+| `TOILE-088` | INV | A web page on the board MUST reach neither the board, its keys nor its storage. | README pillar "E2EE"; this spec section 4 | half of it: `ambre_toile::ui::embed::address_tests::a_scheme_that_could_run_in_the_boards_stead_is_refused`, `::a_scheme_hidden_behind_a_control_character_is_refused`, `::plain_http_is_refused_and_not_upgraded` hold the address gate; the frame's own sandbox is four `ambre-app` attributes no tier can reach -- section 6 | unverified |
 | `TOILE-224` | INV | Which embed is entered MUST be this user's own view state: a peer entering an embed MUST NOT change what this user has focused. | this spec section 5 | `ambre_toile::logic::convergence_tests::doc_embed_reference_survives_the_crdt_round_trip` asserts the derived focus is false whatever the document holds, so no field carries it | verified |
 | `TOILE-UI-016` | INV | At most one embed MUST hold focus. | this spec section 3 | `ambre_toile::ui::embed::tests::only_the_focused_embed_comes_back_focused`; the focus is one `Option<ElementId>`, so a second is unrepresentable | verified |
 | `TOILE-UI-090` | INV | One session MUST serve one nested document, however many embeds point at it. | this spec section 3 | `ambre_toile::ui::embed::tests::a_visible_embed_opens_once_and_only_once`, `::two_embeds_of_the_same_document_share_one_session` | verified |
@@ -39,9 +39,9 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `TOILE-086` | POST | A user MUST be able to place another Ambre document on the board. | this spec section 4 | not built -- lands with the "Embeds on the board" Story (`ambre-roadmap.md` E4) | unimplemented |
-| `TOILE-087` | POST | A user MUST be able to place a web page on the board. | this spec section 4 | not built -- lands with the "Embeds on the board" Story (`ambre-roadmap.md` E4) | unimplemented |
-| `TOILE-225` | FRAME | Placing an embed MUST NOT touch the document it points at. | this spec section 3 | not built -- lands with the "Embeds on the board" Story (`ambre-roadmap.md` E4) | unimplemented |
+| `TOILE-086` | POST | A user MUST be able to place another Ambre document on the board. | this spec section 4 | `ambre_toile::ui::menu_bar::tests::the_placement_entries_are_shell_intents` holds the entry and its resolution; the picker that answers it is `ambre-app`, which no tier reaches -- section 6 | unverified |
+| `TOILE-087` | POST | A user MUST be able to place a web page on the board. | this spec section 4 | `ambre_toile::ui::menu_bar::tests::the_placement_entries_are_shell_intents`, and the address the dialog produces by `ambre_toile::ui::embed::address_tests::a_bare_host_becomes_an_https_address`, `::an_https_address_survives_verbatim`, `::a_host_with_a_port_keeps_its_port` | unverified |
+| `TOILE-225` | FRAME | Placing an embed MUST NOT touch the document it points at. | this spec section 3 | structural, and the construction is the proof: a placement writes two scalar fields of a new element, and the picker reads the names the launcher's document list already carries rather than opening anything | verified |
 
 ### 1.3 Click into an embed
 
@@ -115,16 +115,19 @@ status values are normative in `ambre-spec-template.md`.
   (`TOILE-021`). A child is opened through the ordinary document path, with its own key, its own
   session and its own permission (`TOILE-084`), so nesting adds no flow the sync layer does not
   already seal. The web page is the exception, and `TOILE-088` is the rule that would hold it.
-* **Verification.** 30 `verified`, 10 `unverified`, 4 `unimplemented`. What is held is everything
-  the board can decide alone: the reference, the two transforms, the focus arbitration, the input
-  routing rule and the session lifecycle, on twenty-seven host tests, every one of them cited. What
-  is loose is everything the launcher does with the answer -- the paint, the input route and the
-  event fan-out have no test anywhere, because `ambre-app` runs on the wasm tier and its suite
-  covers two helpers. **No loose rule is known to fail today**: the six that did were fixed, three
-  of them into rules a host test now holds (`TOILE-UI-329`, `TOILE-UI-338`, `TOILE-UI-339`) and
-  three into launcher code no tier can reach (`TOILE-UI-320`, `TOILE-UI-328`, `TOILE-UI-340`),
-  beside three more the same pass corrected (`TOILE-UI-096`, `TOILE-UI-097`, `TOILE-UI-098`). The
-  remaining ten are unproven, which is not the same as broken, and section 6 says which is which.
+* **Verification.** 31 `verified`, 13 `unverified`, 0 `unimplemented`. Every rule of this feature is
+  now built. What is held is everything the board can decide alone: the reference, the two
+  transforms, the focus arbitration, the input routing rule, the address gate and the session
+  lifecycle, on forty host tests, every one of them cited. What is loose is everything the launcher
+  does with the answer -- the paint, the input route, the event fan-out, the two placement dialogs
+  and the frame's own sandbox have no test anywhere, because `ambre-app` runs on the wasm tier and
+  its suite covers two helpers. **No loose rule is known to fail today**: the six that did were
+  fixed, three of them into rules a host test now holds (`TOILE-UI-329`, `TOILE-UI-338`,
+  `TOILE-UI-339`) and three into launcher code no tier can reach (`TOILE-UI-320`, `TOILE-UI-328`,
+  `TOILE-UI-340`), beside three more the same pass corrected (`TOILE-UI-096`, `TOILE-UI-097`,
+  `TOILE-UI-098`). The thirteen loose rules are unproven, which is not the same as broken, and
+  section 6 says which is which. Three of them rose from `unimplemented` when the placement shipped:
+  a built rule nothing can fail on is debt the ceiling should show, where "not built" hid it.
 
 ---
 
@@ -232,9 +235,10 @@ routes every document-tagged event whose id is a live child there instead (`TOIL
 
 ## 4. SURFACE
 
-**Nothing places an embed** (`TOILE-086`, `TOILE-087`). No tool, no menu entry and no chord builds
-either kind: the two constructors exist and their only callers are tests. The surface below is what
-an embed already on the board answers to.
+Two File-menu entries place an embed (`TOILE-086`, `TOILE-087`). Both are shell intents: the
+launcher owns the dialog, because a web address is typed into the DOM and the document list is the
+launcher's alone. What crosses back into the board is the answer -- an address or a reference --
+never the gesture, exactly as a dropped file does.
 
 | Trigger | What happens |
 |---|---|
@@ -247,11 +251,12 @@ an embed already on the board answers to.
 | a click outside the focused embed | focus returns to the board (`TOILE-UI-330`) |
 | leaving the board | every child session closes at once (`TOILE-UI-094`) |
 
-| Trigger, once it exists | What must happen |
+| Trigger | What happens |
 |---|---|
-| a menu entry offering a document to embed | the board mints a `doc_embed` at the drop point holding that document's reference |
-| a menu entry taking a web address | the board mints an `embed` holding the address |
-| the web embed painting | the page renders where the board's placeholder is, sealed off from the board (`TOILE-088`) |
+| File -> "Embed a document..." | the launcher's document list opens, this board excluded; picking one mints a `doc_embed` at the centre of the view holding that document's reference (`TOILE-086`, `TOILE-225`) |
+| File -> "Embed a web page..." | a field takes an address; only `https` survives, and a refusal is read beside the field rather than found on the board (`TOILE-087`, `TOILE-088`) |
+| a web embed on screen | a sandboxed frame is mounted over the canvas where the board paints its placeholder, laid out once at the element's world size and moved by the board's own transform (`TOILE-088`) |
+| a click on a web embed | the same arbitration as a nested document: a click enters it and the frame starts taking the pointer, a drag moves it on the board (`TOILE-UI-091`, `TOILE-UI-324`) |
 
 ---
 
@@ -272,15 +277,36 @@ an embed already on the board answers to.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing places an embed** (`TOILE-086`, `TOILE-087`). The element kind, the constructor, the
-  round trip, the focus, the session and the paint all exist; the gesture that starts the whole
-  chain does not. Fourth area in a row where the engine ships whole and the entry point is missing,
-  after the deck (`TOILE-FEAT-026`) and the import (`TOILE-IO-020`).
-* **A web page has no renderer, so it has no sandbox either** (`TOILE-088`). The corpus calls it a
-  sandboxed web embed. There is no frame, no sandbox attribute and no fetch anywhere in the
-  workspace: the element paints the same placeholder box as a nested document, and its address is
-  stored exactly as it was given, unchecked. The rule the word "sandboxed" stands for has never been
-  written down, and it is the one flow of this feature that leaves the client.
+* **What the sandbox is, and what it costs** (`TOILE-088`). A frame carries
+  `sandbox="allow-scripts allow-forms allow-popups"`, `allow=""` and
+  `referrerpolicy="no-referrer"`, and its address has been through a gate only `https` survives.
+  **`allow-same-origin` is absent, and its absence is the rule**: with it, a page served from this
+  very origin -- which embedding Ambre's own address would be -- could reach `parent.document` and
+  take its own sandbox off. Without it every frame runs in an opaque origin. The price is that a
+  page needing its own storage degrades inside an embed, and no rule says what a user should see
+  when one does.
+* **A third party learns what a board holds, and nobody asked the user.** A frame fetches its page
+  the moment a pan brings the embed on screen: the request is a request the relay never sees and the
+  site does, and no gesture preceded it. The zero-knowledge boundary is about the relay
+  (`ambre-spec-zero-knowledge.md`), and it says nothing about a flow that leaves the client for a
+  host the document names. `TOILE-088` covers what the page may reach, not what watching it
+  reveals, and the boundary table has no row for it -- which is the
+  `A web page loads only when asked` Story (`ambre-roadmap.md` E6).
+* **A frame is clipped by the viewport, not by the embed.** A CSS `clip-path` is resolved in an
+  element's own box before its transform, so it cannot express a screen-space rectangle: the layer
+  clips instead, which bounds every frame to the visible board. An embed inside a board frame that
+  should crop it is not cropped.
+* **The stacking order is the DOM's.** An `<iframe>` sits over the canvas, so a shape the board
+  draws ON TOP of a web embed still paints beneath its page. The board has one paint order and the
+  document has another, and they do not interleave -- irreducible short of painting the whole board
+  in DOM. Nothing in the corpus rules on it.
+* **`Escape` does not leave a web embed.** Entering one hands the pointer and the keyboard to the
+  frame, and a key pressed inside it never reaches the board, so the one rule that gets a user out
+  of a nested document (`TOILE-UI-093`) has no equivalent here. A click outside still returns focus
+  to the board, which is the only way out today.
+* **No budget bounds how many pages a board may carry.** Each frame is a whole document in the
+  process, and the figure that would bound it belongs in `ambre-spec-budgets.md`, where the
+  embedding row is still the open question rather than the answer.
 * **Six defects were fixed, and only the board's half is proved.** A rotated embed painted its
   child upright in the wrong corner (`TOILE-UI-096`); two embeds of one document shared one view
   and resized it against each other (`TOILE-UI-097`); a child never painted its overlay, so an

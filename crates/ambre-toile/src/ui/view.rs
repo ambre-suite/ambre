@@ -1055,6 +1055,14 @@ impl ToileView {
         embed::visible_embeds(&self.display, &self.cam, self.embed_focus.current())
     }
 
+    /// The web `embed`s in screen space, for the shell to place its frames over
+    /// (`TOILE-087`, `TOILE-088`). A web page is DOM, and the canvas has no way
+    /// to hold one: the board paints its placeholder box and publishes where the
+    /// page goes, exactly as it publishes its nested documents.
+    pub fn visible_web_embeds(&self) -> Vec<embed::VisibleWebEmbed> {
+        embed::visible_web_embeds(&self.display, &self.cam, self.embed_focus.current())
+    }
+
     /// Map a screen point into the focused embed's child pixel space, if the
     /// focused element is still in the culled frame. `FrameHost` calls this to
     /// rewrite pointer coordinates before handing an event to the child.

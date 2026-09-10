@@ -8,6 +8,23 @@
 
 use super::*;
 
+/// The container the shell mounts over the canvas for a board's web embeds
+/// (`TOILE-088`). `None` before the shell renders, and for a host page that does
+/// not carry one.
+/// CSS pixels per physical pixel. The board publishes screen geometry in
+/// physical pixels; the DOM lays out in CSS pixels.
+fn device_pixel_ratio() -> f64 {
+    web_sys::window().map_or(1.0, |w| w.device_pixel_ratio())
+}
+
+fn web_embed_layer() -> Option<web_sys::HtmlElement> {
+    web_sys::window()?
+        .document()?
+        .get_element_by_id("ambre-web-embeds")?
+        .dyn_into()
+        .ok()
+}
+
 /// Builds a child `AppView` for a nested `doc_embed`. Supplied by the
 /// launcher, which alone can name the concrete app views and holds the leptos
 /// owner their (throwaway) chrome signals need. Given the embedded document's id,
@@ -94,6 +111,12 @@ pub struct FrameHost {
     /// that never embeds (or before the launcher installs it).
     make_child: Option<MakeChild>,
 
+    /// The sandboxed frames behind the board's web embeds (`TOILE-088`).
+    web_frames: web_embed::WebFrames,
+    /// Whether the last reconciliation left the layer empty, so a board with no
+    /// web embed costs no DOM lookup per frame.
+    web_frames_empty: bool,
+
     render_times: VecDeque<f64>,
     render_fps: f32,
     last_frame_ms: f32,
@@ -121,6 +144,8 @@ impl FrameHost {
             children: HashMap::new(),
             child_sizes: HashMap::new(),
             make_child,
+            web_frames: web_embed::WebFrames::default(),
+            web_frames_empty: true,
             render_times: VecDeque::with_capacity(120),
             render_fps: 0.0,
             last_frame_ms: 0.0,
@@ -207,6 +232,23 @@ impl FrameHost {
             }
         }
         dirty
+    }
+
+    /// Reconcile the sandboxed `<iframe>`s behind the board's web embeds against
+    /// the culled set (`TOILE-087`, `TOILE-088`). A no-op when the shell mounted
+    /// no layer, and for every app that embeds no page.
+    fn sync_web_embeds(&mut self) {
+        let embeds = self.view.visible_web_embeds();
+        // Never touch the DOM for a board that has no web embed and had none:
+        // the overwhelming majority of frames.
+        if embeds.is_empty() && self.web_frames_empty {
+            return;
+        }
+        let Some(layer) = web_embed_layer() else {
+            return;
+        };
+        self.web_frames.sync(&layer, &embeds, device_pixel_ratio());
+        self.web_frames_empty = embeds.is_empty();
     }
 
     /// Resolve a `copy`/`cut` synchronously inside the native clipboard event.
@@ -368,6 +410,12 @@ impl FrameHost {
         if self.sync_children(raf_timestamp) {
             plan.content = ContentRepaint::Full;
         }
+
+        // And the sandboxed frames behind the board's web embeds (`TOILE-088`).
+        // Every frame, not only a dirty one: a frame is DOM sitting over the
+        // canvas, so it follows the camera even when nothing the board paints
+        // has changed.
+        self.sync_web_embeds();
 
         // rAF only starts after GPU init, so `self.gpu` is always Some here.
         let Some(gpu) = self.gpu.as_mut() else { return };

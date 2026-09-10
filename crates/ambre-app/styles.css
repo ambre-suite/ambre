@@ -456,6 +456,20 @@ input[type="radio"] {
     touch-action: none;
 }
 
+/* The sandboxed frames behind a board's web embeds (features/ambre-spec-toile-embeds.md,
+   TOILE-088). One <iframe> per visible embed, positioned by the board's own
+   published transform. The layer clips them to the canvas -- a CSS clip-path is
+   resolved in an element's own box before its transform, so it cannot express a
+   screen-space rectangle, and this is the clip a frame actually gets. It never
+   takes the pointer itself: each frame answers for itself, so an embed nobody
+   has entered leaves the board's move and resize reachable beneath it. */
+.ambre-web-embeds {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
 /* Document-loading overlay (ambre-spec-launcher.md): full-viewport spinner shown while a
    freshly opened document hydrates, reusing the boot loader's look (index.html).
    z-index sits above the canvas/popovers but below modal dialogs (z 1000+) and

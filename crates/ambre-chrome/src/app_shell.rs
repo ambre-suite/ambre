@@ -74,6 +74,13 @@ pub fn AppShell(
                 // The canvas host (ambre-canvas) attaches wgpu to this element
                 // by id and sizes its backing store to the cell.
                 <canvas id=canvas_id class="ambre-canvas" tabindex="0"></canvas>
+                // The layer a board's sandboxed web embeds are mounted into
+                // (`toile-embeds`, `TOILE-088`). Empty for every other app and
+                // for a board with no web embed on screen. It sits over the
+                // canvas and clips to it; each frame decides for itself whether
+                // it takes the pointer, so an embed nobody has entered leaves
+                // the board's own gestures reachable.
+                <div id="ambre-web-embeds" class="ambre-web-embeds"></div>
             </main>
             {if let Some(tabs) = tabs {
                 Some(view! { <div class="ambre-tabstrip">{(tabs.children)()}</div> })
