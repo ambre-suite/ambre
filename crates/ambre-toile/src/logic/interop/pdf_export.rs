@@ -174,6 +174,7 @@ mod tests {
             locked: false,
             style: ElementStyle::default(),
             geom: DisplayGeom::Rect,
+            link: None,
             group: None,
         })
     }

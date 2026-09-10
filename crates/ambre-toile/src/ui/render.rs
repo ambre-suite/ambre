@@ -652,6 +652,11 @@ pub fn paint_overlay<S: DrawSurface>(
         paint_arrow_selection(surface, id, vp, cam, palette);
     }
 
+    // Link badges (`toile-links`): one per linked element, in screen space so
+    // they keep their size through the zoom, and always painted rather than
+    // shown on hover -- a link nobody can see is a link nobody follows.
+    paint_link_badges(surface, vp, cam, palette);
+
     // Find highlights: outline every matching element visible in the
     // culled set, with a heavier outline on the focused hit. Off-screen hits
     // simply have no box until the camera (recentered on `focus`) brings them in.
@@ -868,6 +873,42 @@ fn paint_arrow_selection<S: DrawSurface>(
     draw_handle(surface, w2s * to, palette);
 }
 
+/// Draw the badge of every linked element in the culled frame: a small filled
+/// square outside the top-right corner, with a chain-link notch cut as two
+/// short strokes so it reads as a link and not as a resize handle
+/// (`toile-links`).
+fn paint_link_badges<S: DrawSurface>(
+    surface: &mut S,
+    vp: &DisplayViewport,
+    cam: &ViewportTransform,
+    palette: &Palette,
+) {
+    for e in super::link::linked(vp) {
+        let b = super::link::badge_rect(world_rect_to_screen(e.bounds, cam));
+        surface.fill_path(&roundrect_path(b, 3.0), &Brush::Solid(palette.selection));
+        // Two short bars on the diagonal: the smallest mark that reads as a
+        // chain at this size.
+        let (cx, cy) = (b.center().x, b.center().y);
+        let r = b.width() * 0.22;
+        surface.stroke_line(
+            cx - r * 1.6,
+            cy + r,
+            cx + r * 0.4,
+            cy - r,
+            palette.content_bg,
+            1.5,
+        );
+        surface.stroke_line(
+            cx - r * 0.4,
+            cy + r,
+            cx + r * 1.6,
+            cy - r,
+            palette.content_bg,
+            1.5,
+        );
+    }
+}
+
 fn draw_handle<S: DrawSurface>(surface: &mut S, p: Point, palette: &Palette) {
     let h = HANDLE_SIZE_PX / 2.0;
     surface.fill_rect(
@@ -891,6 +932,7 @@ mod tests {
             locked: false,
             style: ElementStyle::default(),
             geom,
+            link: None,
             group: None,
         })
     }
@@ -1023,6 +1065,7 @@ mod tests {
             locked: false,
             style,
             geom,
+            link: None,
             group: None,
         })
     }
@@ -1431,6 +1474,44 @@ mod tests {
         );
     }
 
+    /// A linked element gets a badge outside its top-right corner; an unlinked
+    /// one gets none (`toile-links`).
+    #[test]
+    fn a_linked_element_gets_a_badge() {
+        let bounds = Rect::new(0.0, 0.0, 50.0, 50.0);
+        let mut linked = elem("l", DisplayGeom::Rect, bounds);
+        if let DisplayNode::Element(e) = &mut linked {
+            e.link = Some(ambre_bus::app::toile::LinkTarget::Url(
+                "https://x.test/".into(),
+            ));
+        }
+        let vp = DisplayViewport {
+            pins: Vec::new(),
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes: vec![linked, elem("p", DisplayGeom::Rect, bounds)],
+        };
+        let mut surface = RecordingSurface::new();
+        paint_overlay(
+            &mut surface,
+            &[],
+            &vp,
+            &cam(),
+            &LIGHT_PALETTE,
+            None,
+            &[],
+            None,
+            &HashMap::new(),
+            None,
+        );
+        let badges = surface
+            .ops()
+            .iter()
+            .filter(|o| matches!(o, DrawOp::FillPath { .. }))
+            .count();
+        assert_eq!(badges, 1, "one badge, for the one linked element");
+    }
+
     /// An arrow the display no longer holds paints nothing: a stale selection
     /// leaves no handles floating on the board.
     #[test]
@@ -1507,6 +1588,7 @@ mod tests {
             locked: false,
             style: ElementStyle::default(),
             geom,
+            link: None,
             group: None,
         })
     }

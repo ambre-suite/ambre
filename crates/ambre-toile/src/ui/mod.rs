@@ -23,6 +23,7 @@ pub mod grid;
 pub mod hit;
 pub mod interop;
 pub mod label;
+pub mod link;
 pub mod menu;
 pub mod menu_bar;
 pub mod palette;

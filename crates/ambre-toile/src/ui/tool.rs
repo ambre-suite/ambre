@@ -1233,6 +1233,7 @@ mod tests {
             locked: false,
             style: ElementStyle::default(),
             geom: DisplayGeom::Rect,
+            link: None,
             group: None,
         })
     }
@@ -1256,6 +1257,7 @@ mod tests {
             locked: false,
             style: ElementStyle::default(),
             geom: DisplayGeom::Group,
+            link: None,
             group: parent.map(|p| ElementId(p.to_owned())),
         })
     }

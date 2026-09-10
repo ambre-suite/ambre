@@ -225,6 +225,7 @@ mod tests {
                 ElementKind::Group => DisplayGeom::Group,
                 _ => DisplayGeom::Rect,
             },
+            link: None,
             group: None,
         })
     }

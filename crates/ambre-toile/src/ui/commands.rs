@@ -133,6 +133,8 @@ describe! {
     IMPORT_FILE: menu_bar::IMPORT_FILE, "Import a file...", Some(IconId("file-import-outline")), &[], FILE;
     EMBED_WEB: menu_bar::EMBED_WEB, "Embed a web page...", Some(IconId("web")), &[], FILE;
     EMBED_DOC: menu_bar::EMBED_DOC, "Embed a document...", Some(IconId("file-document-outline")), &[], FILE;
+    LINK_SET: menu_bar::LINK_SET, "Link...", Some(IconId("link-variant")), &[], OBJECT;
+    LINK_CLEAR: menu_bar::LINK_CLEAR, "Remove link", Some(IconId("link-variant-off")), &[], OBJECT;
     EXPORT_SVG: menu_bar::EXPORT_SVG, "Export as SVG", Some(IconId("file-export-outline")), &[], FILE;
     EXPORT_PDF: menu_bar::EXPORT_PDF, "Export deck as PDF", Some(IconId("file-pdf-box")), &[], FILE;
     PRESENT_DECK: menu_bar::DECK, "Order the deck", Some(IconId("view-carousel-outline")), &[], PRESENT;

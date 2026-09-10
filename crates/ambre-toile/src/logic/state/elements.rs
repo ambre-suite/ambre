@@ -10,7 +10,9 @@ use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
 use crate::logic::command::{InitContent, ToileError, ToileEvent, ToileOutcome, ZTarget};
 use crate::logic::index::ElementBounds;
-use crate::logic::model::{ElementId, ElementKind, ElementStyle, NodeId, ShapeKind, StrokePoint};
+use crate::logic::model::{
+    ElementId, ElementKind, ElementStyle, LinkTarget, NodeId, ShapeKind, StrokePoint,
+};
 
 use super::codec::{bool_of, content_matches, expanded_aabb, f64_of, stroke_aabb};
 use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, NOTES, ToileState};
@@ -156,6 +158,32 @@ impl ToileState {
             )]);
         }
         let _ = em.insert("text", text);
+        self.doc.commit();
+        self.emit_with_update(vec![self.viewport_event()])
+    }
+
+    /// Set or clear one element's link register (`toile-links`). The register is
+    /// its own field, never part of the style: a style is written whole, so a
+    /// link folded into it would be erased by any restyle of a selection the
+    /// element happens to be in (`TOILE-062`). A locked element refuses the
+    /// write like it refuses every other edit.
+    pub(super) fn set_link(&mut self, id: &ElementId, link: Option<LinkTarget>) -> ToileOutcome {
+        let Some(em) = self.element_map(id) else {
+            return self.err_no_element(id);
+        };
+        if bool_of(&em, "locked") {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        match link {
+            Some(l) => {
+                let _ = em.insert("link", LoroValue::Binary(l.to_bytes().into()));
+            }
+            // Absence is the value (`TOILE-230`): a cleared link is a missing
+            // key, not a key holding an empty blob.
+            None => {
+                let _ = em.delete("link");
+            }
+        }
         self.doc.commit();
         self.emit_with_update(vec![self.viewport_event()])
     }

@@ -353,6 +353,12 @@ struct Wiring {
     /// The embed the shell's address dialog / document picker resolved, awaiting
     /// the view that will land it on the board (`toile-embeds`).
     toile_placed_embed: RwSignal<Option<toile_chrome::PlacedEmbed>>,
+    /// A link edit the shell's chooser produced, drained by the canvas view and
+    /// applied to its single selection as one `SetLink` (`toile-links`).
+    toile_set_link: RwSignal<Option<toile_chrome::LinkEdit>>,
+    /// A followed link the board handed back because only the shell can perform
+    /// it: a sandboxed tab, or another document (`TOILE-065`, `TOILE-114`).
+    toile_followed_link: RwSignal<Option<toile_chrome::ShellNav>>,
     /// Status-bar selection aggregates (`trame-status-bar`); `None` on a single
     /// cell. Set by the per-frame relay on `TrameEvent::SelectionStats`, cleared
     /// by the canvas view on a single-cell selection.
@@ -640,6 +646,10 @@ pub fn main() {
     // Embeds (`toile-embeds`): the shell owns the address dialog and the document
     // picker, the view lands the answer on the board.
     let toile_placed_embed = RwSignal::new(None::<toile_chrome::PlacedEmbed>);
+    // The link pair (`toile-links`): the chooser's answer goes down to the view,
+    // and a follow the board cannot perform comes back up to the shell.
+    let toile_set_link = RwSignal::new(None::<toile_chrome::LinkEdit>);
+    let toile_followed_link = RwSignal::new(None::<toile_chrome::ShellNav>);
 
     // Design tokens: inject the generated CSS custom properties (theme.css) and
     // boot the dark theme. `theme_ctl` is the single source of truth for the
@@ -824,6 +834,8 @@ pub fn main() {
         toile_deck,
         toile_dropped_file,
         toile_placed_embed,
+        toile_set_link,
+        toile_followed_link,
         sheets,
         active_sheet,
     );
@@ -1544,6 +1556,8 @@ pub fn main() {
     };
     let ch_toile_dropped_file = RwSignal::new(None::<toile_chrome::DroppedFile>);
     let ch_toile_placed_embed = RwSignal::new(None::<toile_chrome::PlacedEmbed>);
+    let ch_toile_set_link = RwSignal::new(None::<toile_chrome::LinkEdit>);
+    let ch_toile_followed_link = RwSignal::new(None::<toile_chrome::ShellNav>);
     let ch_formula_ref = RwSignal::new(String::new());
     let ch_formula_text = RwSignal::new(String::new());
     let ch_formula_action = RwSignal::new(None::<FormulaAction>);
@@ -1589,6 +1603,8 @@ pub fn main() {
                 ch_toile_deck,
                 ch_toile_dropped_file,
                 ch_toile_placed_embed,
+                ch_toile_set_link,
+                ch_toile_followed_link,
             )),
             // Trame, or any non-Toile embed (only Trame/Toile are paintable views;
             // a stray type falls back to Trame rather than crash the frame).
@@ -1646,6 +1662,8 @@ pub fn main() {
                     toile_deck,
                     toile_dropped_file,
                     toile_placed_embed,
+                    toile_set_link,
+                    toile_followed_link,
                 ))
             } else {
                 AppView::Trame(TrameView::new(

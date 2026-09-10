@@ -68,6 +68,14 @@ pub const EMBED_WEB: CommandId = CommandId("toile.file.embed_web");
 /// the same reason: only the launcher knows which documents this user may open,
 /// so only it can offer the list.
 pub const EMBED_DOC: CommandId = CommandId("toile.file.embed_doc");
+/// Put a link on the selected element (`TOILE-066`). A UI-only intent: the
+/// shell owns the chooser, because two of the three targets are things only it
+/// can offer -- an address it validates like an embed's, and the documents this
+/// user may open.
+pub const LINK_SET: CommandId = CommandId("toile.object.link_set");
+/// Take the link off the selected element (`TOILE-066`). Resolves through the
+/// same intent as the chooser, carrying no target.
+pub const LINK_CLEAR: CommandId = CommandId("toile.object.link_clear");
 /// Take the board out as an SVG document (`TOILE-IO-021`). Resolves to a board
 /// command: the Logic thread holds the board and serializes it.
 pub const EXPORT_SVG: CommandId = CommandId("toile.file.export_svg");
@@ -96,6 +104,8 @@ pub const MENU_BAR_COMMANDS: &[CommandId] = &[
     IMPORT_FILE,
     EMBED_WEB,
     EMBED_DOC,
+    LINK_SET,
+    LINK_CLEAR,
     EXPORT_SVG,
     EXPORT_PDF,
 ];
@@ -190,6 +200,9 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
             MenuRow::Separator,
             row(menu::LOCK),
             row(menu::UNLOCK),
+            MenuRow::Separator,
+            row(LINK_SET),
+            row(LINK_CLEAR),
         ],
         MenuId::Present => vec![row(PRESENT), row(DECK)],
     }
@@ -349,6 +362,24 @@ mod tests {
                 "{id:?} must resolve in the shell, not to a board command"
             );
         }
+    }
+
+    /// The link chooser is a shell intent for the same reason the embed entries
+    /// are: the shell owns the dialog. Clearing is not -- it names no target, so
+    /// the view sends it straight to the board.
+    #[test]
+    fn the_link_entries_sit_under_object() {
+        let cmds = item_commands(&menu_layout(MenuId::Object));
+        assert!(cmds.contains(&LINK_SET));
+        assert!(cmds.contains(&LINK_CLEAR));
+        assert!(
+            menu_bar_edit(LINK_SET).is_none(),
+            "the chooser resolves in the shell"
+        );
+        assert!(
+            menu_bar_edit(LINK_CLEAR).is_none(),
+            "clearing needs the selection, which a menu id does not carry"
+        );
     }
 
     #[test]

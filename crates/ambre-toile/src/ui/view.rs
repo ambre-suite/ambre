@@ -18,8 +18,8 @@ use std::collections::{HashMap, HashSet};
 use ambre_bus::app::toile::CommentAnchor;
 use ambre_bus::app::toile::{
     ClipboardPayload as ToileClipboardPayload, ConnectorId, DisplayConnector, DisplayElement,
-    DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, End, PresencePayload,
-    ThreadId, ToileCommand, ToileEvent, Viewport,
+    DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, End, LinkTarget,
+    PresencePayload, ThreadId, ToileCommand, ToileEvent, Viewport,
 };
 use ambre_bus::{AppCommand, AppEvent, DocumentId, LogicCommand, UiEvent};
 use ambre_canvas::{
@@ -40,6 +40,7 @@ use super::edit::{EditIntent, EditTarget, InlineEditor};
 use super::embed;
 use super::hit::hit_topmost;
 use super::label;
+use super::link::{self, LinkAction};
 use super::presence::{PeerCursors, PresenceSender};
 use super::present::{DEFAULT_TRANSITION_MS, Transition};
 use super::reactions;
@@ -402,6 +403,15 @@ pub struct ToileView {
     /// the board the answer lands. Wasm-only.
     #[cfg(target_arch = "wasm32")]
     placed_embed: RwSignal<Option<super::embed::PlacedEmbed>>,
+    /// A link edit the inspector emitted, drained in `update` and applied to the
+    /// single selection as one `SetLink` (`toile-links`). The DOM panel cannot
+    /// name the element, so the view attaches it.
+    #[cfg(target_arch = "wasm32")]
+    set_link: RwSignal<Option<super::link::LinkEdit>>,
+    /// A followed link the board cannot perform itself: the shell opens the tab
+    /// or the document (`TOILE-065`, `TOILE-114`). Write-only from here.
+    #[cfg(target_arch = "wasm32")]
+    followed_link: RwSignal<Option<super::link::ShellNav>>,
 
     /// The element a thread the panel opened is anchored to, awaiting the
     /// `SelectionStats` reply that carries its bounds so the camera can come to
@@ -538,6 +548,8 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] deck: super::deck::DeckSignals,
         #[cfg(target_arch = "wasm32")] dropped_file: RwSignal<Option<super::interop::DroppedFile>>,
         #[cfg(target_arch = "wasm32")] placed_embed: RwSignal<Option<super::embed::PlacedEmbed>>,
+        #[cfg(target_arch = "wasm32")] set_link: RwSignal<Option<super::link::LinkEdit>>,
+        #[cfg(target_arch = "wasm32")] followed_link: RwSignal<Option<super::link::ShellNav>>,
     ) -> Self {
         if !embedded {
             text_input.focus();
@@ -615,6 +627,10 @@ impl ToileView {
             dropped_file,
             #[cfg(target_arch = "wasm32")]
             placed_embed,
+            #[cfg(target_arch = "wasm32")]
+            set_link,
+            #[cfg(target_arch = "wasm32")]
+            followed_link,
             pending_comment_focus: None,
             pending_fit: false,
             last_stats_sel: Vec::new(),
@@ -1214,7 +1230,7 @@ impl ToileView {
         self.embed_focus.blur();
     }
 
-    fn handle_pointer_down(&mut self, x: f64, y: f64, button: i16) -> bool {
+    fn handle_pointer_down(&mut self, x: f64, y: f64, button: i16, ctrl: bool) -> bool {
         let screen = Point::new(x, y);
         self.last_pointer = screen;
         // A press in the canvas returns keyboard focus to the transparent text
@@ -1231,6 +1247,23 @@ impl ToileView {
         if button == 2 {
             self.handle_right_click(screen);
             return true;
+        }
+        // Follow a link (`toile-links`), before any gesture: a click on the badge
+        // always follows, and a click on the element follows only when it is
+        // asking to (a modifier, or presentation mode, where editing is off).
+        // A plain click with the select tool falls through and selects, which is
+        // what keeps a linked element editable (`TOILE-112`).
+        if button == 0 {
+            let world = self.cam.screen_to_world() * screen;
+            let target = self.badge_at(screen).or_else(|| {
+                link::wants_follow(ctrl, self.present)
+                    .then(|| link::link_at(&self.display, world).map(|(_, l)| l))
+                    .flatten()
+            });
+            if let Some(link) = target {
+                self.follow_link(LinkAction::of(&link));
+                return true;
+            }
         }
         // Space-drag or Hand tool or middle button: begin a pan.
         if self.space_down || self.machine.tool() == Tool::Hand || button == 1 {
@@ -1928,6 +1961,19 @@ impl ToileView {
             _ => {}
         }
 
+        // Clearing a link needs the selection, which a menu id does not carry,
+        // so the view attaches it here (`toile-links`). Setting one goes to the
+        // shell, which owns the chooser.
+        if id == mb::LINK_CLEAR {
+            if let [target] = self.selection.as_slice() {
+                self.send_edit(ToileCommand::SetLink {
+                    id: target.clone(),
+                    link: None,
+                });
+                self.needs_full = true;
+            }
+            return;
+        }
         if id == super::menu::SELECT_ALL {
             self.select_all();
             return;
@@ -2717,6 +2763,7 @@ impl ToileView {
         self.drain_comment_intent();
         self.drain_dropped_file();
         self.drain_placed_embed();
+        self.drain_set_link();
         self.drain_deck_intent();
 
         // Apply the tool the DOM palette / keyboard selected this frame
@@ -2996,9 +3043,9 @@ impl ToileView {
                 delta_mode,
                 ctrl_key,
             } => self.handle_wheel(*dx, *dy, *delta_mode, *ctrl_key),
-            InputEvent::PointerDown { x, y, button, .. } => {
-                self.handle_pointer_down(*x, *y, *button)
-            }
+            InputEvent::PointerDown {
+                x, y, button, ctrl, ..
+            } => self.handle_pointer_down(*x, *y, *button, *ctrl),
             InputEvent::PointerMove { x, y } => self.handle_pointer_move(*x, *y),
             InputEvent::PointerUp { x, y, .. } => self.handle_pointer_up(*x, *y),
             InputEvent::Key {
@@ -3109,6 +3156,70 @@ impl ToileView {
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn drain_placed_embed(&mut self) {}
+
+    /// Drain a link edit the inspector emitted and apply it to the single
+    /// selection as one `SetLink` (`toile-links`). A link is a property of one
+    /// element -- a chooser cannot mean "these five all point here" -- so a
+    /// multi-selection is ignored rather than fanned out. Wasm-only.
+    #[cfg(target_arch = "wasm32")]
+    fn drain_set_link(&mut self) {
+        let Some(edit) = self.set_link.get_untracked() else {
+            return;
+        };
+        self.set_link.set(None);
+        let [id] = self.selection.as_slice() else {
+            return;
+        };
+        self.send_edit(ToileCommand::SetLink {
+            id: id.clone(),
+            link: edit.0,
+        });
+        self.needs_full = true;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn drain_set_link(&mut self) {}
+
+    /// Hand an outbound navigation to the shell. Wasm-only; on the host the
+    /// board simply has nowhere to hand it.
+    #[cfg(target_arch = "wasm32")]
+    fn publish_shell_nav(&self, nav: super::link::ShellNav) {
+        self.followed_link.set(Some(nav));
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn publish_shell_nav(&self, _nav: super::link::ShellNav) {}
+
+    /// Follow a link (`toile-links`). Writes nothing to the document
+    /// (`TOILE-063`) and enters no undo history (`TOILE-115`): a jump asks the
+    /// board for the frame's box and fits the camera to the answer, and the two
+    /// outbound kinds go to the shell.
+    ///
+    /// The frame is *asked for* rather than read off the painted element: a link
+    /// to a frame exists to reach one that is off screen, and an off-screen
+    /// element is not in the culled frame. A frame the board no longer holds
+    /// answers no bounds, and the fit then does nothing, which is the silent
+    /// refusal `TOILE-064` asks for.
+    fn follow_link(&mut self, action: LinkAction) {
+        match action {
+            LinkAction::GoToFrame(frame) => {
+                self.pending_fit = true;
+                self.send_edit(ToileCommand::RequestSelectionStats { ids: vec![frame] });
+            }
+            other => {
+                if let Some(nav) = other.shell_nav() {
+                    self.publish_shell_nav(nav);
+                }
+            }
+        }
+    }
+
+    /// The linked element whose badge `screen` lands on, if any. The badge is a
+    /// screen-space square outside the element's top-right corner, so the test
+    /// runs in screen space too.
+    fn badge_at(&self, screen: Point) -> Option<LinkTarget> {
+        link::linked(&self.display)
+            .find(|e| link::badge_rect(world_rect_to_screen(e.bounds, &self.cam)).contains(screen))
+            .and_then(|e| e.link.clone())
+    }
 
     /// Resolve a copy/cut synchronously inside the native clipboard event
     /// (`toile-clipboard`).

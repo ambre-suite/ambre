@@ -318,6 +318,44 @@ impl ElementStyle {
 }
 
 // =============================================================================
+// Links on an element (`toile-links`)
+// =============================================================================
+
+/// Where a link on an element goes. Three navigations and no more: an address,
+/// a place on this board, and another document; anything else is a command, and
+/// a command belongs to a menu (`toile-links` section 5).
+///
+/// The document arm carries its type beside its id, like an embed's does: a
+/// route cannot be built without it, and asking the server for it turns a
+/// follow into a round trip that can fail.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LinkTarget {
+    /// A web address, opened by the shell in a sandboxed tab. The board never
+    /// fetches it (`TOILE-110`).
+    Url(String),
+    /// A frame on this board: the camera fits to it (`TOILE-113`).
+    Frame(ElementId),
+    /// Another Ambre document, opened by the shell (`TOILE-114`).
+    Document {
+        document_id: DocumentId,
+        doc_type: DocType,
+    },
+}
+
+impl LinkTarget {
+    /// Encode for the `"link"` register.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        postcard::to_allocvec(self).unwrap_or_default()
+    }
+
+    /// Decode a `"link"` register. A malformed blob reads as no link rather
+    /// than as a link nobody can follow.
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        postcard::from_bytes(bytes).ok()
+    }
+}
+
+// =============================================================================
 // Freehand stroke sample (`toile-freehand`)
 // =============================================================================
 
@@ -1044,6 +1082,13 @@ pub enum ToileCommand {
     DeleteConnector {
         id: ConnectorId,
     },
+    /// Set or clear the link register of one element (`toile-links`). `None`
+    /// clears it. One register write and one undo item; nothing else on the
+    /// element moves (`TOILE-066`, `TOILE-111`).
+    SetLink {
+        id: ElementId,
+        link: Option<LinkTarget>,
+    },
     /// Overwrite an arrow's style register, whole, like `RestyleElements` does
     /// for an element (`toile-connectors`).
     RestyleConnector {
@@ -1454,6 +1499,10 @@ pub struct DisplayElement {
     pub locked: bool,
     pub style: ElementStyle,
     pub geom: DisplayGeom,
+    /// The element's link, when it carries one (`toile-links`). The painted
+    /// element carries it so the surface can show the glyph and follow the
+    /// link without asking the board.
+    pub link: Option<LinkTarget>,
     /// The immediate enclosing group node, if this element is a group member
     /// (`toile-groups`). `None` for a top-level
     /// element. Group-selection resolution is a pure-UI concern (walk this edge

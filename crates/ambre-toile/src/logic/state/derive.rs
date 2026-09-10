@@ -15,7 +15,7 @@ use crate::logic::command::{
     Viewport,
 };
 use crate::logic::model::{
-    ConnectorId, ElementId, ElementKind, ElementStyle, ShapeKind, StrokePoint,
+    ConnectorId, ElementId, ElementKind, ElementStyle, LinkTarget, ShapeKind, StrokePoint,
 };
 use crate::logic::stroke::smooth_stroke;
 
@@ -164,6 +164,9 @@ impl ToileState {
             locked,
             style,
             geom,
+            // The link register, absent on an element that carries none
+            // (`toile-links`).
+            link: LinkTarget::from_bytes(&bin_of(&em, "link")),
             // The immediate enclosing group (if any): the UI resolves group-scope
             // selection by walking this edge upward.
             group: self.enclosing_group(id),

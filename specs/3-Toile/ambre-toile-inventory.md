@@ -27,6 +27,7 @@
 | `toile-frames` | A frame is a titled region of the board. | implemented | 9 | 5 |
 | `toile-freehand` | A user drags with the pen and a line follows the pointer. | implemented | 11 | 6 |
 | `toile-groups` | A user selects several elements and binds them: from then on one click takes the set, and one drag moves it. | implemented | 23 | 15 |
+| `toile-links` | A user makes an element clickable: it opens a web address, jumps the camera to a frame on this board, or opens another Ambre document. | implemented | 12 | 7 |
 | `toile-media` | A picture on the board is stored once, wherever it appears, and the server that keeps it never sees it. | implemented | 28 | 5 |
 | `toile-menus` | A user right-clicks and gets what applies to what is under the cursor. | implemented | 47 | 18 |
 | `toile-presence` | A user sees where the others are: a pointer in their colour, the elements they hold, the stroke they are drawing and the trail of their highlighter. | implemented | 24 | 5 |
@@ -44,6 +45,5 @@
 | `toile-reactions` | A user drops an emoji on a note and everyone sees it, with a count. | partial | 32 | 10 |
 | `toile-text-editing` | A user double-clicks a note and types into it, where it sits, at the size it will keep. | partial | 35 | 31 |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 31 | 14 |
-| `toile-links` | A user makes an element clickable: it opens a web address, jumps the camera to a frame on this board, or opens another Ambre document. | design-only | 12 |  |
 
-**29 features: 22 implemented, 6 partial, 1 design-only. 756 contract rows, 296 loose.**
+**29 features: 23 implemented, 6 partial, 0 design-only. 756 contract rows, 303 loose.**

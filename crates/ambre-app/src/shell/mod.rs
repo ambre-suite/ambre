@@ -76,6 +76,8 @@ pub(crate) fn mount_shell(
     toile_deck: toile_chrome::DeckSignals,
     toile_dropped_file: RwSignal<Option<toile_chrome::DroppedFile>>,
     toile_placed_embed: RwSignal<Option<toile_chrome::PlacedEmbed>>,
+    toile_set_link: RwSignal<Option<toile_chrome::LinkEdit>>,
+    toile_followed_link: RwSignal<Option<toile_chrome::ShellNav>>,
     sheets: RwSignal<Vec<(String, String)>>,
     active_sheet: RwSignal<String>,
 ) {
@@ -184,6 +186,8 @@ pub(crate) fn mount_shell(
             toile_deck,
             toile_dropped_file,
             toile_placed_embed,
+            toile_set_link,
+            toile_followed_link,
             sort_dialog,
             chrome_status,
             sheets,

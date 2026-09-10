@@ -658,6 +658,7 @@ mod tests {
                 // Never true off the CRDT: focus is view-local.
                 focused: false,
             },
+            link: None,
             group: None,
         }
     }

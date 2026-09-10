@@ -173,6 +173,7 @@ mod tests {
             locked: false,
             style: ElementStyle::default(),
             geom,
+            link: None,
             group: None,
         }
     }

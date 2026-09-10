@@ -131,7 +131,7 @@ lock and the style, and reads the box from the derived cache.
 | `rot` | `f64` | radians, about the AABB centre | every | built |
 | `locked` | `bool` | the advisory lock | every | built |
 | `style` | Binary | `postcard(ElementStyle)`, one register per element (`TOILE-018`) | every | built |
-| `link` | Binary | `postcard(LinkTarget)`; absent means no link | every | design |
+| `link` | Binary | `postcard(LinkTarget)`; absent means no link | every | built |
 | `name` | String | the frame title, which Find reads | `frame` | design |
 | `text` | String | the body (`TOILE-030`) | `sticky`, `text` | built |
 | `shape` | String | `rect`, `ellipse`, `triangle`, `line`, `path` | `shape` | built |

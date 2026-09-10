@@ -136,6 +136,7 @@ mod tests {
             locked: false,
             style,
             geom: DisplayGeom::Rect,
+            link: None,
             group: None,
         })
     }

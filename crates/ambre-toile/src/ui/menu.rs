@@ -384,6 +384,7 @@ mod tests {
                 ElementKind::Frame => DisplayGeom::Frame,
                 _ => DisplayGeom::Rect,
             },
+            link: None,
             group: None,
         }
     }

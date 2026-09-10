@@ -17,8 +17,8 @@ use crate::logic::command::{
     ReactionKind, TextDelta, ToileCommand, ToileError, ToileEvent, ZTarget,
 };
 use crate::logic::model::{
-    Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, NodeId, PathType,
-    ShapeKind, StrokePoint, ThreadId,
+    Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, LinkTarget, NodeId,
+    PathType, ShapeKind, StrokePoint, ThreadId,
 };
 use crate::logic::state::{PRESENCE_TTL_MS, ToileState};
 
@@ -932,6 +932,120 @@ fn create_frame(st: &mut ToileState, at: Point, size: Size) -> ElementId {
         content: InitContent::None,
         fill: None,
     }))
+}
+
+// -----------------------------------------------------------------------------
+// Links on an element (toile-links)
+// -----------------------------------------------------------------------------
+
+/// Read an element's link back out of the derived viewport.
+fn link_of(st: &ToileState, id: &ElementId) -> Option<LinkTarget> {
+    st.debug_viewport().nodes.iter().find_map(|n| match n {
+        DisplayNode::Element(e) if &e.id == id => Some(e.link.clone()),
+        _ => None,
+    })?
+}
+
+/// A link is set, comes back on the painted element, and is cleared by absence
+/// rather than by an empty value (`TOILE-062`, `TOILE-230`).
+#[test]
+fn a_link_is_set_and_cleared() {
+    let mut st = ToileState::new();
+    let id = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    assert_eq!(link_of(&st, &id), None, "an element is born unlinked");
+
+    let target = LinkTarget::Url("https://example.org/".into());
+    let out = st.handle_command(ToileCommand::SetLink {
+        id: id.clone(),
+        link: Some(target.clone()),
+    });
+    assert!(out.update.is_some(), "a link broadcasts a delta");
+    assert_eq!(link_of(&st, &id), Some(target));
+
+    st.handle_command(ToileCommand::SetLink {
+        id: id.clone(),
+        link: None,
+    });
+    assert_eq!(link_of(&st, &id), None, "clearing removes the register");
+}
+
+/// `TOILE-111`: setting a link writes the link register alone -- the style, the
+/// geometry and the lock are what they were.
+#[test]
+fn setting_a_link_touches_nothing_else() {
+    let mut st = ToileState::new();
+    let id = create_rect(&mut st, Point::new(4.0, 8.0), Size::new(30.0, 20.0));
+    let before = st
+        .debug_viewport()
+        .nodes
+        .iter()
+        .find_map(|n| match n {
+            DisplayNode::Element(e) if e.id == id => Some(e.clone()),
+            _ => None,
+        })
+        .expect("the element is painted");
+
+    st.handle_command(ToileCommand::SetLink {
+        id: id.clone(),
+        link: Some(LinkTarget::Frame(ElementId("f".into()))),
+    });
+
+    let after = st
+        .debug_viewport()
+        .nodes
+        .iter()
+        .find_map(|n| match n {
+            DisplayNode::Element(e) if e.id == id => Some(e.clone()),
+            _ => None,
+        })
+        .expect("the element is still painted");
+    assert_eq!(after.bounds, before.bounds, "geometry moved");
+    assert_eq!(after.style.fill, before.style.fill, "fill changed");
+    assert_eq!(after.style.stroke, before.style.stroke, "stroke changed");
+    assert_eq!(after.locked, before.locked, "lock changed");
+    assert_eq!(st.bounds_of(&id), st.bounds_of(&id));
+    assert!(
+        after.link.is_some(),
+        "the link is the one thing that changed"
+    );
+}
+
+/// `TOILE-109`: a link outlives its target. Deleting the frame a link points at
+/// leaves the register alone -- the frame may come back through a late change or
+/// an undo, and a read must never destroy data.
+#[test]
+fn deleting_the_target_frame_leaves_the_link() {
+    let mut st = ToileState::new();
+    let frame = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let id = create_rect(&mut st, Point::new(400.0, 0.0), Size::new(10.0, 10.0));
+    let target = LinkTarget::Frame(frame.clone());
+    st.handle_command(ToileCommand::SetLink {
+        id: id.clone(),
+        link: Some(target.clone()),
+    });
+
+    st.handle_command(ToileCommand::DeleteElements { ids: vec![frame] });
+    assert_eq!(
+        link_of(&st, &id),
+        Some(target),
+        "the link must survive its target"
+    );
+}
+
+/// A link aimed at an element the board does not hold is refused whole.
+#[test]
+fn linking_a_missing_element_is_refused() {
+    let mut st = ToileState::new();
+    let out = st.handle_command(ToileCommand::SetLink {
+        id: ElementId("nope".into()),
+        link: Some(LinkTarget::Url("https://example.org/".into())),
+    });
+    assert!(out.update.is_none(), "a refused link writes nothing");
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::Error(ToileError::NoSuchElement(_)))),
+    );
 }
 
 #[test]

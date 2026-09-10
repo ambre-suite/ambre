@@ -36,6 +36,7 @@ pub use crate::ui::deck::{DeckIntent, DeckSignals, Move as DeckMove};
 // its own (`toile-import-export`).
 pub use crate::ui::embed::{AddressError, EmbedTarget, PlacedEmbed, normalize_web_address};
 pub use crate::ui::interop::{DroppedFile, IMPORT_ACCEPT, accepts as accepts_file};
+pub use crate::ui::link::{LinkEdit, ShellNav};
 pub use find::{FindPanel, FindQuery};
 
 // The pins, the pick, the badge and the panel's filter are pure and host-tested
@@ -82,7 +83,7 @@ use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
 
 pub use crate::ui::commands::PALETTE;
 pub use crate::ui::find::FIND;
-pub use crate::ui::menu_bar::{EMBED_DOC, EMBED_WEB, IMPORT_FILE};
+pub use crate::ui::menu_bar::{EMBED_DOC, EMBED_WEB, IMPORT_FILE, LINK_CLEAR, LINK_SET};
 
 /// The document type Toile's landing "new document" button creates.
 pub const DOC_TYPE: DocType = DocType::Toile;
