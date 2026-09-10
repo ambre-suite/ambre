@@ -62,7 +62,7 @@ Closed epics live in `ambre-roadmap-journal.md`, whole. They are named here so a
 
 ---
 
-## 3. EF -- DOCUMENT CORPORA AND NATIVE FILE FORMAT  `[ ]`
+## 3. EF -- DOCUMENT CORPORA AND NATIVE FILE FORMAT  `[ ]`  *current core objective*
 
 Documents in known states, and the file they travel in. One epic because a fixture **is** an `.ambre`
 file and the fixture loader **is** the production importer.
