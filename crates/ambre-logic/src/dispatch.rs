@@ -64,7 +64,7 @@ impl LogicState {
                         .map(AppEvent::Trame)
                         .collect(),
                     DocState::Toile(state) => state
-                        .apply_remote(&snapshot)
+                        .import_snapshot(&snapshot)
                         .into_iter()
                         .map(AppEvent::Toile)
                         .collect(),

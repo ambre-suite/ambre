@@ -64,6 +64,38 @@ A usable spreadsheet.
 | `[x]` View-independent merge masking | MVP | a masked cell is excluded from every computation on every sheet, so a formula result no longer depends on the active tab |
 | `[x]` Chrome UX polish | MVP | zoom-aware glyphs, one shared hover token, the sheet-tab strip in the DOM, header separators, a context menu aware of what was clicked |
 
+## E4 -- TOILE MVP  `[x]`
+
+An infinite collaborative whiteboard with a presentation mode. What is new is the spatial document
+model and the GPU vector canvas.
+
+> **Dependency.** `ET` precedes it: every story ships with its test belt green.
+>
+> **Auto-layout and boolean ops are out of the MVP, frozen.** Toile is a Miro, not a Figma
+> (`features/ambre-spec-toile-engine.md section 5`), so a constraint solver and vector boolean ops
+> are another product's metier. They stay in the tree with no stabilization budget, as candidates for
+> V2 or for removal.
+
+| Story | Milestone | Touches |
+| :--- | :--- | :--- |
+| `[x]` The board engine | MVP | elements, connectors, freehand strokes, groups, frames, z-order, undo, clipboard, find, selection stats |
+| `[x]` `CANVAS P1` -- the vector pipeline | MVP | shapes and paths on the GPU, pan and zoom, colour text, PDF output |
+| `[x]` The board surface | MVP | the tool set, the inline text editor, the tool palette, the style inspector, the floating selection toolbar, the menu bar, the find panel, the status bar, live peer cursors |
+| `[x]` Presentation and reactions | MVP | the presenter panel, playback, Smart Animate between slides, follow the presenter, emoji reactions and their badges |
+| `[x]` Toile interop | MVP | the SVG and image converters, the SVG serializer, the media upload round trip and the PDF pages of a deck, all Logic-side |
+| `[x]` The new-document type picker | MVP | create any kind of document from the launcher, not only a spreadsheet |
+| `[x]` `ARCH P6` -- the cross-app plane | MVP | who a peer is, what they are allowed to do, and the plane that runs one document inside another: its own session, its own permission, its own event stream, painted and driven by the launcher |
+| `[x]` Comments | MVP | anchored comment threads with replies and resolve, their pins on the board, and the side panel |
+| `[x]` Live presence on the board | MVP | this peer's cursor, selection and stroke reach the others, the highlighter becomes a tool, a peer who leaves stops being painted, and a label is a name. The render half ships and receives nothing |
+| `[x]` Order the deck | MVP | a panel that adds a frame to the presentation, reorders it and removes it, and a deleted frame that leaves it. Playback, the transition and the speaker notes ship and have no deck to run on |
+| `[x]` The Toile interop surface | MVP | a file dropped or picked reaches the importer at the drop point, the SVG and PDF export entries hand the bytes to the browser, and the lossy-import report reaches the user |
+| `[x]` Embeds on the board | MVP | a gesture places a web page or another Ambre document on the board, and a web page renders sealed off from it. The nesting plane ships -- opened, focused, painted and routed -- and nothing puts an embed there |
+| `[x]` Connector labels | MVP | a caption on an arrow, editable in place |
+| `[x]` An arrow can be selected | MVP | click an arrow to select it, then delete, re-aim, restyle or reorder it |
+| `[x]` Hyperlinks and go-to-frame | MVP | a link on an element, followed to a URL or to another frame |
+| `[x]` Align and distribute | MVP | align or space a selection evenly, as one undo item |
+| `[x]` No delta is lost on an export error | MVP | Toile drops a change when an export fails; Trame retries it. Align Toile on Trame |
+
 ## ET -- TESTING AND CI FOUNDATION  `[x]`
 
 The MVP shipped functional and under-tested. This epic settled that debt before stacking new apps.

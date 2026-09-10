@@ -19,12 +19,12 @@
   `human-review` and `qa-manual` carry no ceiling: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2385 rows: 1651 shipped, of which 815 loose. 734 unbuilt.**
+**2386 rows: 1652 shipped, of which 813 loose. 734 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 188 | 206 | 442 |  | 836 |
-| `unverified` | 303 | 201 | 304 |  | 808 |
+| `verified` | 188 | 206 | 445 |  | 839 |
+| `unverified` | 303 | 201 | 302 |  | 806 |
 | `human-review` | 5 |  |  |  | 5 |
 | `qa-manual` |  |  | 2 |  | 2 |
 | `unimplemented` | 65 | 56 | 22 | 591 | 734 |
@@ -106,7 +106,7 @@
 | `ambre-spec-toile-connectors.md` | 38 | 38 | 18 | 20 |  |
 | `ambre-spec-toile-elements.md` | 30 | 30 | 23 | 7 |  |
 | `ambre-spec-toile-embeds.md` | 44 | 44 | 31 | 13 |  |
-| `ambre-spec-toile-engine.md` | 36 | 36 | 23 | 13 |  |
+| `ambre-spec-toile-engine.md` | 37 | 37 | 26 | 11 |  |
 | `ambre-spec-toile-find.md` | 15 | 15 | 7 | 8 |  |
 | `ambre-spec-toile-frames.md` | 9 | 9 | 4 | 5 |  |
 | `ambre-spec-toile-freehand.md` | 11 | 11 | 5 | 6 |  |

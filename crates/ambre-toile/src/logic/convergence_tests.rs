@@ -834,6 +834,123 @@ fn apply_ephemeral_drops_a_malformed_frame() {
 }
 
 // -----------------------------------------------------------------------------
+// The export cursor (`toile-engine section 1.4`)
+// -----------------------------------------------------------------------------
+
+/// `TOILE-217`: an import takes the cursor past the operations it brought in,
+/// so the next local edit does not send a peer its own work back.
+#[test]
+fn an_import_is_not_broadcast_back() {
+    let mut author = ToileState::new();
+    create_rect(&mut author, Point::ZERO, Size::new(10.0, 10.0));
+    let snapshot = author.export_snapshot();
+
+    let mut reader = ToileState::new();
+    reader.apply_remote(&snapshot);
+    let out = reader.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::Shape(ShapeKind::Rect),
+        at: Point::new(50.0, 0.0),
+        size: Size::new(10.0, 10.0),
+        content: InitContent::None,
+        fill: None,
+    });
+    let delta = out.update.expect("a create must produce a delta");
+
+    // A peer holding nothing sees nothing in this delta: the author's element
+    // is not in it. Its own create is, but it depends on the reader's genesis
+    // operations, which this peer does not hold, so Loro keeps it pending.
+    let mut naive = ToileState::new();
+    naive.apply_remote(&delta);
+    assert_eq!(
+        naive.element_count(),
+        0,
+        "the delta must carry no operation the reader merely imported"
+    );
+
+    // The author, who holds everything the delta depends on, gets the new one.
+    let mut third = ToileState::new();
+    third.apply_remote(&snapshot);
+    third.apply_remote(&delta);
+    assert_eq!(third.element_count(), 2);
+}
+
+/// The board opens by committing its own scaffolding, and the first import
+/// lands before any flush. Those genesis operations are ours and have never
+/// been broadcast, so the cursor must keep our own counter across an import --
+/// otherwise the next local delta depends on operations no peer holds, and a
+/// peer that cannot resolve a dependency never shows the edit.
+#[test]
+fn an_import_does_not_swallow_our_own_unbroadcast_genesis() {
+    let mut author = ToileState::new();
+    create_rect(&mut author, Point::ZERO, Size::new(10.0, 10.0));
+    let snapshot = author.export_snapshot();
+
+    // A brand-new board: its scaffolding is committed and never sent.
+    let mut reader = ToileState::new();
+    reader.apply_remote(&snapshot);
+    let out = reader.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::Shape(ShapeKind::Rect),
+        at: Point::new(50.0, 0.0),
+        size: Size::new(10.0, 10.0),
+        content: InitContent::None,
+        fill: None,
+    });
+    let delta = out.update.expect("a create must produce a delta");
+
+    // The author receives it. Without the genesis operations the create depends
+    // on, Loro would hold it pending and the element would never appear.
+    author.apply_remote(&delta);
+    assert_eq!(
+        author.element_count(),
+        2,
+        "the delta must carry everything it depends on"
+    );
+}
+
+/// `TOILE-236`: a local restore leaves the cursor alone. What this client wrote
+/// before it closed may have reached no peer, and a reopen mints a fresh peer
+/// id -- so absorbing the restored history would drop an offline session for
+/// good.
+#[test]
+fn a_restore_still_offers_what_this_client_wrote_offline() {
+    // A session that wrote something and closed without ever flushing to a peer.
+    let mut offline = ToileState::new();
+    create_rect(&mut offline, Point::ZERO, Size::new(10.0, 10.0));
+    let disk = offline.export_snapshot();
+
+    // The reopen: a fresh board, a fresh peer id, restoring from disk.
+    let mut reopened = ToileState::new();
+    reopened.import_snapshot(&disk);
+    assert_eq!(reopened.element_count(), 1);
+
+    let out = reopened.handle_command(ToileCommand::MoveElements {
+        ids: vec![
+            reopened
+                .debug_viewport()
+                .nodes
+                .iter()
+                .find_map(|n| match n {
+                    crate::logic::command::DisplayNode::Element(e) => Some(e.id.clone()),
+                    crate::logic::command::DisplayNode::Connector(_) => None,
+                })
+                .expect("the restored element"),
+        ],
+        delta: Vec2::new(5.0, 0.0),
+    });
+    let delta = out.update.expect("a move must produce a delta");
+
+    // A peer that has seen nothing gets the whole restored session out of that
+    // first flush, the element included -- not just the move.
+    let mut peer = ToileState::new();
+    peer.apply_remote(&delta);
+    assert_eq!(
+        peer.element_count(),
+        1,
+        "the restored history must still be offered to a peer"
+    );
+}
+
+// -----------------------------------------------------------------------------
 // Groups
 // -----------------------------------------------------------------------------
 

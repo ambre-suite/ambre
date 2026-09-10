@@ -433,6 +433,7 @@ impl ToileState {
             return vec![ToileEvent::Error(ToileError::NoSuchElement(String::new()))];
         }
         let deck_before = self.slide_order();
+        self.absorb_imported();
         self.rebuild_caches();
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
@@ -459,6 +460,7 @@ impl ToileState {
         if !any_ok {
             return vec![ToileEvent::Error(ToileError::NoSuchElement(String::new()))];
         }
+        self.absorb_imported();
         self.rebuild_caches();
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
@@ -484,8 +486,24 @@ impl ToileState {
     /// address uniformly across apps -- which is the whole reason it exists:
     /// `TrameState::import_snapshot` was already spelled that way, `ToileState`
     /// spelled it `apply_remote`, and a loader cannot dispatch on two names.
+    ///
+    /// One thing it does **not** share with `apply_remote`: it leaves the export
+    /// cursor alone (`TOILE-236`). A restore reads what this client wrote before
+    /// it closed, and the operations it wrote offline have reached no peer. A
+    /// reopen mints a fresh peer id, so those operations are no longer ours by
+    /// the cursor's reckoning, and absorbing them would drop a session's work
+    /// for good. Leaving the cursor put re-offers the restored history on the
+    /// first flush; the relay already holds most of it and drops what it knows.
     pub fn import_snapshot(&mut self, payload: &[u8]) -> Vec<ToileEvent> {
-        self.apply_remote(payload)
+        if let Err(e) = self.doc.import(payload) {
+            tracing::warn!("Toile: snapshot import failed: {e}");
+            return vec![ToileEvent::Error(ToileError::NoSuchElement(String::new()))];
+        }
+        let deck_before = self.slide_order();
+        self.rebuild_caches();
+        let mut events = vec![self.viewport_event()];
+        events.extend(self.deck_change(&deck_before));
+        events
     }
 
     // -- undo / redo --------------------------------------------------
@@ -565,20 +583,86 @@ impl ToileState {
 
     // -- outcome plumbing ------------------------------------------------------
 
-    /// Wrap the current export delta (since `exported_vv`) into the outcome and
-    /// advance the version vector. Every mutating command routes through here.
+    /// Wrap the current export delta (since `exported_vv`) into the outcome.
+    /// Every mutating command routes through here.
     pub(super) fn emit_with_update(&mut self, display: Vec<ToileEvent>) -> ToileOutcome {
-        let update = self
-            .doc
-            .export(ExportMode::updates(&self.exported_vv))
-            .ok()
-            .filter(|b| !b.is_empty());
-        self.exported_vv = self.doc.oplog_vv();
         ToileOutcome {
             display,
-            update,
+            update: self.flush_delta(),
             ephemeral: None,
             requests: Vec::new(),
+        }
+    }
+
+    /// Export every operation since the export cursor, and advance the cursor
+    /// only if that export succeeded (`TOILE-090`).
+    ///
+    /// An export that fails leaves the cursor where it is, so the next flush
+    /// offers the same range again. Advancing regardless -- what swallowing the
+    /// error with `.ok()` did -- dropped those operations for good: no later
+    /// export would ever carry them, and the two peers stayed apart until
+    /// someone sent a full snapshot. This is the shape Trame's `flush_delta`
+    /// already had (`features/ambre-spec-trame-engine.md`).
+    fn flush_delta(&mut self) -> Option<Vec<u8>> {
+        let current = self.doc.oplog_vv();
+        if current == self.exported_vv {
+            return None;
+        }
+        let exported = self.doc.export(ExportMode::updates(&self.exported_vv));
+        Self::take_delta(&mut self.exported_vv, current, exported)
+    }
+
+    /// Take the export cursor past `current` -- and every operation the board
+    /// holds up to it -- **only** on a successful export (`TOILE-090`).
+    ///
+    /// Split out of [`flush_delta`](Self::flush_delta) so the rule can be tested
+    /// against a failure: Loro's exporter has no seam a test can break, and a
+    /// rule about what happens on an error is worth nothing if the error is
+    /// unreachable. An empty successful export still advances the cursor -- the
+    /// range held nothing to broadcast, which is not a failure.
+    fn take_delta<E: std::fmt::Debug>(
+        cursor: &mut VersionVector,
+        current: VersionVector,
+        exported: Result<Vec<u8>, E>,
+    ) -> Option<Vec<u8>> {
+        match exported {
+            Ok(delta) => {
+                *cursor = current;
+                (!delta.is_empty()).then_some(delta)
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Toile: export failed, the range is kept for the next flush: {e:?}"
+                );
+                None
+            }
+        }
+    }
+
+    /// Take the export cursor past everything the board now holds, keeping this
+    /// peer's own counter where it was.
+    ///
+    /// Called after an import (a peer's delta, a history replay, a restore). The
+    /// imported operations are not ours to broadcast, so the cursor must clear
+    /// them, or the next local edit would send a peer its own work back.
+    ///
+    /// Our own counter is the exception, and Trame learned it the hard way
+    /// (`features/ambre-spec-trame-engine.md`): every board opens by committing
+    /// its scaffolding under a fresh random peer id, and the first import lands
+    /// before any flush. Swallowing those genesis operations here would make the
+    /// next local delta depend, causally, on operations no other peer holds --
+    /// and a peer that cannot resolve a dependency keeps the edit pending
+    /// forever rather than showing it.
+    fn absorb_imported(&mut self) {
+        let ours = self.exported_vv.get(&self.peer).copied();
+        self.exported_vv = self.doc.oplog_vv();
+        match ours {
+            Some(counter) => {
+                self.exported_vv.insert(self.peer, counter);
+            }
+            None => {
+                self.exported_vv.remove(&self.peer);
+            }
         }
     }
 
@@ -640,5 +724,66 @@ impl ToileState {
         }
         ids.sort();
         ids
+    }
+}
+
+#[cfg(test)]
+mod cursor_tests {
+    use loro::VersionVector;
+
+    use super::ToileState;
+
+    /// `TOILE-090`: a failed export keeps the cursor where it is, so the range
+    /// is offered again; a successful one takes it past everything exported.
+    #[test]
+    fn a_failed_export_keeps_the_range_for_the_next_flush() {
+        // A cursor the board has actually reached, so the two vectors differ
+        // the way they do in a real flush.
+        let st = ToileState::new();
+        let current = st.doc.oplog_vv();
+        let mut cursor = VersionVector::default();
+
+        let out = ToileState::take_delta(
+            &mut cursor,
+            current.clone(),
+            Err::<Vec<u8>, &str>("the exporter said no"),
+        );
+        assert!(out.is_none(), "a failed export broadcasts nothing");
+        assert_eq!(
+            cursor,
+            VersionVector::default(),
+            "a failed export must not advance the cursor"
+        );
+
+        // The next flush offers the same range, and this time it lands.
+        let out =
+            ToileState::take_delta(&mut cursor, current.clone(), Ok::<_, &str>(vec![1, 2, 3]));
+        assert_eq!(out.as_deref(), Some([1, 2, 3].as_slice()));
+        assert_eq!(cursor, current, "a successful export advances the cursor");
+    }
+
+    /// An export that succeeds with nothing in it still advances the cursor:
+    /// an empty range is not a failure, and there is nothing to offer again.
+    #[test]
+    fn an_empty_export_is_not_a_failure() {
+        let st = ToileState::new();
+        let current = st.doc.oplog_vv();
+        let mut cursor = VersionVector::default();
+
+        let out = ToileState::take_delta(&mut cursor, current.clone(), Ok::<_, &str>(Vec::new()));
+        assert!(out.is_none(), "an empty delta is not broadcast");
+        assert_eq!(cursor, current);
+    }
+
+    /// A flush with nothing new answers `None` and touches nothing: the guard
+    /// that keeps an idle command off the exporter.
+    #[test]
+    fn a_flush_with_nothing_new_exports_nothing() {
+        let mut st = ToileState::new();
+        assert!(
+            st.flush_delta().is_some(),
+            "the scaffolding is ours to send"
+        );
+        assert!(st.flush_delta().is_none(), "and it is sent only once");
     }
 }

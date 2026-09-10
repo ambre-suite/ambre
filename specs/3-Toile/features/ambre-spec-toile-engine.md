@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE TOILE ENGINE
 **Type:** Vertical (feature)
-**Implementation:** partial -- the engine and the seam are built; an index update and a remote change
-cost the whole board.
+**Implementation:** partial -- the engine, the seam and the delta cursor are built; an index update
+and a remote change cost the whole board.
 
 > A user drags a note across an endless plane, and every collaborator sees it move. One thread holds
 > the board, writes the change, and answers with the elements the screen shows. The other thread
@@ -58,8 +58,9 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `TOILE-090` | POST | An export that fails MUST NOT advance the export cursor; the range MUST be offered again. | this spec section 3; `ambre-spec-delta-order.md` | none, and **the rule fails today**: `emit_with_update` drops an export error to `None` and advances the cursor regardless, so the operations of that range are never broadcast. Trame keeps its cursor on the same error (`features/ambre-spec-trame-engine.md`). Answered by the "No delta is lost on an export error" Story | unverified |
-| `TOILE-217` | POST | A second export from the same cursor MUST repeat no operation already broadcast. | this spec section 3; `ambre-spec-delta-order.md` | none: the export reads from the stored version vector, which makes the repeat unrepresentable, but the two convergence proptests end by exchanging whole snapshots, so neither would notice a cursor that repeated or skipped | unverified |
+| `TOILE-090` | POST | An export that fails MUST NOT advance the export cursor; the range MUST be offered again. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_toile::logic::state::cursor_tests::a_failed_export_keeps_the_range_for_the_next_flush`, which hands the cursor a failure and then a success and reads it back after each; `::an_empty_export_is_not_a_failure` holds the other side, where a successful export of nothing still advances | verified |
+| `TOILE-217` | POST | A second export from the same cursor MUST repeat no operation already broadcast, and an import MUST NOT be broadcast back. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_toile::logic::convergence_tests::an_import_is_not_broadcast_back`, where a peer holding nothing reads the flush that follows an import and finds none of the imported work in it; `::a_flush_with_nothing_new_exports_nothing` holds the idle case | verified |
+| `TOILE-236` | POST | Taking the cursor past an import MUST keep this peer's own counter, and a restore from local storage MUST NOT move the cursor at all. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_toile::logic::convergence_tests::an_import_does_not_swallow_our_own_unbroadcast_genesis`, where the peer receiving the next delta can resolve it; `::a_restore_still_offers_what_this_client_wrote_offline`, where a session written offline still reaches a peer after a reopen | verified |
 | `TOILE-218` | FRAME | Exporting MUST NOT write to the board. | this spec section 3 | type-level: the export reads the document and the stored cursor and commits nothing; the construction is the proof | verified |
 
 ### 1.5 Answer a request for the whole board
@@ -103,14 +104,14 @@ status values are normative in `ambre-spec-template.md`.
   worker seals (`ZK-001`). Toile's one outbound flow of user content is the media path of
   `features/ambre-spec-toile-media.md section 1`. `UI-THREAD-004` bans a network, crypto or
   persistence path on the other side of the seam.
-* **Verification.** 23 `verified`, 13 `unverified`, 0 `unimplemented`. Fourteen rows became
-  thirty-six, and the distinct mechanisms they cite held at fifteen: ten of the fourteen new
-  `verified` rows are structural -- a private field, a `&self`, a return type with nowhere to put a
-  delta -- and the other four cite a test already cited here for a rule it asserts literally. An
-  engine pays in the shapes its types forbid, not in tests it does not have, and no row below
-  should be read as new coverage. The thirteen gaps are three kinds: eight rules the code answers
-  with something else, four of them naming the Story that closes them; four rules nothing exercises
-  at all; and `TOILE-023`, a measurement rather than a mechanism. What the engine holds best is the
+* **Verification.** 26 `verified`, 11 `unverified`, 0 `unimplemented`. The delta cursor closed the
+  gap that mattered most and is the one corner here paid for in tests rather than in shapes: six
+  assertions over the three rules of section 1.4, each of which fails when the handler is reverted.
+  The rest of the table still pays in the shapes its types forbid -- ten of the `verified` rows are
+  structural, a private field, a `&self`, a return type with nowhere to put a delta -- and no such
+  row should be read as coverage. The eleven gaps are three kinds: six rules the code answers with
+  something else, three of them naming the Story that closes them; four rules nothing exercises at
+  all; and `TOILE-023`, a measurement rather than a mechanism. What the engine holds best is the
   pair no other application holds: the index equivalence and the convergence of every derived
   cache, both under one property test -- neither of them at a camera that culls (`TOILE-206`).
 
@@ -174,7 +175,7 @@ thread leaves as a return value (`TOILE-089`).
 | the presence map | each remote peer's latest cursor, stroke, laser and selection, keyed by user id (`features/ambre-spec-toile-presence.md`) | from the frames that arrive; never persisted |
 | the playback state | the presentation flag, the active slide, the broadcast toggle and the presenter this viewer follows (`features/ambre-spec-toile-presentation.md`) | per viewer, never shared |
 | the local history | the undo manager, opened with the board (`features/ambre-spec-toile-undo.md`) | never: it dies with the session |
-| the sync cursor | the last version vector exported to Sync | advanced after every export, which is `TOILE-090` |
+| the sync cursor | the last version vector exported to Sync | advanced by a successful export, by an import minus our own counter, and by nothing else (`TOILE-090`, `TOILE-236`) |
 | the pending imports | the imports waiting for a media hash before they touch the board (`features/ambre-spec-toile-media.md`) | never: it dies with the session |
 
 **Code:** `crates/ambre-toile/src/logic/state/mod.rs` -- the state and the dispatch;
@@ -303,9 +304,31 @@ reproducible for a fixture generator or a deterministic test (`ambre-spec-fixtur
 It is never for a live document: two writers sharing a peer mint colliding ids, which is the one
 hazard the minting argument rests on avoiding.
 
-**The delta is a cursor, not a drain.** The export reads from the last exported version vector and
-advances it, so a second export from the same cursor repeats no operation. The advance is
-unconditional today, which loses the range a failed export never emitted (`TOILE-090`).
+**The delta is a cursor, not a drain.** The export reads from the last exported version vector, and
+the cursor advances **only** when that export succeeded (`TOILE-090`): a failure keeps the range,
+and the next flush offers it again. Advancing regardless -- swallowing the error -- dropped those
+operations for good, because no later export reads from behind the cursor.
+
+Three movements, and each is a different rule:
+
+| What happened | What the cursor does |
+|---|---|
+| a local edit exported | advances past everything exported, and only then (`TOILE-090`) |
+| a peer's delta imported | advances past what arrived, **keeping this peer's own counter** (`TOILE-236`) |
+| a restore from local storage | does not move (`TOILE-236`) |
+
+The second is what stops a peer from receiving its own work back. Its exception is the one Trame
+learned the hard way: a board opens by committing its scaffolding under a fresh random peer id, and
+the first import lands before any flush, so absorbing our own counter would make the next local
+delta depend on operations no peer holds -- and an unresolvable dependency is not an error a peer
+reports, it is an edit that never appears.
+
+The third is where Toile parts from Trame deliberately. A restore reads what this client wrote
+before it closed, which may have reached nobody, and a reopen mints a fresh peer id -- so the
+exception above cannot save it, and absorbing the restored history would drop an offline session
+for good. Toile leaves the cursor alone there and re-offers the restored history on the first
+flush; the relay already holds most of it and drops what it knows. Trame absorbs it
+(`features/ambre-spec-trame-engine.md`), and carries the hazard.
 
 **The registry is flat.** A board that carries another Ambre document adds no dispatch step and no
 recursion: the child is an ordinary entry keyed by its own document id. Why that is the shape is
@@ -418,10 +441,10 @@ error rather than a silent drop (`TOILE-UI-101`).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A failed export loses a change** (`TOILE-090`). The cursor advances whether the export succeeded
-  or not, so the operations of that range are never broadcast and the two peers diverge until the
-  next full snapshot. Trame retries the same range. Answered by the "No delta is lost on an export
-  error" Story.
+* **A retry has no schedule** (`TOILE-090`). A failed export keeps its range, and the range is
+  offered again on the next flush -- which is the next local edit. A board nobody is editing
+  therefore holds its unsent operations until someone touches it, and no timer, no backoff and no
+  notice cover the gap. The peers are not diverged, only late, and nothing says how late.
 * **An index update walks the index** (`TOILE-091`). Removing a leaf is a linear search, and a
   geometry write is a remove followed by an insert, so a drag at 60 frames a second walks the whole
   board 60 times a second. Answered by the "Engine and render optimization" Story.
