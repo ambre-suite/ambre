@@ -70,13 +70,6 @@ allow = [
 # `Apache-2.0 WITH LLVM-exception` and `OpenSSL` were two of those, and adding
 # either back is one line here plus the reason it returned.
 
-# One warning survives here on purpose. `rustis` states its licence with
-# `license-file` rather than an SPDX expression, so `no-license-field` fires;
-# cargo-deny then reads the file, finds the MIT text and allows the crate. A
-# `licenses.clarify` entry does not silence it -- cargo-deny never consults the
-# clarification it already resolved -- and `-A no-license-field` would silence
-# the check for every future crate, which is the one case worth reading.
-
 [bans]
 # A workspace this size resolves duplicate minor versions across transitive
 # trees; that is noise, not a defect. Capability bans below are the point.

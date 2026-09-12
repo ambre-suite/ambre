@@ -127,14 +127,21 @@ async fn hub_loop(redis: rustis::client::Client, mut cmd_rx: mpsc::Receiver<HubC
             },
             msg = pubsub.next() => match msg {
                 Some(Ok(m)) => {
-                    let channel = String::from_utf8_lossy(&m.channel);
-                    if let Some(sinks) = routes.get(channel.as_ref()) {
+                    // Every channel this hub subscribes to is a name it built
+                    // itself, so a name that is not text is a defect here
+                    // rather than a peer's doing: say so instead of routing a
+                    // lossy reading of it.
+                    let Ok(channel) = m.channel_str() else {
+                        tracing::warn!("pubsub hub: non-UTF-8 channel name, message dropped");
+                        continue;
+                    };
+                    if let Some(sinks) = routes.get(channel) {
                         // Fan out to every connection watching this channel. A
                         // full outbound queue drops the message for that one
                         // connection (it will re-sync via RequestMissing); it
                         // never blocks the hub or the other subscribers.
                         for sink in sinks.values() {
-                            let _ = sink.try_send(m.payload.clone());
+                            let _ = sink.try_send(m.payload().to_vec());
                         }
                     }
                 }
