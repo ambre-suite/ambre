@@ -10,6 +10,9 @@ crate-type = ["cdylib"]
 
 [dependencies]
 ambre-bus    = { path = "../ambre-bus" }
+# The launcher reads an `.ambre` header before it knows which application owns
+# the file, so it names the container layer directly (`ambre-spec-docfile.md`).
+ambre-core   = { path = "../ambre-core" }
 ambre-canvas = { path = "../ambre-canvas" }
 ambre-chrome = { path = "../ambre-chrome" }
 ambre-draw   = { path = "../ambre-draw" }

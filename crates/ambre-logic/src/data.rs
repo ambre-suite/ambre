@@ -46,6 +46,27 @@ impl LogicState {
         );
     }
 
+    /// Write a document to a native `.ambre` file and answer with the bytes
+    /// (`ambre-spec-docfile.md`). The second app command this thread serves
+    /// itself, and for a reason of its own: the container's header carries the
+    /// document's identity, and an engine does not know its own -- only this
+    /// registry, which keyed it, does.
+    ///
+    /// App-agnostic by construction: one container serves every application
+    /// (`DOCFILE-007`), so the only per-app value is the event that carries the
+    /// bytes out, which [`DocState::ambre_file_event`] mints.
+    fn export_ambre_file(&mut self, document_id: DocumentId) {
+        let Some(answer) = self
+            .docs
+            .get(&document_id)
+            .map(|d| d.state.ambre_file_event(document_id))
+        else {
+            tracing::warn!("Logic: .ambre export asked of a document that is not open");
+            return;
+        };
+        self.dispatch_outcome(document_id, vec![answer], None, None, None, Vec::new());
+    }
+
     /// Route a typed application command to its document's state, send display
     /// events to the UI Thread, and forward CRDT/ephemeral payloads to Sync.
     ///
@@ -78,6 +99,17 @@ impl LogicState {
         // rather than inside one.
         if matches!(command, AppCommand::Toile(ToileCommand::ExportPdf)) {
             self.export_toile_pdf(document_id);
+            return;
+        }
+        // The native file is the same operation whichever engine owns the
+        // document, so the two variants are intercepted together rather than
+        // implemented twice (`DOCFILE-007`).
+        if matches!(
+            command,
+            AppCommand::Toile(ToileCommand::ExportAmbreFile)
+                | AppCommand::Trame(ambre_bus::TrameCommand::ExportAmbreFile)
+        ) {
+            self.export_ambre_file(document_id);
             return;
         }
         let doc = &mut doc.state;

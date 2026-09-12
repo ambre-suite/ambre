@@ -238,10 +238,18 @@ into the containers itself.
 |---|---|
 | the toolbar Import button | a file picker opens, accepting `.csv`; the chosen file is read on the main thread and sent as bytes |
 | the toolbar Export button | the Logic thread serializes the active sheet and answers with the bytes |
+| the toolbar Save button | the whole workbook leaves as a native `.ambre` file, on the same answer path, and the button's own label says the file is not encrypted (`ambre-spec-docfile.md`, `DOCFILE-001`, `DOCFILE-009`) |
 | the answer | the UI thread wraps the bytes in a browser download; no canvas state changes |
 
 The picker is transient: it is never attached to the page, and it lives until the user picks a file
 or drops it.
+
+**The native file sits beside the CSV pair, and is not one of them.** The CSV export drops
+formulas, styles and every sheet but the active one; the native file drops nothing. Only the labels
+carry that difference before the click, which is why the save's names the format and its lack of
+encryption. Opening a file is not on this surface -- it belongs to the launcher, because the file's
+header names the application and at the moment of picking no workbook is open
+(`ambre-spec-docfile.md section 4`).
 
 **What the surface cannot reach.** The import command carries a delimiter, a header flag, a target
 sheet and an origin. The button sets none of them: it always auto-detects, always treats row one as

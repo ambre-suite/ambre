@@ -84,6 +84,13 @@ pub const EXPORT_SVG: CommandId = CommandId("toile.file.export_svg");
 /// thread rather than in the board's own state: the pages are drawn, not
 /// serialized, and the base font faces live there.
 pub const EXPORT_PDF: CommandId = CommandId("toile.file.export_pdf");
+/// Write the whole board to a native `.ambre` file (`ambre-spec-docfile.md`).
+/// Unlike the two exports above it drops nothing -- the payload **is** the
+/// document (`DOCFILE-001`) -- and unlike them it is plaintext, which is why its
+/// own label says so (`DOCFILE-009`). Resolves to a board command the Logic
+/// thread serves, because the container's header carries the document's
+/// identity and the board does not know it.
+pub const SAVE_FILE: CommandId = CommandId("toile.file.save_file");
 
 /// Every id the menu bar introduces (not shared with `ui::menu`). Used by the
 /// view to recognise the ids it must resolve locally, and by tests.
@@ -108,6 +115,7 @@ pub const MENU_BAR_COMMANDS: &[CommandId] = &[
     LINK_CLEAR,
     EXPORT_SVG,
     EXPORT_PDF,
+    SAVE_FILE,
 ];
 
 // -- Menu grouping -------------------------------------------------------------
@@ -150,13 +158,17 @@ pub enum MenuRow {
 pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
     let row = MenuRow::Command;
     match id {
-        // File is thin in the MVP: the share dialog is app-agnostic chrome (E2),
-        // and there is no local "save" (the board lives in `LoroDoc`). Only the
-        // presentation entry point lands here for now.
+        // The share dialog is app-agnostic chrome (E2), so File carries the
+        // local file, the two lossy exports and the presentation entry point.
+        // The save sits above the separator with the exports below it: one of
+        // the three keeps everything, and the grouping is the only place that
+        // difference shows before the user clicks.
         MenuId::File => vec![
             row(IMPORT_FILE),
             row(EMBED_WEB),
             row(EMBED_DOC),
+            MenuRow::Separator,
+            row(SAVE_FILE),
             MenuRow::Separator,
             row(EXPORT_SVG),
             row(EXPORT_PDF),
@@ -235,6 +247,7 @@ pub fn menu_bar_edit(id: CommandId) -> Option<ToileCommand> {
         // (`TOILE-IO-085`).
         EXPORT_SVG => Some(ToileCommand::ExportSvg),
         EXPORT_PDF => Some(ToileCommand::ExportPdf),
+        SAVE_FILE => Some(ToileCommand::ExportAmbreFile),
         _ => None,
     }
 }
@@ -260,6 +273,21 @@ mod tests {
                 "menu {id:?} is empty"
             );
         }
+    }
+
+    /// `ambre-spec-docfile.md section 4`: the save gesture exists, it is in the
+    /// File menu, and it resolves to the board command the Logic thread serves.
+    #[test]
+    fn the_file_menu_offers_the_native_file_and_resolves_it() {
+        let cmds = item_commands(&menu_layout(MenuId::File));
+        assert!(
+            cmds.contains(&SAVE_FILE),
+            "File must offer the native file: {cmds:?}"
+        );
+        assert!(matches!(
+            menu_bar_edit(SAVE_FILE),
+            Some(ToileCommand::ExportAmbreFile)
+        ));
     }
 
     #[test]

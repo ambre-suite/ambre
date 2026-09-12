@@ -360,6 +360,15 @@ impl TrameState {
                 let sheet = self.active_sheet.clone();
                 self.export_csv(&sheet, None, None)
             }
+            // Served by the Logic thread: the container's header carries the
+            // document's identity, which a workbook does not know
+            // (`ambre-spec-docfile.md`). Its dispatcher intercepts the command
+            // before the document lookup, so this arm is reached only by a
+            // caller driving `TrameState` directly -- and it answers rather than
+            // falling silent.
+            TrameCommand::ExportAmbreFile => TrameOutcome::display_only(vec![TrameEvent::Error {
+                message: "the file is written by the Logic thread, not by the workbook".to_owned(),
+            }]),
 
             TrameCommand::ReplaceOne {
                 query,

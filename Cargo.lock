@@ -53,6 +53,7 @@ dependencies = [
  "ambre-bus",
  "ambre-canvas",
  "ambre-chrome",
+ "ambre-core",
  "ambre-draw",
  "ambre-logic",
  "ambre-toile",

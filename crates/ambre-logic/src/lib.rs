@@ -173,6 +173,33 @@ impl DocState {
         }
     }
 
+    /// The whole document as a native `.ambre` file, as the display event the
+    /// owning application surfaces (`DOCFILE-001`, `DOCFILE-007`).
+    ///
+    /// Minted here for the same reason as [`refusal_event`](Self::refusal_event):
+    /// the container is one for every application, and the event that carries
+    /// its bytes to the browser is each application's own. `document_id` comes
+    /// from the registry that keyed this state -- the engine does not know its
+    /// own identity, and the header needs it.
+    ///
+    /// The file name is a constant per application, like every other export in
+    /// the suite (`board.svg`, `deck.pdf`): the document's own name is encrypted
+    /// and lives on the Sync thread, which this one cannot read (`ZK-001`).
+    fn ambre_file_event(&self, document_id: DocumentId) -> AppEvent {
+        match self {
+            DocState::Trame(state) => AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete {
+                filename: "workbook.ambre".to_owned(),
+                data: state.export_ambre_plaintext(document_id.into()),
+            }),
+            DocState::Toile(state) => {
+                AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete {
+                    filename: "board.ambre".to_owned(),
+                    data: state.export_ambre_plaintext(document_id.into()),
+                })
+            }
+        }
+    }
+
     /// Export this state's full Loro snapshot.
     ///
     /// **Production code, ungated** (`FIXTURE-007`), and the other half of the

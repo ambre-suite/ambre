@@ -106,6 +106,7 @@ commands! {
     PASTE = shared::PASTE, "Paste", Some(IconId("content-paste")), shared::PASTE_CHORDS, CLIPBOARD;
     IMPORT_CSV = CommandId("trame.interop.import_csv"), "Import CSV", Some(IconId("import")), &[], INTEROP;
     EXPORT_CSV = CommandId("trame.interop.export_csv"), "Export CSV", Some(IconId("export")), &[], INTEROP;
+    SAVE_FILE = CommandId("trame.interop.save_file"), "Save to a file (.ambre, not encrypted)", Some(IconId("content-save")), &[], INTEROP;
     PALETTE = CommandId("trame.palette.open"), "Command palette", None, &[KeyBinding::primary('k')], GENERAL;
 }
 
@@ -288,6 +289,10 @@ pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
         CLEAR_FILTER => TrameCommand::ClearActiveFilter,
         // Parameterless: the Logic thread serializes the active sheet itself.
         EXPORT_CSV => TrameCommand::ExportActiveSheetCsv,
+        // The native file, which drops nothing (`DOCFILE-001`). Also
+        // parameterless, and also served by the Logic thread -- there because
+        // the container's header carries the document's identity.
+        SAVE_FILE => TrameCommand::ExportAmbreFile,
         // BOLD / ITALIC (style toggles), FILTER_COLUMN, FIND / REPLACE and the
         // clipboard commands are UI-only intents the launcher intercepts:
         // BOLD/ITALIC become a `SetCellStyle` patch toggled against the tracked
@@ -425,6 +430,19 @@ mod tests {
         assert!(!cell.contains(&MenuRow::Command(FILTER_COLUMN)));
     }
 
+    /// `DOCFILE-009`: the surface that offers the export says the file carries
+    /// no encryption of its own. The label is where it says it -- the one string
+    /// a user reads before clicking -- so the rule is asserted on the label
+    /// rather than on a comment about a tooltip.
+    #[test]
+    fn the_save_label_says_the_file_is_not_encrypted() {
+        let label = title(SAVE_FILE, &Locale::En).expect("SAVE_FILE is declared");
+        assert!(
+            label.contains("not encrypted"),
+            "the export surface must state that the file is plaintext: {label}"
+        );
+    }
+
     #[test]
     fn command_to_app_maps_the_logic_thread_commands() {
         // `AppCommand` carries no `PartialEq`, so the variant is matched.
@@ -435,6 +453,10 @@ mod tests {
         assert!(matches!(
             command_to_app(DELETE_ROWS),
             Some(AppCommand::Trame(TrameCommand::DeleteSelectedRows))
+        ));
+        assert!(matches!(
+            command_to_app(SAVE_FILE),
+            Some(AppCommand::Trame(TrameCommand::ExportAmbreFile))
         ));
         // A UI-only intent the launcher intercepts: no bus payload.
         assert!(command_to_app(BOLD).is_none());

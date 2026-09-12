@@ -137,6 +137,14 @@ instantiated, so it never names a kind and gains the next one for free (`CHROME-
 kind mints an identifier on the client and opens the document at once. There is no name prompt: the
 prompt is friction on every single creation, and the honest default is an unnamed document.
 
+**Opening one from a file.** The same two steps in the other order: the file is read first, because
+its header names the application, and only then is a path built and navigated to. So this screen
+holds the gesture and owns none of its rules -- the header read, the migration, the refusals and the
+hand-off through the local snapshot store all belong to `ambre-spec-docfile.md section 4`. One thing
+is shared rather than restated: the predicate that says which kinds have an engine. The picker
+offers those kinds and the file path refuses the others, so a file cannot open a document the screen
+would not have let the user create (`CHROME-038`).
+
 **Naming, and why the default is nothing.**
 
 | Rule | Reason |
@@ -169,6 +177,7 @@ monograms, their generic labels and the creatable list. The style is `crates/amb
 | a card is clicked | the document opens, in place or after a reload depending on its kind |
 | the kind picker is opened | one entry per creatable kind, each under its generic label |
 | a kind is picked | a document of that kind opens immediately, unnamed |
+| the open-a-file control is used | a picker accepts an `.ambre` file, and the document it carries opens -- in the application the file's own header names, not in the one the picker was clicked from. The rule and its refusals belong to `ambre-spec-docfile.md section 4`; what this screen owns is holding the gesture, because at the moment of picking no document is open and no engine is booted |
 | a card is renamed inline | the new name is sent, encrypted by the Sync thread, and the card updates |
 | a card's delete is chosen | a modal names the document and asks; confirming removes the card at once |
 | a document is open and renamed from its header | the same path as the card's rename |

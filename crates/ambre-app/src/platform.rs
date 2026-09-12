@@ -603,3 +603,111 @@ pub(crate) fn install_command_keys(
         .expect("add command keydown listener");
     cb.forget();
 }
+
+/// Open a transient `<input type="file">` for a native `.ambre` file, and open
+/// the document it carries (`ambre-spec-docfile.md section 4`).
+///
+/// The launcher owns this gesture because the file owns the choice of
+/// application: at the moment of picking, no document is open and no engine is
+/// booted, and the header is what names the owner. That is also why the
+/// container layer is read here rather than in an app -- `read_ambre_plaintext`
+/// migrates an older container or refuses a newer one before anything sees a
+/// payload (`DOCFILE-002`, `DOCFILE-003`, `DOCFILE-013`).
+///
+/// The payload reaches the engine through the local snapshot store rather than
+/// through a channel, because the path always reloads the page (below) and a
+/// channel does not survive that. The store is where a document's bytes already
+/// wait for a boot, so the file lands exactly where a refresh would have left
+/// them and the existing restore leg picks it up -- schema gate included
+/// (`SCHEMA-006`).
+///
+/// **The reload is unconditional**, where opening a *card* reloads only across
+/// render kinds (`route::needs_reload`). Two reasons: the booted `AppView` is
+/// fixed per page load, so half the files would need one anyway; and the
+/// restore leg runs at boot, not on a router swap, so a pushState would land on
+/// an empty document. One path, taken every time, beats two that differ by the
+/// byte at offset 5.
+pub(crate) fn open_ambre_file_picker(toasts: Toasts) {
+    let Some(document) = web_sys::window().and_then(|w| w.document()) else {
+        return;
+    };
+    let Some(input) = document
+        .create_element("input")
+        .ok()
+        .and_then(|e| e.dyn_into::<web_sys::HtmlInputElement>().ok())
+    else {
+        return;
+    };
+    input.set_type("file");
+    let _ = input.set_attribute("accept", ".ambre");
+    let picker = input.clone();
+    let onchange = Closure::<dyn FnMut()>::new(move || {
+        if let Some(file) = picker.files().and_then(|fs| fs.get(0)) {
+            read_ambre_file(file, toasts);
+        }
+    });
+    input.set_onchange(Some(onchange.as_ref().unchecked_ref()));
+    onchange.forget();
+    input.click();
+}
+
+/// Read `file`, attribute it, persist its payload and navigate to it.
+///
+/// Every refusal reaches the user by name and leaves the session untouched
+/// (`DOCFILE-005`): a file that is not a container, one this build is too old
+/// to read, one whose type no engine renders, and a snapshot store that did not
+/// take the bytes. Nothing is navigated to on any of them, so a refused file
+/// costs the user a message and nothing else.
+fn read_ambre_file(file: web_sys::File, toasts: Toasts) {
+    wasm_bindgen_futures::spawn_local(async move {
+        let Ok(buf) = wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await else {
+            toasts.error("Ambre could not read that file");
+            return;
+        };
+        let bytes = js_sys::Uint8Array::new(&buf).to_vec();
+
+        let header = match ambre_core::docfile::read_ambre_plaintext(&bytes) {
+            Ok(header) => header,
+            Err(e) => {
+                toasts.error(format!("Ambre cannot open that file: {e}"));
+                return;
+            }
+        };
+        // A type this build knows by name but cannot render is refused here
+        // rather than opened blank: `DocType::creatable` is the same predicate
+        // the new-document picker offers, so the two cannot disagree.
+        if !ambre_bus::DocType::creatable().contains(&header.doc_type) {
+            toasts.error(format!(
+                "Ambre cannot open a {} yet",
+                header.doc_type.generic_label()
+            ));
+            return;
+        }
+
+        let store = match ambre_logic::persistence::PersistenceStore::open()
+            .recv_async()
+            .await
+        {
+            Ok(Ok(store)) => store,
+            _ => {
+                toasts.error("Ambre could not open its local store for that file");
+                return;
+            }
+        };
+        // Durable, not fire-and-forget: the navigation below unloads the page,
+        // and an open transaction goes with it.
+        let committed = store
+            .save_snapshot_committed(*header.document_id.as_bytes(), header.payload)
+            .recv_async()
+            .await;
+        if committed != Ok(true) {
+            toasts.error("Ambre could not store that file locally");
+            return;
+        }
+
+        let path = crate::route::doc_path(header.doc_type, header.document_id.into());
+        if let Some(window) = web_sys::window() {
+            let _ = window.location().set_href(&path);
+        }
+    });
+}

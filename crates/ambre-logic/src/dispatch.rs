@@ -422,6 +422,140 @@ mod tests {
         (LogicState::new(to_ui, to_sync, to_persist), ui_rx, sync_rx)
     }
 
+    /// Drive `ExportAmbreFile` on a live document of `doc_type` and hand back
+    /// the bytes the UI would download.
+    ///
+    /// Goes through the real dispatcher rather than calling the engine, because
+    /// the rule under test is exactly what the dispatcher adds: the header's
+    /// identity comes from the registry that keyed the document, and an engine
+    /// has no way to supply it.
+    fn exported_file(doc_type: DocType, document_id: DocumentId) -> Vec<u8> {
+        let (mut state, ui, _sync) = harness();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type,
+        });
+        let command = match doc_type {
+            DocType::Trame => AppCommand::Trame(TrameCommand::ExportAmbreFile),
+            DocType::Toile => AppCommand::Toile(ToileCommand::ExportAmbreFile),
+            other => panic!("no engine for {other:?}"),
+        };
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command,
+        });
+        // The answer is the one event carrying bytes; every other event the open
+        // produced is a viewport refresh.
+        std::iter::from_fn(|| ui.try_recv().ok())
+            .find_map(|evt| match evt {
+                UiEvent::Viewport {
+                    event: AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. }),
+                    ..
+                }
+                | UiEvent::Viewport {
+                    event:
+                        AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete {
+                            data, ..
+                        }),
+                    ..
+                } => Some(data),
+                _ => None,
+            })
+            .expect("the export answered with bytes")
+    }
+
+    /// The bytes `ExportAmbreFile` would answer with, for a document already
+    /// live in `state`. The command path itself is driven by
+    /// [`exported_file`]; this reads the same answer without a second registry.
+    fn exported_file_from(state: &LogicState, document_id: DocumentId) -> Vec<u8> {
+        let doc = state.docs.get(&document_id).expect("a live document");
+        match doc.state.ambre_file_event(document_id) {
+            AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. })
+            | AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete { data, .. }) => {
+                data
+            }
+            other => panic!("the export answered with {other:?}"),
+        }
+    }
+
+    /// `DOCFILE-007`, and the reason this command is served by the dispatcher:
+    /// the container's header carries the document's identity, which only the
+    /// registry knows. An engine-side implementation could not write this byte
+    /// range at all.
+    #[test]
+    fn a_saved_file_carries_the_document_id_the_registry_keyed_it_under() {
+        for doc_type in [DocType::Trame, DocType::Toile] {
+            let document_id = DocumentId::new();
+            let bytes = exported_file(doc_type, document_id);
+            let header = ambre_core::docfile::read_ambre_plaintext(&bytes)
+                .expect("the command wrote a valid container");
+            assert_eq!(header.doc_type, doc_type, "the header names the wrong app");
+            assert_eq!(
+                header.document_id,
+                ambre_bus::Uuid::from(document_id),
+                "the file would open as a different document than the one saved"
+            );
+        }
+    }
+
+    /// `DOCFILE-001` over the whole gesture: what the user saves is what opens,
+    /// down the path the launcher actually takes. The file's payload is fed
+    /// through `RestoreLocalSnapshot` -- the same leg the open gesture reaches
+    /// by way of the local snapshot store -- so this covers the hand-off the
+    /// picker cannot test in a browser-free tier.
+    ///
+    /// The document is edited before saving, so a round trip that silently
+    /// returned an empty document would fail here rather than pass on two
+    /// identical fresh states.
+    #[test]
+    fn a_saved_file_opens_back_as_the_document_that_was_saved() {
+        let document_id = DocumentId::new();
+        let (mut state, _ui, _sync) = harness();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Trame,
+        });
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Trame(TrameCommand::SetCellText {
+                row: 3,
+                col: 1,
+                text: "kept".to_owned(),
+            }),
+        });
+        let saved = exported_file_from(&state, document_id);
+        let header = ambre_core::docfile::read_ambre_plaintext(&saved).expect("valid container");
+
+        // A second session, as a page load after the open gesture: nothing is
+        // live, and the file's payload arrives the way the store hands it over.
+        let (mut reopened, ui, _sync) = harness();
+        reopened.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
+            document_id: header.document_id.into(),
+            doc_type: header.doc_type,
+            snapshot: header.payload,
+        });
+        reopened.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Trame(TrameCommand::ScrollViewport {
+                row_start: 0,
+                col_start: 0,
+                row_end: 16,
+                col_end: 8,
+                version: 1,
+            }),
+        });
+        let kept = std::iter::from_fn(|| ui.try_recv().ok()).any(|evt| match evt {
+            UiEvent::Viewport {
+                event: AppEvent::Trame(ambre_bus::TrameEvent::ViewportData { cells, .. }),
+                ..
+            } => cells
+                .iter()
+                .any(|c| c.row == 3 && c.col == 1 && c.text == "kept"),
+            _ => false,
+        });
+        assert!(kept, "the saved file reopened without the edit it carried");
+    }
+
     /// Wrap a `RestCommand` in a `LogicCommand::Rest` with a fresh id.
     fn rest(cmd: RestCommand) -> LogicCommand {
         LogicCommand::Rest {

@@ -1,7 +1,8 @@
 # AMBRE -- FEATURE: THE NATIVE FILE (`.ambre`)
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the container ships; no gesture reaches it, and the sealed variant is a design.
+**Implementation:** partial -- the container ships and two gestures reach it: a save in each
+application, and one open in the launcher. The sealed variant is a design.
 
 > The file a user saves a document into, and opens back. One container for every application: a
 > spreadsheet, a board and a text document differ by one byte of the header.
@@ -28,7 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 | `DOCFILE-011` | `INV` | A snapshot on the wire MUST NOT carry this header: the container is a file format, never a wire format. | this spec section 5 | none. `ambre-sync` names neither entry point and seals a bare `export_snapshot()`, so the rule holds today by construction. Nothing refuses the line that would change it, and no test asserts the magic bytes are absent from a sealed payload | unverified |
 | `DOCFILE-008` | `INV` | A version bump MUST freeze one named artifact per `doc_type` in the same commit that adds the registry row. | this spec section 3; `ambre-spec-fixtures.md` | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). The recipe that performs the freeze does not exist, and no check reads the registry against the frozen corpus | unimplemented |
 | `DOCFILE-010` | `INV` | A passphrase-sealed file MUST carry its own container version; it MUST NOT be a flag on an existing one. | this spec section 5 | not built -- lands with `DOCFILE P2 -- passphrase-sealed files` (`ambre-roadmap.md` EF) | unimplemented |
-| `DOCFILE-009` | `OBS` | The export surface MUST state that a plaintext file carries no encryption of its own. | this spec section 5 | not built -- lands with `DOCFILE P1 -- user-facing export and import` (`ambre-roadmap.md` EF) | unimplemented |
+| `DOCFILE-009` | `OBS` | The export surface MUST state that a plaintext file carries no encryption of its own. | this spec section 5 | `ambre_toile::ui::commands::tests::the_save_label_says_the_file_is_not_encrypted`, `ambre_trame::ui::commands::tests::the_save_label_says_the_file_is_not_encrypted`. Asserted on the command's **label** -- the one string a user reads before clicking -- rather than on a tooltip or a dialog, so a surface that drops the warning cannot compile green. One test per surface, because the rule is per surface and the suite has two | verified |
 
 ### 1.2 Read a `.ambre` file
 
@@ -49,11 +50,18 @@ migrates or refuses before an application ever sees a payload.
   bytes in `ambre-core`, shared rather than duplicated per application.
 * **Boundary.** none: `DOCFILE-006` bans compression and encryption in this layer, so it holds no
   key, and `DOCFILE-011` keeps the bytes it produces on a local disk rather than on the relay.
-* **Verification.** 9 `verified`, 1 `unverified`, 3 `unimplemented`. The container is the one
+* **Verification.** 10 `verified`, 1 `unverified`, 2 `unimplemented`. The container is the one
   Foundations subsystem where the first count is honest: it does pure byte handling on the host
-  tier, so a test can reach every rule it makes about bytes. The four gaps are the rules that reach
-  outside it -- a bump obligation on a recipe that is unbuilt, two rules about a surface no gesture
-  has yet, and one about what another crate must refrain from putting on the wire. The fixture
+  tier, so a test can reach every rule it makes about bytes. The three gaps that remain are the
+  rules that reach outside it -- a bump obligation on a recipe that is unbuilt, the sealed variant,
+  and one about what another crate must refrain from putting on the wire. `DOCFILE P1` closed the
+  fourth: the export surface now exists, and its warning is held on the command label rather than
+  on a reviewer's memory. What the gestures add on top of the container is verified where it can
+  be: the save's header identity and its round trip through the launcher's own open path are driven
+  by `ambre_logic::dispatch::tests::a_saved_file_carries_the_document_id_the_registry_keyed_it_under`
+  and `::a_saved_file_opens_back_as_the_document_that_was_saved`, and the two command mappings by a
+  test each. The file picker and the download anchor stay DOM glue, held by using the application
+  (`ambre-spec-testing.md section 2`). The fixture
   corpus (`ambre-spec-fixtures.md`) widens the belt further, because it exercises this reader and
   this writer on every run. The pass split `DOCFILE-003`, which cited six tests for a migration and
   a refusal: four drive the walk and two drive the refusal, and one row could not say which. It also
@@ -223,7 +231,12 @@ pub enum DocFileError {
 ```
 
 **Code:** `crates/ambre-core/src/docfile.rs` holds the layout, the five entry points and the
-migration walk. The per-application bindings are `crates/ambre-trame/src/logic/docfile.rs`,
+migration walk. The gestures: `crates/ambre-app/src/platform.rs` (`open_ambre_file_picker`, the
+header read and the store hand-off) with its button in `src/landing.rs`;
+`ambre_logic::LogicState::export_ambre_file` and `DocState::ambre_file_event` for the save, which
+this thread serves itself because the header's identity comes from the registry that keyed the
+document;
+`PersistenceStore::save_snapshot_committed` for the durable write the navigation depends on. The per-application bindings are `crates/ambre-trame/src/logic/docfile.rs`,
 `crates/ambre-toile/src/logic/interop/docfile.rs` and its state-level pair in
 `crates/ambre-toile/src/logic/state/docfile.rs`. `crates/ambre-logic/tests/docfile_dispatch.rs`
 drives the dispatch rule across both.
@@ -238,14 +251,33 @@ drives the dispatch rule across both.
 | open a file | the header decides the application, then that application fills an empty state |
 | open a file another application wrote | the bytes are routed to that application, with no prompt and no conversion |
 | open a file no application claims | one error naming the type byte, and no partial document |
+| open a file of a type no engine renders yet | one error naming the kind, and nothing is opened: the launcher offers a file the same predicate its new-document picker uses (`DocType::creatable`), so the two cannot disagree |
+| the local store refuses the payload | one error saying so, and no navigation -- a document opened without its bytes is indistinguishable from an empty one |
 | open a file a newer client wrote | one error asking the user to update, and the file untouched |
 | export a plaintext file | a statement that the file carries no encryption of its own (`DOCFILE-009`) |
 | export a sealed file | a passphrase prompt, and a file a reader can tell from a plaintext one by its header alone (`DOCFILE-010`) |
 
-**Nothing in the suite reaches this surface.** There is no save gesture, no open gesture and no file
-picker in any application: every row above is what `DOCFILE P1` builds, and the two sealed rows what
-`DOCFILE P2` builds. The container beneath them ships and is exercised by its own tests and by the
-fixture corpus.
+**Where each gesture lives.** The save is per application, because the user is inside a document
+when they want it: Toile's File menu (`toile.file.save_file`) and Trame's toolbar
+(`trame.interop.save_file`), beside the lossy exports and distinguished from them by its own label.
+The open is the launcher's alone, because the file owns the choice of application: at the moment of
+picking, no document is open and no engine is booted, and the header is what names the owner. A save
+gesture duplicated per application is the cost of one container -- the alternative was an
+app-agnostic command and a third download path beside the two the views already own.
+
+**How the open hands the payload over.** The header is read in the launcher, which migrates an older
+container or refuses a newer one before anything sees a payload; the payload is then written to the
+**local snapshot store** under the document id the header carries, and the page navigates to it. The
+store is where a document's bytes already wait for a boot, so the file lands exactly where a refresh
+would have left them, and the existing restore leg picks it up -- schema gate included
+(`SCHEMA-006`). The navigation is an unconditional reload, where opening a card reloads only across
+render kinds: the booted view is fixed per page load, and the restore leg runs at boot rather than on
+a router swap, so a pushState would land on an empty document. The write is awaited on the
+transaction's commit, not the request's success -- a transaction still open when the page unloads is
+aborted, and the file would go with it.
+
+**The two sealed rows are what `DOCFILE P2` builds.** The container beneath every row ships and is
+exercised by its own tests and by the fixture corpus.
 
 ---
 

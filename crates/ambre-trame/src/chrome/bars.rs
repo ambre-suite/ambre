@@ -13,7 +13,8 @@ use leptos_icons::Icon;
 
 use super::color::{theme_bg_default, theme_fg_default};
 use super::commands::{
-    BOLD, COPY, CUT, EXPORT_CSV, FIND, IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, UNDO, UNMERGE,
+    BOLD, COPY, CUT, EXPORT_CSV, FIND, IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, SAVE_FILE, UNDO,
+    UNMERGE,
 };
 use super::icons;
 use crate::ui::commands as registry;
@@ -108,6 +109,16 @@ pub fn FormatBar(
             on:click=move |_| on_command.run(EXPORT_CSV)
         >
             {glyph(EXPORT_CSV).map(|ic| view! { <Icon icon=ic /> })}
+        </button>
+        // The native file, next to the two lossy paths and distinguished by its
+        // own label: it keeps everything and it is not encrypted
+        // (`DOCFILE-001`, `DOCFILE-009`).
+        <button
+            aria-label=label(SAVE_FILE)
+            on:mousedown=move |ev| ev.prevent_default()
+            on:click=move |_| on_command.run(SAVE_FILE)
+        >
+            {glyph(SAVE_FILE).map(|ic| view! { <Icon icon=ic /> })}
         </button>
         <span class="sep"></span>
 

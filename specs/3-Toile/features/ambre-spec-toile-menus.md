@@ -181,7 +181,7 @@ user (`TOILE-UI-050`).
 | Edit | undo, redo, the clipboard entries the context menu also carries, and select all |
 | View | zoom in, zoom out, 100 %, fit the board, fit the selection, the pointer mode, the panels |
 | Object | group and ungroup, the four z-order moves, lock and unlock, the six alignments and the two distributions, and the two link entries |
-| File | bringing a file onto the board and taking the board out as one (`features/ambre-spec-toile-import-export.md section 4`), then the presentation entry point |
+| File | bringing a file onto the board, saving the board as a native `.ambre` file, and taking it out as a lossy one -- the save above the separator, the exports below it (`features/ambre-spec-toile-import-export.md section 4`) -- then the presentation entry point |
 | Present | the presentation entry point, listed in both, and the deck panel (`features/ambre-spec-toile-presentation.md section 4`) |
 
 **The zoom control.** Zoom out, the current percentage, zoom in, fit, and fit the selection. Each

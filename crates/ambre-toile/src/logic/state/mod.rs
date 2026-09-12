@@ -424,6 +424,16 @@ impl ToileState {
             ToileCommand::ExportPdf => ToileOutcome::display_only(vec![ToileEvent::ExportFailed(
                 "the deck is exported by the Logic thread, not by the board".to_owned(),
             )]),
+            // Served by the Logic thread for a different reason: the container's
+            // header carries the document's identity, which a board does not
+            // know (`ambre-spec-docfile.md`). Same shape of answer, same reason
+            // for answering -- a silent arm is indistinguishable from a gesture
+            // that never arrived.
+            ToileCommand::ExportAmbreFile => {
+                ToileOutcome::display_only(vec![ToileEvent::ExportFailed(
+                    "the file is written by the Logic thread, not by the board".to_owned(),
+                )])
+            }
             ToileCommand::ImportFigma { .. } | ToileCommand::ImportMiro { .. } => {
                 // Figma / Miro converters land in a later interop slice; the board
                 // is untouched until then (atomicity).

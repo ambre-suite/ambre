@@ -143,6 +143,7 @@ describe! {
     EMBED_DOC: menu_bar::EMBED_DOC, "Embed a document...", Some(IconId("file-document-outline")), &[], FILE;
     LINK_SET: menu_bar::LINK_SET, "Link...", Some(IconId("link-variant")), &[], OBJECT;
     LINK_CLEAR: menu_bar::LINK_CLEAR, "Remove link", Some(IconId("link-variant-off")), &[], OBJECT;
+    SAVE_FILE: menu_bar::SAVE_FILE, "Save to a file (.ambre, not encrypted)", Some(IconId("content-save")), &[], FILE;
     EXPORT_SVG: menu_bar::EXPORT_SVG, "Export as SVG", Some(IconId("file-export-outline")), &[], FILE;
     EXPORT_PDF: menu_bar::EXPORT_PDF, "Export deck as PDF", Some(IconId("file-pdf-box")), &[], FILE;
     PRESENT_DECK: menu_bar::DECK, "Order the deck", Some(IconId("view-carousel-outline")), &[], PRESENT;
@@ -193,6 +194,19 @@ mod tests {
             let twin = COMMANDS.iter().skip(i + 1).find(|c| c.id == cmd.id);
             assert!(twin.is_none(), "{:?} is declared twice", cmd.id);
         }
+    }
+
+    /// `DOCFILE-009`: the surface that offers the export states that the file
+    /// carries no encryption of its own, and the label is where a user reads it
+    /// before clicking. Trame asserts the same on its own label -- the rule is
+    /// per surface, and the suite has two.
+    #[test]
+    fn the_save_label_says_the_file_is_not_encrypted() {
+        let label = title(menu_bar::SAVE_FILE, &Locale::En).expect("SAVE_FILE is declared");
+        assert!(
+            label.contains("not encrypted"),
+            "the export surface must state that the file is plaintext: {label}"
+        );
     }
 
     /// A command carries its own label, and a view reads it from here. An empty

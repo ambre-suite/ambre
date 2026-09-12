@@ -141,6 +141,80 @@ impl PersistenceStore {
         }
     }
 
+    /// Save a snapshot and report when the write is **durable**.
+    ///
+    /// [`save_snapshot`](Self::save_snapshot) is fire-and-forget, which is right
+    /// for the per-edit persist: the page stays open and the transaction commits
+    /// on the next turn of the event loop. It is wrong for a caller that is about
+    /// to navigate away -- opening an `.ambre` file whose document is of another
+    /// kind hard-reloads the page (`route::needs_reload`), and a transaction
+    /// still open when the document unloads is aborted, taking the file with it.
+    ///
+    /// So this one resolves on the transaction's `complete`, not on the
+    /// request's `success`: the former is the commit, the latter only says the
+    /// write was accepted into it. `false` on any failure, so a caller can tell
+    /// the user the file did not land instead of navigating to an empty
+    /// document.
+    pub fn save_snapshot_committed(
+        &self,
+        document_id: [u8; 16],
+        snapshot: Vec<u8>,
+    ) -> flume::Receiver<bool> {
+        let (tx, rx) = flume::bounded(1);
+        let key = id_to_hex(&document_id);
+
+        let txn = match self
+            .db
+            .transaction_with_str_and_mode(STORE_SNAPSHOTS, IdbTransactionMode::Readwrite)
+        {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::warn!("Persistence: save txn failed for {key}: {e:?}");
+                let _ = tx.send(false);
+                return rx;
+            }
+        };
+        let store = match txn.object_store(STORE_SNAPSHOTS) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("Persistence: save object_store failed for {key}: {e:?}");
+                let _ = tx.send(false);
+                return rx;
+            }
+        };
+
+        let array = Uint8Array::new_with_length(snapshot.len() as u32);
+        array.copy_from(&snapshot);
+        if let Err(e) = store.put_with_key(array.as_ref(), &JsValue::from_str(&key)) {
+            tracing::warn!("Persistence: save put failed for {key}: {e:?}");
+            let _ = tx.send(false);
+            return rx;
+        }
+
+        let tx_done = tx.clone();
+        let on_complete = Closure::<dyn FnMut(web_sys::Event)>::new(move |_e: web_sys::Event| {
+            let _ = tx_done.send(true);
+        });
+        txn.set_oncomplete(Some(on_complete.as_ref().unchecked_ref()));
+        on_complete.forget();
+
+        // `error` and `abort` are distinct events on a transaction and either one
+        // means the bytes are not there; both answer the same way.
+        let tx_err = tx.clone();
+        let on_error = Closure::<dyn FnMut(web_sys::Event)>::new(move |_e: web_sys::Event| {
+            let _ = tx_err.send(false);
+        });
+        txn.set_onerror(Some(on_error.as_ref().unchecked_ref()));
+        on_error.forget();
+        let on_abort = Closure::<dyn FnMut(web_sys::Event)>::new(move |_e: web_sys::Event| {
+            let _ = tx.send(false);
+        });
+        txn.set_onabort(Some(on_abort.as_ref().unchecked_ref()));
+        on_abort.forget();
+
+        rx
+    }
+
     /// Load a document's most recent snapshot.
     ///
     /// Returns a `flume::Receiver` resolving to `Some(bytes)` if a snapshot

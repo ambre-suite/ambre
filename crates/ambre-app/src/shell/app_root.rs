@@ -723,6 +723,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         username,
         dev_mode,
         boot_is_toile,
+        toasts,
     };
     let landing_tx = to_logic.clone();
 

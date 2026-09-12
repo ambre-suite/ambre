@@ -1234,6 +1234,16 @@ pub enum ToileCommand {
     /// [`ExportFailed`](ToileEvent::ExportFailed) when there is no page to draw
     /// or no font to draw it with.
     ExportPdf,
+    /// Write the whole board to a native `.ambre` file and hand the bytes back
+    /// (`ambre-spec-docfile.md`). Read-only, and served by the Logic thread
+    /// rather than by the board: the container's header carries the document's
+    /// identity, which the board does not know -- only the registry that keyed
+    /// it does. Answered by [`ExportComplete`](ToileEvent::ExportComplete).
+    ///
+    /// Unlike every other export, this one drops nothing: the payload **is** the
+    /// document (`DOCFILE-001`). It is also plaintext, which the surface that
+    /// offers it must say (`DOCFILE-009`).
+    ExportAmbreFile,
 
     // -- Persistence / compaction (no CRDT mutation) --
     RequestSnapshot,
@@ -1288,6 +1298,7 @@ impl ToileCommand {
                 | Self::CopyElements { .. }
                 | Self::ExportSvg
                 | Self::ExportPdf
+                | Self::ExportAmbreFile
                 | Self::ReadComments { .. }
                 | Self::ReadDeck
                 | Self::RequestMedia { .. }

@@ -542,6 +542,18 @@ pub enum TrameCommand {
         range: Option<GridRange>,
     },
 
+    /// Write the whole workbook to a native `.ambre` file and hand the bytes
+    /// back (`ambre-spec-docfile.md`). Read-only, and served by the Logic thread
+    /// rather than by the workbook: the container's header carries the
+    /// document's identity, which the workbook does not know -- only the
+    /// registry that keyed it does. Answered by
+    /// [`ExportComplete`](super::TrameEvent::ExportComplete).
+    ///
+    /// Unlike the CSV export, this one drops nothing: the payload **is** the
+    /// document (`DOCFILE-001`). It is also plaintext, which the surface that
+    /// offers it must say (`DOCFILE-009`).
+    ExportAmbreFile,
+
     // ─────────────────────────────────────────────────────────────────────────
     // Deferred feature surface (Phase 2+)
     //
@@ -684,6 +696,7 @@ impl TrameCommand {
                 | Self::FindNext { .. }
                 | Self::ExportActiveSheetCsv
                 | Self::ExportCsv { .. }
+                | Self::ExportAmbreFile
         )
     }
 }

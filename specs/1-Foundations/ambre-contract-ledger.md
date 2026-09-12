@@ -19,15 +19,15 @@
   `human-review` and `qa-manual` carry no ceiling: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2387 rows: 1665 shipped, of which 815 loose. 722 unbuilt.**
+**2387 rows: 1666 shipped, of which 815 loose. 721 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 197 | 207 | 446 |  | 850 |
+| `verified` | 198 | 207 | 446 |  | 851 |
 | `unverified` | 303 | 202 | 303 |  | 808 |
 | `human-review` | 5 |  |  |  | 5 |
 | `qa-manual` |  |  | 2 |  | 2 |
-| `unimplemented` | 57 | 54 | 20 | 591 | 722 |
+| `unimplemented` | 56 | 54 | 20 | 591 | 721 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -44,7 +44,7 @@
 | `ambre-spec-commands.md` | 13 | 13 | 9 | 4 |  |
 | `ambre-spec-delta-order.md` | 18 | 18 | 6 | 12 |  |
 | `ambre-spec-design-tokens.md` | 6 | 6 | 1 | 5 |  |
-| `ambre-spec-docfile.md` | 13 | 10 | 9 | 1 | 3 |
+| `ambre-spec-docfile.md` | 13 | 11 | 10 | 1 | 2 |
 | `ambre-spec-drawing-surface.md` | 15 | 11 | 7 | 4 | 4 |
 | `ambre-spec-find.md` | 10 | 10 | 6 | 4 |  |
 | `ambre-spec-fixtures.md` | 31 | 21 | 16 | 5 | 10 |

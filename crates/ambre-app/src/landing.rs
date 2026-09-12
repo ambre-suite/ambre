@@ -28,6 +28,8 @@ use leptos::html;
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
+use ambre_chrome::Toasts;
+
 use crate::route;
 
 /// One row in the document list, already reduced to display-ready fields.
@@ -59,6 +61,10 @@ pub struct LandingSignals {
     /// the in-place-swap vs. hard-reload choice when opening/creating a document
     /// ([`route::needs_reload`]).
     pub boot_is_toile: bool,
+    /// Where a refused `.ambre` file reaches the user (`DOCFILE-005`). The
+    /// launcher raises no other notification, so this is the one handle it
+    /// needs.
+    pub toasts: Toasts,
 }
 
 /// The landing overlay view. `to_logic` lets the dev sign-in panel dispatch
@@ -73,6 +79,7 @@ pub fn landing_view(
         username,
         dev_mode,
         boot_is_toile,
+        toasts,
     } = signals;
 
     // New document (`ambre-spec-launcher.md`): the app-agnostic type picker
@@ -127,6 +134,13 @@ pub fn landing_view(
                             {move || username.get().unwrap_or_default()}
                         </span>
                         <NewDocPicker on_pick=on_pick />
+                        <button
+                            class="ambre-open-file"
+                            title="Open an .ambre file from this device"
+                            on:click=move |_| crate::platform::open_ambre_file_picker(toasts)
+                        >
+                            "Open a file"
+                        </button>
                     </div>
                 </Show>
             </header>

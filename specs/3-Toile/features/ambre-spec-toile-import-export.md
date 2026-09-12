@@ -249,6 +249,7 @@ group, an embed and a freehand stroke write nothing at all (`TOILE-IO-025`).
 | a file dropped on the board | it is converted and applied at the drop point (`TOILE-IO-020`, `TOILE-IO-023`) |
 | the File menu's import entry | a picker opens on the formats the board reads, and the chosen file takes the same path, landing in the middle of the viewport (`TOILE-IO-098`) |
 | a file of a type no converter reads | it is refused before its bytes are read, by name (`TOILE-IO-098`) |
+| the File menu's save entry | the whole board leaves as a native `.ambre` file, on the same answer path, and the entry's own label says the file is not encrypted (`ambre-spec-docfile.md`, `DOCFILE-001`, `DOCFILE-009`) |
 | the File menu's SVG export entry | the Logic thread serializes the board and answers with the bytes (`TOILE-IO-021`) |
 | the File menu's PDF export entry | the deck leaves as a page per slide, on the same answer path (`features/ambre-spec-toile-pdf-export.md`, `TOILE-IO-029`) |
 | the answer | the UI thread hands the bytes to the browser, and no board state changes (`TOILE-IO-085`, `TOILE-IO-024`) |
@@ -259,6 +260,11 @@ two listeners and the picker live there; the camera belongs to the view, so it i
 turns a drop point into a world point. What the launcher must not hold is a list of formats: it asks
 the board what it reads (`TOILE-IO-098`), which is why the picker's filter and the drop gate can be
 held against each other by a test rather than by a reviewer.
+
+**The native file is not an export, and the menu says so by grouping.** The save sits above the
+separator, the two lossy paths below it: one keeps everything and the others drop something. Opening
+a file is not here at all -- it belongs to the launcher, because the file's header names the
+application and at the moment of picking no board is open (`ambre-spec-docfile.md section 4`).
 
 **A refusal is a sentence, not a log line.** Every outcome a user must see -- the count an import
 brought in, the constructs it dropped, a file no converter reads, the file an export produced, and

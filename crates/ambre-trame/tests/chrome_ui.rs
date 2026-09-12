@@ -26,8 +26,9 @@ use ambre_chrome::CommandStates;
 use ambre_commands::Locale;
 use ambre_trame::chrome::{
     self, BOLD, COPY, CUT, EXPORT_CSV, FIND, FindMode, FindQuery, FindReplace, FindReplaceState,
-    FormatBar, IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, ReorderSheet, ReplaceRequest, SelStats,
-    SheetTabs, SortApply, SortDialog, SortDialogState, StatusBar, StyleState, Toggles, UNDO,
+    FormatBar, IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, ReorderSheet, ReplaceRequest, SAVE_FILE,
+    SelStats, SheetTabs, SortApply, SortDialog, SortDialogState, StatusBar, StyleState, Toggles,
+    UNDO,
 };
 use ambre_trame::ui::commands as registry;
 use leptos::mount::mount_to;
@@ -536,7 +537,7 @@ fn the_toolbar_announces_the_registry_labels() {
     });
 
     for id in [
-        COPY, CUT, PASTE, FIND, IMPORT_CSV, EXPORT_CSV, BOLD, ITALIC, MERGE, UNDO, REDO,
+        COPY, CUT, PASTE, FIND, IMPORT_CSV, EXPORT_CSV, SAVE_FILE, BOLD, ITALIC, MERGE, UNDO, REDO,
     ] {
         let expected = registry::title(id, &Locale::En).expect("described");
         let found = container
