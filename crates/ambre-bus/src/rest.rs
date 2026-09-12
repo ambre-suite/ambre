@@ -1,4 +1,4 @@
-//! Relayed service plane — the correlatable request/response family.
+//! Relayed service plane -- the correlatable request/response family.
 //!
 //! Most P3 traffic is a pure relay: the UI asks for an operation, the Logic
 //! thread forwards it verbatim to the Sync thread (which performs REST / crypto
@@ -9,10 +9,10 @@
 //! Instead, this family is defined **once** here and carried by thin envelopes:
 //!
 //! ```text
-//! LogicCommand::Rest { id, cmd: RestCommand }   // UI    → Logic
-//! SyncCommand ::Rest { id, cmd: RestCommand }   // Logic → Sync
-//! LogicEvent  ::Rest { id, evt: RestEvent }     // Sync  → Logic
-//! UiEvent     ::Rest { id, evt: RestEvent }     // Logic → UI
+//! LogicCommand::Rest { id, cmd: RestCommand }   // UI    -> Logic
+//! SyncCommand ::Rest { id, cmd: RestCommand }   // Logic -> Sync
+//! LogicEvent  ::Rest { id, evt: RestEvent }     // Sync  -> Logic
+//! UiEvent     ::Rest { id, evt: RestEvent }     // Logic -> UI
 //! ```
 //!
 //! The Logic dispatcher collapses to a single forwarding arm (plus a tiny hook
@@ -22,13 +22,13 @@
 //!
 //! # What is *not* here
 //! - **Content plane** (`AppCommand` / `AppEvent`): document edits and viewport
-//!   data, routed by `DocumentId` inside the Logic thread — see [`crate::logic`].
+//!   data, routed by `DocumentId` inside the Logic thread -- see [`crate::logic`].
 //! - **Control & content-send** (`OpenDocument`, `CloseDocument`, `OpenChannel`,
 //!   `CloseChannel`, `SendChannelMessage`): fire-and-forget, no single response
-//!   to correlate — kept as explicit envelope variants.
+//!   to correlate -- kept as explicit envelope variants.
 //! - **Server push** (`Remote*`, `ConnectionStatus`, `SyncWarning`,
 //!   `MemberRevoked`, `*ParticipantJoined/Left`): unsolicited, no originating
-//!   request — kept explicit.
+//!   request -- kept explicit.
 //! - **Errors** (`AuthError`, `ApiError`): may be either a response or a
 //!   spontaneous server error; kept explicit for now (correlating errors by
 //!   `RequestId` is a later refinement).
@@ -46,8 +46,12 @@ use crate::{ChannelId, DocType, DocumentId, MeetingId, Role, UserId};
 // Secret-carrying IPC fields (H5)
 // -----------------------------------------------------------------------------
 
-/// Secret byte material (passphrase) travelling across the UI -> Logic -> Sync
-/// IPC boundary.
+/// Secret byte material crossing the UI -> Logic -> Sync boundary: a
+/// passphrase, or a document's plaintext on its way to or from a seal.
+///
+/// The second use is deliberate. A `Vec<u8>` would relay the same bytes, and
+/// also render them in a `Debug` line and leave its copy in the heap after the
+/// hop. In a feature about a document at rest, that is the wrong default.
 ///
 /// Wraps [`Zeroizing<Vec<u8>>`], so the bytes are wiped when the value is
 /// dropped anywhere along the relay -- including the placeholder handlers that
@@ -139,9 +143,9 @@ impl<'de> Deserialize<'de> for SecretString {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RequestId — request/response correlation token
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// RequestId -- request/response correlation token
+// -----------------------------------------------------------------------------
 
 /// Correlation token tying a [`RestCommand`] to the [`RestEvent`] that answers
 /// it.
@@ -149,7 +153,7 @@ impl<'de> Deserialize<'de> for SecretString {
 /// Allocated by the **originator** (the UI Thread) via [`RequestId::next`] and
 /// echoed unchanged by the Logic and Sync threads. Lets a UI with several P3
 /// operations in flight route each response to its call-site and apply
-/// per-request timeout / retry — impossible with the previous fire-and-forget,
+/// per-request timeout / retry -- impossible with the previous fire-and-forget,
 /// stringly-correlated model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RequestId(pub u64);
@@ -165,13 +169,13 @@ impl RequestId {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Business-shared response types (zero crypto — names already decrypted by Sync)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Business-shared response types (zero crypto -- names already decrypted by Sync)
+// -----------------------------------------------------------------------------
 
 /// Summary of a document (for lists and navigation).
 ///
-/// The `name` is decrypted by the Sync thread — the Logic and UI threads see it
+/// The `name` is decrypted by the Sync thread -- the Logic and UI threads see it
 /// in plaintext.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentSummary {
@@ -219,23 +223,23 @@ pub struct UnreadCount {
     pub count: u64,
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RestCommand — relayed service request (UI → Logic → Sync)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// RestCommand -- relayed service request (UI -> Logic -> Sync)
+// -----------------------------------------------------------------------------
 
 /// A correlatable service request. Carried inside `LogicCommand::Rest` and
 /// forwarded verbatim as `SyncCommand::Rest`; the Sync thread answers with the
 /// matching [`RestEvent`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RestCommand {
-    // ── Session ──────────────────────────────────────────────────────────────
-    /// Bootstrap auth after OIDC callback. → `SessionReady` / `AccountSetupRequired`.
+    // -- Session -----------------------------------------------------------------
+    /// Bootstrap auth after OIDC callback. -> `SessionReady` / `AccountSetupRequired`.
     Unlock {
         /// UTF-8 passphrase bytes. Zeroized on drop by [`SecretBytes`] once the
         /// Sync thread finishes deriving the user key.
         passphrase: SecretBytes,
     },
-    /// First-time account setup. → `AccountCreated { recovery_words }`.
+    /// First-time account setup. -> `AccountCreated { recovery_words }`.
     /// `email`/`display_name` are the user-supplied identity; the server records
     /// them verbatim instead of a hardcoded placeholder (N3). `email` is the
     /// handle other members resolve when sharing a document.
@@ -247,44 +251,44 @@ pub enum RestCommand {
     /// Dev-only: authenticate as `username` (created on the fly server-side),
     /// deriving keys deterministically from the username. Triggered by the
     /// `?user=<name>` URL param to test multi-user behaviour on one machine.
-    /// Rejected unless the server runs with `DEV_MODE`. → `SessionReady`.
+    /// Rejected unless the server runs with `DEV_MODE`. -> `SessionReady`.
     DevLogin { username: String },
-    /// Change the account passphrase. → `PassphraseChanged`.
+    /// Change the account passphrase. -> `PassphraseChanged`.
     ChangePassphrase {
         current_passphrase: SecretBytes,
         new_passphrase: SecretBytes,
     },
-    /// Account recovery via 24-word BIP39 phrase. → `AccountRecovered`.
+    /// Account recovery via 24-word BIP39 phrase. -> `AccountRecovered`.
     RecoverAccount {
         recovery_words: SecretString,
         new_passphrase: SecretBytes,
     },
     /// Log out. The Logic thread clears its document registry on dispatch (hook),
-    /// then the Sync thread zeroizes all keys. → `LoggedOut`.
+    /// then the Sync thread zeroizes all keys. -> `LoggedOut`.
     Logout,
 
-    // ── Document CRUD ────────────────────────────────────────────────────────
-    /// List accessible documents. → `DocumentList`.
+    // -- Document CRUD -----------------------------------------------------------
+    /// List accessible documents. -> `DocumentList`.
     ListDocuments,
-    /// Create a document. → `DocumentCreated`.
+    /// Create a document. -> `DocumentCreated`.
     CreateDocument {
         doc_type: DocType,
         /// Plaintext name (encrypted by the Sync thread before upload).
         name: String,
     },
-    /// Delete a document. The Logic thread drops its in-memory state (hook). → `DocumentDeleted`.
+    /// Delete a document. The Logic thread drops its in-memory state (hook). -> `DocumentDeleted`.
     DeleteDocument { document_id: DocumentId },
-    /// Rename a document. → `DocumentRenamed`.
+    /// Rename a document. -> `DocumentRenamed`.
     RenameDocument {
         document_id: DocumentId,
         name: String,
     },
 
-    // ── Sharing ──────────────────────────────────────────────────────────────
+    // -- Sharing -----------------------------------------------------------------
     /// Phase 1 of the TOFU two-phase invite (`ambre-spec-key-verification.md`):
     /// resolve the invitee and fetch their public key **without wrapping**, so
     /// the user can verify the fingerprint before any Document Key is shared.
-    /// → `InviteeKey`.
+    /// -> `InviteeKey`.
     FetchInviteeKey {
         document_id: DocumentId,
         invitee_email: String,
@@ -293,66 +297,90 @@ pub enum RestCommand {
     /// confirmed (pinned) in phase 1: Sync re-fetches the invitee's key and
     /// wraps the Document Key **only if it still matches**, closing the TOCTOU
     /// hole a compromised server could exploit between the two phases. On
-    /// mismatch the invite fails with an explicit error. → `InviteSent`.
+    /// mismatch the invite fails with an explicit error. -> `InviteSent`.
     InviteToDocument {
         document_id: DocumentId,
         invitee_email: String,
         role: Role,
         expect_exchange_pub_key: [u8; 32],
     },
-    /// Revoke a member (triggers the full key-rotation sequence). → `RevocationComplete`.
+    /// Revoke a member (triggers the full key-rotation sequence). -> `RevocationComplete`.
     RevokeFromDocument {
         document_id: DocumentId,
         user_id: UserId,
     },
-    /// List current members. → `DocumentMembers`.
+    /// List current members. -> `DocumentMembers`.
     ListDocumentMembers { document_id: DocumentId },
-    /// Update a member's role. → `MemberRoleUpdated`.
+    /// Update a member's role. -> `MemberRoleUpdated`.
     UpdateDocumentMemberRole {
         document_id: DocumentId,
         user_id: UserId,
         role: Role,
     },
 
-    // ── Users ────────────────────────────────────────────────────────────────
-    /// Search users by email prefix. → `UserSearchResults`.
+    // -- Users -------------------------------------------------------------------
+    /// Search users by email prefix. -> `UserSearchResults`.
     SearchUsers { query: String },
 
-    // ── Media ────────────────────────────────────────────────────────────────
-    /// Upload a media file. → `MediaUploaded`.
+    // -- Media -------------------------------------------------------------------
+    /// Upload a media file. -> `MediaUploaded`.
     UploadMedia {
         document_id: DocumentId,
         /// Raw (unencrypted) media bytes.
         data: Vec<u8>,
         mime_type: String,
     },
-    /// Download a media file. → `MediaDownloaded`.
+    /// Download a media file. -> `MediaDownloaded`.
     DownloadMedia {
         document_id: DocumentId,
         content_hash: String,
     },
 
-    // ── Channels (Murmure) — CRUD & sharing ──────────────────────────────────
-    /// List channels. → `ChannelList`.
+    // -- The native file (`.ambre`) ----------------------------------------------
+    //
+    // Neither of these reaches the relay, and they are the only service requests
+    // that do not: they are here because the *hops* are what they need. Sealing
+    // is cryptography, so it runs in the Sync worker and nowhere else
+    // (`ARCH-004`). This plane is how the interface asks that worker for
+    // something and gets a correlated answer back. Nothing about them touches a
+    // session: a signed-out user, or an offline one, still seals and opens
+    // their own files (`ambre-spec-docfile.md section 5`).
+    /// Seal a plaintext `.ambre` under `passphrase`. -> `DocFileSealed`
+    /// / `DocFileSealFailed`.
+    SealDocFile {
+        /// A whole plaintext container, header included.
+        plaintext: SecretBytes,
+        passphrase: SecretBytes,
+    },
+    /// Open a sealed `.ambre` with `passphrase`. -> `DocFileOpened`
+    /// / `DocFileOpenFailed`.
+    OpenDocFile {
+        /// A whole sealed container, header included.
+        sealed: Vec<u8>,
+        passphrase: SecretBytes,
+    },
+
+    // -- Channels (Murmure) -- CRUD & sharing -------------------------------------
+    /// List channels. -> `ChannelList`.
     ListChannels,
-    /// Create a channel. → `ChannelCreated`.
+    /// Create a channel. -> `ChannelCreated`.
     CreateChannel { name: String },
-    /// Delete a channel. → `ChannelDeleted`.
+    /// Delete a channel. -> `ChannelDeleted`.
     DeleteChannel { channel_id: ChannelId },
-    /// Invite a user to a channel. → `ChannelInviteSent`.
+    /// Invite a user to a channel. -> `ChannelInviteSent`.
     InviteToChannel {
         channel_id: ChannelId,
         invitee_email: String,
         role: Role,
     },
-    /// Revoke a channel member. → `ChannelRevocationComplete`.
+    /// Revoke a channel member. -> `ChannelRevocationComplete`.
     RevokeFromChannel {
         channel_id: ChannelId,
         user_id: UserId,
     },
-    /// List channel members. → `ChannelMembers`.
+    /// List channel members. -> `ChannelMembers`.
     ListChannelMembers { channel_id: ChannelId },
-    /// Update a channel member's role. → `ChannelMemberRoleUpdated`.
+    /// Update a channel member's role. -> `ChannelMemberRoleUpdated`.
     UpdateChannelMemberRole {
         channel_id: ChannelId,
         user_id: UserId,
@@ -363,23 +391,23 @@ pub enum RestCommand {
         channel_id: ChannelId,
         last_seq: u64,
     },
-    /// Request unread counts for all subscribed channels. → `UnreadCounts`.
+    /// Request unread counts for all subscribed channels. -> `UnreadCounts`.
     GetUnreadCounts,
 
-    // ── Meetings (Rendez-Vous) ───────────────────────────────────────────────
-    /// Create an ephemeral meeting room. → `MeetingCreated`.
+    // -- Meetings (Rendez-Vous) --------------------------------------------------
+    /// Create an ephemeral meeting room. -> `MeetingCreated`.
     CreateMeeting { name: String },
-    /// Join a meeting. → `MeetingJoined`.
+    /// Join a meeting. -> `MeetingJoined`.
     JoinMeeting { meeting_id: MeetingId },
-    /// Leave a meeting. → `MeetingLeft`.
+    /// Leave a meeting. -> `MeetingLeft`.
     LeaveMeeting { meeting_id: MeetingId },
-    /// End a meeting for all participants. → `MeetingEnded`.
+    /// End a meeting for all participants. -> `MeetingEnded`.
     EndMeeting { meeting_id: MeetingId },
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RestEvent — relayed service response (Sync → Logic → UI)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// RestEvent -- relayed service response (Sync -> Logic -> UI)
+// -----------------------------------------------------------------------------
 
 /// A correlatable service response. Carried inside `LogicEvent::Rest` and
 /// forwarded verbatim as `UiEvent::Rest`, echoing the originating
@@ -389,13 +417,13 @@ pub enum RestCommand {
 /// `ApiError` envelope variants (which may also be spontaneous).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RestEvent {
-    // ── Session ──────────────────────────────────────────────────────────────
+    // -- Session -----------------------------------------------------------------
     SessionReady {
         user_id: UserId,
         display_name: String,
         email: String,
     },
-    /// First connection: no keys on the server — the UI must show onboarding.
+    /// First connection: no keys on the server -- the UI must show onboarding.
     AccountSetupRequired,
     /// Display `recovery_words` **exactly once**; they cannot be retrieved later.
     AccountCreated {
@@ -405,7 +433,7 @@ pub enum RestEvent {
     AccountRecovered,
     LoggedOut,
 
-    // ── Document CRUD ────────────────────────────────────────────────────────
+    // -- Document CRUD -----------------------------------------------------------
     DocumentList {
         documents: Vec<DocumentSummary>,
     },
@@ -422,7 +450,7 @@ pub enum RestEvent {
         document_id: DocumentId,
     },
 
-    // ── Sharing ──────────────────────────────────────────────────────────────
+    // -- Sharing -----------------------------------------------------------------
     /// Phase 1 answer of the TOFU invite (`ambre-spec-key-verification.md`).
     /// Carries the invitee's raw X25519 `exchange_pub_key` (for the byte
     /// comparison against the `trusted_keys` store, done on the Main thread) and
@@ -454,12 +482,12 @@ pub enum RestEvent {
         role: Role,
     },
 
-    // ── Users ────────────────────────────────────────────────────────────────
+    // -- Users -------------------------------------------------------------------
     UserSearchResults {
         users: Vec<UserInfo>,
     },
 
-    // ── Media ────────────────────────────────────────────────────────────────
+    // -- Media -------------------------------------------------------------------
     MediaUploaded {
         document_id: DocumentId,
         content_hash: String,
@@ -471,7 +499,27 @@ pub enum RestEvent {
         data: Vec<u8>,
     },
 
-    // ── Channels (Murmure) — CRUD & sharing ──────────────────────────────────
+    // -- The native file (`.ambre`) ----------------------------------------------
+    /// The sealed file, ready for the user's disk.
+    DocFileSealed {
+        data: Vec<u8>,
+    },
+    /// Sealing did not happen, so there is no file. Carries no detail. Two
+    /// failures reach here: a key derivation out of memory, and a document past
+    /// the AEAD size limit. The user acts on neither differently.
+    DocFileSealFailed,
+    /// The plaintext container the sealed file held. The caller reads its
+    /// header as it would a file off the disk: the seal changes nothing about
+    /// dispatch, version recovery or the schema gate.
+    DocFileOpened {
+        plaintext: SecretBytes,
+    },
+    /// The file did not open. **Deliberately one variant for two causes:** the
+    /// tag cannot tell a wrong passphrase from a modified file, so naming one
+    /// would be a guess. The surface says both (`DOCFILE-016`).
+    DocFileOpenFailed,
+
+    // -- Channels (Murmure) -- CRUD & sharing -------------------------------------
     ChannelList {
         channels: Vec<ChannelSummary>,
     },
@@ -501,7 +549,7 @@ pub enum RestEvent {
         counts: Vec<UnreadCount>,
     },
 
-    // ── Meetings (Rendez-Vous) ───────────────────────────────────────────────
+    // -- Meetings (Rendez-Vous) --------------------------------------------------
     MeetingCreated {
         meeting_id: MeetingId,
     },

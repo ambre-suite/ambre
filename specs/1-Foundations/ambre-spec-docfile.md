@@ -1,16 +1,15 @@
 # AMBRE -- FEATURE: THE NATIVE FILE (`.ambre`)
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the container ships and two gestures reach it: a save in each
-application, and one open in the launcher. The sealed variant is a design.
+**Implementation:** partial -- the container ships, and so do both lineages. A save per
+application, one open in the launcher, plaintext or passphrase-sealed.
 
 > The file a user saves a document into, and opens back. One container for every application: a
 > spreadsheet, a board and a text document differ by one byte of the header.
 
 Every other export drops something. A formula collapses to its value, a comment loses its target,
 identity and history leave. This file drops nothing, so it is the local backup and the way out.
-What travels inside belongs to each application's import and export feature; the container is here,
-and no application respecifies it.
+What travels inside belongs to each application's import and export feature; the container is here.
 
 ---
 
@@ -28,13 +27,14 @@ status values are normative in `ambre-spec-template.md`.
 | `DOCFILE-007` | `INV` | There MUST be one container for every app: the only app-dependent value in the header is the `doc_type` byte. | this spec section 3 | `ambre_core::docfile::tests::header_layout_is_the_spec_layout` pins the 22-byte layout. One writer takes the type as a parameter, so a per-app variant has nowhere to be written | verified |
 | `DOCFILE-011` | `INV` | A snapshot on the wire MUST NOT carry this header: the container is a file format, never a wire format. | this spec section 5 | none. `ambre-sync` names neither entry point and seals a bare `export_snapshot()`, so the rule holds today by construction. Nothing refuses the line that would change it, and no test asserts the magic bytes are absent from a sealed payload | unverified |
 | `DOCFILE-008` | `INV` | A version bump MUST freeze one named artifact per `doc_type` in the same commit that adds the registry row. | this spec section 3; `ambre-spec-fixtures.md` | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). The recipe that performs the freeze does not exist, and no check reads the registry against the frozen corpus | unimplemented |
-| `DOCFILE-010` | `INV` | A passphrase-sealed file MUST carry its own container version; it MUST NOT be a flag on an existing one. | this spec section 5 | not built -- lands with `DOCFILE P2 -- passphrase-sealed files` (`ambre-roadmap.md` EF) | unimplemented |
+| `DOCFILE-010` | `INV` | A passphrase-sealed file MUST carry its own container version; it MUST NOT be a flag on an existing one. | this spec section 5 | `ambre_core::docfile::tests::the_sealed_layout_is_the_spec_layout` pins the 45-byte header and its version byte; `::the_plaintext_reader_refuses_a_sealed_file_by_name` and `::the_sealed_parser_refuses_a_plaintext_file_by_name` drive the two refusals that make the version the discriminator; `::an_unknown_sealed_layout_is_refused_without_a_migration_promise`, `::migrating_a_sealed_version_says_it_is_sealed` and `::a_truncated_sealed_header_is_rejected_at_every_length` hold the reader on inputs it must not guess at; `::a_sealed_round_trip_recovers_the_envelope` | verified |
 | `DOCFILE-009` | `OBS` | The export surface MUST state that a plaintext file carries no encryption of its own. | this spec section 5 | `ambre_toile::ui::commands::tests::the_save_label_says_the_file_is_not_encrypted`, `ambre_trame::ui::commands::tests::the_save_label_says_the_file_is_not_encrypted`. Asserted on the command's **label** -- the one string a user reads before clicking -- rather than on a tooltip or a dialog, so a surface that drops the warning cannot compile green. One test per surface, because the rule is per surface and the suite has two | verified |
+| `DOCFILE-014` | `INV` | Sealing and opening a file MUST run in the Sync worker, and a sealed export MUST reach the user through the event its plaintext export already uses. | this spec section 5; `ARCH-004` | `ambre_logic::dispatch::tests::a_sealed_export_hands_the_plaintext_to_sync_and_nothing_to_the_ui`, `::the_sealed_bytes_come_back_as_the_application_s_own_export_event`, `::a_failed_seal_answers_a_failure_and_no_file`, `::a_document_closed_mid_seal_drops_the_answer`; `ambre_sync::integration::a_sealed_file_round_trips_through_the_service_plane` drives the worker's own half. The first clause is held before any test: `ambre-core`, `ambre-logic`, `ambre-toile` and `ambre-trame` declare no crypto dependency, so neither an application nor the container layer can seal anything (`cargo deny`) | verified |
 
 ### 1.2 Read a `.ambre` file
 
 The reader is handed bytes and nothing else. It reads the header, decides what wrote the file, and
-migrates or refuses before an application ever sees a payload.
+migrates or refuses before an application sees a payload.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
@@ -45,29 +45,48 @@ migrates or refuses before an application ever sees a payload.
 | `DOCFILE-013` | `FAIL` | A version newer than the binary's MUST be refused cleanly. | this spec section 3 | `ambre_core::docfile::tests::a_newer_version_is_refused_and_an_older_one_is_attempted`, `::migrating_from_a_newer_version_is_refused` | verified |
 | `DOCFILE-005` | `FAIL` | A malformed file MUST produce a typed error, never a panic. | this spec section 3 | `ambre_core::docfile::tests::truncated_header_is_rejected_at_every_length`, `::bad_magic_is_rejected`; `ambre_trame::logic::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic` | verified |
 
+### 1.3 Seal a `.ambre` file, and open one back
+
+Two operations the plaintext lineage does not have. The surface takes the passphrase; the key and
+the cipher never leave the Sync worker (`DOCFILE-014`).
+
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
+|---|---|---|---|---|---|
+| `DOCFILE-015` | `FRAME` | The seal prompt MUST take the passphrase twice, and MUST NOT seal on a mismatch. | this spec section 4 | `ambre_chrome::passphrase::tests::sealing_needs_the_two_fields_to_agree`, `::nothing_is_submitted_from_an_empty_prompt`, `::opening_asks_once_and_ignores_the_second_field`. The rule is the prompt's one decision, so it is a pure function of the two fields and tested on host; the two inputs around it stay DOM glue | verified |
+| `DOCFILE-016` | `FAIL` | A file that does not open MUST report the same failure whether the passphrase is wrong or the file was modified. | this spec section 5 | `ambre_sync::integration::a_wrong_passphrase_and_a_tampered_file_fail_the_same_way` drives three inputs -- a wrong passphrase, an edited ciphertext, an edited salt -- against one variant. The event carries no detail to differ in: `RestEvent::DocFileOpenFailed` is a unit variant, so a message that distinguished the two causes would have nothing to read | verified |
+
 * **Budget.** none, and `ambre-spec-budgets.md` records that as a result: the
   container adds a 22-byte write and a 22-byte parse, and its binary contribution is a few dozen
   bytes in `ambre-core`, shared rather than duplicated per application.
-* **Boundary.** none: `DOCFILE-006` bans compression and encryption in this layer, so it holds no
-  key, and `DOCFILE-011` keeps the bytes it produces on a local disk rather than on the relay.
-* **Verification.** 10 `verified`, 1 `unverified`, 2 `unimplemented`. The container is the one
+* **Boundary.** the container holds no key (`DOCFILE-006`), and `DOCFILE-011` keeps the bytes it
+  produces on a local disk rather than on the relay. The seal is the one place a key appears. It
+  appears where the boundary already puts one: the passphrase and the derived key live in the
+  Sync worker, for one call. Neither the container layer nor an application links against a cipher
+  (`DOCFILE-014`, `ARCH-004`). A sealed file goes to the user's disk and the passphrase goes
+  nowhere, so the relay learns nothing new.
+* **Verification.** 14 `verified`, 1 `unverified`, 1 `unimplemented`. The container is the one
   Foundations subsystem where the first count is honest: it does pure byte handling on the host
-  tier, so a test can reach every rule it makes about bytes. The three gaps that remain are the
-  rules that reach outside it -- a bump obligation on a recipe that is unbuilt, the sealed variant,
-  and one about what another crate must refrain from putting on the wire. `DOCFILE P1` closed the
-  fourth: the export surface now exists, and its warning is held on the command label rather than
-  on a reviewer's memory. What the gestures add on top of the container is verified where it can
-  be: the save's header identity and its round trip through the launcher's own open path are driven
-  by `ambre_logic::dispatch::tests::a_saved_file_carries_the_document_id_the_registry_keyed_it_under`
+  tier, so a test can reach every rule it makes about bytes. The two gaps that remain are the rules
+  that reach outside it -- a bump obligation on a recipe that is unbuilt, and one about what
+  another crate must refrain from putting on the wire. `DOCFILE P1` closed the export surface,
+  carrying its warning on the command label rather than on a reviewer's memory. `DOCFILE P2` closed
+  the sealed variant's three rows, and the mechanism differs per row. The container's own host-tier
+  tests pin the layout. The service plane carries the Logic-to-Sync-and-back trip, and both crates
+  drive it: four tests in `ambre-logic` hold what Logic does with the answer. One in `ambre-sync`
+  holds the worker's own half, at the real work factor. The prompt's rule is the odd one. Its
+  decision moved from the DOM component into a pure function, where three host tests drive it. The
+  two fields stay glue. What the gestures add on top of the container is verified where it can be:
+  the save's header identity and its round trip through the launcher's own open path are driven by
+  `ambre_logic::dispatch::tests::a_saved_file_carries_the_document_id_the_registry_keyed_it_under`
   and `::a_saved_file_opens_back_as_the_document_that_was_saved`, and the two command mappings by a
   test each. The file picker and the download anchor stay DOM glue, held by using the application
-  (`ambre-spec-testing.md section 2`). The fixture
-  corpus (`ambre-spec-fixtures.md`) widens the belt further, because it exercises this reader and
-  this writer on every run. The pass split `DOCFILE-003`, which cited six tests for a migration and
-  a refusal: four drive the walk and two drive the refusal, and one row could not say which. It also
-  gave `DOCFILE-002`'s second clause its own row: not consulting the extension is a frame condition,
-  and it is held by a stronger mechanism than the rest of the row -- the entry points take a byte
-  slice, so no name is in scope to branch on.
+  (`ambre-spec-testing.md section 2`). The fixture corpus (`ambre-spec-fixtures.md`) widens the
+  belt further, because it exercises this reader and this writer on every run. The pass split
+  `DOCFILE-003`, which cited six tests for a migration and a refusal: four drive the walk and two
+  drive the refusal, and one row could not say which. It also gave `DOCFILE-002`'s second clause
+  its own row: not consulting the extension is a frame condition, and it is held by a stronger
+  mechanism than the rest of the row -- the entry points take a byte slice, so no name is in scope
+  to branch on.
 
 ---
 
@@ -85,13 +104,17 @@ Alice writes the file and hands it over; the third column is what the bytes carr
 | saves from a client shipping a document type this build lacks | opens it | a type byte no application claims | one error, and no dispatch attempt | `ambre_core::docfile::tests::an_unknown_doc_type_byte_is_not_a_dispatch_target` |
 | sends a truncated or corrupt file | opens it | bytes that parse to nothing | a typed error, and the document already open unchanged | `ambre_trame::logic::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone` |
 | mails a plaintext file | reads it without Ambre | the snapshot in the clear | every value of the document, to anyone holding the file | none -- `DOCFILE-009` |
+| mails a sealed file, and the passphrase by another route | opens it with the passphrase | a salt, a nonce and one ciphertext -- no type byte, no document id | the document, after one prompt and one key derivation | `ambre_sync::integration::a_sealed_file_round_trips_through_the_service_plane` |
+| mails a sealed file | reads it without Ambre, or with the wrong passphrase | the same bytes | nothing: not the values, not the document's type, not its identity | `ambre_sync::integration::a_wrong_passphrase_and_a_tampered_file_fail_the_same_way` |
+| mails a sealed file that was modified in transit | opens it with the right passphrase | a ciphertext whose tag no longer matches | the same refusal a wrong passphrase earns, and no partial document (`DOCFILE-016`) | `ambre_sync::integration::a_wrong_passphrase_and_a_tampered_file_fail_the_same_way` |
+| seals a file and forgets the passphrase | -- | a ciphertext under a key nothing else derives | nothing, from either user: there is no recovery path and the prompt says so before the file is written (`DOCFILE-015`) | `ambre_chrome::passphrase::tests::sealing_needs_the_two_fields_to_agree` |
 
 ---
 
 ## 3. MODEL
 
-**CRDT containers.** none. The file carries a snapshot of the application's own containers and
-declares none of its own; the word *container* below names the file layout.
+**CRDT containers.** none. The file carries a snapshot of the application's own and declares none
+of its own; the word *container* below names the file layout.
 
 **The layout.** A fixed 22-byte header, then the payload.
 
@@ -104,26 +127,25 @@ declares none of its own; the word *container* below names the file layout.
 | 22 | rest | `payload` | `LoroDoc::export_snapshot()`, uncompressed and unencrypted (`DOCFILE-006`) |
 
 **The version registry.** One row per container version, appended and never rewritten. A bump is a
-container change alone: it does not track the CRDT schema inside the payload, which each
-application raises on its own (`ambre-spec-architecture.md section 2`).
+container change alone: it does not track the payload's CRDT schema, which each application raises
+on its own (`ambre-spec-architecture.md section 2`).
 
 | Version | Status | Change |
 |---|---|---|
 | `0x01` | current | the initial layout |
 
 **Adding a row freezes an artifact, in the same commit** (`DOCFILE-008`). A writer emits the current
-version only, so the commit that adds a row is the last moment the outgoing version can be written
-at all. Three steps:
+version only, so that commit is the last moment the outgoing version can be written. Three steps:
 
 1. add the registry row and the migration step that reads the outgoing version;
 2. run `just fixtures-freeze <name>` for one **named** artifact per `doc_type`. Several generators
    share a `doc_type`, so which lineage keeps migration coverage is a choice, not a default;
 3. commit the frozen artifact with the bump (`ambre-spec-fixtures.md`).
 
-Skip step 2 and the version that just left becomes untestable for good: no generator can produce it
+Skip step 2 and the outgoing version becomes untestable for good: no generator can produce it
 again, and `migrate_ambre` loses the only input that proves it works.
 
-**The three reader and writer rules**, all normative.
+**The three reader and writer rules**, normative.
 
 | Rule | What it says | Why it is this way |
 |---|---|---|
@@ -131,8 +153,46 @@ again, and `migrate_ambre` loses the only input that proves it works.
 | Version recovery | below the current version, apply `migrate_ambre` in order and retry the import. Above it, refuse, leave the file untouched, and ask the user to update the client | a partial or best-effort read of a format this build does not know produces a document nobody can trust (`DOCFILE-003`) |
 | Writer | a writer emits the current version only. There is no backward-compatible write mode and no negotiation: compatibility is a **read-side** duty | one writer and N readers stays testable as versions accumulate; N writers does not (`DOCFILE-007`) |
 
+**The sealed layout.** A second lineage, not a variant of the first: a fixed 45-byte header, then
+one ciphertext (`DOCFILE-010`). The version byte tells the two apart, read before anything else in
+either reader.
+
+| Offset | Size | Field | Holds |
+|---|---|---|---|
+| 0 | 4 | `magic` | `0x414D4252`, that is `AMBR` -- the same four bytes: a sealed file is an `.ambre` |
+| 4 | 1 | `version` | the sealed layout version. Current: `0x80` |
+| 5 | 16 | `salt` | the Argon2id salt, drawn per file |
+| 21 | 24 | `nonce` | the XChaCha20-Poly1305 nonce, drawn per file |
+| 45 | rest | `ciphertext` | a whole plaintext container, authentication tag included |
+
+**The high bit is the discriminator, and that is why `0x80`.** Plaintext versions count from
+`0x01`, sealed ones from `0x80`. Each registry grows 127 rows before a collision is possible, and
+one byte sorts a file. Every build that ever shipped refuses `0x80` as a plaintext version. An old
+client shows the update prompt rather than parsing a salt as a `doc_type`.
+
+| Version | Status | Change |
+|---|---|---|
+| `0x80` | current | the initial sealed layout: Argon2id v1 at the login work factor, then XChaCha20-Poly1305 |
+
+**The seal authenticates the header, rather than merely carrying it.** The associated data is the
+first 21 bytes: magic, version and salt. An edited salt fails the tag instead of quietly
+deriving a second key. The nonce is left out: the AEAD authenticates its own.
+
+**There is no sealed migration walk.** A plaintext container migrates because its bytes are
+readable. A sealed one is not, and rewriting its envelope means deriving the key inside it: a
+re-seal under a passphrase the user must type. This layer refuses an unknown sealed version. The
+document inside *does* migrate one round trip later: a seal opens to a whole plaintext container,
+header included. Version recovery and the schema gate run unchanged.
+
+**The parameters, and where they live.** Argon2id v1 at the login work factor -- 64
+MiB, 3 passes, 1 lane -- then one domain-separated BLAKE2b pass. The result is a `FileKey` that no
+conversion turns into a `DocumentKey` (`ambre-spec-zero-knowledge.md` holds the hierarchy). The cost
+is the point: a few hundred milliseconds and 64 MiB per seal and per open, paid in the Sync worker
+(`ambre-spec-budgets.md`). The salt makes the file self-describing, so a later version may raise the
+work factor; old files keep opening at their own.
+
 **Two stages, and they are not interchangeable.** The container is stage one; protection is stage
-two, and which protection applies depends on where the file is going (section 5).
+two, and where the file is going decides which applies (section 5).
 
 ```
    app state
@@ -140,10 +200,19 @@ two, and which protection applies depends on where the file is going (section 5)
       v
    .ambre plaintext  = header || snapshot
       |
-      +---> local file: written as-is, or passphrase-sealed on opt-in (section 5)
+      +---> local file, plaintext: written as-is (DOCFILE-009)
+      |
+      +---> local file, sealed: Logic -> Sync -> Logic, on opt-in (DOCFILE-014)
+      |        Argon2id(passphrase, salt) -> FileKey
+      |        XChaCha20-Poly1305(plaintext, aad = header[..21]) -> ciphertext
+      |        sealed header || ciphertext
       |
       +---> fixtures corpus: committed as-is (ambre-spec-fixtures.md)
 ```
+
+An open runs the same steps backwards. The version byte says which lineage the bytes are, and the
+sealed reader refuses a plaintext file before deriving any key: an unsealed file must not cost a
+guessing attempt.
 
 **The shared helper.** Each application binds to it in two lines and re-derives neither the layout
 nor either read rule (`DOCFILE-007`).
@@ -179,6 +248,49 @@ pub struct AmbreHeader {
 }
 ```
 
+**The sealed half of the same crate.** Still pure functions over bytes, and still no key: the
+container assembles and parses the envelope, and its caller fills it (`DOCFILE-006`).
+
+```rust
+// ambre-core
+
+/// The cheapest question a reader can ask, and the first one it must: which
+/// lineage, at which version. Five bytes answer it, so it answers for a file too
+/// short to hold either header in full.
+pub fn classify(data: &[u8]) -> Result<ContainerKind, DocFileError>;
+
+pub enum ContainerKind { Plaintext(u8), Sealed(u8) }
+
+/// The associated data a seal must be computed over, for a file about to be
+/// written under `salt`: the header up to the nonce.
+pub fn sealed_aad(salt: &[u8; SALT_LEN]) -> [u8; SEALED_AAD_LEN];
+
+/// The sealed writer rule. No version parameter either: a sealed file is written
+/// at `AMBRE_SEALED_VERSION` or not at all.
+pub fn write_ambre_sealed(
+    salt: &[u8; SALT_LEN],
+    nonce: &[u8; SEAL_NONCE_LEN],
+    ciphertext: &[u8],
+) -> Vec<u8>;
+
+/// The current sealed layout exactly, with no recovery walk behind it.
+pub fn parse_sealed_header(data: &[u8]) -> Result<SealedAmbre, DocFileError>;
+
+pub struct SealedAmbre {
+    pub version: u8,
+    pub salt: [u8; SALT_LEN],
+    pub nonce: [u8; SEAL_NONCE_LEN],
+    /// Offset 45 onward. Opens to a whole plaintext container.
+    pub ciphertext: Vec<u8>,
+}
+
+impl SealedAmbre {
+    /// The associated data this file was sealed against, assembled from the same
+    /// code as `sealed_aad`, so the two cannot drift.
+    pub fn aad(&self) -> [u8; SEALED_AAD_LEN];
+}
+```
+
 **The per-application pair.** The functions are per-application because the payload comes from that
 application's `LoroDoc`; the header handling is not reimplemented per application.
 
@@ -194,11 +306,11 @@ pub fn import_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError>;
 
 An application owns the payload half alone: its `export_ambre_plaintext` is `write_ambre_plaintext`
 over its own `export_snapshot()`, its `import_ambre_plaintext` is `read_ambre_plaintext_as` for its
-own `DocType`. `PayloadRejected` and `PayloadSchema` are raised there and nowhere else, because the container layer
-never touches a `LoroDoc`. The schema gate runs between the two: the header validates, then the
-payload's own `schema_version` is read in a scratch document, and only then is anything handed to
-the live one (`SCHEMA-006`, `SCHEMA-012`). Each engine also carries the state-level pair, so a caller holding a live
-document does not reach for its `LoroDoc` to save it.
+own `DocType`. `PayloadRejected` and `PayloadSchema` are raised there and nowhere else, because the
+container layer never touches a `LoroDoc`. The schema gate runs between the two: the header
+validates, the payload's own `schema_version` is read in a scratch document, and only then is
+anything handed to the live one (`SCHEMA-006`, `SCHEMA-012`). Each engine also carries the
+state-level pair, so saving a live document does not reach for its `LoroDoc`.
 
 **The error taxonomy.** Fatal by nature: a header failure means no document can be produced.
 
@@ -227,19 +339,41 @@ pub enum DocFileError {
     /// independent on purpose, and a message that says "unsupported version"
     /// without saying which one sends the user looking in the wrong place.
     PayloadSchema(SchemaError),
+    /// The plaintext reader was handed a sealed container. Its mirror is
+    /// `NotSealed`, and a caller that classifies first reaches neither: both
+    /// exist so that neither parser has to guess what the other's bytes mean.
+    SealedFile { version: u8 },
+    NotSealed,
+    /// A sealed layout this build does not know. Distinct from
+    /// `UnsupportedVersion`, whose older half promises a migration: the sealed
+    /// lineage has none to promise.
+    SealedVersionUnsupported { found: u8 },
 }
 ```
 
-**Code:** `crates/ambre-core/src/docfile.rs` holds the layout, the five entry points and the
-migration walk. The gestures: `crates/ambre-app/src/platform.rs` (`open_ambre_file_picker`, the
-header read and the store hand-off) with its button in `src/landing.rs`;
-`ambre_logic::LogicState::export_ambre_file` and `DocState::ambre_file_event` for the save, which
-this thread serves itself because the header's identity comes from the registry that keyed the
-document;
-`PersistenceStore::save_snapshot_committed` for the durable write the navigation depends on. The per-application bindings are `crates/ambre-trame/src/logic/docfile.rs`,
+**No error says whether a passphrase was wrong.** The open failure crosses the bus as one unit
+variant and reaches the user as one sentence (`DOCFILE-016`). The authentication tag cannot tell a
+wrong key from edited bytes, so a message that chose between them would be a guess.
+
+**Code:** `crates/ambre-core/src/docfile.rs` holds both layouts, the entry points of each lineage
+and the migration walk. The gestures: `crates/ambre-app/src/platform.rs` (`open_ambre_file_picker`,
+the classification, the header read and the store hand-off) with its button in `src/landing.rs`;
+`ambre_logic::LogicState::export_ambre_file` and `DocState::ambre_file_event` for the save, served
+by that thread because the header's identity comes from the registry that keyed the document;
+`PersistenceStore::save_snapshot_committed` for the durable write. The per-application bindings are
+`crates/ambre-trame/src/logic/docfile.rs`,
 `crates/ambre-toile/src/logic/interop/docfile.rs` and its state-level pair in
 `crates/ambre-toile/src/logic/state/docfile.rs`. `crates/ambre-logic/tests/docfile_dispatch.rs`
 drives the dispatch rule across both.
+
+The seal adds one crate each side and no third path. `crates/ambre-sync/src/docfile.rs` holds the
+two handlers -- the only service requests in that crate that never touch the relay -- over
+`ambre_crypto::keys::FileKey` and `ambre_crypto::aead::{seal_file, open_file}`.
+`ambre_logic::LogicState::export_ambre_file_sealed` intercepts the sealed command beside the
+plaintext one. `pending_seals` holds the document and the filename until the worker answers, and
+`resolve_pending_seal` turns that answer into the application's own export event (`DOCFILE-014`).
+The prompt is `crates/ambre-chrome/src/passphrase.rs`, mounted in `src/shell/app_root.rs` for a
+seal and in `src/landing.rs` for an open.
 
 ---
 
@@ -255,29 +389,45 @@ drives the dispatch rule across both.
 | the local store refuses the payload | one error saying so, and no navigation -- a document opened without its bytes is indistinguishable from an empty one |
 | open a file a newer client wrote | one error asking the user to update, and the file untouched |
 | export a plaintext file | a statement that the file carries no encryption of its own (`DOCFILE-009`) |
-| export a sealed file | a passphrase prompt, and a file a reader can tell from a plaintext one by its header alone (`DOCFILE-010`) |
+| export a sealed file | a passphrase prompt, typed twice, then the same download the plaintext export produces -- one command per application, beside the plaintext save (`DOCFILE-010`, `DOCFILE-014`) |
+| type two different passphrases at the prompt | nothing is sealed and nothing is written: the prompt says they differ and keeps both fields (`DOCFILE-015`) |
+| open a sealed file | the same file picker, then a passphrase prompt: the version byte decides which of the two the bytes need, never the filename |
+| open a sealed file with a wrong passphrase, or one that was modified | one message for both, naming neither cause, and the session untouched (`DOCFILE-016`) |
+| a seal that fails outright | one failure message and no file. The reachable causes are a key derivation that ran out of memory and a cipher that refused; neither produces bytes worth writing |
+| close the document while its file is being sealed | the answer is dropped: no download lands in a tab whose document is gone |
 
 **Where each gesture lives.** The save is per application, because the user is inside a document
 when they want it: Toile's File menu (`toile.file.save_file`) and Trame's toolbar
-(`trame.interop.save_file`), beside the lossy exports and distinguished from them by its own label.
-The open is the launcher's alone, because the file owns the choice of application: at the moment of
-picking, no document is open and no engine is booted, and the header is what names the owner. A save
-gesture duplicated per application is the cost of one container -- the alternative was an
-app-agnostic command and a third download path beside the two the views already own.
+(`trame.interop.save_file`), beside the lossy exports and set apart by its own label. The open is
+the launcher's alone, because the file owns the choice of application: no document is open and no
+engine is booted when the picking happens, and the header names the owner. The duplicated save
+gesture is the cost of one container; the alternative was a third download path.
 
-**How the open hands the payload over.** The header is read in the launcher, which migrates an older
-container or refuses a newer one before anything sees a payload; the payload is then written to the
-**local snapshot store** under the document id the header carries, and the page navigates to it. The
-store is where a document's bytes already wait for a boot, so the file lands exactly where a refresh
-would have left them, and the existing restore leg picks it up -- schema gate included
-(`SCHEMA-006`). The navigation is an unconditional reload, where opening a card reloads only across
-render kinds: the booted view is fixed per page load, and the restore leg runs at boot rather than on
-a router swap, so a pushState would land on an empty document. The write is awaited on the
-transaction's commit, not the request's success -- a transaction still open when the page unloads is
-aborted, and the file would go with it.
+**How the open hands the payload over.** The launcher reads the header, migrating an older
+container or refusing a newer one before anything sees a payload. The payload is then written to the
+**local snapshot store** under the document id the header carries, and the page navigates to it.
+That store is where a document's bytes already wait for a boot, so the existing restore leg picks
+the file up, schema gate included (`SCHEMA-006`). The navigation is an unconditional reload, where
+opening a card reloads only across render kinds: the restore leg runs at boot, so a pushState would
+land on an empty document. The write is awaited on the transaction's commit, not the request's
+success -- a transaction still open at unload is aborted, and the file with it.
 
-**The two sealed rows are what `DOCFILE P2` builds.** The container beneath every row ships and is
-exercised by its own tests and by the fixture corpus.
+**Where the user types the passphrase, and where they do not.** The launcher asks in both
+directions, never an application. A passphrase cannot travel in a `CommandId`, so the sealed save
+is a UI-only intent the launcher intercepts. The shape Find and the column filter already do this.
+One component serves both (`ambre-chrome`): one operation seals a board and a workbook. Two prompts
+would be two places to get the warning wrong.
+
+**How the sealed save travels.** The application emits `ExportAmbreFileSealed` and knows nothing
+else about it. Logic intercepts that command, writes the plaintext container itself, and hands it to
+the Sync worker with the passphrase. The answer comes back as the application's **ordinary** export
+event, which leaves the download anchor, the filename rule and both engines untouched
+(`DOCFILE-014`). It lives in memory for that trip alone -- never on disk, never on the relay.
+
+**How the sealed open travels.** The picker classifies the bytes before it reads them. A plaintext
+file opens as it always did. A sealed one waits in the launcher, the prompt asks for the
+passphrase, and the worker answers with a whole plaintext container. That container walks the
+plaintext path above. So a sealed file whose *inner* container is older migrates on that second leg.
 
 ---
 
@@ -289,6 +439,15 @@ exercised by its own tests and by the fixture corpus.
 | A passphrase-sealed variant, on explicit opt-in | no sealed variant at all | it leaves a user carrying a document off the machine with nothing but the filesystem. Argon2id then XChaCha20-Poly1305 over a passphrase typed at export time keeps the key independent of any server-side lifecycle, and the salt and parameters in the header keep the file self-describing and strengthenable later without breaking old files (`DOCFILE-010`). |
 | Never the `DocumentKey` | sealing under the key Sync already holds for the document | it is the reading a reader reaches for first, and the reason this row exists. The `DocumentKey` is rotated server-side on every revocation (`ambre-spec-key-rotation.md`), so a file sealed under a since-rotated key is permanently unreadable, silently and late: the user finds out months after the export, when the backup is the only copy left. A local backup whose validity depends on a future membership change is not a backup. |
 | The sealed variant is a version, not a flag | a bit in the current header | every existing client reads it as a plaintext file and fails on it. A reader must tell a sealed file from a plaintext one from the header alone, before it attempts to parse a payload (`DOCFILE-010`). |
+| The seal runs in the Sync worker | sealing in the canvas, on the UI thread | Argon2id at 64 MiB and a few hundred milliseconds on the thread that paints is a visibly frozen application, and it would put a cipher in `ambre-toile` and `ambre-trame` -- which `cargo deny` refuses, because `ARCH-004` is held by the crate graph rather than by review. The worker already holds an event loop of its own and already holds every key (`DOCFILE-014`). |
+| The seal runs in the Sync worker | sealing in the Logic thread, which already writes the container | it is the same crate-graph violation one thread over: Logic holds the documents, and a cipher there makes every engine's dependency tree reach a key. Logic writes the plaintext container and forwards it, which is the division the two rules already draw (`DOCFILE-006`, `ARCH-004`). |
+| One command, intercepted where the plaintext save is | a sealed export path of its own, per application | it duplicates the filename rule, the download anchor and the failure surface per application, and it makes "save to a file" two features that drift. The interception point already exists and already serves both applications, because one container serves both (`DOCFILE-007`). |
+| The answer comes back as the application's own export event | a sealed-specific event the canvas would learn to handle | the canvas downloads bytes; that a passphrase was involved is not its business. A second event means two code paths for one user-visible outcome, and the second one is the one nobody exercises. |
+| The plaintext container never touches the disk | sealing a file already written out | it is the failure mode the feature exists to prevent: the plaintext would land on the user's filesystem, be indexed and backed up, and a crash between the two steps leaves it there for good. The bytes go from Logic to the worker in memory and only the ciphertext is ever offered to the user. |
+| One message for a wrong passphrase and a modified file | naming the cause | nothing can name it. Poly1305 fails identically for a wrong key and for edited bytes, so a message that chose would be a guess the user trusts -- and "the file is damaged" sends someone looking for a backup when they mistyped a character (`DOCFILE-016`). |
+| The passphrase is typed twice when sealing | one field, like every other password prompt | a login prompt can afford one field because a typo is discovered in seconds and costs nothing. A sealed file's typo is discovered when the file is the only copy left, and nothing in the system can recover it: the confirmation is the only check that exists at all (`DOCFILE-015`). |
+| An unknown sealed layout is refused | a sealed migration walk | rewriting an envelope means deriving the key inside it, which is a re-seal under a passphrase the user must type -- not a read-side recovery, and not something a reader may do silently. The document inside migrates through the plaintext walk once the seal comes off, which is where version recovery belongs. |
+| The version byte separates the lineages, high bit set | a magic of its own for sealed files | it makes a sealed file stop being an `.ambre` to every tool that recognizes the magic, and it doubles the discriminator a reader must check. One byte already had to be read first; the high bit gives each lineage 127 versions and no possible collision (`DOCFILE-010`). |
 | A file format, never a wire format | one format for the disk and the socket | it is what put an unnamed key at the centre of the at-rest question. The server already holds `document_id` and `doc_type` as routing metadata, so a header inside the ciphertext duplicates them for nothing, and calling the container a persistence **and sharing** format conflates two destinations (`DOCFILE-011`). |
 | No compression and no encryption in this layer | protection inside the container | it puts a crypto dependency in `ambre-core` and a key in every caller. The two entry points stay pure functions over bytes, testable on host with no key and no dependency, and `ambre-sync` stays the sole compression and crypto consumer (`ambre-spec-architecture.md section 2`, `DOCFILE-006`). |
 | One container for every application | a per-application container variant | four headers to keep in step, and "open this file" stops being one user action. The type byte plus the dispatch rule cover the whole need (`DOCFILE-007`). |
@@ -302,18 +461,28 @@ exercised by its own tests and by the fixture corpus.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No gesture reaches the container.** No application has a save, an open or a file picker, so
-  every row of section 4 is unbuilt (`DOCFILE P1`). What ships is the reader, the writer and the
-  migration walk, driven by their own tests and by the fixture corpus.
+* **Nothing bounds how long a seal may take on a real device.** The budget row exists and no
+  measurement does (`ambre-spec-budgets.md`): the figure is the login work factor, carried over
+  rather than re-derived for a file. No criterion benchmark runs the derivation on the target
+  tier. A mid-range phone that takes three seconds per export would go unnoticed until a user says
+  so.
+* **Nothing rules on the strength of what the user types.** The prompt refuses an empty passphrase
+  and a mismatched confirmation, and nothing else. No length floor, no estimate shown, no refusal
+  of a passphrase a wordlist holds. Argon2id's work factor is the whole defence, and it is a
+  constant -- a four-character passphrase seals as readily as a good one.
+* **No gesture suspends a document while its file seals.** The user keeps editing during the
+  derivation. The sealed file holds the state as of the moment the command left, not the moment
+  the download lands. That is the same semantics as the plaintext save, and no rule states
+  either.
 * **The migration walk has never migrated anything.** The registry holds one row, so
   `migrate_ambre` is exercised by synthetic steps alone (`ambre-spec-testing.md section 6`). The
   first real bump is the first honest test of it, and `DOCFILE-008` is what stops that bump from
   destroying its own input.
 * **`DOCFILE-008` binds a recipe that does not exist.** `just fixtures-freeze` lands with
   `FIXTURES P1`, so a bump performed before it has no mechanical way to obey the rule.
-* **The sealed variant has no design beyond its two rules.** Nothing says where the passphrase is
-  entered, how a wrong one is reported, or what the Argon2id parameters are. `DOCFILE P2` owes all
-  three.
+* **A sealed file's size is the plaintext's, plus 45 bytes and a tag.** Nothing compresses on this
+  path: `DOCFILE-006` bans it from the container, and `DOCFILE P2` added no stage for it. The
+  sealed lineage seals what the plaintext lineage wrote, unchanged.
 * **Nothing rules on a file larger than memory.** Both entry points take and return a `Vec<u8>`, so
   a document is read whole. No row bounds the size a reader accepts, and no budget names one.
 * **Nothing fuzzes the header.** It is a parser on untrusted input and it has no fuzz target

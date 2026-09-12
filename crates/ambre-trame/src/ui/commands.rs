@@ -107,6 +107,7 @@ commands! {
     IMPORT_CSV = CommandId("trame.interop.import_csv"), "Import CSV", Some(IconId("import")), &[], INTEROP;
     EXPORT_CSV = CommandId("trame.interop.export_csv"), "Export CSV", Some(IconId("export")), &[], INTEROP;
     SAVE_FILE = CommandId("trame.interop.save_file"), "Save to a file (.ambre, not encrypted)", Some(IconId("content-save")), &[], INTEROP;
+    SAVE_SEALED_FILE = CommandId("trame.interop.save_sealed_file"), "Save to an encrypted file (.ambre)...", Some(IconId("lock-outline")), &[], INTEROP;
     PALETTE = CommandId("trame.palette.open"), "Command palette", None, &[KeyBinding::primary('k')], GENERAL;
 }
 

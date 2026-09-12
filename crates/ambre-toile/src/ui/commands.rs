@@ -144,6 +144,7 @@ describe! {
     LINK_SET: menu_bar::LINK_SET, "Link...", Some(IconId("link-variant")), &[], OBJECT;
     LINK_CLEAR: menu_bar::LINK_CLEAR, "Remove link", Some(IconId("link-variant-off")), &[], OBJECT;
     SAVE_FILE: menu_bar::SAVE_FILE, "Save to a file (.ambre, not encrypted)", Some(IconId("content-save")), &[], FILE;
+    SAVE_SEALED_FILE: menu_bar::SAVE_SEALED_FILE, "Save to an encrypted file (.ambre)...", Some(IconId("lock-outline")), &[], FILE;
     EXPORT_SVG: menu_bar::EXPORT_SVG, "Export as SVG", Some(IconId("file-export-outline")), &[], FILE;
     EXPORT_PDF: menu_bar::EXPORT_PDF, "Export deck as PDF", Some(IconId("file-pdf-box")), &[], FILE;
     PRESENT_DECK: menu_bar::DECK, "Order the deck", Some(IconId("view-carousel-outline")), &[], PRESENT;

@@ -83,7 +83,9 @@ use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
 
 pub use crate::ui::commands::PALETTE;
 pub use crate::ui::find::FIND;
-pub use crate::ui::menu_bar::{EMBED_DOC, EMBED_WEB, IMPORT_FILE, LINK_CLEAR, LINK_SET};
+pub use crate::ui::menu_bar::{
+    EMBED_DOC, EMBED_WEB, IMPORT_FILE, LINK_CLEAR, LINK_SET, SAVE_SEALED_FILE,
+};
 
 /// The document type Toile's landing "new document" button creates.
 pub const DOC_TYPE: DocType = DocType::Toile;

@@ -25,6 +25,7 @@
 | Inbound decryption 1 KB (verify+HMAC+AEAD+decompress) | < 350 us | < 1 ms | Sync | criterion |
 | Full crypto round-trip (excluding network) | < 600 us | < 1.5 ms | Sync | criterion |
 | Snapshot compression 100 KB (ruzstd) | < 5 ms | -- | Sync | criterion |
+| Passphrase-sealed file, one seal or one open (Argon2id, then one AEAD pass over the whole container) | < 1 s | < 2 s | Sync | the login work factor, deliberately: 64 MiB, 3 passes, 1 lane, paid per file rather than per session, because it is also what an offline guessing attack pays (`ambre-spec-docfile.md`, `DOCFILE-014`). The 64 MiB is the largest transient the Sync worker allocates, and it is released with the call -- **none exists** |
 | Quarantine release, 100 updates | < 1 ms | -- | Sync | criterion -- **none exists** |
 | `doc.import()` Loro update (1 KB delta) | < 2 ms | -- | Logic | criterion |
 | Trame formula DAG recompute (10k cells) | < 50 ms | -- | Logic | custom benchmark -- **none exists** |
@@ -194,7 +195,7 @@
 | Icon atlas blob (vertex buffers) | < 200 KB | ~500 tessellated icons |
 | `image` (PNG, JPEG, WebP) | ~60 KB | Feature-flagged, only the activated decoders |
 | `ambre-sync` logic | ~50 KB | Excluding its dependencies |
-| RustCrypto (chacha20, ed25519, blake2, hmac, argon2) | ~140 KB | Shared with `ambre-crypto`; Argon2 is there for login |
+| RustCrypto (chacha20, ed25519, blake2, hmac, argon2) | ~140 KB | Shared with `ambre-crypto`; Argon2 is there for login, and for a passphrase-sealed file, which reuses the same work factor rather than adding a second one (`ambre-spec-docfile.md`) |
 | `ruzstd` (compression and decompression) | ~80 KB | |
 | `gloo-net` (websocket and http) | ~40 KB | |
 | `postcard` | ~15 KB | Shared |

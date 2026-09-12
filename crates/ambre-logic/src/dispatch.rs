@@ -85,10 +85,12 @@ impl LogicState {
                     RestCommand::Logout => {
                         self.docs.clear();
                         self.rest_routes.clear();
+                        self.forget_pending_seals(None);
                     }
                     RestCommand::DeleteDocument { document_id } => {
                         self.docs.remove(document_id);
                         self.rest_routes.retain(|_, d| d != document_id);
+                        self.forget_pending_seals(Some(*document_id));
                     }
                     _ => {}
                 }
@@ -128,6 +130,7 @@ impl LogicState {
                 // arriving after close has no engine to feed and must not forward
                 // to the UI as a stray API event (`toile-media`).
                 self.rest_routes.retain(|_, d| *d != document_id);
+                self.forget_pending_seals(Some(document_id));
                 self.send_to_sync(SyncCommand::CloseDocument { document_id });
             }
             LogicCommand::OpenChannel { channel_id } => {
@@ -175,6 +178,13 @@ impl LogicState {
             // forward to the UI. Documents are materialised on `OpenDocument`
             // (which carries the `doc_type`), so no event here mutates state.
             LogicEvent::Rest { id, evt } => {
+                // The answer to a sealed `.ambre` export this thread asked for
+                // (`DOCFILE-014`). It becomes a display event of the owning
+                // application here, and never reaches the engine, which knows
+                // nothing of the seal.
+                if self.resolve_pending_seal(id, &evt) {
+                    return;
+                }
                 // A response to a request this Logic thread issued on behalf of a
                 // document (`toile-media`) is fed back into the owning engine
                 // instead of forwarded to the UI. UI-issued requests are absent
@@ -554,6 +564,148 @@ mod tests {
             _ => false,
         });
         assert!(kept, "the saved file reopened without the edit it carried");
+    }
+
+    // -- The sealed file (`DOCFILE-014`) ---------------------------------------
+
+    /// Open a document and ask for a sealed `.ambre`, returning the state, the
+    /// UI channel, and the service request the seal produced.
+    fn sealing(doc_type: DocType) -> (LogicState, flume::Receiver<UiEvent>, RequestId, Vec<u8>) {
+        let document_id = DocumentId::new();
+        let (mut state, ui, sync_rx) = harness();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type,
+        });
+        let passphrase = ambre_bus::SecretBytes::from(b"a passphrase".to_vec());
+        let command = match doc_type {
+            DocType::Trame => AppCommand::Trame(TrameCommand::ExportAmbreFileSealed { passphrase }),
+            DocType::Toile => AppCommand::Toile(ToileCommand::ExportAmbreFileSealed { passphrase }),
+            other => panic!("no engine for {other:?}"),
+        };
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command,
+        });
+        let (id, plaintext) = std::iter::from_fn(|| sync_rx.try_recv().ok())
+            .find_map(|cmd| match cmd {
+                SyncCommand::Rest {
+                    id,
+                    cmd: RestCommand::SealDocFile { plaintext, .. },
+                } => Some((id, plaintext.to_vec())),
+                _ => None,
+            })
+            .expect("the sealed export asked Sync to seal");
+        (state, ui, id, plaintext)
+    }
+
+    /// The file bytes of the one export event on `ui`, if there is one.
+    fn export_bytes(ui: &flume::Receiver<UiEvent>) -> Option<Vec<u8>> {
+        std::iter::from_fn(|| ui.try_recv().ok()).find_map(|evt| match evt {
+            UiEvent::Viewport {
+                event: AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. }),
+                ..
+            }
+            | UiEvent::Viewport {
+                event:
+                    AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete { data, .. }),
+                ..
+            } => Some(data),
+            _ => None,
+        })
+    }
+
+    /// `ARCH-004`: the sealed export sends a plaintext container to the Sync
+    /// worker and hands the UI nothing until the answer lands. No file reaches
+    /// a surface unsealed, and this thread derives no key.
+    #[test]
+    fn a_sealed_export_hands_the_plaintext_to_sync_and_nothing_to_the_ui() {
+        for doc_type in [DocType::Trame, DocType::Toile] {
+            let (_state, ui, _id, plaintext) = sealing(doc_type);
+            let header = ambre_core::docfile::read_ambre_plaintext(&plaintext)
+                .expect("Sync was handed a valid plaintext container");
+            assert_eq!(header.doc_type, doc_type);
+            assert_eq!(
+                export_bytes(&ui),
+                None,
+                "{doc_type:?}: a file reached the surface before it was sealed",
+            );
+        }
+    }
+
+    /// The sealed bytes come back as the application's ordinary export event,
+    /// so the surface downloads them exactly as it downloads a plaintext file.
+    #[test]
+    fn the_sealed_bytes_come_back_as_the_application_s_own_export_event() {
+        for doc_type in [DocType::Trame, DocType::Toile] {
+            let (mut state, ui, id, _plaintext) = sealing(doc_type);
+            state.handle_logic_event(LogicEvent::Rest {
+                id,
+                evt: RestEvent::DocFileSealed {
+                    data: b"sealed bytes".to_vec(),
+                },
+            });
+            assert_eq!(export_bytes(&ui).as_deref(), Some(&b"sealed bytes"[..]));
+        }
+    }
+
+    /// A seal that failed leaves no file: the application says so through its
+    /// own failure event rather than downloading something half-made.
+    #[test]
+    fn a_failed_seal_answers_a_failure_and_no_file() {
+        for doc_type in [DocType::Trame, DocType::Toile] {
+            let (mut state, ui, id, _plaintext) = sealing(doc_type);
+            state.handle_logic_event(LogicEvent::Rest {
+                id,
+                evt: RestEvent::DocFileSealFailed,
+            });
+            let events: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
+            assert!(
+                events.iter().any(|e| matches!(
+                    e,
+                    UiEvent::Viewport {
+                        event: AppEvent::Trame(ambre_bus::TrameEvent::Error { .. })
+                            | AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportFailed(_)),
+                        ..
+                    }
+                )),
+                "{doc_type:?}: the failure did not reach the surface",
+            );
+            assert!(
+                !events.iter().any(|e| matches!(
+                    e,
+                    UiEvent::Viewport {
+                        event: AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { .. })
+                            | AppEvent::Toile(
+                                ambre_bus::app::toile::ToileEvent::ExportComplete { .. }
+                            ),
+                        ..
+                    }
+                )),
+                "{doc_type:?}: a failed seal produced a file",
+            );
+        }
+    }
+
+    /// The passphrase never reaches the engine: the dispatcher intercepts the
+    /// command by value and moves the secret straight to Sync. A document
+    /// closed mid-seal has nothing left to answer.
+    #[test]
+    fn a_document_closed_mid_seal_drops_the_answer() {
+        let (mut state, ui, id, _plaintext) = sealing(DocType::Trame);
+        let document_id = *state.docs.keys().next().expect("a live document");
+        state.handle_logic_command(LogicCommand::CloseDocument { document_id });
+        state.handle_logic_event(LogicEvent::Rest {
+            id,
+            evt: RestEvent::DocFileSealed {
+                data: b"sealed bytes".to_vec(),
+            },
+        });
+        assert_eq!(
+            export_bytes(&ui),
+            None,
+            "a seal answered into a closed document",
+        );
     }
 
     /// Wrap a `RestCommand` in a `LogicCommand::Rest` with a fresh id.

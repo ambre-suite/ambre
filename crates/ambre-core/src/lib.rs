@@ -8,7 +8,8 @@
 //! - [`Version`]: version byte for serialization
 //! - [`schema`]: the persisted schema version and its migration walk
 //! - [`Error`]: core error types
-//! - [`docfile`]: the `.ambre` container header, shared by every app
+//! - [`docfile`]: the `.ambre` container header in its two lineages -- plaintext
+//!   and passphrase-sealed -- shared by every app
 //! - [`fixtures`] (feature `fixtures`, host-only): the document-fixture
 //!   generator contract and its sidecar manifest
 
@@ -35,8 +36,10 @@ pub mod version;
 // Re‑export the main types for convenient use.
 pub use doc_type::DocType;
 pub use docfile::{
-    AMBRE_MAGIC, AMBRE_VERSION, AmbreHeader, DocFileError, HEADER_LEN, migrate_ambre,
-    read_ambre_plaintext, read_ambre_plaintext_as, write_ambre_plaintext,
+    AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, ContainerKind, DocFileError,
+    HEADER_LEN, SALT_LEN, SEAL_NONCE_LEN, SEALED_AAD_LEN, SEALED_HEADER_LEN, SealedAmbre, classify,
+    migrate_ambre, parse_sealed_header, read_ambre_plaintext, read_ambre_plaintext_as, sealed_aad,
+    write_ambre_plaintext, write_ambre_sealed,
 };
 pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
 #[cfg(feature = "fixtures")]

@@ -366,9 +366,12 @@ impl TrameState {
             // before the document lookup, so this arm is reached only by a
             // caller driving `TrameState` directly -- and it answers rather than
             // falling silent.
-            TrameCommand::ExportAmbreFile => TrameOutcome::display_only(vec![TrameEvent::Error {
-                message: "the file is written by the Logic thread, not by the workbook".to_owned(),
-            }]),
+            TrameCommand::ExportAmbreFile | TrameCommand::ExportAmbreFileSealed { .. } => {
+                TrameOutcome::display_only(vec![TrameEvent::Error {
+                    message: "the file is written by the Logic thread, not by the workbook"
+                        .to_owned(),
+                }])
+            }
 
             TrameCommand::ReplaceOne {
                 query,

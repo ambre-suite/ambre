@@ -186,16 +186,55 @@ impl DocState {
     /// the suite (`board.svg`, `deck.pdf`): the document's own name is encrypted
     /// and lives on the Sync thread, which this one cannot read (`ZK-001`).
     fn ambre_file_event(&self, document_id: DocumentId) -> AppEvent {
+        let (filename, data) = self.ambre_file_bytes(document_id);
+        self.export_complete_event(filename, data)
+    }
+
+    /// The file name and the plaintext container behind
+    /// [`ambre_file_event`](Self::ambre_file_event), apart from the event.
+    ///
+    /// The sealed export needs exactly these two, and needs them *before*
+    /// there is an event to carry them. The bytes travel to the Sync worker and
+    /// come back changed, while the name waits here (`DOCFILE-014`).
+    fn ambre_file_bytes(&self, document_id: DocumentId) -> (String, Vec<u8>) {
         match self {
-            DocState::Trame(state) => AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete {
-                filename: "workbook.ambre".to_owned(),
-                data: state.export_ambre_plaintext(document_id.into()),
-            }),
-            DocState::Toile(state) => {
+            DocState::Trame(state) => (
+                "workbook.ambre".to_owned(),
+                state.export_ambre_plaintext(document_id.into()),
+            ),
+            DocState::Toile(state) => (
+                "board.ambre".to_owned(),
+                state.export_ambre_plaintext(document_id.into()),
+            ),
+        }
+    }
+
+    /// A finished export, as the display event the owning application surfaces.
+    /// The bytes are whatever the caller has: a plaintext container, or the
+    /// sealed one the Sync worker returned. The surface downloads either the
+    /// same way, and never tells them apart.
+    fn export_complete_event(&self, filename: String, data: Vec<u8>) -> AppEvent {
+        match self {
+            DocState::Trame(_) => {
+                AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { filename, data })
+            }
+            DocState::Toile(_) => {
                 AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete {
-                    filename: "board.ambre".to_owned(),
-                    data: state.export_ambre_plaintext(document_id.into()),
+                    filename,
+                    data,
                 })
+            }
+        }
+    }
+
+    /// An export that produced no file, as the display event the owning
+    /// application surfaces. Trame has no export-failure variant of its own, so
+    /// it says it through the generic error the chrome already toasts.
+    fn export_failed_event(&self, reason: String) -> AppEvent {
+        match self {
+            DocState::Trame(_) => AppEvent::Trame(ambre_bus::TrameEvent::Error { message: reason }),
+            DocState::Toile(_) => {
+                AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportFailed(reason))
             }
         }
     }
@@ -304,6 +343,16 @@ struct LogicState {
     /// and forward verbatim, exactly as before. An entry is inserted when a
     /// `ToileRequest` is lowered and removed when its response arrives.
     rest_routes: HashMap<RequestId, DocumentId>,
+    /// Sealed `.ambre` exports awaiting the Sync worker's answer
+    /// (`DOCFILE-014`): the document whose file the worker holds, and the name
+    /// the download will carry. A separate map from
+    /// [`rest_routes`](Self::rest_routes) because the answer is not the
+    /// engine's. The engine never learns of the seal, and the response becomes
+    /// a display event here.
+    ///
+    /// Cleared with the document that owns it, so a seal outlived by its
+    /// document answers nothing rather than downloading into a closed tab.
+    pending_seals: HashMap<RequestId, (DocumentId, String)>,
     /// Base fonts for PDF export (`toile-pdf-export`), seeded once by
     /// [`LogicCommand::LoadFonts`]. `None` until the Main thread's boot-time
     /// fetch lands; a fresh `FontContext` here would have zero faces and emit no
@@ -330,6 +379,7 @@ impl LogicState {
             my_user_id: None,
             my_display_name: None,
             rest_routes: HashMap::new(),
+            pending_seals: HashMap::new(),
             export_cx: None,
         }
     }

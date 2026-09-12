@@ -1187,6 +1187,24 @@ pub fn main() {
                         cmd: RestCommand::ListDocuments,
                     });
                 }
+                // A sealed file came back open (`DOCFILE-014`): what it holds
+                // is a whole plaintext container, so the ordinary open path
+                // takes it from here. Version recovery, the type check and the
+                // local store are the same steps a plaintext file walks.
+                UiEvent::Rest {
+                    evt: ambre_bus::RestEvent::DocFileOpened { plaintext },
+                    ..
+                } => platform::open_plaintext_container(plaintext.to_vec(), toasts),
+                // One message for two causes, and that is the contract rather
+                // than laziness. The tag cannot tell a wrong passphrase from a
+                // modified file, and a message that named one would be a guess
+                // the user trusts (`DOCFILE-016`).
+                UiEvent::Rest {
+                    evt: ambre_bus::RestEvent::DocFileOpenFailed,
+                    ..
+                } => toasts.error(
+                    "That file did not open. The passphrase may be wrong, or the file may be damaged.",
+                ),
                 // Share dialog: the current member list landed -> render it.
                 UiEvent::Rest {
                     evt: ambre_bus::RestEvent::DocumentMembers { members: list, .. },

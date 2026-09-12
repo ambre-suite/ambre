@@ -627,7 +627,7 @@ pub(crate) fn install_command_keys(
 /// restore leg runs at boot, not on a router swap, so a pushState would land on
 /// an empty document. One path, taken every time, beats two that differ by the
 /// byte at offset 5.
-pub(crate) fn open_ambre_file_picker(toasts: Toasts) {
+pub(crate) fn open_ambre_file_picker(toasts: Toasts, on_sealed: Callback<Vec<u8>>) {
     let Some(document) = web_sys::window().and_then(|w| w.document()) else {
         return;
     };
@@ -643,7 +643,7 @@ pub(crate) fn open_ambre_file_picker(toasts: Toasts) {
     let picker = input.clone();
     let onchange = Closure::<dyn FnMut()>::new(move || {
         if let Some(file) = picker.files().and_then(|fs| fs.get(0)) {
-            read_ambre_file(file, toasts);
+            read_ambre_file(file, toasts, on_sealed);
         }
     });
     input.set_onchange(Some(onchange.as_ref().unchecked_ref()));
@@ -658,7 +658,7 @@ pub(crate) fn open_ambre_file_picker(toasts: Toasts) {
 /// to read, one whose type no engine renders, and a snapshot store that did not
 /// take the bytes. Nothing is navigated to on any of them, so a refused file
 /// costs the user a message and nothing else.
-fn read_ambre_file(file: web_sys::File, toasts: Toasts) {
+fn read_ambre_file(file: web_sys::File, toasts: Toasts, on_sealed: Callback<Vec<u8>>) {
     wasm_bindgen_futures::spawn_local(async move {
         let Ok(buf) = wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await else {
             toasts.error("Ambre could not read that file");
@@ -666,48 +666,74 @@ fn read_ambre_file(file: web_sys::File, toasts: Toasts) {
         };
         let bytes = js_sys::Uint8Array::new(&buf).to_vec();
 
-        let header = match ambre_core::docfile::read_ambre_plaintext(&bytes) {
-            Ok(header) => header,
-            Err(e) => {
-                toasts.error(format!("Ambre cannot open that file: {e}"));
-                return;
-            }
-        };
-        // A type this build knows by name but cannot render is refused here
-        // rather than opened blank: `DocType::creatable` is the same predicate
-        // the new-document picker offers, so the two cannot disagree.
-        if !ambre_bus::DocType::creatable().contains(&header.doc_type) {
-            toasts.error(format!(
-                "Ambre cannot open a {} yet",
-                header.doc_type.generic_label()
-            ));
+        // A sealed file is a container of the other lineage, and the version
+        // byte alone says which (`DOCFILE-010`). Nothing here can read it: it
+        // needs a passphrase this thread must ask for, and a key the Sync
+        // worker derives. So the bytes go to the caller's prompt, and the
+        // plaintext path below resumes on what comes back (`DOCFILE-015`).
+        if matches!(
+            ambre_core::classify(&bytes),
+            Ok(ambre_core::ContainerKind::Sealed(_))
+        ) {
+            on_sealed.run(bytes);
             return;
         }
-
-        let store = match ambre_logic::persistence::PersistenceStore::open()
-            .recv_async()
-            .await
-        {
-            Ok(Ok(store)) => store,
-            _ => {
-                toasts.error("Ambre could not open its local store for that file");
-                return;
-            }
-        };
-        // Durable, not fire-and-forget: the navigation below unloads the page,
-        // and an open transaction goes with it.
-        let committed = store
-            .save_snapshot_committed(*header.document_id.as_bytes(), header.payload)
-            .recv_async()
-            .await;
-        if committed != Ok(true) {
-            toasts.error("Ambre could not store that file locally");
-            return;
-        }
-
-        let path = crate::route::doc_path(header.doc_type, header.document_id.into());
-        if let Some(window) = web_sys::window() {
-            let _ = window.location().set_href(&path);
-        }
+        open_container_bytes(bytes, toasts).await;
     });
+}
+
+/// Attribute a plaintext container, persist its payload and navigate to it.
+///
+/// Split from [`read_ambre_file`] because a sealed file reaches exactly this
+/// point too, one round trip later and by way of the Sync worker. What it holds
+/// is a whole plaintext container, so the two lineages share every step after
+/// the seal comes off (`DOCFILE-014`).
+pub(crate) fn open_plaintext_container(bytes: Vec<u8>, toasts: Toasts) {
+    wasm_bindgen_futures::spawn_local(open_container_bytes(bytes, toasts));
+}
+
+async fn open_container_bytes(bytes: Vec<u8>, toasts: Toasts) {
+    let header = match ambre_core::docfile::read_ambre_plaintext(&bytes) {
+        Ok(header) => header,
+        Err(e) => {
+            toasts.error(format!("Ambre cannot open that file: {e}"));
+            return;
+        }
+    };
+    // A type this build knows by name but cannot render draws a refusal here
+    // rather than a blank page. `DocType::creatable` is the same predicate
+    // the new-document picker offers, so the two cannot disagree.
+    if !ambre_bus::DocType::creatable().contains(&header.doc_type) {
+        toasts.error(format!(
+            "Ambre cannot open a {} yet",
+            header.doc_type.generic_label()
+        ));
+        return;
+    }
+
+    let store = match ambre_logic::persistence::PersistenceStore::open()
+        .recv_async()
+        .await
+    {
+        Ok(Ok(store)) => store,
+        _ => {
+            toasts.error("Ambre could not open its local store for that file");
+            return;
+        }
+    };
+    // Durable, not fire-and-forget: the navigation below unloads the page,
+    // and an open transaction goes with it.
+    let committed = store
+        .save_snapshot_committed(*header.document_id.as_bytes(), header.payload)
+        .recv_async()
+        .await;
+    if committed != Ok(true) {
+        toasts.error("Ambre could not store that file locally");
+        return;
+    }
+
+    let path = crate::route::doc_path(header.doc_type, header.document_id.into());
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(&path);
+    }
 }

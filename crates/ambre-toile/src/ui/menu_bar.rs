@@ -91,6 +91,11 @@ pub const EXPORT_PDF: CommandId = CommandId("toile.file.export_pdf");
 /// thread serves, because the container's header carries the document's
 /// identity and the board does not know it.
 pub const SAVE_FILE: CommandId = CommandId("toile.file.save_file");
+/// Write the whole board to a native `.ambre` file **sealed under a
+/// passphrase** (`ambre-spec-docfile.md section 5`). The same file as
+/// [`SAVE_FILE`], encrypted. A UI-only intent, because the user types the
+/// passphrase into a dialog the launcher owns and no `CommandId` carries it.
+pub const SAVE_SEALED_FILE: CommandId = CommandId("toile.file.save_sealed_file");
 
 /// Every id the menu bar introduces (not shared with `ui::menu`). Used by the
 /// view to recognise the ids it must resolve locally, and by tests.
@@ -116,6 +121,7 @@ pub const MENU_BAR_COMMANDS: &[CommandId] = &[
     EXPORT_SVG,
     EXPORT_PDF,
     SAVE_FILE,
+    SAVE_SEALED_FILE,
 ];
 
 // -- Menu grouping -------------------------------------------------------------
@@ -169,6 +175,7 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
             row(EMBED_DOC),
             MenuRow::Separator,
             row(SAVE_FILE),
+            row(SAVE_SEALED_FILE),
             MenuRow::Separator,
             row(EXPORT_SVG),
             row(EXPORT_PDF),

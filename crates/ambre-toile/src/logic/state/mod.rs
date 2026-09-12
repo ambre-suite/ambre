@@ -429,7 +429,7 @@ impl ToileState {
             // know (`ambre-spec-docfile.md`). Same shape of answer, same reason
             // for answering -- a silent arm is indistinguishable from a gesture
             // that never arrived.
-            ToileCommand::ExportAmbreFile => {
+            ToileCommand::ExportAmbreFile | ToileCommand::ExportAmbreFileSealed { .. } => {
                 ToileOutcome::display_only(vec![ToileEvent::ExportFailed(
                     "the file is written by the Logic thread, not by the board".to_owned(),
                 )])

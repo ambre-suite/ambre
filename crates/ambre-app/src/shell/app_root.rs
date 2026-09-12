@@ -179,6 +179,10 @@ pub(crate) fn AppRoot() -> impl IntoView {
         move |()| raf.resume()
     });
 
+    // Sealed-save modal: the passphrase of a `.ambre` file the user is about to
+    // write (`DOCFILE-014`). Same rAF suspend/resume as every other modal.
+    let seal_open = RwSignal::new(false);
+
     // Share modal: same rAF suspend/resume. Opening it requests the current
     // member list so the dialog renders it; the relay fills `members` on the
     // `DocumentMembers` response.
@@ -310,6 +314,16 @@ pub(crate) fn AppRoot() -> impl IntoView {
             // overlay and reaches no Logic thread (`CHROME-008`).
             if id == trame_chrome::PALETTE || id == toile_chrome::PALETTE {
                 palette_open.set(true);
+                return;
+            }
+            // The sealed save is a UI-only intent in both applications: a
+            // `CommandId` carries no passphrase. So the dialog collects one and
+            // emits the typed command itself (`DOCFILE-015`). One arm takes the
+            // two ids because what follows them is identical: the container,
+            // and the operation on it, are one for every application
+            // (`DOCFILE-007`).
+            if id == trame_chrome::SAVE_SEALED_FILE || id == toile_chrome::SAVE_SEALED_FILE {
+                seal_open.set(true);
                 return;
             }
             // Toile board: every context-menu id is forwarded into the canvas view,
@@ -851,6 +865,39 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 }}
             </StatusBar>
         </AppShell>
+
+        <ambre_chrome::PassphraseDialog
+            open=seal_open
+            intent=ambre_chrome::PassphraseIntent::Seal
+            on_open=on_open
+            on_close=on_close
+            on_submit=Callback::new({
+                let tx = to_logic.clone();
+                move |passphrase: String| {
+                    let Some(document_id) = current_doc.get_untracked() else {
+                        return;
+                    };
+                    // The typed text becomes a `SecretBytes` here and goes
+                    // nowhere else. Every hop that drops it wipes it, and the
+                    // Sync worker is the only thread that reads it
+                    // (`ARCH-004`).
+                    let passphrase = ambre_bus::SecretBytes::from(passphrase.into_bytes());
+                    let command = if boot_is_toile {
+                        AppCommand::Toile(
+                            ambre_bus::app::toile::ToileCommand::ExportAmbreFileSealed {
+                                passphrase,
+                            },
+                        )
+                    } else {
+                        AppCommand::Trame(TrameCommand::ExportAmbreFileSealed { passphrase })
+                    };
+                    let _ = tx.try_send(LogicCommand::App {
+                        document_id,
+                        command,
+                    });
+                }
+            })
+        />
 
         <Dialog open=about_open on_open=on_open on_close=on_close class="ambre-about">
             <div class="ambre-about-panel">

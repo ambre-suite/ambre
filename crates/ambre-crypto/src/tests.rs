@@ -2,8 +2,8 @@
 
 use proptest::prelude::*;
 
-use crate::keys::{DocumentKey, MasterSeed};
-use crate::{CryptoError, ecdh, envelope, hash, passphrase};
+use crate::keys::{DocumentKey, FileKey, MasterSeed};
+use crate::{CryptoError, aead, ecdh, envelope, hash, passphrase};
 
 fn fixed_doc_key() -> DocumentKey {
     DocumentKey::from_array([0x11; 32])
@@ -13,7 +13,7 @@ fn fixed_seed() -> MasterSeed {
     MasterSeed::from_array([0x22; 32])
 }
 
-// ── Envelope ────────────────────────────────────────────────────────────────
+// -- Envelope ----------------------------------------------------------------
 
 #[test]
 fn roundtrip_envelope() {
@@ -103,7 +103,7 @@ fn wrong_document_key_rejected() {
     );
 }
 
-// ── Key derivation ────────────────────────────────────────────────────────────
+// -- Key derivation ----------------------------------------------------------
 
 #[test]
 fn derive_keys_deterministic() {
@@ -130,7 +130,7 @@ fn derive_keys_deterministic() {
     );
 }
 
-// ── ECDH ──────────────────────────────────────────────────────────────────────
+// -- ECDH --------------------------------------------------------------------
 
 #[test]
 fn ecdh_symmetric() {
@@ -197,7 +197,7 @@ fn kek_binds_peer_identity() {
     assert!(ecdh::unwrap_document_key(&carol, &alice_pub, &wrapped).is_err());
 }
 
-// ── Argon2id ──────────────────────────────────────────────────────────────────
+// -- Argon2id ----------------------------------------------------------------
 
 #[test]
 fn argon2_deterministic() {
@@ -214,7 +214,7 @@ fn argon2_deterministic() {
     assert_ne!(k1, k4);
 }
 
-// ── BLAKE2b chain ─────────────────────────────────────────────────────────────
+// -- BLAKE2b chain -----------------------------------------------------------
 
 #[test]
 fn blake2_chain_hash() {
@@ -224,7 +224,7 @@ fn blake2_chain_hash() {
     assert_ne!(h1, hash::chain_hash(b"paren", b"tsnapshot"));
 }
 
-// ── Property tests ────────────────────────────────────────────────────────────
+// -- Property tests ----------------------------------------------------------
 
 proptest! {
     #[test]
@@ -259,7 +259,7 @@ proptest! {
     }
 }
 
-// ── TOFU fingerprint (`ambre-spec-key-verification.md`) ────────────────────
+// -- TOFU fingerprint (`ambre-spec-key-verification.md`) ---------------------
 
 #[test]
 fn fingerprint_is_stable_grouped_base32() {
@@ -293,4 +293,90 @@ fn fingerprint_distinguishes_keys() {
     key_b[0] = 1;
     let b = hash::fingerprint(&key_b);
     assert_ne!(a, b);
+}
+
+// -- Passphrase-sealed file --------------------------------------------------
+
+#[test]
+fn a_file_key_is_not_the_user_key_of_the_same_passphrase_and_salt() {
+    // The two derivations share a passphrase, a salt and a work factor. Only
+    // the domain separates them, so this is the one assertion that shows the
+    // separation at all. Without it, a file on disk would carry the value that
+    // unwraps the account's master key.
+    let salt = [0xAB; 16];
+    let user = passphrase::derive_user_key(b"correct horse", &salt).unwrap();
+    let file = FileKey::from_passphrase(b"correct horse", &salt).unwrap();
+    assert_ne!(file.as_bytes(), &user);
+}
+
+#[test]
+fn a_file_key_is_deterministic_and_per_salt() {
+    // Deterministic, or nothing reopens the file; per salt, or two files
+    // sealed under one passphrase share a key.
+    let salt = [0xAB; 16];
+    let first = FileKey::from_passphrase(b"correct horse", &salt).unwrap();
+    let again = FileKey::from_passphrase(b"correct horse", &salt).unwrap();
+    assert_eq!(first.as_bytes(), again.as_bytes());
+
+    let elsewhere = FileKey::from_passphrase(b"correct horse", &[0xCD; 16]).unwrap();
+    assert_ne!(first.as_bytes(), elsewhere.as_bytes());
+}
+
+#[test]
+fn each_new_file_draws_its_own_salt() {
+    // The salt is what keeps two files sealed under one passphrase from sharing
+    // a key. So this entry point draws one per file, and the caller cannot
+    // supply it here at all.
+    let (first, first_salt) = FileKey::for_new_file(b"correct horse").unwrap();
+    let (again, again_salt) = FileKey::for_new_file(b"correct horse").unwrap();
+    assert_ne!(first_salt, again_salt);
+    assert_ne!(first.as_bytes(), again.as_bytes());
+
+    // And the salt it returns is the one that reopens the file. The header
+    // carries this value in the clear, and nothing else can re-derive the key.
+    let reopened = FileKey::from_passphrase(b"correct horse", &first_salt).unwrap();
+    assert_eq!(reopened.as_bytes(), first.as_bytes());
+}
+
+#[test]
+fn a_sealed_file_opens_under_its_passphrase_and_nothing_else() {
+    let salt = [0x01; 16];
+    let aad = b"the-sealed-header";
+    let plaintext = b"a whole plaintext container";
+    let key = FileKey::from_passphrase(b"open sesame", &salt).unwrap();
+    let (nonce, ciphertext) = aead::seal_file(plaintext, aad, &key).unwrap();
+    assert_eq!(
+        aead::open_file(&nonce, &ciphertext, aad, &key).unwrap(),
+        plaintext
+    );
+
+    // A wrong passphrase is a wrong key, and Poly1305 is what says so. Nothing
+    // cheaper sits upstream of it: no password verifier, no checksum. The tag
+    // is the whole of "that passphrase does not open this file".
+    let wrong = FileKey::from_passphrase(b"open sesa", &salt).unwrap();
+    assert_eq!(
+        aead::open_file(&nonce, &ciphertext, aad, &wrong),
+        Err(CryptoError::AeadFailed)
+    );
+
+    // And the seal binds the header it covered: an edited salt, nonce or
+    // lineage byte fails the tag rather than deriving quietly.
+    assert_eq!(
+        aead::open_file(&nonce, &ciphertext, b"the-sealed-headeR", &key),
+        Err(CryptoError::AeadFailed)
+    );
+}
+
+#[test]
+fn the_sealed_header_widths_match_the_primitives() {
+    // `ambre-core` lays the sealed header out and names no primitive
+    // (`DOCFILE-006`), so it declares its two widths independently of the
+    // cipher and the KDF. This is the seam where a mismatch
+    // would surface, and it is the only place both sides are nameable at once.
+    assert_eq!(ambre_core::docfile::SEAL_NONCE_LEN, aead::NONCE_LEN);
+    assert_eq!(
+        ambre_core::docfile::SALT_LEN,
+        16,
+        "Argon2id requires at least 8 bytes of salt; the header carries 16"
+    );
 }

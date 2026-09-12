@@ -1,6 +1,6 @@
 // ambre-sync/tests/integration.rs
 // ============================================================================
-// Integration tests for the SYNC P1 pipeline — session lifecycle, document CRUD,
+// Integration tests for the SYNC P1 pipeline -- session lifecycle, document CRUD,
 // multi-document open/close, and mock WebSocket transport verification.
 
 use ambre_bus::{DocType, LogicEvent, RequestId, RestCommand, RestEvent, SyncCommand};
@@ -38,9 +38,9 @@ fn send_rest(state: &mut ambre_sync::SyncState, id: RequestId, cmd: RestCommand)
     state.handle_command(SyncCommand::Rest { id, cmd });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Session lifecycle
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 #[test]
 fn unlock_returns_session_ready() {
@@ -111,9 +111,9 @@ fn logout_returns_logged_out_and_clears_session() {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Document CRUD
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 #[test]
 fn create_document_returns_created() {
@@ -261,9 +261,9 @@ fn rename_document_updates_name() {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Multi-document lifecycle (open / close)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 #[test]
 fn open_document_subscribes_via_mock_ws() {
@@ -375,9 +375,9 @@ fn send_update_after_open_document_encrypts_and_sends() {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Full session flow (end-to-end smoke test)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 #[test]
 fn full_session_flow_unlock_create_open_close_logout() {
@@ -472,4 +472,152 @@ fn full_session_flow_unlock_create_open_close_logout() {
 
     // After logout, documents should be empty.
     assert_eq!(state.documents_len(), 0);
+}
+
+// -----------------------------------------------------------------------------
+// Passphrase-sealed files (`DOCFILE P2`)
+//
+// These run the real Argon2id work factor, which is the point: the seam under
+// test is the service plane, and a test key derivation would not exercise it.
+// Each one costs a few hundred milliseconds, so there are as few as the rules
+// need.
+// -----------------------------------------------------------------------------
+
+#[test]
+fn a_sealed_file_round_trips_through_the_service_plane() {
+    let (mut state, rx, _mock) = setup(false);
+    let doc_id = ambre_core::DocumentId::new();
+    let plaintext = ambre_core::write_ambre_plaintext(DocType::Prose, *doc_id.as_uuid(), b"body");
+
+    let seal_id = RequestId::next();
+    send_rest(
+        &mut state,
+        seal_id,
+        RestCommand::SealDocFile {
+            plaintext: plaintext.clone().into(),
+            passphrase: b"correct horse".to_vec().into(),
+        },
+    );
+    let sealed = match drain_rest(&rx, seal_id) {
+        RestEvent::DocFileSealed { data } => data,
+        other => panic!("expected DocFileSealed, got {other:?}"),
+    };
+
+    // The sealed bytes are a container of the other lineage, and they do not
+    // carry the plaintext header the plaintext reader would otherwise find.
+    assert!(matches!(
+        ambre_core::classify(&sealed),
+        Ok(ambre_core::ContainerKind::Sealed(
+            ambre_core::AMBRE_SEALED_VERSION
+        ))
+    ));
+    assert!(ambre_core::read_ambre_plaintext(&sealed).is_err());
+
+    let open_id = RequestId::next();
+    send_rest(
+        &mut state,
+        open_id,
+        RestCommand::OpenDocFile {
+            sealed,
+            passphrase: b"correct horse".to_vec().into(),
+        },
+    );
+    match drain_rest(&rx, open_id) {
+        // What comes back is the whole plaintext container, byte for byte, so
+        // the caller reads it exactly as it reads a file off the disk.
+        RestEvent::DocFileOpened { plaintext: opened } => {
+            assert_eq!(&*opened, &plaintext[..]);
+            let header = ambre_core::read_ambre_plaintext(&opened).expect("plaintext header");
+            assert_eq!(header.doc_type, DocType::Prose);
+            assert_eq!(header.document_id, *doc_id.as_uuid());
+        }
+        other => panic!("expected DocFileOpened, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
+    let (mut state, rx, _mock) = setup(false);
+    let plaintext = ambre_core::write_ambre_plaintext(
+        DocType::Prose,
+        *ambre_core::DocumentId::new().as_uuid(),
+        b"body",
+    );
+
+    let seal_id = RequestId::next();
+    send_rest(
+        &mut state,
+        seal_id,
+        RestCommand::SealDocFile {
+            plaintext: plaintext.into(),
+            passphrase: b"correct horse".to_vec().into(),
+        },
+    );
+    let sealed = match drain_rest(&rx, seal_id) {
+        RestEvent::DocFileSealed { data } => data,
+        other => panic!("expected DocFileSealed, got {other:?}"),
+    };
+
+    for (case, bytes, passphrase) in [
+        ("wrong passphrase", sealed.clone(), &b"correct horsf"[..]),
+        (
+            "tampered ciphertext",
+            {
+                let mut t = sealed.clone();
+                let last = t.len() - 1;
+                t[last] ^= 0x01;
+                t
+            },
+            &b"correct horse"[..],
+        ),
+        (
+            "tampered salt",
+            {
+                let mut t = sealed.clone();
+                t[5] ^= 0x01;
+                t
+            },
+            &b"correct horse"[..],
+        ),
+    ] {
+        let id = RequestId::next();
+        send_rest(
+            &mut state,
+            id,
+            RestCommand::OpenDocFile {
+                sealed: bytes,
+                passphrase: passphrase.to_vec().into(),
+            },
+        );
+        match drain_rest(&rx, id) {
+            RestEvent::DocFileOpenFailed => {}
+            other => panic!("{case}: expected DocFileOpenFailed, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn opening_a_plaintext_file_fails_without_deriving_a_key() {
+    let (mut state, rx, _mock) = setup(false);
+    let plaintext = ambre_core::write_ambre_plaintext(
+        DocType::Prose,
+        *ambre_core::DocumentId::new().as_uuid(),
+        b"body",
+    );
+
+    // The header says plaintext, so the answer comes from the parse. Nothing
+    // pays the work factor: an unsealed file is not a guessing attempt.
+    let id = RequestId::next();
+    send_rest(
+        &mut state,
+        id,
+        RestCommand::OpenDocFile {
+            sealed: plaintext,
+            passphrase: b"anything".to_vec().into(),
+        },
+    );
+    match drain_rest(&rx, id) {
+        RestEvent::DocFileOpenFailed => {}
+        other => panic!("expected DocFileOpenFailed, got {other:?}"),
+    }
 }

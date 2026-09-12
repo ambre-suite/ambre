@@ -3,6 +3,10 @@
 //! Derives the user key that unwraps the server-stored master key at login. The
 //! parameters are explicit and versioned so they can evolve without breaking
 //! existing accounts (the salt and version travel with the stored key material).
+//!
+//! The same work factor derives the key of a passphrase-sealed file
+//! ([`crate::keys::FileKey::from_passphrase`]). That is the other place a
+//! passphrase becomes a key, against the same offline guessing attack.
 
 use argon2::{Algorithm, Argon2, Params, Version};
 

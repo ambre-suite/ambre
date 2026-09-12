@@ -5,8 +5,14 @@
 //! exchange key via domain-separated BLAKE2b. [`DocumentKey`] is the symmetric
 //! per-document key used for AEAD and the HMAC commitment tag.
 //!
-//! Both types are `ZeroizeOnDrop`: their bytes are wiped when they leave scope.
+//! [`FileKey`] is the symmetric key of one passphrase-sealed `.ambre` file,
+//! derived from the passphrase the user typed and the file's own salt. It is a
+//! type of its own, so that no local file takes the document key the server
+//! rotates.
+//!
+//! All three are `ZeroizeOnDrop`: their bytes are wiped when they leave scope.
 
+use ambre_core::SALT_LEN;
 use blake2::{Blake2b512, Digest};
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
@@ -20,6 +26,8 @@ use crate::random;
 const SIGN_DOMAIN: &[u8] = b"ambre-sign-v1";
 /// Domain-separation tag for the X25519 exchange key derivation.
 const EXCH_DOMAIN: &[u8] = b"ambre-exch-v1";
+/// Domain-separation tag for the passphrase-sealed file key.
+const FILE_DOMAIN: &[u8] = b"ambre-file-v1";
 
 /// Derives 32 bytes from `domain || seed` via BLAKE2b, truncating the 64-byte
 /// digest. Distinct domains yield independent keys from the same seed.
@@ -103,6 +111,63 @@ impl DocumentKey {
     }
 
     /// Returns the raw key bytes. Restricted to crate use (AEAD, HMAC, wrap).
+    pub(crate) fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+/// A 32-byte symmetric key derived from a passphrase, scoped to a single sealed
+/// `.ambre` file. Used for AEAD and nothing else.
+///
+/// **A distinct type from [`DocumentKey`], and that is a rule rather than a
+/// preference** (`ambre-spec-docfile.md section 5`). Sealing a local file under
+/// the key Sync holds for that document would tie its readability to a
+/// server-side lifecycle. Every revocation rotates the document key, so a
+/// backup under a since-rotated key stops opening, silently and months late.
+/// Two types with no conversion between them means the mistake does not
+/// compile -- neither AEAD entry point accepts the other's key.
+///
+/// It carries no [`Clone`]: a file key exists for one seal or one open, and a
+/// copy is one more buffer to wipe.
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct FileKey([u8; 32]);
+
+impl FileKey {
+    /// Derives the key that seals one file, from `passphrase` and that file's
+    /// own random `salt`.
+    ///
+    /// Argon2id v1 at the login work factor (`crate::passphrase`), then one
+    /// domain-separated BLAKE2b pass. The second step is what makes this key
+    /// *not* the account's user key, which the same inputs would otherwise
+    /// produce. Sealing a file under the account passphrase would put a value
+    /// derived from the login secret on the disk, beside the ciphertext it
+    /// protects.
+    ///
+    /// The cost is the point and it is not small: ~64 MiB and a few hundred
+    /// milliseconds per call. It runs in the Sync worker, which holds an event
+    /// loop of its own, so the interface keeps painting while it works
+    /// (`ARCH-004`).
+    pub fn from_passphrase(passphrase: &[u8], salt: &[u8]) -> Result<Self, CryptoError> {
+        let mut intermediate = crate::passphrase::derive_user_key(passphrase, salt)?;
+        let key = Self(derive32(FILE_DOMAIN, &intermediate));
+        intermediate.zeroize();
+        Ok(key)
+    }
+
+    /// Draws a fresh salt from the platform CSPRNG, derives the key of a file
+    /// about to go out, and returns both. The sealed header carries the salt in
+    /// the clear, and the caller needs it there.
+    ///
+    /// Sealing needs a salt no caller may choose, so the draw belongs on this
+    /// side of the crate boundary, not behind a public CSPRNG accessor.
+    /// The length is [`ambre_core::SALT_LEN`], the header field it fills.
+    pub fn for_new_file(passphrase: &[u8]) -> Result<(Self, [u8; SALT_LEN]), CryptoError> {
+        let salt = random::bytes::<SALT_LEN>();
+        let key = Self::from_passphrase(passphrase, &salt)?;
+        Ok((key, salt))
+    }
+
+    /// Returns the raw key bytes. Restricted to crate use (AEAD).
     pub(crate) fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }

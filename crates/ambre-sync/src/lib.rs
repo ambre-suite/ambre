@@ -108,6 +108,7 @@ impl LogicSink {
 
 mod auth;
 mod channels;
+mod docfile;
 mod documents;
 mod http;
 mod media;
@@ -1026,6 +1027,17 @@ impl SyncState {
                 tracing::debug!("Sync: UpdateReadCursor {channel_id:?} seq={last_seq}");
             }
             RestCommand::GetUnreadCounts => tracing::info!("Sync: GetUnreadCounts"),
+
+            // -- The native file (`.ambre`) ------------------------------------
+            RestCommand::SealDocFile {
+                plaintext,
+                passphrase,
+            } => {
+                self.handle_seal_doc_file(id, plaintext, passphrase);
+            }
+            RestCommand::OpenDocFile { sealed, passphrase } => {
+                self.handle_open_doc_file(id, sealed, passphrase);
+            }
 
             // -- Meetings ------------------------------------------------------
             RestCommand::CreateMeeting { name } => tracing::info!("Sync: CreateMeeting '{name}'"),

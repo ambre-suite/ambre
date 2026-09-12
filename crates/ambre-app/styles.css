@@ -987,6 +987,53 @@ input[type="radio"] {
     cursor: pointer;
 }
 
+/* Passphrase prompt of a sealed `.ambre` file (ambre-spec-docfile.md
+   section 5). Narrow on purpose: one or two fields and a warning the user must
+   read before the file becomes unrecoverable. */
+.ambre-dialog.ambre-passphrase {
+    width: min(92vw, 420px);
+    max-width: min(92vw, 420px);
+}
+
+.ambre-passphrase-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ambre-passphrase-panel h2 {
+    font-size: 20px;
+    font-weight: 400;
+}
+
+.ambre-passphrase-note {
+    color: var(--text-dim);
+    line-height: 1.5;
+}
+
+.ambre-passphrase-panel input {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    padding: 7px 10px;
+    border-radius: 7px;
+}
+
+/* Reserves its line whether or not there is a message, so the fields and the
+   buttons do not jump when a mismatch appears. */
+.ambre-passphrase-error {
+    min-height: 18px;
+    font-size: 12px;
+    color: var(--danger, #e05260);
+}
+
+.ambre-passphrase-panel .ambre-dialog-actions button:first-child {
+    background: transparent;
+    color: var(--text);
+}
+
 /* TOFU key verification modal (ambre-spec-key-verification.md). */
 .ambre-tofu-panel {
     max-width: 420px;

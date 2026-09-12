@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE PERSISTED SCHEMA
 
 **Type:** Horizontal (framework)
-**Implementation:** complete for the version register -- it is written at creation, read at every
+**Implementation:** partial -- the version register ships. It is written at creation, read at every
 full-state entry point, and both applications carry a migration registry. The one-register rule
 ships in both applications and nothing refuses a third shape.
 

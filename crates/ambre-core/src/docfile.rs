@@ -1,15 +1,17 @@
 //! The `.ambre` container -- the shared header of the native document file
 //! (`ambre-spec-docfile.md`).
 //!
-//! This module owns the *container* half of the format and nothing else: the
-//! fixed 22-byte header, the version registry and its forward migrations, the
-//! error taxonomy, and the two normative rules that make a file readable by a
-//! client that did not write it (dispatch, version recovery). The *payload* half
-//! -- producing and consuming a `LoroDoc` snapshot -- belongs to each app's
-//! interop module, which calls in here rather than re-deriving the layout (I5:
-//! one container, every app).
+//! This module owns the *container* half alone: the 22-byte header, the version
+//! registry with its migrations, and the error taxonomy. The *payload* half --
+//! a `LoroDoc` snapshot -- belongs to each app's interop module, which calls in
+//! here rather than re-deriving it (I5: one container).
 //!
-//! Layout, offsets fixed:
+//! Two lineages share one version byte, and its top bit is the partition: clear
+//! for a plaintext container, set for a passphrase-sealed one (`DOCFILE-010`).
+//! A sealed file therefore tells itself apart from the header alone, and an
+//! older client refuses it rather than parsing a salt as a `doc_type`.
+//!
+//! Plaintext layout, offsets fixed:
 //!
 //! ```text
 //!   0   4   magic       0x414D4252 ("AMBR")
@@ -19,13 +21,33 @@
 //!  22   ..  payload     LoroDoc::export_snapshot(), plaintext
 //! ```
 //!
+//! Sealed layout, offsets fixed:
+//!
+//! ```text
+//!   0   4   magic       0x414D4252 ("AMBR")
+//!   4   1   version     sealed container version, current 0x80
+//!   5  16   salt        Argon2id salt, fresh per file
+//!  21  24   nonce       XChaCha20 nonce, fresh per file
+//!  45   ..  ciphertext  a whole plaintext container, sealed
+//! ```
+//!
+//! The sealed header carries no `doc_type` and no `document_id`: what it seals
+//! is an entire plaintext container, header included, so both travel inside the
+//! ciphertext. A sealed file therefore names neither the application that wrote
+//! it nor the document it holds. Opening one yields bytes the plaintext reader
+//! above accepts unchanged, so dispatch, version recovery and the schema gate
+//! come along for free.
+//!
 //! Four invariants shape the API:
 //! * **I2 self-describing** -- `version` and `doc_type` precede any app-specific
 //!   parsing, so a reader identifies a file without guessing from its extension.
 //! * **I3 non-destructive** -- every entry point takes `&[u8]` and returns fresh
 //!   bytes. No path here mutates its input, under any error.
-//! * **I4 no cryptography** -- pure byte handling. Protection (the future
-//!   passphrase-sealed variant) is a separate stage and a separate version.
+//! * **I4 no cryptography** -- pure byte handling, both lineages. This module
+//!   lays a sealed file out and takes it apart. It derives no key and runs no
+//!   cipher, and `ambre-core` declares no crypto dependency that would let it
+//!   (`DOCFILE-006`). The seal itself runs in the Sync worker, the one place
+//!   that may hold a primitive (`ARCH-004`).
 //! * **Writer rule** -- writers only ever emit [`AMBRE_VERSION`]. Compatibility
 //!   is a read-side obligation: one writer path, N reader paths.
 
@@ -44,19 +66,58 @@ pub const AMBRE_VERSION: u8 = 0x01;
 /// Fixed header size; the payload starts at this offset.
 pub const HEADER_LEN: usize = 22;
 
+/// The bit of the version byte that partitions the two lineages: clear for a
+/// plaintext container, set for a passphrase-sealed one.
+///
+/// The version byte changes, not a field beside it. A build that predates the
+/// sealed lineage reads `0x80` as a container version it does not know, and
+/// refuses the file. That is the whole of `DOCFILE-010`.
+pub const SEALED_BIT: u8 = 0x80;
+
+/// The sealed container version this build writes, and the only sealed layout it
+/// parses. There is no sealed migration registry: see [`parse_sealed_header`].
+pub const AMBRE_SEALED_VERSION: u8 = 0x80;
+
+/// Argon2id salt width in a sealed header.
+pub const SALT_LEN: usize = 16;
+
+/// XChaCha20 nonce width in a sealed header. Mirrors `ambre_crypto::aead::NONCE_LEN`,
+/// which this crate cannot name (`DOCFILE-006`). One crate up, where both sides
+/// are in scope at once, `ambre_crypto::tests::the_sealed_header_widths_match_the_primitives`
+/// pins the two together.
+pub const SEAL_NONCE_LEN: usize = 24;
+
+/// Fixed sealed-header size; the ciphertext starts at this offset.
+pub const SEALED_HEADER_LEN: usize = 5 + SALT_LEN + SEAL_NONCE_LEN;
+
+/// Width of the associated data the tag covers: the sealed header **up to but
+/// excluding the nonce**.
+///
+/// The nonce is left out because the tag already covers it. An AEAD tag binds
+/// its key *and* its nonce, so a flipped bit there fails the open either way.
+/// It adds the rest of the context -- the magic and the lineage byte -- so no
+/// other sealed layout reads this ciphertext.
+pub const SEALED_AAD_LEN: usize = 5 + SALT_LEN;
+
 // Field offsets inside the header. Named rather than inlined so a version bump
 // that moves a field moves it in one place.
 const VERSION_AT: usize = 4;
 const DOC_TYPE_AT: usize = 5;
 const DOCUMENT_ID_AT: usize = 6;
 
+// Sealed-header offsets. `SALT_AT` collides with the plaintext `DOC_TYPE_AT` by
+// construction: the lineages diverge at offset 5, and the version byte before
+// it names what follows.
+const SALT_AT: usize = 5;
+const SEAL_NONCE_AT: usize = SALT_AT + SALT_LEN;
+
 /// A parsed `.ambre` container: the header fields plus the payload that followed
 /// them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AmbreHeader {
     /// Container version the bytes carried. Always [`AMBRE_VERSION`] once the
-    /// reader has returned: an older file is migrated before it gets here, a
-    /// newer one is refused.
+    /// reader has returned: the reader migrates an older file before it gets
+    /// here, and refuses a newer one.
     pub version: u8,
     /// Which app wrote the file. The caller compares it against its own and
     /// re-dispatches on mismatch (dispatch rule) rather than coercing.
@@ -67,8 +128,8 @@ pub struct AmbreHeader {
     pub payload: Vec<u8>,
 }
 
-/// Container-level failures. Fatal by nature: a header failure means no document
-/// can be produced.
+/// Container-level failures. Fatal by nature: a header failure leaves no
+/// document to produce.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum DocFileError {
     /// Fewer than [`HEADER_LEN`] bytes -- not a container at all.
@@ -84,11 +145,33 @@ pub enum DocFileError {
     #[error("unsupported .ambre container version: {found}")]
     UnsupportedVersion { found: u8 },
 
+    /// The version byte has [`SEALED_BIT`] set, so the file is a sealed
+    /// container and there is no payload to read without a passphrase. The
+    /// plaintext entry points raise it, because they cannot open one.
+    ///
+    /// Not a version failure, and not an error to report as one. This build
+    /// reads a sealed file perfectly well once it holds the passphrase, and the
+    /// caller prompts for it.
+    #[error("this .ambre file is sealed with a passphrase")]
+    SealedFile,
+
+    /// The sealed parser met a plaintext container. The mirror of
+    /// [`Self::SealedFile`], and out of reach for a caller that classifies
+    /// first. Both exist so neither parser guesses at the other's bytes.
+    #[error("this .ambre file is not sealed")]
+    NotSealed,
+
+    /// A sealed container whose sealed-layout version this build does not know.
+    /// Distinct from [`Self::UnsupportedVersion`], which promises a migration
+    /// for the older half. The sealed lineage has none: rewriting the envelope
+    /// means deriving the key it wraps.
+    #[error("unsupported sealed .ambre layout: {found:#04x}")]
+    SealedVersionUnsupported { found: u8 },
+
     /// The `doc_type` byte names no app this build knows. Distinct from
-    /// [`Self::WrongDocType`], which is a *valid* type belonging to another app:
-    /// that one is re-dispatchable, this one is not, so it cannot carry a
-    /// [`DocType`]. Reachable from a file written by a client that shipped a new
-    /// document type, or from corruption.
+    /// [`Self::WrongDocType`], a *valid* type belonging to another app: that one
+    /// re-dispatches, this one cannot, so it carries no [`DocType`]. A client
+    /// shipping a new document type reaches it, and so does corruption.
     #[error("unknown .ambre document type discriminant: {found}")]
     UnknownDocType { found: u8 },
 
@@ -103,17 +186,57 @@ pub enum DocFileError {
     PayloadRejected,
 
     /// The header parsed and the payload is a valid document, but the *schema*
-    /// version inside it is one this build will not read (`SCHEMA-008`) or
-    /// cannot migrate. Raised by the app-side half of the pair, like
+    /// version inside it is one this build refuses (`SCHEMA-008`) or cannot
+    /// migrate. The app-side half of the pair raises it, like
     /// [`Self::PayloadRejected`].
     ///
-    /// Carries the inner verdict rather than flattening it: the two versions
-    /// guarding a stored document are independent on purpose -- this one guards
-    /// the twenty-two bytes around the payload, the other guards what is inside
-    /// -- and a caller that reports "unsupported version" without saying which
-    /// one sends the user looking in the wrong place.
+    /// It carries the inner verdict rather than flattening it. The two versions
+    /// guarding a stored document are independent on purpose: this one guards
+    /// the twenty-two bytes around the payload, the other what is inside. A
+    /// caller that reports "unsupported version" without saying which one sends
+    /// the user looking in the wrong place.
     #[error("{0}")]
     PayloadSchema(#[from] crate::schema::SchemaError),
+}
+
+// -----------------------------------------------------------------------------
+// The two lineages
+// -----------------------------------------------------------------------------
+
+/// Which lineage a file's version byte names, and at which version.
+///
+/// What a caller holding raw bytes reads *first*. It decides whether the next
+/// step is a parse or a passphrase prompt, with no key, no filename and no
+/// guess.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContainerKind {
+    /// A plaintext container at this version. [`AMBRE_VERSION`] parses as it
+    /// stands; an older one migrates first, and a newer one fails.
+    Plaintext(u8),
+    /// A sealed container at this sealed-layout version. Needs a passphrase
+    /// before any of the above applies.
+    Sealed(u8),
+}
+
+/// Read the magic and the version byte, and say which lineage the file belongs
+/// to -- nothing more.
+///
+/// The cheapest question a reader can ask, and the first one it must. The two
+/// lineages diverge at offset 5, so a caller that parses before it classifies
+/// reads a salt as a document type. Five bytes are enough, so this answers for
+/// a file too short to hold either header in full.
+pub fn classify(data: &[u8]) -> Result<ContainerKind, DocFileError> {
+    let Some(&version) = data.get(VERSION_AT) else {
+        return Err(DocFileError::TruncatedHeader);
+    };
+    if data.get(..AMBRE_MAGIC.len()) != Some(&AMBRE_MAGIC[..]) {
+        return Err(DocFileError::InvalidMagic);
+    }
+    if version & SEALED_BIT == 0 {
+        Ok(ContainerKind::Plaintext(version))
+    } else {
+        Ok(ContainerKind::Sealed(version))
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -140,13 +263,11 @@ pub fn write_ambre_plaintext(doc_type: DocType, document_id: Uuid, payload: &[u8
 // -----------------------------------------------------------------------------
 
 /// Parse the header at the current version exactly, with no recovery: an older
-/// file is reported as [`DocFileError::UnsupportedVersion`] rather than
-/// migrated.
+/// file earns [`DocFileError::UnsupportedVersion`] rather than a migration.
 ///
-/// The container half of the read path, exposed for callers that want to inspect
-/// raw bytes (a header dump, a migration step validating its own output). The
-/// ordinary entry points are [`read_ambre_plaintext`] and
-/// [`read_ambre_plaintext_as`].
+/// The container half of the read path, for callers that inspect raw bytes -- a
+/// header dump, a migration step validating its own output. The ordinary entry
+/// points are [`read_ambre_plaintext`] and [`read_ambre_plaintext_as`].
 pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
     if data.len() < HEADER_LEN {
         return Err(DocFileError::TruncatedHeader);
@@ -154,10 +275,15 @@ pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
     if data[..AMBRE_MAGIC.len()] != AMBRE_MAGIC {
         return Err(DocFileError::InvalidMagic);
     }
-    // Version before doc_type: a future version is free to redefine the byte at
-    // offset 5, so validating it against *this* build's DocType set only makes
-    // sense once the version matches.
+    // Version before doc_type, and the lineage before the version. A sealed
+    // file holds a salt at offset 5, so reading it as a `DocType` is the
+    // confusion the partition prevents. A future plaintext version may redefine
+    // that byte too, so it is worth checking against *this* build's DocType set
+    // only once the version matches.
     let version = data[VERSION_AT];
+    if version & SEALED_BIT != 0 {
+        return Err(DocFileError::SealedFile);
+    }
     if version != AMBRE_VERSION {
         return Err(DocFileError::UnsupportedVersion { found: version });
     }
@@ -175,18 +301,18 @@ pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
     })
 }
 
-/// Read a plaintext `.ambre` of any [`DocType`], applying the version-recovery
-/// rule: an older container is migrated then re-parsed, a newer one is
-/// refused with the file left untouched (I3).
+/// Read a plaintext `.ambre` of any [`DocType`], under the version-recovery
+/// rule: this migrates an older container then re-parses it, and refuses a
+/// newer one (I3).
 ///
-/// Type-agnostic on purpose -- this is what an "open this file" caller wants:
-/// it reads `doc_type` off the returned header and routes to the app that claims
-/// it. An importer that already knows which app it is wants
-/// [`read_ambre_plaintext_as`] instead.
+/// Type-agnostic on purpose, for an "open this file" caller: it reads
+/// `doc_type` off the header and routes to the app that claims it. An importer
+/// that already knows which app it is wants [`read_ambre_plaintext_as`]
+/// instead.
 pub fn read_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
     match parse_header(data) {
         // Older container: migrate forward, then parse the result. The migrated
-        // buffer is a fresh allocation, so `data` is untouched either way.
+        // buffer is a fresh allocation, so nothing here touches `data`.
         Err(DocFileError::UnsupportedVersion { found }) if found < AMBRE_VERSION => {
             parse_header(&migrate_ambre(found, data)?)
         }
@@ -214,6 +340,120 @@ pub fn read_ambre_plaintext_as(
 }
 
 // -----------------------------------------------------------------------------
+// The sealed lineage
+// -----------------------------------------------------------------------------
+
+/// A parsed sealed `.ambre`: the envelope's public parameters, and the
+/// ciphertext they belong to.
+///
+/// Every field here is public in the file and public in this type. A salt and a
+/// nonce are not secrets. What *is* secret -- the document, its type, its
+/// identity -- sits inside [`Self::ciphertext`] until something holding the
+/// passphrase opens it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SealedAmbre {
+    /// Sealed-layout version the bytes carried. Always [`AMBRE_SEALED_VERSION`]
+    /// once the parser has returned.
+    pub version: u8,
+    /// Argon2id salt, fresh per file.
+    pub salt: [u8; SALT_LEN],
+    /// AEAD nonce, fresh per file.
+    pub nonce: [u8; SEAL_NONCE_LEN],
+    /// Offset [`SEALED_HEADER_LEN`] onward: the sealed bytes, authentication tag
+    /// included. Opens to a whole plaintext container.
+    pub ciphertext: Vec<u8>,
+}
+
+impl SealedAmbre {
+    /// The associated data the seal covered: this file's own header, up to the
+    /// nonce.
+    ///
+    /// A prefix of the header by construction, not by convention: the writer
+    /// and this method assemble from the same code, and cannot drift apart.
+    pub fn aad(&self) -> [u8; SEALED_AAD_LEN] {
+        sealed_aad_at(self.version, &self.salt)
+    }
+}
+
+/// Assemble the authenticated prefix of a sealed header. The one place that
+/// writes the sealed layout down, called by [`sealed_aad`] and by
+/// [`SealedAmbre::aad`].
+fn sealed_aad_at(version: u8, salt: &[u8; SALT_LEN]) -> [u8; SEALED_AAD_LEN] {
+    let mut out = [0u8; SEALED_AAD_LEN];
+    out[..AMBRE_MAGIC.len()].copy_from_slice(&AMBRE_MAGIC);
+    out[VERSION_AT] = version;
+    out[SALT_AT..].copy_from_slice(salt);
+    out
+}
+
+/// The associated data a seal covers, for a file about to go out under `salt`.
+///
+/// The write-side counterpart of [`SealedAmbre::aad`]. The sealer needs the
+/// associated data *before* it has a ciphertext to put in a [`SealedAmbre`], so
+/// it asks here. It hands the same salt to [`write_ambre_sealed`] afterwards,
+/// along with the nonce the cipher drew.
+pub fn sealed_aad(salt: &[u8; SALT_LEN]) -> [u8; SEALED_AAD_LEN] {
+    sealed_aad_at(AMBRE_SEALED_VERSION, salt)
+}
+
+/// Assemble a sealed `.ambre`: the current sealed header, then `ciphertext`.
+///
+/// The writer rule of the sealed lineage, and it takes no version either: this
+/// emits [`AMBRE_SEALED_VERSION`] or nothing at all.
+pub fn write_ambre_sealed(
+    salt: &[u8; SALT_LEN],
+    nonce: &[u8; SEAL_NONCE_LEN],
+    ciphertext: &[u8],
+) -> Vec<u8> {
+    let mut out = Vec::with_capacity(SEALED_HEADER_LEN + ciphertext.len());
+    out.extend_from_slice(&sealed_aad(salt));
+    out.extend_from_slice(nonce);
+    debug_assert_eq!(out.len(), SEALED_HEADER_LEN);
+    out.extend_from_slice(ciphertext);
+    out
+}
+
+/// Parse a sealed `.ambre` header, at the current sealed layout exactly.
+///
+/// **There is no sealed migration walk, and this is where that decision shows.**
+/// A plaintext container migrates because its bytes are readable; a sealed one
+/// is not, so rewriting its envelope means deriving the key inside it. That is
+/// a re-seal, under a passphrase the user must type, not a read-side recovery.
+/// The document inside migrates once opened, through the ordinary reader. So
+/// this refuses an unknown sealed layout, and the refusal names itself
+/// ([`DocFileError::SealedVersionUnsupported`]) rather than promising a
+/// migration that cannot exist.
+///
+/// A ciphertext too short for an authentication tag still parses: this module
+/// owns no tag width (`DOCFILE-006`), and the AEAD refuses it one layer up.
+pub fn parse_sealed_header(data: &[u8]) -> Result<SealedAmbre, DocFileError> {
+    let version = match classify(data)? {
+        ContainerKind::Plaintext(_) => return Err(DocFileError::NotSealed),
+        ContainerKind::Sealed(version) => version,
+    };
+    if version != AMBRE_SEALED_VERSION {
+        return Err(DocFileError::SealedVersionUnsupported { found: version });
+    }
+    if data.len() < SEALED_HEADER_LEN {
+        return Err(DocFileError::TruncatedHeader);
+    }
+    let salt = data
+        .get(SALT_AT..SEAL_NONCE_AT)
+        .and_then(|s| <[u8; SALT_LEN]>::try_from(s).ok())
+        .ok_or(DocFileError::TruncatedHeader)?;
+    let nonce = data
+        .get(SEAL_NONCE_AT..SEALED_HEADER_LEN)
+        .and_then(|s| <[u8; SEAL_NONCE_LEN]>::try_from(s).ok())
+        .ok_or(DocFileError::TruncatedHeader)?;
+    Ok(SealedAmbre {
+        version,
+        salt,
+        nonce,
+        ciphertext: data[SEALED_HEADER_LEN..].to_vec(),
+    })
+}
+
+// -----------------------------------------------------------------------------
 // Version registry and migration
 // -----------------------------------------------------------------------------
 
@@ -221,9 +461,9 @@ pub fn read_ambre_plaintext_as(
 /// whole file out.
 ///
 /// A step owns the *entire* transformation, header byte included: it returns
-/// bytes that parse at `to`. Payload contents are not its business -- the CRDT
-/// schema inside the snapshot is versioned separately by the `meta`
-/// / `schema_version` register (`ambre-spec-schema-version.md`, `ARCH P8`).
+/// bytes that parse at `to`. Payload contents are not its business -- the
+/// `meta` / `schema_version` register versions the CRDT schema inside the
+/// snapshot (`ambre-spec-schema-version.md`, `ARCH P8`).
 struct Migration {
     from: u8,
     to: u8,
@@ -233,24 +473,30 @@ struct Migration {
 /// The version registry: one row per container version bump, appended
 /// never rewritten.
 ///
-/// Empty at `0x01` -- nothing precedes the initial layout. The walk that
-/// consumes it ([`migrate_steps`]) is exercised by the synthetic-step test below
-/// so the path is not dead code on the day the first bump lands.
+/// Empty at `0x01` -- nothing precedes the initial layout. The synthetic-step
+/// test below drives the walk that consumes it ([`migrate_steps`]), so the path
+/// is not dead code when the first bump lands.
 const MIGRATIONS: &[Migration] = &[];
 
 /// Migrate a whole `.ambre` file forward from `from` to [`AMBRE_VERSION`],
 /// one registry step at a time.
 ///
 /// Returns fresh bytes; the input is never mutated (I3). `from` at the current
-/// version is the identity, and a `from` newer than this build is refused rather
-/// than guessed at.
+/// version is the identity, and anything newer than this build draws a refusal
+/// rather than a guess.
 pub fn migrate_ambre(from: u8, bytes: &[u8]) -> Result<Vec<u8>, DocFileError> {
+    // The walk would refuse a sealed version anyway, since every one of them
+    // sits above `AMBRE_VERSION`. But it would call it an unknown *plaintext*
+    // version, the one message that sends the user to the changelog instead of
+    // to their passphrase.
+    if from & SEALED_BIT != 0 {
+        return Err(DocFileError::SealedFile);
+    }
     migrate_steps(MIGRATIONS, from, AMBRE_VERSION, bytes)
 }
 
-/// The registry walk, parameterized by the step table so the harness can be
-/// driven by a synthetic registry in tests while the shipping one is still
-/// empty.
+/// The registry walk, parameterized by the step table: the tests drive it with
+/// a synthetic registry while the shipping one is still empty.
 fn migrate_steps(
     steps: &[Migration],
     from: u8,
@@ -263,8 +509,8 @@ fn migrate_steps(
     let mut current = from;
     let mut buf = bytes.to_vec();
     while current < target {
-        // `to > current` is required, not merely expected: it is what makes the
-        // walk terminate, whatever a future registry row looks like.
+        // `to > current` is a requirement, not an expectation: it is what makes
+        // the walk terminate, whatever a future registry row looks like.
         let step = steps
             .iter()
             .find(|step| step.from == current && step.to > current)
@@ -395,7 +641,7 @@ mod tests {
             }),
             "the caller must be able to re-dispatch, so the type is carried"
         );
-        // The same bytes, unchanged, are accepted by the importer they name.
+        // The importer they name accepts the same bytes, unchanged.
         let header = read_ambre_plaintext_as(DocType::Toile, &toile).expect("right importer");
         assert_eq!(header.payload, b"snapshot-bytes");
     }
@@ -427,12 +673,21 @@ mod tests {
                 b
             },
             sample(DocType::Toile),
+            sealed_sample(),
+            {
+                let mut b = sealed_sample();
+                b[VERSION_AT] = 0x81;
+                b
+            },
+            sealed_sample()[..20].to_vec(),
         ];
         for bytes in cases {
             let before = bytes.clone();
             let _ = read_ambre_plaintext(&bytes);
             let _ = read_ambre_plaintext_as(DocType::Trame, &bytes);
             let _ = migrate_ambre(0, &bytes);
+            let _ = classify(&bytes);
+            let _ = parse_sealed_header(&bytes);
             assert_eq!(bytes, before, "an error path rewrote its input");
         }
     }
@@ -470,7 +725,7 @@ mod tests {
     }
 
     /// `0x02` -> `0x03`: same shape, plus a payload edit, so the multi-step walk
-    /// is seen to chain outputs rather than re-reading the original.
+    /// must chain outputs rather than re-read the original.
     fn bump_to_3(bytes: &[u8]) -> Result<Vec<u8>, DocFileError> {
         let mut out = bytes.to_vec();
         *out.get_mut(VERSION_AT)
@@ -526,5 +781,151 @@ mod tests {
             migrate_steps(SYNTHETIC, 1, 2, &truncated),
             Err(DocFileError::TruncatedHeader)
         );
+    }
+
+    // -- the sealed lineage ----------------------------------------------
+
+    const SALT: [u8; SALT_LEN] = [0xA5; SALT_LEN];
+    const NONCE: [u8; SEAL_NONCE_LEN] = [0x5A; SEAL_NONCE_LEN];
+
+    fn sealed_sample() -> Vec<u8> {
+        write_ambre_sealed(&SALT, &NONCE, b"ciphertext-bytes")
+    }
+
+    #[test]
+    fn the_sealed_layout_is_the_spec_layout() {
+        let bytes = sealed_sample();
+        assert_eq!(&bytes[..4], b"AMBR");
+        assert_eq!(bytes[VERSION_AT], AMBRE_SEALED_VERSION);
+        assert_eq!(&bytes[SALT_AT..SEAL_NONCE_AT], &SALT);
+        assert_eq!(&bytes[SEAL_NONCE_AT..SEALED_HEADER_LEN], &NONCE);
+        assert_eq!(&bytes[SEALED_HEADER_LEN..], b"ciphertext-bytes");
+        assert_eq!(SEALED_HEADER_LEN, 45);
+        assert_eq!(bytes.len(), SEALED_HEADER_LEN + b"ciphertext-bytes".len());
+    }
+
+    #[test]
+    fn the_associated_data_is_the_header_up_to_the_nonce() {
+        // The sealer computes the associated data before it has a ciphertext;
+        // the opener recovers it from the parsed envelope. Both must be the
+        // bytes on disk, or a file seals against one and opens against another.
+        let bytes = sealed_sample();
+        let envelope = parse_sealed_header(&bytes).expect("valid sealed container");
+        assert_eq!(&sealed_aad(&SALT), &bytes[..SEALED_AAD_LEN]);
+        assert_eq!(envelope.aad(), sealed_aad(&SALT));
+        // The nonce is deliberately outside it: the AEAD authenticates the
+        // nonce on its own, and naming it here would add nothing.
+        assert_eq!(SEALED_AAD_LEN, SEALED_HEADER_LEN - SEAL_NONCE_LEN);
+    }
+
+    #[test]
+    fn a_sealed_round_trip_recovers_the_envelope() {
+        let envelope = parse_sealed_header(&sealed_sample()).expect("valid sealed container");
+        assert_eq!(envelope.version, AMBRE_SEALED_VERSION);
+        assert_eq!(envelope.salt, SALT);
+        assert_eq!(envelope.nonce, NONCE);
+        assert_eq!(envelope.ciphertext, b"ciphertext-bytes");
+        assert_eq!(
+            write_ambre_sealed(&envelope.salt, &envelope.nonce, &envelope.ciphertext),
+            sealed_sample()
+        );
+    }
+
+    #[test]
+    fn the_version_byte_alone_tells_the_lineages_apart() {
+        // `DOCFILE-010`: the header, and only the header, says which lineage a
+        // file belongs to -- five bytes of it, before any field that moved.
+        assert_eq!(
+            classify(&sample(DocType::Trame)),
+            Ok(ContainerKind::Plaintext(AMBRE_VERSION))
+        );
+        assert_eq!(
+            classify(&sealed_sample()),
+            Ok(ContainerKind::Sealed(AMBRE_SEALED_VERSION))
+        );
+        // Five bytes is the whole input it needs: a file too short to hold
+        // either header still classifies.
+        assert_eq!(
+            classify(&sealed_sample()[..5]),
+            Ok(ContainerKind::Sealed(AMBRE_SEALED_VERSION))
+        );
+        assert_eq!(
+            classify(&sealed_sample()[..4]),
+            Err(DocFileError::TruncatedHeader)
+        );
+        let mut bad = sealed_sample();
+        bad[0] = b'X';
+        assert_eq!(classify(&bad), Err(DocFileError::InvalidMagic));
+    }
+
+    #[test]
+    fn the_plaintext_reader_refuses_a_sealed_file_by_name() {
+        // Not `UnsupportedVersion`: this build reads a sealed file perfectly
+        // well once it has the passphrase. Asking the user to update their
+        // client is the wrong message.
+        let bytes = sealed_sample();
+        assert_eq!(parse_header(&bytes), Err(DocFileError::SealedFile));
+        assert_eq!(read_ambre_plaintext(&bytes), Err(DocFileError::SealedFile));
+        assert_eq!(
+            read_ambre_plaintext_as(DocType::Trame, &bytes),
+            Err(DocFileError::SealedFile)
+        );
+        // Every sealed version, not just the one this build writes: the
+        // partition is the bit, not the value.
+        let mut future = sealed_sample();
+        future[VERSION_AT] = 0xFF;
+        assert_eq!(read_ambre_plaintext(&future), Err(DocFileError::SealedFile));
+    }
+
+    #[test]
+    fn the_sealed_parser_refuses_a_plaintext_file_by_name() {
+        assert_eq!(
+            parse_sealed_header(&sample(DocType::Trame)),
+            Err(DocFileError::NotSealed)
+        );
+    }
+
+    #[test]
+    fn an_unknown_sealed_layout_is_refused_without_a_migration_promise() {
+        let mut bytes = sealed_sample();
+        bytes[VERSION_AT] = 0x81;
+        assert_eq!(
+            parse_sealed_header(&bytes),
+            Err(DocFileError::SealedVersionUnsupported { found: 0x81 }),
+            "a sealed layout has no migration, so the refusal must not promise one"
+        );
+    }
+
+    #[test]
+    fn migrating_a_sealed_version_says_it_is_sealed() {
+        assert_eq!(
+            migrate_ambre(AMBRE_SEALED_VERSION, &sealed_sample()),
+            Err(DocFileError::SealedFile)
+        );
+    }
+
+    #[test]
+    fn a_truncated_sealed_header_is_rejected_at_every_length() {
+        let bytes = sealed_sample();
+        for len in 0..SEALED_HEADER_LEN {
+            assert!(
+                matches!(
+                    parse_sealed_header(&bytes[..len]),
+                    Err(DocFileError::TruncatedHeader)
+                ),
+                "a {len}-byte sealed file must not parse"
+            );
+        }
+        assert!(parse_sealed_header(&bytes[..SEALED_HEADER_LEN]).is_ok());
+    }
+
+    #[test]
+    fn an_empty_ciphertext_parses_and_leaves_the_verdict_to_the_aead() {
+        // This module owns no tag width (`DOCFILE-006`), so it cannot tell a
+        // ciphertext too short to be one from a valid short document. It reports
+        // the envelope faithfully; the open fails one layer up.
+        let envelope = parse_sealed_header(&write_ambre_sealed(&SALT, &NONCE, &[]))
+            .expect("a header with no ciphertext is still a header");
+        assert!(envelope.ciphertext.is_empty());
     }
 }

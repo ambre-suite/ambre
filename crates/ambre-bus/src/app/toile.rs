@@ -1244,6 +1244,23 @@ pub enum ToileCommand {
     /// document (`DOCFILE-001`). It is also plaintext, which the surface that
     /// offers it must say (`DOCFILE-009`).
     ExportAmbreFile,
+    /// Write the whole board to a native `.ambre` file **sealed under
+    /// `passphrase`**, and hand the sealed bytes back
+    /// (`ambre-spec-docfile.md section 5`). Read-only, and answered by the same
+    /// [`ExportComplete`](ToileEvent::ExportComplete) as the plaintext export --
+    /// what differs is the bytes, which the surface never has to tell apart.
+    ///
+    /// Served neither by the board nor by the Logic thread alone. The Logic
+    /// thread writes the plaintext container, the Sync worker seals it
+    /// (`ARCH-004`), and the answer comes back through the service plane. A
+    /// failure answers [`ExportFailed`](ToileEvent::ExportFailed) and leaves no
+    /// file. That is the only safe direction: a partial seal is not a file the
+    /// user can open.
+    ExportAmbreFileSealed {
+        /// The passphrase the user typed for this file, and not the account's:
+        /// nothing on this path can reach a session (`DOCFILE-014`).
+        passphrase: crate::rest::SecretBytes,
+    },
 
     // -- Persistence / compaction (no CRDT mutation) --
     RequestSnapshot,
@@ -1299,6 +1316,7 @@ impl ToileCommand {
                 | Self::ExportSvg
                 | Self::ExportPdf
                 | Self::ExportAmbreFile
+                | Self::ExportAmbreFileSealed { .. }
                 | Self::ReadComments { .. }
                 | Self::ReadDeck
                 | Self::RequestMedia { .. }

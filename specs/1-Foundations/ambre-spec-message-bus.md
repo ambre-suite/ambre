@@ -53,7 +53,7 @@ is what a full channel means.
 |---|---|---|---|---|---|
 | `BUS-013` | `POST` | The request identity allocator MUST yield a strictly increasing value, unique under concurrency. | this spec section 2 | `ambre_bus::host::request_id_is_strictly_monotonic`; `::request_id_is_unique_under_concurrency` drives eight threads at a thousand ids each and asserts every one is new | verified |
 | `BUS-014` | `POST` | A service request identity MUST be echoed unchanged by every hop. | this spec section 2 | `ambre_bus::host::request_id_echo_is_preserved_across_the_hop` asserts the id survives the `postcard` codec byte for byte; `ambre_logic::dispatch::tests::rest_command_forwards_to_sync_with_id` and `::rest_event_forwards_to_ui_with_id` assert the dispatcher echoes it in both directions | verified |
-| `BUS-009` | `POST` | A service request MUST be relayed to the Sync worker field for field. | this spec section 2 | `ambre_logic::dispatch::tests::create_document_preserves_fields` asserts both fields survive the arm. The relay is one arm for the whole family, so what the test pins for one variant is structural for the other thirty | verified |
+| `BUS-009` | `POST` | A service request MUST be relayed to the Sync worker field for field. | this spec section 2 | `ambre_logic::dispatch::tests::create_document_preserves_fields` asserts both fields survive the arm. The relay is one arm for the whole family, so what the test pins for one variant is structural for the rest of it | verified |
 | `BUS-015` | `POST` | A service response MUST be relayed to the interface field for field, unless a recorded route claims it for the document that issued it. | this spec section 2 | `ambre_logic::dispatch::tests::an_unrouted_rest_event_still_forwards_to_the_ui`; `::routed_media_uploaded_lands_in_engine_not_the_ui` asserts the claimed case reaches the engine and no stray event reaches the interface | verified |
 | `BUS-020` | `FAIL` | A service response whose document was closed MUST be dropped, never delivered. | this spec section 2 | `ambre_logic::dispatch::tests::a_late_response_after_close_is_dropped_without_panic` asserts the route is gone on close and that the late response repaints nothing; `::a_correlated_upload_failure_aborts_the_import_without_a_raw_api_error` pins the same for the error direction | verified |
 | `BUS-004` | `PRE` | A service request identity MUST be allocated by the UI thread. | this spec section 2 | none, and nothing could refuse it: `RequestId::next` is a free function over a process-wide counter, so the Sync worker -- which holds its own memory and therefore its own counter -- would allocate a colliding id in silence. There is no failure to define, only a caller that owes the rule | unverified |
@@ -99,7 +99,7 @@ thread.
 | Plane | Carried by | Payload | Logic routing |
 |---|---|---|---|
 | **Content** | `LogicCommand::App` / `UiEvent::{Viewport,Presence}` | `AppCommand` / `AppEvent`, typed and closed | by document identity, to that document's state |
-| **Service** | the `Rest { id, .. }` variant of all four envelopes | `RestCommand` / `RestEvent`, defined once | relayed verbatim, plus a state hook for the few that change the registry |
+| **Service** | the `Rest { id, .. }` variant of all four envelopes | `RestCommand` / `RestEvent`, defined once | relayed verbatim, plus a state hook for the few that change the registry. Two are served inside Sync and reach no relay: the seal and the open of a file (`DOCFILE-014`) |
 | **Network** | `SyncCommand::Send*` / `LogicEvent::Remote*` and the pushes | opaque bytes: CRDT deltas, channel messages | applied to the document, or forwarded |
 
 **Four envelopes, one per hop.** The direction is carried by the type name, so a `Command` always
@@ -111,7 +111,7 @@ travels towards the downstream worker and an `Event` always flows back.
 | Logic to UI | `UiEvent` | `ui.rs` | 16 |
 | Logic to Sync | `SyncCommand` | `command.rs` | 12 |
 | Sync to Logic | `LogicEvent` | `event.rs` | 19 |
-| shared service plane | `RestCommand` / `RestEvent` / `RequestId` | `rest.rs` | 31 / 30 |
+| shared service plane | `RestCommand` / `RestEvent` / `RequestId` | `rest.rs` | 33 / 34 |
 
 ```rust
 pub enum LogicCommand {
@@ -133,7 +133,7 @@ one module per row of the table above.
 
 | Shape | Where it goes |
 |---|---|
-| a correlated request with a success answer: session, document and channel management, sharing, media | `RestCommand` and `RestEvent`, one variant each |
+| a correlated request with a success answer: session, document and channel management, sharing, media, a local seal or open | `RestCommand` and `RestEvent`, one variant each |
 | a control operation with no answer: open, close, send a channel message | an explicit envelope variant |
 | a server push: a remote change, a connection status, a revocation, a meeting event | an explicit envelope variant |
 | a failure: an authentication error, an interface error | an explicit envelope variant, correlated by identity only where a route recorded one |

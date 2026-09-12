@@ -23,7 +23,7 @@
 // session, so the signed-out panel gates access.
 // ============================================================================
 
-use ambre_bus::{DocType, DocumentId, LogicCommand, RequestId, RestCommand};
+use ambre_bus::{DocType, DocumentId, LogicCommand, RequestId, RestCommand, SecretBytes};
 use leptos::html;
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
@@ -95,6 +95,33 @@ pub fn landing_view(
         })
     };
 
+    // A sealed file waits here between the picker and the Sync worker
+    // (`DOCFILE-014`). The bytes stay in this signal, not in the dialog: the
+    // prompt owns the passphrase and nothing else, and the two only meet on
+    // submission.
+    let sealed_file = RwSignal::new(None::<Vec<u8>>);
+    let passphrase_open = RwSignal::new(false);
+    let on_sealed = Callback::new(move |bytes: Vec<u8>| {
+        sealed_file.set(Some(bytes));
+        passphrase_open.set(true);
+    });
+    let on_passphrase = {
+        let to_logic = to_logic.clone();
+        Callback::new(move |passphrase: String| {
+            let Some(sealed) = sealed_file.get_untracked() else {
+                return;
+            };
+            sealed_file.set(None);
+            let _ = to_logic.try_send(LogicCommand::Rest {
+                id: RequestId::next(),
+                cmd: RestCommand::OpenDocFile {
+                    sealed,
+                    passphrase: SecretBytes::from(passphrase.into_bytes()),
+                },
+            });
+        })
+    };
+
     // Confirmation dialog for the irreversible delete (E2EE: no server-side
     // trash). Holds the pending target so the dialog can name it before the user
     // confirms; `<dialog>` provides focus trap / Escape / backdrop for free.
@@ -137,7 +164,10 @@ pub fn landing_view(
                         <button
                             class="ambre-open-file"
                             title="Open an .ambre file from this device"
-                            on:click=move |_| crate::platform::open_ambre_file_picker(toasts)
+                            on:click=move |_| crate::platform::open_ambre_file_picker(
+                                toasts,
+                                on_sealed,
+                            )
                         >
                             "Open a file"
                         </button>
@@ -208,6 +238,14 @@ pub fn landing_view(
                     </button>
                 </div>
             </dialog>
+
+            // The passphrase of a sealed file. No `on_open`/`on_close`: this
+            // overlay already covers the canvas, and its rAF already stopped.
+            <ambre_chrome::PassphraseDialog
+                open=passphrase_open
+                intent=ambre_chrome::PassphraseIntent::Open
+                on_submit=on_passphrase
+            />
         </div>
     }
 }

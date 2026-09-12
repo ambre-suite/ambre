@@ -9,6 +9,7 @@ use super::*;
 // The deck's PDF export is answered here rather than inside `ToileState`, so
 // this file names the two Toile bus types the rest of the module reaches only
 // through `AppCommand` / `AppEvent`.
+use ambre_bus::SecretBytes;
 use ambre_bus::app::toile::{ToileCommand, ToileEvent};
 
 impl LogicState {
@@ -67,6 +68,76 @@ impl LogicState {
         self.dispatch_outcome(document_id, vec![answer], None, None, None, Vec::new());
     }
 
+    /// Write a document to a native `.ambre` file **sealed under a passphrase**
+    /// and answer with the sealed bytes (`ambre-spec-docfile.md section 5`).
+    ///
+    /// Three threads and no crypto here: this one writes the plaintext
+    /// container exactly as [`export_ambre_file`](Self::export_ambre_file)
+    /// does. The Sync worker seals it because cryptography runs nowhere else
+    /// (`ARCH-004`), and the browser downloads what comes back. The file name
+    /// never leaves this thread -- it waits in `pending_seals` with the id that
+    /// will bring the bytes home.
+    ///
+    /// The passphrase travels as [`SecretBytes`](ambre_bus::SecretBytes):
+    /// every hop that drops it wipes it, and it prints as nothing in a log
+    /// line.
+    fn export_ambre_file_sealed(&mut self, document_id: DocumentId, passphrase: SecretBytes) {
+        let Some((filename, plaintext)) = self
+            .docs
+            .get(&document_id)
+            .map(|d| d.state.ambre_file_bytes(document_id))
+        else {
+            tracing::warn!("Logic: sealed .ambre export asked of a document that is not open");
+            return;
+        };
+        let id = RequestId::next();
+        self.pending_seals.insert(id, (document_id, filename));
+        self.send_to_sync(SyncCommand::Rest {
+            id,
+            cmd: RestCommand::SealDocFile {
+                plaintext: plaintext.into(),
+                passphrase,
+            },
+        });
+    }
+
+    /// Turn the Sync worker's answer to a pending seal back into the display
+    /// event the owning application surfaces (`DOCFILE-014`). Returns whether
+    /// `id` named a pending seal, so the caller can fall through to its other
+    /// routes when it did not.
+    ///
+    /// A document closed while its seal was in flight drops the answer.
+    /// Nothing remains to download into, and the bytes go out of scope sealed.
+    pub(crate) fn resolve_pending_seal(&mut self, id: RequestId, evt: &RestEvent) -> bool {
+        let answer = match evt {
+            RestEvent::DocFileSealed { data } => Ok(data.clone()),
+            RestEvent::DocFileSealFailed => Err("the file could not be encrypted".to_owned()),
+            _ => return false,
+        };
+        let Some((document_id, filename)) = self.pending_seals.remove(&id) else {
+            return false;
+        };
+        let Some(doc) = self.docs.get(&document_id) else {
+            tracing::warn!("Logic: sealed .ambre landed for closed doc {document_id}, dropping");
+            return true;
+        };
+        let event = match answer {
+            Ok(data) => doc.state.export_complete_event(filename, data),
+            Err(reason) => doc.state.export_failed_event(reason),
+        };
+        self.dispatch_outcome(document_id, vec![event], None, None, None, Vec::new());
+        true
+    }
+
+    /// Drop every pending seal of `document_id` (it closed, or the session
+    /// ended): an answer that arrives afterwards has nowhere to go.
+    pub(crate) fn forget_pending_seals(&mut self, document_id: Option<DocumentId>) {
+        match document_id {
+            Some(document_id) => self.pending_seals.retain(|_, (d, _)| *d != document_id),
+            None => self.pending_seals.clear(),
+        }
+    }
+
     /// Route a typed application command to its document's state, send display
     /// events to the UI Thread, and forward CRDT/ephemeral payloads to Sync.
     ///
@@ -112,6 +183,18 @@ impl LogicState {
             self.export_ambre_file(document_id);
             return;
         }
+        // The sealed file is the same operation once more, and intercepted in
+        // the same place for the same reason (`DOCFILE-007`, `DOCFILE-014`).
+        // Matched by value rather than by discriminant: this moves the
+        // passphrase out of the command and sends it no further than Sync.
+        let command = match command {
+            AppCommand::Toile(ToileCommand::ExportAmbreFileSealed { passphrase })
+            | AppCommand::Trame(ambre_bus::TrameCommand::ExportAmbreFileSealed { passphrase }) => {
+                self.export_ambre_file_sealed(document_id, passphrase);
+                return;
+            }
+            other => other,
+        };
         let doc = &mut doc.state;
 
         // Each arm produces the same triple -- display events, an optional CRDT
