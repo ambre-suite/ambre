@@ -310,10 +310,18 @@ impl ElementStyle {
         postcard::to_allocvec(self).unwrap_or_default()
     }
 
-    /// Decode a `"style"` register. An empty / malformed blob falls back to the
-    /// default style rather than dropping the element.
-    pub fn from_bytes(bytes: &[u8]) -> Self {
-        postcard::from_bytes(bytes).unwrap_or_default()
+    /// Decode a `"style"` register, saying so when it cannot be read.
+    ///
+    /// `None` is a register this build does not understand -- a layout written
+    /// by a newer client -- and the caller owes the user a word about it
+    /// (`SCHEMA-003`). An **empty** register is not that case: an element with
+    /// no style carries no bytes and reads as the default, so it comes back as
+    /// `Some(default)`.
+    pub fn try_from_bytes(bytes: &[u8]) -> Option<Self> {
+        if bytes.is_empty() {
+            return Some(Self::default());
+        }
+        postcard::from_bytes(bytes).ok()
     }
 }
 
@@ -1471,6 +1479,17 @@ pub enum ToileEvent {
     /// safety-limit breach, or a media upload failure): the board is unchanged
     /// (`toile-import-export`, atomicity). Carries a human-facing reason.
     ImportFailed(String),
+    /// The board was written by a newer client and was refused whole
+    /// (`SCHEMA-008`): nothing was applied, and the board on screen is the one
+    /// that was already open. Carries the reason in the user's terms -- a
+    /// refusal the user is not told about is indistinguishable from a board that
+    /// simply failed to load.
+    DocumentRefused(String),
+    /// At least one record in the board could not be decoded and was drawn with
+    /// its default style instead (`SCHEMA-003`). A fact rather than a count: the
+    /// same unreadable register is met again on every later read, so any number
+    /// reported here would be an artefact of how often the board was redrawn.
+    UndecodableRecords,
     /// An export produced nothing (`toile-pdf-export`): a board with no content,
     /// or a session whose fonts have not landed yet. The board is unchanged, so
     /// without a word the user cannot tell the refusal from a lost click.

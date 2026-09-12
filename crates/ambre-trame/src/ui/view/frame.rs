@@ -71,6 +71,18 @@ impl TrameView {
                 tracing::warn!("[UI] Trame rejected: {message}");
                 self.text_input.announce(&message);
             }
+            // Both schema notices are the chrome's to toast; announcing them here
+            // too puts them on the a11y channel, which is the only surface a
+            // screen-reader user has for either (`SCHEMA-003`, `SCHEMA-008`).
+            TrameEvent::DocumentRefused { reason } => {
+                tracing::warn!("[UI] Trame refused a document: {reason}");
+                self.text_input.announce(&reason);
+            }
+            TrameEvent::UndecodableRecords => {
+                tracing::warn!("[UI] Trame met a register it cannot decode");
+                self.text_input
+                    .announce("Some formatting in this workbook could not be read.");
+            }
             // Shared filter (`trame-shared-filter`): track the filtered column for the funnel
             // badge. The accompanying DataReset re-fetches the collapsed rows.
             TrameEvent::FilterApplied { col, .. } => {

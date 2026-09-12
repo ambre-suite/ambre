@@ -13,6 +13,7 @@
 use ambre_core::{
     DocType, Uuid,
     docfile::{AmbreHeader, DocFileError, read_ambre_plaintext_as, write_ambre_plaintext},
+    schema::SchemaError,
 };
 
 use super::*;
@@ -58,7 +59,8 @@ impl TrameState {
     /// Load a plaintext `.ambre` into this state, returning the document id it
     /// carried and the display events the UI needs to repaint.
     ///
-    /// Nothing is applied until the header has validated, and a payload the CRDT
+    /// Nothing is applied until the header and the schema register have both
+    /// validated, and a payload the CRDT
     /// engine refuses leaves the state as it was: the two failure modes are
     /// distinct, and [`DocFileError::PayloadRejected`] is the only one this layer
     /// adds to the container taxonomy.
@@ -67,7 +69,18 @@ impl TrameState {
         data: &[u8],
     ) -> Result<(Uuid, Vec<TrameEvent>), DocFileError> {
         let header = import_ambre_plaintext(data)?;
-        self.doc.import(&header.payload).map_err(|e| {
+        // The container has said its piece; the schema register inside the
+        // payload is a separate gate and it runs before any container is used
+        // (`SCHEMA-006`). A file this build cannot read leaves the workbook
+        // alone.
+        let payload = schema::gate(&header.payload).map_err(|e| match e {
+            // Bytes the engine will not read already have a name in the
+            // container taxonomy; the gate only happens to be where they were
+            // discovered.
+            SchemaError::PayloadRejected => DocFileError::PayloadRejected,
+            other => DocFileError::PayloadSchema(other),
+        })?;
+        self.doc.import(&payload).map_err(|e| {
             tracing::warn!("[Trame] .ambre payload rejected by the CRDT engine: {e:?}");
             DocFileError::PayloadRejected
         })?;

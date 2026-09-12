@@ -6,6 +6,7 @@
 //! - [`DocType`]: enum of document types (Prose, Trame, Toile, Murmure)
 //! - [`PublicKey`]: wrapper `[u8; 32]` for Ed25519 or X25519
 //! - [`Version`]: version byte for serialization
+//! - [`schema`]: the persisted schema version and its migration walk
 //! - [`Error`]: core error types
 //! - [`docfile`]: the `.ambre` container header, shared by every app
 //! - [`fixtures`] (feature `fixtures`, host-only): the document-fixture
@@ -25,6 +26,9 @@ pub mod fixtures;
 pub mod id;
 pub mod public_key;
 pub mod role;
+/// The persisted schema version: the register, the read rule and the migration
+/// walk every application shares (`ambre-spec-schema-version.md`).
+pub mod schema;
 pub mod uuid;
 pub mod version;
 
@@ -40,5 +44,9 @@ pub use fixtures::{FixtureGen, FixtureManifest, FixtureShape, ShapeBody, seeded_
 pub use id::{ChannelId, DocumentId, MeetingId, SnapshotId, UserId};
 pub use public_key::PublicKey;
 pub use role::Role;
+pub use schema::{
+    SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
+    SchemaVerdict, migrate_schema, verdict,
+};
 pub use uuid::Uuid;
 pub use version::Version;

@@ -162,9 +162,11 @@ fn undo_local_only_not_remote() {
     let base_snap = base.export_snapshot();
 
     let mut a = TrameState::new();
-    a.import_snapshot(&base_snap);
+    a.import_snapshot(&base_snap)
+        .expect("a snapshot this build wrote reads back at the current schema");
     let mut b = TrameState::new();
-    b.import_snapshot(&base_snap);
+    b.import_snapshot(&base_snap)
+        .expect("a snapshot this build wrote reads back at the current schema");
 
     // A edits A1; B edits B1 locally.
     a.handle_command(TrameCommand::SetCellText {
@@ -246,7 +248,9 @@ fn undo_stack_cleared_on_doc_close() {
     // Close + reopen: persist a snapshot, restore into a fresh state.
     let snapshot = state.export_snapshot();
     let mut reopened = TrameState::new();
-    reopened.import_snapshot(&snapshot);
+    reopened
+        .import_snapshot(&snapshot)
+        .expect("a snapshot this build wrote reads back at the current schema");
 
     assert!(
         !reopened.undo_manager.can_undo(),
@@ -319,7 +323,9 @@ fn delete_row_shifts_cells_up_and_purges() {
     // The purged content is gone for good, even after a snapshot round-trip.
     let snapshot = state.export_snapshot();
     let mut restored = TrameState::new();
-    restored.import_snapshot(&snapshot);
+    restored
+        .import_snapshot(&snapshot)
+        .expect("a snapshot this build wrote reads back at the current schema");
     assert_eq!(read_cell(&mut restored, 0, 0), "keep");
     assert_eq!(read_cell(&mut restored, 1, 0), "last");
 }
@@ -483,7 +489,9 @@ fn merge_marks_master_span_and_blanks_covered() {
     // Round-trip: the merge is persisted in the CRDT.
     let snapshot = state.export_snapshot();
     let mut restored = TrameState::new();
-    restored.import_snapshot(&snapshot);
+    restored
+        .import_snapshot(&snapshot)
+        .expect("a snapshot this build wrote reads back at the current schema");
     assert_eq!(read_display(&mut restored, 0, 0).merge_span, Some((2, 2)));
 }
 

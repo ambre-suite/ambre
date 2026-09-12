@@ -82,7 +82,7 @@ impl ToileState {
             .into_iter()
             .filter_map(|id| {
                 let em = self.element_map(&id)?;
-                let style = ElementStyle::from_bytes(&bin_of(&em, "style"));
+                let style = self.style_read(&bin_of(&em, "style"));
                 // A group carries no stored geometry: its rect is the derived
                 // member-union AABB, read from the bounds cache.
                 let bounds = if str_of(&em, "type") == "group" {
@@ -145,7 +145,7 @@ impl ToileState {
         };
         let rot = f64_of(&em, "rot");
         let locked = bool_of(&em, "locked");
-        let style = ElementStyle::from_bytes(&bin_of(&em, "style"));
+        let style = self.style_read(&bin_of(&em, "style"));
         let type_tag = str_of(&em, "type");
         let shape_kind = ShapeKind::from_tag(&str_of(&em, "shape"));
         let kind = kind_from_tags(&type_tag, shape_kind);
@@ -166,7 +166,7 @@ impl ToileState {
             geom,
             // The link register, absent on an element that carries none
             // (`toile-links`).
-            link: LinkTarget::from_bytes(&bin_of(&em, "link")),
+            link: self.link_read(&bin_of(&em, "link")),
             // The immediate enclosing group (if any): the UI resolves group-scope
             // selection by walking this edge upward.
             group: self.enclosing_group(id),
@@ -209,13 +209,44 @@ impl ToileState {
             ElementKind::Sticky => DisplayGeom::Sticky(str_of(em, "text")),
             ElementKind::Text => DisplayGeom::Text(str_of(em, "text")),
             ElementKind::Drawing => {
-                let pts: Vec<StrokePoint> =
-                    postcard::from_bytes(&bin_of(em, "points")).unwrap_or_default();
+                let raw = bin_of(em, "points");
+                let pts: Vec<StrokePoint> = postcard::from_bytes(&raw).unwrap_or_else(|_| {
+                    // A stroke this build cannot decode draws as no stroke at
+                    // all, which is an absence the user is owed a word about
+                    // (`SCHEMA-003`).
+                    self.note_undecodable(&raw);
+                    Vec::new()
+                });
                 let mut out = Vec::new();
                 smooth_stroke(&pts, &mut out);
                 DisplayGeom::Stroke(out)
             }
         }
+    }
+
+    /// Decode a `"style"` register, noting a blob this build cannot read
+    /// (`SCHEMA-003`) before falling back to the default look.
+    ///
+    /// The fallback itself is unavoidable -- an unreadable register cannot be
+    /// drawn as anything else -- so the rule is about the notice, not the pixels.
+    pub(super) fn style_read(&self, bytes: &[u8]) -> ElementStyle {
+        ElementStyle::try_from_bytes(bytes).unwrap_or_else(|| {
+            self.note_undecodable(bytes);
+            ElementStyle::default()
+        })
+    }
+
+    /// Decode a `"link"` register the same way. An empty register is an element
+    /// carrying no link, which is not a decode failure.
+    fn link_read(&self, bytes: &[u8]) -> Option<LinkTarget> {
+        if bytes.is_empty() {
+            return None;
+        }
+        let link = LinkTarget::from_bytes(bytes);
+        if link.is_none() {
+            self.note_undecodable(bytes);
+        }
+        link
     }
 
     fn display_connector(&self, id: &ConnectorId) -> Option<DisplayConnector> {
@@ -227,7 +258,7 @@ impl ToileState {
             path,
             // A connector minted before the field existed reads back an empty
             // binary, which decodes to the default: the same look it had.
-            style: ElementStyle::from_bytes(&bin_of(&cm, "style")),
+            style: self.style_read(&bin_of(&cm, "style")),
             arrows: conn.arrows,
             label: connector_label(&cm),
         })

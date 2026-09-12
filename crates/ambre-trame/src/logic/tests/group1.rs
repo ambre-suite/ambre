@@ -78,7 +78,9 @@ fn formatting_survives_snapshot_roundtrip() {
     // Simulate a reload: fresh state restored from the persisted snapshot.
     let snapshot = state.export_snapshot();
     let mut restored = TrameState::new();
-    restored.import_snapshot(&snapshot);
+    restored
+        .import_snapshot(&snapshot)
+        .expect("a snapshot this build wrote reads back at the current schema");
 
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
         version: 1,
@@ -143,7 +145,9 @@ fn set_cell_style_round_trips_and_formats_numbers() {
     // Reload from a snapshot: the style must persist in the CRDT.
     let snapshot = state.export_snapshot();
     let mut restored = TrameState::new();
-    restored.import_snapshot(&snapshot);
+    restored
+        .import_snapshot(&snapshot)
+        .expect("a snapshot this build wrote reads back at the current schema");
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
         version: 1,
         row_start: 0,
@@ -231,7 +235,9 @@ fn far_cell_survives_snapshot_roundtrip() {
 
     let snapshot = state.export_snapshot();
     let mut restored = TrameState::new();
-    restored.import_snapshot(&snapshot);
+    restored
+        .import_snapshot(&snapshot)
+        .expect("a snapshot this build wrote reads back at the current schema");
 
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
         version: 1,
@@ -276,7 +282,9 @@ fn formula_evaluates_through_stable_keys() {
 
     let snapshot = state.export_snapshot();
     let mut restored = TrameState::new();
-    restored.import_snapshot(&snapshot);
+    restored
+        .import_snapshot(&snapshot)
+        .expect("a snapshot this build wrote reads back at the current schema");
 
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
         version: 1,
@@ -343,7 +351,9 @@ fn named_range_defines_resolves_and_deletes() {
     // The name survives a snapshot round-trip.
     let snapshot = state.export_snapshot();
     let mut restored = TrameState::new();
-    restored.import_snapshot(&snapshot);
+    restored
+        .import_snapshot(&snapshot)
+        .expect("a snapshot this build wrote reads back at the current schema");
     assert_eq!(
         read_c1(&mut restored, 3),
         "15",
@@ -431,7 +441,9 @@ fn sum_over_plain_literals_survives_reseed() {
 
     let snapshot = state.export_snapshot();
     let mut restored = TrameState::new();
-    restored.import_snapshot(&snapshot);
+    restored
+        .import_snapshot(&snapshot)
+        .expect("a snapshot this build wrote reads back at the current schema");
 
     let evts = restored.handle_command(TrameCommand::ScrollViewport {
         version: 1,

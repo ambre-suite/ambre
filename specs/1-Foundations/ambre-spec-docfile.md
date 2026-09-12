@@ -186,8 +186,10 @@ pub fn import_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError>;
 
 An application owns the payload half alone: its `export_ambre_plaintext` is `write_ambre_plaintext`
 over its own `export_snapshot()`, its `import_ambre_plaintext` is `read_ambre_plaintext_as` for its
-own `DocType`. `PayloadRejected` is raised there and nowhere else, because the container layer never
-touches a `LoroDoc`. Each engine also carries the state-level pair, so a caller holding a live
+own `DocType`. `PayloadRejected` and `PayloadSchema` are raised there and nowhere else, because the container layer
+never touches a `LoroDoc`. The schema gate runs between the two: the header validates, then the
+payload's own `schema_version` is read in a scratch document, and only then is anything handed to
+the live one (`SCHEMA-006`, `SCHEMA-012`). Each engine also carries the state-level pair, so a caller holding a live
 document does not reach for its `LoroDoc` to save it.
 
 **The error taxonomy.** Fatal by nature: a header failure means no document can be produced.
@@ -209,6 +211,14 @@ pub enum DocFileError {
     WrongDocType { found: DocType },
     /// The header parsed but the Loro payload did not import.
     PayloadRejected,
+    /// The header parsed and the payload is a valid document, but the *schema*
+    /// version inside it is one this build will not read, or cannot migrate
+    /// (`ambre-spec-schema-version.md`). Raised by the app-side half, like
+    /// `PayloadRejected`, and it carries the inner verdict rather than
+    /// flattening it: the two versions guarding a stored document are
+    /// independent on purpose, and a message that says "unsupported version"
+    /// without saying which one sends the user looking in the wrong place.
+    PayloadSchema(SchemaError),
 }
 ```
 

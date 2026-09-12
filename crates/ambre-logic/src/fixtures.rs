@@ -281,10 +281,10 @@ pub fn manifest_for(
         seed: generator.seed(),
         doc_type: generator.doc_type(),
         ambre_version: AMBRE_VERSION,
-        // `ARCH P8` has not created the payload register yet; 0 is what an absent
-        // one reads as (`architecture`). The day it lands, that bump is
-        // itself a schema bump and carries a full regeneration in its own commit.
-        schema_version: 0,
+        // The register the document actually carries (`SCHEMA-004`), read back
+        // from the generated state rather than assumed: a manifest that names a
+        // version the artefact does not hold is worse than no manifest.
+        schema_version: state.schema_version(),
         digest: digest_of(bytes),
         shape: shape_of(&state),
     })

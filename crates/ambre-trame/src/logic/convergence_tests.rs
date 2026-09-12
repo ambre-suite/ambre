@@ -278,7 +278,9 @@ proptest! {
         }
         let base = a.export_snapshot();
         let mut b = TrameState::new();
-        b.import_snapshot(&base);
+        b
+            .import_snapshot(&base)
+            .expect("a snapshot this build wrote reads back at the current schema");
 
         // Route each generated op to its peer.
         for (peer, op) in program {
@@ -305,7 +307,9 @@ proptest! {
         // Recompute determinism: a fresh peer rebuilt from the converged
         // snapshot renders the same grid (no derived-state path dependence).
         let mut c = TrameState::new();
-        c.import_snapshot(&a.export_snapshot());
+        c
+            .import_snapshot(&a.export_snapshot())
+            .expect("a snapshot this build wrote reads back at the current schema");
         prop_assert_eq!(read_window(&mut c), grid_a, "reload diverged from live peer");
     }
 }
@@ -479,7 +483,8 @@ fn concurrent_whole_cell_style_edits_do_not_blend_across_containers() {
     apply_style(&mut a, base_style());
     let base = a.export_snapshot();
     let mut b = TrameState::new();
-    b.import_snapshot(&base);
+    b.import_snapshot(&base)
+        .expect("a snapshot this build wrote reads back at the current schema");
 
     // Concurrent whole-cell rewrites of the same cell.
     apply_style(&mut a, clear_style());
@@ -532,7 +537,8 @@ fn subset_style_edit_does_not_tear_a_whole_cell_rewrite() {
     });
     let base = a.export_snapshot();
     let mut b = TrameState::new();
-    b.import_snapshot(&base);
+    b.import_snapshot(&base)
+        .expect("a snapshot this build wrote reads back at the current schema");
 
     // Peer A runs several unrelated edits first, so its recolour op carries a
     // strictly higher Lamport than peer B's write and wins the text-colour

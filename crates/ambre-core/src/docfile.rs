@@ -101,6 +101,19 @@ pub enum DocFileError {
     /// app-side half of the pair, never by this module (I4: pure bytes here).
     #[error("the .ambre payload was rejected by the CRDT engine")]
     PayloadRejected,
+
+    /// The header parsed and the payload is a valid document, but the *schema*
+    /// version inside it is one this build will not read (`SCHEMA-008`) or
+    /// cannot migrate. Raised by the app-side half of the pair, like
+    /// [`Self::PayloadRejected`].
+    ///
+    /// Carries the inner verdict rather than flattening it: the two versions
+    /// guarding a stored document are independent on purpose -- this one guards
+    /// the twenty-two bytes around the payload, the other guards what is inside
+    /// -- and a caller that reports "unsupported version" without saying which
+    /// one sends the user looking in the wrong place.
+    #[error("{0}")]
+    PayloadSchema(#[from] crate::schema::SchemaError),
 }
 
 // -----------------------------------------------------------------------------

@@ -57,12 +57,14 @@ use kurbo::Rect;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
 use ambre_bus::UserId;
+use ambre_core::schema::SchemaError;
 
 use crate::logic::command::{
     PresencePayload, SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome,
 };
 use crate::logic::index::{SpatialIndex, Viewport};
 use crate::logic::model::{ConnectorId, ElementId, FrameId, NodeId, PlaybackState};
+use crate::logic::schema;
 
 // Root container names.
 const ELEMENTS: &str = "elements";
@@ -158,6 +160,18 @@ pub struct ToileState {
     /// blake2b returns from Sync, so the whole import stays one atomic undo group
     /// Rare and short-lived; dies with the `DocState`. See `state::import`.
     pending_imports: Vec<import::PendingImport>,
+    /// A register was met that this build cannot decode (`SCHEMA-003`). Set by
+    /// the decode helpers, drained at every import; a `Cell` because a board is
+    /// read through `&self` and the read is where the failure is discovered.
+    ///
+    /// A flag rather than a tally: the same unreadable register is met again on
+    /// every later read, so a count would measure how often the board was
+    /// redrawn.
+    ///
+    /// Drained at an import, never at a repaint, so a register first met by a
+    /// display-only read is reported at the next import rather than at once.
+    /// Late, and never wrong: the register is still unreadable.
+    undecodable: std::cell::Cell<bool>,
 }
 
 impl Default for ToileState {
@@ -212,6 +226,9 @@ impl ToileState {
         let _ = board.insert("bg_color", 0xFF1E_1E1Eu32 as i64);
         let _ = board.insert("grid_size", 32.0);
         let _ = board.insert("grid_snap", false);
+        // The schema version is board scaffolding too, and it is written in the
+        // same commit so a board is never persisted without it (`SCHEMA-004`).
+        schema::stamp(&doc);
         doc.commit();
         let peer = doc.peer_id();
         // Create the undo manager AFTER the initial commit: the board scaffolding
@@ -239,6 +256,7 @@ impl ToileState {
             broadcasting: false,
             following: None,
             pending_imports: Vec::new(),
+            undecodable: std::cell::Cell::new(false),
         }
     }
 
@@ -437,6 +455,9 @@ impl ToileState {
         self.rebuild_caches();
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
+        // A delta can carry a register this build cannot decode just as a
+        // snapshot can, and the user is owed the same word (`SCHEMA-003`).
+        events.extend(self.undecodable_notice());
         events
     }
 
@@ -464,6 +485,7 @@ impl ToileState {
         self.rebuild_caches();
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
+        events.extend(self.undecodable_notice());
         events
     }
 
@@ -494,16 +516,63 @@ impl ToileState {
     /// the cursor's reckoning, and absorbing them would drop a session's work
     /// for good. Leaving the cursor put re-offers the restored history on the
     /// first flush; the relay already holds most of it and drops what it knows.
-    pub fn import_snapshot(&mut self, payload: &[u8]) -> Vec<ToileEvent> {
-        if let Err(e) = self.doc.import(payload) {
+    ///
+    /// # Errors
+    /// Every failure of the schema gate: a board written by a newer client
+    /// (`SCHEMA-008`), a migration the registry cannot run, and bytes the CRDT
+    /// engine refuses. On any of them the board is untouched (`SCHEMA-012`) --
+    /// the gate reads the payload in a scratch document precisely so a refusal
+    /// costs the caller nothing.
+    pub fn import_snapshot(&mut self, payload: &[u8]) -> Result<Vec<ToileEvent>, SchemaError> {
+        // Before a single container is used (`SCHEMA-006`). What comes back is
+        // the payload itself at the current version, or a migrated snapshot.
+        let payload = schema::gate(payload)?;
+        if let Err(e) = self.doc.import(&payload) {
             tracing::warn!("Toile: snapshot import failed: {e}");
-            return vec![ToileEvent::Error(ToileError::NoSuchElement(String::new()))];
+            return Err(SchemaError::PayloadRejected);
         }
         let deck_before = self.slide_order();
         self.rebuild_caches();
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
-        events
+        events.extend(self.undecodable_notice());
+        Ok(events)
+    }
+
+    /// The schema version this board carries (`SCHEMA-004`), for a report rather
+    /// than for a decision: the fixture manifest records the version its
+    /// artefact was written at.
+    ///
+    /// A register this build cannot read comes back as
+    /// [`SCHEMA_VERSION_ABSENT`](ambre_core::schema::SCHEMA_VERSION_ABSENT)
+    /// here. Every path that *decides* anything goes through `schema::gate`,
+    /// which refuses it instead (`SCHEMA-013`); this one is called on a document
+    /// the caller just generated, where the case cannot arise.
+    #[must_use]
+    pub fn schema_version(&self) -> u32 {
+        schema::read_version(&self.doc).unwrap_or(ambre_core::schema::SCHEMA_VERSION_ABSENT)
+    }
+
+    /// Record that a register could not be decoded (`SCHEMA-003`).
+    ///
+    /// An **empty** register is not a failure: an element with no style carries
+    /// no bytes, and that decodes to the default by design. Only a non-empty
+    /// blob the decoder refuses is a record this build cannot read.
+    pub(crate) fn note_undecodable(&self, bytes: &[u8]) {
+        if !bytes.is_empty() {
+            self.undecodable.set(true);
+        }
+    }
+
+    /// Drain the flag into the one event that carries it to the user, or nothing
+    /// when every register read cleanly (`SCHEMA-003`).
+    ///
+    /// Drained rather than read so the notice is raised once per import instead
+    /// of once per repaint.
+    fn undecodable_notice(&mut self) -> Option<ToileEvent> {
+        self.undecodable
+            .replace(false)
+            .then_some(ToileEvent::UndecodableRecords)
     }
 
     // -- undo / redo --------------------------------------------------
@@ -724,6 +793,117 @@ impl ToileState {
         }
         ids.sort();
         ids
+    }
+}
+
+#[cfg(test)]
+mod schema_tests {
+    //! The two schema rules that need a live board rather than a payload: a
+    //! refused read must leave the board it refused untouched (`SCHEMA-012`),
+    //! and a register this build cannot decode must reach the user
+    //! (`SCHEMA-003`).
+
+    use kurbo::{Point, Size};
+    use loro::{ExportMode, LoroDoc};
+
+    use ambre_bus::app::toile::ToileEvent;
+    use ambre_core::schema::{SCHEMA_META_MAP, SCHEMA_VERSION_KEY, SchemaError};
+
+    use crate::logic::command::{InitContent, ToileCommand};
+    use crate::logic::model::{ElementKind, ShapeKind};
+    use crate::logic::schema::SCHEMA_VERSION;
+    use crate::logic::state::ToileState;
+
+    fn board_with_one_rect() -> ToileState {
+        let mut st = ToileState::new();
+        st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Rect),
+            at: Point::ZERO,
+            size: Size::new(10.0, 10.0),
+            content: InitContent::None,
+            fill: None,
+        });
+        st
+    }
+
+    /// `SCHEMA-008` + `SCHEMA-012`: the refusal is the whole document, and the
+    /// board the user was already looking at survives it intact.
+    #[test]
+    fn a_board_from_a_newer_client_is_refused_and_changes_nothing() {
+        // A snapshot stamped one version ahead of this build.
+        let newer = {
+            let doc = LoroDoc::new();
+            doc.get_map(SCHEMA_META_MAP)
+                .insert(SCHEMA_VERSION_KEY, i64::from(SCHEMA_VERSION + 1))
+                .expect("stamp");
+            doc.get_map("elements")
+                .insert_container("xx", loro::LoroMap::new())
+                .expect("an element the refusal must not import");
+            doc.commit();
+            doc.export(ExportMode::Snapshot).expect("snapshot")
+        };
+
+        let mut st = board_with_one_rect();
+        let before = st.export_snapshot();
+        let err = st.import_snapshot(&newer).expect_err("refused");
+
+        assert_eq!(
+            err,
+            SchemaError::DocumentTooNew {
+                document: SCHEMA_VERSION + 1,
+                binary: SCHEMA_VERSION,
+            }
+        );
+        assert_eq!(st.element_count(), 1, "nothing was merged in");
+        assert_eq!(
+            st.export_snapshot(),
+            before,
+            "a refused read must not write the document back"
+        );
+    }
+
+    /// `SCHEMA-003`: a style register this build cannot decode is drawn plain --
+    /// unavoidably -- but the user is told, instead of reading a document that
+    /// looks intact and is not.
+    #[test]
+    fn a_register_that_cannot_be_decoded_reaches_the_user() {
+        let source = board_with_one_rect();
+        let crate::logic::model::NodeId::Element(id) = source.layer_order()[0].clone() else {
+            panic!("the board holds one element");
+        };
+        let em = source.element_map(&id).expect("the rect is there");
+        // A blob no `ElementStyle` layout can produce: a register written by a
+        // client this build does not know.
+        em.insert("style", loro::LoroValue::Binary(vec![0xFFu8; 8].into()))
+            .expect("overwrite the style register");
+        source.doc.commit();
+        let payload = source.export_snapshot();
+
+        let mut st = ToileState::new();
+        let events = st.import_snapshot(&payload).expect("the board still opens");
+
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, ToileEvent::UndecodableRecords)),
+            "an unreadable register must be reported, not defaulted in silence"
+        );
+        // Raised once per import, not once per repaint: the flag is drained.
+        assert!(st.undecodable_notice().is_none());
+    }
+
+    /// The same board, written by this build, says nothing -- otherwise the
+    /// notice is noise and the user learns to ignore it.
+    #[test]
+    fn a_board_this_build_wrote_raises_no_notice() {
+        let payload = board_with_one_rect().export_snapshot();
+        let mut st = ToileState::new();
+        let events = st.import_snapshot(&payload).expect("opens");
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, ToileEvent::UndecodableRecords))
+        );
     }
 }
 

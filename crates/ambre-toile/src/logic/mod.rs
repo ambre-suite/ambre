@@ -15,6 +15,9 @@ pub mod connector;
 pub mod index;
 pub mod interop;
 pub mod model;
+/// Toile's persisted schema version and its migration registry
+/// (`ambre-spec-schema-version.md`).
+pub mod schema;
 pub mod state;
 pub mod stroke;
 

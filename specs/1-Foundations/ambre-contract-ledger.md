@@ -19,15 +19,15 @@
   `human-review` and `qa-manual` carry no ceiling: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2386 rows: 1652 shipped, of which 813 loose. 734 unbuilt.**
+**2387 rows: 1665 shipped, of which 815 loose. 722 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 188 | 206 | 445 |  | 839 |
-| `unverified` | 303 | 201 | 302 |  | 806 |
+| `verified` | 197 | 207 | 446 |  | 850 |
+| `unverified` | 303 | 202 | 303 |  | 808 |
 | `human-review` | 5 |  |  |  | 5 |
 | `qa-manual` |  |  | 2 |  | 2 |
-| `unimplemented` | 65 | 56 | 22 | 591 | 734 |
+| `unimplemented` | 57 | 54 | 20 | 591 | 722 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -61,7 +61,7 @@
 | `ambre-spec-pdf-export.md` | 6 | 5 | 2 | 3 | 1 |
 | `ambre-spec-presence.md` | 14 | 14 | 11 | 3 |  |
 | `ambre-spec-render-assets.md` | 14 | 11 | 3 | 8 | 3 |
-| `ambre-spec-schema-version.md` | 12 | 4 | 0 | 4 | 8 |
+| `ambre-spec-schema-version.md` | 13 | 13 | 9 | 4 |  |
 | `ambre-spec-sealed-envelope.md` | 17 | 17 | 8 | 9 |  |
 | `ambre-spec-sequencer.md` | 19 | 18 | 6 | 12 | 1 |
 | `ambre-spec-server.md` | 22 | 22 | 12 | 10 |  |
@@ -72,7 +72,7 @@
 | `ambre-spec-ui.md` | 17 | 11 | 2 | 9 | 6 |
 | `ambre-spec-undo.md` | 9 | 9 | 2 | 7 |  |
 | `ambre-spec-zero-knowledge.md` | 14 | 14 | 6 | 8 |  |
-| `ambre-spec-trame-schema.md` | 7 | 5 | 4 | 1 | 2 |
+| `ambre-spec-trame-schema.md` | 7 | 7 | 5 | 2 |  |
 | `ambre-spec-trame-autofill.md` | 10 | 10 | 3 | 7 |  |
 | `ambre-spec-trame-cell-editing.md` | 38 | 27 | 6 | 21 | 11 |
 | `ambre-spec-trame-cell-merges.md` | 38 | 37 | 25 | 12 | 1 |
@@ -98,7 +98,7 @@
 | `ambre-spec-trame-sort.md` | 24 | 24 | 12 | 12 |  |
 | `ambre-spec-trame-status-bar.md` | 10 | 10 | 3 | 7 |  |
 | `ambre-spec-trame-undo.md` | 8 | 4 | 4 |  | 4 |
-| `ambre-spec-toile-schema.md` | 11 | 9 | 6 | 3 | 2 |
+| `ambre-spec-toile-schema.md` | 11 | 11 | 7 | 4 |  |
 | `ambre-spec-toile-auto-layout.md` | 23 | 23 | 17 | 6 |  |
 | `ambre-spec-toile-board-rendering.md` | 26 | 26 | 10 | 16 |  |
 | `ambre-spec-toile-clipboard.md` | 17 | 17 | 11 | 6 |  |

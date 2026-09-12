@@ -174,8 +174,12 @@ fn the_manifest_describes_the_artifact_beside_it() {
     assert_eq!(manifest.generator_version, TRAME.generator_version());
     assert_eq!(manifest.seed, TRAME.seed());
     assert_eq!(manifest.doc_type, DocType::Trame);
-    // `schema_version` is 0 until `ARCH P8` creates the register (D1).
-    assert_eq!(manifest.schema_version, 0);
+    // `schema_version` is read back from the document, not declared, so the
+    // manifest cannot name a version its artifact does not hold (`SCHEMA-004`).
+    assert_eq!(
+        manifest.schema_version,
+        ambre_trame::logic::schema::SCHEMA_VERSION
+    );
 
     // `shape` matches `shape_of` recomputed from the decoded state, which is what
     // catches a manifest committed out of sync with its artifact.

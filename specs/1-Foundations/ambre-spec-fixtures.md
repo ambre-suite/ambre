@@ -172,9 +172,10 @@ pub struct FixtureManifest {
     pub seed: u64,
     pub doc_type: DocType,
     /// The document's two independent versions at write time -- current for a
-    /// generated artifact, superseded for a frozen one. Generators write
-    /// `schema_version: 0` until the payload register exists, 0 being what an
-    /// absent one reads as (`ambre-spec-architecture.md section 2`).
+    /// generated artifact, superseded for a frozen one. `schema_version` is read
+    /// back from the generated document rather than declared, so a manifest
+    /// cannot name a version its artifact does not hold
+    /// (`ambre-spec-schema-version.md`).
     pub ambre_version: u8,
     pub schema_version: u32,
     /// BLAKE2b over the whole file, header included (`FIXTURE-011`). Hex, not

@@ -46,8 +46,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-018` | INV | An element's whole style MUST be a single LWW register. | this spec section 3; architecture section 2.D | structural, and the construction is the proof: one `LoroValue::Binary` under the `style` key per element map (`logic/state/elements.rs`), decoded whole by `ElementStyle::from_bytes`, so no attribute has a register to be elected on its own | verified |
 | `TOILE-228` | CONC | Two concurrent restyles of one element MUST converge on the whole style one of the two wrote, never a per-attribute blend. | this spec section 3; architecture section 2.D | `ambre_toile::logic::convergence_tests::two_peers_converge` (proptest, 48 cases) interleaves restyles of the same element across two peers and compares the full rendered viewport, so a blend of two writers' attributes diverges. Trame's dedicated no-blend tests have no counterpart here | verified |
 | `TOILE-230` | INV | An unset property MUST be the absence of its key; a container MUST NOT carry a "cleared" marker. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` clears a frame's auto-layout and asserts the read is `None` with the key gone, and that the clear of an already-absent key broadcasts nothing -- a marker would make both assertions fail | verified |
-| `TOILE-027` | INV | A Toile document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7 | not built -- lands with `ARCH P8` | unimplemented |
-| `TOILE-028` | INV | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | not built -- lands with `ARCH P8` | unimplemented |
+| `TOILE-027` | INV | A Toile document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7 | `ambre_toile::logic::schema::tests::a_new_board_carries_the_current_version`. Written by `schema::stamp` inside the scaffolding commit of `from_doc`, alongside the board defaults, so a board carries it before any user edit; the protocol it obeys is `ambre-spec-schema-version.md` | verified |
+| `TOILE-028` | INV | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | none, and none is possible today -- the Toile half of `SCHEMA-009`: the rule binds a code change to a constant, and nothing compares this build's layouts against the previous release's. Human review, named as such. The registry it obliges exists now (`logic/schema.rs`), so the reviewer has somewhere to put the step | unverified |
 | `TOILE-029` | INV | A container under a fixed key MUST be created once, with its parent; it MUST NOT be created by the first peer that writes into it. | this spec section 5 | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` holds the half that obeys: a frame's `notes` is seeded at frame birth (`logic/state/elements.rs`), and two concurrent first edits both survive. **The rule fails today** for `presentation/order` and `presentation/config`: `order_list_or_seed` creates both on the first `SetSlideOrder`, so two peers building the deck at the same moment mint rival lists and Loro keeps one. A container under a minted key (`elements/{id}`, `comments/{id}`) is out of reach of the race, and a `media/{hash}` entry loses nothing to it: the two rival maps carry the same bytes | unverified |
 | `TOILE-030` | CONC | A sticky or text body MUST converge character by character; it MUST NOT be a register two authors race for whole. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 3` | none, and **the rule fails today** for a sticky and a text element: the body is a flat String under the element's `text` key, so one of two authors typing in the same note loses their sentence. The two `LoroText` bodies of `ambre-toile` are a frame's `notes` and a comment message | unverified |
 * **Budget.** none: a format has no operation to budget. What loading a board costs is the remote
@@ -55,14 +55,17 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and the media entry holds a content hash, never the pixels
   (`features/ambre-spec-toile-media.md section 3`).
-* **Verification.** 6 `verified`, 3 `unverified`, 2 `unimplemented`. Two carried-over cells said
+* **Verification.** 7 `verified`, 4 `unverified`, 0 `unimplemented`. Two carried-over cells said
   something the tests do not: `TOILE-003` credited two paste tests with move-invariance, which they
   never walk, and `TOILE-029` claimed no test drives the concurrent seed when one holds the half
   that is seeded eagerly. Three rules were already load-bearing and unwritten -- a composite key
   re-reads as its pair, an absent key is the value, an id is fixed width -- and the last of them is
   the one gap this pass opened: section 7 counts 25 bytes an id that no type constrains.
   `TOILE-029` and `TOILE-030` remain defects rather than blind spots: each names the code that
-  breaks it.
+  breaks it. `ARCH P8` closed the two unbuilt rows: the register ships and `TOILE-027` is held by a
+  test, while `TOILE-028` moves from unbuilt to unverifiable -- it binds a code change to a
+  constant, and only a reviewer sees both. That is the one row this document's ceiling was raised
+  for, deliberately: a rule that is built and unverified counts, where an unbuilt one was exempt.
 
 ---
 
@@ -93,7 +96,7 @@ code uses.
 
 | Container | Loro type | Key | Value | LWW unit | Owning feature document | State |
 |---|---|---|---|---|---|---|
-| `meta` | Map | `schema_version` | `u32` | the key | -- (foundation; this spec section 7) | design |
+| `meta` | Map | `schema_version` | `u32` | the key | -- (foundation; this spec section 7) | built |
 | `board` | Map | `name`, `bg_color`, `grid_size`, `grid_snap` | String, `u32`, `f64`, `bool` | the key | viewport | built |
 | `elements` | Map | `element_id` | one element map | the element entry | elements | built |
 | `elements/{id}` | Map | a field name, per the table below | per field | the field | elements | built |
@@ -242,10 +245,10 @@ Only where a schema decision needs a reason. 40 words each.
 | Duty | Rule | Where |
 |---|---|---|
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `TOILE-027` |
-| Read | equal proceeds, older migrates, newer is refused whole (`SchemaTooNew`) | architecture section 2.D |
-| Migration | the chain lives in `ambre-toile`; the foundation owns the protocol, never the semantics | architecture section 2.D |
+| Read | equal proceeds, older migrates, newer is refused whole (`SchemaError::DocumentTooNew`), read in a scratch document so a refusal writes nothing | architecture section 2.D; `ambre-spec-schema-version.md section 2` |
+| Migration | the registry lives in `ambre-toile` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics | architecture section 2.D; `SCHEMA-010` |
 | Bump | a key or layout change raises `SCHEMA_VERSION` and freezes one named fixture in the same commit | `TOILE-028`; `ambre-spec-fixtures.md section 2` |
-| Unknown field | `postcard` decodes a blob whole and tolerates none, so a stale `ElementStyle` falls back to `Default` -- a silent downgrade, which is what `TOILE-027` exists to stop | architecture section 2.D |
+| Unknown field | `postcard` decodes a blob whole and tolerates none, so an `ElementStyle` written by a newer client falls back to `Default` -- no longer silently: the read raises one warning per import (`SCHEMA-003`) | architecture section 2.D |
 | Size, ids | an id is 25 bytes and a `layers` entry 27; a 50 000-element board is 1.3 MB of ids alone | this spec section 2; `TOILE-231` |
 | Size, blobs | `media` carries a thumbnail inline and the full blob out of band; the board never holds pixels | `features/ambre-spec-toile-media.md section 3` |
 | Deltas | a remote delta carries no version and applies blind; mixed-version live editing is bounded, not solved | architecture section 2.D |

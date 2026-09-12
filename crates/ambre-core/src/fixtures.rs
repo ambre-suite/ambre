@@ -137,10 +137,12 @@ pub struct FixtureManifest {
     /// generated artifact, superseded for a frozen one.
     pub ambre_version: u8,
 
-    /// Payload schema version (`architecture`). Distinct from
+    /// Payload schema version (`ambre-spec-schema-version.md`). Distinct from
     /// [`generator_version`](Self::generator_version), which tracks authorial
-    /// intent rather than format. Generators write `0` until `ARCH P8` creates
-    /// the register, 0 being what an absent one reads as.
+    /// intent rather than format. Read back from the generated document rather
+    /// than declared, so a manifest cannot name a version its artefact does not
+    /// hold; `0` is what a document written before the register existed reads as
+    /// (`SCHEMA-005`).
     pub schema_version: u32,
 
     /// BLAKE2b over the **whole `.ambre` file, header included**, so a flipped

@@ -48,6 +48,8 @@ use ambre_bus::{
     RestEvent, Role, SyncCommand, UiEvent, UserId,
 };
 
+use ambre_core::schema::SchemaError;
+
 use ambre_toile::{ToileRequest, ToileState};
 use ambre_trame::TrameState;
 
@@ -123,18 +125,51 @@ impl DocState {
     /// Lifted to the enum because a loader cannot address two engines that spell
     /// the same operation differently (`TrameState::import_snapshot` versus, up
     /// to this phase, `ToileState::apply_remote`).
-    pub fn import_snapshot(&mut self, payload: &[u8]) -> Vec<AppEvent> {
+    ///
+    /// # Errors
+    /// The schema gate's verdict, unchanged (`ambre-spec-schema-version.md`): a
+    /// document written by a newer client, a migration the owning application
+    /// cannot run, or bytes the CRDT engine refuses. On any of them the state is
+    /// untouched (`SCHEMA-012`), which is why this is a `Result` and not an
+    /// event: a caller that ignored it would carry on with a document it never
+    /// loaded.
+    pub fn import_snapshot(&mut self, payload: &[u8]) -> Result<Vec<AppEvent>, SchemaError> {
         match self {
-            DocState::Trame(state) => state
-                .import_snapshot(payload)
+            DocState::Trame(state) => Ok(state
+                .import_snapshot(payload)?
                 .into_iter()
                 .map(AppEvent::Trame)
-                .collect(),
-            DocState::Toile(state) => state
-                .import_snapshot(payload)
+                .collect()),
+            DocState::Toile(state) => Ok(state
+                .import_snapshot(payload)?
                 .into_iter()
                 .map(AppEvent::Toile)
-                .collect(),
+                .collect()),
+        }
+    }
+
+    /// The schema version this document carries (`SCHEMA-004`), whichever
+    /// application owns it. Each declares its own number, so the value is only
+    /// comparable against that application's own current version.
+    #[must_use]
+    pub fn schema_version(&self) -> u32 {
+        match self {
+            DocState::Trame(state) => state.schema_version(),
+            DocState::Toile(state) => state.schema_version(),
+        }
+    }
+
+    /// The refusal, as the display event the owning application surfaces
+    /// (`SCHEMA-008`). The gate is shared; the wording and the toast are the
+    /// app's, so the event is minted here rather than in the dispatcher.
+    fn refusal_event(&self, error: &SchemaError) -> AppEvent {
+        match self {
+            DocState::Trame(_) => AppEvent::Trame(ambre_bus::TrameEvent::DocumentRefused {
+                reason: error.to_string(),
+            }),
+            DocState::Toile(_) => AppEvent::Toile(
+                ambre_bus::app::toile::ToileEvent::DocumentRefused(error.to_string()),
+            ),
         }
     }
 

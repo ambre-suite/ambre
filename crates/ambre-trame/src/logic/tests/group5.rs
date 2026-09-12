@@ -170,9 +170,11 @@ fn concurrent_filters_converge_lww() {
     let base_snap = base.export_snapshot();
 
     let mut a = TrameState::new();
-    a.import_snapshot(&base_snap);
+    a.import_snapshot(&base_snap)
+        .expect("a snapshot this build wrote reads back at the current schema");
     let mut b = TrameState::new();
-    b.import_snapshot(&base_snap);
+    b.import_snapshot(&base_snap)
+        .expect("a snapshot this build wrote reads back at the current schema");
 
     a.handle_command(TrameCommand::ApplyFilter {
         sheet_id: "s0".to_owned(),

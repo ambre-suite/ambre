@@ -212,6 +212,18 @@ pub struct TrameState {
     /// viewport request (sent on load) rides a [`TrameEvent::SheetList`] back to
     /// hydrate the tab strip. Subsequent scrolls do not repeat it.
     sheet_list_sent: bool,
+    /// A register was met that this build cannot decode (`SCHEMA-003`). Set by
+    /// the style reseed, drained at every import; a `Cell` because the reseed
+    /// reads through a shared borrow of the document.
+    ///
+    /// A flag rather than a tally: the same unreadable register is met again on
+    /// every later reseed, so a count would measure how often the grid was
+    /// rebuilt.
+    ///
+    /// Drained at an import, never at a repaint, so a register first met by a
+    /// display-only read is reported at the next import rather than at once.
+    /// Late, and never wrong: the register is still unreadable.
+    undecodable: std::cell::Cell<bool>,
 }
 
 impl TrameState {
@@ -259,6 +271,10 @@ impl TrameState {
         // Register the implicit default sheet's name (idempotent map insert, so
         // a peer that also "creates" s0 converges to the same entry).
         let _ = doc.get_map(SHEETS_MAP).insert(DEFAULT_SHEET, "Sheet1");
+        // The schema version is workbook scaffolding too, and it is written in
+        // the same commit so a workbook is never persisted without it
+        // (`SCHEMA-004`).
+        schema::stamp(&doc);
         doc.commit();
         // Create the undo manager AFTER the initial commit: the implicit-sheet
         // registration is document scaffolding, not a user edit, so it must not
@@ -293,6 +309,7 @@ impl TrameState {
             sheet_counter: 0,
             uid_counter: 0,
             sheet_list_sent: false,
+            undecodable: std::cell::Cell::new(false),
         };
         // Index the implicit sheet so `=Sheet1!A1` resolves before any reseed.
         state.rebuild_sheet_maps();
@@ -338,7 +355,10 @@ mod interop;
 mod merges;
 mod metrics;
 mod packing;
-mod schema;
+/// Container naming, the packed style layout, and the workbook's persisted
+/// schema version (`ambre-spec-schema-version.md`). Public for the version half
+/// alone -- the container names stay `pub(crate)`.
+pub mod schema;
 mod sheets;
 mod sort;
 mod structural;

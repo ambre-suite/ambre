@@ -13,7 +13,7 @@ use kurbo::{BezPath, Rect};
 
 use crate::logic::command::{ToileEvent, ToileOutcome};
 use crate::logic::interop::{ExportElement, export_svg};
-use crate::logic::model::{ElementId, ElementKind, ElementStyle, NodeId, ShapeKind};
+use crate::logic::model::{ElementId, ElementKind, NodeId, ShapeKind};
 
 use super::ToileState;
 use super::codec::{bin_of, f64_of, kind_from_tags, str_of};
@@ -88,7 +88,7 @@ impl ToileState {
             kind,
             rect,
             rotation: f64_of(&em, "rot"),
-            style: ElementStyle::from_bytes(&bin_of(&em, "style")),
+            style: self.style_read(&bin_of(&em, "style")),
             path: match kind {
                 ElementKind::Shape(ShapeKind::Path) => BezPath::from_svg(&str_of(&em, "path")).ok(),
                 _ => None,

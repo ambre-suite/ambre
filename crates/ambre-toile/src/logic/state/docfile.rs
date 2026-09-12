@@ -5,7 +5,7 @@
 //! methods bind them to a live board -- the snapshot on the way out, the cache
 //! rebuild on the way in.
 
-use ambre_core::{Uuid, docfile::DocFileError};
+use ambre_core::{Uuid, docfile::DocFileError, schema::SchemaError};
 
 use crate::logic::interop::docfile::{export_ambre_plaintext, import_ambre_plaintext};
 
@@ -24,7 +24,8 @@ impl ToileState {
     /// Load a plaintext `.ambre` into this state, returning the document id it
     /// carried and the display events the UI needs to repaint.
     ///
-    /// Nothing is applied until the header has validated, and a payload the CRDT
+    /// Nothing is applied until the header and the schema register have both
+    /// validated, and a payload the CRDT
     /// engine refuses leaves the board as it was: the two failure modes are
     /// distinct, and [`DocFileError::PayloadRejected`] is the only one this layer
     /// adds to the container taxonomy.
@@ -33,7 +34,17 @@ impl ToileState {
         data: &[u8],
     ) -> Result<(Uuid, Vec<ToileEvent>), DocFileError> {
         let header = import_ambre_plaintext(data)?;
-        self.doc.import(&header.payload).map_err(|e| {
+        // The container has said its piece; the schema register inside the
+        // payload is a separate gate and it runs before any container is used
+        // (`SCHEMA-006`). A file this build cannot read leaves the board alone.
+        let payload = schema::gate(&header.payload).map_err(|e| match e {
+            // Bytes the engine will not read already have a name in the
+            // container taxonomy; the gate only happens to be where they were
+            // discovered.
+            SchemaError::PayloadRejected => DocFileError::PayloadRejected,
+            other => DocFileError::PayloadSchema(other),
+        })?;
+        self.doc.import(&payload).map_err(|e| {
             tracing::warn!("[Toile] .ambre payload rejected by the CRDT engine: {e:?}");
             DocFileError::PayloadRejected
         })?;

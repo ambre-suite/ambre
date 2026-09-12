@@ -284,7 +284,9 @@ fn resize_survives_snapshot_roundtrip() {
     });
     let snapshot = state.export_snapshot();
     let mut restored = TrameState::new();
-    restored.import_snapshot(&snapshot);
+    restored
+        .import_snapshot(&snapshot)
+        .expect("a snapshot this build wrote reads back at the current schema");
     let (widths, _) = viewport_metrics(&mut restored, 0, 0, 0, 0);
     assert_eq!(widths, vec![200.0], "the persisted width reloads");
 }
@@ -308,8 +310,10 @@ fn concurrent_resize_of_same_col_converges_lww() {
         width_px: 300.0,
     });
     let (sa, sb) = (a.export_snapshot(), b.export_snapshot());
-    a.import_snapshot(&sb);
-    b.import_snapshot(&sa);
+    a.import_snapshot(&sb)
+        .expect("a snapshot this build wrote reads back at the current schema");
+    b.import_snapshot(&sa)
+        .expect("a snapshot this build wrote reads back at the current schema");
     let (wa, _) = viewport_metrics(&mut a, 0, 0, 0, 0);
     let (wb, _) = viewport_metrics(&mut b, 0, 0, 0, 0);
     assert_eq!(wa, wb, "both peers converge to one width");

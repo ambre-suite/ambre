@@ -5,6 +5,8 @@
 // Submodule of `logic`, so it reaches the private fields/helpers of the parent
 // module through the `use super::*` glob.
 
+use ambre_core::schema::SchemaError;
+
 use super::*;
 
 impl TrameState {
@@ -68,8 +70,22 @@ impl TrameState {
     /// delta, and reseeds the formula engine from the restored cells (so formula
     /// cells evaluate instead of showing their literal source). Returns no
     /// display events: the next viewport request re-renders the restored grid.
-    pub fn import_snapshot(&mut self, payload: &[u8]) -> Vec<TrameEvent> {
-        self.import_and_reseed(payload, "import_snapshot")
+    ///
+    /// # Errors
+    /// Every failure of the schema gate: a workbook written by a newer client
+    /// (`SCHEMA-008`), a migration the registry cannot run, and bytes the CRDT
+    /// engine refuses. On any of them the workbook is untouched (`SCHEMA-012`)
+    /// -- the gate reads the payload in a scratch document precisely so a
+    /// refusal costs the caller nothing.
+    ///
+    /// The remote-delta path ([`apply_remote`](Self::apply_remote)) carries no
+    /// version and applies blind: a delta is not a full-state read, and there is
+    /// nothing in it to compare.
+    pub fn import_snapshot(&mut self, payload: &[u8]) -> Result<Vec<TrameEvent>, SchemaError> {
+        // Before a single container is used (`SCHEMA-006`). What comes back is
+        // the payload itself at the current version, or a migrated snapshot.
+        let payload = schema::gate(payload)?;
+        Ok(self.import_and_reseed(&payload, "import_snapshot"))
     }
 
     /// Resolve a sheet name to its stable sheet id (e.g. `"Sheet1"` -> `"s0"`).
@@ -187,6 +203,46 @@ impl TrameState {
             self.style_state_event(),
         ];
         events.extend(conflicts);
+        // A register the reseed could not decode is reported here rather than at
+        // each import site: this is the one body every full-state read and every
+        // remote delta passes through (`SCHEMA-003`).
+        events.extend(self.undecodable_notice());
         events
+    }
+
+    /// The schema version this workbook carries (`SCHEMA-004`), for a report rather
+    /// than for a decision: the fixture manifest records the version its
+    /// artefact was written at.
+    ///
+    /// A register this build cannot read comes back as
+    /// [`SCHEMA_VERSION_ABSENT`](ambre_core::schema::SCHEMA_VERSION_ABSENT)
+    /// here. Every path that *decides* anything goes through `schema::gate`,
+    /// which refuses it instead (`SCHEMA-013`); this one is called on a document
+    /// the caller just generated, where the case cannot arise.
+    #[must_use]
+    pub fn schema_version(&self) -> u32 {
+        schema::read_version(&self.doc).unwrap_or(ambre_core::schema::SCHEMA_VERSION_ABSENT)
+    }
+
+    /// Record that a register could not be decoded (`SCHEMA-003`).
+    ///
+    /// An **empty** register is not a failure: a cell with no formatting carries
+    /// no bytes. Only a non-empty blob the decoder refuses is a record this
+    /// build cannot read.
+    pub(super) fn note_undecodable(&self, bytes: &[u8]) {
+        if !bytes.is_empty() {
+            self.undecodable.set(true);
+        }
+    }
+
+    /// Drain the flag into the one event that carries it to the user, or nothing
+    /// when every register read cleanly (`SCHEMA-003`).
+    ///
+    /// Drained rather than read so the notice is raised once per import instead
+    /// of once per reseed.
+    fn undecodable_notice(&mut self) -> Option<TrameEvent> {
+        self.undecodable
+            .replace(false)
+            .then_some(TrameEvent::UndecodableRecords)
     }
 }

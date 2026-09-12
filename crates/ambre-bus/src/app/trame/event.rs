@@ -114,6 +114,19 @@ pub enum TrameEvent {
     /// last remaining sheet). Purely informational; no CRDT mutation occurred.
     Error { message: String },
 
+    /// The workbook was written by a newer client and was refused whole
+    /// (`SCHEMA-008`): nothing was applied, and the grid on screen is the one
+    /// that was already open. Distinct from [`Error`](Self::Error), which
+    /// reports a rejected *command* -- this one reports a document the build
+    /// cannot read at all, and the remedy is to update the client.
+    DocumentRefused { reason: String },
+
+    /// At least one record in the workbook could not be decoded and lost its
+    /// formatting (`SCHEMA-003`). A fact rather than a count: the same
+    /// unreadable register is met again on every later reseed, so any number
+    /// reported here would be an artefact of how often the grid was rebuilt.
+    UndecodableRecords,
+
     /// A local [`SortRange`](super::TrameCommand::SortRange) finished
     /// reordering the rows (`trame-sort`). The accompanying
     /// [`DataReset`](Self::DataReset) prompts the UI to re-fetch the viewport with

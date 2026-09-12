@@ -66,6 +66,8 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
             | TrameEvent::MergeConflictDetected { .. }
             | TrameEvent::SheetList { .. }
             | TrameEvent::Error { .. }
+            | TrameEvent::DocumentRefused { .. }
+            | TrameEvent::UndecodableRecords
             | TrameEvent::SortComplete
             | TrameEvent::FilterApplied { .. }
             | TrameEvent::ColumnValues { .. }
@@ -118,6 +120,16 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
             toasts.warning(format!("Invalid value: {message}"));
         }
         TrameEvent::Error { message } => toasts.warning(message.clone()),
+        // The workbook was written by a newer client (`SCHEMA-008`). An error,
+        // not a warning: nothing opened, and the remedy is not in this workbook.
+        TrameEvent::DocumentRefused { reason } => toasts.error(reason.clone()),
+        // Part of the workbook could not be read and lost its formatting
+        // (`SCHEMA-003`). The document is open and usable, so this is a warning
+        // -- but it must be said: a register that silently reads as unformatted
+        // is a workbook that looks intact and is not.
+        TrameEvent::UndecodableRecords => toasts.warning(
+            "Some formatting in this workbook was written by a newer client and could not be read.",
+        ),
         // A converged concurrent edit masked a covered cell on an active merge.
         // Purely informational: the value reappears on unmerge.
         TrameEvent::MergeConflictDetected {

@@ -169,9 +169,11 @@ fn concurrent_value_under_merge_is_masked_then_restored() {
     let base_snap = base.export_snapshot();
 
     let mut a = TrameState::new();
-    a.import_snapshot(&base_snap);
+    a.import_snapshot(&base_snap)
+        .expect("a snapshot this build wrote reads back at the current schema");
     let mut b = TrameState::new();
-    b.import_snapshot(&base_snap);
+    b.import_snapshot(&base_snap)
+        .expect("a snapshot this build wrote reads back at the current schema");
 
     // Peer A merges A1:A2 (both empty on its side).
     a.handle_command(TrameCommand::MergeCells {
@@ -230,9 +232,11 @@ fn overlapping_merges_resolve_to_the_lowest_master_key() {
     let base_snap = base.export_snapshot();
 
     let mut a = TrameState::new();
-    a.import_snapshot(&base_snap);
+    a.import_snapshot(&base_snap)
+        .expect("a snapshot this build wrote reads back at the current schema");
     let mut b = TrameState::new();
-    b.import_snapshot(&base_snap);
+    b.import_snapshot(&base_snap)
+        .expect("a snapshot this build wrote reads back at the current schema");
 
     // A merges A1:B2, B merges B2:C3 concurrently: they overlap at B2.
     a.handle_command(TrameCommand::MergeCells {
@@ -410,7 +414,8 @@ fn cross_sheet_reference_converges_across_peers_on_rename() {
     // B joins by loading A's snapshot (the real "open shared doc" path, so
     // both peers share the same op history) and converges on the value.
     let mut b = TrameState::new();
-    b.import_snapshot(&a.export_snapshot());
+    b.import_snapshot(&a.export_snapshot())
+        .expect("a snapshot this build wrote reads back at the current schema");
     assert_eq!(
         read_cell(&mut b, 0, 1),
         "10",
@@ -597,9 +602,11 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
     let base_snap = base.export_snapshot();
 
     let mut a = TrameState::new();
-    a.import_snapshot(&base_snap);
+    a.import_snapshot(&base_snap)
+        .expect("a snapshot this build wrote reads back at the current schema");
     let mut b = TrameState::new();
-    b.import_snapshot(&base_snap);
+    b.import_snapshot(&base_snap)
+        .expect("a snapshot this build wrote reads back at the current schema");
 
     // Peer A merges Sheet2!A1:A2 (both empty on its side).
     a.handle_command(TrameCommand::ActivateSheet {

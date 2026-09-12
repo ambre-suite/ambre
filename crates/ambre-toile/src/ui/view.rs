@@ -950,6 +950,17 @@ impl ToileView {
             ToileEvent::ExportFailed(reason) => {
                 tracing::warn!("Toile: export failed: {reason}");
             }
+            // Both schema notices are the chrome's to surface (`notify_event`):
+            // the canvas has nothing to repaint for either. A refused board was
+            // never applied, so the pixels on screen are already correct; an
+            // unreadable register was drawn with the default style, and redrawing
+            // it would produce the same pixels again.
+            ToileEvent::DocumentRefused(reason) => {
+                tracing::warn!("Toile: document refused: {reason}");
+            }
+            ToileEvent::UndecodableRecords => {
+                tracing::warn!("Toile: a register could not be decoded");
+            }
         }
     }
 

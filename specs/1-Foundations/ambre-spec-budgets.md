@@ -166,7 +166,7 @@
 |---|---|
 | 1. Server read (snapshot plus N deltas from S3 and Postgres) | < 500 ms, section 3 |
 | 2. Client AEAD open plus zstd decompress of a full snapshot | **none** -- section 1 budgets compression of 100 KB and inbound decryption per 1 KB |
-| 3. `LoroDoc` import of a full snapshot | **none** -- `doc.import` in section 1 is < 2 ms for a **1 KB delta**, which says nothing about a 10 MB snapshot |
+| 3. `LoroDoc` import of a full snapshot | **none** -- `doc.import` in section 1 is < 2 ms for a **1 KB delta**, which says nothing about a 10 MB snapshot. A full-state read imports it **twice**: once into a scratch document to read the schema register, once into the live one (`ambre-spec-schema-version.md section 2`). Deliberate, and it is what makes a refused document cost the user nothing |
 | 4. Engine rebuild after import | partial -- `SheetIndex` rebuild of 10k rows is < 10 ms in section 1. Trame's `import_snapshot` triggers the **full reseed**, which re-parses and recompiles every formula of every sheet (`ambre-spec-trame-engine.md`): unbudgeted, and likely dominant at 100k cells. Toile's `SpatialIndex` **bulk load** is unbudgeted too |
 | 5. First painted frame | the frame budget of section 2, GPU-bound |
 

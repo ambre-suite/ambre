@@ -43,18 +43,20 @@ what two peers reach, not what one holds. Grammar and status values are normativ
 | `TRAME-221` | `CONC` | Two peers that exchanged their whole history MUST show the same computed value, and a peer rebuilt from the converged snapshot MUST show it too. | this spec section 3 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` (proptest, 256 interleavings) compares the rendered text of both peers, then of a third peer imported from the converged snapshot; `logic::tests::group1::sum_over_plain_literals_survives_reseed` is the worked example | verified |
 | `TRAME-016` | `INV` | A cell's whole style MUST be one binary register, keyed by that cell's identity. | this spec section 3; architecture section 2.D | `ambre_trame::logic::convergence_tests::subset_style_edit_does_not_tear_a_whole_cell_rewrite` goes red on a split register: a partial patch racing a whole rewrite is exactly what a second style container tears on. `logic::tests::group1::bold_stays_on_the_cell_not_the_selection` holds the key | verified |
 | `TRAME-222` | `CONC` | Two concurrent restyles of one cell MUST converge on the whole style one of the two wrote, never a per-attribute blend. | this spec section 3; architecture section 2.D | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`, `::subset_style_edit_does_not_tear_a_whole_cell_rewrite` | verified |
-| `TRAME-025` | `INV` | A Trame document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7 | not built -- lands with `ARCH P8` | unimplemented |
-| `TRAME-026` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | not built -- lands with `ARCH P8` | unimplemented |
+| `TRAME-025` | `INV` | A Trame document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7 | `ambre_trame::logic::schema::tests::a_new_workbook_carries_the_current_version`. Written by `schema::stamp` inside the scaffolding commit of `from_doc`, alongside the implicit sheet, so a workbook carries it before any user edit; the protocol it obeys is `ambre-spec-schema-version.md` | verified |
+| `TRAME-026` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | none, and none is possible today -- the Trame half of `SCHEMA-009`: the rule binds a code change to a constant, and nothing compares this build's layouts against the previous release's. Human review, named as such. The registry it obliges exists now (`logic/schema.rs`), so the reviewer has somewhere to put the step | unverified |
 
 * **Budget.** none: a format has no operation to budget. What loading one costs is legs 3 and 4 of
   `ambre-spec-budgets.md section 4`, and both are recorded there as unbudgeted.
 * **Boundary.** none: `TRAME-010` keeps computed values out of the document, and the containers
   this table declares reach the relay as ciphertext alone (`ZK-001`).
-* **Verification.** 4 `verified`, 1 `unverified`, 2 `unimplemented`. Two conjunctions came apart:
+* **Verification.** 5 `verified`, 2 `unverified`, 0 `unimplemented`. Two conjunctions came apart:
   `TRAME-010` and `TRAME-016` each stated a format rule and a convergence rule, and in both the
   convergence half was the tested one. `TRAME-010` is the gap that remains, and it is narrower than
   it reads: only a computed value stored **beside** the raw text escapes. Reported in
-  `ambre-spec-testing.md section 7`.
+  `ambre-spec-testing.md section 7`. `ARCH P8` closed the two unbuilt rows the same way it did in
+  Toile: `TRAME-025` is held by a test, and `TRAME-026` moves from unbuilt to unverifiable, which is
+  the one row this document's ceiling was raised for.
 
 ---
 
@@ -81,7 +83,7 @@ race: the last writer takes that whole unit.
 
 | Container | Loro type | Key | Value | LWW unit | Owning feature document | State |
 |---|---|---|---|---|---|---|
-| `meta` | Map | `schema_version` | `u32` | the key | -- (foundation; this spec section 7) | design |
+| `meta` | Map | `schema_version` | `u32` | the key | -- (foundation; this spec section 7) | built |
 | `workbook` | Map | `name`, `author`, `created` | String | the key | **-- (none; section 5)** | design |
 | `sheet_order` | MovableList | position | `sheet_id` | list order, no LWW | `trame-sheets` | built |
 | `sheets` | Map | `sheet_id` | sheet name (String) | the sheet entry | `trame-sheets` | built |
@@ -191,10 +193,10 @@ stops the eventual container being keyed positionally by whoever writes it first
 | Duty | Rule | Where |
 |---|---|---|
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `TRAME-025` |
-| Read | equal proceeds, older migrates, newer is refused whole (`SchemaTooNew`) | architecture section 2.D |
-| Migration | the chain lives in `ambre-trame`; the foundation owns the protocol, never the semantics | architecture section 2.D |
+| Read | equal proceeds, older migrates, newer is refused whole (`SchemaError::DocumentTooNew`), read in a scratch document so a refusal writes nothing | architecture section 2.D; `ambre-spec-schema-version.md section 2` |
+| Migration | the registry lives in `ambre-trame` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics | architecture section 2.D; `SCHEMA-010` |
 | Bump | a key or layout change raises `SCHEMA_VERSION` and freezes one named fixture in the same commit | `TRAME-026`; `ambre-spec-fixtures.md section 2` |
-| Unknown field | `postcard` decodes a blob whole and tolerates none, so a stale `StyleRecord` falls back to `Default` -- a silent downgrade, which is what `TRAME-025` exists to stop | architecture section 2.D |
+| Unknown field | `postcard` decodes a blob whole and tolerates none, so a `StyleRecord` written by a newer client is skipped -- no longer silently: the reseed raises one warning per import (`SCHEMA-003`) | architecture section 2.D |
 | Size, axes | the used range grows by at most 10 000 lines per write, and holds at most 1 000 columns | `features/ambre-spec-trame-rows-and-columns.md` |
 | Size, keys | a cell key is 51 bytes, a uid 25; a 100 000-row axis is 2.5 MB of element values alone | this spec section 2 |
 | Deltas | a remote delta carries no version and applies blind; mixed-version live editing is bounded, not solved | architecture section 2.D |

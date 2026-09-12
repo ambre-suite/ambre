@@ -1,7 +1,24 @@
 // ambre-trame/src/logic/schema.rs
-// CRDT container naming and the packed style bit-layout constants. Pure
-// (free) data with no `TrameState` dependency; re-exported by the parent so the
-// impl submodules reach it through their `use super::*`.
+// CRDT container naming, the packed style bit-layout constants, and the
+// workbook's persisted schema version. Pure (free) data and functions with no
+// `TrameState` dependency; re-exported by the parent so the impl submodules
+// reach it through their `use super::*`.
+//
+// The version protocol -- where the register lives, what an absent one means,
+// what each comparison implies, how a registry is walked -- is
+// `ambre_core::schema` and is shared with every other application
+// (`ambre-spec-schema-version.md`). What lives here is what only Trame can
+// know: which version its containers are at today, and what each past layout
+// has to become.
+
+use std::borrow::Cow;
+
+use loro::{ExportMode, LoroDoc, LoroValue};
+
+use ambre_core::schema::{
+    SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
+    SchemaVerdict, migrate_schema, verdict,
+};
 
 /// Stable id of the implicit default sheet created by [`TrameState::new`].
 ///
@@ -123,4 +140,316 @@ pub(crate) const MIN_ROW_HEIGHT: f32 = 12.0;
 pub(crate) enum Axis {
     Row,
     Col,
+}
+
+// -----------------------------------------------------------------------------
+// The persisted schema version (`ambre-spec-schema-version.md`)
+// -----------------------------------------------------------------------------
+
+/// The schema version this build writes into every workbook it creates
+/// (`SCHEMA-004`).
+///
+/// Raising it is not a decision about this constant: it is a layout change to a
+/// persisted record -- the packed [`StyleRecord`](super::StyleRecord) above is
+/// the one most likely to move -- which obliges a [`MIGRATIONS`] row that
+/// carries an existing workbook across it (`SCHEMA-009`).
+pub const SCHEMA_VERSION: u32 = 1;
+
+/// Write the current version into a workbook's `meta` register.
+///
+/// Called from workbook construction, inside the scaffolding commit, so the
+/// number is present before any user edit and travels with the document through
+/// every persistence path rather than through the one that happens to check it.
+pub(crate) fn stamp(doc: &LoroDoc) {
+    let _ = doc
+        .get_map(SCHEMA_META_MAP)
+        .insert(SCHEMA_VERSION_KEY, i64::from(SCHEMA_VERSION));
+}
+
+/// The schema version a workbook carries, or the refusal when the register is
+/// present and unreadable.
+///
+/// An **absent** register is [`SCHEMA_VERSION_ABSENT`] (`SCHEMA-005`): a
+/// workbook written before the register existed needs no rewriting. A register
+/// that is present but holds something other than a `u32` is refused instead
+/// (`SchemaError::VersionUnreadable`) -- reading it as 0 would send a document
+/// this build cannot understand down the migration path and open it.
+///
+/// # Errors
+/// [`SchemaError::VersionUnreadable`] for a register holding a non-integer, a
+/// container, or an integer outside `u32`.
+pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
+    let Some(value) = doc.get_map(SCHEMA_META_MAP).get(SCHEMA_VERSION_KEY) else {
+        return Ok(SCHEMA_VERSION_ABSENT);
+    };
+    match value.into_value() {
+        Ok(LoroValue::I64(n)) => u32::try_from(n).map_err(|_| SchemaError::VersionUnreadable {
+            found: format!("the integer {n}"),
+        }),
+        Ok(other) => Err(SchemaError::VersionUnreadable {
+            found: format!("{other:?}"),
+        }),
+        Err(_) => Err(SchemaError::VersionUnreadable {
+            found: "a container".to_owned(),
+        }),
+    }
+}
+
+/// Trame's registry: one row per version bump, appended never rewritten.
+///
+/// `0 -> 1` is the register's own arrival. Every workbook written before it
+/// existed reads as version 0 and is identical in layout to a version 1
+/// workbook, so the step stamps the number and changes nothing else -- which is
+/// what makes it a migration and not a rewrite.
+const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
+    from: 0,
+    to: 1,
+    apply: stamp_step,
+}];
+
+/// The `0 -> 1` step. A free function rather than a closure because a registry
+/// row holds a plain `fn`.
+fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
+
+/// The full-state read rule, applied before a single container is used
+/// (`SCHEMA-006`).
+///
+/// Returns the bytes the caller should actually import: the payload untouched
+/// when the versions match, a migrated snapshot when the workbook is older
+/// (`SCHEMA-007`), and an error when it is newer (`SCHEMA-008`) or the engine
+/// refuses the bytes. Nothing here writes to the live document, so a refused
+/// read leaves the workbook exactly as it was (`SCHEMA-012`).
+///
+/// **Cost.** The payload is imported into a scratch document before the live
+/// state is touched, so a full-state read decodes the snapshot twice. That is
+/// the price of `SCHEMA-012`: reading the version off the live document means
+/// the refused workbook is already merged into the grid the user is looking at,
+/// and the only way back out is to throw their session away. A scratch document
+/// is discarded for free.
+///
+/// # Errors
+/// [`SchemaError::PayloadRejected`] when the CRDT engine will not read the
+/// bytes, [`SchemaError::DocumentTooNew`] when the workbook was written by a
+/// newer client, and the migration variants when the chain cannot carry an
+/// older one.
+pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
+    let scratch = LoroDoc::new();
+    scratch.import(payload).map_err(|e| {
+        tracing::warn!("[Trame] snapshot rejected by the CRDT engine: {e:?}");
+        SchemaError::PayloadRejected
+    })?;
+    let found = read_version(&scratch)?;
+    match verdict(found, SCHEMA_VERSION) {
+        SchemaVerdict::Current => Ok(Cow::Borrowed(payload)),
+        SchemaVerdict::Newer => Err(SchemaError::DocumentTooNew {
+            document: found,
+            binary: SCHEMA_VERSION,
+        }),
+        SchemaVerdict::Older => {
+            migrate_schema(MIGRATIONS, found, SCHEMA_VERSION, &scratch)?;
+            let bytes =
+                scratch
+                    .export(ExportMode::Snapshot)
+                    .map_err(|e| SchemaError::MigrationFailed {
+                        from: found,
+                        to: SCHEMA_VERSION,
+                        reason: format!("re-exporting the migrated workbook failed: {e:?}"),
+                    })?;
+            Ok(Cow::Owned(bytes))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::TrameState;
+
+    /// A snapshot of a workbook carrying `version` in its register, or none at
+    /// all when `version` is `None` -- which is every workbook written before
+    /// `ARCH P8`.
+    fn snapshot_at(version: Option<u32>) -> Vec<u8> {
+        let doc = LoroDoc::new();
+        doc.get_map(SHEETS_MAP)
+            .insert(DEFAULT_SHEET, "Sheet1")
+            .expect("seed");
+        if let Some(v) = version {
+            doc.get_map(SCHEMA_META_MAP)
+                .insert(SCHEMA_VERSION_KEY, i64::from(v))
+                .expect("stamp");
+        }
+        doc.commit();
+        doc.export(ExportMode::Snapshot).expect("snapshot")
+    }
+
+    #[test]
+    fn a_new_workbook_carries_the_current_version() {
+        assert_eq!(TrameState::new().schema_version(), SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn a_workbook_at_the_current_version_is_handed_back_untouched() {
+        let bytes = snapshot_at(Some(SCHEMA_VERSION));
+        let gated = gate(&bytes).expect("current");
+        assert!(matches!(gated, Cow::Borrowed(_)));
+        assert_eq!(&*gated, &bytes[..]);
+    }
+
+    #[test]
+    fn a_workbook_written_before_the_register_migrates_to_the_current_version() {
+        let bytes = snapshot_at(None);
+        let gated = gate(&bytes).expect("version 0 migrates");
+        let migrated = LoroDoc::new();
+        migrated
+            .import(&gated)
+            .expect("the migrated snapshot imports");
+        assert_eq!(
+            read_version(&migrated).expect("the migrated register reads"),
+            SCHEMA_VERSION
+        );
+        // The migration stamps and does nothing else: the workbook it carried is
+        // still there.
+        assert!(
+            migrated.get_map(SHEETS_MAP).get(DEFAULT_SHEET).is_some(),
+            "the migration must not drop what it migrates"
+        );
+    }
+
+    #[test]
+    fn a_workbook_from_a_newer_client_is_refused_whole() {
+        let bytes = snapshot_at(Some(SCHEMA_VERSION + 1));
+        assert_eq!(
+            gate(&bytes).expect_err("refused"),
+            SchemaError::DocumentTooNew {
+                document: SCHEMA_VERSION + 1,
+                binary: SCHEMA_VERSION,
+            }
+        );
+    }
+
+    /// `SCHEMA-008` + `SCHEMA-012`: the refusal is the whole document, and the
+    /// workbook the user was already looking at survives it intact.
+    #[test]
+    fn a_workbook_from_a_newer_client_is_refused_and_changes_nothing() {
+        let mut st = TrameState::new();
+        st.handle_command(ambre_bus::TrameCommand::SetCellText {
+            row: 0,
+            col: 0,
+            text: "kept".to_owned(),
+        });
+        let before = st.export_snapshot();
+
+        let err = st
+            .import_snapshot(&snapshot_at(Some(SCHEMA_VERSION + 1)))
+            .expect_err("refused");
+
+        assert_eq!(
+            err,
+            SchemaError::DocumentTooNew {
+                document: SCHEMA_VERSION + 1,
+                binary: SCHEMA_VERSION,
+            }
+        );
+        assert_eq!(
+            st.export_snapshot(),
+            before,
+            "a refused read must not write the document back"
+        );
+    }
+
+    /// `SCHEMA-003`: a style register this build cannot decode loses its
+    /// formatting -- unavoidably -- but the user is told, instead of reading a
+    /// workbook that looks intact and is not.
+    #[test]
+    fn a_register_that_cannot_be_decoded_reaches_the_user() {
+        use ambre_bus::{TrameCommand, TrameEvent};
+
+        // A real styled cell first, so the register sits under the cell key the
+        // reseed resolves through its own index -- an invented key is skipped
+        // before any decode is attempted, which would prove nothing.
+        let mut source = TrameState::new();
+        source.handle_command(TrameCommand::SetActiveCell {
+            row: 0,
+            col: 0,
+            anchor_row: 0,
+            anchor_col: 0,
+        });
+        source.handle_command(TrameCommand::SetCellStyle {
+            patch: crate::StylePatch {
+                bold: Some(true),
+                ..Default::default()
+            },
+        });
+
+        // Now overwrite that register with a blob no `StyleRecord` layout can
+        // produce: a record written by a client this build does not know.
+        let styles = source.doc.get_map(cellstyle_map_name(DEFAULT_SHEET));
+        let LoroValue::Map(entries) = styles.get_value() else {
+            panic!("the styled cell wrote a register");
+        };
+        let key = entries
+            .keys()
+            .next()
+            .expect("one styled cell, one register")
+            .clone();
+        styles
+            .insert(&key, LoroValue::Binary(vec![0xFFu8; 8].into()))
+            .expect("overwrite the register");
+        source.doc.commit();
+        let payload = source.export_snapshot();
+
+        let mut st = TrameState::new();
+        let events = st
+            .import_snapshot(&payload)
+            .expect("the workbook still opens");
+
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, TrameEvent::UndecodableRecords)),
+            "an unreadable register must be reported, not skipped in silence"
+        );
+    }
+
+    /// The same workbook, written by this build, says nothing -- otherwise the
+    /// notice is noise and the user learns to ignore it.
+    #[test]
+    fn a_workbook_this_build_wrote_raises_no_notice() {
+        let payload = TrameState::new().export_snapshot();
+        let mut st = TrameState::new();
+        let events = st.import_snapshot(&payload).expect("opens");
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, ambre_bus::TrameEvent::UndecodableRecords))
+        );
+    }
+
+    /// `SCHEMA-013`: the back door `SCHEMA-005` opens. A register holding
+    /// something that is not a version must not be read as no register at all.
+    #[test]
+    fn a_register_holding_something_other_than_a_version_is_refused() {
+        let doc = LoroDoc::new();
+        doc.get_map(SCHEMA_META_MAP)
+            .insert(SCHEMA_VERSION_KEY, "two")
+            .expect("a register a newer client might have written");
+        doc.commit();
+        let bytes = doc.export(ExportMode::Snapshot).expect("snapshot");
+        assert!(matches!(
+            gate(&bytes).expect_err("refused"),
+            SchemaError::VersionUnreadable { .. }
+        ));
+    }
+
+    #[test]
+    fn bytes_the_engine_will_not_read_are_told_apart_from_a_version_refusal() {
+        assert_eq!(
+            gate(b"not a loro snapshot").expect_err("rejected"),
+            SchemaError::PayloadRejected
+        );
+    }
 }

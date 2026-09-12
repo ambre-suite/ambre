@@ -55,19 +55,18 @@ impl LogicState {
                     return;
                 };
                 // A snapshot import is the same operation whichever engine owns
-                // the document; each returns its own display-event family, mapped
-                // to the matching `AppEvent` variant.
-                let events: Vec<AppEvent> = match doc {
-                    DocState::Trame(state) => state
-                        .import_snapshot(&snapshot)
-                        .into_iter()
-                        .map(AppEvent::Trame)
-                        .collect(),
-                    DocState::Toile(state) => state
-                        .import_snapshot(&snapshot)
-                        .into_iter()
-                        .map(AppEvent::Toile)
-                        .collect(),
+                // the document, and it is a full-state read: the schema gate runs
+                // inside `DocState::import_snapshot` before any container is used
+                // (`SCHEMA-006`). A refused document leaves the state alone
+                // (`SCHEMA-012`) and reaches the user as the owning app's own
+                // refusal event -- a restore that silently does nothing is
+                // indistinguishable from a document that never existed.
+                let events: Vec<AppEvent> = match doc.import_snapshot(&snapshot) {
+                    Ok(events) => events,
+                    Err(e) => {
+                        tracing::warn!("Logic: doc {document_id} refused its snapshot: {e}");
+                        vec![doc.refusal_event(&e)]
+                    }
                 };
                 for event in events {
                     self.send_to_ui(UiEvent::Viewport { document_id, event });

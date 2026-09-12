@@ -222,7 +222,11 @@ impl TrameState {
                 continue; // references a deleted row/column
             };
             let Ok(record) = postcard::from_bytes::<StyleRecord>(bytes) else {
-                continue; // unreadable payload: skip rather than crash the reseed
+                // Skip rather than crash the reseed -- but say so: a cell that
+                // silently loses its formatting is a workbook that looks intact
+                // and is not (`SCHEMA-003`).
+                self.note_undecodable(bytes);
+                continue;
             };
             let cell = (row as u32, col as u32);
             if record.bold {

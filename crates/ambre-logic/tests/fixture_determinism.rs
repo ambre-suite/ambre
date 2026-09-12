@@ -305,7 +305,9 @@ fn assert_round_trip(source: &DocState, doc_type: DocType) {
 
     // Into a *fresh* state of the same type, which is what a loader does.
     let mut restored = DocState::new(doc_type).expect("an engine for this doc_type");
-    let events = restored.import_snapshot(&first);
+    let events = restored
+        .import_snapshot(&first)
+        .expect("a fixture this build generated reads back at the current schema");
     assert!(
         !events.is_empty(),
         "{doc_type:?}: a restore must tell the UI to repaint"
@@ -320,7 +322,9 @@ fn assert_round_trip(source: &DocState, doc_type: DocType) {
     // The fixed point. Re-importing a document's own bytes into the state that
     // produced them is a no-op merge, so the next export must be identical --
     // this is what fails if an import path starts mutating the document it reads.
-    restored.import_snapshot(&second);
+    restored
+        .import_snapshot(&second)
+        .expect("the document's own bytes read back");
     assert_eq!(
         restored.export_snapshot(),
         second,

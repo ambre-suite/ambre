@@ -920,7 +920,9 @@ fn a_restore_still_offers_what_this_client_wrote_offline() {
 
     // The reopen: a fresh board, a fresh peer id, restoring from disk.
     let mut reopened = ToileState::new();
-    reopened.import_snapshot(&disk);
+    reopened
+        .import_snapshot(&disk)
+        .expect("a board this build wrote reads back at the current schema");
     assert_eq!(reopened.element_count(), 1);
 
     let out = reopened.handle_command(ToileCommand::MoveElements {
