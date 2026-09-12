@@ -251,7 +251,7 @@ pulldown-cmark = "0.13"
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-license = "AGPL-3.0"
+license = "AGPL-3.0-only"
 
 # A test run executes the dependency graph, it does not only compile it:
 # Argon2id hashes 64 MiB three times over per derivation, and the CRDT engine
