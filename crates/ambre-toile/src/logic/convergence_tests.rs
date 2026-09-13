@@ -1,10 +1,10 @@
 //! Engine lifecycle tests and the 2-peer CRDT convergence property test.
 //!
-//! The convergence test drives two independent [`ToileState`]s, relaying every
-//! local `update` delta to the other peer via `apply_remote`, then asserts they
-//! reach an identical `LoroDoc` **and** identical derived caches
-//! (`bounds` / `layers`) -- the whiteboard has no computed values to compare,
-//! only state and derived structures.
+//! The convergence test drives two independent [`ToileState`]s. It relays every
+//! local `update` delta to the other peer through `apply_remote`. It then
+//! asserts that the two peers reach an identical `LoroDoc`, and identical
+//! derived caches (`bounds` / `layers`). The whiteboard has no computed values
+//! to compare, only state and derived structures.
 
 use kurbo::{Point, Rect, Size, Vec2};
 use proptest::prelude::*;
@@ -187,7 +187,7 @@ fn create_connector(st: &mut ToileState) -> ConnectorId {
         },
     });
     // The newest connector is the last node in the paint order, which is where
-    // a create puts it; taking the first would answer an earlier arrow.
+    // a create puts it. Taking the first would answer an earlier arrow.
     st.layer_order()
         .iter()
         .rev()
@@ -223,8 +223,8 @@ fn conn_style(st: &ToileState, id: &ConnectorId) -> ElementStyle {
         .expect("the connector is in the viewport")
 }
 
-/// `TOILE-046`: an arrow carries its own style, so it can be coloured and
-/// thickened without touching any other arrow.
+/// `TOILE-046`: an arrow carries its own style, so a user can colour and
+/// thicken it without touching any other arrow.
 #[test]
 fn an_arrow_carries_its_own_style() {
     let mut st = ToileState::new();
@@ -244,11 +244,11 @@ fn an_arrow_carries_its_own_style() {
     let got = conn_style(&st, &one);
     assert_eq!(got.stroke, red.stroke);
     assert_eq!(got.stroke_w, red.stroke_w);
-    // The second arrow is untouched: the register is per connector.
+    // The second arrow keeps its own style: the register is per connector.
     assert_eq!(conn_style(&st, &two).stroke, ElementStyle::default().stroke);
 }
 
-/// A restyle aimed at an arrow the board does not hold is refused whole.
+/// The board refuses a restyle whole when it does not hold the arrow.
 #[test]
 fn restyling_a_missing_arrow_is_refused() {
     let mut st = ToileState::new();
@@ -278,7 +278,7 @@ fn a_caption_reaches_the_viewport() {
     assert_eq!(caption(&st, &c), "owns");
 }
 
-/// A caption on an arrow nobody holds is refused, and writes nothing.
+/// The board refuses a caption on an arrow nobody holds, and writes nothing.
 #[test]
 fn captioning_a_missing_arrow_is_refused() {
     let mut st = ToileState::new();
@@ -296,7 +296,7 @@ fn captioning_a_missing_arrow_is_refused() {
 
 /// `TOILE-047`: two peers captioning one arrow converge character by character.
 /// The whole caption travels on the wire, but the handler diffs it into the
-/// `label` char-CRDT, so neither side's typing is dropped whole.
+/// `label` char-CRDT, so the handler drops neither side's typing whole.
 #[test]
 fn concurrent_captions_converge() {
     let mut a = ToileState::new();
@@ -617,9 +617,9 @@ fn identity_is_seeded_and_read_back() {
 
 #[test]
 fn presence_command_broadcasts_ephemeral_only() {
-    // A local presence sample rides the ephemeral leg: no display event while
-    // the live set is unchanged, and no CRDT delta (the UI draws its own
-    // cursor).
+    // A local presence sample rides the ephemeral leg. The board emits no
+    // display event while the live set holds steady, and no CRDT delta. The UI
+    // draws its own cursor.
     let mut st = ToileState::new();
     let a = create_sticky(&mut st, Point::ZERO, "note");
     let payload = PresencePayload {
@@ -667,7 +667,7 @@ fn the_outbound_sample_carries_the_session_display_name() {
 #[test]
 fn a_peer_who_stops_sending_leaves_the_live_set() {
     // TOILE-185 / TOILE-UI-075 / PRESENCE-009: a departure is the absence of an
-    // entry. No departure signal exists anywhere; the peer ages out against the
+    // entry. No departure signal exists anywhere. The peer ages out against the
     // clock the local samples carry, and the event that says so is the whole
     // set.
     let mut sender = ToileState::new();
@@ -809,12 +809,12 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
     assert_eq!(peers[0].presence, payload);
     assert_eq!(rx.peer_presence(&alice), Some(&payload));
 
-    // Non-mutating: the CRDT snapshot and element set are untouched.
+    // Non-mutating: neither the CRDT snapshot nor the element set moves.
     assert_eq!(rx.export_snapshot(), before);
     assert_eq!(rx.element_count(), count_before);
 
-    // A second peer is tracked independently, keyed by its own UserId, and the
-    // set carries both.
+    // The board tracks a second peer independently, keyed by its own UserId,
+    // and the set carries both.
     let bob = UserId::new();
     let bob_frame = presence_frame(&mut sender, PresencePayload::default(), 0);
     let peers = live_set(rx.apply_ephemeral(bob, &bob_frame));
@@ -837,8 +837,8 @@ fn apply_ephemeral_drops_a_malformed_frame() {
 // The export cursor (`toile-engine section 1.4`)
 // -----------------------------------------------------------------------------
 
-/// `TOILE-217`: an import takes the cursor past the operations it brought in,
-/// so the next local edit does not send a peer its own work back.
+/// `TOILE-217`: an import takes the cursor past the operations it brought in.
+/// The next local edit therefore does not send a peer its own work back.
 #[test]
 fn an_import_is_not_broadcast_back() {
     let mut author = ToileState::new();
@@ -875,17 +875,17 @@ fn an_import_is_not_broadcast_back() {
 }
 
 /// The board opens by committing its own scaffolding, and the first import
-/// lands before any flush. Those genesis operations are ours and have never
-/// been broadcast, so the cursor must keep our own counter across an import --
-/// otherwise the next local delta depends on operations no peer holds, and a
-/// peer that cannot resolve a dependency never shows the edit.
+/// lands before any flush. Those genesis operations are ours, and no flush has
+/// sent them out. The cursor must therefore keep our own counter across an
+/// import. Otherwise the next local delta depends on operations no peer holds,
+/// and a peer that cannot resolve a dependency never shows the edit.
 #[test]
 fn an_import_does_not_swallow_our_own_unbroadcast_genesis() {
     let mut author = ToileState::new();
     create_rect(&mut author, Point::ZERO, Size::new(10.0, 10.0));
     let snapshot = author.export_snapshot();
 
-    // A brand-new board: its scaffolding is committed and never sent.
+    // A brand-new board: it commits its own scaffolding and never sends it.
     let mut reader = ToileState::new();
     reader.apply_remote(&snapshot);
     let out = reader.handle_command(ToileCommand::CreateElement {
@@ -909,8 +909,8 @@ fn an_import_does_not_swallow_our_own_unbroadcast_genesis() {
 
 /// `TOILE-236`: a local restore leaves the cursor alone. What this client wrote
 /// before it closed may have reached no peer, and a reopen mints a fresh peer
-/// id -- so absorbing the restored history would drop an offline session for
-/// good.
+/// id. Absorbing the restored history would therefore drop an offline session
+/// for good.
 #[test]
 fn a_restore_still_offers_what_this_client_wrote_offline() {
     // A session that wrote something and closed without ever flushing to a peer.
@@ -1066,8 +1066,8 @@ fn link_of(st: &ToileState, id: &ElementId) -> Option<LinkTarget> {
     })?
 }
 
-/// A link is set, comes back on the painted element, and is cleared by absence
-/// rather than by an empty value (`TOILE-062`, `TOILE-230`).
+/// A command sets a link, the painted element carries it back, and absence
+/// clears it rather than an empty value (`TOILE-062`, `TOILE-230`).
 #[test]
 fn a_link_is_set_and_cleared() {
     let mut st = ToileState::new();
@@ -1131,7 +1131,7 @@ fn setting_a_link_touches_nothing_else() {
 }
 
 /// `TOILE-109`: a link outlives its target. Deleting the frame a link points at
-/// leaves the register alone -- the frame may come back through a late change or
+/// leaves the register alone. The frame may come back through a late change or
 /// an undo, and a read must never destroy data.
 #[test]
 fn deleting_the_target_frame_leaves_the_link() {
@@ -1152,7 +1152,7 @@ fn deleting_the_target_frame_leaves_the_link() {
     );
 }
 
-/// A link aimed at an element the board does not hold is refused whole.
+/// The board refuses a link whole when it does not hold the target element.
 #[test]
 fn linking_a_missing_element_is_refused() {
     let mut st = ToileState::new();
@@ -1456,8 +1456,8 @@ fn clipboard_payload_postcard_roundtrips() {
 
 #[test]
 fn paste_reproduces_selection_on_a_separate_board() {
-    // Cross-board portability (DoD): copy from one board, paste into a
-    // fresh one and the selection is reproduced.
+    // Cross-board portability (DoD): copy from one board, paste into a fresh
+    // one, and the paste reproduces the selection.
     let mut src = ToileState::new();
     let a = create_rect(&mut src, Point::new(5.0, 5.0), Size::new(10.0, 10.0));
     let b = create_rect(&mut src, Point::new(25.0, 5.0), Size::new(10.0, 10.0));
@@ -1605,14 +1605,14 @@ fn retarget_to_missing_element_reports_dangling() {
             .any(|e| matches!(e, ToileEvent::DanglingConnector(c) if *c == conn)),
         "retarget to a missing element must surface DanglingConnector"
     );
-    // A dangling connector routes to None and is dropped from the paint set.
+    // A dangling connector routes to None, and the paint set drops it.
     assert_eq!(connector_node_count(&st), 0);
 }
 
 #[test]
 fn deleting_an_endpoint_makes_the_connector_dangle() {
-    // an endpoint deletion leaves the connector unroutable; it is skipped
-    // at derivation (route -> None), never corrupting state.
+    // an endpoint deletion leaves the connector unroutable. Derivation skips it
+    // (route -> None) and never corrupts state.
     let mut st = ToileState::new();
     let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
     let b = create_rect(&mut st, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
@@ -1631,7 +1631,7 @@ fn deleting_an_endpoint_makes_the_connector_dangle() {
 #[test]
 fn viewport_culls_offscreen_nodes() {
     // derivation only emits the visible set. Default viewport spans
-    // roughly (-640,-400)..(640,400), so a node at (5000,5000) is culled.
+    // roughly (-640,-400)..(640,400), so derivation culls a node at (5000,5000).
     let mut st = ToileState::new();
     let near = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
     let _far = create_rect(&mut st, Point::new(5000.0, 5000.0), Size::new(10.0, 10.0));
@@ -1689,7 +1689,7 @@ fn slide_order_dedups_repeated_frames() {
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b.clone(), a.clone()],
     });
-    // The repeated first frame is dropped, keeping first occurrence.
+    // The handler drops the repeat and keeps the first occurrence.
     assert_eq!(st.slide_order(), vec![a, b]);
 }
 
@@ -1849,9 +1849,9 @@ fn slide_change_carries_snapshots_and_fit_rect() {
 
 #[test]
 fn slide_change_carries_count_frame_and_notes() {
-    // The presenter overlay panel (toile-presentation) reads the deck length, the
-    // active frame id and its speaker notes straight off the enriched SlideChanged,
-    // since the chrome holds no board state.
+    // The presenter overlay panel (toile-presentation) reads the deck length,
+    // the active frame id and its speaker notes straight off the enriched
+    // SlideChanged. The chrome holds no board state of its own.
     let mut st = ToileState::new();
     let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
     let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
@@ -2075,7 +2075,8 @@ fn non_follower_ignores_broadcast() {
 
 #[test]
 fn following_other_peer_ignores_broadcast() {
-    // Following B, a frame from A is ignored (identity is the canonical UserId).
+    // Following B, the board ignores a frame from A (identity is the canonical
+    // UserId).
     let mut presenter = ToileState::new();
     deck_of_three(&mut presenter);
     presenter.handle_command(ToileCommand::SetPresentBroadcast(true));
@@ -2119,7 +2120,7 @@ fn adopted_slide_is_clamped_to_deck() {
 
 #[test]
 fn manual_nav_breaks_follow() {
-    // A manual navigation takes control: the follow is cleared and announced.
+    // A manual navigation takes control: it clears the follow and says so.
     let mut st = ToileState::new();
     deck_of_three(&mut st);
     let alice = UserId::new();
@@ -2262,14 +2263,14 @@ fn edit_notes_clamps_out_of_range_splice() {
         frame: f.clone(),
         delta: insert_notes(0, "abc"),
     });
-    // An `at` past the end is clamped to the length: the insert lands at the tail
-    // rather than being rejected.
+    // The handler clamps an `at` past the end to the length, so the insert lands
+    // at the tail instead of earning a refusal.
     st.handle_command(ToileCommand::EditNotes {
         frame: f.clone(),
         delta: insert_notes(999, "Z"),
     });
     assert_eq!(st.notes(&f), "abcZ");
-    // An oversized deletion span is clamped to what remains.
+    // The handler clamps an oversized deletion span to what remains.
     st.handle_command(ToileCommand::EditNotes {
         frame: f.clone(),
         delta: TextDelta {
@@ -2568,8 +2569,8 @@ fn derive_viewport_carries_tally_and_skips_deleted_target() {
         .expect("tally present for reacted target");
     assert_eq!(tally.emoji, vec![("thumbsup".to_owned(), 1)]);
 
-    // Deleting the target drops it from the derived map: its orphan reaction
-    // entries survive in the CRDT but are skipped at derivation (never rendered).
+    // Deleting the target drops it from the derived map. Its orphan reaction
+    // entries survive in the CRDT, and derivation skips them.
     st.handle_command(ToileCommand::DeleteElements {
         ids: vec![t.clone()],
     });
@@ -2595,9 +2596,9 @@ fn only_doc_embed(st: &ToileState) -> Option<DisplayGeom> {
 #[test]
 fn doc_embed_reference_survives_the_crdt_round_trip() {
     // The embed's whole purpose is to name another document. That reference goes
-    // into the CRDT as a string and comes back out through `derive`, so this
-    // asserts the pair survives verbatim: a `document_id` that does not round-trip
-    // points the child session at the wrong document (or nowhere).
+    // into the CRDT as a string and comes back out through `derive`. This test
+    // asserts the pair survives verbatim. A `document_id` that does not
+    // round-trip points the child session at the wrong document, or nowhere.
     let mut st = ToileState::new();
     let child = ambre_core::DocumentId::new();
 
@@ -2784,8 +2785,8 @@ fn concurrent_reactions_distinct_users_converge() {
 #[test]
 fn same_user_two_devices_is_one_entry() {
     // The same account reacting from two devices (two sessions / PeerIDs) must
-    // collapse to a single entry keyed by the canonical UserId -- never a
-    // double-count.
+    // collapse to a single entry, keyed by the canonical UserId. A double-count
+    // is the failure this guards.
     let me = UserId::new();
     let mut a = ToileState::new();
     a.set_user_id(me);
@@ -3356,8 +3357,8 @@ fn two_peers_answering_one_brand_new_thread_both_keep_their_reply() {
 
 #[test]
 fn a_pin_carries_its_place_its_count_and_its_state() {
-    // TOILE-026: the board is told where each pin sits, how many messages it
-    // holds and whether it is resolved.
+    // TOILE-026: the board says where each pin sits, how many messages it holds
+    // and whether anyone has closed it.
     let mut st = ToileState::new();
     st.set_user_id(UserId::new());
     let e = create_sticky(&mut st, Point::new(10.0, 20.0), "note");
@@ -3414,9 +3415,9 @@ fn a_pin_leaves_the_board_with_its_anchor_element() {
 
 #[test]
 fn the_board_carries_no_body_and_a_read_carries_them_all() {
-    // TOILE-205: a thread is read when it is opened. The pin type has no body
-    // field at all, so the compiler holds half of this; the other half is that
-    // the read answers with the bodies, and it is the only thing that does.
+    // TOILE-205: opening a thread reads it. The pin type has no body field at
+    // all, so the compiler holds half of this. The other half is that the read
+    // answers with the bodies, and nothing else does.
     let mut st = ToileState::new();
     st.set_user_id(UserId::new());
     let t = comment_on(
@@ -3455,9 +3456,9 @@ fn the_board_carries_no_body_and_a_read_carries_them_all() {
 // 2-peer CRDT convergence property test (DoD)
 // -----------------------------------------------------------------------------
 
-/// A local command issued by a peer, parameterized over a small shared id pool
-/// resolved at replay time (so both peers can name each other's creations after
-/// a sync round).
+/// A local command a peer issues, parameterized over a small shared id pool.
+/// The replay resolves that pool, so both peers can name each other's creations
+/// after a sync round.
 #[derive(Clone, Debug)]
 enum PeerOp {
     Create {
@@ -3667,7 +3668,7 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
             _ => return None,
         },
         PeerOp::UngroupNth { nth: n } => match nth(*n) {
-            // A no-op on a non-group returns no delta and is filtered by `out.update`.
+            // A no-op on a non-group returns no delta, and `out.update` filters it.
             Some(id) => st.handle_command(ToileCommand::UngroupElements { group: id }),
             None => return None,
         },
@@ -3756,8 +3757,8 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
     out.update
 }
 
-/// A viewport wide enough that nothing is culled, so `debug_viewport()` returns
-/// the full derived paint set for cross-peer / rebuild comparison.
+/// A viewport wide enough to cull nothing, so `debug_viewport()` returns the
+/// full derived paint set for cross-peer / rebuild comparison.
 fn wide_viewport() -> crate::logic::index::Viewport {
     crate::logic::index::Viewport {
         center: Point::ZERO,
@@ -3774,14 +3775,14 @@ proptest! {
                           ops_b in proptest::collection::vec(op_strategy(), 0..20)) {
         let mut a = ToileState::new();
         let mut b = ToileState::new();
-        // Distinct canonical identities (as `SessionReady` would seed), so a
-        // `ReactNth` on each peer writes under its own key: concurrent reactions
-        // on one target must both survive.
+        // Distinct canonical identities, as `SessionReady` would seed them. A
+        // `ReactNth` on each peer then writes under its own key, and concurrent
+        // reactions on one target must both survive.
         a.set_user_id(UserId::new());
         b.set_user_id(UserId::new());
 
-        // Interleave: each peer applies its op locally, then both pending deltas
-        // are exchanged, so operations concurrently target a partly-shared state.
+        // Interleave: each peer applies its op locally, then the round exchanges
+        // both pending deltas. Operations therefore target a partly-shared state.
         let rounds = ops_a.len().max(ops_b.len());
         for i in 0..rounds {
             let da = ops_a.get(i).and_then(|op| apply_local(&mut a, op));
@@ -3851,10 +3852,10 @@ proptest! {
         );
     }
 
-    /// The invariant beyond the isolated `SpatialIndex`: every derived cache
-    /// held by `ToileState` (bounds, layers, group unions, routed connectors)
-    /// must equal what a full rebuild from the CRDT snapshot produces. `b` is
-    /// built purely through `apply_remote` (the `rebuild_caches` path), so this
+    /// The invariant beyond the isolated `SpatialIndex`. Every derived cache
+    /// `ToileState` holds (bounds, layers, group unions, routed connectors) must
+    /// equal what a full rebuild from the CRDT snapshot produces. Only
+    /// `apply_remote` feeds `b`, which is the `rebuild_caches` path, so this
     /// asserts incremental == rebuild across the whole command surface.
     #[test]
     fn caches_match_a_full_rebuild(ops in proptest::collection::vec(op_strategy(), 0..40)) {

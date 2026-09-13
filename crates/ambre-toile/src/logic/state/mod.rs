@@ -1,9 +1,9 @@
 //! `ToileState` -- the per-document Toile engine (Logic thread side,).
 //!
-//! Owns the single-board `LoroDoc`, the derived `SpatialIndex` and bounds /
-//! layers caches, and turns typed [`ToileCommand`]s into a [`ToileOutcome`]
-//! (display events + CRDT / ephemeral bytes). The `LoroDoc` never leaves this
-//! thread; it exits only as exported bytes.
+//! Owns the single-board `LoroDoc`, the derived `SpatialIndex` and the bounds /
+//! layers caches. It turns typed [`ToileCommand`]s into a [`ToileOutcome`],
+//! that is display events plus CRDT / ephemeral bytes. The `LoroDoc` never
+//! leaves this thread; it exits only as exported bytes.
 //!
 //! **Phase 0 scope.** Element / connector / stroke lifecycle, z-order, groups
 //! frame membership, local undo/redo, clipboard
@@ -13,9 +13,9 @@
 //! command handled here is complete.
 //!
 //! This module holds the state, the command dispatcher and the remote / undo /
-//! persistence paths; the `impl` is split by responsibility across the sibling
-//! modules below (each reaches the struct's fields, consts and shared helpers via
-//! `super::`):
+//! persistence paths. The `impl` splits by responsibility across the sibling
+//! modules below, and each of them reaches the struct's fields, consts and
+//! shared helpers through `super::`:
 //! - [`elements`] -- element / stroke lifecycle and z-order
 //! - [`groups`] -- grouping, frame membership, the group/frame tree
 //! - [`presentation`] -- slide sequence CRDT + local playback (`toile-presentation`)
@@ -119,11 +119,11 @@ pub struct ToileState {
     /// item per atomic user action (one `doc.commit()` per mutating command).
     undo: UndoManager,
     /// Canonical per-user identifier, seeded from `LogicEvent::SessionReady`
-    /// by the dispatcher. `None` until the session is authenticated. A
-    /// stable `UserId`, NOT `peer` (which is per-session/per-device and only
-    /// mints element ids); used to key this peer's own persisted reactions
-    /// (`toile-reactions`) and to tag outbound presence with a stable
-    /// identity. Same field as `trame-engine`.
+    /// by the dispatcher. `None` until the session carries an authenticated
+    /// user. A stable `UserId`, NOT `peer`, which is per-session / per-device
+    /// and only mints element ids. It keys this peer's own persisted reactions
+    /// (`toile-reactions`) and tags outbound presence with a stable identity.
+    /// Same field as `trame-engine`.
     my_user_id: Option<UserId>,
     /// This session's display name, seeded from `SessionReady` beside the
     /// `UserId` and stamped on every outbound presence sample
@@ -134,15 +134,16 @@ pub struct ToileState {
     /// and the local clock each was last seen at, keyed by canonical `UserId`.
     /// Ephemeral: never in Loro, never persisted, rebuilt from inbound frames.
     /// The local peer's own presence is not stored here (the UI draws its own
-    /// cursor). A peer whose last sample is older than the TTL is dropped, which
-    /// is how a departure travels with no departure signal (`TOILE-185`).
+    /// cursor). The map drops a peer whose last sample is older than the TTL,
+    /// which is how a departure travels with no departure signal
+    /// (`TOILE-185`).
     presence: HashMap<UserId, (PresencePayload, i64)>,
     /// The latest wall clock a local `Presence` command carried, and the only
     /// clock this thread has (`toile-presence`). Monotonic: it never moves
     /// backwards, whatever the machine's own clock does.
     now_ms: i64,
     /// Presentation (focus) mode toggle (`toile-presentation`). Local/per-viewer,
-    /// never in Loro and never synced -- only the slide sequence is shared.
+    /// never in Loro and never synced -- only the slide sequence travels.
     present: bool,
     /// Local playback cursor + focus flag. Momentary-gesture state, like
     /// [`present`](Self::present); reset on `EnterPresent`, clamped by
@@ -158,21 +159,20 @@ pub struct ToileState {
     /// Local role, never in Loro and never synced.
     following: Option<UserId>,
     /// Imports awaiting media-upload confirmations (`toile-media`). An
-    /// import that carries raster media is NOT applied until every blob's real
-    /// blake2b returns from Sync, so the whole import stays one atomic undo group
-    /// Rare and short-lived; dies with the `DocState`. See `state::import`.
+    /// import that carries raster media waits here until every blob's real
+    /// blake2b returns from Sync. The whole import therefore stays one atomic
+    /// undo group. Rare and short-lived; dies with the `DocState`. See
+    /// `state::import`.
     pending_imports: Vec<import::PendingImport>,
-    /// A register was met that this build cannot decode (`SCHEMA-003`). Set by
-    /// the decode helpers, drained at every import; a `Cell` because a board is
-    /// read through `&self` and the read is where the failure is discovered.
+    /// A read met a register this build cannot decode (`SCHEMA-003`). The decode
+    /// helpers set it, and every import drains it. A `Cell`, because a caller
+    /// reads a board through `&self` and the read is where the failure surfaces.
     ///
-    /// A flag rather than a tally: the same unreadable register is met again on
-    /// every later read, so a count would measure how often the board was
-    /// redrawn.
-    ///
-    /// Drained at an import, never at a repaint, so a register first met by a
-    /// display-only read is reported at the next import rather than at once.
-    /// Late, and never wrong: the register is still unreadable.
+    /// * A flag rather than a tally. Every later read meets the same unreadable
+    ///   register, so a count would measure how often the board redrew.
+    /// * An import drains it, a repaint never does. A register a display-only
+    ///   read met first therefore reaches the user at the next import, not at
+    ///   once. Late, and never wrong: the register is still unreadable.
     undecodable: std::cell::Cell<bool>,
 }
 
@@ -187,30 +187,30 @@ impl ToileState {
         Self::from_doc(LoroDoc::new())
     }
 
-    /// A board whose CRDT identity and commit clock are **pinned**, so the same
+    /// A board with a **pinned** CRDT identity and commit clock, so the same
     /// command sequence produces the same bytes twice (`FIXTURE-001`).
     ///
-    /// Two of the three entropy sources of a Toile document are closed here; the
-    /// third, `document_id`, belongs to the caller and is supplied to
-    /// [`export_ambre_plaintext`](Self::export_ambre_plaintext).
+    /// This constructor closes two of the three entropy sources of a Toile
+    /// document. The third, `document_id`, belongs to the caller, who hands it
+    /// to [`export_ambre_plaintext`](Self::export_ambre_plaintext).
     ///
-    /// * **`PeerID`** -- `LoroDoc::new()` draws one at random, and
-    ///   [`peer`](Self::peer) is cached at construction and minted into every
-    ///   [`ElementId`] / [`ConnectorId`], so an unpinned peer changes the
-    ///   board's *content*, not merely its encoding.
+    /// * **`PeerID`** -- `LoroDoc::new()` draws one at random. Construction
+    ///   caches [`peer`](Self::peer) and mints it into every [`ElementId`] /
+    ///   [`ConnectorId`], so an unpinned peer changes the board's *content*, not
+    ///   merely its encoding.
     /// * **Commit timestamps** -- Loro records one per commit unless told not to.
     ///
-    /// Set before the board-scaffolding commit of [`new`](Self::new), so that op
-    /// is attributed to `peer` like every op after it.
+    /// Both land before the board-scaffolding commit of [`new`](Self::new), so
+    /// `peer` owns that op like every op after it.
     ///
     /// **Never for a live document.** Two concurrent writers sharing a `PeerID`
-    /// mint conflicting `OpID`s and corrupt the history; this exists for
+    /// mint conflicting `OpID`s and corrupt the history. This exists for
     /// single-owner, offline, host-side reproduction (a fixture generator, a
     /// deterministic test). The client path is [`new`](Self::new).
     pub fn with_peer(peer: u64) -> Self {
         let doc = LoroDoc::new();
-        // `set_peer_id` before any op: it is the peer the board scaffolding is
-        // attributed to, and every minted element id captures it.
+        // `set_peer_id` before any op: this peer owns the board scaffolding, and
+        // every minted element id captures it.
         doc.set_peer_id(peer)
             .expect("a fresh LoroDoc accepts a peer id");
         // No wall clock in the ops: a recorded timestamp would differ between two
@@ -228,13 +228,14 @@ impl ToileState {
         let _ = board.insert("bg_color", 0xFF1E_1E1Eu32 as i64);
         let _ = board.insert("grid_size", 32.0);
         let _ = board.insert("grid_snap", false);
-        // The schema version is board scaffolding too, and it is written in the
-        // same commit so a board is never persisted without it (`SCHEMA-004`).
+        // The schema version is board scaffolding too, and it rides the same
+        // commit so no board ever persists without it (`SCHEMA-004`).
         schema::stamp(&doc);
         doc.commit();
         let peer = doc.peer_id();
-        // Create the undo manager AFTER the initial commit: the board scaffolding
-        // is document setup, not a user edit, so it must not sit on the stack.
+        // Create the undo manager AFTER the initial commit. The board
+        // scaffolding is document setup, not a user edit, so it must not sit on
+        // the stack.
         let mut undo = UndoManager::new(&doc);
         // Keep every comment write off the undo stack (`TOILE-FEAT-017`): undo
         // reverts what the user drew, never a message a teammate has read.
@@ -265,14 +266,14 @@ impl ToileState {
     // -- session identity -------------------------------------------------
 
     /// Seed the canonical `UserId` from `LogicEvent::SessionReady`. Called
-    /// by the dispatcher once the session is authenticated; idempotent (a
-    /// re-login with the same account is a no-op). Keys this peer's reactions
-    /// (`toile-reactions`) and tags outbound presence.
+    /// by the dispatcher once the session carries an authenticated user;
+    /// idempotent (a re-login with the same account is a no-op). Keys this
+    /// peer's reactions (`toile-reactions`) and tags outbound presence.
     pub fn set_user_id(&mut self, user_id: UserId) {
         self.my_user_id = Some(user_id);
     }
 
-    /// The canonical `UserId` for this session, if the session is authenticated.
+    /// The canonical `UserId` for this session, when a user has signed in.
     pub fn user_id(&self) -> Option<UserId> {
         self.my_user_id
     }
@@ -366,9 +367,9 @@ impl ToileState {
                 keep_sources,
             } => self.boolean_op(op, &ids, keep_sources),
             ToileCommand::ReadDeck => self.read_deck(),
-            // One answer per address the document resolves; an address it does
-            // not carry is answered with nothing, so the element keeps the
-            // placeholder it is already painting (`toile-media`).
+            // One answer per address the document resolves. An address it does
+            // not carry earns no answer, so the element keeps the placeholder it
+            // already paints (`toile-media`).
             ToileCommand::RequestMedia { hashes } => ToileOutcome::display_only(
                 hashes
                     .iter()
@@ -420,9 +421,9 @@ impl ToileState {
             ToileCommand::ExportSvg => self.export_svg_document(),
             // Served by the Logic thread, which holds the base font faces the
             // render walk needs (`toile-pdf-export`, `TOILE-IO-029`). Its
-            // dispatcher intercepts the command before the document lookup, so
-            // this arm is reached only by a caller that drives `ToileState`
-            // directly -- and it answers rather than falling silent.
+            // dispatcher intercepts the command before the document lookup. Only
+            // a caller driving `ToileState` directly therefore lands here, and
+            // this arm answers rather than falling silent.
             ToileCommand::ExportPdf => ToileOutcome::display_only(vec![ToileEvent::ExportFailed(
                 "the deck is exported by the Logic thread, not by the board".to_owned(),
             )]),
@@ -437,8 +438,8 @@ impl ToileState {
                 )])
             }
             ToileCommand::ImportFigma { .. } | ToileCommand::ImportMiro { .. } => {
-                // Figma / Miro converters land in a later interop slice; the board
-                // is untouched until then (atomicity).
+                // Figma / Miro converters land in a later interop slice, and
+                // until then nothing here touches the board (atomicity).
                 ToileOutcome::display_only(vec![ToileEvent::ImportFailed(
                     "Figma / Miro import is not yet available".to_owned(),
                 )])
@@ -468,16 +469,17 @@ impl ToileState {
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
         // A delta can carry a register this build cannot decode just as a
-        // snapshot can, and the user is owed the same word (`SCHEMA-003`).
+        // snapshot can, and the user deserves the same word (`SCHEMA-003`).
         events.extend(self.undecodable_notice());
         events
     }
 
     /// Apply a batch of remote deltas (a server history replay on open) as one
-    /// `import` sweep + a single cache rebuild, so the UI repaints once instead
-    /// of once per delta. Mirrors [`apply_remote`](Self::apply_remote) but
-    /// amortizes the derived-cache rebuild over the whole batch. A failed import
-    /// on one delta is logged and skipped; the surviving deltas still merge.
+    /// `import` sweep plus a single cache rebuild. The UI therefore repaints
+    /// once instead of once per delta. Mirrors
+    /// [`apply_remote`](Self::apply_remote) but amortizes the derived-cache
+    /// rebuild over the whole batch. A delta that fails to import earns a log
+    /// line and a skip; the surviving deltas still merge.
     pub fn apply_remote_batch(&mut self, updates: &[Vec<u8>]) -> Vec<ToileEvent> {
         if updates.is_empty() {
             return Vec::new();
@@ -510,34 +512,40 @@ impl ToileState {
     /// the production importer) and return the display events the UI needs.
     ///
     /// The counterpart of [`export_snapshot`](Self::export_snapshot), and the
-    /// Toile half of `DocState::import_snapshot` -- **production code, ungated**
-    /// (`FIXTURE-007`): the enum method dispatches here for the Toile variant,
-    /// so putting this behind the `fixtures` feature would make an ordinary
-    /// client build fail to compile and take Toile's local restore with it.
+    /// Toile half of `DocState::import_snapshot`. **Production code, ungated**
+    /// (`FIXTURE-007`): the enum method dispatches here for the Toile variant.
+    /// Putting this behind the `fixtures` feature would make an ordinary client
+    /// build fail to compile and take Toile's local restore with it.
     ///
     /// Loro's `import` ingests snapshots and incremental updates alike, so this
-    /// is [`apply_remote`](Self::apply_remote)'s body under the name a loader can
-    /// address uniformly across apps -- which is the whole reason it exists:
-    /// `TrameState::import_snapshot` was already spelled that way, `ToileState`
+    /// is [`apply_remote`](Self::apply_remote)'s body under a name a loader can
+    /// address uniformly across apps. That is the whole reason it exists:
+    /// `TrameState::import_snapshot` already spelled it that way, `ToileState`
     /// spelled it `apply_remote`, and a loader cannot dispatch on two names.
     ///
-    /// One thing it does **not** share with `apply_remote`: it leaves the export
-    /// cursor alone (`TOILE-236`). A restore reads what this client wrote before
-    /// it closed, and the operations it wrote offline have reached no peer. A
-    /// reopen mints a fresh peer id, so those operations are no longer ours by
-    /// the cursor's reckoning, and absorbing them would drop a session's work
-    /// for good. Leaving the cursor put re-offers the restored history on the
-    /// first flush; the relay already holds most of it and drops what it knows.
+    /// * One thing it does **not** share with `apply_remote`: it leaves the
+    ///   export cursor alone (`TOILE-236`). A restore reads what this client
+    ///   wrote before it closed, and the operations it wrote offline reached no
+    ///   peer. A reopen mints a fresh peer id, so the cursor no longer counts
+    ///   those operations as ours. Absorbing them would drop a session's work
+    ///   for good.
+    /// * Leaving the cursor put re-offers the restored history on the first
+    ///   flush. The relay already holds most of it and drops what it knows.
     ///
     /// # Errors
-    /// Every failure of the schema gate: a board written by a newer client
-    /// (`SCHEMA-008`), a migration the registry cannot run, and bytes the CRDT
-    /// engine refuses. On any of them the board is untouched (`SCHEMA-012`) --
-    /// the gate reads the payload in a scratch document precisely so a refusal
-    /// costs the caller nothing.
+    /// Every failure of the schema gate.
+    ///
+    /// * A board a newer client wrote (`SCHEMA-008`).
+    /// * A migration the registry cannot run.
+    /// * Bytes the CRDT engine refuses.
+    ///
+    /// On any of them the board keeps what it held (`SCHEMA-012`). The gate
+    /// reads the payload in a scratch document precisely so a refusal costs the
+    /// caller nothing.
     pub fn import_snapshot(&mut self, payload: &[u8]) -> Result<Vec<ToileEvent>, SchemaError> {
-        // Before a single container is used (`SCHEMA-006`). What comes back is
-        // the payload itself at the current version, or a migrated snapshot.
+        // Before the caller touches a single container (`SCHEMA-006`). What
+        // comes back is the payload itself at the current version, or a migrated
+        // snapshot.
         let payload = schema::gate(payload)?;
         if let Err(e) = self.doc.import(&payload) {
             tracing::warn!("Toile: snapshot import failed: {e}");
@@ -552,20 +560,20 @@ impl ToileState {
     }
 
     /// The schema version this board carries (`SCHEMA-004`), for a report rather
-    /// than for a decision: the fixture manifest records the version its
-    /// artefact was written at.
+    /// than for a decision. The fixture manifest records the version of its own
+    /// artefact.
     ///
     /// A register this build cannot read comes back as
     /// [`SCHEMA_VERSION_ABSENT`](ambre_core::schema::SCHEMA_VERSION_ABSENT)
     /// here. Every path that *decides* anything goes through `schema::gate`,
-    /// which refuses it instead (`SCHEMA-013`); this one is called on a document
-    /// the caller just generated, where the case cannot arise.
+    /// which refuses it instead (`SCHEMA-013`). A caller reaches this one on a
+    /// document it just generated, where the case cannot arise.
     #[must_use]
     pub fn schema_version(&self) -> u32 {
         schema::read_version(&self.doc).unwrap_or(ambre_core::schema::SCHEMA_VERSION_ABSENT)
     }
 
-    /// Record that a register could not be decoded (`SCHEMA-003`).
+    /// Record that the decoder refused a register (`SCHEMA-003`).
     ///
     /// An **empty** register is not a failure: an element with no style carries
     /// no bytes, and that decodes to the default by design. Only a non-empty
@@ -579,8 +587,8 @@ impl ToileState {
     /// Drain the flag into the one event that carries it to the user, or nothing
     /// when every register read cleanly (`SCHEMA-003`).
     ///
-    /// Drained rather than read so the notice is raised once per import instead
-    /// of once per repaint.
+    /// Drained rather than read, so the notice reaches the user once per import
+    /// instead of once per repaint.
     fn undecodable_notice(&mut self) -> Option<ToileEvent> {
         self.undecodable
             .replace(false)
@@ -589,8 +597,8 @@ impl ToileState {
 
     // -- undo / redo --------------------------------------------------
 
-    /// Apply one undo or redo step. The inverse ops are committed by
-    /// `undo()`/`redo()`; reseed the derived caches and broadcast the delta like
+    /// Apply one undo or redo step. `undo()`/`redo()` commit the inverse ops,
+    /// then this method reseeds the derived caches and broadcasts the delta like
     /// any structural edit. A no-op (empty stack) only reports availability.
     fn apply_history(&mut self, undo: bool) -> ToileOutcome {
         let changed = if undo {
@@ -610,9 +618,9 @@ impl ToileState {
     }
 
     /// `DeckChanged` when the deck is no longer `before` (`toile-presentation`).
-    /// Every write that can move the deck without naming it -- a history step, a
-    /// remote delta, a deleted frame -- calls this, because the panel holds no
-    /// authoritative state and would otherwise show a deck nobody has.
+    /// Every write that can move the deck without naming it calls this: a
+    /// history step, a remote delta, a deleted frame. The panel holds no
+    /// authoritative state, and it would otherwise show a deck nobody has.
     pub(super) fn deck_change(&self, before: &[FrameId]) -> Option<ToileEvent> {
         (self.slide_order() != before).then_some(ToileEvent::DeckChanged)
     }
@@ -679,11 +687,11 @@ impl ToileState {
     /// only if that export succeeded (`TOILE-090`).
     ///
     /// An export that fails leaves the cursor where it is, so the next flush
-    /// offers the same range again. Advancing regardless -- what swallowing the
-    /// error with `.ok()` did -- dropped those operations for good: no later
-    /// export would ever carry them, and the two peers stayed apart until
-    /// someone sent a full snapshot. This is the shape Trame's `flush_delta`
-    /// already had (`features/ambre-spec-trame-engine.md`).
+    /// offers the same range again. Advancing regardless, which is what
+    /// swallowing the error with `.ok()` did, dropped those operations for good.
+    /// No later export would ever carry them, and the two peers stayed apart
+    /// until someone sent a full snapshot. This is the shape Trame's
+    /// `flush_delta` already had (`features/ambre-spec-trame-engine.md`).
     fn flush_delta(&mut self) -> Option<Vec<u8>> {
         let current = self.doc.oplog_vv();
         if current == self.exported_vv {
@@ -696,11 +704,11 @@ impl ToileState {
     /// Take the export cursor past `current` -- and every operation the board
     /// holds up to it -- **only** on a successful export (`TOILE-090`).
     ///
-    /// Split out of [`flush_delta`](Self::flush_delta) so the rule can be tested
-    /// against a failure: Loro's exporter has no seam a test can break, and a
-    /// rule about what happens on an error is worth nothing if the error is
-    /// unreachable. An empty successful export still advances the cursor -- the
-    /// range held nothing to broadcast, which is not a failure.
+    /// Split out of [`flush_delta`](Self::flush_delta) so a test can drive the
+    /// rule against a failure. Loro's exporter has no seam a test can break. A
+    /// rule about error handling is worth nothing when no test can reach the
+    /// error. An empty successful export still advances the cursor:
+    /// the range held nothing to broadcast, which is not a failure.
     fn take_delta<E: std::fmt::Debug>(
         cursor: &mut VersionVector,
         current: VersionVector,
@@ -724,16 +732,17 @@ impl ToileState {
     /// peer's own counter where it was.
     ///
     /// Called after an import (a peer's delta, a history replay, a restore). The
-    /// imported operations are not ours to broadcast, so the cursor must clear
+    /// imported operations are not ours to broadcast. The cursor must clear
     /// them, or the next local edit would send a peer its own work back.
     ///
-    /// Our own counter is the exception, and Trame learned it the hard way
-    /// (`features/ambre-spec-trame-engine.md`): every board opens by committing
-    /// its scaffolding under a fresh random peer id, and the first import lands
-    /// before any flush. Swallowing those genesis operations here would make the
-    /// next local delta depend, causally, on operations no other peer holds --
-    /// and a peer that cannot resolve a dependency keeps the edit pending
-    /// forever rather than showing it.
+    /// * Our own counter is the exception, and Trame learned it the hard way
+    ///   (`features/ambre-spec-trame-engine.md`). Every board opens by
+    ///   committing its scaffolding under a fresh random peer id, and the first
+    ///   import lands before any flush.
+    /// * Swallowing those genesis operations here would make the next local
+    ///   delta depend, causally, on operations no other peer holds. A peer that
+    ///   cannot resolve a dependency keeps the edit pending forever rather than
+    ///   showing it.
     fn absorb_imported(&mut self) {
         let ours = self.exported_vv.get(&self.peer).copied();
         self.exported_vv = self.doc.oplog_vv();
@@ -810,10 +819,12 @@ impl ToileState {
 
 #[cfg(test)]
 mod schema_tests {
-    //! The two schema rules that need a live board rather than a payload: a
-    //! refused read must leave the board it refused untouched (`SCHEMA-012`),
-    //! and a register this build cannot decode must reach the user
-    //! (`SCHEMA-003`).
+    //! The two schema rules that need a live board rather than a payload.
+    //!
+    //! * A refused read must leave the board it refused exactly as it was
+    //!   (`SCHEMA-012`).
+    //! * A register this build cannot decode must reach the user
+    //!   (`SCHEMA-003`).
 
     use kurbo::{Point, Size};
     use loro::{ExportMode, LoroDoc};
@@ -874,9 +885,9 @@ mod schema_tests {
         );
     }
 
-    /// `SCHEMA-003`: a style register this build cannot decode is drawn plain --
-    /// unavoidably -- but the user is told, instead of reading a document that
-    /// looks intact and is not.
+    /// `SCHEMA-003`: the painter unavoidably draws a style register this build
+    /// cannot decode plain. The user hears about it, instead of reading a
+    /// document that looks intact and is not.
     #[test]
     fn a_register_that_cannot_be_decoded_reaches_the_user() {
         let source = board_with_one_rect();
@@ -900,7 +911,7 @@ mod schema_tests {
                 .any(|e| matches!(e, ToileEvent::UndecodableRecords)),
             "an unreadable register must be reported, not defaulted in silence"
         );
-        // Raised once per import, not once per repaint: the flag is drained.
+        // Once per import, not once per repaint: the read drains the flag.
         assert!(st.undecodable_notice().is_none());
     }
 
@@ -925,8 +936,9 @@ mod cursor_tests {
 
     use super::ToileState;
 
-    /// `TOILE-090`: a failed export keeps the cursor where it is, so the range
-    /// is offered again; a successful one takes it past everything exported.
+    /// `TOILE-090`: a failed export keeps the cursor where it is, so the next
+    /// flush offers the range again. A successful one takes the cursor past
+    /// everything it exported.
     #[test]
     fn a_failed_export_keeps_the_range_for_the_next_flush() {
         // A cursor the board has actually reached, so the two vectors differ
@@ -954,8 +966,8 @@ mod cursor_tests {
         assert_eq!(cursor, current, "a successful export advances the cursor");
     }
 
-    /// An export that succeeds with nothing in it still advances the cursor:
-    /// an empty range is not a failure, and there is nothing to offer again.
+    /// An export that succeeds with nothing in it still advances the cursor.
+    /// An empty range is not a failure, and it holds nothing to offer again.
     #[test]
     fn an_empty_export_is_not_a_failure() {
         let st = ToileState::new();

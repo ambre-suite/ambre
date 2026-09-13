@@ -1,16 +1,16 @@
 //! Toile (whiteboard) IPC contract (`ambre-spec-toile-schema.md`).
 //!
-//! Mirrors the Trame split: the typed command / event / display data-plane types
-//! live here in `ambre-bus` so the `ambre-logic` dispatcher can match on
-//! `(DocState, AppCommand::Toile)` without a dependency cycle (the engine crate
-//! `ambre-toile` depends on `ambre-bus`, never the reverse). The stateful engine
+//! Mirrors the Trame split. The typed command / event / display data-plane types
+//! live here in `ambre-bus`, so the `ambre-logic` dispatcher can match on
+//! `(DocState, AppCommand::Toile)` without a dependency cycle. The engine crate
+//! `ambre-toile` depends on `ambre-bus`, never the reverse. The stateful engine
 //! (`ToileState`) and its `ToileOutcome` wrapper stay in `ambre-toile`, exactly
 //! as `TrameState` / `TrameOutcome` stay in `ambre-trame`.
 //!
-//! These are pure data: identity, element kinds, the single per-element style
-//! register, freehand strokes, connector anchoring, the culled `DisplayViewport`,
-//! and the command / event enums. No `LoroDoc` handle, no `unsafe`, US-keyboard
-//! characters only.
+//! * Pure data only: identity, element kinds, the single per-element style
+//!   register, freehand strokes, connector anchoring, the culled
+//!   `DisplayViewport`, and the command / event enums.
+//! * No `LoroDoc` handle, no `unsafe`, US-keyboard characters only.
 
 use std::collections::BTreeMap;
 
@@ -35,7 +35,7 @@ use serde::{Deserialize, Serialize};
 pub struct ElementId(pub String);
 
 /// Stable identity of a connector. Same minting scheme as [`ElementId`]; a
-/// distinct type so the compiler rejects passing one where the other is meant.
+/// distinct type so the compiler rejects one wherever the other belongs.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct ConnectorId(pub String);
 
@@ -108,9 +108,8 @@ impl NodeId {
 /// Discriminant of a board node. Also tags a [`DisplayElement`].
 ///
 /// `Drawing` and `Group` are valid *types* but are **not** creatable via
-/// `CreateElement` (`toile-elements`): a stroke is born only through
-/// `CommitStroke`, a group only through `GroupElements`. `handle_command` rejects
-/// such a `kind`.
+/// `CreateElement` (`toile-elements`): only `CommitStroke` creates a stroke, and
+/// only `GroupElements` creates a group. `handle_command` rejects such a `kind`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum ElementKind {
     Sticky,
@@ -192,8 +191,8 @@ impl ShapeKind {
 // =============================================================================
 
 /// Font attributes for sticky / text bodies. `underline` / `strikethrough` are
-/// the text decorations, matching Trame's cell font attributes so the shared
-/// format controls (`ambre_chrome`) drive the same field set in both apps.
+/// the text decorations, and they match Trame's cell font attributes. The shared
+/// format controls (`ambre_chrome`) therefore drive one field set in both apps.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct FontSpec {
     pub family: String,
@@ -226,13 +225,15 @@ pub struct Shadow {
     pub blur: f32,
 }
 
-/// The whole visual style of an element, stored as **one** postcard-encoded LWW
-/// register (`toile-styles`) so a fill update racing a stroke update
-/// cannot leave a half-applied tear. Schema note: postcard decodes the blob whole
-/// and does NOT tolerate a missing or extra field, so ANY layout change (a new
-/// field here or in `FontSpec`) makes a blob written by an older binary fall back
-/// to `default()` (`from_bytes` -> `unwrap_or_default`). Acceptable pre-1.0 (no
-/// persisted-format guarantee yet); a versioned register is owed before GA.
+/// The whole visual style of an element, held as **one** postcard-encoded LWW
+/// register (`toile-styles`). One register means a fill update racing a stroke
+/// update cannot leave a half-applied tear.
+///
+/// Schema note: postcard decodes the blob whole and tolerates no missing or
+/// extra field. ANY layout change here or in `FontSpec` therefore makes a blob
+/// from an older binary fall back to `default()` (`from_bytes` ->
+/// `unwrap_or_default`). That is acceptable pre-1.0, since no persisted-format
+/// guarantee holds yet. GA needs a versioned register.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct ElementStyle {
     pub fill: Option<u32>, // ARGB, None = no fill
@@ -269,23 +270,23 @@ impl Default for ElementStyle {
 pub const STICKY_DEFAULT_FILL: u32 = 0xFFFE_F08A;
 
 /// Corner radius (world units) of a sticky-note card. A sticky is a plain
-/// rectangle (Miro-style), so this is zero; kept as a named constant so the
-/// card's shape is spec-anchored and easy to revisit.
+/// rectangle (Miro-style), so this is zero. A named constant keeps the card's
+/// shape spec-anchored and easy to revisit.
 pub const STICKY_CORNER: f32 = 0.0;
 
-/// Sentinel `FontSpec.size` meaning "auto-size to the note" for a sticky: the
-/// renderer computes the body size from the card bounds instead of a fixed value
-/// (`toile-styles`). A positive size set from the style inspector overrides
+/// Sentinel `FontSpec.size` meaning "auto-size to the note" for a sticky. The
+/// renderer then computes the body size from the card bounds, not from a fixed
+/// value (`toile-styles`). A positive size from the style inspector overrides
 /// it.
 pub const STICKY_AUTO_FONT_SIZE: f32 = 0.0;
 
 impl ElementStyle {
     /// The style seeded at element birth (`toile-styles`, "Per-kind
-    /// defaults"). Every kind uses [`ElementStyle::default`] EXCEPT `sticky`,
-    /// which gets the sticky yellow, no border, `corner = 0` (a plain card) and
-    /// the auto-size font sentinel so a fresh, still-empty note is immediately
-    /// visible and its text tracks the card size. The Sticky tool overrides the
-    /// fill per placement via `CreateElement.fill`.
+    /// defaults"). Every kind uses [`ElementStyle::default`] EXCEPT `sticky`. A
+    /// sticky gets the sticky yellow, no border, `corner = 0` (a plain card) and
+    /// the auto-size font sentinel. A fresh, still-empty note is therefore
+    /// visible at once, and its text tracks the card size. The Sticky tool
+    /// overrides the fill per placement via `CreateElement.fill`.
     pub fn for_kind(kind: ElementKind) -> Self {
         match kind {
             ElementKind::Sticky => Self {
@@ -304,17 +305,17 @@ impl ElementStyle {
     }
 
     /// Serialize for the element's `"style"` binary register. Infallible in
-    /// practice (a fixed, all-owned struct); a failure is logged and yields an
+    /// practice (a fixed, all-owned struct); a failure logs a line and yields an
     /// empty blob, which decodes back to `default()`.
     pub fn to_bytes(&self) -> Vec<u8> {
         postcard::to_allocvec(self).unwrap_or_default()
     }
 
-    /// Decode a `"style"` register, saying so when it cannot be read.
+    /// Decode a `"style"` register, saying so when the bytes will not decode.
     ///
-    /// `None` is a register this build does not understand -- a layout written
-    /// by a newer client -- and the caller owes the user a word about it
-    /// (`SCHEMA-003`). An **empty** register is not that case: an element with
+    /// `None` marks a register this build does not understand, that is a layout
+    /// a newer client wrote. The caller then owes the user a word about it
+    /// (`SCHEMA-003`). An **empty** register is not that case. An element with
     /// no style carries no bytes and reads as the default, so it comes back as
     /// `Some(default)`.
     pub fn try_from_bytes(bytes: &[u8]) -> Option<Self> {
@@ -330,11 +331,11 @@ impl ElementStyle {
 // =============================================================================
 
 /// Where a link on an element goes. Three navigations and no more: an address,
-/// a place on this board, and another document; anything else is a command, and
+/// a place on this board, and another document. Anything else is a command, and
 /// a command belongs to a menu (`toile-links` section 5).
 ///
-/// The document arm carries its type beside its id, like an embed's does: a
-/// route cannot be built without it, and asking the server for it turns a
+/// The document arm carries its type beside its id, like an embed's does.
+/// Without the type no route builds, and asking the server for it turns a
 /// follow into a round trip that can fail.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LinkTarget {
@@ -443,10 +444,10 @@ impl Viewport {
 // (`toile-elements`)
 // =============================================================================
 
-/// One captured CRDT scalar field value. Covers the four `LoroValue` leaf kinds
-/// an element / connector map stores (`ambre-spec-toile-schema.md`); container
-/// fields (a group's `children` list) are never captured here -- membership is
-/// remapped to slots.
+/// One captured CRDT scalar field value. It covers the four `LoroValue` leaf
+/// kinds an element / connector map stores (`ambre-spec-toile-schema.md`). A
+/// container field, such as a group's `children` list, never travels here: the
+/// capture maps membership onto slots instead.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ClipValue {
     F64(f64),
@@ -484,10 +485,10 @@ pub struct ClipMembership {
 
 /// Self-contained, id-free snapshot of a selection produced by `CopyElements`
 /// (`toile-clipboard`). Portable across boards and sessions (postcard
-/// round-trips for the OS clipboard). Media are referenced by content hash only
-/// (blobs stay on MinIO, `toile-media`); a `doc_embed` copies the
-/// same `document_id` (a second reference to the one nested document, not a
-/// clone).
+/// round-trips for the OS clipboard). The payload names media by content hash
+/// only, and the blobs stay on MinIO (`toile-media`). A `doc_embed` copies the
+/// same `document_id`, that is a second reference to the one nested document,
+/// not a clone.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClipboardPayload {
     pub elements: Vec<ClipElement>,
@@ -502,7 +503,7 @@ pub struct ClipboardPayload {
 // =============================================================================
 
 /// Type-specific seed passed to `CreateElement`. The variant must match `kind`
-/// (a mismatch is rejected).
+/// (the handler rejects a mismatch).
 #[derive(Clone, Debug)]
 pub enum InitContent {
     None,
@@ -558,7 +559,7 @@ pub struct FindResults {
 /// codepoints, then insert `insert`". Indices are loro unicode-codepoint
 /// positions; the engine clamps them to the current length. This is the
 /// `TextDelta` the specs defer for element text -- introduced here for notes
-/// only, where char-CRDT convergence is required (`toile-text-editing`).
+/// only, where the spec demands char-CRDT convergence (`toile-text-editing`).
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct TextDelta {
     pub at: usize,
@@ -568,8 +569,8 @@ pub struct TextDelta {
 
 /// One user's persisted reaction on a target (`toile-reactions`): an
 /// emoji OR a signed vote weight, plus a wall-clock `ts` kept only as a display
-/// tiebreak. The LWW on a user's own key is handled by Loro (the map key is the
-/// canonical `UserId`), not by this `ts`. Postcard-encoded into the reactions
+/// tiebreak. Loro handles the LWW on a user's own key, since the map key is the
+/// canonical `UserId`. This `ts` does not. Postcard-encoded into the reactions
 /// sub-map value (`toile-reactions`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reaction {
@@ -578,7 +579,7 @@ pub struct Reaction {
 }
 
 /// The two reaction flavours (`toile-reactions`): a free-form emoji or
-/// a signed vote weight (e.g. `+1` / `-1` / a weighted ballot).
+/// a signed vote weight (for example `+1` / `-1` / a weighted ballot).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ReactionKind {
     Emoji(String),
@@ -644,8 +645,8 @@ pub struct CommentThread {
 }
 
 /// One pin of the derived viewport (`toile-comments`, `TOILE-026`). Carries
-/// where the pin sits, how many messages the thread holds and whether it is
-/// resolved -- and no body (`TOILE-205`).
+/// where the pin sits, how many messages the thread holds and the resolved
+/// flag -- and no body (`TOILE-205`).
 ///
 /// `at` is a world point: the anchor point itself, or the top-right corner of
 /// the anchored element, which the pin follows through every move. The painter
@@ -660,10 +661,10 @@ pub struct CommentPin {
 
 /// One row of the board-wide thread list (`toile-comments`). The panel shows
 /// every thread, including one whose anchor element is gone
-/// (`TOILE-FEAT-016`), so this list is read from the whole document and not
-/// from the culled viewport. `preview` is the opening message, so a reader
-/// recognises the thread before opening it; the rest of the conversation
-/// arrives only when the thread is opened (`TOILE-205`).
+/// (`TOILE-FEAT-016`). This list therefore reads the whole document, not the
+/// culled viewport. `preview` is the opening message, so a reader recognises
+/// the thread before opening it. The rest of the conversation arrives only when
+/// the reader opens the thread (`TOILE-205`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct CommentSummary {
     pub id: ThreadId,
@@ -678,8 +679,8 @@ pub struct CommentSummary {
 // -----------------------------------------------------------------------------
 
 /// One frame the deck panel lists (`toile-presentation`). `name` is the frame's
-/// title, empty until the user names one: the panel labels an unnamed frame
-/// from its rank, which is a presentation concern and stays out of the engine.
+/// title, empty until the user names one. The panel then labels an unnamed
+/// frame from its rank, a presentation concern that stays out of the engine.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DeckFrame {
     pub id: FrameId,
@@ -688,8 +689,8 @@ pub struct DeckFrame {
 
 /// The board's frames, split by whether the deck names them
 /// (`toile-presentation`): the answer to a [`ReadDeck`](ToileCommand::ReadDeck).
-/// `slides` is the deck in playback order, and a slide whose frame is gone is
-/// not in it -- the deck holds only live frames (`TOILE-FEAT-027`). `off_deck`
+/// `slides` is the deck in playback order. A slide whose frame is gone drops
+/// out, so the deck holds only live frames (`TOILE-FEAT-027`). `off_deck`
 /// is every other frame, in paint order, so the panel can offer them for adding
 /// without deriving an order of its own.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -720,10 +721,10 @@ pub enum Direction {
 /// (`toile-elements section 1.7`).
 ///
 /// The six alignments put every box on one edge or centre line of the
-/// selection's union box; the two distributions pin the extreme boxes and
+/// selection's union box. The two distributions pin the extreme boxes and
 /// equalize the gaps between the rest. Distinct from [`Align`], which is a
-/// persisted auto-layout rule on a frame: this one is a one-shot batch of
-/// coordinates and the document keeps no trace of it.
+/// persisted auto-layout rule on a frame. This one is a one-shot batch of
+/// coordinates, and the document keeps no trace of it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AlignOp {
     Left,
@@ -746,10 +747,10 @@ pub enum Align {
     SpaceBetween,
 }
 
-/// How a child is sized on the main axis (`toile-auto-layout`). `Hug` and
-/// `Fill` are the Figma resize modes; from the pure solver's view `Hug` ==
-/// `Fixed` (the frame rect is an input, so "hug content" changes nothing about
-/// the children).
+/// How the solver sizes a child on the main axis (`toile-auto-layout`). `Hug`
+/// and `Fill` are the Figma resize modes. From the pure solver's view `Hug` ==
+/// `Fixed`, since the frame rect is an input and "hug content" changes nothing
+/// about the children.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Sizing {
     Hug,
@@ -759,8 +760,8 @@ pub enum Sizing {
 
 /// Auto-layout spec carried by a frame (`toile-auto-layout`). Serialized
 /// with `postcard` into the frame element's `autolayout` CRDT register (absent =
-/// free positioning). The spec is shared design intent; the solved positions are
-/// derived, never persisted (`toile-auto-layout`).
+/// free positioning). The spec carries shared design intent. The solver derives
+/// the positions and never persists them (`toile-auto-layout`).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AutoLayout {
     /// Main-axis flow.
@@ -778,7 +779,7 @@ pub struct AutoLayout {
 /// Per-viewer presentation playback (`toile-presentation`). Purely local,
 /// momentary-gesture state: which slide this viewer is on and whether focus
 /// (present) mode hides the chrome. Never a CRDT value and never synced -- only
-/// the slide *sequence* (which frames, in what order) is shared
+/// the slide *sequence* (which frames, in what order) travels between peers
 /// (`toile-presentation`). Mirrors the durable-intent vs
 /// momentary-gesture split already used for presence (`toile-presence`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -795,7 +796,7 @@ pub struct PlaybackState {
 
 /// Animatable properties of one element captured for a slide
 /// (`toile-presentation`). A frame's snapshot holds one of these per
-/// declared child, in `children` order. Pure data: it lives here so the enriched
+/// declared child, in `children` order. Pure data. It lives here so the enriched
 /// [`SlideChange`] event can carry both frame snapshots across `AppEvent::Toile`
 /// to the render thread, which owns no board state. The `smart_animate` solver
 /// that consumes these stays in the engine (`ambre_toile::logic::animate`).
@@ -833,7 +834,7 @@ impl FrameSnapshot {
 /// pass needs to glide to the new slide and Smart Animate its content
 /// (`toile-presentation`). The Logic thread owns the
 /// board, so it captures the two frame snapshots and the target frame rect here
-/// in one shot; the UI holds no board state and cannot derive them itself. Local
+/// in one shot. The UI holds no board state and cannot derive them itself. Local
 /// view state, never crosses the wire.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SlideChange {
@@ -872,10 +873,10 @@ pub enum ToileCommand {
         content: InitContent,
         /// Optional creation-time override of the seeded `style.fill` (ARGB). The
         /// engine seeds a per-kind default style at birth (sticky = yellow,
-        /// others = white); `Some(argb)` overwrites just that fill, the rest of
-        /// the default is kept. The Sticky tool uses it to place a note in the
-        /// picked palette colour atomically (one element, one undo item). `None`
-        /// keeps the per-kind default. See `toile-styles`.
+        /// others = white). `Some(argb)` overwrites just that fill and leaves
+        /// the rest of the default alone. The Sticky tool uses it to place a
+        /// note in the picked palette colour atomically (one element, one undo
+        /// item). `None` keeps the per-kind default. See `toile-styles`.
         fill: Option<u32>,
     },
     MoveElements {
@@ -883,14 +884,14 @@ pub enum ToileCommand {
         delta: Vec2,
     },
     /// Align or distribute a selection (`toile-elements section 1.7`). One
-    /// batch, one undo item: the handler computes every translation from the
-    /// boxes of the named nodes and writes them under a single commit, so no
-    /// peer ever sees half an alignment.
+    /// batch, one undo item. The handler computes every translation from the
+    /// boxes of the named nodes, then writes them under a single commit. No
+    /// peer therefore ever sees half an alignment.
     ///
     /// `ids` are the selected nodes, not their leaves: a group aligns by its own
-    /// box and carries its subtree along. An id nobody minted is skipped, and a
-    /// locked element takes no part -- neither moved nor counted in the union
-    /// (`TOILE-234`).
+    /// box and carries its subtree along. The handler skips an id nobody minted,
+    /// and a locked element takes no part -- it neither moves nor counts in the
+    /// union (`TOILE-234`).
     AlignElements {
         ids: Vec<ElementId>,
         op: AlignOp,
@@ -904,13 +905,13 @@ pub enum ToileCommand {
         radians: f64,
     },
     /// Ask for the pixels behind one or more media addresses
-    /// (`toile-media`). Sent by the UI thread when the walk meets a picture
-    /// whose pixels it does not hold, so only what is on screen crosses the
-    /// bus: a board of two hundred photographs pays for the ones in view.
+    /// (`toile-media`). The UI thread sends it when the walk meets a picture
+    /// whose pixels it does not hold. Only what is on screen therefore crosses
+    /// the bus: a board of two hundred photographs pays for the ones in view.
     ///
-    /// Read-only, and answered per address with `MediaDecoded`. An address the
-    /// document does not carry is answered with nothing -- the element keeps its
-    /// placeholder, which is what it was already painting.
+    /// The command only reads, and the board answers it per address with
+    /// `MediaDecoded`. It answers an address the document does not carry with
+    /// nothing, and the element keeps the placeholder it already paints.
     RequestMedia {
         hashes: Vec<String>,
     },
@@ -923,11 +924,11 @@ pub enum ToileCommand {
     },
     /// Replace the plaintext body of a sticky / text element
     /// (`toile-text-editing`). Phase 0 stores the body as a single LWW string
-    /// field, so a text edit is a full-body overwrite -- the inline Parley editor
+    /// field, so a text edit is a full-body overwrite. The inline Parley editor
     /// holds the authoritative buffer and commits the final string here. The
     /// char-wise `LoroText` + `TextDelta` upgrade (a `EditText { id, delta }`
-    /// variant) is a later slice (see the `DisplayGeom::Text` note). A non-text
-    /// element id is rejected.
+    /// variant) is a later slice (see the `DisplayGeom::Text` note). The handler
+    /// rejects a non-text element id.
     SetText {
         id: ElementId,
         text: String,
@@ -951,7 +952,7 @@ pub enum ToileCommand {
         ids: Vec<ElementId>,
     },
     /// Drop a group's binding, re-parenting its children to the group's own
-    /// parent. The children survive; only the group node is removed. One undo
+    /// parent. The children survive, and only the group node goes away. One undo
     /// item.
     UngroupElements {
         group: ElementId,
@@ -1016,9 +1017,9 @@ pub enum ToileCommand {
     },
     /// Set (or clear, with `None`) a frame's auto-layout spec
     /// (`toile-auto-layout`). The spec is a single LWW CRDT register on the
-    /// frame element; the solved child positions are derived on render, never
-    /// persisted (`toile-auto-layout`). Convergent and undoable; a missing /
-    /// non-frame id is a rejected no-op.
+    /// frame element, and the renderer derives the child positions afresh and
+    /// never persists them (`toile-auto-layout`). Convergent and undoable; a
+    /// missing / non-frame id is a rejected no-op.
     SetAutoLayout {
         frame: FrameId,
         layout: Option<AutoLayout>,
@@ -1137,8 +1138,8 @@ pub enum ToileCommand {
         style: ElementStyle,
     },
     /// Overwrite an arrow's caption. The whole caption travels, and the handler
-    /// diffs it into the `label` char-CRDT, so two peers captioning one arrow
-    /// converge character by character instead of one body winning
+    /// diffs it into the `label` char-CRDT. Two peers captioning one arrow
+    /// therefore converge character by character, instead of one body winning
     /// (`toile-connectors`).
     SetConnectorLabel {
         id: ConnectorId,
@@ -1226,17 +1227,17 @@ pub enum ToileCommand {
     /// which the UI thread turns into a browser download (`TOILE-IO-085`).
     ExportSvg,
     /// Render the deck to a PDF, one page per slide, and hand the bytes back
-    /// (`toile-pdf-export`). Read-only, like [`ExportSvg`](Self::ExportSvg), and
-    /// answered the same way -- but the render walk needs the base font faces the
-    /// Main thread fetched at boot, so this one is served by the Logic thread
-    /// itself rather than by the board alone. Answered by
+    /// (`toile-pdf-export`). It only reads, like [`ExportSvg`](Self::ExportSvg),
+    /// and it answers the same way. The render walk needs the base font faces
+    /// the Main thread fetched at boot. The Logic thread therefore serves this
+    /// one, not the board alone. Answered by
     /// [`ExportComplete`](ToileEvent::ExportComplete), or by
     /// [`ExportFailed`](ToileEvent::ExportFailed) when there is no page to draw
     /// or no font to draw it with.
     ExportPdf,
     /// Write the whole board to a native `.ambre` file and hand the bytes back
-    /// (`ambre-spec-docfile.md`). Read-only, and served by the Logic thread
-    /// rather than by the board: the container's header carries the document's
+    /// (`ambre-spec-docfile.md`). It only reads, and the Logic thread serves it
+    /// rather than the board. The container's header carries the document's
     /// identity, which the board does not know -- only the registry that keyed
     /// it does. Answered by [`ExportComplete`](ToileEvent::ExportComplete).
     ///
@@ -1290,11 +1291,11 @@ impl ToileCommand {
     /// Whether this command can change the board's shared CRDT state
     /// (`architecture`).
     ///
-    /// Only the commands documented above as local-only or read-only are listed
-    /// here; everything else is treated as mutating. That is the safe direction
-    /// for a UX gate -- a new variant left unclassified is withheld from a
-    /// viewer rather than wrongly offered, and the server rejects the write
-    /// regardless.
+    /// This list holds only the commands documented above as local-only or
+    /// read-only. Everything else counts as mutating. That is the safe
+    /// direction for a UX gate. An unclassified new variant stays out of a
+    /// viewer's reach rather than reaching it wrongly, and the server rejects
+    /// the write regardless.
     pub fn is_mutating(&self) -> bool {
         !matches!(
             self,
@@ -1336,14 +1337,15 @@ impl ToileCommand {
 /// (`toile-presence`): pointer position, current selection, an in-flight
 /// stroke, and/or a laser point. All fields are optional so a bare cursor move
 /// need not resend the selection. Postcard-encoded into the `SendEphemeral`
-/// payload. Identity is deliberately NOT carried here: the receiver keys presence
-/// off the sender's canonical `UserId`, resolved from the authenticated `pub_key`
-/// in `ambre-sync`, so a peer cannot spoof another user's cursor.
+/// payload. This payload deliberately carries NO identity. The receiver keys
+/// presence off the sender's canonical `UserId`, which `ambre-sync` resolves
+/// from the authenticated `pub_key`, so a peer cannot spoof another user's
+/// cursor.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PresencePayload {
     /// The sender's display name, cosmetic and forgeable
-    /// (`1-Foundations/ambre-spec-presence.md`, `PRESENCE-004`): it labels a
-    /// cursor and decides neither identity, nor colour, nor permission -- both
+    /// (`1-Foundations/ambre-spec-presence.md`, `PRESENCE-004`). It labels a
+    /// cursor and decides neither identity, nor colour, nor permission. Both
     /// come from the `UserId` the transport resolved. `None` falls back to a
     /// short handle derived from that id.
     pub name: Option<String>,
@@ -1370,9 +1372,9 @@ pub struct PresencePayload {
 /// A remote peer's latest presence, keyed by the canonical `UserId`
 /// (`toile-presence`). The UI derives the peer color / name label by
 /// hashing `user_id` with the shared cross-app algorithm
-/// (`ambre_draw::peer::peer_color`), so a collaborator keeps the same color across
-/// Prose, Trame and Toile. Emitted as `ToileEvent::PeerPresence`; the render side
-/// is `toile-presence`'s overlay pass.
+/// (`ambre_draw::peer::peer_color`). A collaborator therefore keeps the same
+/// color across Prose, Trame and Toile. Emitted as `ToileEvent::PeerPresence`;
+/// the render side is `toile-presence`'s overlay pass.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PresenceUpdate {
     pub user_id: UserId,
@@ -1439,10 +1441,10 @@ pub enum ToileEvent {
     /// The whole live peer set to render, each entry keyed by the canonical
     /// `UserId` (`toile-presence`, `PRESENCE-009`). Ephemeral, never persisted.
     ///
-    /// The set, not one peer: the view replaces its mirror with it, so a peer
-    /// who stopped sending is an absent entry and stops being painted, with no
-    /// departure signal anywhere in the workspace (`TOILE-UI-075`,
-    /// `TOILE-185`).
+    /// The set, not one peer: the view replaces its mirror with it. A peer who
+    /// stopped sending therefore leaves the set, and the overlay pass stops
+    /// painting it. No departure signal travels anywhere in the workspace
+    /// (`TOILE-UI-075`, `TOILE-185`).
     PeerPresence(Vec<PresenceUpdate>),
     /// Local undo/redo stack availability, driving the chrome affordances
     /// (`toile-undo`).
@@ -1455,7 +1457,7 @@ pub enum ToileEvent {
     /// `toile-presentation` camera pass consumes to glide + Smart Animate. Local view state:
     /// emitted by the playback commands, never crosses the wire.
     SlideChanged(SlideChange),
-    /// Presentation (focus) mode was entered (`true`) or left (`false`)
+    /// The viewer entered (`true`) or left (`false`) presentation (focus) mode
     /// (`toile-presentation`). Local view state, like
     /// [`SlideChanged`](Self::SlideChanged).
     PresentModeChanged(bool),
@@ -1464,8 +1466,9 @@ pub enum ToileEvent {
     /// reflects it. Local view state.
     PresentBroadcastChanged(bool),
     /// This viewer's follow target changed (`toile-presentation`, "Follow
-    /// presenter"): `Some(u)` = now following `u`, `None` = stopped following
-    /// (e.g. after taking control with a manual navigation). Local view state.
+    /// presenter"). `Some(u)` = now following `u`, `None` = stopped following
+    /// (for example after taking control with a manual navigation). Local view
+    /// state.
     FollowingChanged(Option<UserId>),
     /// A target's reaction set changed (`toile-reactions`): the UI
     /// re-reads the derived tally for this target. Emitted on a local `React`; the
@@ -1498,30 +1501,34 @@ pub enum ToileEvent {
     DeckChanged,
     /// A foreign-file import applied successfully
     /// (`toile-import-export`). Carries the lossy-import summary the UI
-    /// surfaces: how many elements landed and which unsupported constructs were
-    /// dropped. The whole import is one undo item (`toile-import-export`).
+    /// surfaces: how many elements landed and which unsupported constructs the
+    /// importer left behind. The whole import is one undo item
+    /// (`toile-import-export`).
     ImportReport {
         imported: usize,
         skipped: Vec<String>,
     },
     /// A foreign-file import aborted before touching the board (a parse error, a
-    /// safety-limit breach, or a media upload failure): the board is unchanged
-    /// (`toile-import-export`, atomicity). Carries a human-facing reason.
+    /// safety-limit breach, or a media upload failure). The board still holds
+    /// what it held (`toile-import-export`, atomicity). Carries a human-facing
+    /// reason.
     ImportFailed(String),
-    /// The board was written by a newer client and was refused whole
-    /// (`SCHEMA-008`): nothing was applied, and the board on screen is the one
-    /// that was already open. Carries the reason in the user's terms -- a
-    /// refusal the user is not told about is indistinguishable from a board that
-    /// simply failed to load.
+    /// A newer client wrote the board, and the gate refused it whole
+    /// (`SCHEMA-008`). Nothing reached the state, and the board on screen is the
+    /// one the user already had open. Carries the reason in the user's terms. A
+    /// refusal nobody explains looks exactly like a board that simply failed to
+    /// load.
     DocumentRefused(String),
-    /// At least one record in the board could not be decoded and was drawn with
-    /// its default style instead (`SCHEMA-003`). A fact rather than a count: the
-    /// same unreadable register is met again on every later read, so any number
-    /// reported here would be an artefact of how often the board was redrawn.
+    /// The reader could not decode at least one record in the board, and it drew
+    /// that record with its default style instead (`SCHEMA-003`). A fact rather
+    /// than a count: every later read meets the same unreadable register again.
+    /// Any number here would therefore measure how often the board redrew,
+    /// nothing more.
     UndecodableRecords,
     /// An export produced nothing (`toile-pdf-export`): a board with no content,
-    /// or a session whose fonts have not landed yet. The board is unchanged, so
-    /// without a word the user cannot tell the refusal from a lost click.
+    /// or a session whose fonts have not landed yet. The board still holds what
+    /// it held, so without a word the user cannot tell the refusal from a lost
+    /// click.
     ExportFailed(String),
     /// An export produced a file (`toile-import-export`). The Logic thread holds
     /// the board, so it serializes the bytes; the UI thread owns the DOM, so it
@@ -1550,14 +1557,15 @@ pub struct DisplayViewport {
     /// Derived reaction tallies (`toile-reactions`), keyed by target,
     /// for the visible, still-existing targets that carry at least one reaction.
     /// Derived on read
-    /// (never stored in the CRDT); a deleted target's orphan entries are skipped.
+    /// (never stored in the CRDT); the derivation skips a deleted target's
+    /// orphan entries.
     /// The reaction badge pass paints one chip row per entry. A `BTreeMap` (not
     /// `HashMap`) so iteration order is deterministic -- the derived viewport
     /// must equal a full rebuild byte-for-byte (convergence tests).
     pub reactions: BTreeMap<TargetId, ReactionTally>,
     /// The comment pins to paint (`toile-comments`, `TOILE-026`): one entry per
     /// thread whose anchor resolves inside this camera. Message bodies never
-    /// ride here -- a thread is read when it is opened (`TOILE-205`) -- and a
+    /// ride here: the reader fetches a thread when it opens one (`TOILE-205`). A
     /// thread whose anchor element is gone carries no pin (`TOILE-025`).
     /// Ordered by thread id, so the derived viewport equals a full rebuild.
     pub pins: Vec<CommentPin>,
@@ -1586,10 +1594,10 @@ pub struct DisplayElement {
     pub link: Option<LinkTarget>,
     /// The immediate enclosing group node, if this element is a group member
     /// (`toile-groups`). `None` for a top-level
-    /// element. Group-selection resolution is a pure-UI concern (walk this edge
-    /// upward through the group chain to the top-most enclosing group), so the
-    /// display carries the edge rather than a command round-trip; a group node
-    /// itself carries its own parent group here.
+    /// element. Group-selection resolution is a pure-UI concern: walk this edge
+    /// upward through the group chain to the top-most enclosing group. The
+    /// display therefore carries the edge, not a command round-trip. A group
+    /// node itself carries its own parent group here.
     pub group: Option<ElementId>,
 }
 
@@ -1605,10 +1613,10 @@ pub enum DisplayGeom {
     /// it to `LoroText` + `Vec<TextRun>` for char-wise convergence
     /// (`toile-text-editing`).
     Sticky(String),
-    /// Free text body, no card background. Phase 0 carries a plain string (a
-    /// single LWW field); a later slice upgrades it to `LoroText` + `Vec<TextRun>`
-    /// for char-wise convergence (`toile-text-editing`) and Parley-ready
-    /// runs.
+    /// Free text body, no card background. Phase 0 carries a plain string, a
+    /// single LWW field. A later slice upgrades it to `LoroText` +
+    /// `Vec<TextRun>` for char-wise convergence (`toile-text-editing`) and
+    /// Parley-ready runs.
     Text(String),
     /// Media blob hash (`toile-media` resolves the pixels).
     Image(String),

@@ -125,13 +125,6 @@
     "para": 0,
     "passive": 1
   },
-  "crates/ambre-bus/src/app/toile.rs": {
-    "ascii": 0,
-    "latin": 2,
-    "long": 19,
-    "para": 0,
-    "passive": 23
-  },
   "crates/ambre-bus/src/app/trame/clipboard.rs": {
     "ascii": 2,
     "latin": 2,
@@ -1154,13 +1147,6 @@
     "para": 0,
     "passive": 1
   },
-  "crates/ambre-toile/src/logic/convergence_tests.rs": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 7,
-    "para": 0,
-    "passive": 17
-  },
   "crates/ambre-toile/src/logic/index.rs": {
     "ascii": 0,
     "latin": 0,
@@ -1328,13 +1314,6 @@
     "long": 6,
     "para": 1,
     "passive": 14
-  },
-  "crates/ambre-toile/src/logic/state/mod.rs": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 10,
-    "para": 0,
-    "passive": 13
   },
   "crates/ambre-toile/src/logic/state/presence.rs": {
     "ascii": 0,

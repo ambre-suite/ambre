@@ -1,18 +1,19 @@
 //! Toile's persisted schema version: the number, the register, and the
 //! migration registry (`ambre-spec-schema-version.md`, `ambre-spec-toile-schema.md`).
 //!
-//! The protocol -- where the register lives, what an absent one means, what each
-//! comparison implies, how a registry is walked -- is `ambre_core::schema` and is
-//! shared with every other application. What lives here is what only Toile can
-//! know: which version its containers are at today, and what each past layout
-//! has to become.
+//! `ambre_core::schema` holds the protocol, and every other application shares
+//! it. The protocol says where the register lives, what an absent one means,
+//! what each comparison implies, and how a reader walks a registry.
 //!
-//! **Cost.** [`gate`] imports the payload into a scratch document before the
-//! live state is touched, so a full-state read decodes the snapshot twice. That
-//! is deliberate and it is the price of `SCHEMA-012`: reading the version off
-//! the live document means the refused document is already merged into the board
-//! the user is looking at, and the only way back out is to throw their session
-//! away. A scratch document is discarded for free.
+//! What lives here is what only Toile can know: which version its containers are
+//! at today, and what each past layout has to become.
+//!
+//! **Cost.** [`gate`] imports the payload into a scratch document before it
+//! touches the live state, so a full-state read decodes the snapshot twice.
+//! That is deliberate, and it is the price of `SCHEMA-012`. Reading the version
+//! off the live document would merge the refused document into the board the
+//! user has open. The only way back out would be to throw their session away,
+//! and a scratch document costs nothing to drop.
 
 use std::borrow::Cow;
 
@@ -26,16 +27,16 @@ use ambre_core::schema::{
 /// The schema version this build writes into every board it creates
 /// (`SCHEMA-004`).
 ///
-/// Raising it is not a decision about this constant: it is a layout change to a
-/// persisted record, which obliges a [`MIGRATIONS`] row that carries an existing
-/// document across it (`SCHEMA-009`).
+/// Raising it is not a decision about this constant. It is a layout change to a
+/// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
+/// existing document across it (`SCHEMA-009`).
 pub const SCHEMA_VERSION: u32 = 1;
 
 /// Write the current version into a board's `meta` register.
 ///
-/// Called from board construction, inside the scaffolding commit, so the number
-/// is present before any user edit and travels with the document through every
-/// persistence path rather than through the one that happens to check it.
+/// Called from board construction, inside the scaffolding commit. The number
+/// therefore reaches the document before any user edit. It then travels through
+/// every persistence path, not through the one that happens to check it.
 pub(crate) fn stamp(doc: &LoroDoc) {
     let _ = doc
         .get_map(SCHEMA_META_MAP)
@@ -46,10 +47,10 @@ pub(crate) fn stamp(doc: &LoroDoc) {
 /// present and unreadable.
 ///
 /// An **absent** register is [`SCHEMA_VERSION_ABSENT`] (`SCHEMA-005`): a
-/// board written before the register existed needs no rewriting. A register
-/// that is present but holds something other than a `u32` is refused instead
-/// (`SchemaError::VersionUnreadable`) -- reading it as 0 would send a document
-/// this build cannot understand down the migration path and open it.
+/// board written before the register existed needs no rewriting. A present
+/// register holding something other than a `u32` earns a refusal instead
+/// (`SchemaError::VersionUnreadable`). Reading it as 0 would send a document
+/// this build cannot understand down the migration path, and open it.
 ///
 /// # Errors
 /// [`SchemaError::VersionUnreadable`] for a register holding a non-integer, a
@@ -74,9 +75,9 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 /// Toile's registry: one row per version bump, appended never rewritten.
 ///
 /// `0 -> 1` is the register's own arrival. Every board written before it existed
-/// reads as version 0 and is identical in layout to a version 1 board, so the
-/// step stamps the number and changes nothing else -- which is what makes it a
-/// migration and not a rewrite.
+/// reads as version 0, and its layout is identical to a version 1 board. The
+/// step therefore stamps the number and changes nothing else, which is what
+/// makes it a migration rather than a rewrite.
 const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
     from: 0,
     to: 1,
@@ -91,19 +92,24 @@ fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
     Ok(())
 }
 
-/// The full-state read rule, applied before a single container is used
-/// (`SCHEMA-006`).
+/// The full-state read rule, applied before the caller touches a single
+/// container (`SCHEMA-006`).
 ///
-/// Returns the bytes the caller should actually import: the payload untouched
-/// when the versions match, a migrated snapshot when the document is older
-/// (`SCHEMA-007`), and an error when it is newer (`SCHEMA-008`) or the engine
-/// refuses the bytes. Nothing here writes to the live document, so a refused
-/// read leaves the board exactly as it was (`SCHEMA-012`).
+/// Returns the bytes the caller should actually import.
+///
+/// * The payload untouched, when the versions match.
+/// * A migrated snapshot, when the document is older (`SCHEMA-007`).
+/// * An error, when the document is newer (`SCHEMA-008`) or the engine refuses
+///   the bytes.
+///
+/// Nothing here writes to the live document, so a refused read leaves the board
+/// exactly as it was (`SCHEMA-012`).
 ///
 /// # Errors
-/// [`SchemaError::PayloadRejected`] when the CRDT engine will not read the
-/// bytes, [`SchemaError::DocumentTooNew`] when the board was written by a newer
-/// client, and the migration variants when the chain cannot carry an older one.
+/// * [`SchemaError::PayloadRejected`] when the CRDT engine will not read the
+///   bytes.
+/// * [`SchemaError::DocumentTooNew`] when a newer client wrote the board.
+/// * A migration variant when the chain cannot carry an older board.
 pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
     let scratch = LoroDoc::new();
     scratch.import(payload).map_err(|e| {
@@ -137,8 +143,9 @@ mod tests {
     use super::*;
     use crate::logic::state::ToileState;
 
-    /// A snapshot of a board carrying `version` in its register, or none at all
-    /// when `version` is `None` -- which is every board written before `ARCH P8`.
+    /// A snapshot of a board carrying `version` in its register. A `None`
+    /// version writes no register at all, which is every board written before
+    /// `ARCH P8`.
     fn snapshot_at(version: Option<u32>) -> Vec<u8> {
         let doc = LoroDoc::new();
         doc.get_map("board").insert("bg_color", 0i64).expect("seed");
@@ -198,8 +205,8 @@ mod tests {
         );
     }
 
-    /// `SCHEMA-013`: the back door `SCHEMA-005` opens. A register holding
-    /// something that is not a version must not be read as no register at all.
+    /// `SCHEMA-013`: the back door `SCHEMA-005` opens. The gate must not treat a
+    /// register holding something other than a version as no register at all.
     #[test]
     fn a_register_holding_something_other_than_a_version_is_refused() {
         let doc = LoroDoc::new();

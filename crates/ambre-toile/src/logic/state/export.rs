@@ -1,7 +1,7 @@
 //! Board -> file, the outbound half of `toile-import-export`.
 //!
 //! The SVG serializer is a pure function over a slice of
-//! [`ExportElement`](crate::logic::interop::ExportElement) and nothing built that
+//! [`ExportElement`](crate::logic::interop::ExportElement). Nothing built that
 //! slice from a live board, so no user could export anything. This is that
 //! reader: it walks the paint order, projects each element to the export shape,
 //! and hands the bytes back as one display event.
@@ -18,18 +18,18 @@ use crate::logic::model::{ElementId, ElementKind, NodeId, ShapeKind};
 use super::ToileState;
 use super::codec::{bin_of, f64_of, kind_from_tags, str_of};
 
-/// The name an SVG export carries. The board's own title is a launcher concern
-/// (the Logic thread holds a document, not its listing entry), so the file is
-/// named for what it holds.
+/// The name an SVG export carries. The board's own title is a launcher concern:
+/// the Logic thread holds a document, not its listing entry. The name therefore
+/// says what the file holds.
 const SVG_FILENAME: &str = "board.svg";
 
 impl ToileState {
     /// Decode the thumbnail stored for one media address, if the document
     /// carries one and it parses (`toile-media`).
     ///
-    /// The thumbnail is every pixel this thread holds: the full blob is
-    /// ciphertext on the relay and no path here fetches it, so this is the
-    /// resolution both the screen and an exported page get (`TOILE-IO-100`).
+    /// The thumbnail is every pixel this thread holds. The full blob is
+    /// ciphertext on the relay, and no path here fetches it. Both the screen and
+    /// an exported page therefore get this resolution (`TOILE-IO-100`).
     pub(super) fn decoded_thumbnail(&self, hash: &str) -> Option<(u32, u32, Vec<u8>)> {
         let loro::LoroValue::Map(entries) = self.doc.get_map(super::MEDIA).get_deep_value() else {
             return None;
@@ -59,9 +59,11 @@ impl ToileState {
     }
 
     /// Every element of the board, in paint order, as the serializer's shape.
-    /// Connectors are not elements and do not appear here; a group carries no
-    /// geometry of its own and the serializer skips it, so its members export
-    /// flat -- both are gaps `TOILE-IO-025` records.
+    /// `TOILE-IO-025` records two gaps.
+    ///
+    /// * Connectors are not elements, so they do not appear here.
+    /// * A group carries no geometry of its own, and the serializer skips it.
+    ///   Its members therefore export flat.
     fn export_elements(&self) -> Vec<ExportElement> {
         self.layer_order()
             .iter()
@@ -72,8 +74,9 @@ impl ToileState {
             .collect()
     }
 
-    /// One element, read from the CRDT exactly as the display pass reads it: the
-    /// stored box for anything with geometry, the derived union for a group.
+    /// One element, read from the CRDT exactly as the display pass reads it.
+    /// That means the stored box for anything with geometry, and the derived
+    /// union for a group.
     fn export_element(&self, id: &ElementId) -> Option<ExportElement> {
         let em = self.element_map(id)?;
         let type_tag = str_of(&em, "type");
@@ -108,8 +111,8 @@ impl ToileState {
 /// The deck as a PDF (`toile-pdf-export`), one page per slide.
 ///
 /// Gated behind the `pdf` feature, and served by the Logic thread rather than by
-/// the board alone: the render walk needs the base font faces the Main thread
-/// fetched at boot, which live beside the documents and not inside one.
+/// the board alone. The render walk needs the base font faces the Main thread
+/// fetched at boot. Those faces live beside the documents and not inside one.
 #[cfg(feature = "pdf")]
 impl ToileState {
     /// Render the deck at `page` size, or say why there is nothing to render.
@@ -117,7 +120,7 @@ impl ToileState {
     /// carries no update (`TOILE-IO-046`).
     ///
     /// The pictures come from the `media` map's inline thumbnails, which is every
-    /// pixel this thread holds -- the full-resolution blobs are ciphertext on the
+    /// pixel this thread holds. The full-resolution blobs are ciphertext on the
     /// relay, and no cache on this side has them yet (`toile-media`). A page is
     /// therefore no sharper than the board is on screen.
     pub fn export_pdf_document(
@@ -238,9 +241,9 @@ mod tests {
     }
 
     /// The deck reaches the PDF serializer and comes back as a document
-    /// (`TOILE-IO-029`). The bytes are opaque here -- the page walk is covered
-    /// in `logic::interop` -- so this holds the seam: a live board, the real
-    /// font faces, and a file at the end of it.
+    /// (`TOILE-IO-029`). The bytes are opaque here, because `logic::interop`
+    /// covers the page walk. This test holds the seam instead: a live board, the
+    /// real font faces, and a file at the end of it.
     #[cfg(feature = "pdf")]
     #[test]
     fn the_deck_exports_as_a_pdf_document() {
@@ -252,7 +255,7 @@ mod tests {
         assert!(pdf.starts_with(b"%PDF-"), "a PDF header: {:?}", &pdf[..8]);
     }
 
-    /// A board with nothing on it has no page to draw, and the caller turns the
+    /// A board with nothing on it has no page to draw. The caller turns the
     /// refusal into a message rather than handing the user an empty file.
     #[cfg(feature = "pdf")]
     #[test]
@@ -314,9 +317,10 @@ mod media_request_tests {
         st
     }
 
-    /// A request is answered with the thumbnail's own pixels (`TOILE-IO-034`).
-    /// This is the crossing the screen path was missing: the pixels live on the
-    /// Logic thread and the store the render walk reads lives on the UI one.
+    /// The board answers a request with the thumbnail's own pixels
+    /// (`TOILE-IO-034`). This is the crossing the screen path was missing. The
+    /// pixels live on the Logic thread, and the store the render walk reads
+    /// lives on the UI one.
     #[test]
     fn a_media_request_answers_with_decoded_pixels() {
         let mut st = board_with_media("img", 4, 2);
@@ -342,9 +346,9 @@ mod media_request_tests {
         assert_eq!(answer.3, 4 * 2 * 4);
     }
 
-    /// An address the document does not carry is answered with nothing, so the
-    /// element keeps the placeholder it was already painting rather than the
-    /// view waiting on a reply that never comes.
+    /// The board answers an address it does not carry with nothing. The element
+    /// then keeps the placeholder it was already painting, instead of leaving
+    /// the view to wait on a reply that never comes.
     #[test]
     fn an_unknown_address_is_answered_with_nothing() {
         let mut st = board_with_media("img", 2, 2);
@@ -354,8 +358,8 @@ mod media_request_tests {
         assert!(out.display.is_empty());
     }
 
-    /// Asking for a picture changes no document state (`TOILE-IO-024`): the
-    /// command is read-only, so it emits no CRDT update and nothing to persist.
+    /// Asking for a picture changes no document state (`TOILE-IO-024`). The
+    /// command only reads, so it emits no CRDT update and nothing to persist.
     #[test]
     fn a_media_request_writes_nothing() {
         let mut st = board_with_media("img", 2, 2);
