@@ -116,13 +116,12 @@ status values are normative in `ambre-spec-template.md`.
   deliberate exit from the zero-knowledge boundary, and `TOILE-IO-096` makes it say so.
 * **Budget check.** the 5 000-node SVG import is now a conversion a user can start, so the budget
   row it cites has a caller at last; nothing measures it yet, which is `TOILE-IO-028`.
-* **Verification.** 25 `verified`, 14 `unverified`, 12 `unimplemented`, 2 `qa-manual`. The surface
-  landed: the drop point, the export and the report each moved from "the rule fails today" to a test
-  of its own, and the two rows left are the DOM glue underneath them -- a pair of canvas listeners
-  and a click on a detached anchor, which no belt of this workspace reaches and a person catches by
-  using the application. Every decidable half of that glue is a row beside it. The fourteen gaps are
-  what they were: eight rules the code answers with something else, and six the code holds and no
-  test drives.
+* **Verification.** 25 `verified`, 14 `unverified`, 12 `unimplemented`, 2 `qa-manual`. The drop
+  point, the export and the report each carry a test of their own. The two `qa-manual` rows are the
+  DOM glue underneath them -- a pair of canvas listeners and a click on a detached anchor -- which no
+  belt of this workspace reaches, and which a person catches by using the application. Every
+  decidable half of that glue is a row beside it. The fourteen gaps split in two: eight rules the
+  code answers with something else, and six the code holds and no test drives.
 
 ---
 

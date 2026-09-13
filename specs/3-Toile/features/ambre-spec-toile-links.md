@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: LINKS ON AN ELEMENT
 
 **Type:** Vertical (feature)
-**Implementation:** built -- the register, the command, the chooser and the three navigations. What
+**Implementation:** partial -- the register, the command, the chooser and the three navigations. What
 is not built is a way back from a jump, and any mark saying a target is gone.
 
 > A user makes an element clickable: it opens a web address, jumps the camera to a frame on this

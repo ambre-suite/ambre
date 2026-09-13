@@ -98,7 +98,14 @@ APPS = ("trame", "toile", "prose")
 # names a document that exists (finding 68). A path whose last component is not a
 # document still resolves to nothing, so `` `crates/ambre-prose/src/lib.rs` ``
 # stays what it was: not a citation.
-NAME = re.compile(r"`(?:[a-z0-9][a-z0-9-]*/)*([a-z0-9][a-z0-9.-]*)(?=[`\s])")
+NAME = re.compile(r"`((?:[a-z0-9][a-z0-9-]*/)*)([a-z0-9][a-z0-9.-]*)(?=[`\s])")
+
+# A prefix that names a crate marks a Cargo feature, never a document path. The
+# corpus writes a feature as `` `ambre-logic/toile-pdf` ``, and the name pattern
+# above drops the prefix and reads `toile-pdf` as a Toile document, which no
+# directory holds. A crate name is the one prefix that cannot introduce a
+# document, so the candidate behind it is not a citation at all.
+CRATE_NAMES = {path.name for path in (ROOT / "crates").iterdir() if path.is_dir()}
 
 # `this spec`, `this document`: the citing file is the target.
 SELF = re.compile(r"\bthis (?:spec|document)\b", re.IGNORECASE)
@@ -319,7 +326,9 @@ def citations(text: str, own: str | None, shorts: dict[str, str]):
             # The coordinate is inside this candidate's own span: the span opened
             # at the backtick and no backtick closed it before the coordinate.
             span = any(match.end() <= at <= match.end() + 1 for at in starts)
-            hit = resolve(match.group(1), shorts, near, span)
+            if match.group(1).rstrip("/").rsplit("/", 1)[-1] in CRATE_NAMES:
+                continue
+            hit = resolve(match.group(2), shorts, near, span)
             # A backticked word that is not a document citation is not an anchor
             # either: `` `ambre-chrome` (section 1bis) `` names a crate, and the
             # coordinate belongs to the citing document.
