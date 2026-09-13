@@ -28,7 +28,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `TOILE-099` | `POST` | Adding elements to a frame MUST make each a member, and removing them MUST take each out. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_adds_and_removes_membership` reads the membership back after an add of two and a remove of one | verified |
+| `TOILE-099` | `POST` | Adding elements to a frame MUST make each one a member. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_adds_and_removes_membership` reads the membership back after an add of two | verified |
+| `TOILE-237` | `POST` | Removing elements from a frame MUST take each one out. | this spec section 3 | the same test, on its remove step: one of the two members leaves and the membership is read back without it | verified |
 | `TOILE-100` | `POST` | An element removed and added again in one gesture MUST end up last in the frame. | this spec section 3 | none, and it is the half `TOILE-099` was carrying. The handler removes before it adds for exactly this, and the membership test does its add and its remove in two separate commands | unverified |
 | `TOILE-048` | `POST` | A membership change MUST be one undo item, the clamping of the paint order included. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_is_one_undo_item` creates the frame before the child, so the child already paints above it and the clamp never fires; **the rule fails when it does** -- the two commits leave in one broadcast and split into two undo items, so the first undo reverts the reordering alone -- section 6 | unverified |
 | `TOILE-101` | `FRAME` | An element the frame cannot take MUST NOT stop the rest: the frame itself, an id the board does not hold and a current member are skipped, and the other elements of the same gesture still join. | this spec section 3 | none. Each of the three is a `continue` in the add loop, and no test mixes an eligible id with an ineligible one | unverified |
@@ -40,7 +41,7 @@ status values are normative in `ambre-spec-template.md`.
   order per moved child, so the figure is per child out of order and no bench measures it.
 * **Boundary.** none of its own: a frame and its membership live in the Logic thread's document and
   leave as bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 4 `verified`, 5 `unverified`. `TOILE-011` cited three tests and only one reads a
+* **Verification.** 5 `verified`, 5 `unverified`. `TOILE-011` cited three tests and only one reads a
   paint order; the other two read memberships, which is what `TOILE-099` now says and they now hold.
   `TOILE-048` said `none` while a test of it exists -- it creates the frame before the child, so the
   clamp it is about never fires, and the row is now honest about what it covers. `TOILE-050` was four

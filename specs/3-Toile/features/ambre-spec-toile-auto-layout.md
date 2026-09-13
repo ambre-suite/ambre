@@ -45,7 +45,8 @@ status values are normative in `ambre-spec-template.md`. The frame this feature 
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `TOILE-FEAT-050` | `POST` | After a set the frame MUST carry exactly the rule given, and after a clear it MUST carry none. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear`, which reads the rule back after an add, a change and a clear. It is the test `TOILE-FEAT-009` cited for a convergence it never drives | verified |
+| `TOILE-FEAT-050` | `POST` | After a set the frame MUST carry exactly the rule given. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear`, which reads the rule back after an add and after a change. It is the test `TOILE-FEAT-009` cited for a convergence it never drives | verified |
+| `TOILE-FEAT-099` | `POST` | After a clear the frame MUST carry no rule. | this spec section 3 | the same test, on its clear step: the frame is read back holding none | verified |
 | `TOILE-FEAT-051` | `POST` | A set MUST be one undo item: one `Ctrl+Z` MUST bring back the rule the frame carried before it. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` on its undo step, which undoes a change and reads the prior rule back. The undo of an add and the undo of a clear are not driven | verified |
 | `TOILE-FEAT-031` | `POST` | A user MUST be able to give a frame a layout rule, change it and clear it. | this spec section 4 | none, and **the rule fails today**: the command has no menu entry, no inspector row and no chord anywhere in the workspace -- section 6. It lands with the `Auto-layout reaches a frame` Story (`ambre-roadmap.md` E6) | unverified |
 | `TOILE-FEAT-052` | `FRAME` | A rule identical to the one already stored MUST NOT be written, and MUST NOT reach the other users. | this spec section 3 | none. The handler compares the encoded rule and returns before its commit, and every set in the tests differs from the rule before it. The clear half of the same guard is held by the row below | unverified |
@@ -58,7 +59,7 @@ status values are normative in `ambre-spec-template.md`. The frame this feature 
   (`TOILE-FEAT-029`).
 * **Boundary.** none of its own: a layout rule is written to the document, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 17 `verified`, 6 `unverified`. Six rows become twenty-three and not one
+* **Verification.** 18 `verified`, 6 `unverified`. Six rows become twenty-four and not one
   assertion was added: the sixteen tests this document cited are the sixteen it cites now, and
   `TOILE-FEAT-005` alone stacked thirteen of them under one verdict -- one per combination the
   solver pins, each falsifiable on its own. A fourfold verdict count over an unchanged set of

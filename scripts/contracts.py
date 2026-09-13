@@ -36,6 +36,27 @@ The rules it enforces, beyond generating the file:
     had no rule at all, so nothing would go red the day the fix was reverted. A
     finding with no rule to state is declared in `NO_RULE` below, with its
     reason;
+  * **the grammar of a row's own cells**, which a review held and nothing else
+    did. Four drifts reached the corpus that way and each was found by reading,
+    long after it landed: 519 rows across sixteen documents wrote a bare `INV`
+    where the template writes `` `INV` `` -- this script stripped the backticks
+    before comparing, so the vocabulary check passed and the corpus split into
+    two spellings of one column; six rows stated no RFC 2119 keyword at all, so
+    they read as description and bound nothing; twelve `Sources` cells cited a
+    form the template does not declare, `pillar "Local-First"` for `README
+    pillar "Local-First"`, and a citation nobody can resolve is a citation that
+    rots; and a `Statement` carrying two rules is two rules with one status, so
+    half of it can break in green. The first three are errors here. The fourth
+    is a ceiling, below: the line between a bundle the kind licenses and a
+    conjunction that hides a second rule is a reading, not a parse;
+  * **a `Statement` stating two rules may not grow.** `FAIL` binds "the refusal,
+    the notice, the rollback" and `FRAME` names everything an operation must not
+    touch, so both legitimately carry a list; the other six kinds do not, and 65
+    of their rows state a second MUST after an `and`. Splitting all of them is a
+    reading of each; letting a sixty-sixth arrive unremarked is how the first 65
+    got here. So each document carries a count in `statement_ceilings.json`, on
+    the same terms as the `unverified` ceiling: it may only fall, and a growth is
+    `--ceilings --raise`, one reviewed line of diff;
   * an id is never reused, and a prefix has no gap in its numbering;
   * **a document's `unverified` count may only fall.** An unbuilt row is bound to
     an open Story and cannot be forgotten; a shipped row nothing would fail on is
@@ -78,6 +99,7 @@ ROADMAP = "ambre-roadmap.md"  # the one schedule: every Story is a row of it
 JOURNAL = "ambre-roadmap-journal.md"  # closed epics, cut there verbatim
 AUDIT = "security-audit.md"  # numbered findings, cited by the rows that close them
 CEILINGS = Path(__file__).resolve().parent / "contract_ceilings.json"
+STATEMENT_CEILINGS = Path(__file__).resolve().parent / "statement_ceilings.json"
 STATUSES = ("verified", "unverified", "human-review", "qa-manual", "unimplemented")
 LOOSE = ("unverified", "human-review", "qa-manual")  # built, and no test would fail
 APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose")
@@ -193,15 +215,16 @@ ROW = re.compile(
 TABLE_HEAD = re.compile(r"^\|\s*ID\s*\|")
 
 
-def kind_column(header: str) -> int | None:
-    """The index of the `Kind` cell in one table header, or `None`.
+def header_cells(header: str) -> list[str]:
+    """The column names one table header declares, in order.
 
-    The index, not the second cell: pinning the column to position two makes a
-    reordered header opt the document out of every check below in silence,
-    which is the failure mode this whole file exists to refuse.
+    The names, not the template's order: pinning a column to its place makes a
+    reordered header opt the document out of every check below in silence, which
+    is the failure mode this whole file exists to refuse.
     """
-    cells = [c.strip() for c in header.strip().strip("|").split("|")]
-    return cells.index("Kind") if "Kind" in cells else None
+    return [c.strip() for c in header.strip().strip("|").split("|")]
+
+
 # What a rule binds. A state kind holds at every instant; an operation kind
 # holds at one point of one operation's run, and the four of them are what
 # design by contract adds. The two families never share a table: one table per
@@ -209,6 +232,77 @@ def kind_column(header: str) -> int | None:
 STATE_KINDS = ("INV", "CONC", "OBS", "IO")
 OPERATION_KINDS = ("PRE", "POST", "FRAME", "FAIL")
 KINDS = STATE_KINDS + OPERATION_KINDS
+# Both families carry a list by right: a `FAIL` binds the refusal, the notice and
+# the rollback as one outcome, and a `FRAME` names everything one operation must
+# not touch. The conjunction measure below leaves them alone.
+BUNDLING_KINDS = ("FAIL", "FRAME")
+
+# How the template writes a `Kind` cell: the word, in backticks, and nothing
+# else. Comparing the word alone is what let 519 rows drop the backticks and
+# pass -- a vocabulary check that forgives the spelling checks half a column.
+KIND_CELL = re.compile(r"^`([A-Z]+)`$")
+
+# What a `Statement` must carry to bind anything: one of the RFC 2119 keywords
+# the template declares. A row without one describes, and a description cannot
+# be falsified, so it cannot carry a status.
+RFC2119 = re.compile(r"\bMUST(?:\s+NOT)?\b|\bSHOULD(?:\s+NOT)?\b|\bMAY\b")
+
+# A second RFC 2119 keyword, behind an `and`, in a kind that does not license a
+# list: "MUST paint above the content, and MUST follow the gesture" is two rules
+# under one status, so the half nothing tests breaks in green. Counted, not
+# refused: the split is a reading of each row (see the ceiling above).
+CONJUNCTION = re.compile(
+    r"\b(?:MUST(?:\s+NOT)?|SHOULD(?:\s+NOT)?|MAY)\b[^.;:]*?"
+    r",?\s+and\s+(?:it\s+)?(?:MUST|SHOULD|MAY)\b"
+)
+
+# The forms a `Sources` cell may take, and the whole of them. A form off this
+# list is a citation nobody can resolve: `pillar "Local-First"` names a pillar
+# no reader can grep for, and `audit #3` names no finding. The document form
+# accepts a path, so a citation of `1-Foundations/ambre-spec-message-bus.md` is
+# read as the citation it is rather than flagged as prose.
+SOURCE_FORMS = (
+    re.compile(r"\bsection\s+\d"),  # this spec's own section, or a sibling's
+    re.compile(r'\bREADME pillar\s+"'),  # a pillar of the README, by its name
+    re.compile(r"\baudit\s+`"),  # a `security-audit.md` finding, by number
+    re.compile(r"^derived\b"),  # nothing but the design itself
+    re.compile(r"`[\w./-]+\.md`"),  # a named document, with the rule it cites
+)
+
+
+def row_defects(where: str, kind_cell: str, statement: str, sources: str) -> list[str]:
+    """Whether one row's own cells obey the grammar of `ambre-spec-template.md`.
+
+    Three cells, three rules, and each held a drift this script could not see
+    (the docstring above names them). The conjunction is not here: it is
+    measured, not refused.
+    """
+    defects = []
+    match = KIND_CELL.match(kind_cell)
+    if not match:
+        defects.append(
+            f"{where}: the `Kind` cell is {kind_cell!r} -- a kind is written in "
+            f"backticks, `INV`, so one column has one spelling"
+        )
+    elif match.group(1) not in KINDS:
+        defects.append(
+            f"{where}: kind `{match.group(1)}` is none of the eight "
+            f"({', '.join(KINDS)})"
+        )
+    if not RFC2119.search(statement):
+        defects.append(
+            f"{where}: the `Statement` carries no RFC 2119 keyword -- a rule "
+            f"reads MUST, MUST NOT, SHOULD, SHOULD NOT or MAY, and a sentence "
+            f"without one describes instead of binding"
+        )
+    if not any(form.search(sources) for form in SOURCE_FORMS):
+        defects.append(
+            f"{where}: `Sources` reads {sources[:60]!r}, which is none of the "
+            f"declared forms -- a section of this spec or a sibling, a "
+            f'`README pillar "..."`, an ``audit `H9` `` finding, a named '
+            f"`document.md` with the rule it cites, or `derived`"
+        )
+    return defects
 
 
 # A backticked Rust path in a Verification cell: `crate::module::name`, or the
@@ -529,9 +623,8 @@ def stated_counts(text: str) -> dict[str, int]:
 def table_defects(spec: str, table: list[tuple[int, str, str]]) -> list[str]:
     """Whether one table that declares `Kind` obeys the grammar of section 1.B.
 
-    Three rules, and each one caught a defect the day it landed. An unknown kind
-    is the `Implementation` field's story again: a vocabulary nothing checks
-    grows a ninth value. A table mixing a state kind with an operation kind
+    Two rules about the table as a whole; the cells of one row are
+    `row_defects`. A table mixing a state kind with an operation kind
     is the layout collapsing back into one list, which is what hid the frame
     conditions. And the completeness rule is the reason for the column: a `POST`
     with no `FRAME` names what an operation writes and never what it leaves
@@ -545,15 +638,9 @@ def table_defects(spec: str, table: list[tuple[int, str, str]]) -> list[str]:
     them; a reader applies it.
     """
     defects = []
-    kinds = set()
-    for lineno, rid, kind in table:
-        if kind not in KINDS:
-            defects.append(
-                f"{spec}:{lineno} {rid}: kind {kind!r} is none of the eight "
-                f"({', '.join(KINDS)})"
-            )
-            continue
-        kinds.add(kind)
+    # An unknown kind is reported once, by `row_defects`, which reads the cell
+    # whole. Here it is dropped: a typo must not also read as a family clash.
+    kinds = {kind for _, _, kind in table if kind in KINDS}
     if not kinds:
         return defects
     operation = kinds & set(OPERATION_KINDS)
@@ -624,13 +711,31 @@ def leaning_report(leans: dict[str, list[str]]) -> list[str]:
     return lines
 
 
-def load_ceilings() -> dict[str, int]:
-    """`{spec: n}` -- the `unverified` rows a document is still allowed to carry.
+def statement_ceiling_defects(
+    per_spec: dict[str, int], ceilings: dict[str, int]
+) -> list[str]:
+    """Whether any document states two rules in one row more often than it may."""
+    defects = []
+    for spec, measured in sorted(per_spec.items()):
+        ceiling = ceilings.get(spec, 0)
+        if measured > ceiling:
+            defects.append(
+                f"{spec}: {measured} row{'s' if measured > 1 else ''} state a "
+                f"second rule after an `and`, "
+                f"ceiling {ceiling} -- it may only fall. Split the row, giving the"
+                " second rule an id and a status of its own, or record the debt"
+                " with `just contracts-ceilings`"
+            )
+    return defects
+
+
+def load_ceilings(path: Path) -> dict[str, int]:
+    """`{spec: n}` -- what a document is still allowed to carry, per document.
 
     A spec the file does not name has a ceiling of zero, so a document that
     arrives loose declares it in the same commit rather than inheriting silence.
     """
-    return json.loads(CEILINGS.read_text()) if CEILINGS.exists() else {}
+    return json.loads(path.read_text()) if path.exists() else {}
 
 
 def ceiling_defects(per_spec: dict[str, Counter], ceilings: dict[str, int]) -> list[str]:
@@ -648,9 +753,13 @@ def ceiling_defects(per_spec: dict[str, Counter], ceilings: dict[str, int]) -> l
 
 
 def write_ceilings(
-    per_spec: dict[str, Counter], ceilings: dict[str, int], allow_raise: bool
+    path: Path,
+    what: str,
+    per_spec: dict[str, int],
+    ceilings: dict[str, int],
+    allow_raise: bool,
 ) -> int:
-    """Rewrite the ceilings from what the corpus holds today, lowering only.
+    """Rewrite one ceiling file from what the corpus holds today, lowering only.
 
     A ceiling that rises on its own is a ceiling that holds nothing, which is why
     a growth needs `--raise` and shows up as a line of diff. A document back to
@@ -658,8 +767,7 @@ def write_ceilings(
     """
     out: dict[str, int] = {}
     refused: list[str] = []
-    for spec, counts in sorted(per_spec.items()):
-        measured = counts["unverified"]
+    for spec, measured in sorted(per_spec.items()):
         if not measured:
             continue
         recorded = ceilings.get(spec, 0)
@@ -671,14 +779,14 @@ def write_ceilings(
                 out[spec] = recorded
         else:
             out[spec] = measured
-    CEILINGS.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n")
-    print(f"ceilings rewritten: {len(out)} specs, {sum(out.values())} unverified rows")
+    path.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n")
+    print(f"{path.name}: {len(out)} specs, {sum(out.values())} {what}")
     for line in refused:
         print(f"{'RAISED' if allow_raise else 'KEPT'} {line}", file=sys.stderr)
     if refused and not allow_raise:
         print(
-            f"{len(refused)} ceilings would have risen and were kept: a ceiling only"
-            " falls. Use `--ceilings --raise` for a deliberate growth.",
+            f"{len(refused)} ceilings would have risen in {path.name} and were kept:"
+            " a ceiling only falls. Use `--ceilings --raise` for a deliberate growth.",
             file=sys.stderr,
         )
     return 0
@@ -754,6 +862,8 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter) -> str:
 
 def main() -> int:
     per_spec: dict[str, Counter] = {}
+    # Rows stating a second rule after an `and`, per document, for the ceiling.
+    conjunctions: Counter = Counter()
     seen: dict[str, str] = {}
     errors: list[str] = []
     per_crate, pooled = declared_fns()
@@ -775,10 +885,7 @@ def main() -> int:
         # ends where the pipes do, so a heading, a bullet or a blank line
         # closes it and the rows it collected are checked as one operation.
         table: list[tuple[int, str, str]] = []
-        kind_column_at: int | None = None
-        # Per document, for the rule the template states at document level: a
-        # spec declares the column or it does not, never half of each.
-        shapes: set[bool] = set()
+        columns: list[str] | None = None
         for lineno, line in enumerate(path.read_text().splitlines(), 1):
             stripped = line.lstrip()
             head = TABLE_HEAD.match(line)
@@ -786,10 +893,12 @@ def main() -> int:
             # operation table over one still writes one operation, and treating
             # the halves as two tables checked each half against nothing.
             if head or (stripped and not stripped.startswith("|")):
-                if kind_column_at is not None and table:
+                if columns is not None and table:
                     errors += table_defects(rel, table)
                 table = []
-                kind_column_at = kind_column(line) if head else None
+                columns = header_cells(line) if head else None
+                if columns is not None and "Kind" not in columns:
+                    columns = None  # a table keyed by `ID` that is not a contract
             m = ROW.match(line)
             # a story the row's own binding already answers for, checked below
             bound: set[str] = set()
@@ -807,12 +916,27 @@ def main() -> int:
                 continue
             rid, status, rest = m["id"], m["status"], m["rest"]
             where = f"{path.relative_to(SPECS)}:{lineno} {rid}"
-            shapes.add(kind_column_at is not None)
-            if kind_column_at is not None:
+            if columns is None:
+                errors.append(
+                    f"{where}: a contract row under a header that declares no "
+                    f"`Kind` column -- the column is what holds the row to the "
+                    f"eight kinds, so a table without it checks nothing"
+                )
+            else:
+                # `rest` starts after the ID cell, so a header index shifts by one.
                 cells = [c.strip() for c in rest.split("|")]
-                # `rest` starts after the ID cell, so the header index shifts by one.
-                kind = cells[kind_column_at - 1] if kind_column_at <= len(cells) else ""
-                table.append((lineno, rid, kind.strip("`")))
+                cell = {
+                    name: cells[at - 1]
+                    for at, name in enumerate(columns)
+                    if 0 < at <= len(cells)
+                }
+                kind_cell = cell.get("Kind", "")
+                statement = cell.get("Statement (RFC 2119)", "")
+                errors += row_defects(where, kind_cell, statement, cell.get("Sources", ""))
+                kind = kind_cell.strip("`")
+                table.append((lineno, rid, kind))
+                if kind not in BUNDLING_KINDS and CONJUNCTION.search(statement):
+                    conjunctions[rel] += 1
 
             if status not in STATUSES:
                 errors.append(f"{where}: unknown status {status!r}")
@@ -850,21 +974,28 @@ def main() -> int:
                         leans[name].append(rid)
 
             counts[status] += 1
-        if kind_column_at is not None and table:
+        if columns is not None and table:
             errors += table_defects(rel, table)
-        if shapes == {True, False}:
-            errors.append(
-                f"{rel}: some contract tables declare `Kind` and some do not -- "
-                f"a document declares the column or it does not, so a half-"
-                f"migrated file cannot pass as a migrated one"
-            )
         if counts:
             per_spec[str(path.relative_to(SPECS))] = counts
             errors += answer_defects(str(path.relative_to(SPECS)), answer, counts)
 
     if "--ceilings" in sys.argv:
-        return write_ceilings(per_spec, load_ceilings(), "--raise" in sys.argv)
-    errors += ceiling_defects(per_spec, load_ceilings())
+        allow_raise = "--raise" in sys.argv
+        loose = {spec: counts["unverified"] for spec, counts in per_spec.items()}
+        return write_ceilings(
+            CEILINGS, "unverified rows", loose, load_ceilings(CEILINGS), allow_raise
+        ) or write_ceilings(
+            STATEMENT_CEILINGS,
+            "rows stating two rules",
+            dict(conjunctions),
+            load_ceilings(STATEMENT_CEILINGS),
+            allow_raise,
+        )
+    errors += ceiling_defects(per_spec, load_ceilings(CEILINGS))
+    errors += statement_ceiling_defects(
+        dict(conjunctions), load_ceilings(STATEMENT_CEILINGS)
+    )
 
     errors += audit_coverage_defects(findings, cited_audit)
 

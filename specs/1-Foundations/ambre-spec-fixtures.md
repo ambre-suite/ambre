@@ -515,7 +515,7 @@ host with no GPU through the recording surface.
 * **The GPU half of the paint budget is not measured here, and cannot be.** The dense board charges
   the derivation of 2 000 visible elements, which is the CPU half. The frame rate stays a visual
   check (`FIXTURE-024`).
-* **No baseline has landed yet.** The directory holds the shape and the belt that refuses an
+* **No baseline exists yet.** The directory holds the shape and the belt that refuses an
   unnamed machine. The first figures arrive with the first change that needs them.
 * **Determinism has been measured on one architecture.** Every figure and every determinism test
   runs on x86_64. A failure elsewhere reopens `FIXTURE-001`, and the fallback is a semantic digest,

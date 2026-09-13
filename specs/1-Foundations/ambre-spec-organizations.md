@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
 | `SRV-060` | `INV` | An organization MUST NOT be left without an owner. | this spec section 3 | `ambre_server::routes::orgs::tests::integration::owner_cannot_demote_last_owner`, `::owner_cannot_remove_last_owner`, `::owner_can_leave_when_another_owner_remains`. The count is taken inside the same transaction as the change, so two concurrent departures cannot both pass it | verified |
-| `SRV-066` | `INV` | The relay MUST NOT be able to combine a set of shares into a secret. | `ZK-004`; `SRV-012` | crate graph: `deny.toml` refuses the secret-sharing crate in this process, and the continuous-integration `deny` job fails the manifest that declares it. It was declared and unused until audit `C4` removed it | verified |
+| `SRV-066` | `INV` | The relay MUST NOT be able to combine a set of shares into a secret. | `ambre-spec-zero-knowledge.md`, `ZK-004`; `ambre-spec-server.md`, `SRV-012` | crate graph: `deny.toml` refuses the secret-sharing crate in this process, and the continuous-integration `deny` job fails the manifest that declares it. It was declared and unused until audit `C4` removed it | verified |
 | `SRV-067` | `INV` | A member's escrowed key MUST reach the relay already sealed to the organization. | `ZK-001`; this spec section 3 | none, and **no route deposits one**: the register carries the column and the release reads it, and nothing anywhere writes it, so the release can only ever answer that there is nothing to release -- section 5 | unverified |
 
 ### 1.2 Create an organization

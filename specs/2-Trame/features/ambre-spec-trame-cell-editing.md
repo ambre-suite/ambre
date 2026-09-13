@@ -50,7 +50,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-160` | `POST` | A commit MUST send the buffer's raw text to the cell the session opened on. | this spec section 3 | none. `commit_edit` sends `SetCellText` for `editor.row`/`editor.col`; the session lives on `TrameView`, on the far side of the headless seam | unverified |
 | `TRAME-UI-054` | `POST` | A commit of empty text MUST clear the cell. | this spec section 3 | `ambre_trame::logic::tests::group1::edited_text_overrides_generated_label` writes a value, then commits an empty `SetCellText`, and reads the cell back blank | verified |
 | `TRAME-UI-052` | `POST` | A commit MUST close the undo group, so one edit is one undo item. | this spec section 3 | `ambre_trame::logic::tests::group1::undo_then_redo_round_trips_a_cell_edit`, `group2::filtered_column_edit_is_one_undo_item` | verified |
-| `TRAME-UI-161` | `POST` | A commit by `Enter` MUST move the selection down and one by `Tab` MUST move it right. | this spec section 4 | none. The two chords park `PendingCommit::Nav(1, 0)` and `Nav(0, 1)`, drained beside the commit; no test drives the pair | unverified |
+| `TRAME-UI-161` | `POST` | A commit by `Enter` MUST move the selection down. | this spec section 4 | none. The chord parks `PendingCommit::Nav(1, 0)`, drained beside the commit; no test drives it | unverified |
+| `TRAME-UI-171` | `POST` | A commit by `Tab` MUST move the selection right. | this spec section 4 | none. The chord parks `PendingCommit::Nav(0, 1)`, drained beside the commit; no test drives it | unverified |
 | `TRAME-UI-162` | `FRAME` | A commit MUST NOT write to any cell other than the one the session opened on. | this spec section 3 | none. `commit_edit` names one cell in the command and one in the local cache; nothing watches the rest of the sheet | unverified |
 | `TRAME-UI-163` | `FAIL` | A commit the channel cannot carry MUST NOT leave the cell reading as written. | this spec section 3 | none, and the code does the opposite: on a full channel `commit_edit` logs "retry next frame", updates the local cache anyway and drops the command. No retry exists, so the cell shows a value the document never took | unverified |
 | `TRAME-UI-164` | `FAIL` | A write the document cannot store MUST say so. | this spec section 3; section 5 | none, and the code does the opposite: `write_cell` returns without writing when the cell lies beyond the materialization cap, with no event and no toast, against the section 5 decision that a refusal always answers | unverified |
@@ -109,7 +110,7 @@ status values are normative in `ambre-spec-template.md`.
   and the autocompletion in < 2 ms. Every one of them reads **none exists**.
 * **Boundary.** none: the draft lives on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path, and the committed text reaches the relay sealed (`ZK-001`).
-* **Verification.** 6 `verified`, 21 `unverified`, 11 `unimplemented`. The rows went 19 to 38 and
+* **Verification.** 6 `verified`, 22 `unverified`, 11 `unimplemented`. The rows went 19 to 39 and
   the mechanisms they cite went 10 to 11: the split manufactured no coverage, and the `verified`
   count did not move. It moved twice inside itself -- `TRAME-UI-054` turned out to be driven after
   all, and `TRAME-UI-051` lost its type-level claim, which was the order of two statements in one

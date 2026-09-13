@@ -296,10 +296,17 @@ SECTION_HEADING = re.compile(r"^##\s+(\d+)\s*(bis)?\s*[.:]")
 NO_CODE_DOCS = SCHEDULE_DOCS | {TEMPLATE, BUDGETS}
 
 # The header field, and the only three values it takes
-# (`ambre-spec-template.md section 1.A`). One clause may follow, after a `--`,
+# (`ambre-spec-template.md section 1.A`). One clause may follow, after a ` -- `,
 # naming what is missing: "partial -- the file round trip is not built".
+#
+# The value ends at the space or at the line: a word boundary let `implemented.`
+# through, and a value the gate reads as one of three while the corpus carries
+# four spellings of it is the `Kind` column's story again. Anything after the
+# value is a clause, so it announces itself with the dash the template writes.
 HEADER_FIELDS = ("Type", "Implementation")
-IMPLEMENTATION = re.compile(r"^\*\*Implementation:\*\* (implemented|partial|design-only)\b")
+IMPLEMENTATION = re.compile(
+    r"^\*\*Implementation:\*\* (implemented|partial|design-only)( -- \S.*)?$"
+)
 
 # A feature document describes the current state. These betray the steps.
 FEATURE_MARKERS = [

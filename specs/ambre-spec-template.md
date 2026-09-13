@@ -79,8 +79,10 @@ it is what stops a 7-line stub reading like a shipped subsystem.
 | `partial` | part of the surface is built. The default while a document is under construction |
 | `design-only` | no code beyond a stub. Every contract row is `unimplemented` and names the story that will build it |
 
-One clause may follow the value -- `partial -- the grid behaviour is built; the file round trip is
-not`. `spec_shape.py` fails on any other value.
+One clause may follow the value, behind a ` -- `: `partial -- the grid behaviour is built; the file
+round trip is not`. Nothing else may follow it, not even a full stop. `implemented.` is a fourth
+spelling of a three-value vocabulary, and a gate that forgives it reads half the field.
+`spec_shape.py` fails on any other value.
 
 ### B. The contract table
 
@@ -114,9 +116,9 @@ carries both:
 | Field | Rule |
 | :--- | :--- |
 | `ID` | `XXX` is the prefix, declared once and **never renumbered**: it joins document, test name and audit finding. A feature spanning two layers carries two prefixes, and the gaps each leaves are the price |
-| `Kind` | one of the eight below. It says what the rule binds: the state, or one step of one operation. The kind is a column and never a part of the id, so a row keeps its number when it moves between tables |
-| `Statement` | RFC 2119 -- MUST, MUST NOT, SHOULD, MAY. One rule per row, no conjunction |
-| `Sources` | where the rule comes from: this spec's own section, a README pillar, a `security-audit.md` finding by number, or `derived`. A row that closes a finding cites it, and the finding stops drifting from the code in silence |
+| `Kind` | one of the eight below, **written in backticks** -- `` `INV` ``, never `INV`. It says what the rule binds: the state, or one step of one operation. The kind is a column and never a part of the id, so a row keeps its number when it moves between tables |
+| `Statement` | RFC 2119 -- MUST, MUST NOT, SHOULD, SHOULD NOT, MAY. **A statement carrying none of them binds nothing**: it describes, and a description cannot be falsified, so it cannot carry a status. One rule per row, no conjunction |
+| `Sources` | where the rule comes from, in one of five forms: **a section**, of this spec or of a named sibling (`this spec section 3`, `` `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) ``); a **`README pillar "Zero-Knowledge"`**, the word `README` included, because a bare `pillar "..."` names something a reader cannot grep for; an **``audit `H9` ``** finding, by its number; a **named `document.md`** with the rule id it cites; or **`derived`**, which claims no source but the design. A row that closes a finding cites it, and the finding stops drifting from the code in silence |
 | `Verification` | the concrete mechanism, or the explicit absence of one. A test path, a type-level construction, a lint, a capability ban |
 | `Status` | one of the five values below. An empty cell fails |
 
@@ -169,6 +171,19 @@ that none of them binds an operation.
 which fixes its target and corrupts a neighbour. It is legitimately `unverified`: naming what an
 operation leaves alone costs a row, and proving it costs an isolation assertion.
 
+**`contracts.py` holds the grammar of a row's own cells.** Each of its three rules answers a drift
+only a reading could catch. A bare `Kind` cell in 519 rows; six statements with no RFC 2119
+keyword; twelve `Sources` cells citing an undeclared form. A vocabulary a gate compares loosely has
+two spellings, and the second arrives in silence.
+
+**One rule per row is a ceiling, not an error.** `FAIL` binds the refusal, the notice and the
+rollback as one outcome, and `FRAME` names everything one operation must not touch. Both carry a
+list by right; the other six kinds do not. A statement of theirs stating a second MUST after an
+`and` is two rules under one status: the half nothing tests breaks in green. Telling a licensed
+bundle from a hidden second rule is a reading, so `contracts.py` counts them per document in
+`scripts/statement_ceilings.json`. The count may only fall, on the same terms as the `unverified`
+ceiling: a growth is `just contracts-ceilings-raise`, one reviewed line of diff.
+
 **Three rules a script cannot hold**, and they are what keeps two kinds from becoming one:
 
 * **One guard, one row: `PRE` when nothing checks it, `FAIL` when something does.** The test is
@@ -212,10 +227,11 @@ own assertion stays a review act.
   not a rule. Rejected: "sync is secure". Accepted: "no frame leaves the client with a plaintext
   payload".
 * **One row per falsifiable consequence, never one per theme.** Five guarantees are five rows.
-* **A document declares the `Kind` column, or it does not.** A table that declares it holds every
-  row of it to the vocabulary and to the two completeness rules; a document that declares none is
-  one the column has not reached. `contracts.py` reads the header of every table, so the corpus
-  migrates one document at a time, and a file mixing a declared table with a legacy one fails.
+* **Every contract table declares the `Kind` column.** The migration that added it is over, so a
+  table without it no longer reads as a document the column has not reached. `contracts.py` reads
+  the header of every table and fails on a contract row under a header that declares none: the
+  column is what holds the row to the vocabulary and to the two completeness rules, and a table
+  missing it checks nothing at all.
 * **A rule for code that does not exist yet is a row**, with `Status: unimplemented`, never prose held
   back. A numbered falsifiable statement is cheaper to read, to review and to revise than the
   paragraph it replaces, and it is the only form in which an unbuilt design can be checked against

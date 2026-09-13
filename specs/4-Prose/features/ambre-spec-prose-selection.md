@@ -38,7 +38,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-009` | `POST` | A click that lands in no glyph MUST resolve to the nearest valid caret position, never to no position. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-032` | `POST` | A block that holds no text MUST resolve to one of its two edges, chosen by the side the pointer is on. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-154` | `POST` | A press that does not extend MUST collapse the selection to the caret it places. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-155` | `POST` | A second press in place MUST select the word under the pointer and a third MUST select its paragraph. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-155` | `POST` | A second press in place MUST select the word under the pointer. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-171` | `POST` | A third press in place MUST select the paragraph the word sits in. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-072` | `POST` | A press on a document holding no block MUST place the caret in a block created through the command path, never in a locally invented one. | this spec section 2; `PROSE-027` | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-156` | `FAIL` | A press on a layout carrying no page at all MUST resolve to no position, and the caret MUST stay where it was until a block exists to hold it. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-157` | `FRAME` | Placing the caret with a press MUST NOT shape a block and MUST NOT scroll the column: what the press resolved is already on screen. | this spec section 2 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -97,7 +98,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: `PROSE-UI-010` (`features/ambre-spec-prose-engine.md section 1`) keeps the
   selection out of the document, and the UI thread reaches no network, crypto or persistence path
   (`UI-THREAD-004`).
-* **Verification.** 34 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+* **Verification.** 35 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
   `PROSE-UI-008` is the one row with an oracle already available: the layout draws a glyph at a
   position and the hit-test answers a position for a point, so the round trip through both is a
   property over the shaped runs, at every zoom and every scroll offset. `PROSE-UI-071` is

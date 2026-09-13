@@ -65,14 +65,14 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
 | `SYNC-067` | `POST` | A document name MUST reach the relay sealed under the document key. | `ZK-001`; this spec section 2 | none. The name is sealed on create and on rename and opened for the list, and no test seals one: the three legs run in a browser. `CHROME-036` holds the half about what a card shows | unverified |
-| `SYNC-068` | `FRAME` | A sealed document name MUST NOT open under any document but its own. | `SYNC-018` | none, and **the rule fails today**: the name is sealed with one constant string as additional data, no commitment tag and no signature, so the relay can move a sealed name from one document to another and nothing notices -- section 5. Answered by the `The document name is sealed like every other payload` Story (`ambre-roadmap.md` E7) | unverified |
+| `SYNC-068` | `FRAME` | A sealed document name MUST NOT open under any document but its own. | `ambre-spec-sealed-envelope.md`, `SYNC-018` | none, and **the rule fails today**: the name is sealed with one constant string as additional data, no commitment tag and no signature, so the relay can move a sealed name from one document to another and nothing notices -- section 5. Answered by the `The document name is sealed like every other payload` Story (`ambre-roadmap.md` E7) | unverified |
 | `SYNC-069` | `FAIL` | A channel message MUST reach the relay or be refused: it MUST NOT be dropped in silence. | this spec section 2 | none, and **the rule fails today**: the client subscribes to a channel and both send paths log the payload and discard it, so a message a user writes disappears with no error. Answered by the `SYNC P4` / `SRV P1` channels and meetings Story | unverified |
 
 ### 1.6 The session ends
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `SYNC-066` | `POST` | A sign-out MUST close the socket and clear every key. | `ZK-002` | none. The keys are cleared and wipe themselves on drop (`SYNC-095`), and nothing asserts the socket is closed or that a later frame finds no state to apply | unverified |
+| `SYNC-066` | `POST` | A sign-out MUST close the socket and clear every key. | `ambre-spec-zero-knowledge.md`, `ZK-002` | none. The keys are cleared and wipe themselves on drop (`SYNC-095`), and nothing asserts the socket is closed or that a later frame finds no state to apply | unverified |
 | `SYNC-100` | `FRAME` | A sign-out MUST leave no token behind it. | `ZK-006`; `ambre-spec-session.md`, `SRV-026` | none, and **the rule fails today**: the two tokens are plain strings, dropped rather than wiped, so the access token and the refresh token both stay in the worker's linear memory after the session they belong to has ended | unverified |
 
 * **Budget.** the relay hop of `ambre-spec-budgets.md section 1` -- one encode plus one

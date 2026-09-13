@@ -34,7 +34,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `PROSE-FEAT-140` | `POST` | The item MUST carry the requested style, and a checkbox MUST carry the requested ticked state. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-140` | `POST` | The item MUST carry the requested style. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-278` | `POST` | A checkbox item MUST carry the requested ticked state. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-141` | `FRAME` | Changing a style MUST NOT touch the item's text, its place in the block tree, or the style of any other item. | derived | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Indent an item
@@ -59,7 +60,7 @@ status values are normative in `ambre-spec-template.md`.
   pagination pays for them once per layout.
 * **Boundary.** none of its own: a list item is a block like any other, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 16 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+* **Verification.** 17 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
   `PROSE-005` and `PROSE-FEAT-002` are the two a reviewer can hold without a test, because a
   stored depth or a stored ordinal is a key in the schema table and the schema table has neither.
   `PROSE-FEAT-137` is the one that needs two peers, and it is the row the four commands are

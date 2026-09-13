@@ -23,7 +23,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-103` | `INV` | The aggregates MUST be computed by the Logic thread, never by the UI thread. | this spec section 2 | type-level: the reply `TrameEvent::SelectionStats` carries six numbers with no cell in them, and the signal the band reads has one writer -- the launcher's relay on that event (`ambre-app`); `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` drives the Logic side | verified |
 | `TRAME-UI-106` | `INV` | A query for the aggregates MUST emit no CRDT delta. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells`, which asserts the outcome carries no update | verified |
 | `TRAME-UI-104` | `OBS` | An aggregate MUST cover the whole selection, not the part the UI thread holds. | this spec section 2; section 4 | none. **The rule fails today** on two selections -- section 5: a whole-column band is clamped by the UI to its own cache, and a disjoint selection reaches the Logic thread as its last rectangle alone. Answered by the `The selection reaches the Logic thread whole` Story (`ambre-roadmap.md` E7) | unverified |
-| `TRAME-UI-105` | `OBS` | `count` MUST tally every non-empty cell, and the numeric aggregates MUST tally the numbers alone. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells`, over a column holding numbers, a blank and a word, asserting both tallies | verified |
+| `TRAME-UI-105` | `OBS` | `count` MUST tally every non-empty cell. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells`, over a column holding numbers, a blank and a word, asserting the count of the non-empty ones | verified |
+| `TRAME-UI-172` | `OBS` | A numeric aggregate MUST tally the numbers alone. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells`, the same column: the word and the blank leave the sum, the average and the extremes untouched | verified |
 | `TRAME-UI-107` | `OBS` | The band MUST show a numeric aggregate only when the selection holds a number. | this spec section 3 | `ambre_trame::tests::chrome_ui::status_bar_renders_label_and_aggregates` mounts the band over a selection holding three numbers; the branch that hides the four numeric aggregates is reached by no test | unverified |
 | `TRAME-UI-108` | `OBS` | A selection of one cell MUST show no aggregate. | this spec section 3 | none. The refresh clears the band when the selection is not multi-cell, and no test drives a selection change | unverified |
 | `TRAME-UI-110` | `OBS` | A row the filter hides MUST NOT count in an aggregate. | this spec section 4 | none. The walk skips the hidden set, and every stats test runs on an unfiltered sheet | unverified |
@@ -41,12 +42,11 @@ status values are normative in `ambre-spec-template.md`.
   phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the band reads and shows. It writes nothing to the document, opens no path,
   and `UI-THREAD-004` bans a network, crypto or persistence path on the thread it paints on.
-* **Verification.** 3 `verified`, 7 `unverified`. The Logic half is held: the walk, the tallies and
+* **Verification.** 4 `verified`, 7 `unverified`. The Logic half is held: the walk, the tallies and
   the read-only guarantee all have a host test. The seven gaps are the UI half -- what the band
   shows, how it reads, when it refreshes, and which rows it covers -- and three of them are rules
-  the code answers with something else, listed in section 5. `TRAME-UI-105` states two tallies in
-  one row and stays whole: the same test asserts both, so splitting it would add a count and no
-  mechanism.
+  the code answers with something else, listed in section 5. The count and the numeric aggregates
+  are two rows (`TRAME-UI-105`, `TRAME-UI-172`) over one test, which names the half a change breaks.
 
 ---
 

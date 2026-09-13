@@ -132,8 +132,8 @@ The user touches one thing: the theme control. Everything else is what they see.
 
 * **The shell stylesheet carries fifty-eight literal colours.** Every shadow is a literal, so no theme
   changes one, and every white on a coloured ground is a literal, so a light theme cannot lighten
-  the ground under it. The file's own header still says the token sets will land later, and they
-  landed (`UI-THREAD-029`).
+  the ground under it. The file's own header still promises the token sets for later, and the sets
+  are there (`UI-THREAD-029`).
 * **Five tokens are read and declared nowhere:** the content ground, a danger colour, a foreground,
   a shadow and a dimmed text. Four have a fallback and degrade quietly; the foreground has none, so
   a label on the home screen takes whatever it inherits (`UI-THREAD-031`).

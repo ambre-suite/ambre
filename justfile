@@ -187,10 +187,11 @@ contracts:
 contracts-write:
     python3 scripts/contracts.py --write
 
-# Rewrite the per-document ceiling on `unverified` rows after a deliberate
-# change. It lowers only, so it cannot make a red check green: a rising ceiling
-# is shipped code losing its last mechanism. A document that legitimately grows
-# loose needs the target below, and a reviewed diff.
+# Rewrite the two per-document ceilings after a deliberate change: `unverified`
+# rows, and rows stating a second rule after an `and`. Both lower only, so this
+# cannot make a red check green: a rising ceiling is shipped code losing its
+# last mechanism, or a statement quietly binding twice. A document that
+# legitimately grows needs the target below, and a reviewed diff.
 contracts-ceilings:
     python3 scripts/contracts.py --ceilings
 

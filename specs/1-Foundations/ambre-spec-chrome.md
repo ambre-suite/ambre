@@ -59,7 +59,8 @@ the DOM side produces.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
 | `CHROME-011` | `POST` | A modal MUST suspend the frame loop while it is open. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none. Three modals pass a pause callback and the launcher's own confirmation dialog passes none. Nothing joins opening a modal to the state of the loop | unverified |
-| `CHROME-012` | `POST` | A modal's open signal MUST drive the element: setting it open MUST show the element, and clearing it MUST hide it. | this spec section 2 | none. One effect drives the element from the signal, and no test mounts a modal to watch it | unverified |
+| `CHROME-012` | `POST` | Setting a modal's open signal MUST show the element. | this spec section 2 | none. One effect drives the element from the signal, and no test mounts a modal to watch it open | unverified |
+| `CHROME-091` | `POST` | Clearing a modal's open signal MUST hide the element. | this spec section 2 | none. The same effect carries the closing arm, and no test mounts a modal to watch it close | unverified |
 | `CHROME-088` | `POST` | Escape and a click on the backdrop MUST close a modal, and MUST clear its signal. | this spec section 2 | none. Two handlers drive the signal from the element. A regression leaves a closed modal whose signal still reads open, which blocks the next open -- the failure is not the dismissal, it is the one after | unverified |
 | `CHROME-089` | `FRAME` | Closing a modal MUST NOT leave the frame loop suspended. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none, and this is the dangerous half: a missing pause costs a few frames of work, and a missing resume leaves the surface frozen with the interface answering normally around it. The resume callback is passed by the same three modals that pass the pause, and by no one else | unverified |
 
@@ -75,7 +76,7 @@ the DOM side produces.
 * **Boundary.** none: `UI-THREAD-004` and `UI-THREAD-049` ban a network, crypto and persistence
   path on the UI thread, and the toolkit adds no exception. Its manifest names no transport and no
   crypto crate, which is the same crate-graph fact `CHROME-001` and `CHROME-002` are read off.
-* **Verification.** 9 `verified`, 9 `unverified`, 1 `unimplemented`. The verified rows are either a
+* **Verification.** 9 `verified`, 10 `unverified`, 1 `unimplemented`. The verified rows are either a
   crate-graph fact, placement arithmetic the code extracted out of the DOM, or a component mounted
   in a real headless document -- and every one of them asserts a first render. Three conjunctions
   came apart and each hid the same shape: a rule that reads as one behaviour is a claim about the

@@ -22,7 +22,7 @@ prefix is `ARCH`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
 | `ARCH-002` | `INV` | The crate graph MUST stay acyclic. | this spec section 2 | `cargo`: a cycle between two workspace crates fails to resolve, so the edit that would create one never builds | verified |
-| `ARCH-004` | `INV` | Every cryptographic operation MUST run in the Sync worker. | pillar "Zero-Knowledge"; `ZK-002` | `cargo deny` -- `deny.toml` grants `ambre-crypto` to `ambre-sync`, and to `ambre-logic` for one host-only fixture hash. Every other crate fails the CI job | verified |
+| `ARCH-004` | `INV` | Every cryptographic operation MUST run in the Sync worker. | README pillar "Zero-Knowledge"; `ambre-spec-zero-knowledge.md`, `ZK-002` | `cargo deny` -- `deny.toml` grants `ambre-crypto` to `ambre-sync`, and to `ambre-logic` for one host-only fixture hash. Every other crate fails the CI job | verified |
 | `ARCH-012` | `INV` | The client MUST build against a shared memory with atomics enabled. | this spec section 2 | the build: the flags are scoped to the wasm target in `.cargo/config.toml`, and the threading runtime fails to link without them | verified |
 | `ARCH-001` | `INV` | The client MUST run as two WebAssembly instances: one holding the UI and Logic threads over a single shared heap, one holding the Sync worker with its own memory. | this spec section 2 | none. The page loads two artefacts, and nothing refuses a third or a merge of the two | unverified |
 | `ARCH-003` | `INV` | The Logic thread MUST NOT declare a dependency on the render runtime or on the interface toolkit. | this spec section 2 | none. `ambre-logic` declares neither, and no capability ban refuses the line that would add one | unverified |
