@@ -194,7 +194,8 @@ respecified here (`ambre-spec-chrome.md`).
   `features/ambre-spec-prose-track-changes.md section 6`).
 * **A refused mark value has nowhere to go.** `PROSE-FEAT-022` requires a malformed value to be
   reported to the author, and no event carries the refusal, so the colour and size controls have
-  no failure path (`features/ambre-spec-prose-inline-styles.md section 6`).
+  no failure path (`features/ambre-spec-prose-inline-styles.md section 6`). It lands with the
+  `A refused command names what it refused` Story (`ambre-roadmap.md` E5).
 * **What a control applies to is stated twice, and differently.** Section 4 says a control
   applies its formatting to the whole selection, which is what `PROSE-UI-102` carries; the control
   table of section 3 sends the heading and quote controls to the block the selection starts in.

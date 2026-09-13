@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-134` | `OBS` | The text a draft holds MUST be drawn under the caret over the confirmed runs, before the document has answered. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-135` | `INV` | A draft MUST hold text and an anchor and no structure: it MUST NOT be able to express a split, a deletion or a mark. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-137` | `INV` | One primitive MUST delete the active selection, and a second one MUST NOT exist per editing path. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-039` | `INV` | Joining two paragraphs MUST be expressed as the deletion below with an empty range; a second join operation MUST NOT exist. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-039` | `INV` | Joining two paragraphs MUST be expressed as the deletion below with an empty range; a second join operation MUST NOT exist. | this spec section 3 | not built -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Type a run of text
 
@@ -43,16 +43,16 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `PROSE-037` | `POST` | What survives of the last paragraph MUST be appended to the first, and every paragraph the deletion emptied MUST be removed. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-041` | `FRAME` | The deletion MUST NOT change the identity of the first paragraph or its paragraph style, whichever of the two the caret started in. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-037` | `POST` | What survives of the last paragraph MUST be appended to the first, and every paragraph the deletion emptied MUST be removed. | this spec section 3 | not built -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-041` | `FRAME` | The deletion MUST NOT change the identity of the first paragraph or its paragraph style, whichever of the two the caret started in. | this spec section 3 | not built -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Split a paragraph
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `PROSE-038` | `POST` | The new paragraph MUST carry the source's type and paragraph style. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-UI-141` | `POST` | The caret MUST be left at the start of the new paragraph. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
-| `PROSE-042` | `FRAME` | The split MUST NOT change the text the two paragraphs carry between them, or the identity of the source paragraph. | this spec section 3 | not built -- lands with `ARCH P2` (Epic `E5`) | unimplemented |
+| `PROSE-038` | `POST` | The new paragraph MUST carry the source's type and paragraph style. | this spec section 3 | not built -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-141` | `POST` | The caret MUST be left at the start of the new paragraph. | this spec section 3 | not built -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-042` | `FRAME` | The split MUST NOT change the text the two paragraphs carry between them, or the identity of the source paragraph. | this spec section 3 | not built -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Compose with an input method
 

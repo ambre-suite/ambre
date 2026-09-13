@@ -201,7 +201,8 @@ that sit over the canvas are DOM and are not painted here (`UI-THREAD-001`,
 * **The UI-thread memory figures do not fit the shared total.** The run cache alone is budgeted at
   twenty megabytes and the vertex buffers and atlases for three pages at fifty of video memory,
   against a shared UI-thread total of forty-one (`ambre-spec-budgets.md section 6`). The
-  rows now sit beside each other, which is the first time the arithmetic is visible.
+  rows now sit beside each other, which is the first time the arithmetic is visible. Settling it
+  lands with the `The memory budgets add up` Story (`ambre-roadmap.md` E7).
 * **The table above names tokens the catalogue does not spell out.** The design started from seven
   literal hex colours, beside a rule banning exactly that; the tokens replace them, and
   `ambre-spec-design-tokens.md` lists its catalogue by group rather than by name. Until a token

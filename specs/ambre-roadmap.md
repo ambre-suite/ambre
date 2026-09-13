@@ -71,7 +71,9 @@ plane touches, and it unblocks Toile's inline rich text and Trame's text colours
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
 | `[ ]` `ARCH P2` -- the Prose engine core | MVP | the document model: text, blocks, marks, nesting |
+| `[ ]` A refused command names what it refused | MVP | eight rows across seven features require a refusal to reach the author -- a nesting break, a malformed mark value, a list command, a band field, a footnote, a table operation, a comment -- and the engine declares one untyped error carrying a number and a message, which names neither the command nor a reason. Two features were written against a `CommandRejected` variant no plane declares. A typed error, and one event that carries it |
 | `[ ]` Pagination | MVP | measured pages: breaks, orphans and widows, kept-together blocks, footnote placement, incremental relayout |
+| `[ ]` Two peers read the same page number | MVP | the layout is derived from the document and the page format, both shared, and from the faces the device actually loaded: an unknown family resolves to whichever base face is there (`PROSE-034`), so two collaborators measure the same paragraph differently and land on a different page count. A comment naming a page, a cross reference to one and a table of contents entry all rest on an agreement no row states and no decision refuses |
 | `[ ]` Styles, lists and headings | MVP | character and paragraph styles, ordered and bulleted lists, numbered headings |
 | `[ ]` Tables, table of contents and word count | MVP | tables with merged cells and styles, a generated table of contents, a live word count |
 | `[ ]` Headers, footers, find and replace | MVP | page headers and footers with dynamic fields, and find and replace |
@@ -202,6 +204,7 @@ plane touches, and it unblocks Toile's inline rich text and Trame's text colours
 | `[ ]` A stroke in flight reaches the other users | MVP | nothing in the workspace sends a presence payload for a board: the in-flight sample field is written by tests only and the presence command has no sender, so a freehand stroke appears on the other screens once it is finished (`TOILE-106`) |
 | `[ ]` A picture is measured before it is expanded | MVP | the decoder expands the whole picture before the dimension bound is read, so the bound protects the document and not the heap (`TOILE-IO-052`) |
 | `[ ]` Toile's snapshot command answers | -- | the command returns an empty outcome and no caller sends it; the dispatcher answers a Sync request from the document state instead (`TOILE-093`) |
+| `[ ]` The memory budgets add up | -- | the UI-thread table of `ambre-spec-budgets.md section 6` totals forty-one megabytes over rows that sum to sixty-five: the picture upload budget was added beside the others and charged to no total. Prose then states fifty megabytes of video memory for three pages against a shared wgpu row of twenty, and the table records the arithmetic rather than settling it. A stated total its own rows exceed holds no regression |
 
 ---
 

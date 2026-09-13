@@ -207,7 +207,8 @@ whole, deleted whole, and never edited in place (`PROSE-FEAT-163`).
 * **The refusal has no event.** `PROSE-FEAT-067` requires the refusal to be reported, and the
   engine declares one untyped error carrying a code and a message
   (`features/ambre-spec-prose-engine.md section 3`). The lists, the styles and the tables features report
-  through the same gap.
+  through the same gap, and it lands with the `A refused command names what it refused` Story
+  (`ambre-roadmap.md` E5).
 * **A field in a hidden side is not refused.** `PROSE-FEAT-067` refuses a field in the first
   page's own block while the setting is off, because nothing would draw it; a side whose own
   setting is off is invisible for the same reason, and `PROSE-FEAT-165` writes the mark there

@@ -162,7 +162,8 @@ whole and deleted whole.
   same gap.
 * **The refusal has no event.** `PROSE-FEAT-071` requires the refusal to be reported, and the
   engine declares one untyped error alone (`features/ambre-spec-prose-engine.md section 3`). Four features
-  report through the same gap.
+  report through the same gap, and it lands with the `A refused command names what it refused`
+  Story (`ambre-roadmap.md` E5).
 * **What the call is a mark on is not settled.** Section 3 makes the call an inline mark and says
   that deleting the character it sits on deletes it; section 4 says it draws as its number and is
   selected and deleted whole, as one character. Either the mark rides a character the author typed,

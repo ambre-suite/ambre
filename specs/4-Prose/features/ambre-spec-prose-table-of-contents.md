@@ -190,7 +190,8 @@ rather than to a page (`features/ambre-spec-prose-pdf-export.md section 3`).
   nothing at all in the meantime.
 * **Two peers may lay out the same document differently**, and every page number here rests on
   their agreeing. The gap is `features/ambre-spec-prose-pagination.md section 5`, and it is the
-  same one the cross references and the comments rest on.
+  same one the cross references and the comments rest on. It lands with the `Two peers read the
+  same page number` Story (`ambre-roadmap.md` E5).
 * **Three more derived blocks are designed and unbuilt, and each is this walk with another
   predicate.** A table of figures and a table of tables list the captioned pictures and tables; an
   index lists the terms an author marked, alphabetically, with the pages they fall on. All three

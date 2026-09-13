@@ -183,7 +183,8 @@ selected whole and deleted whole, and no caret position falls inside it (`PROSE-
   opened is undecided.
 * **Two peers may lay out the same document differently**, and every page number here rests on
   their agreeing. The gap is `features/ambre-spec-prose-pagination.md section 5`, and the table of
-  contents and the comments rest on it too.
+  contents and the comments rest on it too. It lands with the `Two peers read the same page number`
+  Story (`ambre-roadmap.md` E5).
 * **Nothing says that a restored block keeps its identity.** `PROSE-FEAT-133` rests on an undo of
   a deletion bringing the target back under the same identity a reference names. `ambre-spec-undo.md`
   states that an undo reverts this peer's own operation and says nothing about what identity the

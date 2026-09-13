@@ -244,7 +244,8 @@ position the view publishes for its anchor (`PROSE-UI-050`).
   records the same gap for a note whose call is deleted; this is the comments half of it.
 * **The refusal has no event.** `PROSE-FEAT-080` requires the refusal to be reported, and the
   engine declares one untyped error alone (`features/ambre-spec-prose-engine.md section 3`). Five
-  features report through the same gap.
+  features report through the same gap, and it lands with the `A refused command names what it
+  refused` Story (`ambre-roadmap.md` E5).
 * **The panel's own state is named and never declared.**
   `features/ambre-spec-prose-engine.md section 3` gives the view a `CommentPanelState` field, and no
   document says what it holds -- which thread is open, where the panel is scrolled, whether the
@@ -254,7 +255,8 @@ position the view publishes for its anchor (`PROSE-UI-050`).
   refuses the three cases.
 * **Nothing rules on a comment's page.** A thread whose panel entry names a page number rests on
   two peers breaking pages at the same place, which no rule states
-  (`features/ambre-spec-prose-pagination.md section 5`).
+  (`features/ambre-spec-prose-pagination.md section 5`). The `Two peers read the same page number`
+  Story settles it (`ambre-roadmap.md` E5).
 * **Two applications stamp a comment's author two ways.** `TOILE-FEAT-014` requires the canonical
   `UserId` resolved by `ambre-sync` and refuses a peer identifier; this document stores a display
   name and the document peer, and no `UserId` at all (`ambre-spec-prose-schema.md section 3`). Both

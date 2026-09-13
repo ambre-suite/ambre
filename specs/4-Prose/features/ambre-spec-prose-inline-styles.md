@@ -235,7 +235,8 @@ Which control sits where, and what the format bar shows for the current selectio
   told, and the refusal was written as `CommandRejected`, a variant
   `features/ambre-spec-prose-engine.md section 3` never declares -- the lists feature reports
   through the same missing variant. The enum carries one generic error instead, which names no
-  command and no reason.
+  command and no reason. It lands with the `A refused command names what it refused` Story
+  (`ambre-roadmap.md` E5).
 * **Nothing says which side of the registry a new key falls on.** Clearing removes the
   presentation marks and the link, and spares the annotations; the split is a sentence of
   section 3 rather than a column of the registry, so a key added to

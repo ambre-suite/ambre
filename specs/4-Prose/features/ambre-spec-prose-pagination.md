@@ -311,7 +311,8 @@ everywhere (`features/ambre-spec-prose-page-rendering.md`).
   there (`PROSE-034`). A collaborator with a different font set can measure the same paragraph
   differently and land on a different page count. That matters the moment a page number leaves the
   screen: a comment naming a page, a cross reference to one, or two users reading the same PDF.
-  No row states the guarantee and no decision refuses it.
+  No row states the guarantee and no decision refuses it. It lands with the `Two peers read the
+  same page number` Story (`ambre-roadmap.md` E5).
 * **The layout has no version rule of its own.** The engine stamps each layout so the UI thread can
   drop a stale one (`PROSE-UI-016`, `features/ambre-spec-prose-page-rendering.md`), and nothing
   here says what the stamp counts or that it never goes backwards.
