@@ -89,8 +89,8 @@ The shared gaps are in `ambre-spec-undo.md section 6`. Prose's own:
   document (`ambre-spec-prose-schema.md section 3`, `ambre-spec-object-store.md`). No command
   saves, lists, restores or deletes one, and nothing says whether restoring a version is an
   ordinary undoable change or a fork. Trame records the same gap and carries no design at all
-  (`features/ambre-spec-trame-undo.md`); the Story is "The later writing set"
-  (`ambre-roadmap.md`).
+  (`features/ambre-spec-trame-undo.md`); the Story is
+  "The later writing set" (`ambre-roadmap.md` POST-V1).
 * **Nothing rules on undo inside a table cell, a header or a footnote.** Those hold ordinary
   blocks, so their edits enter the same history, and no rule says whether the caret returns to a
   band the reader may not be looking at.

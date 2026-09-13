@@ -443,7 +443,12 @@ def story_defects(
             f"-- a story stays open until every row it builds has left "
             f"`unimplemented`"
         )
-    if epic and epic.upper() != story_epic.upper():
+    if not epic:
+        defects.append(
+            f"{where}: lands with {real!r} and names no epic -- write "
+            f"(`{ROADMAP}` {story_epic}), so a move of the story fails here"
+        )
+    elif epic.upper() != story_epic.upper():
         defects.append(
             f"{where}: cites epic `{epic}`, and {real!r} lives under `{story_epic}`"
             f" ({ROADMAP}:{lineno})"
@@ -458,6 +463,13 @@ CITED_STORY = re.compile(
     r"(?P<name>`[^`]+`|\"[^\"]+\")\s*(?:Story\s*)?"
     r"\(`ambre-roadmap\.md`\s*(?P<epic>[^),]*)"
 )
+# The same citation with the parenthesis left off. It reads as a citation and
+# resolves to nothing: 41 of them named a story no gate then held, and one named
+# a story that had closed into the journal while the sentence still said
+# "the roadmap's". The name is on the line the word `Story` is on, so a citation
+# wrapped across two lines is this defect too, and is rewrapped rather than
+# excused.
+BARE_STORY = re.compile(r"(?P<name>`[^`]+`|\"[^\"]+\")\s*[Ss]tory\b")
 
 
 def loose_citation_defects(
@@ -474,6 +486,17 @@ def loose_citation_defects(
     was cited under `E6` by three `unverified` rows while the story moved to `E7`.
     """
     defects = []
+    resolved = {story_key(m["name"]) for m in CITED_STORY.finditer(line)} | handled
+    for m in BARE_STORY.finditer(line):
+        name = m["name"].strip('`"')
+        if story_key(name) in resolved:
+            continue
+        if story_key(name) in schedule or story_key(name) in closed:
+            defects.append(
+                f"{where}: names the Story {name!r} and does not cite it -- a name "
+                f"the gate cannot resolve rots in silence, so write it "
+                f"{name} Story (`{ROADMAP}` <epic>)"
+            )
     for m in CITED_STORY.finditer(line):
         name = m["name"].strip('`"')
         if story_key(name) in handled:
@@ -493,7 +516,14 @@ def loose_citation_defects(
                 f"{where}: cites the Story {real!r}, which {ROADMAP}:{lineno} ticks"
                 f" `[x]` -- the work it waits on has shipped"
             )
-        elif m["epic"].strip() and m["epic"].strip().upper() != story_epic.upper():
+        elif not m["epic"].strip():
+            # Ten citations named the roadmap and no epic, so the check below had
+            # nothing to compare and the move that renames an epic stayed green.
+            defects.append(
+                f"{where}: cites {real!r} with no epic -- write "
+                f"(`{ROADMAP}` {story_epic}), so a move of the story fails here"
+            )
+        elif m["epic"].strip().upper() != story_epic.upper():
             defects.append(
                 f"{where}: cites {real!r} under epic `{m['epic'].strip()}`, and it "
                 f"lives under `{story_epic}` ({ROADMAP}:{lineno})"

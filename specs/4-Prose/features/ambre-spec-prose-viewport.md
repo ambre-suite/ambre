@@ -204,8 +204,9 @@ The zoom control itself is chrome, not canvas, and lives with the rest of the ap
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **The zoom is Prose's own, and the shared model is a Story.** The clamp, the anchor and the
-  centring are specified here; the "One zoom model" Story exists to make them one implementation
-  across the applications, and until it lands the spreadsheet has no keyboard zoom at all.
+  centring are specified here; the "One zoom model" Story (`ambre-roadmap.md` E8) exists to make them
+  one implementation across the applications, and until it lands the spreadsheet has no keyboard
+  zoom at all.
 * **Nothing rules on inertial scroll.** A momentum term is carried in the view state and no rule
   says how it decays, whether it survives a relayout, or what stops it at the ends of the column.
 * **The zoom does not survive a reload.** It is view state and nothing writes it anywhere, so a

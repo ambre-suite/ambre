@@ -307,5 +307,5 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
   invalidates the compiled form of the written cell before anything compares its text
   (`TRAME-212`), so re-typing a value recompiles it. Neither produces a wrong number; both are a
   cost nothing weighs. The walk and the cycle check are the
-  other half, in `features/ambre-spec-trame-engine.md section 6`. Answered by the "A recompute
-  bounded by what changed" story (`ambre-roadmap.md`).
+  other half, in `features/ambre-spec-trame-engine.md section 6`. Answered by the
+  "A recompute bounded by what changed" Story (`ambre-roadmap.md` E6).

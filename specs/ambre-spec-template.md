@@ -98,7 +98,7 @@ carries both:
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
 | `XXX-001` | `INV` | The feature MUST ... | this spec section 2, row 1 | `ambre_crate::module::test_name`, `::second_test` | verified |
-| `XXX-003` | `IO` | The feature MUST ... | this spec section 4 | not built -- lands with `Grid surface` | unimplemented |
+| `XXX-003` | `IO` | The feature MUST ... | this spec section 4 | not built -- lands with `Grid surface` (`ambre-roadmap.md` E6) | unimplemented |
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
@@ -241,6 +241,13 @@ own assertion stays a review act.
   the row's status has moved.** Without the binding, `unimplemented` decays into the next `Draft`:
   true everywhere, informative nowhere. `contracts.py` resolves the name against the roadmap, so a
   story that is ticked, renamed or moved fails the build instead of leaving the row pointing nowhere.
+* **Every other mention of a story is a citation, in one form**: `` `<Story>` Story
+  (`ambre-roadmap.md` <epic>) ``, the whole of it on one line. A `Verification` cell answering a rule
+  that fails today, a section 5 bullet, a rejected alternative -- all of them. Writing the name alone
+  reads like a citation and resolves to nothing: the corpus carried 41 of them, and one of them
+  named a story that had closed into the journal while the sentence still said "the roadmap's". The
+  epic is not optional either: ten citations named the file and no epic, so the story could move
+  under another epic and nothing failed. `contracts.py` refuses a bare name and a missing epic.
 * **A `Verification` cell that says `none` says what is covered and what is not.** "none" alone hides
   which half of the rule is loose.
 * **A cited mechanism must run in CI.** A test name resolving to a `fn` behind a Cargo feature no job
@@ -310,6 +317,7 @@ A pillar without a script is decoration. The second column names the script that
 | Current state, never the steps | `spec_shape.py` -- a checkbox, a milestone word or a past-tense marker in a feature document fails |
 | One schedule | `spec_shape.py` -- a checkbox list or a roadmap heading **in any spec** fails |
 | An unbuilt row waits on an open story | `contracts.py` -- the story an `unimplemented` row lands with must resolve to one open row of `ambre-roadmap.md`. A name no row carries, a name two rows carry, a story already ticked and a stale epic each fail |
+| Every story mention resolves | `contracts.py` -- a mention shaped `<name> Story` that names a row of the roadmap or the journal must carry `` (`ambre-roadmap.md` <epic>) `` on the same line, and the epic must be the one the story lives under. A bare name, a missing epic and a stale epic each fail |
 | The coverage debt only falls | `contracts.py` -- a ceiling per document on its `unverified` rows, in `scripts/contract_ceilings.json`, zero for a document the file does not name. An unbuilt row is held by its story; a shipped row nothing would fail on was held by nothing, and adding one cost an author a regeneration. A growth is `just contracts-ceilings-raise`, one reviewed line. `human-review` and `qa-manual` carry no ceiling: they are decisions |
 | The schema document stays a schema | `spec_shape.py` -- 600 prose words for the file, 40 for a container note |
 | The schema matches the code | `spec_shape.py`, **asymmetric**: a container declared with no code is normal; one built in the code and absent from the table fails |

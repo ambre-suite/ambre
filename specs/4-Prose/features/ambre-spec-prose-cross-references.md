@@ -208,4 +208,4 @@ selected whole and deleted whole, and no caret position falls inside it (`PROSE-
   both the citation and the generated list on demand from the chosen style. The container is
   declared and unwritten (`ambre-spec-prose-schema.md section 3`), the mark key is not declared at
   all, and the generated list is a derived block like the table of contents rather than a reference.
-  Both designs are the "The later writing set" Story (`ambre-roadmap.md`).
+  Both designs are the "The later writing set" Story (`ambre-roadmap.md` POST-V1).

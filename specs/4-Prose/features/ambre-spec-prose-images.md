@@ -317,7 +317,7 @@ the loading placeholder for ever (`PROSE-UI-046`).
   Neither the mark nor the block type is in `ambre-spec-prose-schema.md section 3`, no event
   carries the rendering, and the renderer itself is named as a choice nobody has made. It is placed
   here because the path from a Logic-thread product to a painted block is this feature's, and the
-  Story is "The later writing set" (`ambre-roadmap.md`).
+  Story is "The later writing set" (`ambre-roadmap.md` POST-V1).
 * **A Word table holding a picture loses the cell it was in.** The pipeline lifts it beside the
   table and reports the lift (`PROSE-IO-026`, `PROSE-FEAT-053`), which is settled. What is not
   settled is the way back: an export writes the lifted picture where the document now holds it, so

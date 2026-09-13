@@ -215,7 +215,8 @@ The bus has no control of its own. What a user meets is what it does under load.
   against the last one it accepted; Toile's viewport request carries no version, so a late answer is
   applied whenever it lands (`BUS-017`).
 * **No rule covers a channel message payload.** The channel plane still carries opaque bytes on both
-  envelopes, which is the `ARCH P7` Story, and the bus states nothing about what those bytes are.
+  envelopes, which is the `ARCH P7` Story (`ambre-roadmap.md` E5). The bus states nothing about what
+  those bytes are.
 * **Nothing bounds how long a service request may stay outstanding.** A request whose answer never
   arrives leaves its route recorded, and nothing times it out.
 

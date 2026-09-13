@@ -197,4 +197,4 @@ rather than to a page (`features/ambre-spec-prose-pdf-export.md section 3`).
   index lists the terms an author marked, alphabetically, with the pages they fall on. All three
   reuse the settling pass and the page numbers of section 3, none has a block type in
   `ambre-spec-prose-schema.md section 3`, and the index needs a mark key that is not declared
-  either. The Story is "The later writing set" (`ambre-roadmap.md`).
+  either. The Story is "The later writing set" (`ambre-roadmap.md` POST-V1).

@@ -173,7 +173,8 @@ their chord lists, and decodes none of the three itself.
 
 * **A paste from another Ambre application is not ruled on.** The rich half carries this
   application's own shape, so a paste from the whiteboard or the spreadsheet falls back to plain
-  text. Making that structure survive is the "Cross-app rich paste" Story.
+  text. Making that structure survive is the
+  "Cross-app rich paste" Story (`ambre-roadmap.md` POST-V1).
 * **Nothing rules on the size of a payload.** A copy of a whole document builds it in memory
   twice, once as text and once as bytes, and no rule caps it or says what happens when the system
   clipboard refuses it.

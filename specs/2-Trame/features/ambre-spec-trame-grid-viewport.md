@@ -190,7 +190,7 @@ painter never leaves it (`TRAME-UI-013`). Every fill comes from the theme palett
   each boundary. No field carries it and nothing draws it.
 * **A pixel-smooth axis** (`TRAME-UI-049`). The remainder is accumulated but never drawn: the grid
   still steps by a whole row. A smooth axis means offsetting the painted content by the remainder,
-  which the "Post-V1 surface" Story carries.
+  which the "Post-V1 surface" Story (`ambre-roadmap.md` POST-V1) carries.
 * **Touch and pinch to zoom** carry no rule here, and none is owed: touch input is horizontal --
   `Ctrl` with the wheel is handed to the browser and no two-finger gesture reaches the grid, in
   Trame as in Toile -- so the rule is `UI-THREAD-013`, on the shared zoom engine, and it ships with

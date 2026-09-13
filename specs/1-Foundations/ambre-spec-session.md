@@ -192,7 +192,8 @@ authentication error asking them to sign in again. Where each of those is drawn 
   and both handlers ask the router for a provider segment that route does not declare. Every call
   therefore fails to build its arguments and answers an internal error, so the only sign-in a
   production deployment offers has never worked. Nothing catches it: the request suite mounts its
-  own route table and omits both (`SRV-022`, the `The production sign-in path` Story).
+  own route table and omits both (`SRV-022`). The repair is the
+  `The production sign-in path` Story (`ambre-roadmap.md` E7).
 * **One provider is configured, and the corpus names four.** The deployment reads the credentials of
   a single provider, and the route table names that provider literally.
 * **A key that does not parse becomes an all-zero key.** Both sign-in paths fall back to it rather

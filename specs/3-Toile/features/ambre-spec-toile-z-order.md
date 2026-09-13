@@ -44,7 +44,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `TOILE-061` | `FRAME` | Removing a node MUST NOT rewrite the rest of the order. | `ambre-spec-budgets.md section 1`; this spec section 6 | none, and **the rule fails today**: the removal deletes the whole list and re-pushes the survivors, so deleting one element sends an operation per surviving node to every peer -- section 6. Answered by the "Engine and render optimization" Story, which names the paint-order rewrite | unverified |
+| `TOILE-061` | `FRAME` | Removing a node MUST NOT rewrite the rest of the order. | `ambre-spec-budgets.md section 1`; this spec section 6 | none, and **the rule fails today**: the removal deletes the whole list and re-pushes the survivors, so deleting one element sends an operation per surviving node to every peer -- section 6. Answered by the "Engine and render optimization" Story (`ambre-roadmap.md` E6), which names the paint-order rewrite | unverified |
 | `TOILE-129` | `FRAME` | Removing a node MUST NOT drop an entry it was not asked to remove. | this spec section 3 | none, and **the rule fails today**: the rewrite keeps the entries that decode, so an entry whose tag this version cannot read is destroyed by the next unrelated delete. That is the repair section 5 rejects, run on a write rather than on a read -- section 6. Answered by the `The paint order holds every element` Story (`ambre-roadmap.md` E7) | unverified |
 
 * **Budget.** a remote change under 2 ms, a row of `ambre-spec-budgets.md section 1`.

@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-004` | `INV` | The spatial index MUST be a derived cache: the incrementally maintained index MUST hold the same elements as a from-scratch rebuild. | this spec section 3 | `ambre_toile::logic::index::prop::incremental_matches_rebuild` (proptest), `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` (proptest over an operation stream). Both compare the population and the paint set; neither compares them at a camera that culls, which is `TOILE-206` | verified |
 | `TOILE-206` | `INV` | The visible set the incremental index answers MUST equal the rebuild's at a camera that culls, not only at one that shows everything. | this spec section 3 | none: `incremental_matches_rebuild` probes one viewport covering the whole populated area, and both `ToileState` proptests derive under `wide_viewport`, whose comment says it culls nothing. The equivalence is held over the population, never over a cull | unverified |
 | `TOILE-005` | `INV` | The visible set MUST be resolved from the spatial index, and MUST NOT drop an element that meets the viewport. | this spec section 3 | `ambre_toile::logic::index::tests::query_visible_culls_offscreen`, `::remove_then_query_is_empty`, `ambre_toile::logic::convergence_tests::viewport_culls_offscreen_nodes` | verified |
-| `TOILE-207` | `INV` | The answer the UI receives MUST carry nothing the camera does not meet. | this spec section 3 | none, and **the rule fails today**: the derivation culls elements against the index and walks connectors unconditionally, so every connector of the board is routed and shipped at every camera. `viewport_culls_offscreen_nodes` filters `DisplayNode::Connector` out of what it asserts on, so no test can see it. Answered by the "Engine and render optimization" Story | unverified |
+| `TOILE-207` | `INV` | The answer the UI receives MUST carry nothing the camera does not meet. | this spec section 3 | none, and **the rule fails today**: the derivation culls elements against the index and walks connectors unconditionally, so every connector of the board is routed and shipped at every camera. `viewport_culls_offscreen_nodes` filters `DisplayNode::Connector` out of what it asserts on, so no test can see it. Answered by the "Engine and render optimization" Story (`ambre-roadmap.md` E6) | unverified |
 | `TOILE-017` | `CONC` | Two peers exchanging the same operations in any interleaving MUST converge to the same board and the same derived caches. | this spec section 2; `ambre-spec-testing.md` | `ambre_toile::logic::convergence_tests::two_peers_converge`, `::caches_match_a_full_rebuild` (proptest over create, move, resize, rotate, restyle, delete, reorder, group, ungroup, connect, stroke, frame, slide order, auto-layout and react) | verified |
 | `TOILE-208` | `INV` | The answer the UI receives MUST carry no presence sample and no acknowledgement. | this spec section 3 | type-level: `DisplayViewport` has four fields -- the camera, the paint order, the reaction tallies and the comment pins -- and no display event acknowledges a command; the absence is the proof | verified |
 | `TOILE-023` | `INV` | `ambre-toile` MUST contain no `unsafe`. | README pillar "Security" | measured zero `unsafe` in the crate, but no `#![forbid(unsafe_code)]` on its root -- a claim, not a mechanism (`ambre-spec-testing.md`, the mechanism ladder) | unverified |
@@ -48,7 +48,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `TOILE-092` | `POST` | A remote change MUST rebuild only the derived caches it touched. | this spec section 3 | none, and **the rule fails today**: the remote path calls `rebuild_caches`, which clears the bounds map, bulk-loads the index, re-reads the paint order and re-unions every group to a fixpoint, whatever the change carried. Answered by the "Engine and render optimization" Story | unverified |
+| `TOILE-092` | `POST` | A remote change MUST rebuild only the derived caches it touched. | this spec section 3 | none, and **the rule fails today**: the remote path calls `rebuild_caches`, which clears the bounds map, bulk-loads the index, re-reads the paint order and re-unions every group to a fixpoint, whatever the change carried. Answered by the "Engine and render optimization" Story (`ambre-roadmap.md` E6) | unverified |
 | `TOILE-213` | `POST` | A batch of remote deltas MUST repaint once, not once per delta. | this spec section 3 | none: `apply_remote_batch` amortizes the rebuild by construction, but no test of `ambre-toile` calls it. Trame holds the same rule with a test (`features/ambre-spec-trame-engine.md`) | unverified |
 | `TOILE-214` | `FAIL` | A remote change that cannot be imported MUST tell the user their board is behind. | this spec section 3 | none, and **the rule fails today**: the failure is reported as `ToileEvent::Error` carrying an empty element id, and the canvas logs that variant without surfacing it, so a board silently stops receiving a collaborator's work. Answered by the `A remote change the board cannot apply is announced` Story (`ambre-roadmap.md` E7) | unverified |
 | `TOILE-215` | `FAIL` | One delta of a batch that fails to import MUST NOT leave the board silently behind the rest. | this spec section 3 | none, and **the rule fails today**: the batch path logs the failed delta, keeps merging the others and reports success as long as one import succeeded, so the board is short a change nobody is told about. Answered by the `A remote change the board cannot apply is announced` Story (`ambre-roadmap.md` E7) | unverified |
@@ -74,7 +74,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `TOILE-091` | `POST` | Dropping an element from the spatial index MUST NOT cost a walk of the index. | this spec section 3; `ambre-spec-budgets.md section 1` | none, and **the rule fails today**: `SpatialIndex::remove` scans every leaf to find the one it removes, and `update` is a remove followed by an insert, so one drag step costs a walk of the whole board. Answered by the "Engine and render optimization" Story | unverified |
+| `TOILE-091` | `POST` | Dropping an element from the spatial index MUST NOT cost a walk of the index. | this spec section 3; `ambre-spec-budgets.md section 1` | none, and **the rule fails today**: `SpatialIndex::remove` scans every leaf to find the one it removes, and `update` is a remove followed by an insert, so one drag step costs a walk of the whole board. Answered by the "Engine and render optimization" Story (`ambre-roadmap.md` E6) | unverified |
 | `TOILE-220` | `POST` | An element dropped from the index MUST NOT come back in a query. | this spec section 3 | `ambre_toile::logic::index::tests::remove_then_query_is_empty`, and the removal branch of `ambre_toile::logic::index::prop::incremental_matches_rebuild` | verified |
 | `TOILE-221` | `FRAME` | Updating one element's leaf MUST NOT change another element's. | this spec section 3 | `ambre_toile::logic::index::prop::incremental_matches_rebuild` drives an interleaved upsert and remove stream over eight keys against a model map, so a leaf touched in place of another diverges from the rebuild | verified |
 
@@ -447,7 +447,7 @@ error rather than a silent drop (`TOILE-UI-101`).
   notice cover the gap. The peers are not diverged, only late, and nothing says how late.
 * **An index update walks the index** (`TOILE-091`). Removing a leaf is a linear search, and a
   geometry write is a remove followed by an insert, so a drag at 60 frames a second walks the whole
-  board 60 times a second. Answered by the "Engine and render optimization" Story.
+  board 60 times a second. Answered by the "Engine and render optimization" Story (`ambre-roadmap.md` E6).
 * **A remote change rebuilds everything** (`TOILE-092`). One moved note from a collaborator clears
   the bounds map, bulk-loads the index and re-reads the paint order. The same rebuild runs on an
   undo and on a redo. Answered by the same Story.
@@ -458,11 +458,11 @@ error rather than a silent drop (`TOILE-UI-101`).
   pushes the whole visible set. The engine could instead send the changed elements and the removals,
   which the UI applies onto the set it holds, and keep the whole push as the fallback. The decision
   is the engine's, keyed on the size of the change. Nothing of it is built, and it lands with the
-  "Engine and render optimization" Story.
+  "Engine and render optimization" Story (`ambre-roadmap.md` E6).
 * **A connector is never culled** (`TOILE-207`). Elements are resolved against the index and
   connectors are walked whole, so a board of a thousand arrows pays for all of them at every
   camera. The one test that names the cull filters connectors out of what it asserts on, so the
-  belt cannot see it. Answered by the "Engine and render optimization" Story.
+  belt cannot see it. Answered by the "Engine and render optimization" Story (`ambre-roadmap.md` E6).
 * **A failed import is silent** (`TOILE-214`, `TOILE-215`). A remote delta that will not import is
   reported as an error with an empty element id, which the canvas logs and drops; inside a batch it
   is logged and skipped and the batch still reports success. Either way the board is behind and the

@@ -60,12 +60,13 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-015` | `FAIL` | Only an owner MUST be able to remove a member or re-key a document. | this spec section 3 | `ambre_server::routes::tests::handler_tests::rotate_key_denied_to_editor`, `::delete_document_only_by_owner` assert the refusals; `::revoke_then_rotate_replaces_owner_key` asserts the owner's own path still completes | verified |
 | `SRV-016` | `FAIL` | A caller MUST NOT grant a role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::share::tests::editor_cannot_grant_owner`; `::owner_can_grant_any_valid_role` and `::doc_role_rank_ordering` pin the ordering the clamp is read off | verified |
 | `SRV-070` | `FAIL` | A caller MUST NOT change a member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::editor_cannot_demote_owner_via_invite`. The invitation is also the role-change path, so this is the half a clamp on the granted role alone leaves open | verified |
-| `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | none, and **the rule fails today**: the delete removes the rows and nothing else, so the document's sequence counter and its per-author clock hash stay in the ephemeral store with no expiry. Answered by the `A deleted document leaves nothing` Story | unverified |
+| `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | none, and **the rule fails today**: the delete removes the rows and nothing else, so the document's sequence counter and its per-author clock hash stay in the ephemeral store with no expiry. Answered by the `A deleted document leaves nothing` Story (`ambre-roadmap.md` E7) | unverified |
 
 * **Budget.** the per-operation targets of `ambre-spec-budgets.md section 3`, and the roughly
   50 KB per open document of `ambre-spec-budgets.md section 6`. Every relay row of that
   register reads **none exists**: no
-  bench measures the relay today, which is the `The performance budgets given a mechanism` Story.
+  bench measures the relay today, which is the
+  `The performance budgets given a mechanism` Story (`ambre-roadmap.md` E9).
 * **Boundary.** this document is the relay side of the boundary
   `ambre-spec-zero-knowledge.md` draws. `SRV-001` keeps the payload out of the process and
   out of the logs, `SRV-012` refuses the relay the ability to open one, `SRV-005` keeps the
@@ -243,7 +244,7 @@ declares their tables and nothing serves them (`ambre-spec-broadcast.md`, `SRV-0
   sign-in request is therefore counted as an ordinary request -- a limit thirty times looser -- and
   fails open where the rule says it must fail closed. The tests assert the tier's answer and the
   classifier's answer separately, and neither one runs the path the assembled router produces
-  (`SRV-013`, the `The production sign-in path` Story).
+  (`SRV-013`). The repair is the `The production sign-in path` Story (`ambre-roadmap.md` E7).
 * **A delete removes rows and nothing else.** The register cascades, and the document's sequence
   counter, its per-author clock hash and its pending list stay in the ephemeral store with no
   expiry, while every sealed blob stays in object storage (`SRV-017`,

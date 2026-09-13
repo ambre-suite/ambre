@@ -235,8 +235,8 @@ Which control sits where, and what the format bar shows for the current selectio
   told, and the refusal was written as `CommandRejected`, a variant
   `features/ambre-spec-prose-engine.md section 3` never declares -- the lists feature reports
   through the same missing variant. The enum carries one generic error instead, which names no
-  command and no reason. It lands with the `A refused command names what it refused` Story
-  (`ambre-roadmap.md` E5).
+  command and no reason. It lands with the
+  `A refused command names what it refused` Story (`ambre-roadmap.md` E5).
 * **Nothing says which side of the registry a new key falls on.** Clearing removes the
   presentation marks and the link, and spares the annotations; the split is a sentence of
   section 3 rather than a column of the registry, so a key added to
@@ -247,8 +247,8 @@ Which control sits where, and what the format bar shows for the current selectio
 * **A named paragraph style cannot inherit from another.** The style store is flat and the cascade
   above has no level for a base style. The deferred design gives a style a `based_on` key and walks
   the chain, capped at five levels with a cycle guard; no container carries the key
-  (`ambre-spec-prose-schema.md section 3`), and the Story is "The later writing set"
-  (`ambre-roadmap.md`).
+  (`ambre-spec-prose-schema.md section 3`), and the Story is
+  "The later writing set" (`ambre-roadmap.md` POST-V1).
 * **Nothing rules on a link's target.** The link mark carries a string, and no rule constrains the
   scheme, the length or what happens on an empty one. Opening it is a click rule
   (`PROSE-UI-070`, `PROSE-UI-071`, `features/ambre-spec-prose-selection.md`), and the shared

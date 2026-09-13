@@ -693,8 +693,8 @@ Prose view is an arm of the frame host's application enum, like Trame's.
   writes its variants; the event plane offers a numeric code and a message, which names neither the
   command that failed nor a reason. Five features -- the styles, the lists, the tables, the bands and
   the comments -- each record the same absence, and each was written against a refusal event this
-  plane does not declare. It lands with the `A refused command names what it refused` Story
-  (`ambre-roadmap.md` E5).
+  plane does not declare. It lands with the
+  `A refused command names what it refused` Story (`ambre-roadmap.md` E5).
 * **Three commands were declared by a feature and by no plane.** The spell checker's language,
   accept and dictionary commands are stated in `features/ambre-spec-prose-spell-check.md` and were
   absent from the plane; they are declared in section 3.B now. The plane's own error path for a

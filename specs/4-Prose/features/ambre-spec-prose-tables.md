@@ -277,8 +277,8 @@ traversal lands on the anchor and skips the cells it covers.
 * **The refusal has no event.** `PROSE-040`, `PROSE-FEAT-046` and `PROSE-FEAT-047` each require the
   refusal to be reported, and the engine declares one untyped error carrying a code and a message
   (`features/ambre-spec-prose-engine.md section 3`). The lists and the styles features report through the
-  same gap, and it lands with the `A refused command names what it refused` Story
-  (`ambre-roadmap.md` E5).
+  same gap, and it lands with the
+  `A refused command names what it refused` Story (`ambre-roadmap.md` E5).
 * **Nothing rules on a caret inside a cell a merge covers.** Traversal skips a covered cell
   (section 4), and no row says where a caret already sitting in one goes when the merge lands.
 * **Nothing rules on the selection inside a table.** Every gesture above needs a rectangle of

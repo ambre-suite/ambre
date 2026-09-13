@@ -257,7 +257,7 @@ toolbar and the slash command.
   anyone else. The mark key is in no registry (`ambre-spec-prose-schema.md section 3`), and the
   rule it would carry is application-level only: a peer writing to the document directly is not
   refused by anything, because a CRDT has no writer to check. That is a limitation to state to the
-  author, not a security boundary, and `ZK-001` is untouched by it. The Story is "The later
-  writing set" (`ambre-roadmap.md`).
+  author, not a security boundary, and `ZK-001` is untouched by it. The Story is
+  "The later writing set" (`ambre-roadmap.md` POST-V1).
 * **A drop of text into the page is named as a trigger and specified nowhere.** No command carries
   it, and the import path it would otherwise take is a document import, not an insertion.

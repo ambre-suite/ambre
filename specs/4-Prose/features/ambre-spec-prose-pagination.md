@@ -333,5 +333,5 @@ everywhere (`features/ambre-spec-prose-page-rendering.md`).
   would change what a page is: `meta/line_numbers` and `meta/pageless` are containers the schema
   carries as deferred, a section break would make the page box vary within one document, and two
   or three columns would make the phases below place blocks across a column set rather than down
-  one. All four are the "The later writing set" Story (`ambre-roadmap.md`), and none of the four has
+  one. All four are the "The later writing set" Story (`ambre-roadmap.md` POST-V1), and none has
   a block type or an attribute in `ambre-spec-prose-schema.md section 3`.

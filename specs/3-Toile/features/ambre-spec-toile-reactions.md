@@ -198,8 +198,8 @@ resolve and are tested like every other menu entry
 
 * **Nothing casts a vote** (`TOILE-FEAT-022`). The value kind, the signed total, the voter count and
   the trailing badge all exist and are tested; no menu entry, button or chord produces one. The
-  roadmap's "Presentation and reactions" Story named votes as shipped, and its emoji half is what
-  shipped.
+  emoji half of this document has a surface, the vote half has none, and no open Story carries the
+  difference.
 * **The facilitation layer is a design** (`TOILE-FEAT-024`, `TOILE-FEAT-025`). A shared timer and a
   facilitated vote session are shared intent, so they are CRDT and their containers are declared. The
   Story that would build them is the last one of its epic. A vote budget can only be advisory, like

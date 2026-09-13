@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE ZOOM MODEL
 
 **Type:** Horizontal (framework)
-**Implementation:** design-only -- each application zooms its own way; the one engine behind the
-shared chip is the "One zoom model" Story.
+**Implementation:** design-only -- each application zooms its own way. The one engine behind the
+shared chip is the "One zoom model" Story (`ambre-roadmap.md` E8).
 
 > A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the
 > factor from one chip. What zooms is the view alone: no collaborator sees it, and the document does
@@ -92,8 +92,8 @@ application's own.
    mapping (`ZOOM-003`);
 4. the view repaints and the chip reads the new factor (`ambre-spec-chrome.md`, `CHROME-014`).
 
-**Code.** not built -- the one engine lands with the "One zoom model" Story. Until then the mapping
-lives in each application's viewport (section 5).
+**Code.** not built -- the one engine lands with the "One zoom model" Story (`ambre-roadmap.md` E8).
+Until then the mapping lives in each application's viewport (section 5).
 
 ---
 
@@ -128,8 +128,8 @@ every editor.
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **The one engine is unbuilt.** Each application zooms in its own viewport today, so the shared
-  factor, the shared ladder and the shared commands are a design bound to the "One zoom model" Story
-  (`ambre-roadmap.md` E8), not code.
+  factor, the shared ladder and the shared commands are a design bound to the
+  "One zoom model" Story (`ambre-roadmap.md` E8), not code.
 * **Toile zooms, without the shared model.** Toile clamps its camera and maps it
   (`3-Toile/features/ambre-spec-toile-viewport.md`), and its zoom ids resolve to no board command
   (`3-Toile/features/ambre-spec-toile-menus.md`). Nothing yet reads the shared ladder.

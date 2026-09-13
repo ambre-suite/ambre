@@ -156,7 +156,7 @@ declared in `features/ambre-spec-prose-engine.md section 3`):
 The shared chords, the empty-query clear and the reveal are `ambre-spec-find.md section 4`; the
 reveal is the caret's own (`features/ambre-spec-prose-selection.md section 2`). The search panel is
 chrome (`ambre-spec-chrome.md`). One match session with a live cursor, in every application, is the
-"One find and replace" Story.
+"One find and replace" Story (`ambre-roadmap.md` E8).
 
 ---
 
@@ -188,4 +188,4 @@ whole-word and case fold -- are in `ambre-spec-find.md section 6`. Prose's own:
   or taken whole.
 * **Regular-expression search is a switch with no design.** The query carries the flag, no rule
   covers what a pattern may express, what it costs or what a malformed one reports, and the Story
-  that would build it is "The later writing set" (`ambre-roadmap.md`).
+  that would build it is "The later writing set" (`ambre-roadmap.md` POST-V1).
