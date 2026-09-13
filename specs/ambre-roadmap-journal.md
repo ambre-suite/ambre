@@ -107,3 +107,29 @@ The MVP shipped functional and under-tested. This epic settled that debt before 
 | `[x]` The convergence property test | -- | two peers, interleaved operations, identical converged documents |
 | `[x]` The first UI belt | -- | the Trame chrome tested in a real browser, reactive layer and DOM |
 | `[x]` The MVP feature belts | -- | the filter, sort, undo and CSV belts green in CI, and the concurrent-filter case folded into the convergence test |
+
+## EF -- DOCUMENT CORPORA AND NATIVE FILE FORMAT  `[x]`
+
+Documents in known states, and the file they travel in. One epic because a fixture **is** an `.ambre`
+file and the fixture loader **is** the production importer.
+
+> **Gates.** `DOCFILE P1` follows `ARCH P8`: a file on a user's disk has unbounded age and is beyond
+> our reach to migrate, so it must not ship before payload migration has a mechanism. `EF` does not
+> block `E4`.
+>
+> **`FIXTURES P2` is the one story exempt from "green in CI".** Its benches read git-ignored corpora
+> no CI job builds, so the condition is unreachable by construction. It ships `[x]` when
+> `just fixtures-bench` runs clean on a developer machine and its baselines are committed with the
+> machine they came from. A silent exemption is how a rule stops meaning anything, so the substitute
+> is named here.
+
+| Story | Milestone | Touches |
+| :--- | :--- | :--- |
+| `[x]` `DOCFILE P0` -- the container | -- | the `.ambre` file: one header, one version, one migration path, plaintext export and import |
+| `[x]` `FIXTURES P0` -- deterministic generation | -- | a document built from a seed is byte-identical every time, on any machine |
+| `[x]` `FIXTURES P1` -- the corpus and its gate | -- | the committed test documents, the interop export sources, and a CI gate that fails when one drifts |
+| `[x]` `CONTRIBUTING.md` | -- | the file, which does not exist, and the two checklists that need somewhere to live |
+| `[x]` `ARCH P8` -- persisted schema versioning | -- | a document says which schema it holds; an older one migrates, a newer one is refused without damage, and a record the client cannot decode reaches the user instead of vanishing (`SCHEMA-003` to `SCHEMA-010`) |
+| `[x]` `DOCFILE P1` -- user-facing export and import | V1 | save a document to a file and open one back, in any app |
+| `[x]` `DOCFILE P2` -- passphrase-sealed files | V1 | an exported file encrypted under a passphrase |
+| `[x]` `FIXTURES P2` -- scale corpora and benches | V1 | documents at the sizes the performance budgets name, and the benchmarks that read them |
