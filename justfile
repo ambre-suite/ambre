@@ -82,6 +82,30 @@ fixtures-check:
 fixtures-freeze name:
     cargo run -p ambre-logic --features fixtures --bin ambre-fixtures -- freeze {{name}}
 
+# The scale corpora (`ambre-spec-fixtures.md` section 3). Built on demand and
+# git-ignored (`FIXTURE-022`): they are multi-megabyte and reproducible from a
+# seed, so git would carry them forever for a convenience the seed already gives.
+# `--release` because the build is quadratic in the element count and a debug
+# build turns minutes into an hour. `toile-pdf` because the deck bench cannot
+# compile without Toile's PDF writer, which is behind that non-default feature.
+# An artifact already on disk is kept, so a rerun costs nothing.
+
+# scale corpora: write the git-ignored benchmark documents into `fixtures/bench/`.
+fixtures-bench-corpus:
+    cargo run --release -p ambre-logic --features fixtures,toile-pdf --bin ambre-fixtures -- bench-corpus
+
+# The benches themselves, corpus first. Split from the recipe above because
+# generating is minutes and re-running a bench is not: an author iterating on a
+# hot path runs this one repeatedly and pays the corpus once.
+#
+# No CI job runs it. A figure belongs in the pull request with the machine it
+# came from (`FIXTURE-023`), because `criterion` measures wall clock and a
+# number from one machine means nothing on another.
+
+# benchmarks over the scale corpora, building the corpus when it is absent.
+fixtures-bench: fixtures-bench-corpus
+    cargo bench -p ambre-logic --features fixtures,toile-pdf --bench scale
+
 # The `db` feature flips the `cfg_attr(not(feature = "db"), ignore = ...)` gate
 # off so the otherwise ignored tests run. Bring services up first with
 # `just services-up` (CI declares them as `services:` instead).

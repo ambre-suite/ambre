@@ -421,3 +421,168 @@ fn new_sheet_id(outcome: &TrameOutcome, name: &str) -> String {
         })
         .unwrap_or_else(|| panic!("CreateSheet must report the sheet it minted: {name}"))
 }
+
+// -----------------------------------------------------------------------------
+// The scale generators
+// -----------------------------------------------------------------------------
+
+/// Which workbook a scale generator builds (`FIXTURE-022`).
+///
+/// A second enum beside [`TrameFixture`], not two more variants of it. The two
+/// registries go to two directories. Git carries a correctness artifact and
+/// never a scale one. One registry per destination therefore keeps
+/// `just fixtures` from writing a multi-megabyte file into the working copy.
+///
+/// * Every variant takes a figure `ambre-spec-budgets.md` already states. This
+///   module invents no size and repeats no target.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TrameBenchFixture {
+    /// 100 000 literal cells over 12 500 rows. The document size and cache
+    /// budgets name that figure, and the snapshot import and index rebuild
+    /// benches read the same artifact.
+    DenseGrid100k,
+    /// 100 000 formula cells over 12 500 rows, on two literal source columns.
+    /// The DAG and cache memory budget counts formula cells, so the figure it
+    /// names has to be the formula count and not the cell count.
+    FormulaGrid100k,
+    /// 10 000 formula cells in five cascading columns over 2 000 rows. The
+    /// recompute budget names 10 000 cells; five columns make the walk wide
+    /// rather than deep, which is the shape a recompute meets.
+    FormulaDag10k,
+    /// 10 000 cells over 1 250 rows by 8 columns. The CSV and xlsx export
+    /// budgets name that figure.
+    ExportSheet10k,
+}
+
+/// Trame's half of the scale registry (`ambre-logic`'s `BENCH_REGISTRY`).
+///
+/// Declared next to the generators, like [`TRAME_FIXTURES`]. A generator added
+/// here reaches the corpus with no second edit one crate down.
+pub const TRAME_BENCH_FIXTURES: &[&dyn FixtureGen] = &[
+    &TrameBenchFixture::DenseGrid100k,
+    &TrameBenchFixture::FormulaGrid100k,
+    &TrameBenchFixture::FormulaDag10k,
+    &TrameBenchFixture::ExportSheet10k,
+];
+
+impl FixtureGen for TrameBenchFixture {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::DenseGrid100k => "trame/bench_dense_grid_100k",
+            Self::FormulaGrid100k => "trame/bench_formula_grid_100k",
+            Self::FormulaDag10k => "trame/bench_formula_dag_10k",
+            Self::ExportSheet10k => "trame/bench_export_sheet_10k",
+        }
+    }
+
+    fn doc_type(&self) -> DocType {
+        DocType::Trame
+    }
+
+    fn seed(&self) -> u64 {
+        // A range of its own, disjoint from the correctness seeds above, so no
+        // scale artifact shares a `document_id` with a committed one.
+        match self {
+            Self::DenseGrid100k => 0x5EED_B0C4_0000_0001,
+            Self::FormulaGrid100k => 0x5EED_B0C4_0000_0002,
+            Self::FormulaDag10k => 0x5EED_B0C4_0000_0003,
+            Self::ExportSheet10k => 0x5EED_B0C4_0000_0004,
+        }
+    }
+
+    fn generator_version(&self) -> u32 {
+        1
+    }
+
+    fn build(&self) -> Vec<u8> {
+        let seed = self.seed();
+        let mut state = TrameState::with_peer(seed);
+        match self {
+            Self::DenseGrid100k => build_literal_grid(&mut state, 12_500, 8),
+            Self::FormulaGrid100k => build_formula_grid(&mut state),
+            Self::FormulaDag10k => build_formula_cascade(&mut state),
+            Self::ExportSheet10k => build_literal_grid(&mut state, 1_250, 8),
+        }
+        state.export_ambre_plaintext(seeded_document_id(seed))
+    }
+}
+
+/// `rows` by `cols` of literal cells, written as one batch.
+///
+/// One batch rather than one command per cell. A command derives the viewport,
+/// so a cell-at-a-time build costs the square of the cell count and produces the
+/// same document.
+fn build_literal_grid(state: &mut TrameState, rows: u32, cols: u32) {
+    let cells: Vec<(u32, u32, String)> = (0..rows)
+        .flat_map(|row| {
+            (0..cols).map(move |col| {
+                // A mix of text and numbers. An all-numeric grid compresses far
+                // better than a real sheet, and the size budget reads the
+                // compressed artifact.
+                let text = match col {
+                    0 => format!("row {row}"),
+                    7 => format!("owner {}", row % 37),
+                    _ => (row * 31 + col * 7).to_string(),
+                };
+                (row, col, text)
+            })
+        })
+        .collect();
+    state.handle_command(TrameCommand::SetCellsBatch { cells });
+}
+
+/// 100 000 formulas over 12 500 rows, on two literal source columns.
+///
+/// Eight formula columns per row, so the formula count is the figure the memory
+/// budget names. Counting the literal sources into it instead would report a DAG
+/// a fifth smaller than the one the budget is about.
+///
+/// The eight differ in shape: an addition, a product, a reference chain, a
+/// conditional and a range aggregate. A cache sized on one expression kind
+/// measures that kind rather than a workbook.
+fn build_formula_grid(state: &mut TrameState) {
+    const ROWS: u32 = 12_500;
+    let mut cells: Vec<(u32, u32, String)> = Vec::with_capacity(125_000);
+    for row in 0..ROWS {
+        let line = row + 1;
+        cells.push((row, 0, (row * 13 + 1).to_string()));
+        cells.push((row, 1, (row * 13 + 2).to_string()));
+        cells.push((row, 2, format!("=A{line}+B{line}")));
+        cells.push((row, 3, format!("=C{line}*2")));
+        cells.push((row, 4, format!("=C{line}+D{line}")));
+        cells.push((row, 5, format!("=IF(E{line}>100,E{line},D{line})")));
+        cells.push((row, 6, format!("=SUM(A{line}:B{line})")));
+        cells.push((row, 7, format!("=AVERAGE(C{line}:F{line})")));
+        cells.push((row, 8, format!("=G{line}+H{line}")));
+        cells.push((row, 9, format!("=I{line}-A{line}")));
+    }
+    state.handle_command(TrameCommand::SetCellsBatch { cells });
+}
+
+/// 10 000 formulas in five cascading columns over 2 000 rows.
+///
+/// Wide rather than deep. A 10 000-long chain measures recursion depth; five
+/// columns over 2 000 rows measure the topological walk, which is what the
+/// recompute budget is about.
+fn build_formula_cascade(state: &mut TrameState) {
+    const ROWS: u32 = 2_000;
+    const CASCADE: u32 = 5;
+    let mut cells: Vec<(u32, u32, String)> = Vec::with_capacity(12_000);
+    for row in 0..ROWS {
+        let line = row + 1;
+        cells.push((row, 0, (row + 1).to_string()));
+        // Every later column reads the one beside it and the row above, so a
+        // wrong walk order changes the whole cascade rather than one cell.
+        for col in 1..=CASCADE {
+            let previous = crate::columns::col_to_alpha(col - 1);
+            let text = if row == 0 {
+                format!("={previous}{line}")
+            } else {
+                let here = crate::columns::col_to_alpha(col);
+                format!("={previous}{line}+{here}{row}")
+            };
+            cells.push((row, col, text));
+        }
+    }
+    state.handle_command(TrameCommand::SetCellsBatch { cells });
+}

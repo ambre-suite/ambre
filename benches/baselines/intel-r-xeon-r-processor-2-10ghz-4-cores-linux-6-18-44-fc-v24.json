@@ -1,0 +1,46 @@
+{
+  "machine": "Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores, Linux 6.18.44-fc-v24",
+  "commit": "bcfbda4",
+  "measurements": [
+    {
+      "id": "import_snapshot/toile_bench_board_50k",
+      "mean_ns": 3810035550
+    },
+    {
+      "id": "import_snapshot/trame_bench_dense_grid_100k",
+      "mean_ns": 466993932
+    },
+    {
+      "id": "import_snapshot/trame_bench_formula_dag_10k",
+      "mean_ns": 753091102
+    },
+    {
+      "id": "toile_index_update/move_one_of_50k",
+      "mean_ns": 2156079641
+    },
+    {
+      "id": "toile_pdf_export/deck_50_slides",
+      "mean_ns": 196688096
+    },
+    {
+      "id": "toile_viewport/toile_bench_board_50k",
+      "mean_ns": 3866021964
+    },
+    {
+      "id": "toile_viewport/toile_bench_dense_viewport_2k",
+      "mean_ns": 1407900776
+    },
+    {
+      "id": "trame_batch_50_cells_on_100k",
+      "mean_ns": 1028044
+    },
+    {
+      "id": "trame_recompute/10k_dag",
+      "mean_ns": 3534913753
+    },
+    {
+      "id": "trame_remote_delta_on_100k",
+      "mean_ns": 136219120
+    }
+  ]
+}

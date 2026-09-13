@@ -20,7 +20,7 @@ use loro::LoroValue;
 
 use kurbo::{Point, Size};
 
-use crate::logic::command::{InitContent, ToileCommand, ToileEvent, ZTarget};
+use crate::logic::command::{ClipboardPayload, InitContent, ToileCommand, ToileEvent, ZTarget};
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, EndCaps, NodeId, PathType, ShapeKind,
 };
@@ -409,4 +409,198 @@ fn last_connector(state: &ToileState) -> ConnectorId {
             NodeId::Element(_) => None,
         })
         .unwrap_or_else(|| panic!("CreateConnector must leave a connector in the paint order"))
+}
+
+// -----------------------------------------------------------------------------
+// The scale generators
+// -----------------------------------------------------------------------------
+
+/// Which board a scale generator builds (`FIXTURE-022`).
+///
+/// A second enum beside [`ToileFixture`], not two more variants of it. The two
+/// registries go to two directories. Git carries a correctness artifact and
+/// never a scale one. One registry per destination therefore keeps
+/// `just fixtures` from writing a multi-megabyte file into the working copy.
+///
+/// * Every variant takes a figure `ambre-spec-budgets.md` already states. This
+///   module invents no size and repeats no target.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ToileBenchFixture {
+    /// 50 000 shapes spread over a wide plane. The visible-set query and index
+    /// update budgets name that figure.
+    Board50k,
+    /// 2 000 shapes inside one default viewport. The board paint budget names
+    /// that figure, and it counts *visible* elements, which a spread board
+    /// cannot supply.
+    DenseViewport2k,
+    /// 50 frames, each holding eight elements and a speaker note. The PDF
+    /// export budget names 50 slides.
+    Deck50,
+}
+
+/// Toile's half of the scale registry (`ambre-logic`'s `BENCH_REGISTRY`).
+pub const TOILE_BENCH_FIXTURES: &[&dyn FixtureGen] = &[
+    &ToileBenchFixture::Board50k,
+    &ToileBenchFixture::DenseViewport2k,
+    &ToileBenchFixture::Deck50,
+];
+
+impl FixtureGen for ToileBenchFixture {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Board50k => "toile/bench_board_50k",
+            Self::DenseViewport2k => "toile/bench_dense_viewport_2k",
+            Self::Deck50 => "toile/bench_deck_50",
+        }
+    }
+
+    fn doc_type(&self) -> DocType {
+        DocType::Toile
+    }
+
+    fn seed(&self) -> u64 {
+        // A range of its own, disjoint from the correctness seeds above, so no
+        // scale artifact shares a `document_id` with a committed one.
+        match self {
+            Self::Board50k => 0x5EED_B0C4_0001_0001,
+            Self::DenseViewport2k => 0x5EED_B0C4_0001_0002,
+            Self::Deck50 => 0x5EED_B0C4_0001_0003,
+        }
+    }
+
+    fn generator_version(&self) -> u32 {
+        1
+    }
+
+    fn build(&self) -> Vec<u8> {
+        let seed = self.seed();
+        let mut state = ToileState::with_peer(seed);
+        match self {
+            // 100 tiles of 500 on a 4 000-unit pitch: far wider than one
+            // viewport, so a cull that returned everything shows up as a figure.
+            Self::Board50k => build_spread_board(&mut state, 100, 4_000.0, 160.0),
+            // One tile of 500, then three more inside the 1280 by 800 default
+            // camera, so every element of this board is a visible element.
+            Self::DenseViewport2k => build_spread_board(&mut state, 4, 600.0, 24.0),
+            Self::Deck50 => build_deck(&mut state, 50),
+        }
+        state.export_ambre_plaintext(seeded_document_id(seed))
+    }
+}
+
+/// Elements of one [`TILE`] block, spread over `tiles` copies on a
+/// `tile_pitch`-unit lattice. Each block is 25 by 20 shapes on an
+/// `element_pitch`-unit lattice.
+///
+/// **One block built, then pasted.** `CreateElement` derives the viewport once
+/// per call. Building 50 000 elements one at a time therefore costs the square
+/// of the count, and a measured run passed 20 minutes without finishing. A
+/// paste re-mints a whole payload under one command and one derivation.
+///
+/// * The generator still drives `handle_command` alone (`FIXTURE-004`). Copy
+///   and paste are user commands, and this board is one a user could produce.
+///   Nothing here writes a container.
+///
+/// * The three shape kinds alternate inside a block, so a tessellation bench
+///   meets a mix rather than one geometry repeated.
+fn build_spread_board(state: &mut ToileState, tiles: u32, tile_pitch: f64, element_pitch: f64) {
+    const COLS: u32 = 25;
+    const ROWS: u32 = 20;
+    let kinds = [ShapeKind::Rect, ShapeKind::Ellipse, ShapeKind::Triangle];
+    let ids: Vec<ElementId> = (0..ROWS)
+        .flat_map(|row| (0..COLS).map(move |col| (row, col)))
+        .enumerate()
+        .map(|(index, (row, col))| {
+            create(
+                state,
+                ElementKind::Shape(kinds[index % kinds.len()]),
+                Point::new(
+                    f64::from(col) * element_pitch,
+                    f64::from(row) * element_pitch,
+                ),
+                Size::new(element_pitch * 0.6, element_pitch * 0.4),
+                InitContent::None,
+            )
+        })
+        .collect();
+    // The board already holds the first block, so the copy lands `tiles - 1`
+    // times. A square lattice of tiles keeps the board as wide as it is tall.
+    let Some(payload) = copy_payload(state, ids) else {
+        return;
+    };
+    let side = tiles.isqrt().max(1);
+    for tile in 1..tiles {
+        let (row, col) = (tile / side, tile % side);
+        state.handle_command(ToileCommand::PasteElements {
+            payload: payload.clone(),
+            at: Point::new(f64::from(col) * tile_pitch, f64::from(row) * tile_pitch),
+        });
+    }
+}
+
+/// The clipboard payload of `ids`, read back off the `CopyElements` reply.
+///
+/// `None` when the reply carries no payload. A generator drives a command it
+/// chose itself, so that is a defect here rather than a runtime condition.
+fn copy_payload(state: &mut ToileState, ids: Vec<ElementId>) -> Option<ClipboardPayload> {
+    state
+        .handle_command(ToileCommand::CopyElements { ids })
+        .display
+        .into_iter()
+        .find_map(|event| match event {
+            ToileEvent::Clipboard(payload) => Some(payload),
+            _ => None,
+        })
+}
+
+/// `slides` frames in a row, each holding eight elements and a speaker note.
+///
+/// The frames declare their children and the deck declares its order. The
+/// export walks that order and that membership, never the spatial overlap.
+fn build_deck(state: &mut ToileState, slides: u32) {
+    const PITCH: f64 = 1_400.0;
+    let mut order = Vec::with_capacity(slides as usize);
+    for slide in 0..slides {
+        let origin = f64::from(slide) * PITCH;
+        let frame = create(
+            state,
+            ElementKind::Frame,
+            Point::new(origin, 0.0),
+            Size::new(1_280.0, 720.0),
+            InitContent::None,
+        );
+        let title = create(
+            state,
+            ElementKind::Text,
+            Point::new(origin + 60.0, 60.0),
+            Size::new(900.0, 80.0),
+            InitContent::Text(format!("slide {}", slide + 1)),
+        );
+        let mut children = vec![title];
+        children.extend((0..7).map(|i| {
+            let kind = if i % 2 == 0 {
+                ElementKind::Shape(ShapeKind::Rect)
+            } else {
+                ElementKind::Sticky
+            };
+            let content = match kind {
+                ElementKind::Sticky => InitContent::Text(format!("point {i} of slide {slide}")),
+                _ => InitContent::None,
+            };
+            create(
+                state,
+                kind,
+                Point::new(origin + 60.0 + f64::from(i) * 160.0, 220.0),
+                Size::new(140.0, 120.0),
+                content,
+            )
+        }));
+        state.handle_command(ToileCommand::SetFrameChildren {
+            frame: frame.clone(),
+            add: children,
+            remove: Vec::new(),
+        });
+        order.push(frame);
+    }
+    state.handle_command(ToileCommand::SetSlideOrder { order });
 }

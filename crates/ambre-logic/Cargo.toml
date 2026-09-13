@@ -23,6 +23,7 @@ fixtures = [
     "ambre-trame/fixtures",
     "ambre-toile/fixtures",
     "dep:ambre-crypto",
+    "dep:serde",
     "dep:serde_json",
     "dep:thiserror",
 ]
@@ -41,6 +42,10 @@ ambre-toile     = { path = "../ambre-toile" }
 # workspace dependency but was not yet one of this crate's, which is the one new
 # dependency edge `FIXTURES P0` carries.
 ambre-crypto    = { path = "../ambre-crypto", optional = true }
+# The committed benchmark baseline (`FIXTURE-023`) derives its own encoding, and
+# the manifest types it sits beside already derive theirs in `ambre-core`. A
+# workspace dependency everywhere else in the tree, and fixture-only here.
+serde           = { workspace = true, optional = true }
 serde_json      = { workspace = true, optional = true }
 # The corpus error taxonomy (`FixtureError`), which wraps `DocFileError` rather
 # than flattening it into a string.
@@ -83,6 +88,11 @@ image = { workspace = true }
 # (`ambre-spec-toile-schema.md`).
 kurbo = { workspace = true }
 
+# The scale benches (`ambre-spec-fixtures.md` section 3). Host-only: they read a
+# git-ignored corpus off disk, which no wasm target has.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+criterion = { workspace = true }
+
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
 
@@ -93,3 +103,10 @@ wasm-bindgen-test = "0.3"
 name = "ambre-fixtures"
 path = "src/bin/ambre-fixtures.rs"
 required-features = ["fixtures"]
+
+# The scale benches (`ambre-spec-fixtures.md` section 3), behind the same feature
+# as the corpus they read. No CI job runs them (`FIXTURE-023`).
+[[bench]]
+name = "scale"
+harness = false
+required-features = ["fixtures", "toile-pdf"]

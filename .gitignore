@@ -11,3 +11,7 @@ servers.json
 # Python bytecode cache from the scripts/ tooling (just spec-code / contracts).
 __pycache__/
 *.pyc
+# Scale corpora for the benches (`ambre-spec-fixtures.md`, `FIXTURE-022`).
+# Multi-megabyte, minutes to build and fully reproducible from a seed, so
+# `just fixtures-bench-corpus` writes them and git never carries them.
+fixtures/bench/

@@ -30,8 +30,8 @@ status values are normative in `ambre-spec-template.md`.
 | `FIXTURE-010` | `INV` | Two generators MUST NOT share a name: the name is the artifact's identity on disk. | this spec section 2 | `fixtures_corpus::the_shipping_registry_has_no_duplicate_names` over the six shipping generators, and it refuses an empty registry first: the dedup alone passes on nothing at all | verified |
 | `FIXTURE-005` | `INV` | Every committed artifact MUST trace to a generator run from a seed, and MUST NOT come from a real user document. | this spec section 2 | none is possible: a real document and a generated one are both Loro bytes, so no gate can tell them apart. It is a **review rule**, and it belongs in the contribution checklist. A committed real document would place plaintext user content in a public AGPL repository, permanently, in git history; a fixture that is interesting *because* it came from real data is exactly the one that must not be committed -- write a generator that reproduces its shape instead | human-review |
 | `FIXTURE-024` | `INV` | A benchmark built on a fixture MUST NOT be reported as a frame-rate validation. | this spec section 3; `ambre-spec-testing.md section 5` | none, and none is possible: the claim is made in a pull request, not in a test. The reviewer refuses it, and section 3 states what the corpus does measure so the honest claim is at hand | human-review |
-| `FIXTURE-022` | `INV` | A benchmark corpus MUST NOT be committed. | this spec section 3 | not built -- lands with `FIXTURES P2 -- scale corpora and benches` (`ambre-roadmap.md` EF). The `.gitignore` entry lands with the recipe that writes the corpus | unimplemented |
-| `FIXTURE-023` | `INV` | A committed benchmark baseline MUST name the machine it was measured on. | this spec section 3 | not built -- lands with `FIXTURES P2 -- scale corpora and benches` (`ambre-roadmap.md` EF) | unimplemented |
+| `FIXTURE-022` | `INV` | A benchmark corpus MUST NOT be committed. | this spec section 3 | `fixtures_bench::the_scale_corpus_is_ignored_by_git` reads the ignore entry back out of `.gitignore`, and `::every_scale_generator_writes_under_the_ignored_directory` refuses a generator whose name escapes the directory that entry covers. Neither reads the corpus: no CI job has one | verified |
+| `FIXTURE-023` | `INV` | A committed benchmark baseline MUST name the machine it was measured on. | this spec section 3 | `fixtures_bench::every_committed_baseline_names_its_machine` over the committed set, and `::a_blank_machine_is_not_a_named_machine` over both shapes, which is what holds the rule while that set is one file | verified |
 
 ### 1.2 A generator builds a document
 
@@ -91,12 +91,13 @@ status values are normative in `ambre-spec-template.md`.
   that `ambre-app` never names (`FIXTURE-007`), so it links into no shipped binary and reaches no
   relay. The one key it touches is derived at test setup, guards nothing, and is never written to
   disk (section 2).
-* **Verification.** 25 `verified`, 2 `unverified`, 2 `human-review`, 2 `unimplemented`. Determinism
+* **Verification.** 27 `verified`, 2 `unverified`, 2 `human-review`, 0 `unimplemented`. Determinism
   is held on four axes including the cross-process one, and the whole loader is held: the round
   trip, every typed failure, the root resolution and both canonical-dump rules. The corpus exists
   and the gate runs in the host job, so drift, membership, freezing and retention are each held by a
-  belt over a throwaway corpus root. The two `unimplemented` rows are the benchmark corpus, which
-  lands with `FIXTURES P2`. Three
+  belt over a throwaway corpus root. The two benchmark rows are held without reading a corpus,
+  which is what lets them run in CI at all: the ignore entry and the shape of a baseline are what a
+  commit can carry, and the corpus is not. Three
   conjunctions came apart, and each separated a covered half from a half that carries the weight.
   `FIXTURE-001` claimed byte-identical output across runs **and** across processes, and the second
   is the one the spike was written for: Rust reseeds hash-map state per process, so an encoder
@@ -431,27 +432,39 @@ The surface is a contributor's, not a user's: five recipes and one feature flag.
 | `just fixtures` | regenerate `fixtures/current/` in place, delete any artifact whose generator no longer exists, and run the frozen retention pass (`FIXTURE-021`, `FIXTURE-026`). Detecting an orphan or an overflow is the gate's job; removing one is this recipe's, so the fix for a red gate is always to run this, never a manual delete |
 | `just fixtures-check` | regenerate into a temporary directory and diff against the committed goldens, refuse a golden whose generator is gone and a generator with no golden (`FIXTURE-025`), then load every frozen artifact and assert its migration (`FIXTURE-006`). Runs in the CI host job |
 | `just fixtures-freeze <name>` | copy the **named** artifact out of `current/` into `frozen/`, deriving the version suffix from its manifest rather than from a person typing it. A name, not a document type: several generators share one, and which lineage keeps migration coverage is a deliberate choice |
-| `just fixtures-bench-corpus` | produce the large, git-ignored scale corpora into `fixtures/bench/` (`FIXTURE-022`) |
+| `just fixtures-bench-corpus` | produce the large, git-ignored scale corpora into `fixtures/bench/` (`FIXTURE-022`), skipping every artifact already there, and report each one's size |
 | `just fixtures-bench` | run the `criterion` benches, building the corpus first when it is absent. Split from the recipe above because generating is minutes and re-running benches is not |
 
-All five pass `--features fixtures`, and the two bench recipes add `pdf`, because Toile's PDF writer
-is behind that non-default feature and the presentation bench cannot otherwise be compiled in. A
-bare `cargo test` sees none of this, which is why the gate cannot ride inside the existing
-`cargo test --workspace` and the host job carries an explicit line for it. None of the five touches
+A sixth command sits on the driver and on no recipe. `ambre-fixtures baseline <machine>` reads the
+last run out of `target/criterion/` and writes `benches/baselines/<machine>.json`. It takes the
+machine as a word rather than reading it off the host. No portable call answers that question, and a
+rule holds best in front of the author as the file lands (`FIXTURE-023`).
+
+All five recipes pass `--features fixtures`. The two bench recipes add the PDF-export feature,
+because Toile's PDF writer sits behind it and the deck bench needs that writer. Those two also build
+in release mode: the corpus build is quadratic in the element count, and a debug build turns minutes
+into an hour. A bare `cargo test` reaches none of this. The gate therefore cannot ride inside
+`cargo test --workspace`, and the host job carries an explicit line for it. None of the six touches
 the network, a database or a browser.
 
-**What the benches read.** Each corpus is sized to a figure its owning budget already states; no
-target is set or restated here.
 
-| Budget, in `ambre-spec-budgets.md` | The corpus the bench needs |
-|---|---|
-| 10k-cell DAG recomputation | a deep formula DAG, 10k formula cells |
-| document size and cache size at 100k cells | a 100k-cell sheet, dense and formula-heavy variants |
-| snapshot import, delta batch, sheet index rebuild | the same corpora, plus recorded delta batches |
-| visible-set query and index update at 50k elements | a 50k-element board |
-| board paint at 2 000 visible elements | a dense board with 2 000 elements in one viewport |
-| xlsx and CSV export at 10k cells | a 10k-cell sheet |
-| PDF export of 50 slides | a 50-frame presentation sequence |
+**What the benches read.** Each corpus takes a figure its owning budget already states. This
+section sets no target and repeats none.
+
+| Budget, in `ambre-spec-budgets.md` | The corpus the bench needs | The artifact |
+|---|---|---|
+| 10k-cell DAG recomputation | a formula DAG, 10k formula cells | `trame/bench_formula_dag_10k` |
+| document size and cache size at 100k cells | a 100k-cell sheet, dense and formula-heavy variants | `trame/bench_dense_grid_100k`, `trame/bench_formula_grid_100k` |
+| snapshot import, delta batch, sheet index rebuild | the same corpora, plus recorded delta batches | the two above |
+| visible-set query and index update at 50k elements | a 50k-element board | `toile/bench_board_50k` |
+| board paint at 2 000 visible elements | a dense board with 2 000 elements in one viewport | `toile/bench_dense_viewport_2k` |
+| xlsx and CSV export at 10k cells | a 10k-cell sheet | `trame/bench_export_sheet_10k` |
+| PDF export of 50 slides | a 50-frame presentation sequence | `toile/bench_deck_50` |
+
+Each artifact carries the figure its budget names, and its manifest states it. The formula grid
+counts formulas rather than cells, because the budget it serves counts formula cells. Two of these
+budgets name megabytes, which `criterion` cannot measure, so the corpus recipe reports each
+artifact's size instead.
 
 **No CI job runs a bench.** The corpora are git-ignored and minutes to build, so benches are local
 and on demand. The author of a performance-relevant change produces the numbers and puts them in the
@@ -483,6 +496,9 @@ host with no GPU through the recording surface.
 | A frozen artifact is compared by canonical dump | comparing the migrated frozen document against the current one by state or by bytes | two documents agreeing on every user-visible value still differ in op history, peer ids and commit timestamps, which is the same fact `FIXTURE-001` pins around. The dump compares content and prints a readable diff when it fails (`FIXTURE-019`). |
 | The retention cap is three per document type | keeping every frozen artifact, and discovering the cost as a CI regression | the gate loads and migrates every frozen artifact, so an unbounded set walks into its 10 s budget one bump at a time. The cap states how far back migration is exercised, rather than leaving it to be discovered when CI slows down (`FIXTURE-021`). |
 | Only the small corpora are committed | committing the benchmark corpora | it buys a convenience a seed already provides. Git keeps a committed artifact forever, and the scale corpora are multi-megabyte and fully reproducible from a seed, so they are generated on demand and git-ignored instead (`FIXTURE-022`). |
+| The scale generators are a second registry | more variants in the shipping registry | the two registries go to two directories, one committed and one not. A single registry would write a multi-megabyte artifact into the working copy on every `just fixtures`. |
+| A scale board pastes one block | creating every element through its own command | `CreateElement` derives the viewport once per call, so 50 000 of them cost the square of the count: a measured run passed 20 minutes without finishing. A paste re-mints a whole payload under one command, and copy and paste are user commands, so the generator still drives `handle_command` alone (`FIXTURE-004`). |
+| A delta batch is derived at bench setup | committing recorded delta batches beside the corpus | a second artifact format, with a drift gate of its own, for bytes a second peer reproduces from the corpus in microseconds. |
 | "No silent golden refresh" is a review rule | a gate that claims to enforce it | it would put a machine check's name on a review rule: the gate compares the corpus against the code, never against the corpus's own history, so any regenerate-and-commit passes. The manifest makes a refresh **visible** instead, moving a digest and usually a shape in a JSON file read as plain text, and `generator_version` is the author's declaration that the change was intended. |
 | A real document is never committed | capturing a fixture from a real document, and trusting the gate to notice | plaintext user content in a public AGPL repository, irreversibly, and a fixture that is interesting *because* it came from real data is exactly the one that must not be committed. No check can hold the rule, and `FIXTURE-005` says so rather than implying otherwise. |
 
@@ -493,8 +509,14 @@ host with no GPU through the recording surface.
 * **The frozen tree is empty.** Freezing is a step of a version bump and no version has been bumped
   yet, so the gate holds zero semantic comparisons today. Every frozen rule is held by a belt over a
   throwaway corpus root instead, and the first bump is what puts a real artifact under them.
-* **Two of the five recipes do not exist.** `just fixtures-bench-corpus` and `just fixtures-bench`
-  land with `FIXTURES P2`, and with them the two benchmark rows of section 1.
+* **The formula grid has no import benchmark.** One import of it measured 102 s, so ten samples of
+  that one benchmark run for seventeen minutes and an author stops running the recipe. The corpus
+  stands: the memory budget it serves names 100 000 formula cells, and the recipe reports its size.
+* **The GPU half of the paint budget is not measured here, and cannot be.** The dense board charges
+  the derivation of 2 000 visible elements, which is the CPU half. The frame rate stays a visual
+  check (`FIXTURE-024`).
+* **No baseline has landed yet.** The directory holds the shape and the belt that refuses an
+  unnamed machine. The first figures arrive with the first change that needs them.
 * **Determinism has been measured on one architecture.** Every figure and every determinism test
   runs on x86_64. A failure elsewhere reopens `FIXTURE-001`, and the fallback is a semantic digest,
   which is weaker because it cannot see a peer-derived id.

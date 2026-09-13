@@ -25,9 +25,9 @@ use ambre_core::{
 };
 
 use ambre_toile::logic::state::ToileState;
-use ambre_toile::logic::state::fixtures::TOILE_FIXTURES;
+use ambre_toile::logic::state::fixtures::{TOILE_BENCH_FIXTURES, TOILE_FIXTURES};
 use ambre_trame::logic::TrameState;
-use ambre_trame::logic::fixtures::TRAME_FIXTURES;
+use ambre_trame::logic::fixtures::{TRAME_BENCH_FIXTURES, TRAME_FIXTURES};
 
 use crate::DocState;
 
@@ -49,6 +49,156 @@ pub const BENCH_DIR: &str = "bench";
 pub const ARTIFACT_EXT: &str = "ambre";
 /// Extension of the JSON sidecar carrying the artifact's provenance.
 pub const MANIFEST_EXT: &str = "manifest";
+
+/// Committed benchmark baselines, relative to the workspace root
+/// (`FIXTURE-023`). One file per machine, named after it.
+pub const BASELINE_DIR: &str = "benches/baselines";
+
+// -----------------------------------------------------------------------------
+// Benchmark baselines (`FIXTURE-023`)
+// -----------------------------------------------------------------------------
+
+/// One committed set of benchmark figures, and the machine that produced them.
+///
+/// **The machine is not optional.** `criterion` measures wall clock, so a figure
+/// from one machine means nothing on another. A baseline read as an absolute
+/// target then fails on hardware rather than on code (`FIXTURE-023`). The type
+/// makes the field unskippable, and [`BenchBaseline::names_its_machine`] refuses
+/// an empty one, which the type cannot.
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq, Clone, Debug)]
+pub struct BenchBaseline {
+    /// Free text describing the hardware: the CPU model, the core count, the
+    /// operating system. No field set survives contact with the machines
+    /// contributors use. A reader recognizes a machine rather than parsing it.
+    pub machine: String,
+
+    /// The commit the run covered, so a later reader knows which tree the
+    /// figures describe.
+    pub commit: String,
+
+    /// One entry per benchmark: its `criterion` id, and the mean in nanoseconds.
+    /// Nanoseconds because that is what `criterion` reports, and a converted
+    /// figure is one more thing to get wrong.
+    pub measurements: Vec<BenchMeasurement>,
+}
+
+/// One benchmark's mean, as `criterion` estimated it.
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq, Clone, Debug)]
+pub struct BenchMeasurement {
+    pub id: String,
+    pub mean_ns: u64,
+}
+
+impl BenchBaseline {
+    /// Whether this baseline names its machine (`FIXTURE-023`).
+    ///
+    /// A present but blank field is the failure the type cannot express, and the
+    /// one a hurried contributor produces.
+    pub fn names_its_machine(&self) -> bool {
+        !self.machine.trim().is_empty()
+    }
+}
+
+/// Collect the mean of every benchmark `criterion` last wrote under `dir`.
+///
+/// Reads `<dir>/**/new/estimates.json`, which is where `criterion` puts the
+/// estimates of the most recent run. The `criterion` id is the directory path
+/// below `dir`, which is how a grouped benchmark keeps its group in its name.
+///
+/// An empty result means no bench has run, which the caller reports rather than
+/// committing an empty baseline.
+pub fn criterion_means(dir: &Path) -> Result<Vec<BenchMeasurement>, FixtureError> {
+    let mut out = Vec::new();
+    // A tree that is not there is a run that has not happened. The caller says
+    // so, with the recipe to fix it; an IO error here would bury that message.
+    if !dir.is_dir() {
+        return Ok(out);
+    }
+    collect_means(dir, dir, &mut out)?;
+    // Sorted by id, so two runs on one machine produce a reviewable diff rather
+    // than a reordering.
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(out)
+}
+
+/// Walk `dir` for `new/estimates.json` files, naming each by its path below
+/// `root`.
+fn collect_means(
+    root: &Path,
+    dir: &Path,
+    out: &mut Vec<BenchMeasurement>,
+) -> Result<(), FixtureError> {
+    for entry in fs::read_dir(dir)?.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_means(root, &path, out)?;
+            continue;
+        }
+        // `base/estimates.json` is the previous run, which a fresh baseline has
+        // no use for.
+        let is_new_estimate = path.file_name().is_some_and(|f| f == "estimates.json")
+            && path.parent().is_some_and(|p| p.ends_with("new"));
+        if !is_new_estimate {
+            continue;
+        }
+        // The id is the path below `root`, minus the trailing `new`.
+        let Some(id) = path
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.strip_prefix(root).ok())
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+        else {
+            continue;
+        };
+        // `criterion` reports a float; a mean in nanoseconds is an integer to
+        // every reader, and the fraction is far below the measurement noise.
+        let text = fs::read_to_string(&path)?;
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+            continue;
+        };
+        let Some(mean) = value
+            .get("mean")
+            .and_then(|m| m.get("point_estimate"))
+            .and_then(serde_json::Value::as_f64)
+        else {
+            continue;
+        };
+        out.push(BenchMeasurement {
+            id,
+            mean_ns: mean.max(0.0) as u64,
+        });
+    }
+    Ok(())
+}
+
+/// Every committed baseline under `root`, with the file each came from.
+///
+/// The belt walks them and refuses one that names no machine. A file that is
+/// neither JSON nor a baseline raises an error rather than a skip. A baseline
+/// nobody can read is not a baseline.
+pub fn baselines_in(dir: &Path) -> Result<Vec<(PathBuf, BenchBaseline)>, FixtureError> {
+    if !dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    let mut paths: Vec<PathBuf> = fs::read_dir(dir)?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
+        .collect();
+    // Sorted, so a report reads the same way twice.
+    paths.sort();
+    for path in paths {
+        let text = fs::read_to_string(&path)?;
+        let baseline =
+            serde_json::from_str::<BenchBaseline>(&text).map_err(|e| FixtureError::Manifest {
+                name: path.to_string_lossy().into_owned(),
+                reason: e.to_string(),
+            })?;
+        out.push((path, baseline));
+    }
+    Ok(out)
+}
 
 // -----------------------------------------------------------------------------
 // The generator registry
@@ -90,6 +240,35 @@ const fn merged_registry() -> [&'static dyn FixtureGen; REGISTRY_LEN] {
 }
 
 const REGISTRY_LEN: usize = TRAME_FIXTURES.len() + TOILE_FIXTURES.len();
+
+/// Every scale generator this build knows (`FIXTURE-022`).
+///
+/// A registry of its own rather than more entries in [`REGISTRY`], because the
+/// two go to two directories. `just fixtures` writes [`REGISTRY`] into
+/// `current/`, which git carries. This one writes into `bench/`, which the
+/// ignore file covers. One registry carrying both would drop a multi-megabyte
+/// artifact into the working copy on every regeneration.
+pub const BENCH_REGISTRY: &[&dyn FixtureGen] = &merged_bench_registry();
+
+/// Both per-engine scale registries, concatenated at compile time. The reasoning
+/// is [`merged_registry`]'s.
+const fn merged_bench_registry() -> [&'static dyn FixtureGen; BENCH_REGISTRY_LEN] {
+    let mut out: [&dyn FixtureGen; BENCH_REGISTRY_LEN] =
+        [TRAME_BENCH_FIXTURES[0]; BENCH_REGISTRY_LEN];
+    let mut i = 0;
+    while i < TRAME_BENCH_FIXTURES.len() {
+        out[i] = TRAME_BENCH_FIXTURES[i];
+        i += 1;
+    }
+    let mut i = 0;
+    while i < TOILE_BENCH_FIXTURES.len() {
+        out[TRAME_BENCH_FIXTURES.len() + i] = TOILE_BENCH_FIXTURES[i];
+        i += 1;
+    }
+    out
+}
+
+const BENCH_REGISTRY_LEN: usize = TRAME_BENCH_FIXTURES.len() + TOILE_BENCH_FIXTURES.len();
 
 // -----------------------------------------------------------------------------
 // Errors
@@ -204,6 +383,17 @@ pub fn corpus_root() -> Result<PathBuf, FixtureError> {
 /// [`import_fixture`], which is the production import path.
 pub fn load_fixture(name: &str) -> Result<(DocumentId, DocState), FixtureError> {
     load_fixture_from(&corpus_root()?.join(CURRENT_DIR), name)
+}
+
+/// Load a scale fixture by name, out of the git-ignored `bench/` tree
+/// (`FIXTURE-022`).
+///
+/// The benches' entry point, and the reason a bench never spells the directory:
+/// a corpus that moved would then move in one place. The error a missing
+/// artifact yields is [`FixtureError::NotFound`], which tells the author to run
+/// `just fixtures-bench-corpus`.
+pub fn load_bench_fixture(name: &str) -> Result<(DocumentId, DocState), FixtureError> {
+    load_fixture_from(&corpus_root()?.join(BENCH_DIR), name)
 }
 
 /// [`load_fixture`] against an explicit corpus directory.
@@ -381,6 +571,34 @@ pub fn generate_into(
         .iter()
         .map(|generator| write_fixture(*generator, dir))
         .collect()
+}
+
+/// Write every scale generator that has no artifact yet under `dir`
+/// (`FIXTURE-022`), and report the names it built.
+///
+/// Skips a generator whose artifact and sidecar are both already there. The
+/// corpus takes minutes to build and the benches that read it run far more
+/// often, so a rerun costs nothing when the corpus stands. A generator whose
+/// output changed on purpose is rebuilt by deleting its artifact, the same
+/// gesture as for any cache.
+///
+/// No drift gate rides on this tree. The committed corpus has one
+/// (`check_corpus`), and it exists because git keeps a committed artifact
+/// forever; a generated-on-demand tree is rebuilt from the seed instead.
+pub fn generate_bench_into(
+    registry: &[&dyn FixtureGen],
+    dir: &Path,
+) -> Result<Vec<&'static str>, FixtureError> {
+    let mut built = Vec::new();
+    for generator in registry {
+        let name = generator.name();
+        if artifact_path(dir, name).is_file() && manifest_path(dir, name).is_file() {
+            continue;
+        }
+        write_fixture(*generator, dir)?;
+        built.push(name);
+    }
+    Ok(built)
 }
 
 // -----------------------------------------------------------------------------
