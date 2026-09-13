@@ -19,6 +19,10 @@
   compilation warning, then every `cargo clippy` warning. Commit only once the tree is clean.
   `./run_tests.sh lint` checks it.
 * **A commit that touches only `specs/`** runs `just contracts` and `just spec-code` instead.
+* **Every commit runs `just prose`**, whatever it touched: the gate reads Rust comments and
+  Markdown alike. It goes red today on files outside any one commit, a debt that
+  `scripts/prose_ceilings.json` records. A commit must not add a line to that report for a file it
+  touched.
 * **A commit that adds or edits a ` ```mermaid ` block** renders every touched block locally first
   and commits only once each one parses. Use the mermaid CLI, for example
   `npx --yes @mermaid-js/mermaid-cli -i block.mmd -o /dev/null`. `just spec-code` checks the fence
