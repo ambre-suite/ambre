@@ -19,29 +19,29 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-031` | `INV` | A cell covered by two selected rectangles MUST be acted on once. | this spec section 3 | `ambre_trame::ui::grid::tests::group1::selected_cells_enumerates_and_dedups` covers the enumeration two paths read: the clear and the `Ctrl`+`Enter` fill, which carry their cells | verified |
-| `TRAME-UI-032` | `INV` | A range operation MUST act on the rectangle the user selected, never on the active cell alone. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_selection_resolves_against_tracked_selection`: a `SetActiveCell` reporting A1:B3, then a parameterless `SortSelectionAsc`, sorts the three rows | verified |
-| `TRAME-UI-129` | `INV` | A range operation MUST act on every rectangle the user selected, not on the live one alone. | this spec section 4 | none. **The rule fails today** -- section 6: `SetActiveCell` carries one pair, so the rectangles the modifier committed never reach the Logic thread. Answered by the `The selection reaches the Logic thread whole` Story (`ambre-roadmap.md` E7) | unverified |
-| `TRAME-UI-035` | `INV` | A selection MUST NOT be written to the document. | `ambre-spec-ui.md section 2` | structural: `Selection` lives in `ui/grid/`, which `TRAME-UI-001` forbids any document access. The Logic thread keeps its own copy, and there the argument is an enumeration: the field is private and its ten readers each resolve a geometry | verified |
-| `TRAME-UI-130` | `INV` | A selection MUST NOT reach a peer. | `ambre-spec-ui.md section 2` | none: the rule holds by absence today -- Trame sends no ephemeral frame at all -- and becomes a claim to prove when `TRAME-UI-019` lands | unverified |
-| `TRAME-UI-034` | `OBS` | A lone selected cell MUST show the active border. | this spec section 4 | `ambre_trame::ui::renderer::tests::draw_overlay_draws_headers_and_active_border`: one 2px stroke in the selection colour. `::multi_cell_selection_fills_and_outlines_each_range` covers the other side, that a multi-cell selection draws none | verified |
-| `TRAME-UI-131` | `OBS` | A lone selected cell MUST show no range fill behind it. | this spec section 4 | none: the single-cell test counts the border and never counts the tint, so nothing fails if the fill returns | unverified |
-| `TRAME-UI-019` | `INV` | A remote cursor MUST NOT force a viewport re-derive. | this spec section 3 | not built -- lands with the "Grid surface" Story (`ambre-roadmap.md` E6). The half about leaving no trace in the document is `PRESENCE-001` | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-031` | `INV` | A cell covered by two selected rectangles MUST be acted on once. | this spec section 3 | `ambre_trame::ui::grid::tests::group1::selected_cells_enumerates_and_dedups` -- it covers the enumeration two paths read, the clear and the `Ctrl`+`Enter` fill, which carry their cells | none | verified |
+| `TRAME-UI-032` | `INV` | A range operation MUST act on the rectangle the user selected, never on the active cell alone. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_selection_resolves_against_tracked_selection` -- a `SetActiveCell` reporting A1:B3, then a parameterless `SortSelectionAsc`, sorts the three rows | none | verified |
+| `TRAME-UI-129` | `INV` | A range operation MUST act on every rectangle the user selected, not on the live one alone. | this spec section 4 | none | fails -- `SetActiveCell` carries one pair, so the rectangles the modifier committed never reach the Logic thread (section 6). Answered by the `The selection reaches the Logic thread whole` Story (`ambre-roadmap.md` E7) | unverified |
+| `TRAME-UI-035` | `INV` | A selection MUST NOT be written to the document. | `ambre-spec-ui.md section 2` | structural -- `Selection` lives in `ui/grid/`, which `TRAME-UI-001` forbids any document access. The Logic thread keeps its own copy, and there the argument is an enumeration: the field is private and its ten readers each resolve a geometry | none | verified |
+| `TRAME-UI-130` | `INV` | A selection MUST NOT reach a peer. | `ambre-spec-ui.md section 2` | none | claim -- the rule holds by absence today, Trame sending no ephemeral frame at all, and becomes a claim to prove when `TRAME-UI-019` lands | unverified |
+| `TRAME-UI-034` | `OBS` | A lone selected cell MUST show the active border. | this spec section 4 | `ambre_trame::ui::renderer::tests::draw_overlay_draws_headers_and_active_border` -- one 2px stroke in the selection colour; `::multi_cell_selection_fills_and_outlines_each_range` -- the other side, that a multi-cell selection draws none | none | verified |
+| `TRAME-UI-131` | `OBS` | A lone selected cell MUST show no range fill behind it. | this spec section 4 | none | unheld -- the single-cell test counts the border and never counts the tint, so nothing fails if the fill returns | unverified |
+| `TRAME-UI-019` | `INV` | A remote cursor MUST NOT force a viewport re-derive. | this spec section 3 | not built | unbuilt -- lands with the `Grid surface` Story (`ambre-roadmap.md` E6). The half about leaving no trace in the document is `PRESENCE-001` | unimplemented |
 
 ### 1.2 Move or extend the selection
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-030` | `POST` | Extending a selection MUST move its active corner alone and leave its fixed corner where the user put it. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::move_with_extend_keeps_anchor`, `::selection_extend_disjoint_and_membership` | verified |
-| `TRAME-UI-132` | `FRAME` | A move that does not extend MUST NOT keep a rectangle the modifier committed. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::selection_extend_disjoint_and_membership`: after two rectangles, a plain `move_to` leaves a single cell. `::single_cell_selection_tracks_active` covers the arrow path | verified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-030` | `POST` | Extending a selection MUST move its active corner alone and leave its fixed corner where the user put it. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::move_with_extend_keeps_anchor`; `::selection_extend_disjoint_and_membership` | none | verified |
+| `TRAME-UI-132` | `FRAME` | A move that does not extend MUST NOT keep a rectangle the modifier committed. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::selection_extend_disjoint_and_membership` -- after two rectangles, a plain `move_to` leaves a single cell; `::single_cell_selection_tracks_active` -- the arrow path | none | verified |
 
 ### 1.3 Take a whole column or row from its header
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-033` | `FRAME` | A whole-column or whole-row selection MUST NOT require the document height from the UI thread. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::axis_selection_spans_the_band` covers the band shape, which carries no extent across its axis. It does not cover the command built from it, and that command reads the extent out of the UI cache. **The rule fails today** -- section 6. Answered by the `The selection reaches the Logic thread whole` Story (`ambre-roadmap.md` E7) | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-033` | `FRAME` | A whole-column or whole-row selection MUST NOT require the document height from the UI thread. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::axis_selection_spans_the_band` -- the band shape, which carries no extent across its axis | fails -- the band test does not cover the command built from it, and that command reads the extent out of the UI cache (section 6). Answered by the `The selection reaches the Logic thread whole` Story (`ambre-roadmap.md` E7) | unverified |
 
 * **Budget.** none: the selection is view state, and `ambre-spec-budgets.md` budgets
   no selection operation. Painting it sits in the frame phases of

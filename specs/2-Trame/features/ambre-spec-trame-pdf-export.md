@@ -16,10 +16,10 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-IO-021` | `INV` | The drawing primitives MUST hold no screen-only state. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | type-level: the seven primitives under `crates/ambre-trame/src/render/` are generic over `DrawSurface` and none names a scroll offset or a dirty rect. Three of them -- `ambre_trame::render::tests::draw_cells_on_fills_each_and_counts_nonempty_text`, `::draw_grid_lines_on_strokes_with_grid_color`, `::col_headers_draw_bg_separator_and_active_tint` -- run through a recording surface that is neither screen nor page; the merge overlay and the cell borders are driven by the screen renderer alone. They do take a `TextCache`, which lives in the GPU crate and is not a GPU type: a shaping cache, not screen state | verified |
-| `TRAME-IO-023` | `OBS` | Text too wide for its cell MUST be cut at the cell edge on the page, with no ellipsis, exactly as on screen. | this spec section 3; `features/ambre-spec-trame-cell-rendering.md section 4` | not built -- lands with `Sheet PDF export` (`ambre-roadmap.md` post-V1). Nothing serves a page, so no test compares one with the screen | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-IO-021` | `INV` | The drawing primitives MUST hold no screen-only state. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | type-level -- the seven primitives under `crates/ambre-trame/src/render/` are generic over `DrawSurface`, and none names a scroll offset or a dirty rect; `ambre_trame::render::tests::draw_cells_on_fills_each_and_counts_nonempty_text`; `::draw_grid_lines_on_strokes_with_grid_color`; `::col_headers_draw_bg_separator_and_active_tint` -- three of them run through a recording surface that is neither screen nor page, and the `TextCache` they take is a shaping cache, not screen state | none | verified |
+| `TRAME-IO-023` | `OBS` | Text too wide for its cell MUST be cut at the cell edge on the page, with no ellipsis, exactly as on screen. | this spec section 3; `features/ambre-spec-trame-cell-rendering.md section 4` | not built | unbuilt -- lands with the `Sheet PDF export` Story (`ambre-roadmap.md` post-V1). Nothing serves a page, so no test compares one with the screen | unimplemented |
 
 ### 1.2 Export a sheet to a page
 
@@ -27,10 +27,10 @@ That a page is drawn by the screen's own walk, is pure vector, is byte-stable an
 browser off the UI thread is `ambre-spec-pdf-export.md section 1.1`. What a sheet adds is a page
 format, and an override that must not become an edit.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-IO-022` | `POST` | An export MUST take its page format from the sheet's persisted setup, unless the gesture carries a one-off override. | this spec section 2; section 3 | not built -- lands with `Persisted page setup` (`ambre-roadmap.md` E6). The container is declared and no command writes it | unimplemented |
-| `TRAME-IO-031` | `FRAME` | An export MUST NOT change the document, the stored page setup of a one-off override included. | this spec section 2; section 5 | not built -- lands with `Sheet PDF export` (`ambre-roadmap.md` post-V1). It is the row that keeps a trial print from becoming a shared edit | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-IO-022` | `POST` | An export MUST take its page format from the sheet's persisted setup, unless the gesture carries a one-off override. | this spec section 2; section 3 | not built | unbuilt -- lands with the `Persisted page setup` Story (`ambre-roadmap.md` E6). The container is declared and no command writes it | unimplemented |
+| `TRAME-IO-031` | `FRAME` | An export MUST NOT change the document, the stored page setup of a one-off override included. | this spec section 2; section 5 | not built | unbuilt -- lands with the `Sheet PDF export` Story (`ambre-roadmap.md` post-V1). It is the row that keeps a trial print from becoming a shared edit | unimplemented |
 
 * **Budget.** none: `ambre-spec-budgets.md` budgets no grid export, and the page walk over a large
   sheet is unmeasured until the fixture corpus exists (`ambre-spec-fixtures.md`). The shared

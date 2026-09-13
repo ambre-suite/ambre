@@ -21,37 +21,37 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `UI-THREAD-006` | `INV` | The clipboard MUST carry a `text/plain` mirror plus one app-agnostic private type. | this spec section 2 | none. The launcher owns the type names and every application serializes behind them. Nothing reads the written item back to check that both are on it | unverified |
-| `UI-THREAD-043` | `INV` | An application MUST NOT define a clipboard type of its own. | this spec section 2, the three names | none. A per-application type would have to be added to the launcher, which owns all of them, so the rule holds by where the names live. Nothing refuses that addition | unverified |
-| `UI-THREAD-024` | `INV` | Every paste affordance MUST reach the view through one path, whatever the gesture that raised it. | this spec section 3 | none, and **the rule fails today**: the paste event goes through the view, and the toolbar button sends a command straight to the Logic thread without the token, the in-memory copy or the ladder. The repair is the `One clipboard host` Story (`ambre-roadmap.md` E7) | unverified |
-| `UI-THREAD-025` | `INV` | The host MUST NOT name an application on a clipboard path: it MUST address the active view. | this spec section 2 | none, and **the rule fails today**: the button path builds a `TrameCommand`, so the affordance is dead in every other application. The repair is the `One clipboard host` Story (`ambre-roadmap.md` E7) | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `UI-THREAD-006` | `INV` | The clipboard MUST carry a `text/plain` mirror plus one app-agnostic private type. | this spec section 2 | none | unheld -- the launcher owns the type names and every application serializes behind them. Nothing reads the written item back to check that both are on it | unverified |
+| `UI-THREAD-043` | `INV` | An application MUST NOT define a clipboard type of its own. | this spec section 2, the three names | none | unheld -- a per-application type would have to be added to the launcher, which owns all of them, so the rule holds by where the names live. Nothing refuses that addition | unverified |
+| `UI-THREAD-024` | `INV` | Every paste affordance MUST reach the view through one path, whatever the gesture that raised it. | this spec section 3 | none | fails -- the paste event goes through the view, and the toolbar button sends a command straight to the Logic thread without the token, the in-memory copy or the ladder. The repair is the `One clipboard host` Story (`ambre-roadmap.md` E7) | unverified |
+| `UI-THREAD-025` | `INV` | The host MUST NOT name an application on a clipboard path: it MUST address the active view. | this spec section 2 | none | fails -- the button path builds a `TrameCommand`, so the affordance is dead in every other application. The repair is the `One clipboard host` Story (`ambre-roadmap.md` E7) | unverified |
 
 ### 1.2 Copy or cut the selection
 
 The payload does not exist when the key fires, so the copy is two writes: one on the event, one a
 frame later. What a cut deletes, and when, is each application's own policy.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `UI-THREAD-010` | `POST` | A copy MUST be built by the Logic thread from the whole document, never culled to what the viewport holds. | this spec section 2 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` holds it for Trame. Toile builds from an id list and nothing asserts that list is the whole selection | unverified |
-| `UI-THREAD-008` | `POST` | A deferred copy MUST prevent the browser default, so an empty write never clobbers what the clipboard already holds. | this spec section 2 | none. The deferred branch prevents the default and writes no `text/plain`, and nothing asserts that the host obeys it | unverified |
-| `UI-THREAD-009` | `POST` | The clipboard write MUST happen inside the user activation window the copy opened. | this spec section 2 | none, and none is possible on host: the window is a browser property. The write runs one frame after the keypress, from the render loop, which Firefox refuses | unverified |
-| `UI-THREAD-023` | `POST` | The asynchronous write MUST publish everything the copy event published, so it never removes what the copy established. | this spec section 2 | none, and **the rule fails today**: the asynchronous item carries the mirror and the prefixed private type, and `write` replaces the whole clipboard, so the ownership token and the bare private type are dropped. The repair is the `One clipboard host` Story (`ambre-roadmap.md` E7) | unverified |
-| `UI-THREAD-044` | `FRAME` | A copy MUST NOT change the document. | this spec section 2, the opening of the model; derived | none. A copy reads the selection and writes the clipboard, and no test reads the document back across one. A cut does change it, and it does so through the ordinary delete command afterwards, never as part of the copy | unverified |
-| `UI-THREAD-045` | `FAIL` | A cut whose copy fails MUST delete nothing. | this spec section 2, cut is each application's own policy | none. The order is what the two applications share -- the copy is asked for first -- and neither drives a failing copy to see what the delete does. One of the two deletes right after the copy command, without waiting for an answer | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `UI-THREAD-010` | `POST` | A copy MUST be built by the Logic thread from the whole document, never culled to what the viewport holds. | this spec section 2 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- Trame's half | partial -- Toile builds from an id list and nothing asserts that list is the whole selection | unverified |
+| `UI-THREAD-008` | `POST` | A deferred copy MUST prevent the browser default, so an empty write never clobbers what the clipboard already holds. | this spec section 2 | none | unheld -- the deferred branch prevents the default and writes no `text/plain`, and nothing asserts that the host obeys it | unverified |
+| `UI-THREAD-009` | `POST` | The clipboard write MUST happen inside the user activation window the copy opened. | this spec section 2 | none | fails -- the window is a browser property, so nothing on host can read it, and the write runs one frame after the keypress, from the render loop, which Firefox refuses | unverified |
+| `UI-THREAD-023` | `POST` | The asynchronous write MUST publish everything the copy event published, so it never removes what the copy established. | this spec section 2 | none | fails -- the asynchronous item carries the mirror and the prefixed private type, and `write` replaces the whole clipboard, so the ownership token and the bare private type are dropped. The repair is the `One clipboard host` Story (`ambre-roadmap.md` E7) | unverified |
+| `UI-THREAD-044` | `FRAME` | A copy MUST NOT change the document. | this spec section 2, the opening of the model; derived | none | unheld -- a copy reads the selection and writes the clipboard, and no test reads the document back across one. A cut does change it, and it does so through the ordinary delete command afterwards, never as part of the copy | unverified |
+| `UI-THREAD-045` | `FAIL` | A cut whose copy fails MUST delete nothing. | this spec section 2, cut is each application's own policy | none | unheld -- the order is what the two applications share, the copy is asked for first, and neither drives a failing copy to see what the delete does. One of the two deletes right after the copy command, without waiting for an answer | unverified |
 
 ### 1.3 Paste
 
 Four rungs of fidelity, in one order. The first that can answer does.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `UI-THREAD-007` | `POST` | A paste MUST decide same-tab full fidelity on the ownership token the copy wrote, never by comparing the `text/plain` mirror. | this spec section 2 | none, and **the rule cannot hold today**: the token is written on the `copy` event and the asynchronous write replaces it a frame later (`UI-THREAD-023`), so the same-tab answer is true only when that write fails | unverified |
-| `UI-THREAD-022` | `POST` | A paste MUST take the fidelity ladder in one order, first match wins. | this spec section 2 | none. Each application walks the ladder in its own view, and no test drives a paste with two rungs available to see which one answers | unverified |
-| `UI-THREAD-046` | `POST` | A paste MUST NOT skip a rung it can serve. | this spec section 2, the ladder | none. Falling past a rung that could have answered is what turns a full-fidelity paste into plain text, silently, and it is the failure `UI-THREAD-023` already produces at rung 2. Nothing asserts which rung answered | unverified |
-| `UI-THREAD-047` | `FRAME` | A paste MUST NOT change what the clipboard holds. | derived | none. Nothing on the paste path writes the clipboard, so the rule holds by absence. A paste that rewrote it would make the second paste of one copy differ from the first | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `UI-THREAD-007` | `POST` | A paste MUST decide same-tab full fidelity on the ownership token the copy wrote, never by comparing the `text/plain` mirror. | this spec section 2 | none | fails -- the token is written on the `copy` event and the asynchronous write replaces it a frame later (`UI-THREAD-023`), so the same-tab answer is true only when that write fails | unverified |
+| `UI-THREAD-022` | `POST` | A paste MUST take the fidelity ladder in one order, first match wins. | this spec section 2 | none | unheld -- each application walks the ladder in its own view, and no test drives a paste with two rungs available to see which one answers | unverified |
+| `UI-THREAD-046` | `POST` | A paste MUST NOT skip a rung it can serve. | this spec section 2, the ladder | none | unheld -- falling past a rung that could have answered is what turns a full-fidelity paste into plain text, silently, and it is the failure `UI-THREAD-023` already produces at rung 2. Nothing asserts which rung answered | unverified |
+| `UI-THREAD-047` | `FRAME` | A paste MUST NOT change what the clipboard holds. | derived | none | unheld -- nothing on the paste path writes the clipboard, so the rule holds by absence. A paste that rewrote it would make the second paste of one copy differ from the first | unverified |
 
 * **Budget.** none: a copy serializes the selection once and a paste inserts it once, and
   `ambre-spec-budgets.md` budgets no clipboard operation. What a very large payload

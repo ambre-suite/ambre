@@ -18,31 +18,31 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TOILE-FEAT-006` | `INV` | Each combinator MUST be area-correct: a union is the two areas minus their overlap, an intersection is the overlap, a subtraction is the subject minus the union of the rest, an exclusion is the symmetric difference. | this spec section 3 | `ambre_toile::logic::boolean::tests::union_area_is_combined_minus_overlap`, `::intersect_area_is_overlap`, `::subtract_removes_the_clip`, `::exclude_is_symmetric_difference`, and on the degenerate inputs `::union_of_disjoint_keeps_both`, `::intersect_of_disjoint_is_empty`, `::subtract_folds_over_multiple_clips` | verified |
-| `TOILE-FEAT-033` | `INV` | A combinator MUST return the same outline for the same inputs. | this spec section 3 | `ambre_toile::logic::boolean::tests::deterministic_across_runs` calls the solver twice in one process and compares the SVG, so it holds one build against itself; nothing compares two builds or two platforms, which is what the row said | verified |
-| `TOILE-FEAT-018` | `INV` | A boolean operation MUST be reachable from a surface. | this spec section 4 | none, and **the rule fails today**: the command has no menu entry, no button and no chord anywhere in the workspace, so the tests hold behaviour nothing can invoke -- section 6. It lands with the `Boolean operations reach a surface` Story (`ambre-roadmap.md` E6) | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-FEAT-006` | `INV` | Each combinator MUST be area-correct: a union is the two areas minus their overlap, an intersection is the overlap, a subtraction is the subject minus the union of the rest, an exclusion is the symmetric difference. | this spec section 3 | `ambre_toile::logic::boolean::tests::union_area_is_combined_minus_overlap`; `::intersect_area_is_overlap`; `::subtract_removes_the_clip`; `::exclude_is_symmetric_difference`; `::union_of_disjoint_keeps_both` -- a degenerate input; `::intersect_of_disjoint_is_empty` -- another; `::subtract_folds_over_multiple_clips` -- the subject against several clips | none | verified |
+| `TOILE-FEAT-033` | `INV` | A combinator MUST return the same outline for the same inputs. | this spec section 3 | `ambre_toile::logic::boolean::tests::deterministic_across_runs` -- it calls the solver twice in one process and compares the SVG, so it holds one build against itself, which is the rule as stated. Nothing compares two builds or two platforms, which is the wider rule the row once carried | none | verified |
+| `TOILE-FEAT-018` | `INV` | A boolean operation MUST be reachable from a surface. | this spec section 4 | none | fails -- the command has no menu entry, no button and no chord anywhere in the workspace, so the tests hold behaviour nothing can invoke, section 6. It lands with the `Boolean operations reach a surface` Story (`ambre-roadmap.md` E6) | unverified |
 
 ### 1.2 Draw a path with the pen
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TOILE-UI-057` | `POST` | Finishing a path MUST emit exactly one create. | this spec section 3 | `ambre_toile::ui::tool::tests::pen_clicks_then_double_click_emits_path`, on the one outcome the double-click returns. The two tests this row also cited drive a Shape and a Sticky, never the pen | verified |
-| `TOILE-UI-058` | `POST` | A node dragged out MUST make a curved segment. | this spec section 3 | none. `pen_bezpath` emits a cubic when either end of a span carries a handle, and the one pen test asserts the kind of the created element rather than the shape of its path | unverified |
-| `TOILE-UI-102` | `POST` | A node clicked without a drag MUST make a straight segment. | this spec section 3 | none, and it is the half `TOILE-UI-058` was carrying. The one pen test places three handle-free nodes and reads none of the three spans back, so a builder that curved every span would pass it | unverified |
-| `TOILE-UI-103` | `FRAME` | Placing a node MUST NOT write to the document. | this spec section 3 | none. The pen holds its nodes in view state and only `finish_pen` returns a command, but the pen test discards what each `pointer_up` returned, so a create emitted per node would fail nothing | unverified |
-| `TOILE-UI-104` | `FAIL` | A finish left with fewer than two distinct nodes MUST emit nothing. | this spec section 3 | none. `finish_pen` drops trailing nodes closer than `PEN_DEDUP` -- the finishing double-click lands one -- and returns no command below two, and no test double-clicks on a single node | unverified |
-| `TOILE-UI-105` | `FAIL` | A path abandoned by `Escape` or a tool change MUST emit nothing. | this spec section 3 | none for the pen. `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` cancels a Shape draft and `::escape_reverts_an_armed_creation_tool_to_select` an armed Sticky; the pen is the one tool whose gesture spans many clicks, so it is the one the rule is about | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-UI-057` | `POST` | Finishing a path MUST emit exactly one create. | this spec section 3 | `ambre_toile::ui::tool::tests::pen_clicks_then_double_click_emits_path` -- it reads the one outcome the double-click returns. The two tests this row also cited drive a Shape and a Sticky, never the pen | none | verified |
+| `TOILE-UI-058` | `POST` | A node dragged out MUST make a curved segment. | this spec section 3 | none | unheld -- `pen_bezpath` emits a cubic when either end of a span carries a handle, and the one pen test asserts the kind of the created element rather than the shape of its path | unverified |
+| `TOILE-UI-102` | `POST` | A node clicked without a drag MUST make a straight segment. | this spec section 3 | none | unheld -- it is the half `TOILE-UI-058` was carrying. The one pen test places three handle-free nodes and reads none of the three spans back, so a builder that curved every span would pass it | unverified |
+| `TOILE-UI-103` | `FRAME` | Placing a node MUST NOT write to the document. | this spec section 3 | none | unheld -- the pen holds its nodes in view state and only `finish_pen` returns a command, but the pen test discards what each `pointer_up` returned, so a create emitted per node would fail nothing | unverified |
+| `TOILE-UI-104` | `FAIL` | A finish left with fewer than two distinct nodes MUST emit nothing. | this spec section 3 | none | unheld -- `finish_pen` drops trailing nodes closer than `PEN_DEDUP` (the finishing double-click lands one) and returns no command below two, and no test double-clicks on a single node | unverified |
+| `TOILE-UI-105` | `FAIL` | A path abandoned by `Escape` or a tool change MUST emit nothing. | this spec section 3 | none | unheld -- nothing drives the pen. `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` cancels a Shape draft and `::escape_reverts_an_armed_creation_tool_to_select` an armed Sticky, and the pen is the one tool whose gesture spans many clicks, so it is the one the rule is about | unverified |
 
 ### 1.3 Combine paths
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TOILE-FEAT-034` | `POST` | Combining MUST write one path element carrying the result and the first source's style, and consume the sources in the same commit unless the caller keeps them. | this spec section 3 | `ambre_toile::logic::state::boolean::tests::union_of_two_rects_makes_one_path_element` on the single result and the broadcast delta, `::boolean_is_one_undo_item` on the one commit, `::keep_sources_leaves_inputs` on the kept sources. Nothing reads the style back | verified |
-| `TOILE-FEAT-035` | `FRAME` | Combining MUST NOT delete an element it did not resolve as a source: a locked element and a non-shape are ignored, not consumed. | this spec section 3 | none. The handler skips both with a `continue`, so they never enter `sources` and never reach the delete; no test passes an ineligible id and reads it back | unverified |
-| `TOILE-FEAT-036` | `FAIL` | Fewer than two eligible outlines MUST be refused rather than write a degenerate element. | this spec section 3 | `ambre_toile::logic::state::boolean::tests::fewer_than_two_eligible_is_rejected` on the handler, `logic::boolean::tests::fewer_than_two_paths_is_empty` on the solver | verified |
-| `TOILE-FEAT-037` | `FAIL` | An empty result MUST be refused rather than write an element with no outline. | this spec section 3 | none. The handler returns `BooleanEmpty` and writes nothing; `logic::boolean::tests::intersect_of_disjoint_is_empty` holds that the solver produces the empty result and stops at the solver, so the refusal itself is undriven | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-FEAT-034` | `POST` | Combining MUST write one path element carrying the result and the first source's style, and consume the sources in the same commit unless the caller keeps them. | this spec section 3 | `ambre_toile::logic::state::boolean::tests::union_of_two_rects_makes_one_path_element` -- the single result and the broadcast delta; `::boolean_is_one_undo_item` -- the one commit; `::keep_sources_leaves_inputs` -- the kept sources | partial -- nothing reads the style back, so a result carrying the second source's fill, or none at all, would pass the three | unverified |
+| `TOILE-FEAT-035` | `FRAME` | Combining MUST NOT delete an element it did not resolve as a source: a locked element and a non-shape are ignored, not consumed. | this spec section 3 | none | unheld -- the handler skips both with a `continue`, so they never enter `sources` and never reach the delete, but no test passes an ineligible id and reads it back | unverified |
+| `TOILE-FEAT-036` | `FAIL` | Fewer than two eligible outlines MUST be refused rather than write a degenerate element. | this spec section 3 | `ambre_toile::logic::state::boolean::tests::fewer_than_two_eligible_is_rejected` -- the handler; `ambre_toile::logic::boolean::tests::fewer_than_two_paths_is_empty` -- the solver | none | verified |
+| `TOILE-FEAT-037` | `FAIL` | An empty result MUST be refused rather than write an element with no outline. | this spec section 3 | none | unheld -- the handler returns `BooleanEmpty` and writes nothing, and `ambre_toile::logic::boolean::tests::intersect_of_disjoint_is_empty` holds that the solver produces the empty result and stops there, so the refusal itself is undriven | unverified |
 
 * **Budget.** the in-flight preview under 0.5 ms, one row of
   `ambre-spec-budgets.md section 2` -- it is a view-state update per click, not per frame. The
@@ -51,13 +51,15 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the pen is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The finished path enters the document as one create and leaves as bytes
   the Sync worker seals (`ZK-001`).
-* **Verification.** 5 `verified`, 8 `unverified`. Four rows became thirteen. `TOILE-FEAT-006` was
+* **Verification.** 4 `verified`, 9 `unverified`. Four rows became thirteen. `TOILE-FEAT-006` was
   three rules in one sentence -- area-correctness, determinism and the refusal below two -- and only
   the first was what its tests held; the determinism half compares one process against itself, so it
   is verified of a weaker rule than the one it was written for. `TOILE-UI-057` cited three tests, two
   of which drive a Shape and a Sticky and never touch the pen. Both refusals the handler makes and
   both frame conditions -- placing a node writes nothing, an ineligible element is skipped rather than
-  consumed -- were unwritten, and three solver tests were cited nowhere. The combinator geometry is
+  consumed -- were unwritten, and three solver tests were cited nowhere. `TOILE-FEAT-034` names the
+  style the result carries and nothing reads it back, so it falls to `unverified` on that half. The
+  combinator geometry is
   the most thoroughly tested pure function in the application, and nothing can call it.
 
 ---

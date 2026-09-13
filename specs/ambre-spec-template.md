@@ -95,23 +95,23 @@ is verified is `ambre-spec-testing.md`; the roll-up of every row's status is der
 The state table, then one table per operation. The two kinds never share a table, so the example
 carries both:
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `XXX-001` | `INV` | The feature MUST ... | this spec section 2, row 1 | `ambre_crate::module::test_name`, `::second_test` | verified |
-| `XXX-003` | `IO` | The feature MUST ... | this spec section 4 | not built -- lands with `Grid surface` (`ambre-roadmap.md` E6) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `XXX-001` | `INV` | The feature MUST ... | this spec section 2, row 1 | `ambre_crate::module::test_name`; `::second_test` | none | verified |
+| `XXX-003` | `IO` | The feature MUST ... | this spec section 4 | not built | unbuilt -- lands with the `Grid surface` Story (`ambre-roadmap.md` E6) | unimplemented |
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `XXX-005` | `POST` | The operation MUST ... | this spec section 4 | `ambre_crate::module::test_name` | verified |
-| `XXX-002` | `FRAME` | The operation MUST NOT ... | README pillar "E2EE" | none. What the test covers, and which half of the rule it leaves open | unverified |
-| `XXX-004` | `FAIL` | Given [the condition the guard refuses], the operation MUST ... | this spec section 4 | `ambre_crate::module::guard_test` | verified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `XXX-005` | `POST` | The operation MUST ... | this spec section 4 | `ambre_crate::module::test_name` | none | verified |
+| `XXX-002` | `FRAME` | The operation MUST NOT ... | README pillar "E2EE" | none | unheld -- which half of the rule is open, and what a mechanism would take | unverified |
+| `XXX-004` | `FAIL` | Given [the condition the guard refuses], the operation MUST ... | this spec section 4 | `ambre_crate::module::guard_test` | none | verified |
 
 * **Budget.** none: the three rows above are an example, so they cost nothing and cite no row of
   `ambre-spec-budgets.md`.
 * **Boundary.** none: a template reaches no relay, holds no key and opens no socket.
 * **Verification.** none: `contracts.py` skips this file, so no row of it is counted anywhere.
 
-**The six fields.**
+**The seven fields.**
 
 | Field | Rule |
 | :--- | :--- |
@@ -119,8 +119,60 @@ carries both:
 | `Kind` | one of the eight below, **written in backticks** -- `` `INV` ``, never `INV`. It says what the rule binds: the state, or one step of one operation. The kind is a column and never a part of the id, so a row keeps its number when it moves between tables |
 | `Statement` | RFC 2119 -- MUST, MUST NOT, SHOULD, SHOULD NOT, MAY. **A statement carrying none of them binds nothing**: it describes, and a description cannot be falsified, so it cannot carry a status. One rule per row, no conjunction |
 | `Sources` | where the rule comes from, in one of five forms: **a section**, of this spec or of a named sibling (`this spec section 3`, `` `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) ``); a **`README pillar "Zero-Knowledge"`**, the word `README` included, because a bare `pillar "..."` names something a reader cannot grep for; an **``audit `H9` ``** finding, by its number; a **named `document.md`** with the rule id it cites; or **`derived`**, which claims no source but the design. A row that closes a finding cites it, and the finding stops drifting from the code in silence |
-| `Verification` | the concrete mechanism, or the explicit absence of one. A test path, a type-level construction, a lint, a capability ban |
+| `Verification` | the mechanism, and **nothing else**: one or more tokens of the closed set below, separated by `` ; ``. No argument. The cell answers one question -- what turns red when the rule breaks -- and that answer is a fact about CI, so it is finite and countable |
+| `Gap` | what the mechanism does not hold: one of the six openers below, then the argument in prose. The cell answers the other question, which is a judgement and ages with the code. `none` is an answer and the only one that carries no prose |
 | `Status` | one of the five values below. An empty cell fails |
+
+**The mechanism tokens.** The closed set `Verification` draws on. Each token names a rung of the
+ladder in `1-Foundations/ambre-spec-testing.md section 2`. That document owns the method and wins
+where the two disagree; this table invents no rung of its own.
+
+| Token | The rung it names |
+| :--- | :--- |
+| `` `ambre_crate::module::test_name` `` | the belt: a test that runs in a tier of `ambre-spec-testing.md section 4`. `Trame`, `Toile`, `Prose` or `chrome` may precede it when the same rule is held once per application |
+| `` `::second_test` `` | a continuation of the path before it, in that path's module |
+| `type-level` | newtypes, enums, typestate, `#[must_use]` -- the invariant holds if it compiles |
+| `structural` | the construction is the proof: the state has no shape the violation could take |
+| `exhaustive-match` | a closed enum matched with no `_` arm, so the next variant fails the build |
+| `crate-graph` | the manifest does not reach the capability, so no call to it can be written |
+| `target-build` | the build is the mechanism: the code compiles only under this flag, this manifest entry or this generated file, so the CI build fails without it |
+| `lint-wall` | `[workspace.lints]`, `deny(unwrap_used, panic, indexing_slicing)`, `#![forbid(unsafe_code)]` |
+| `cargo-deny` | a capability ban in `deny.toml`, held by the CI `deny` job |
+| `proptest`, `cargo-fuzz`, `cargo-mutants`, `cargo-llvm-cov`, `criterion`, `insta` | the upper rungs, each written only where the mechanism runs in CI |
+| `qa-manual` | the two places the doctrine declares mechanism-free: the wgpu pipeline, and the DOM glue |
+| `human-review` | cryptography, line by line, by decision |
+| `none` | no mechanism. Explicit, and never the same claim as an empty cell |
+| `not built` | the code does not exist yet |
+
+**Any item may carry a locating clause**, written `` type-level -- the id is a newtype ``. The clause
+says where the mechanism is, and nothing more: it locates, and it argues nothing. On a path it names
+the tier or the feature the test runs under. On a token it names the shape, or what the reviewer
+reads.
+
+**Seven tokens must carry one**: `type-level`, `structural`, `exhaustive-match`, `crate-graph`,
+`target-build`, `qa-manual` and `human-review`. A path locates itself, and `cargo-deny` names one
+file. These seven name a shape or a habit, so the bare token tells a reader nothing to go and read.
+**Two tokens must not**: `none` and `not built` name no mechanism for a clause to locate. What
+follows either one is an argument, and it belongs in `Gap`.
+
+**The six gap openers.** The closed set `Gap` opens on. What follows an opener is prose, and it is
+the one place in the row where an argument belongs.
+
+| Opener | Means |
+| :--- | :--- |
+| `none` | the mechanism holds the whole rule, and nothing follows |
+| `partial -- ` | the mechanism holds part of the rule; the prose says which part is left |
+| `fails -- ` | the code breaks the rule today; the prose says how |
+| `claim -- ` | what the row cites is an observation and not a mechanism: nothing turns red |
+| `unheld -- ` | the code exists, nothing holds it; the prose says what a mechanism would take |
+| `unbuilt -- lands with the ` | the rule is unbuilt, and the Story citation follows in the one form |
+
+**Two rules across the columns**, which one merged cell could not express:
+
+* **No mechanism and no gap fails.** `Verification` at `none` or `not built`, with `Gap` at
+  `none`, claims a coverage the row does not have.
+* **A `verified` row with a gap fails.** A status saying something turns red, beside a cell saying
+  which half is loose, is two answers to one question. Move the status or close the gap.
 
 **The five status values.**
 
@@ -232,24 +284,30 @@ own assertion stays a review act.
   the header of every table and fails on a contract row under a header that declares none: the
   column is what holds the row to the vocabulary and to the two completeness rules, and a table
   missing it checks nothing at all.
+* **Every contract table declares the `Gap` column.** That migration is over too. `contracts.py`
+  fails on a contract row under a six-column header. The mechanism and what it leaves open are two
+  cells, and one cell holding both is the shape neither grammar above can read.
 * **A rule for code that does not exist yet is a row**, with `Status: unimplemented`, never prose held
   back. A numbered falsifiable statement is cheaper to read, to review and to revise than the
   paragraph it replaces, and it is the only form in which an unbuilt design can be checked against
   itself.
-* **An `unimplemented` row names its story**, by name, as `specs/ambre-roadmap.md` writes it: `not
-  built -- lands with <Story>`. Never a section number, never a phase. **That story is not `[x]` until
+* **An `unimplemented` row names its story** in its `Gap` cell, as `specs/ambre-roadmap.md`
+  writes it: `` unbuilt -- lands with the <Story> Story (`ambre-roadmap.md` <epic>) ``. It is the
+  citation form every other mention takes. Never a section number, never a phase. **That story is
+  not `[x]` until
   the row's status has moved.** Without the binding, `unimplemented` decays into the next `Draft`:
   true everywhere, informative nowhere. `contracts.py` resolves the name against the roadmap, so a
   story that is ticked, renamed or moved fails the build instead of leaving the row pointing nowhere.
 * **Every other mention of a story is a citation, in one form**: `` `<Story>` Story
-  (`ambre-roadmap.md` <epic>) ``, the whole of it on one line. A `Verification` cell answering a rule
-  that fails today, a section 5 bullet, a rejected alternative -- all of them. Writing the name alone
+  (`ambre-roadmap.md` <epic>) ``, the whole of it on one line. A `Gap` cell answering a rule that
+  fails today, a section 5 bullet, a rejected alternative -- all of them. Writing the name alone
   reads like a citation and resolves to nothing: the corpus carried 41 of them, and one of them
   named a story that had closed into the journal while the sentence still said "the roadmap's". The
   epic is not optional either: ten citations named the file and no epic, so the story could move
   under another epic and nothing failed. `contracts.py` refuses a bare name and a missing epic.
-* **A `Verification` cell that says `none` says what is covered and what is not.** "none" alone hides
-  which half of the rule is loose.
+* **A `Verification` cell that says `none` carries a `Gap` that is not `none`.** The mechanism cell
+  says what turns red; the gap cell says what is loose. One cell saying both is what let 78 rows
+  read `verified` beside a reservation nobody could enumerate.
 * **A cited mechanism must run in CI.** A test name resolving to a `fn` behind a Cargo feature no job
   enables is the same claim as a name resolving to nothing.
 * **A row lives in the spec of the component it constrains**, next to the design that produced it,
@@ -308,6 +366,8 @@ A pillar without a script is decoration. The second column names the script that
 | Every claim carries its status | `contracts.py` -- a row with no `Status`, or an unknown one, fails. `feature_inventory.py` -- a feature document that declares no contract table at all fails |
 | The table's three questions are answered | `spec_shape.py` -- a document with a contract table carries `Budget`, `Boundary` and `Verification`, each non-empty. `contracts.py` -- the counts the `Verification` answer opens on are the table's own, nine documents having drifted from theirs. Whether the other two answers are true is a review act |
 | A cited mechanism exists | `contracts.py` -- every `fn` a built row names must resolve in the workspace, per crate when the crate is named |
+| The mechanism cell is a mechanism | `contracts.py` -- a `Verification` cell is read **whole**: every token of it is one of the closed set, or the row fails. Prose in that cell fails even when the prose is true, which is the point: a cell a gate reads half of is a cell nothing holds |
+| The gap is stated, never implied | `contracts.py` -- a `Gap` cell opens on one of the six openers, and `none` is the only one carrying no prose. A row with no mechanism and no gap fails, and so does a `verified` row whose gap is not `none`: 78 rows read `verified` beside a reservation while the two answers shared one cell. A six-column header fails on every row under it, because neither grammar can read a cell holding both answers |
 | A cited document exists | `spec_refs.py` -- a document is cited by its name, in the corpus and in the code alike, and that name must resolve to a file |
 | A cited section exists | `spec_refs.py` -- a citation carrying `section N` must name a section the target document has. The number, never the letter after it. `§N` is the same coordinate |
 | A coordinate is a corpus namespace | `spec_refs.py` -- **`crates/` carries no section number.** A name and a contract id are minted once; a section number is the one part a renumbering breaks, and the code held 906 that named no document at all. A comment cites the document, and the id where the rule has one |

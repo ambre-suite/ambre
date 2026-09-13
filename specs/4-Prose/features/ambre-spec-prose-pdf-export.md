@@ -16,12 +16,12 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 
 ### 1.1 The file
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-IO-029` | `IO` | A PDF page MUST carry the pagination the screen shows. | this spec section 3; `ambre-spec-prose-schema.md` (`PROSE-032`) | not built -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-031` | `IO` | Every link the document carries MUST reach the file as a live link: the table of contents, a cross reference and an external address. | this spec section 3 | not built -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-032` | `IO` | The language the file carries MUST come from the request, or from the document when the request names none. | this spec section 3 | not built -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-035` | `INV` | The writer MUST NOT carry a locale of its own: when neither the request nor the document names a language, the file MUST carry none. | this spec section 3 | not built -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-IO-029` | `IO` | A PDF page MUST carry the pagination the screen shows. | this spec section 3; `ambre-spec-prose-schema.md` (`PROSE-032`) | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-031` | `IO` | Every link the document carries MUST reach the file as a live link: the table of contents, a cross reference and an external address. | this spec section 3 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-032` | `IO` | The language the file carries MUST come from the request, or from the document when the request names none. | this spec section 3 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-035` | `INV` | The writer MUST NOT carry a locale of its own: when neither the request nor the document names a language, the file MUST carry none. | this spec section 3 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Export the document as a PDF
 
@@ -29,12 +29,12 @@ That a page is drawn by the screen's own walk, is pure vector, keeps its charact
 browser off the UI thread is `ambre-spec-pdf-export.md section 1.1`. What a paginated document adds
 is the layout it must not compute twice.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-IO-033` | `POST` | A user MUST be able to export the document as a PDF. | this spec section 4 | not built -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-037` | `POST` | An export MUST write the pages the engine already laid out, and MUST NOT lay the document out again. | this spec section 3 | not built -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-038` | `POST` | An export MUST write the document as it stood when the export began; an edit made while it runs MUST NOT reach the file in part. | this spec section 3 | not built -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-039` | `FRAME` | An export MUST NOT change what the screen shows: not the page the reader is on, not the layout, and not the selection. | derived | not built -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-IO-033` | `POST` | A user MUST be able to export the document as a PDF. | this spec section 4 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-037` | `POST` | An export MUST write the pages the engine already laid out, and MUST NOT lay the document out again. | this spec section 3 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-038` | `POST` | An export MUST write the document as it stood when the export began; an edit made while it runs MUST NOT reach the file in part. | this spec section 3 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-039` | `FRAME` | An export MUST NOT change what the screen shows: not the page the reader is on, not the layout, and not the selection. | derived | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the PDF export of a hundred pages, without and with pictures, one row of
   `ambre-spec-budgets.md section 1`, reading **none exists**. The shared writer's weight is

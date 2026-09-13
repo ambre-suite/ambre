@@ -16,59 +16,59 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-UI-004` | `INV` | The view MUST NOT mutate shared state: what was typed and not yet confirmed MUST live in a draft held apart from the document, and every mutation MUST leave as a command. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-134` | `OBS` | The text a draft holds MUST be drawn under the caret over the confirmed runs, before the document has answered. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-135` | `INV` | A draft MUST hold text and an anchor and no structure: it MUST NOT be able to express a split, a deletion or a mark. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-137` | `INV` | One primitive MUST delete the active selection, and a second one MUST NOT exist per editing path. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-039` | `INV` | Joining two paragraphs MUST be expressed as the deletion below with an empty range; a second join operation MUST NOT exist. | this spec section 3 | not built -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-004` | `INV` | The view MUST NOT mutate shared state: what was typed and not yet confirmed MUST live in a draft held apart from the document, and every mutation MUST leave as a command. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-134` | `OBS` | The text a draft holds MUST be drawn under the caret over the confirmed runs, before the document has answered. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-135` | `INV` | A draft MUST hold text and an anchor and no structure: it MUST NOT be able to express a split, a deletion or a mark. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-137` | `INV` | One primitive MUST delete the active selection, and a second one MUST NOT exist per editing path. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-039` | `INV` | Joining two paragraphs MUST be expressed as the deletion below with an empty range; a second join operation MUST NOT exist. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Type a run of text
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-UI-136` | `POST` | The text MUST be appended to the draft at its anchor, and one insertion command MUST leave carrying the same text at the same position. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-138` | `POST` | The draft MUST re-anchor only when it moves to another block, so consecutive keystrokes in one block MUST accumulate in one draft. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-139` | `FRAME` | Typing MUST NOT change the structure of the document, the paragraph's settings, or the marks the run lands beside. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-136` | `POST` | The text MUST be appended to the draft at its anchor, and one insertion command MUST leave carrying the same text at the same position. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-138` | `POST` | The draft MUST re-anchor only when it moves to another block, so consecutive keystrokes in one block MUST accumulate in one draft. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-139` | `FRAME` | Typing MUST NOT change the structure of the document, the paragraph's settings, or the marks the run lands beside. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Take the active selection
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-UI-030` | `POST` | An edit that inserts or splits MUST delete the active selection first, and the caret MUST collapse to the start of the range it deleted. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-140` | `FRAME` | Taking the selection MUST emit the deletion alone: the insertion or the split that follows MUST be the caller's, and MUST reach the document after it. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-030` | `POST` | An edit that inserts or splits MUST delete the active selection first, and the caret MUST collapse to the start of the range it deleted. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-140` | `FRAME` | Taking the selection MUST emit the deletion alone: the insertion or the split that follows MUST be the caller's, and MUST reach the document after it. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Delete across a paragraph boundary
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-037` | `POST` | What survives of the last paragraph MUST be appended to the first, and every paragraph the deletion emptied MUST be removed. | this spec section 3 | not built -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-041` | `FRAME` | The deletion MUST NOT change the identity of the first paragraph or its paragraph style, whichever of the two the caret started in. | this spec section 3 | not built -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-037` | `POST` | What survives of the last paragraph MUST be appended to the first, and every paragraph the deletion emptied MUST be removed. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-041` | `FRAME` | The deletion MUST NOT change the identity of the first paragraph or its paragraph style, whichever of the two the caret started in. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Split a paragraph
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-038` | `POST` | The new paragraph MUST carry the source's type and paragraph style. | this spec section 3 | not built -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-141` | `POST` | The caret MUST be left at the start of the new paragraph. | this spec section 3 | not built -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-042` | `FRAME` | The split MUST NOT change the text the two paragraphs carry between them, or the identity of the source paragraph. | this spec section 3 | not built -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-038` | `POST` | The new paragraph MUST carry the source's type and paragraph style. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-141` | `POST` | The caret MUST be left at the start of the new paragraph. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-042` | `FRAME` | The split MUST NOT change the text the two paragraphs carry between them, or the identity of the source paragraph. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Compose with an input method
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-UI-029` | `POST` | The composed text MUST reach the document once, when the composition ends, at the position the draft holds then. | this spec section 3 | not built -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-142` | `FRAME` | While a composition is open the view MUST send no text to the document: a preview MUST reach the canvas and nothing else. | this spec section 3 | not built -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-029` | `POST` | The composed text MUST reach the document once, when the composition ends, at the position the draft holds then. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-142` | `FRAME` | While a composition is open the view MUST send no text to the document: a preview MUST reach the canvas and nothing else. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.7 Take in a document event
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-UI-005` | `POST` | An event confirming the anchored block MUST discard the draft: its text is then in the confirmed runs. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-028` | `POST` | A remote change MUST shift the pending draft by what it applied at or before the draft position. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-143` | `POST` | The draft MUST be dropped only when the block it is anchored in is deleted, and the caret MUST then collapse to the nearest confirmed position. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-027` | `FRAME` | An event carrying no change MUST leave the draft untouched: a download or a presence update MUST NOT erase what is being typed. | this spec section 3 | not built -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-005` | `POST` | An event confirming the anchored block MUST discard the draft: its text is then in the confirmed runs. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-028` | `POST` | A remote change MUST shift the pending draft by what it applied at or before the draft position. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-143` | `POST` | The draft MUST be dropped only when the block it is anchored in is deleted, and the caret MUST then collapse to the nearest confirmed position. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-027` | `FRAME` | An event carrying no change MUST leave the draft untouched: a download or a presence update MUST NOT erase what is being typed. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the keystroke to a local echo and the keystroke to a confirmed one, two rows of
   `ambre-spec-budgets.md section 1`. The first is what the draft exists to hold.

@@ -18,24 +18,24 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-103` | `INV` | The aggregates MUST be computed by the Logic thread, never by the UI thread. | this spec section 2 | type-level: the reply `TrameEvent::SelectionStats` carries six numbers with no cell in them, and the signal the band reads has one writer -- the launcher's relay on that event (`ambre-app`); `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` drives the Logic side | verified |
-| `TRAME-UI-106` | `INV` | A query for the aggregates MUST emit no CRDT delta. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells`, which asserts the outcome carries no update | verified |
-| `TRAME-UI-104` | `OBS` | An aggregate MUST cover the whole selection, not the part the UI thread holds. | this spec section 2; section 4 | none. **The rule fails today** on two selections -- section 5: a whole-column band is clamped by the UI to its own cache, and a disjoint selection reaches the Logic thread as its last rectangle alone. Answered by the `The selection reaches the Logic thread whole` Story (`ambre-roadmap.md` E7) | unverified |
-| `TRAME-UI-105` | `OBS` | `count` MUST tally every non-empty cell. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells`, over a column holding numbers, a blank and a word, asserting the count of the non-empty ones | verified |
-| `TRAME-UI-172` | `OBS` | A numeric aggregate MUST tally the numbers alone. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells`, the same column: the word and the blank leave the sum, the average and the extremes untouched | verified |
-| `TRAME-UI-107` | `OBS` | The band MUST show a numeric aggregate only when the selection holds a number. | this spec section 3 | `ambre_trame::tests::chrome_ui::status_bar_renders_label_and_aggregates` mounts the band over a selection holding three numbers; the branch that hides the four numeric aggregates is reached by no test | unverified |
-| `TRAME-UI-108` | `OBS` | A selection of one cell MUST show no aggregate. | this spec section 3 | none. The refresh clears the band when the selection is not multi-cell, and no test drives a selection change | unverified |
-| `TRAME-UI-110` | `OBS` | A row the filter hides MUST NOT count in an aggregate. | this spec section 4 | none. The walk skips the hidden set, and every stats test runs on an unfiltered sheet | unverified |
-| `TRAME-UI-135` | `OBS` | An aggregate MUST read with no decimals when it is a whole number, and with two otherwise. | this spec section 3 | none. `fmt_num` is a free function with one branch on the fractional part, and no test calls it | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-103` | `INV` | The aggregates MUST be computed by the Logic thread, never by the UI thread. | this spec section 2 | type-level -- the reply `TrameEvent::SelectionStats` carries six numbers with no cell in them, and the signal the band reads has one writer, the launcher's relay on that event (`ambre-app`); `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- the Logic side | none | verified |
+| `TRAME-UI-106` | `INV` | A query for the aggregates MUST emit no CRDT delta. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- it asserts the outcome carries no update | none | verified |
+| `TRAME-UI-104` | `OBS` | An aggregate MUST cover the whole selection, not the part the UI thread holds. | this spec section 2; section 4 | none | fails -- on two selections (section 5): a whole-column band is clamped by the UI to its own cache, and a disjoint selection reaches the Logic thread as its last rectangle alone. Answered by the `The selection reaches the Logic thread whole` Story (`ambre-roadmap.md` E7) | unverified |
+| `TRAME-UI-105` | `OBS` | `count` MUST tally every non-empty cell. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- a column holding numbers, a blank and a word, asserting the count of the non-empty ones | none | verified |
+| `TRAME-UI-172` | `OBS` | A numeric aggregate MUST tally the numbers alone. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- the same column, where the word and the blank leave the sum, the average and the extremes untouched | none | verified |
+| `TRAME-UI-107` | `OBS` | The band MUST show a numeric aggregate only when the selection holds a number. | this spec section 3 | `ambre_trame::tests::chrome_ui::status_bar_renders_label_and_aggregates` -- it mounts the band over a selection holding three numbers | partial -- the branch that hides the four numeric aggregates is reached by no test | unverified |
+| `TRAME-UI-108` | `OBS` | A selection of one cell MUST show no aggregate. | this spec section 3 | none | unheld -- the refresh clears the band when the selection is not multi-cell, and no test drives a selection change | unverified |
+| `TRAME-UI-110` | `OBS` | A row the filter hides MUST NOT count in an aggregate. | this spec section 4 | none | unheld -- the walk skips the hidden set, and every stats test runs on an unfiltered sheet | unverified |
+| `TRAME-UI-135` | `OBS` | An aggregate MUST read with no decimals when it is a whole number, and with two otherwise. | this spec section 3 | none | unheld -- `fmt_num` is a free function with one branch on the fractional part, and no test calls it | unverified |
 
 ### 1.2 Select a different block
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-109` | `POST` | A change to the selection MUST refresh the aggregates. | this spec section 2 | none. **The rule fails today** -- section 5: the refresh is called from the active-cell announcement alone, which extending a header band does not reach. Answered by the `Every selection change refreshes the aggregates` Story (`ambre-roadmap.md` E7) | unverified |
-| `TRAME-UI-136` | `FRAME` | A refresh whose request did not reach the Logic thread MUST NOT leave the band showing the totals of another selection. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none. **The rule fails today** -- section 5: the request is lossy, a full channel is logged, and the previous totals stay on screen. Answered by the `A lost edit is never shown as applied` Story (`ambre-roadmap.md` E7) | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-109` | `POST` | A change to the selection MUST refresh the aggregates. | this spec section 2 | none | fails -- the refresh is called from the active-cell announcement alone, which extending a header band does not reach (section 5). Answered by the `Every selection change refreshes the aggregates` Story (`ambre-roadmap.md` E7) | unverified |
+| `TRAME-UI-136` | `FRAME` | A refresh whose request did not reach the Logic thread MUST NOT leave the band showing the totals of another selection. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none | fails -- the request is lossy, a full channel is logged, and the previous totals stay on screen (section 5). Answered by the `A lost edit is never shown as applied` Story (`ambre-roadmap.md` E7) | unverified |
 
 * **Budget.** none: the tallies are one walk over the selection, and
   `ambre-spec-budgets.md` budgets no aggregate. The band paints inside the frame

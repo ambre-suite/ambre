@@ -29,75 +29,75 @@ Two of the four match, and the two that do not are section 6.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-001` | `INV` | A comment's identity MUST be stable for the document's lifetime: an edit, a reply or a remote delta MUST NOT change it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-075` | `INV` | The live mark on the text, never the stored anchor, MUST decide where a comment sits. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-185` | `INV` | The stored anchor MUST NOT be read for a position while the comment's mark is alive. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-078` | `INV` | Each comment MUST own its own mark span. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-186` | `INV` | The order of a thread's replies MUST be the list's own, never a timestamp's. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-077` | `INV` | The author and the peer of a comment MUST be stamped from the session identity, never read from the command. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-187` | `INV` | Resolving, reopening or deleting a thread MUST NOT be refused on the caller's identity: only a reply is its author's alone. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-009` | `CONC` | A comment thread MUST stay anchored to its text range across concurrent edits. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-049` | `OBS` | A comment highlight MUST be canvas content, painted under the annotated range. | this spec section 4 | not built -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-144` | `OBS` | Two threads whose spans share characters MUST both be painted, one highlight over the other. | this spec section 3 | not built -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-050` | `INV` | The comment panel MUST be DOM chrome, not a canvas overlay. | this spec section 4; `ambre-spec-ui.md section 2` | not built -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-001` | `INV` | A comment's identity MUST be stable for the document's lifetime: an edit, a reply or a remote delta MUST NOT change it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-075` | `INV` | The live mark on the text, never the stored anchor, MUST decide where a comment sits. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-185` | `INV` | The stored anchor MUST NOT be read for a position while the comment's mark is alive. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-078` | `INV` | Each comment MUST own its own mark span. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-186` | `INV` | The order of a thread's replies MUST be the list's own, never a timestamp's. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-077` | `INV` | The author and the peer of a comment MUST be stamped from the session identity, never read from the command. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-187` | `INV` | Resolving, reopening or deleting a thread MUST NOT be refused on the caller's identity: only a reply is its author's alone. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-009` | `CONC` | A comment thread MUST stay anchored to its text range across concurrent edits. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-049` | `OBS` | A comment highlight MUST be canvas content, painted under the annotated range. | this spec section 4 | not built | unbuilt -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-144` | `OBS` | Two threads whose spans share characters MUST both be painted, one highlight over the other. | this spec section 3 | not built | unbuilt -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-050` | `INV` | The comment panel MUST be DOM chrome, not a canvas overlay. | this spec section 4; `ambre-spec-ui.md section 2` | not built | unbuilt -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Open a thread on a range
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-188` | `POST` | Opening a thread MUST write one annotation entry and one mark reaching the requested range and no character outside it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-189` | `FRAME` | Opening a thread MUST NOT change the text of the block, or the entry or the span of any other thread. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-188` | `POST` | Opening a thread MUST write one annotation entry and one mark reaching the requested range and no character outside it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-189` | `FRAME` | Opening a thread MUST NOT change the text of the block, or the entry or the span of any other thread. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Reply to a thread
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-190` | `POST` | A reply MUST be appended at the end of the thread's reply list. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-079` | `POST` | A reply to a resolved thread MUST reopen it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-191` | `FRAME` | Replying MUST NOT move the thread's mark, rewrite an earlier reply, or touch another thread. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-190` | `POST` | A reply MUST be appended at the end of the thread's reply list. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-079` | `POST` | A reply to a resolved thread MUST reopen it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-191` | `FRAME` | Replying MUST NOT move the thread's mark, rewrite an earlier reply, or touch another thread. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Resolve or reopen a thread
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-192` | `POST` | Resolving a thread MUST mark it closed. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-193` | `POST` | Reopening a thread MUST mark it open, with no reply added. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-194` | `FRAME` | Resolving or reopening a thread MUST NOT rewrite another thread's span, and MUST NOT add, remove or edit a reply of its own. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-192` | `POST` | Resolving a thread MUST mark it closed. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-193` | `POST` | Reopening a thread MUST mark it open, with no reply added. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-194` | `FRAME` | Resolving or reopening a thread MUST NOT rewrite another thread's span, and MUST NOT add, remove or edit a reply of its own. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Edit a reply
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-195` | `POST` | Editing a reply MUST replace that reply's text and leave its place in the list. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-080` | `FAIL` | Editing a reply MUST be refused unless the caller wrote it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-196` | `FRAME` | Editing a reply MUST NOT change the thread's `resolved` flag, its mark, or the author stamped on the reply. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-195` | `POST` | Editing a reply MUST replace that reply's text and leave its place in the list. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-080` | `FAIL` | Editing a reply MUST be refused unless the caller wrote it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-196` | `FRAME` | Editing a reply MUST NOT change the thread's `resolved` flag, its mark, or the author stamped on the reply. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Delete a reply
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-197` | `POST` | Deleting a reply MUST remove it from the list and leave the order of the replies around it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-081` | `POST` | Deleting a thread's opening reply MUST delete the thread. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-198` | `FAIL` | Deleting a reply MUST be refused unless the caller wrote it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-199` | `FRAME` | Deleting a reply that is not the head MUST NOT change the thread's mark, its `resolved` flag, or another thread. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-197` | `POST` | Deleting a reply MUST remove it from the list and leave the order of the replies around it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-081` | `POST` | Deleting a thread's opening reply MUST delete the thread. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-198` | `FAIL` | Deleting a reply MUST be refused unless the caller wrote it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-199` | `FRAME` | Deleting a reply that is not the head MUST NOT change the thread's mark, its `resolved` flag, or another thread. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.7 Delete a thread
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-200` | `POST` | Deleting a thread MUST remove its entry and its mark, and MUST leave the text the mark covered. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-201` | `FRAME` | Deleting a thread MUST NOT rewrite the span of any other thread over the same characters. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-200` | `POST` | Deleting a thread MUST remove its entry and its mark, and MUST leave the text the mark covered. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-201` | `FRAME` | Deleting a thread MUST NOT rewrite the span of any other thread over the same characters. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.8 Edit the text a thread is anchored to
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-076` | `POST` | The stored anchor MUST be rewritten from the mark on every edit that touches the annotated block. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-202` | `POST` | An edit that deletes the whole marked range MUST keep the entry, with the thread orphaned rather than re-anchored. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-203` | `POST` | An edit that takes the mark away MUST leave the stored anchor on the last position the mark held. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-204` | `FRAME` | An edit over an annotated range MUST NOT change the thread's `resolved` flag, its replies, or the entry of another thread. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-076` | `POST` | The stored anchor MUST be rewritten from the mark on every edit that touches the annotated block. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-202` | `POST` | An edit that deletes the whole marked range MUST keep the entry, with the thread orphaned rather than re-anchored. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-203` | `POST` | An edit that takes the mark away MUST leave the stored anchor on the last position the mark held. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-204` | `FRAME` | An edit over an annotated range MUST NOT change the thread's `resolved` flag, its replies, or the entry of another thread. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none of its own: a comment is an annotation entry and a mark, both written on the
   ordinary command path, and the highlight is painted in the page pass

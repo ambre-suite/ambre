@@ -21,34 +21,34 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SYNC-050` | `INV` | A blob's address MUST NOT be derived from its plaintext. | `ZK-007`; this spec section 3 | none, and **the rule fails today**: the address is a hash of the plaintext bytes and it travels to the relay in clear, so the relay can confirm that a document holds a file it already knows. Answered by the "The media address is not the plaintext" Story (`ambre-roadmap.md` E7) | unverified |
-| `SYNC-051` | `INV` | A sealed blob MUST be bound to the document it belongs to. | this spec section 3; `SYNC-018` | none, and **the rule fails today**: the seal's additional data is one constant string, shared by every blob of every document, so a blob sealed for one document opens under any other holding the same key | unverified |
-| `SYNC-074` | `INV` | A sealed blob MUST be bound to the address that names it. | this spec section 3; `SYNC-018` | none, and **the rule fails today**: the same constant additional data names no address, so nothing ties the ciphertext to the string the document stores. It is the half `SYNC-052` needs and does not have | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-050` | `INV` | A blob's address MUST NOT be derived from its plaintext. | `ZK-007`; this spec section 3 | none | fails -- the address is a hash of the plaintext bytes and it travels to the relay in clear, so the relay can confirm that a document holds a file it already knows. Answered by the `The media address is not the plaintext` Story (`ambre-roadmap.md` E7) | unverified |
+| `SYNC-051` | `INV` | A sealed blob MUST be bound to the document it belongs to. | this spec section 3; `SYNC-018` | none | fails -- the seal's additional data is one constant string, shared by every blob of every document, so a blob sealed for one document opens under any other holding the same key | unverified |
+| `SYNC-074` | `INV` | A sealed blob MUST be bound to the address that names it. | this spec section 3; `SYNC-018` | none | fails -- the same constant additional data names no address, so nothing ties the ciphertext to the string the document stores. It is the half `SYNC-052` needs and does not have | unverified |
 
 ### 1.2 Add a picture
 
 The application hands over the plaintext and waits for an address. The seal, the two requests and
 the put are the Sync worker's.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SYNC-075` | `POST` | An upload MUST answer the requesting application with the blob's address. | this spec section 3, the upload steps | none. The worker emits the address on the last step and no test drives the leg, which runs only in a browser. `ambre_toile::logic::state::import::tests::seed_media_dedups_repeated_hashes` reads what an application does with two equal addresses, never that the upload produced one | unverified |
-| `SYNC-049` | `FRAME` | An upload MUST NOT emit a byte of the picture that is not sealed under the document key. | `ZK-001`; this spec section 3 | none. The upload seals before it puts, and the crate graph keeps every application out of the cipher (`TOILE-IO-013`). Nothing here refuses a put that skips the seal, which is the same absence as `SYNC-001` | unverified |
-| `SYNC-053` | `FRAME` | An upload MUST NOT tell the relay anything about a blob beyond its size. | `ZK-007`; this spec section 3 | none, and **the rule fails today**: the confirmation carries the plaintext address and the media type, and neither is in the set `ZK-007` allows. Answered by the "The media address is not the plaintext" Story (`ambre-roadmap.md` E7) | unverified |
-| `SYNC-076` | `FAIL` | An upload that fails at any step MUST be reported, and MUST confirm nothing to the relay. | this spec section 2, row 3 | none for the worker's half. Each step returns before the next runs, so a failed put never reaches the confirmation; `ambre_toile::logic::state::import::tests::a_failed_upload_aborts_the_pending_import` holds what one application does with the report, not that the worker sends one | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-075` | `POST` | An upload MUST answer the requesting application with the blob's address. | this spec section 3, the upload steps | none | unheld -- the worker emits the address on the last step and no test drives the leg, which runs only in a browser. `ambre_toile::logic::state::import::tests::seed_media_dedups_repeated_hashes` reads what an application does with two equal addresses, never that the upload produced one | unverified |
+| `SYNC-049` | `FRAME` | An upload MUST NOT emit a byte of the picture that is not sealed under the document key. | `ZK-001`; this spec section 3 | none | unheld -- the upload seals before it puts, and the crate graph keeps every application out of the cipher (`TOILE-IO-013`). Nothing here refuses a put that skips the seal, which is the same absence as `SYNC-001` | unverified |
+| `SYNC-053` | `FRAME` | An upload MUST NOT tell the relay anything about a blob beyond its size. | `ZK-007`; this spec section 3 | none | fails -- the confirmation carries the plaintext address and the media type, and neither is in the set `ZK-007` allows. Answered by the `The media address is not the plaintext` Story (`ambre-roadmap.md` E7) | unverified |
+| `SYNC-076` | `FAIL` | An upload that fails at any step MUST be reported, and MUST confirm nothing to the relay. | this spec section 2, row 3 | none | unheld -- each step returns before the next runs, so a failed put never reaches the confirmation; `ambre_toile::logic::state::import::tests::a_failed_upload_aborts_the_pending_import` holds what one application does with the report, not that the worker sends one | unverified |
 
 ### 1.3 Show a picture
 
 The application names an address it does not hold. The worker fetches the object and opens it.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SYNC-077` | `POST` | A download MUST answer with the plaintext the address names. | this spec section 3, the download steps | none. The leg runs only in a browser and the suite performs no round trip against object storage | unverified |
-| `SYNC-054` | `FRAME` | A download MUST NOT let a decrypted blob reach persistent storage. | `ZK-004`; this spec section 3 | none. The worker opens no storage handle and hands the plaintext straight up, so the rule holds by absence. Nothing would fail the day a writer appeared | unverified |
-| `SYNC-052` | `FAIL` | A download MUST refuse a blob that is not the one the address names. | this spec section 3 | none, and **the rule fails today**: the download opens whatever object storage returned and hands the plaintext up without recomputing the address, so a substituted blob under the same document key is accepted | unverified |
-| `SYNC-055` | `FAIL` | A blob that fails to open MUST be reported, never delivered half-read. | this spec section 3 | none. Every failure returns before the answer is built -- a short blob, a fetch error and a bad tag each report and stop -- so nothing partial is delivered; no test drives a failing download, because the leg runs only in a browser | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-077` | `POST` | A download MUST answer with the plaintext the address names. | this spec section 3, the download steps | none | unheld -- the leg runs only in a browser and the suite performs no round trip against object storage | unverified |
+| `SYNC-054` | `FRAME` | A download MUST NOT let a decrypted blob reach persistent storage. | `ZK-004`; this spec section 3 | none | unheld -- the worker opens no storage handle and hands the plaintext straight up, so the rule holds by absence. Nothing would fail the day a writer appeared | unverified |
+| `SYNC-052` | `FAIL` | A download MUST refuse a blob that is not the one the address names. | this spec section 3 | none | fails -- the download opens whatever object storage returned and hands the plaintext up without recomputing the address, so a substituted blob under the same document key is accepted | unverified |
+| `SYNC-055` | `FAIL` | A blob that fails to open MUST be reported, never delivered half-read. | this spec section 3 | none | unheld -- every failure returns before the answer is built, a short blob, a fetch error and a bad tag each report and stop, so nothing partial is delivered. No test drives a failing download, because the leg runs only in a browser | unverified |
 
 * **Budget.** none of its own for the transfer: `ambre-spec-budgets.md section 1` budgets the
   first paint of a picture under 15 ms and no refetch on a revisit, and both are the reading

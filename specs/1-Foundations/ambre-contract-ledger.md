@@ -19,12 +19,12 @@
   `human-review` and `qa-manual` carry no ceiling: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2406 rows: 1693 shipped, of which 820 loose. 713 unbuilt.**
+**2406 rows: 1693 shipped, of which 833 loose. 713 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 213 | 209 | 451 |  | 873 |
-| `unverified` | 303 | 203 | 306 |  | 812 |
+| `verified` | 205 | 208 | 447 |  | 860 |
+| `unverified` | 311 | 204 | 310 |  | 825 |
 | `human-review` | 6 |  |  |  | 6 |
 | `qa-manual` |  |  | 2 |  | 2 |
 | `unimplemented` | 44 | 54 | 22 | 593 | 713 |
@@ -46,7 +46,7 @@
 | `ambre-spec-design-tokens.md` | 6 | 6 | 1 | 5 |  |
 | `ambre-spec-docfile.md` | 16 | 16 | 14 | 2 |  |
 | `ambre-spec-drawing-surface.md` | 15 | 11 | 7 | 4 | 4 |
-| `ambre-spec-find.md` | 10 | 10 | 6 | 4 |  |
+| `ambre-spec-find.md` | 10 | 10 | 4 | 6 |  |
 | `ambre-spec-fixtures.md` | 31 | 31 | 27 | 4 |  |
 | `ambre-spec-frame.md` | 17 | 16 | 3 | 13 | 1 |
 | `ambre-spec-high-density.md` | 9 | 5 | 0 | 5 | 4 |
@@ -55,16 +55,16 @@
 | `ambre-spec-launcher.md` | 17 | 17 | 7 | 10 |  |
 | `ambre-spec-media.md` | 11 | 11 | 0 | 11 |  |
 | `ambre-spec-membership.md` | 17 | 17 | 12 | 5 |  |
-| `ambre-spec-message-bus.md` | 21 | 18 | 10 | 8 | 3 |
+| `ambre-spec-message-bus.md` | 21 | 18 | 9 | 9 | 3 |
 | `ambre-spec-object-store.md` | 12 | 12 | 3 | 9 |  |
 | `ambre-spec-organizations.md` | 11 | 10 | 5 | 5 | 1 |
-| `ambre-spec-pdf-export.md` | 6 | 5 | 2 | 3 | 1 |
-| `ambre-spec-presence.md` | 14 | 14 | 11 | 3 |  |
+| `ambre-spec-pdf-export.md` | 6 | 5 | 0 | 5 | 1 |
+| `ambre-spec-presence.md` | 14 | 14 | 10 | 4 |  |
 | `ambre-spec-render-assets.md` | 14 | 11 | 3 | 8 | 3 |
 | `ambre-spec-schema-version.md` | 13 | 13 | 9 | 4 |  |
 | `ambre-spec-sealed-envelope.md` | 17 | 17 | 8 | 9 |  |
-| `ambre-spec-sequencer.md` | 19 | 18 | 6 | 12 | 1 |
-| `ambre-spec-server.md` | 22 | 22 | 12 | 10 |  |
+| `ambre-spec-sequencer.md` | 19 | 18 | 5 | 13 | 1 |
+| `ambre-spec-server.md` | 22 | 22 | 11 | 11 |  |
 | `ambre-spec-session.md` | 16 | 16 | 7 | 9 |  |
 | `ambre-spec-sync.md` | 25 | 25 | 3 | 22 |  |
 | `ambre-spec-text-editor.md` | 13 | 11 | 4 | 7 | 2 |
@@ -75,7 +75,7 @@
 | `ambre-spec-trame-schema.md` | 7 | 7 | 5 | 2 |  |
 | `ambre-spec-trame-autofill.md` | 10 | 10 | 3 | 7 |  |
 | `ambre-spec-trame-cell-editing.md` | 39 | 28 | 6 | 22 | 11 |
-| `ambre-spec-trame-cell-merges.md` | 38 | 37 | 25 | 12 | 1 |
+| `ambre-spec-trame-cell-merges.md` | 38 | 37 | 24 | 13 | 1 |
 | `ambre-spec-trame-cell-rendering.md` | 12 | 9 | 1 | 8 | 3 |
 | `ambre-spec-trame-cell-styles.md` | 22 | 18 | 6 | 12 | 4 |
 | `ambre-spec-trame-clipboard.md` | 9 | 9 | 3 | 6 |  |
@@ -116,7 +116,7 @@
 | `ambre-spec-toile-media.md` | 28 | 28 | 23 | 5 |  |
 | `ambre-spec-toile-menus.md` | 48 | 48 | 30 | 18 |  |
 | `ambre-spec-toile-pdf-export.md` | 16 | 14 | 10 | 4 | 2 |
-| `ambre-spec-toile-presence.md` | 24 | 24 | 19 | 5 |  |
+| `ambre-spec-toile-presence.md` | 24 | 24 | 18 | 6 |  |
 | `ambre-spec-toile-presentation.md` | 44 | 44 | 35 | 9 |  |
 | `ambre-spec-toile-reactions.md` | 34 | 29 | 19 | 10 | 5 |
 | `ambre-spec-toile-selection.md` | 29 | 29 | 16 | 13 |  |
@@ -124,7 +124,7 @@
 | `ambre-spec-toile-styles.md` | 30 | 30 | 17 | 13 |  |
 | `ambre-spec-toile-text-editing.md` | 36 | 35 | 4 | 31 | 1 |
 | `ambre-spec-toile-tools.md` | 28 | 28 | 20 | 8 |  |
-| `ambre-spec-toile-undo.md` | 6 | 6 | 2 | 4 |  |
-| `ambre-spec-toile-vector-paths.md` | 13 | 13 | 5 | 8 |  |
-| `ambre-spec-toile-viewport.md` | 32 | 30 | 16 | 14 | 2 |
+| `ambre-spec-toile-undo.md` | 6 | 6 | 1 | 5 |  |
+| `ambre-spec-toile-vector-paths.md` | 13 | 13 | 4 | 9 |  |
+| `ambre-spec-toile-viewport.md` | 32 | 30 | 15 | 15 | 2 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 4 | 12 |  |

@@ -19,35 +19,35 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-UI-006` | `INV` | A full text layout or a table-of-contents recompute MUST NOT run in the UI thread: both arrive already computed. | this spec section 2; `features/ambre-spec-prose-pagination.md` | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-113` | `INV` | A shaped run handed from the side that shapes to the side that draws MUST NOT carry a GPU handle or any other handle bound to one thread. | this spec section 4 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-114` | `INV` | Resolving the position under a pointer MUST read the runs already shaped and MUST NOT shape a block: a block that was culled and never painted MUST resolve like any other. | this spec section 4 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-019` | `INV` | The run cache MUST be bounded: it MUST evict rather than grow with the document. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-018` | `INV` | Block drawing MUST be written once against the drawing surface: the screen and the PDF MUST NOT be two implementations. | this spec section 2; `ambre-spec-drawing-surface.md section 2` | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5); `ambre-spec-pdf-export.md`, `PDF-001` is the export half of the same rule | unimplemented |
-| `PROSE-UI-017` | `INV` | Partial repaint MUST use the shared content-repaint contract; a second repaint mechanism MUST NOT exist beside it. | this spec section 2; `ambre-spec-frame.md section 2` | not built -- lands with the "One repaint contract" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-014` | `INV` | Every colour drawn MUST come from the generated theme tokens; a literal colour MUST NOT appear in render code. | this spec section 3; `ambre-spec-design-tokens.md` | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-115` | `OBS` | A visible page MUST be drawn with its sheet, the blocks the layout places on it, and the header, the footer and the footnote band the layout carries for it. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-116` | `OBS` | A block the layout breaks across two pages MUST be drawn on both: the continuation MUST NOT be left out. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-117` | `OBS` | A selection MUST be drawn under the glyphs it covers, and an inline highlight over them. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-118` | `OBS` | A remote caret and its label MUST NOT hide local text: they MUST be drawn after the glyphs of the page. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-006` | `INV` | A full text layout or a table-of-contents recompute MUST NOT run in the UI thread: both arrive already computed. | this spec section 2; `features/ambre-spec-prose-pagination.md` | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-113` | `INV` | A shaped run handed from the side that shapes to the side that draws MUST NOT carry a GPU handle or any other handle bound to one thread. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-114` | `INV` | Resolving the position under a pointer MUST read the runs already shaped and MUST NOT shape a block: a block that was culled and never painted MUST resolve like any other. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-019` | `INV` | The run cache MUST be bounded: it MUST evict rather than grow with the document. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-018` | `INV` | Block drawing MUST be written once against the drawing surface: the screen and the PDF MUST NOT be two implementations. | this spec section 2; `ambre-spec-drawing-surface.md section 2` | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5); `ambre-spec-pdf-export.md`, `PDF-001` is the export half of the same rule | unimplemented |
+| `PROSE-UI-017` | `INV` | Partial repaint MUST use the shared content-repaint contract; a second repaint mechanism MUST NOT exist beside it. | this spec section 2; `ambre-spec-frame.md section 2` | not built | unbuilt -- lands with the "One repaint contract" Story (`ambre-roadmap.md` E8) | unimplemented |
+| `PROSE-UI-014` | `INV` | Every colour drawn MUST come from the generated theme tokens; a literal colour MUST NOT appear in render code. | this spec section 3; `ambre-spec-design-tokens.md` | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-115` | `OBS` | A visible page MUST be drawn with its sheet, the blocks the layout places on it, and the header, the footer and the footnote band the layout carries for it. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-116` | `OBS` | A block the layout breaks across two pages MUST be drawn on both: the continuation MUST NOT be left out. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-117` | `OBS` | A selection MUST be drawn under the glyphs it covers, and an inline highlight over them. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-118` | `OBS` | A remote caret and its label MUST NOT hide local text: they MUST be drawn after the glyphs of the page. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Paint a page
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-UI-119` | `POST` | Painting a page MUST build the GPU state of a run the first time that run is drawn, and MUST reuse it afterwards. | this spec section 4 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-020` | `FRAME` | Painting a page MUST NOT walk an annotation anchored outside the pages it draws. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-120` | `FRAME` | Painting a page MUST NOT write to the document, and MUST NOT build the GPU state of a run it does not draw. | derived | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-119` | `POST` | Painting a page MUST build the GPU state of a run the first time that run is drawn, and MUST reuse it afterwards. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-020` | `FRAME` | Painting a page MUST NOT walk an annotation anchored outside the pages it draws. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-120` | `FRAME` | Painting a page MUST NOT write to the document, and MUST NOT build the GPU state of a run it does not draw. | derived | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Apply a layout
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-UI-121` | `POST` | A layout newer than the one in force MUST replace it, and the version it carries MUST become the version the view holds. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-016` | `FAIL` | A layout older than the one already applied MUST be dropped, so a late arrival MUST NOT replace a newer one. | this spec section 2 | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-122` | `FRAME` | Applying a layout MUST NOT write to the document and MUST NOT shape a block. | derived | not built -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-121` | `POST` | A layout newer than the one in force MUST replace it, and the version it carries MUST become the version the view holds. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-016` | `FAIL` | A layout older than the one already applied MUST be dropped, so a late arrival MUST NOT replace a newer one. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-122` | `FRAME` | Applying a layout MUST NOT write to the document and MUST NOT shape a block. | derived | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 * **Budget.** the display-list build and the whole page paint, two rows of
   `ambre-spec-budgets.md section 2`; the run cache and the vertex buffers, two rows of
   `ambre-spec-budgets.md section 6`. The second of those exceeds the shared UI-thread total, and

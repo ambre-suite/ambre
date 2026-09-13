@@ -18,22 +18,22 @@ match, and the replace-all is one undo item. Trame's own turn is what a cell mat
 
 ### 1.1 What counts as a match
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-077` | `INV` | Case sensitivity and whole-cell matching MUST apply to a search as to a replace. | this spec section 4 | `ambre_trame::logic::tests::group6::find_next_honors_case_and_whole_cell`, and both options reach both gestures through one predicate | verified |
-| `TRAME-UI-078` | `INV` | A plain cell MUST be matched on its displayed value. | this spec section 3 | none. The scan reads the **computed** value, not the formatted one: a cell shown as `50.0%` is matched by `0.5` and not by what the user reads (`TRAME-108`). The cited tests carry no format, so they never separate the two | unverified |
-| `TRAME-UI-079` | `INV` | A formula cell MUST be matched on its source text, and only when the user asks for it. | this spec section 3 | `ambre_trame::logic::tests::group6::replace_all_gates_formula_cells`, over both settings of the option. The option is a replace option: a find has none, so it matches a formula on its value -- section 6 | verified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-077` | `INV` | Case sensitivity and whole-cell matching MUST apply to a search as to a replace. | this spec section 4 | `ambre_trame::logic::tests::group6::find_next_honors_case_and_whole_cell` -- both options reach both gestures through one predicate | none | verified |
+| `TRAME-UI-078` | `INV` | A plain cell MUST be matched on its displayed value. | this spec section 3 | none | fails -- the scan reads the **computed** value, not the formatted one: a cell shown as `50.0%` is matched by `0.5` and not by what the user reads (`TRAME-108`). The tests carry no format, so they never separate the two | unverified |
+| `TRAME-UI-079` | `INV` | A formula cell MUST be matched on its source text, and only when the user asks for it. | this spec section 3 | `ambre_trame::logic::tests::group6::replace_all_gates_formula_cells` -- it runs over both settings of the option, and the option is a replace option: a find has none, so it matches a formula on its value (section 6) | none | verified |
 
 ### 1.2 Replace every match in the workbook
 
 The scope toggle is Trame's own: `ambre-spec-find.md` owns the replace, this table owns what a
 workbook scope reaches and what it leaves alone.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-083` | `POST` | A workbook-scoped replace MUST reach every sheet, whichever tab is active. | this spec section 4 | `ambre_trame::logic::tests::group6::replace_all_spans_sheets`, which rewrites a match on an inactive sheet and reads it back | verified |
-| `TRAME-UI-080` | `POST` | A case-insensitive replace MUST leave the rest of the cell byte for byte. | this spec section 3 | `ambre_trame::logic::find::tests::case_insensitive_replace_survives_a_non_length_preserving_lowercase`, `::case_insensitive_replace_handles_the_ordinary_cases`, `::whole_cell_rewrite_swaps_the_entire_content`. One rewrite serves both gestures | verified |
-| `TRAME-UI-138` | `FRAME` | A workbook-scoped replace MUST NOT change which sheet the user is looking at. | this spec section 4 | none. The other sheets are rewritten by id, through their cells map, and the active sheet is never switched; no test reads the active tab after the replace | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-083` | `POST` | A workbook-scoped replace MUST reach every sheet, whichever tab is active. | this spec section 4 | `ambre_trame::logic::tests::group6::replace_all_spans_sheets` -- it rewrites a match on an inactive sheet and reads it back | none | verified |
+| `TRAME-UI-080` | `POST` | A case-insensitive replace MUST leave the rest of the cell byte for byte. | this spec section 3 | `ambre_trame::logic::find::tests::case_insensitive_replace_survives_a_non_length_preserving_lowercase`; `::case_insensitive_replace_handles_the_ordinary_cases`; `::whole_cell_rewrite_swaps_the_entire_content` -- one rewrite serves both gestures | none | verified |
+| `TRAME-UI-138` | `FRAME` | A workbook-scoped replace MUST NOT change which sheet the user is looking at. | this spec section 4 | none | unheld -- the other sheets are rewritten by id, through their cells map, and the active sheet is never switched, and no test reads the active tab after the replace | unverified |
 
 * **Budget.** none: a search is one walk over the cells a sheet holds, and `ambre-spec-budgets.md`
   budgets no search. A replace lands under the batch row of `ambre-spec-budgets.md section 1`.

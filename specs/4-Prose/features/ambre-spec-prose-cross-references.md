@@ -16,34 +16,34 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-073` | `INV` | A reference MUST name its target by the target's own identity, never by the text the target reads. | this spec section 3; `ambre-spec-prose-schema.md section 2` | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-072` | `INV` | A reference's stored value MUST be a record whose parts are delimited by their length; it MUST NOT be a string split on a separator. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-128` | `IO` | A reference read back MUST carry the label the author typed, whatever characters it holds. | this spec section 3; this spec section 5 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-129` | `INV` | The value a reference is drawn as MUST NOT be stored in the document. | this spec section 3; this spec section 5 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-130` | `OBS` | A reference to a page MUST show the page its target starts on in the layout being drawn. | this spec section 3 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-131` | `OBS` | A reference to a section MUST show the section number the headings feature derives for its target. | this spec section 3; `PROSE-FEAT-030` | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-014` | `OBS` | A reference whose target is gone MUST be drawn as a broken mark. | this spec section 3 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-132` | `INV` | A reference MUST NOT resolve to any block but the one it names. | this spec section 5 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-074` | `INV` | A reference whose target is gone MUST stay in the document. | this spec section 3; this spec section 5 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-133` | `CONC` | A target restored by an undo MUST make the reference resolve again on every peer. | this spec section 2; this spec section 3 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-048` | `OBS` | A reference carrying its own label MUST keep showing that label when its target is gone. | this spec section 4 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-084` | `INV` | A caret position MUST NOT fall inside the value a reference is drawn as. | this spec section 4; this spec section 5 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-073` | `INV` | A reference MUST name its target by the target's own identity, never by the text the target reads. | this spec section 3; `ambre-spec-prose-schema.md section 2` | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-072` | `INV` | A reference's stored value MUST be a record whose parts are delimited by their length; it MUST NOT be a string split on a separator. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-128` | `IO` | A reference read back MUST carry the label the author typed, whatever characters it holds. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-129` | `INV` | The value a reference is drawn as MUST NOT be stored in the document. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-130` | `OBS` | A reference to a page MUST show the page its target starts on in the layout being drawn. | this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-131` | `OBS` | A reference to a section MUST show the section number the headings feature derives for its target. | this spec section 3; `PROSE-FEAT-030` | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-014` | `OBS` | A reference whose target is gone MUST be drawn as a broken mark. | this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-132` | `INV` | A reference MUST NOT resolve to any block but the one it names. | this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-074` | `INV` | A reference whose target is gone MUST stay in the document. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-133` | `CONC` | A target restored by an undo MUST make the reference resolve again on every peer. | this spec section 2; this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-048` | `OBS` | A reference carrying its own label MUST keep showing that label when its target is gone. | this spec section 4 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-084` | `INV` | A caret position MUST NOT fall inside the value a reference is drawn as. | this spec section 4; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Insert a cross reference
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-134` | `POST` | After the command, a reference naming the chosen target MUST sit at the position it was given. | this spec section 3; this spec section 4 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-135` | `FRAME` | Inserting a reference MUST NOT touch the target block: no anchor, no mark and no text is written there. | derived | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-134` | `POST` | After the command, a reference naming the chosen target MUST sit at the position it was given. | this spec section 3; this spec section 4 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-135` | `FRAME` | Inserting a reference MUST NOT touch the target block: no anchor, no mark and no text is written there. | derived | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Click a reference
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-UI-085` | `POST` | A click on a reference MUST bring its target into view. | this spec section 4 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-086` | `FRAME` | A click on a reference MUST NOT write to the document. | derived | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-085` | `POST` | A click on a reference MUST bring its target into view. | this spec section 4 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-086` | `FRAME` | A click on a reference MUST NOT write to the document. | derived | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none of its own: a reference is resolved with the page it is drawn on, from the page
   layout and the section numbers the headings feature derives, and both figures are rows of

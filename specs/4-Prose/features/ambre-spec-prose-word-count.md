@@ -19,31 +19,31 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-018` | `INV` | The document MUST hold none of the five figures. | this spec section 2; this spec section 4 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-119` | `OBS` | The four text tallies shown MUST be those of the document's text, once they have settled. | this spec section 2 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-038` | `OBS` | The page count shown MUST be the number of pages of the layout that is applied. | this spec section 2 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-039` | `INV` | The character count MUST be taken over grapheme clusters, never over bytes or code points. | this spec section 2; `PROSE-FEAT-006` | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-120` | `INV` | The character count MUST exclude every whitespace cluster, including the break between two paragraphs. | this spec section 2 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-121` | `OBS` | A second character count, taken over the same clusters and including the whitespace, MUST be shown beside it. | this spec section 2; this spec section 4 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-122` | `OBS` | An empty document MUST answer zero for the four text tallies. | this spec section 2 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-040` | `OBS` | The five figures MUST reach the reader through the status bar slot every application shares. | this spec section 3; `ambre-spec-chrome.md` | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-123` | `INV` | Prose MUST NOT carry a status bar of its own. | this spec section 3; `ambre-spec-chrome.md` | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-018` | `INV` | The document MUST hold none of the five figures. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-119` | `OBS` | The four text tallies shown MUST be those of the document's text, once they have settled. | this spec section 2 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-038` | `OBS` | The page count shown MUST be the number of pages of the layout that is applied. | this spec section 2 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-039` | `INV` | The character count MUST be taken over grapheme clusters, never over bytes or code points. | this spec section 2; `PROSE-FEAT-006` | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-120` | `INV` | The character count MUST exclude every whitespace cluster, including the break between two paragraphs. | this spec section 2 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-121` | `OBS` | A second character count, taken over the same clusters and including the whitespace, MUST be shown beside it. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-122` | `OBS` | An empty document MUST answer zero for the four text tallies. | this spec section 2 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-040` | `OBS` | The five figures MUST reach the reader through the status bar slot every application shares. | this spec section 3; `ambre-spec-chrome.md` | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-123` | `INV` | Prose MUST NOT carry a status bar of its own. | this spec section 3; `ambre-spec-chrome.md` | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 The text changes
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-124` | `POST` | A run of changes MUST cost one recount of the four text tallies, taken after the changes stop, not one per change. | this spec section 2; this spec section 4 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-125` | `FRAME` | Recounting MUST NOT touch the document, and MUST NOT restamp the page count. | this spec section 2; derived | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-124` | `POST` | A run of changes MUST cost one recount of the four text tallies, taken after the changes stop, not one per change. | this spec section 2; this spec section 4 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-125` | `FRAME` | Recounting MUST NOT touch the document, and MUST NOT restamp the page count. | this spec section 2; derived | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 A layout arrives
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-126` | `POST` | The page count MUST become that layout's, on the frame it is applied. | this spec section 2 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-127` | `FRAME` | A new layout MUST NOT change any of the four text tallies. | this spec section 2; derived | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-126` | `POST` | The page count MUST become that layout's, on the frame it is applied. | this spec section 2 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-127` | `FRAME` | A new layout MUST NOT change any of the four text tallies. | this spec section 2; derived | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the word count, a row of `ambre-spec-budgets.md section 1`. It is what the
   delay below exists to keep off the keystroke path.

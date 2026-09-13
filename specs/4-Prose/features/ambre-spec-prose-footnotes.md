@@ -16,34 +16,34 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-013` | `OBS` | The number drawn in front of a note MUST be counted from the order of the calls in the document, at the moment the document is read. | this spec section 3 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-095` | `INV` | The document MUST NOT hold a note's number. | this spec section 3; this spec section 5 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-096` | `INV` | A note's identity MUST be minted once and MUST survive a move of its call, an edit of its body, and a remote change. | this spec section 3; this spec section 5 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-097` | `CONC` | Two peers whose text has converged MUST draw the same number in front of every note. | this spec section 2; this spec section 3 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-098` | `OBS` | A note no call reaches MUST be shown to the author as orphaned. | this spec section 3; this spec section 5 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-013` | `OBS` | The number drawn in front of a note MUST be counted from the order of the calls in the document, at the moment the document is read. | this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-095` | `INV` | The document MUST NOT hold a note's number. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-096` | `INV` | A note's identity MUST be minted once and MUST survive a move of its call, an edit of its body, and a remote change. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-097` | `CONC` | Two peers whose text has converged MUST draw the same number in front of every note. | this spec section 2; this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-098` | `OBS` | A note no call reaches MUST be shown to the author as orphaned. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Add a note
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-099` | `POST` | After the command, the document MUST hold the note's body and one call to it at the position the caret was in. | this spec section 3; this spec section 4 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-100` | `FRAME` | Adding a note MUST NOT put the note's text in the block the call sits in, and MUST NOT touch another note. | this spec section 5 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-071` | `FAIL` | A note MUST be refused in a header or a footer, and the refusal MUST be reported. | this spec section 3 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-099` | `POST` | After the command, the document MUST hold the note's body and one call to it at the position the caret was in. | this spec section 3; this spec section 4 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-100` | `FRAME` | Adding a note MUST NOT put the note's text in the block the call sits in, and MUST NOT touch another note. | this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-071` | `FAIL` | A note MUST be refused in a header or a footer, and the refusal MUST be reported. | this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Delete a note
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-070` | `POST` | Deleting a note MUST remove its body and every call still carrying its identity. | this spec section 3 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-101` | `FRAME` | Deleting a note MUST NOT change the text a call sat in, beyond the call itself, and MUST NOT touch another note. | this spec section 3 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-070` | `POST` | Deleting a note MUST remove its body and every call still carrying its identity. | this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-101` | `FRAME` | Deleting a note MUST NOT change the text a call sat in, beyond the call itself, and MUST NOT touch another note. | this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Delete the text a note is called from
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-069` | `FRAME` | Deleting the text a call sits on MUST NOT remove the note it reached. | this spec section 3; this spec section 5 | not built -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-069` | `FRAME` | Deleting the text a call sits on MUST NOT remove the note it reached. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none of its own: the notes are collected, shaped and placed with the page, which is
   the fourth step of `features/ambre-spec-prose-pagination.md section 3` and is charged to the

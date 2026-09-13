@@ -17,73 +17,73 @@ of this feature: the suggestion converges under one, and it is painted under the
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-082` | `INV` | A suggestion's identity MUST be stable for the document's lifetime: a partial accept, a reject or a remote delta MUST NOT change it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-257` | `INV` | A suggestion MUST be a mark over the document's own text, never a second copy of the block it covers. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-258` | `INV` | A span MUST be able to carry a suggested insertion mark and a suggested deletion mark at once. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-259` | `INV` | A suggestion that crossed a block boundary MUST be held as several marked spans sharing one identity. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-260` | `INV` | The peer owning a marked span MUST be read from the annotation entry the mark points at, never inferred from where the span sits. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-261` | `INV` | The set of pending suggestions MUST be derived from the marks and the annotation entries, never stored beside them. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-262` | `INV` | Every edit intercepted while suggesting MUST carry the intercepting peer's current identity. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-011` | `CONC` | Track changes MUST converge under concurrent accept and reject of the same suggestion: one outcome, never a half-applied edit. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-051` | `OBS` | A suggested insertion and a suggested deletion MUST be distinguishable in the text itself, not by an affordance the reader has to open. | this spec section 4 | not built -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-148` | `OBS` | A hover over a suggestion MUST show the accept and reject affordance on that suggestion, and on no other. | this spec section 4 | not built -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-052` | `INV` | The accept and reject affordance MUST be DOM chrome, not a canvas overlay. | this spec section 4; `ambre-spec-ui.md section 2` | not built -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-082` | `INV` | A suggestion's identity MUST be stable for the document's lifetime: a partial accept, a reject or a remote delta MUST NOT change it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-257` | `INV` | A suggestion MUST be a mark over the document's own text, never a second copy of the block it covers. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-258` | `INV` | A span MUST be able to carry a suggested insertion mark and a suggested deletion mark at once. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-259` | `INV` | A suggestion that crossed a block boundary MUST be held as several marked spans sharing one identity. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-260` | `INV` | The peer owning a marked span MUST be read from the annotation entry the mark points at, never inferred from where the span sits. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-261` | `INV` | The set of pending suggestions MUST be derived from the marks and the annotation entries, never stored beside them. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-262` | `INV` | Every edit intercepted while suggesting MUST carry the intercepting peer's current identity. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-011` | `CONC` | Track changes MUST converge under concurrent accept and reject of the same suggestion: one outcome, never a half-applied edit. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-051` | `OBS` | A suggested insertion and a suggested deletion MUST be distinguishable in the text itself, not by an affordance the reader has to open. | this spec section 4 | not built | unbuilt -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-148` | `OBS` | A hover over a suggestion MUST show the accept and reject affordance on that suggestion, and on no other. | this spec section 4 | not built | unbuilt -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-052` | `INV` | The accept and reject affordance MUST be DOM chrome, not a canvas overlay. | this spec section 4; `ambre-spec-ui.md section 2` | not built | unbuilt -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Turn suggestion mode on or off
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-263` | `POST` | With suggestion mode on, every subsequent edit MUST be intercepted and recorded as a suggestion. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-264` | `POST` | With suggestion mode off, every subsequent edit MUST reach the text directly, carrying no mark. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-089` | `FRAME` | Turning suggestion mode on or off MUST leave every pending suggestion untouched: the command MUST NOT apply or cancel any of them. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-263` | `POST` | With suggestion mode on, every subsequent edit MUST be intercepted and recorded as a suggestion. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-264` | `POST` | With suggestion mode off, every subsequent edit MUST reach the text directly, carrying no mark. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-089` | `FRAME` | Turning suggestion mode on or off MUST leave every pending suggestion untouched: the command MUST NOT apply or cancel any of them. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Type while suggesting
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-265` | `POST` | Text typed while suggesting MUST be marked as a suggested insertion. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-085` | `POST` | Consecutive edits by one peer MUST share an identity while they stay adjacent and inside the merge window. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-086` | `POST` | A caret move to a non-adjacent position MUST start a new identity. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-266` | `FRAME` | Typing while suggesting MUST NOT alter the marks of any other identity, nor the text outside the range it inserted. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-265` | `POST` | Text typed while suggesting MUST be marked as a suggested insertion. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-085` | `POST` | Consecutive edits by one peer MUST share an identity while they stay adjacent and inside the merge window. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-086` | `POST` | A caret move to a non-adjacent position MUST start a new identity. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-266` | `FRAME` | Typing while suggesting MUST NOT alter the marks of any other identity, nor the text outside the range it inserted. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Delete while suggesting
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-267` | `POST` | A delete range MUST be cut into maximal segments by what covers each one before any text is touched. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-087` | `POST` | Deleting text covered by the caller's own pending insertion MUST remove that text outright. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-088` | `POST` | Deleting any other text while suggesting MUST mark it, and MUST NOT remove it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-268` | `FRAME` | Deleting while suggesting MUST NOT remove or alter a mark another peer owns. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-267` | `POST` | A delete range MUST be cut into maximal segments by what covers each one before any text is touched. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-087` | `POST` | Deleting text covered by the caller's own pending insertion MUST remove that text outright. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-088` | `POST` | Deleting any other text while suggesting MUST mark it, and MUST NOT remove it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-268` | `FRAME` | Deleting while suggesting MUST NOT remove or alter a mark another peer owns. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Accept a suggestion
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-269` | `POST` | Accepting a suggested insertion MUST strip the mark and leave the text it covered in place. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-270` | `POST` | Accepting a suggested deletion MUST remove the text the mark covers. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-010` | `POST` | Accepting a suggestion MUST apply exactly the recorded change; it MUST NOT re-derive it from the current text. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-083` | `POST` | Accepting a suggestion MUST act on every span carrying the identity, whatever the number of blocks it crosses. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-084` | `POST` | Accepting a suggestion MUST be idempotent. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-271` | `FRAME` | Accepting a suggestion MUST NOT touch a span any other identity carries. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-269` | `POST` | Accepting a suggested insertion MUST strip the mark and leave the text it covered in place. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-270` | `POST` | Accepting a suggested deletion MUST remove the text the mark covers. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-010` | `POST` | Accepting a suggestion MUST apply exactly the recorded change; it MUST NOT re-derive it from the current text. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-083` | `POST` | Accepting a suggestion MUST act on every span carrying the identity, whatever the number of blocks it crosses. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-084` | `POST` | Accepting a suggestion MUST be idempotent. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-271` | `FRAME` | Accepting a suggestion MUST NOT touch a span any other identity carries. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Reject a suggestion
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-004` | `POST` | A rejected suggestion MUST be removed from the CRDT and MUST leave no trace in the final document. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-272` | `POST` | Rejecting a suggested deletion MUST strip the mark and leave the text it covered in place. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-273` | `POST` | Rejecting a suggestion MUST act on every span carrying the identity, whatever the number of blocks it crosses. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-274` | `POST` | Rejecting a suggestion MUST be idempotent. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-275` | `FRAME` | Rejecting a suggestion MUST NOT touch a span any other identity carries. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-004` | `POST` | A rejected suggestion MUST be removed from the CRDT and MUST leave no trace in the final document. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-272` | `POST` | Rejecting a suggested deletion MUST strip the mark and leave the text it covered in place. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-273` | `POST` | Rejecting a suggestion MUST act on every span carrying the identity, whatever the number of blocks it crosses. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-274` | `POST` | Rejecting a suggestion MUST be idempotent. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-275` | `FRAME` | Rejecting a suggestion MUST NOT touch a span any other identity carries. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.7 Accept or reject every pending suggestion
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-276` | `POST` | Accept-all and reject-all MUST resolve every pending identity exactly as the per-suggestion command would resolve it. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-277` | `FRAME` | Accept-all and reject-all MUST NOT touch text no pending suggestion covers. | this spec section 3 | not built -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-276` | `POST` | Accept-all and reject-all MUST resolve every pending identity exactly as the per-suggestion command would resolve it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-277` | `FRAME` | Accept-all and reject-all MUST NOT touch text no pending suggestion covers. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** two rows of `ambre-spec-budgets.md section 1`: the command interception under
   100 us, because it sits on the path of every mutation while suggesting is on, and accept-all over

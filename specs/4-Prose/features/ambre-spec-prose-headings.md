@@ -15,21 +15,21 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-030` | `OBS` | The number drawn in front of a heading MUST be the one its position implies, read from the headings before it in document order. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-090` | `INV` | The document MUST NOT hold a heading's number, nor its place in the outline. | this spec section 3; this spec section 5 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-029` | `OBS` | A heading whose stored level is outside one to six MUST be numbered as the nearest level inside it. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-091` | `INV` | The stored level MUST stay the level the document carries: no numbering pass and no export MUST rewrite it to the level it was read as. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-031` | `INV` | A level MUST reach a block only through a typed command; it MUST NOT be written as an untyped attribute. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-030` | `OBS` | The number drawn in front of a heading MUST be the one its position implies, read from the headings before it in document order. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-090` | `INV` | The document MUST NOT hold a heading's number, nor its place in the outline. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-029` | `OBS` | A heading whose stored level is outside one to six MUST be numbered as the nearest level inside it. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-091` | `INV` | The stored level MUST stay the level the document carries: no numbering pass and no export MUST rewrite it to the level it was read as. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-031` | `INV` | A level MUST reach a block only through a typed command; it MUST NOT be written as an untyped attribute. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Turn a paragraph into a heading, or change its level
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-094` | `PRE` | The level a command carries MUST be one to six; a level outside that range reaches the document through an import alone. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-092` | `POST` | After the command, the block MUST be a heading of the level asked for, or a paragraph when the level is taken away. | this spec section 4 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-093` | `FRAME` | Setting a level MUST NOT touch the block's text, its place in document order, or the level of any other block. | derived | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-094` | `PRE` | The level a command carries MUST be one to six; a level outside that range reaches the document through an import alone. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-092` | `POST` | After the command, the block MUST be a heading of the level asked for, or a paragraph when the level is taken away. | this spec section 4 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-093` | `FRAME` | Setting a level MUST NOT touch the block's text, its place in document order, or the level of any other block. | derived | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the section numbering, shared with the list ordinals in one row of
   `ambre-spec-budgets.md section 1`: both walk the block tree once per layout.

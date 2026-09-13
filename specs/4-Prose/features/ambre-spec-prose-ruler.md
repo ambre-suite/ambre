@@ -19,18 +19,18 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-UI-064` | `OBS` | The handles MUST show the indents of the block the caret is in, whichever block that is. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-075` | `OBS` | The values the handles show MUST be the ones the page is laid out with, not the block's own stored keys. | this spec section 3; this spec section 5 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-065` | `OBS` | The scale MUST stay aligned with the page's content width, at any zoom and at any horizontal offset of the page column. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-064` | `OBS` | The handles MUST show the indents of the block the caret is in, whichever block that is. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-075` | `OBS` | The values the handles show MUST be the ones the page is laid out with, not the block's own stored keys. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-065` | `OBS` | The scale MUST stay aligned with the page's content width, at any zoom and at any horizontal offset of the page column. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Drag a handle
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-UI-063` | `POST` | Releasing a handle MUST write the paragraph once, whatever the length of the drag. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-076` | `FRAME` | A handle in motion MUST NOT touch the document: the paint follows the pointer and nothing is written until the release. | this spec section 3 | not built -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-063` | `POST` | Releasing a handle MUST write the paragraph once, whatever the length of the drag. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-076` | `FRAME` | A handle in motion MUST NOT touch the document: the paint follows the pointer and nothing is written until the release. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none of its own. A drag paints the handle and nothing else until release, which is
   the point of `PROSE-UI-063`: the frame it sits inside is the row of

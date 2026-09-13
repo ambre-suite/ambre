@@ -21,53 +21,53 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SRV-006` | `INV` | Per document and per author the accepted clock MUST increase by exactly one. | this spec section 3; `ambre-spec-delta-order.md`, `SYNC-024` | `ambre_server::redis_ops::lua_tests::sequential_clock_succeeds` and `::first_update_succeeds` assert the accepted values; `::duplicate_clock_rejected` and `::clock_mismatch_rejected` assert the two refusals; `::independent_clients_have_independent_clocks` asserts one author's clock does not move another's. Database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | verified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-006` | `INV` | Per document and per author the accepted clock MUST increase by exactly one. | this spec section 3; `ambre-spec-delta-order.md`, `SYNC-024` | `ambre_server::redis_ops::lua_tests::sequential_clock_succeeds` -- an accepted value; `::first_update_succeeds` -- the first one; `::duplicate_clock_rejected` -- the replayed refusal; `::clock_mismatch_rejected` -- the out-of-step refusal; `::independent_clients_have_independent_clocks` -- one author's clock does not move another's, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
 
 ### 1.2 A delta is numbered
 
 The one thing a blind relay decides. Two counters -- the author's clock and the document's number --
 move together or neither moves.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SRV-032` | `POST` | An ordering state the ephemeral store has lost MUST be rebuilt from the durable history before any delta is validated. | this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::seed_clock_state_unblocks_the_next_update_after_a_redis_reset` asserts the author's next delta is accepted after a reset that would otherwise refuse it for ever. The rebuild raises and never lowers, so a live writer cannot be undone by it | verified |
-| `SRV-080` | `POST` | The clock check and the number MUST be one indivisible step. | this spec section 3; `SRV-006` | none. `ambre_server::redis_ops::lua_tests::lua_script_contains_key_validation` greps the script's text for `HGET`, `INCR` and `HSET`; it never runs it, and no test sends two frames from one author at once. The atomicity rests on the script being a script, which the grep does not establish | unverified |
-| `SRV-037` | `FAIL` | A refused clock MUST reach the client as a typed conflict, carrying the expected and the received value. | `ambre-spec-server.md`, `SRV-020` | none, and **the rule fails today**: the script's refusal is wrapped as an ephemeral-store failure, and the typed conflict the error mapping declares is constructed nowhere -- section 6. Answered by the `A refusal carries the conflict, never the store's error` Story (`ambre-roadmap.md` E7) | unverified |
-| `SRV-081` | `FRAME` | A refusal MUST NOT carry a store's own name or error text out to the client. | `ZK-006`; `ambre-spec-server.md`, `SRV-020` | none, and **the rule fails today**: the wrapped failure is forwarded verbatim, so the frame the client receives names the ephemeral store and quotes its message -- section 6. Answered by the `A refusal carries the conflict, never the store's error` Story (`ambre-roadmap.md` E7) | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-032` | `POST` | An ordering state the ephemeral store has lost MUST be rebuilt from the durable history before any delta is validated. | this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::seed_clock_state_unblocks_the_next_update_after_a_redis_reset` -- the author's next delta is accepted after a reset that would otherwise refuse it for ever, the rebuild raising and never lowering, so a live writer cannot be undone by it | none | verified |
+| `SRV-080` | `POST` | The clock check and the number MUST be one indivisible step. | this spec section 3; `SRV-006` | none | unheld -- `ambre_server::redis_ops::lua_tests::lua_script_contains_key_validation` greps the script's text for `HGET`, `INCR` and `HSET`, never runs it, and no test sends two frames from one author at once. The atomicity rests on the script being a script, which the grep does not establish | unverified |
+| `SRV-037` | `FAIL` | A refused clock MUST reach the client as a typed conflict, carrying the expected and the received value. | `ambre-spec-server.md`, `SRV-020` | none | fails -- the script's refusal is wrapped as an ephemeral-store failure, and the typed conflict the error mapping declares is constructed nowhere, section 6. Answered by the `A refusal carries the conflict, never the store's error` Story (`ambre-roadmap.md` E7) | unverified |
+| `SRV-081` | `FRAME` | A refusal MUST NOT carry a store's own name or error text out to the client. | `ZK-006`; `ambre-spec-server.md`, `SRV-020` | none | fails -- the wrapped failure is forwarded verbatim, so the frame the client receives names the ephemeral store and quotes its message, section 6. Answered by the `A refusal carries the conflict, never the store's error` Story (`ambre-roadmap.md` E7) | unverified |
 
 ### 1.3 A numbered delta is made durable
 
 The number is assigned before the delta is stored, so every failure below is a failure after the
 sequence has already moved.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SRV-036` | `FRAME` | Two instances MUST NOT drain one document's queued deltas at the same time. | this spec section 3; `SRV-021` | `ambre_server::redis_ops::redis_integration_tests::flush_lock_is_mutually_exclusive` asserts the second acquirer is refused while the first holds it. Database tier | verified |
-| `SRV-033` | `POST` | A delta given a number MUST reach the durable index. | audit `H1`; this spec section 3 | none. No test drives an index failure: it needs a register that refuses one statement and accepts the next (`ambre-spec-testing.md section 9`) | unverified |
-| `SRV-034` | `POST` | A delta given a number MUST reach object storage. | audit `H1`; this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::dirty_set_marks_on_append_and_clears_only_when_drained` asserts the queueing half -- the document is marked unflushed on append and cleared only once drained. Nothing drives a failing append | unverified |
-| `SRV-082` | `POST` | A durable write that failed MUST leave the whole frame where an operator can replay it. | audit `H1`; this spec section 3 | none, and the recovery is nominal: the failing path pushes to a dead-letter list, and nothing drains it, counts it or exposes it over any route -- section 6. The rule is held by a list nobody reads | unverified |
-| `SRV-035` | `FRAME` | A flush MUST NOT drop an entry it did not store. | this spec section 3 | none. The drain advances one front counter over the entries it finished with -- stored or permanently unreadable -- stops at the first retryable failure and trims to that counter; the ordering is stated in the source and no test drives a partial batch | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-036` | `FRAME` | Two instances MUST NOT drain one document's queued deltas at the same time. | this spec section 3; `SRV-021` | `ambre_server::redis_ops::redis_integration_tests::flush_lock_is_mutually_exclusive` -- the second acquirer is refused while the first holds it, on the database tier | none | verified |
+| `SRV-033` | `POST` | A delta given a number MUST reach the durable index. | audit `H1`; this spec section 3 | none | unheld -- no test drives an index failure: it needs a register that refuses one statement and accepts the next (`ambre-spec-testing.md section 9`) | unverified |
+| `SRV-034` | `POST` | A delta given a number MUST reach object storage. | audit `H1`; this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::dirty_set_marks_on_append_and_clears_only_when_drained` -- the queueing half, the document marked unflushed on append and cleared only once drained | partial -- nothing drives a failing append | unverified |
+| `SRV-082` | `POST` | A durable write that failed MUST leave the whole frame where an operator can replay it. | audit `H1`; this spec section 3 | none | unheld -- the recovery is nominal: the failing path pushes to a dead-letter list, and nothing drains it, counts it or exposes it over any route, section 6. The rule is held by a list nobody reads | unverified |
+| `SRV-035` | `FRAME` | A flush MUST NOT drop an entry it did not store. | this spec section 3 | none | unheld -- the drain advances one front counter over the entries it finished with, stored or permanently unreadable, stops at the first retryable failure and trims to that counter; the ordering is stated in the source and no test drives a partial batch | unverified |
 
 ### 1.4 A history is folded and trimmed
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SRV-039` | `POST` | A delta a retained snapshot already contains MUST be removed from the index. | this spec section 3 | `ambre_server::db::tests::purge_superseded_updates_trims_covered_deltas` seeds ten deltas and a snapshot covering six, and asserts exactly the uncovered tail survives. Correct and unreachable while `SRV-038` fails: with no snapshot there is no horizon | verified |
-| `SRV-083` | `FRAME` | A trim MUST NOT remove a delta the oldest retained snapshot does not cover. | this spec section 3 | `ambre_server::db::tests::purge_horizon_is_min_covered_seq` seeds two snapshots covering 3 and 8 and asserts the trim stops at 3, not 8; `::create_snapshot_roundtrips_covered_seq` pins the horizon a snapshot records | verified |
-| `SRV-038` | `POST` | The relay MUST ask for a snapshot once a document's unfolded history passes its threshold. | this spec section 3; `ambre-spec-delta-order.md` | not built -- lands with `A document is compacted as its history grows` (`ambre-roadmap.md` E7). The request exists in the protocol and the client acts on it; the relay sends it from nowhere, so no document is ever compacted -- section 6 | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-039` | `POST` | A delta a retained snapshot already contains MUST be removed from the index. | this spec section 3 | `ambre_server::db::tests::purge_superseded_updates_trims_covered_deltas` -- ten deltas and a snapshot covering six leave exactly the uncovered tail, correct and unreachable while `SRV-038` is unbuilt, since with no snapshot there is no horizon | none | verified |
+| `SRV-083` | `FRAME` | A trim MUST NOT remove a delta the oldest retained snapshot does not cover. | this spec section 3 | `ambre_server::db::tests::purge_horizon_is_min_covered_seq` -- two snapshots covering 3 and 8 stop the trim at 3, not 8; `::create_snapshot_roundtrips_covered_seq` -- the horizon a snapshot records | none | verified |
+| `SRV-038` | `POST` | The relay MUST ask for a snapshot once a document's unfolded history passes its threshold. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7). The request exists in the protocol and the client acts on it, and the relay sends it from nowhere, so no document is ever compacted, section 6 | unimplemented |
 
 ### 1.5 A client asks for what it missed
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SRV-040` | `POST` | A replay MUST answer every request it accepts, including one with nothing to send. | this spec section 3 | `ambre_server::ws::handler::message::delta_size_cap_tests::empty_replay_still_sends_missing_updates` asserts a document with no rows still emits one `MissingUpdates`, which is what releases the client's loading overlay. An index read that fails mid-replay still returns without answering | verified |
-| `SRV-041` | `POST` | A replay MUST deliver every delta the caller asked for. | this spec section 3 | none. A delta the relay cannot locate in object storage or in the pending map is logged and skipped, so a page can be short and the caller cannot tell -- section 6 | unverified |
-| `SRV-084` | `POST` | A replay MUST deliver its deltas in the order of their numbers. | this spec section 3 | none. The index is paged in order and each page is re-sorted by number after its concurrent fetch, so the ordering is held by the sort being written; no test drives a page whose fetches complete out of order | unverified |
-| `SRV-075` | `FRAME` | A page of the delta index served over a request MUST NOT exceed the cap the relay declares. | audit `M16`; this spec section 3 | none. `routes::sync` clamps the caller's `limit` to 1..=1000, and no test asks for more. The cap binds that route alone: the socket replay pages the whole history and bounds only each page | unverified |
-| `SRV-085` | `FAIL` | A replay MUST be refused, and answered with nothing, when the caller's membership no longer holds. | this spec section 3; `ambre-spec-membership.md` | none. The handler re-checks membership on a short cache before it reads the index; no test revokes a membership mid-session and asks again, which is the one path that keeps a revoked member from pulling the whole history down | unverified |
-| `SRV-086` | `FAIL` | A second replay of one document within the throttle window MUST be refused, and answered with nothing. | this spec section 3 | none. The handler records the instant of each served replay and drops a call that arrives inside the interval; no test calls twice | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-040` | `POST` | A replay MUST answer every request it accepts, including one with nothing to send. | this spec section 3 | `ambre_server::ws::handler::message::delta_size_cap_tests::empty_replay_still_sends_missing_updates` -- a document with no rows still emits one `MissingUpdates`, which is what releases the client's loading overlay | partial -- an index read that fails mid-replay still returns without answering | unverified |
+| `SRV-041` | `POST` | A replay MUST deliver every delta the caller asked for. | this spec section 3 | none | fails -- a delta the relay cannot locate in object storage or in the pending map is logged and skipped, so a page can be short and the caller cannot tell, section 6 | unverified |
+| `SRV-084` | `POST` | A replay MUST deliver its deltas in the order of their numbers. | this spec section 3 | none | unheld -- the index is paged in order and each page is re-sorted by number after its concurrent fetch, so the ordering is held by the sort being written; no test drives a page whose fetches complete out of order | unverified |
+| `SRV-075` | `FRAME` | A page of the delta index served over a request MUST NOT exceed the cap the relay declares. | audit `M16`; this spec section 3 | none | unheld -- `routes::sync` clamps the caller's `limit` to 1..=1000, and no test asks for more. The cap binds that route alone: the socket replay pages the whole history and bounds only each page | unverified |
+| `SRV-085` | `FAIL` | A replay MUST be refused, and answered with nothing, when the caller's membership no longer holds. | this spec section 3; `ambre-spec-membership.md` | none | unheld -- the handler re-checks membership on a short cache before it reads the index; no test revokes a membership mid-session and asks again, which is the one path that keeps a revoked member from pulling the whole history down | unverified |
+| `SRV-086` | `FAIL` | A second replay of one document within the throttle window MUST be refused, and answered with nothing. | this spec section 3 | none | unheld -- the handler records the instant of each served replay and drops a call that arrives inside the interval; no test calls twice | unverified |
 
 * **Budget.** three rows of `ambre-spec-budgets.md section 3`: the live receive and broadcast
   under 5 ms, the ordering check under 1 ms, and the flush batch under 2 s for a thousand deltas.
@@ -76,11 +76,12 @@ sequence has already moved.
 * **Boundary.** the relay orders bytes it cannot read. What it learns here is exactly the routing
   set of `ZK-007`: which key wrote to which document, at which clock, and how large the frame was.
   Nothing here opens a payload, and `SRV-001` keeps the frame out of the logs.
-* **Verification.** 6 `verified`, 12 `unverified`, 1 `unimplemented`. What holds is the ordering
+* **Verification.** 5 `verified`, 13 `unverified`, 1 `unimplemented`. What holds is the ordering
   itself: the script's five accepted and refused cases, the rebuild after a reset, the drain lock
   and both halves of the trim. What is loose is every recovery path -- an index that refuses a
-  write, a queue that refuses an append, a partial batch -- because each needs a store that fails on
-  demand, and every refusal the replay performs, because none of the three is driven. Four
+  write, a queue that refuses an append, a partial batch, an index read that fails mid-replay --
+  because each needs a store that fails on demand, and every refusal the replay performs, because
+  none of the three is driven. Four
   conjunctions came apart. `SRV-006` claimed the clock's progression **and** the atomicity of the
   step, and the second was carried by a test that greps the script's source text for `HGET` and
   `INCR` without ever running it: five real cases were hiding a rule nothing exercises. `SRV-037`

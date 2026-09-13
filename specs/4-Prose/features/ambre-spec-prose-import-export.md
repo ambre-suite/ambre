@@ -21,95 +21,95 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-IO-001` | `INV` | Every conversion MUST run in the Logic thread. | this spec section 3; `ZK-001` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-043` | `INV` | No part of a document MUST reach the relay while a conversion runs. | this spec section 3; `ZK-001` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-044` | `INV` | A reader and a writer MUST meet in the intermediate form alone: neither MUST know the other. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-009` | `INV` | A reader MUST NOT emit a command. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-045` | `INV` | A writer MUST NOT read the document. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-046` | `INV` | The walk from the document into the intermediate form MUST be one, shared by every writer. | this spec section 3; `ambre-spec-budgets.md section 1` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-004` | `INV` | Every fidelity loss MUST raise a warning naming the construct that was dropped. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-005` | `INV` | A reader MUST warn before it discards an element it does not recognise. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-006` | `INV` | A writer that emits an approximation MUST record it in the report. | this spec section 3 | not built -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-047` | `INV` | A conversion that finished MUST answer with a report, and one that produced nothing MUST answer with an error: the two MUST NOT be one type. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file. | this spec section 3; `ambre-spec-budgets.md section 1` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-025` | `INV` | The reader an HTML import uses MUST be the reader a rich paste uses: they MUST NOT be two readers. | this spec section 3; `features/ambre-spec-prose-clipboard.md` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-049` | `INV` | The native file MUST reuse the shared container rather than restate it. | this spec section 3; `ambre-spec-docfile.md section 3` | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5), on top of `DOCFILE P0` (Epic `EF`) | unimplemented |
-| `PROSE-IO-012` | `IO` | The native file MUST be the only lossless round trip. | this spec section 3; `ambre-spec-docfile.md section 3` | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5), on top of `DOCFILE P0` (Epic `EF`) | unimplemented |
-| `PROSE-IO-014` | `IO` | A Word round trip MUST keep every structure the intermediate form represents, or warn for each one it drops. | this spec section 3 | not built -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-IO-001` | `INV` | Every conversion MUST run in the Logic thread. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-043` | `INV` | No part of a document MUST reach the relay while a conversion runs. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-044` | `INV` | A reader and a writer MUST meet in the intermediate form alone: neither MUST know the other. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-009` | `INV` | A reader MUST NOT emit a command. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-045` | `INV` | A writer MUST NOT read the document. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-046` | `INV` | The walk from the document into the intermediate form MUST be one, shared by every writer. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-004` | `INV` | Every fidelity loss MUST raise a warning naming the construct that was dropped. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-005` | `INV` | A reader MUST warn before it discards an element it does not recognise. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-006` | `INV` | A writer that emits an approximation MUST record it in the report. | this spec section 3 | not built | unbuilt -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-047` | `INV` | A conversion that finished MUST answer with a report, and one that produced nothing MUST answer with an error: the two MUST NOT be one type. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-025` | `INV` | The reader an HTML import uses MUST be the reader a rich paste uses: they MUST NOT be two readers. | this spec section 3; `features/ambre-spec-prose-clipboard.md` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-049` | `INV` | The native file MUST reuse the shared container rather than restate it. | this spec section 3; `ambre-spec-docfile.md section 3` | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5), on top of `DOCFILE P0` (Epic `EF`) | unimplemented |
+| `PROSE-IO-012` | `IO` | The native file MUST be the only lossless round trip. | this spec section 3; `ambre-spec-docfile.md section 3` | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5), on top of `DOCFILE P0` (Epic `EF`) | unimplemented |
+| `PROSE-IO-014` | `IO` | A Word round trip MUST keep every structure the intermediate form represents, or warn for each one it drops. | this spec section 3 | not built | unbuilt -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Bring a file into the document
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-IO-027` | `POST` | A user MUST be able to bring a file into the document. | this spec section 4 | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-002` | `POST` | An import MUST write through typed commands. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-050` | `POST` | The commands MUST be built in tree order, parent before child. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-051` | `POST` | The whole file MUST apply as one batch: one undo MUST take the import back. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-026` | `POST` | A construct the block tree refuses MUST be lifted to the nearest place the tree allows, never dropped. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-052` | `POST` | Every lift MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-053` | `POST` | The report MUST reach the user: a construct changed in silence MUST NOT be the outcome. | this spec section 4 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-021` | `POST` | An import of a large file MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-054` | `POST` | An imported picture naming a remote address MUST be reported as unresolved. | this spec section 3; `ZK-001` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-023` | `FRAME` | An import MUST NOT fetch a remote address a picture names. | this spec section 3; `ZK-001` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-055` | `FRAME` | An import MUST NOT mutate the document directly. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-011` | `FAIL` | A failed import MUST leave the document untouched: a partial application MUST NOT be observable. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5); the readers are the first `cargo-fuzz` targets | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-IO-027` | `POST` | A user MUST be able to bring a file into the document. | this spec section 4 | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-002` | `POST` | An import MUST write through typed commands. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-050` | `POST` | The commands MUST be built in tree order, parent before child. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-051` | `POST` | The whole file MUST apply as one batch: one undo MUST take the import back. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-026` | `POST` | A construct the block tree refuses MUST be lifted to the nearest place the tree allows, never dropped. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-052` | `POST` | Every lift MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-053` | `POST` | The report MUST reach the user: a construct changed in silence MUST NOT be the outcome. | this spec section 4 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-021` | `POST` | An import of a large file MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-054` | `POST` | An imported picture naming a remote address MUST be reported as unresolved. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-023` | `FRAME` | An import MUST NOT fetch a remote address a picture names. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-055` | `FRAME` | An import MUST NOT mutate the document directly. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-011` | `FAIL` | A failed import MUST leave the document untouched: a partial application MUST NOT be observable. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5); the readers are the first `cargo-fuzz` targets | unimplemented |
 
 ### 1.3 Take the document out as a file
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-IO-028` | `POST` | A user MUST be able to take the document out as a file. | this spec section 4 | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-056` | `POST` | The exported bytes MUST reach the browser download path. | this spec section 4 | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-003` | `POST` | An export MUST be idempotent: the same document exported twice MUST yield the same bytes, up to the stamp the format writes. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-020` | `POST` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-022` | `POST` | An export MUST omit the comments and the suggestions the user did not ask for. | this spec section 4; `ZK-001` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-057` | `POST` | An export of a large document MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-017` | `FRAME` | An export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-IO-028` | `POST` | A user MUST be able to take the document out as a file. | this spec section 4 | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-056` | `POST` | The exported bytes MUST reach the browser download path. | this spec section 4 | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-003` | `POST` | An export MUST be idempotent: the same document exported twice MUST yield the same bytes, up to the stamp the format writes. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-020` | `POST` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-022` | `POST` | An export MUST omit the comments and the suggestions the user did not ask for. | this spec section 4; `ZK-001` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-057` | `POST` | An export of a large document MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-017` | `FRAME` | An export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Save a native file
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-IO-058` | `POST` | A native file MUST carry Prose's own document-type byte. | this spec section 3; `ambre-spec-docfile.md section 3` | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-059` | `FRAME` | A native export MUST NOT route the document through the intermediate form: its payload MUST be the snapshot itself. | this spec section 3; `ambre-spec-docfile.md section 3` | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-IO-058` | `POST` | A native file MUST carry Prose's own document-type byte. | this spec section 3; `ambre-spec-docfile.md section 3` | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-059` | `FRAME` | A native export MUST NOT route the document through the intermediate form: its payload MUST be the snapshot itself. | this spec section 3; `ambre-spec-docfile.md section 3` | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Open a native file
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-IO-013` | `FAIL` | A native file belonging to another application MUST be re-dispatched, never coerced into Prose. | this spec section 3; `ambre-spec-docfile.md section 3` | not built -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-IO-013` | `FAIL` | A native file belonging to another application MUST be re-dispatched, never coerced into Prose. | this spec section 3; `ambre-spec-docfile.md section 3` | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Import a Word file
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-IO-060` | `POST` | A tracked change and a comment the file carries MUST arrive as a suggestion and a comment thread, never as plain text. | this spec section 3 | not built -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-024` | `FRAME` | A Word import MUST NOT run a macro the file carries. | this spec section 3; `ZK-001` | not built -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-IO-060` | `POST` | A tracked change and a comment the file carries MUST arrive as a suggestion and a comment thread, never as plain text. | this spec section 3 | not built | unbuilt -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-024` | `FRAME` | A Word import MUST NOT run a macro the file carries. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.7 Export to Markdown
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-IO-018` | `POST` | A Markdown export MUST report every construct the flavour has no syntax for, the page model included. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-061` | `FRAME` | A Markdown export MUST NOT emit a table, a to-do item or a footnote the chosen flavour has no syntax for. | this spec section 3 | not built -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-IO-018` | `POST` | A Markdown export MUST report every construct the flavour has no syntax for, the page model included. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-061` | `FRAME` | A Markdown export MUST NOT emit a table, a to-do item or a footnote the chosen flavour has no syntax for. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.8 Import an HTML file
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-IO-016` | `FRAME` | An imported HTML document MUST NOT run a script it carries. | this spec section 3; `ZK-001` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-062` | `FRAME` | An HTML import MUST NOT resolve a remote reference the document carries: no stylesheet, no font, no frame. | this spec section 3; `ZK-001` | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-IO-016` | `FRAME` | An imported HTML document MUST NOT run a script it carries. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-062` | `FRAME` | An HTML import MUST NOT resolve a remote reference the document carries: no stylesheet, no font, no frame. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.9 Export to HTML
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-IO-019` | `POST` | An HTML export MUST report the header and the footer, which the format has no element for. | this spec section 3 | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-063` | `POST` | An HTML export MUST stand alone: it MUST carry the stylesheet it needs, in the head or inline. | this spec section 3 | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-064` | `FRAME` | An HTML export MUST NOT emit a script or an event handler: the file it writes MUST be inert. | this spec section 3 | not built -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-IO-019` | `POST` | An HTML export MUST report the header and the footer, which the format has no element for. | this spec section 3 | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-063` | `POST` | An HTML export MUST stand alone: it MUST carry the stylesheet it needs, in the head or inline. | this spec section 3 | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-064` | `FRAME` | An HTML export MUST NOT emit a script or an event handler: the file it writes MUST be inert. | this spec section 3 | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** six rows of `ambre-spec-budgets.md section 1`: the Word import and export of a
   hundred pages, the Markdown export, the HTML clipboard import, the plaintext native export, and

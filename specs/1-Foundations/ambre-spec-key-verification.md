@@ -21,49 +21,49 @@ other five documents of the DOM side.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `CHROME-048` | `INV` | A fingerprint MUST be stable for a key. | this spec section 2; `ambre-spec-server.md` | `ambre_crypto::tests::fingerprint_is_stable_grouped_base32`: it freezes the value for a known key, so any change to the tag, the hash variant, the truncation or the encoding fails | verified |
-| `CHROME-071` | `INV` | A fingerprint MUST differ for any other key. | this spec section 2; `ambre-spec-server.md` | `ambre_crypto::tests::fingerprint_distinguishes_keys`: it asserts a one-bit change moves the string | verified |
-| `CHROME-072` | `OBS` | A fingerprint MUST be readable aloud. | this spec section 2 | `ambre_crypto::tests::fingerprint_is_stable_grouped_base32`, on its second assertion: the alphabet and the grouping into eight blocks of four are what a person reads over the phone | verified |
-| `CHROME-049` | `INV` | The fingerprint MUST be computed where the keys are: the chrome MUST NOT hash anything. | this spec section 2; `ambre-spec-zero-knowledge.md` (`ZK-001`) | crate graph: neither the launcher nor the shared toolkit declares the crypto crate, so the string arrives already formatted. No lint holds the next crate that would | unverified |
-| `CHROME-053` | `INV` | The stored key MUST survive a browser that already holds documents: adding it MUST NOT disturb them. | this spec section 2 | `ambre_logic::persistence::wasm_tests::upgrade_v1_to_v2_adds_trusted_keys_and_keeps_snapshots`, `::trusted_key_roundtrips_and_absent_is_none` -- wasm tier, a real browser database | verified |
-| `CHROME-054` | `OBS` | The prompt MUST state, in plain words, that without out-of-band comparison the protection reduces to trusting the server. | this spec section 2; `ambre-spec-server.md` | none. The sentence is in the prompt beside the fingerprint and a copy action, and it is not a footnote. Nothing refuses its removal, which is the whole honesty of the step | unverified |
-| `CHROME-077` | `OBS` | The prompt MUST offer the refusing action first. | this spec section 2, the prompt is a modal | none. The two actions sit in that order in one view, and re-confirming a changed key is deliberately not the easy path. Nothing refuses a reordering, which is the half `CHROME-051` was carrying | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-048` | `INV` | A fingerprint MUST be stable for a key. | this spec section 2; `ambre-spec-server.md` | `ambre_crypto::tests::fingerprint_is_stable_grouped_base32` -- the value is frozen for a known key, so any change to the tag, the hash variant, the truncation or the encoding fails | none | verified |
+| `CHROME-071` | `INV` | A fingerprint MUST differ for any other key. | this spec section 2; `ambre-spec-server.md` | `ambre_crypto::tests::fingerprint_distinguishes_keys` -- a one-bit change moves the string | none | verified |
+| `CHROME-072` | `OBS` | A fingerprint MUST be readable aloud. | this spec section 2 | `ambre_crypto::tests::fingerprint_is_stable_grouped_base32` -- its second assertion, the alphabet and the grouping into eight blocks of four being what a person reads over the phone | none | verified |
+| `CHROME-049` | `INV` | The fingerprint MUST be computed where the keys are: the chrome MUST NOT hash anything. | this spec section 2; `ambre-spec-zero-knowledge.md` (`ZK-001`) | crate-graph -- neither the launcher nor the shared toolkit declares the crypto crate, so the string arrives already formatted | partial -- no lint holds the next crate that would declare it | unverified |
+| `CHROME-053` | `INV` | The stored key MUST survive a browser that already holds documents: adding it MUST NOT disturb them. | this spec section 2 | `ambre_logic::persistence::wasm_tests::upgrade_v1_to_v2_adds_trusted_keys_and_keeps_snapshots`; `::trusted_key_roundtrips_and_absent_is_none` -- wasm tier, a real browser database | none | verified |
+| `CHROME-054` | `OBS` | The prompt MUST state, in plain words, that without out-of-band comparison the protection reduces to trusting the server. | this spec section 2; `ambre-spec-server.md` | none | unheld -- the sentence is in the prompt beside the fingerprint and a copy action, and it is not a footnote. Nothing refuses its removal, which is the whole honesty of the step | unverified |
+| `CHROME-077` | `OBS` | The prompt MUST offer the refusing action first. | this spec section 2, the prompt is a modal | none | unheld -- the two actions sit in that order in one view, and re-confirming a changed key is deliberately not the easy path. Nothing refuses a reordering, which is the half `CHROME-051` was carrying | unverified |
 
 ### 1.2 Invite someone
 
 The first phase resolves the recipient, fetches their exchange key and computes the fingerprint. It
 shares nothing.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `CHROME-073` | `POST` | The first phase MUST answer with the recipient's fingerprint. | this spec section 2, the invitation in two phases | none. It resolves, fetches and formats, and no test in any tier drives it: the mock relay does not model an invitation | unverified |
-| `CHROME-046` | `FRAME` | A document key MUST NOT be wrapped to a recipient before the trust decision is taken. | this spec section 2; `ambre-spec-zero-knowledge.md` | type-level: the first phase's parameters carry no document key and no exchange key, so there is nothing in scope to wrap with. The wrap lives in the second phase alone | verified |
-| `CHROME-050` | `FAIL` | A key never seen before MUST interrupt: the invitation MUST NOT proceed until the user confirms. | this spec section 2 | none. The absence of a stored key raises the prompt and the dispatch sits behind the confirming action. Nothing asserts that no other path reaches the second phase | unverified |
-| `CHROME-051` | `FAIL` | A key that differs from the stored one MUST block the invitation. | this spec section 2 | none. The comparison classifies the state and the prompt carries the divergence as an alert. Nothing drives a substituted key through the classification | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-073` | `POST` | The first phase MUST answer with the recipient's fingerprint. | this spec section 2, the invitation in two phases | none | unheld -- the phase resolves, fetches and formats, and no test in any tier drives it: the mock relay does not model an invitation | unverified |
+| `CHROME-046` | `FRAME` | A document key MUST NOT be wrapped to a recipient before the trust decision is taken. | this spec section 2; `ambre-spec-zero-knowledge.md` | type-level -- the first phase's parameters carry no document key and no exchange key, so there is nothing in scope to wrap with, the wrap living in the second phase alone | none | verified |
+| `CHROME-050` | `FAIL` | A key never seen before MUST interrupt: the invitation MUST NOT proceed until the user confirms. | this spec section 2 | none | unheld -- the absence of a stored key raises the prompt and the dispatch sits behind the confirming action. Nothing asserts that no other path reaches the second phase | unverified |
+| `CHROME-051` | `FAIL` | A key that differs from the stored one MUST block the invitation. | this spec section 2 | none | unheld -- the comparison classifies the state and the prompt carries the divergence as an alert. Nothing drives a substituted key through the classification | unverified |
 
 ### 1.3 Confirm the recipient's key
 
 The user has looked at the fingerprint and accepted it. The key is pinned, then the second phase
 wraps.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `CHROME-052` | `POST` | The confirmed key MUST be stored before the invitation is dispatched. | this spec section 2 | none. The store write and the dispatch sit in that order in one block. A reversal leaves a share sent under a key the next comparison does not know | unverified |
-| `CHROME-074` | `POST` | The confirmed key MUST be stored under the recipient's own identity. | this spec section 2; this spec section 6 | none, and **the rule fails today**: the first phase falls back to a freshly generated identifier when the server's is malformed, and the pin is filed under that. The recipient then looks new on every invitation, so a substituted key reads as a first contact and the whole comparison is dead. Answered by the `A verified key is pinned under its owner` Story (`ambre-roadmap.md` E7) | unverified |
-| `CHROME-078` | `FRAME` | Confirming a key MUST NOT change any other recipient's pin. | derived | none. The write addresses one identity, so the rule holds by the shape of the call. Nothing reads a second pin back across a confirmation, and `CHROME-074` is the reason to care: a wrong identity is already a write landing where it should not | unverified |
-| `CHROME-047` | `FAIL` | The wrap MUST be refused unless the key still equals the one the user confirmed. | this spec section 2; `ambre-spec-server.md` | none. The second phase re-fetches the key and compares it with the confirmed value before building the request, and answers a conflict otherwise. `ambre_sync::sharing::tests::invite_request_wraps_for_the_invitee_only` covers the wrap and not the comparison | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-052` | `POST` | The confirmed key MUST be stored before the invitation is dispatched. | this spec section 2 | none | unheld -- the store write and the dispatch sit in that order in one block, and a reversal leaves a share sent under a key the next comparison does not know | unverified |
+| `CHROME-074` | `POST` | The confirmed key MUST be stored under the recipient's own identity. | this spec section 2; this spec section 6 | none | fails -- the first phase falls back to a freshly generated identifier when the server's is malformed, and the pin is filed under that. The recipient then looks new on every invitation, so a substituted key reads as a first contact and the whole comparison is dead. Answered by the `A verified key is pinned under its owner` Story (`ambre-roadmap.md` E7) | unverified |
+| `CHROME-078` | `FRAME` | Confirming a key MUST NOT change any other recipient's pin. | derived | none | unheld -- the write addresses one identity, so the rule holds by the shape of the call. Nothing reads a second pin back across a confirmation, and `CHROME-074` is the reason to care: a wrong identity is already a write landing where it should not | unverified |
+| `CHROME-047` | `FAIL` | The wrap MUST be refused unless the key still equals the one the user confirmed. | this spec section 2; `ambre-spec-server.md` | none | unheld -- the second phase re-fetches the key and compares it with the confirmed value before building the request, and answers a conflict otherwise. `ambre_sync::sharing::tests::invite_request_wraps_for_the_invitee_only` covers the wrap and not the comparison | unverified |
 
 ### 1.4 Refuse the recipient's key
 
 Escape, the backdrop and the refusing action are three routes to one outcome.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `CHROME-055` | `POST` | Refusing MUST store no key. | this spec section 2 | none. The three routes clear the pending decision and the store write sits behind the confirming action alone. Nothing asserts the three agree | unverified |
-| `CHROME-075` | `POST` | Refusing MUST send no invitation. | this spec section 2 | none. The dispatch reads the same pending value the three routes clear, so the two halves of the old row rest on one mechanism and neither is driven. This is the half that reaches the relay | unverified |
-| `CHROME-076` | `FRAME` | Refusing MUST NOT leave a pending decision behind. | this spec section 2 | none. A decision left behind is the next invitation dispatching against a recipient the user never looked at, and the three routes are the three places it could survive | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-055` | `POST` | Refusing MUST store no key. | this spec section 2 | none | unheld -- the three routes clear the pending decision and the store write sits behind the confirming action alone. Nothing asserts the three agree | unverified |
+| `CHROME-075` | `POST` | Refusing MUST send no invitation. | this spec section 2 | none | unheld -- the dispatch reads the same pending value the three routes clear, so the two halves of the old row rest on one mechanism and neither is driven. This is the half that reaches the relay | unverified |
+| `CHROME-076` | `FRAME` | Refusing MUST NOT leave a pending decision behind. | this spec section 2 | none | unheld -- a decision left behind is the next invitation dispatching against a recipient the user never looked at, and the three routes are the three places it could survive | unverified |
 
 * **Budget.** none: one hash of 32 bytes, once per invitation, on the thread that already holds the
   keys. `ambre-spec-budgets.md` budgets no operation here.

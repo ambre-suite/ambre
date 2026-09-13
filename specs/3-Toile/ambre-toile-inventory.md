@@ -31,19 +31,19 @@
 | `toile-links` | A user makes an element clickable: a web address, a frame on this board, or another Ambre document. | implemented | 12 | 7 |
 | `toile-media` | A picture on the board is stored once, wherever it appears, and the server that keeps it never sees it. | implemented | 28 | 5 |
 | `toile-menus` | A user right-clicks and gets what applies to what is under the cursor. | implemented | 48 | 18 |
-| `toile-presence` | A user sees where the others are: a pointer in their colour, the elements they hold, the stroke they are drawing and the trail of their highlighter. | implemented | 24 | 5 |
+| `toile-presence` | A user sees where the others are: a pointer in their colour, the elements they hold, the stroke they are drawing and the trail of their highlighter. | implemented | 24 | 6 |
 | `toile-presentation` | A user orders a few frames into a deck and presents them: the board walks the audience from one frame to the next, animating what two neighbouring slides share. | implemented | 44 | 9 |
 | `toile-selection` | A user clicks an element and gets it, not the one behind it. | implemented | 29 | 13 |
 | `toile-status-bar` | A user selects a handful of elements and reads how many there are and what box they occupy, without drawing a rectangle to find out. | implemented | 13 | 6 |
 | `toile-styles` | A user picks a colour, a border, a thickness, a font, and the selection takes it. | implemented | 30 | 13 |
 | `toile-tools` | A user picks a tool and the board obeys one rule: the gesture shows what it will make, and the release makes it once. | implemented | 28 | 8 |
-| `toile-undo` | Toile's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a board, and which caches an undo reseeds. | implemented | 6 | 4 |
-| `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | implemented | 13 | 8 |
+| `toile-undo` | Toile's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a board, and which caches an undo reseeds. | implemented | 6 | 5 |
+| `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | implemented | 13 | 9 |
 | `toile-z-order` | What overlaps what. | implemented | 16 | 12 |
 | `toile-import-export` | A user brings a drawing that came from somewhere else onto the board, and hands the board back as a file someone without Ambre can open. | partial | 53 | 16 |
 | `toile-pdf-export` | Toile's half of the shared PDF export (`ambre-spec-pdf-export.md`): one page per slide, and the clip that keeps a page to its own frame. | partial | 16 | 4 |
 | `toile-reactions` | A user drops an emoji on a note and everyone sees it, with a count. | partial | 34 | 10 |
 | `toile-text-editing` | A user double-clicks a note and types into it, where it sits, at the size it will keep. | partial | 36 | 31 |
-| `toile-viewport` | A user pans and zooms an endless plane. | partial | 32 | 14 |
+| `toile-viewport` | A user pans and zooms an endless plane. | partial | 32 | 15 |
 
-**29 features: 24 implemented, 5 partial, 0 design-only. 770 contract rows, 304 loose.**
+**29 features: 24 implemented, 5 partial, 0 design-only. 770 contract rows, 308 loose.**

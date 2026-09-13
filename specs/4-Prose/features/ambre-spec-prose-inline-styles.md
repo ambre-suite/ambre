@@ -16,48 +16,48 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-007` | `INV` | An inline mark MUST expand or not expand at its boundaries according to the registry alone (`ambre-spec-prose-schema.md section 3`), never according to the applying feature. | this spec section 3; `PROSE-007` | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-020` | `INV` | The value of a property MUST be taken from the first level that carries it, in the order inline mark, paragraph style, block type, document default. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-177` | `INV` | The cascade MUST terminate: a property no level carries MUST resolve to a decided absence, and a reader of the resolved style MUST NOT look further up. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-173` | `INV` | Superscript and subscript MUST both be storable on one range: writing either one MUST NOT clear the other. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-174` | `INV` | Where both are stored on one range, the resolved style MUST be the raised one, by a priority fixed in the reader and not by which mark was written last. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-021` | `CONC` | Two peers holding both marks MUST resolve one style, whichever order the two marks arrived in. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-008` | `CONC` | Two concurrent applications of the same mark to overlapping ranges MUST converge without producing a torn or duplicated span. | this spec section 2 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-184` | `CONC` | Two peers writing two values of one mark key over one range MUST converge on one of the two, and both MUST resolve that same one. | this spec section 5 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-176` | `CONC` | Two authors setting two different properties of one paragraph MUST both keep their property: neither MUST overwrite the other's. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-175` | `INV` | Two spellings of one colour MUST be stored as one: the bytes a peer writes for a colour MUST depend on the colour alone. | this spec section 3; `PROSE-008` | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-023` | `IO` | Reading a stored colour and writing it back MUST leave the bytes unchanged. | this spec section 3; `PROSE-008` | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-007` | `INV` | An inline mark MUST expand or not expand at its boundaries according to the registry alone (`ambre-spec-prose-schema.md section 3`), never according to the applying feature. | this spec section 3; `PROSE-007` | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-020` | `INV` | The value of a property MUST be taken from the first level that carries it, in the order inline mark, paragraph style, block type, document default. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-177` | `INV` | The cascade MUST terminate: a property no level carries MUST resolve to a decided absence, and a reader of the resolved style MUST NOT look further up. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-173` | `INV` | Superscript and subscript MUST both be storable on one range: writing either one MUST NOT clear the other. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-174` | `INV` | Where both are stored on one range, the resolved style MUST be the raised one, by a priority fixed in the reader and not by which mark was written last. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-021` | `CONC` | Two peers holding both marks MUST resolve one style, whichever order the two marks arrived in. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-008` | `CONC` | Two concurrent applications of the same mark to overlapping ranges MUST converge without producing a torn or duplicated span. | this spec section 2 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-184` | `CONC` | Two peers writing two values of one mark key over one range MUST converge on one of the two, and both MUST resolve that same one. | this spec section 5 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-176` | `CONC` | Two authors setting two different properties of one paragraph MUST both keep their property: neither MUST overwrite the other's. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-175` | `INV` | Two spellings of one colour MUST be stored as one: the bytes a peer writes for a colour MUST depend on the colour alone. | this spec section 3; `PROSE-008` | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-023` | `IO` | Reading a stored colour and writing it back MUST leave the bytes unchanged. | this spec section 3; `PROSE-008` | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Apply a mark to a range
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-178` | `POST` | The mark MUST cover the given range and no character outside it, and the value stored MUST be the canonical form of the value supplied. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-022` | `FAIL` | A mark value that fails the grammar of its key MUST be refused before the document is written, and MUST be reported to the author. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-179` | `FRAME` | Applying a mark MUST NOT change the text of the block, any other key of the registry over that range, or the block's paragraph settings. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-178` | `POST` | The mark MUST cover the given range and no character outside it, and the value stored MUST be the canonical form of the value supplied. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-022` | `FAIL` | A mark value that fails the grammar of its key MUST be refused before the document is written, and MUST be reported to the author. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-179` | `FRAME` | Applying a mark MUST NOT change the text of the block, any other key of the registry over that range, or the block's paragraph settings. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Remove a mark from a range
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-180` | `POST` | After removal the named key MUST cover no character of the range, and MUST still cover every character outside it that it covered before. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-181` | `FRAME` | Removing one key MUST NOT change the text of the block, or any other key of the registry over that range. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-180` | `POST` | After removal the named key MUST cover no character of the range, and MUST still cover every character outside it that it covered before. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-181` | `FRAME` | Removing one key MUST NOT change the text of the block, or any other key of the registry over that range. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Clear the formatting of a range
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-024` | `POST` | Clearing MUST remove every presentation mark and the link over the range, and MUST leave the range's text as it was. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-182` | `FRAME` | Clearing MUST NOT touch a comment, a suggestion, a footnote, a cross reference or a dynamic field over the range: each carries an identity a formatting reset MUST NOT destroy. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-024` | `POST` | Clearing MUST remove every presentation mark and the link over the range, and MUST leave the range's text as it was. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-182` | `FRAME` | Clearing MUST NOT touch a comment, a suggestion, a footnote, a cross reference or a dynamic field over the range: each carries an identity a formatting reset MUST NOT destroy. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Set a paragraph's settings
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-025` | `POST` | Setting a paragraph's settings MUST write only the properties whose value differs from what is stored. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-183` | `FRAME` | Setting a paragraph's settings MUST NOT change the block's text, the inline marks on it, or the settings of any other block. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-025` | `POST` | Setting a paragraph's settings MUST write only the properties whose value differs from what is stored. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-183` | `FRAME` | Setting a paragraph's settings MUST NOT change the block's text, the inline marks on it, or the settings of any other block. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the resolution of the effective style for a block, a row of
   `ambre-spec-budgets.md section 1`: it runs once per block per layout, so it is on the

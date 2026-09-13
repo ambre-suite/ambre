@@ -23,53 +23,53 @@ the DOM side produces.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `CHROME-001` | `INV` | The chrome MUST NOT draw content nor hit-test it. | `ambre-spec-ui.md section 2` (`UI-THREAD-001`, `UI-THREAD-050`) | crate graph: `ambre-chrome` declares neither `wgpu` nor `ambre-draw`, so no drawing surface is reachable from it. What it does instead -- invoke a command, read a signal -- is `UI-THREAD-050`, and is not restated here | verified |
-| `CHROME-002` | `INV` | The shared toolkit MUST NOT depend on an application crate. | this spec section 2 | crate graph: the manifest names `ambre-commands`, `leptos`, the two icon crates and the DOM bindings, and no application | verified |
-| `CHROME-009` | `INV` | The content surface MUST be a cell of the chrome layout, so it is sized by the layout and never by the viewport. | this spec section 2 | `ambre_chrome::chrome_ui::app_shell_owns_the_named_canvas_cell` -- wasm tier, real `document` | verified |
-| `CHROME-004` | `INV` | Every popover and floating bar MUST take its placement, flip and keyboard model from one shell. | this spec section 2 | not built -- lands with `One floating-menu shell` (`ambre-roadmap.md` E8). Four shells exist: the shared menu, Trame's filter popover, Trame's find panel and Toile's selection toolbar | unimplemented |
-| `CHROME-008` | `INV` | The command palette MUST search every command the active application declares, not the subset some menu happens to show. | this spec section 2; `ambre-spec-commands.md` | the filter is held: `ambre_chrome::palette::tests::an_empty_query_lists_every_declared_command`, `::a_query_matches_any_case_and_any_position`, `::a_query_that_answers_nothing_lists_nothing`, `::rows_keep_the_declaration_order`, and the DOM belt `ambre_chrome::chrome_ui::palette_lists_every_declared_command`, all over a table the test declares. What the rule is about is the feed, and nothing reads it: `crates/ambre-app/src/shell/app_root.rs` passes the application's whole table today, and passing a menu's subset instead would leave every one of those assertions green | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-001` | `INV` | The chrome MUST NOT draw content nor hit-test it. | `ambre-spec-ui.md section 2` (`UI-THREAD-001`, `UI-THREAD-050`) | crate-graph -- `ambre-chrome` declares neither `wgpu` nor `ambre-draw`, so no drawing surface is reachable from it. What it does instead (invoke a command, read a signal) is `UI-THREAD-050`, and is not restated here | none | verified |
+| `CHROME-002` | `INV` | The shared toolkit MUST NOT depend on an application crate. | this spec section 2 | crate-graph -- the manifest names `ambre-commands`, `leptos`, the two icon crates and the DOM bindings, and no application | none | verified |
+| `CHROME-009` | `INV` | The content surface MUST be a cell of the chrome layout, so it is sized by the layout and never by the viewport. | this spec section 2 | `ambre_chrome::chrome_ui::app_shell_owns_the_named_canvas_cell` -- wasm tier, real `document` | none | verified |
+| `CHROME-004` | `INV` | Every popover and floating bar MUST take its placement, flip and keyboard model from one shell. | this spec section 2 | not built | unbuilt -- lands with the `One floating-menu shell` Story (`ambre-roadmap.md` E8). Four shells exist: the shared menu, Trame's filter popover, Trame's find panel and Toile's selection toolbar | unimplemented |
+| `CHROME-008` | `INV` | The command palette MUST search every command the active application declares, not the subset some menu happens to show. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::palette::tests::an_empty_query_lists_every_declared_command`; `::a_query_matches_any_case_and_any_position`; `::a_query_that_answers_nothing_lists_nothing`; `::rows_keep_the_declaration_order`; `ambre_chrome::chrome_ui::palette_lists_every_declared_command` -- the DOM belt, all five over a table the test declares | partial -- the filter is held and the feed is not: `crates/ambre-app/src/shell/app_root.rs` passes the application's whole table today, and passing a menu's subset instead would leave every one of those assertions green | unverified |
 
 ### 1.2 A floating menu is placed
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `CHROME-003` | `POST` | A floating menu MUST stay inside the viewport: it flips at an edge, and pins to the origin when it is larger than the viewport. | this spec section 2 | `ambre_chrome::context_menu::tests::right_overflow_flips_horizontally`, `::bottom_overflow_flips_vertically` and `::corner_overflow_flips_both_axes` assert each flip; `::menu_larger_than_viewport_pins_to_origin` asserts the clamp that would otherwise place it off-screen. The arithmetic is a free function, which is why it is testable at all | verified |
-| `CHROME-085` | `FRAME` | Placing a menu that already fits MUST NOT move it off the point it was raised from. | this spec section 2 | `ambre_chrome::context_menu::tests::no_overflow_keeps_click_point` asserts the placement returns the click point unchanged. It is the row that keeps the flip from becoming an unconditional offset | verified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-003` | `POST` | A floating menu MUST stay inside the viewport: it flips at an edge, and pins to the origin when it is larger than the viewport. | this spec section 2 | `ambre_chrome::context_menu::tests::right_overflow_flips_horizontally`; `::bottom_overflow_flips_vertically`; `::corner_overflow_flips_both_axes` -- each flip; `::menu_larger_than_viewport_pins_to_origin` -- the clamp that would otherwise place it off-screen, over an arithmetic held in a free function, which is why it is testable at all | none | verified |
+| `CHROME-085` | `FRAME` | Placing a menu that already fits MUST NOT move it off the point it was raised from. | this spec section 2 | `ambre_chrome::context_menu::tests::no_overflow_keeps_click_point` -- the placement returns the click point unchanged, which is what keeps the flip from becoming an unconditional offset | none | verified |
 
 ### 1.3 A key event is resolved
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `CHROME-005` | `FAIL` | A key event MUST resolve to a modelled key or be rejected; an unmodelled key MUST NOT reach a command. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::command::tests::named_keys_map`, `::function_keys_in_range`, `::single_printable_char_maps` assert what resolves; `::function_keys_out_of_range_rejected` and `::unmodelled_keys_rejected` assert the refusal, which is the half that keeps an unknown key from binding a command by accident | verified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-005` | `FAIL` | A key event MUST resolve to a modelled key or be rejected; an unmodelled key MUST NOT reach a command. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::command::tests::named_keys_map`; `::function_keys_in_range`; `::single_printable_char_maps` -- what resolves; `::function_keys_out_of_range_rejected`; `::unmodelled_keys_rejected` -- the refusal, which is the half that keeps an unknown key from binding a command by accident | none | verified |
 
 ### 1.4 A control renders, and reports a click
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `CHROME-010` | `POST` | A control MUST show the state the Logic thread reported. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::chrome_ui::command_states_defaults`, `::command_states_single_writer_propagates`, `::command_states_unknown_id_is_noop` assert one writer reaches the right signal and leaves its neighbours alone | verified |
-| `CHROME-013` | `POST` | A shared formatting control MUST report a change. | this spec section 2 | `ambre_chrome::chrome_ui::format_toggle_reflects_pressed_and_reports_clicks` dispatches a real click and asserts the callback fired once; `::font_size_select_lists_presets_plus_auto_entry` asserts the same shape for a select | verified |
-| `CHROME-014` | `POST` | A status-bar chip MUST start collapsed. | this spec section 2 | `ambre_chrome::chrome_ui::zoom_chip_renders_readout_from_signal_and_starts_collapsed`, `::perf_chip_renders_fps_from_signal_and_starts_collapsed` assert the menu element is absent on mount | verified |
-| `CHROME-086` | `POST` | A control MUST follow its signal when the value changes, not only when it mounts. | this spec section 2 | none. Both chip tests read the value off the first synchronous render and say so in their own comments: a re-render lands on a later microtask, so a post-change query would race and none is written. What is asserted is the mount, and the live half is the one a stale readout breaks | unverified |
-| `CHROME-087` | `FRAME` | A control MUST NOT change the state it displays: the click leaves as a report and the value comes back from the Logic thread. | this spec section 2; `ambre-spec-commands.md` | none. The toggle test sets the pressed signal itself before dispatching the click, so nothing would notice a control that also wrote it; the store has one writer by construction and no test drives a second. This is the row that keeps a toolbar from showing a change the document refused | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-010` | `POST` | A control MUST show the state the Logic thread reported. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::chrome_ui::command_states_defaults`; `::command_states_single_writer_propagates`; `::command_states_unknown_id_is_noop` -- one writer reaches the right signal and leaves its neighbours alone | none | verified |
+| `CHROME-013` | `POST` | A shared formatting control MUST report a change. | this spec section 2 | `ambre_chrome::chrome_ui::format_toggle_reflects_pressed_and_reports_clicks` -- a real click is dispatched and the callback fires once; `::font_size_select_lists_presets_plus_auto_entry` -- the same shape for a select | none | verified |
+| `CHROME-014` | `POST` | A status-bar chip MUST start collapsed. | this spec section 2 | `ambre_chrome::chrome_ui::zoom_chip_renders_readout_from_signal_and_starts_collapsed`; `::perf_chip_renders_fps_from_signal_and_starts_collapsed` -- the menu element is absent on mount | none | verified |
+| `CHROME-086` | `POST` | A control MUST follow its signal when the value changes, not only when it mounts. | this spec section 2 | none | unheld -- both chip tests read the value off the first synchronous render and say so in their own comments: a re-render lands on a later microtask, so a post-change query would race and none is written. What is asserted is the mount, and the live half is the one a stale readout breaks | unverified |
+| `CHROME-087` | `FRAME` | A control MUST NOT change the state it displays: the click leaves as a report and the value comes back from the Logic thread. | this spec section 2; `ambre-spec-commands.md` | none | unheld -- the toggle test sets the pressed signal itself before dispatching the click, so nothing would notice a control that also wrote it, and the store has one writer by construction with no test driving a second. This is the row that keeps a toolbar from showing a change the document refused | unverified |
 
 ### 1.5 A modal opens, and closes
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `CHROME-011` | `POST` | A modal MUST suspend the frame loop while it is open. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none. Three modals pass a pause callback and the launcher's own confirmation dialog passes none. Nothing joins opening a modal to the state of the loop | unverified |
-| `CHROME-012` | `POST` | Setting a modal's open signal MUST show the element. | this spec section 2 | none. One effect drives the element from the signal, and no test mounts a modal to watch it open | unverified |
-| `CHROME-091` | `POST` | Clearing a modal's open signal MUST hide the element. | this spec section 2 | none. The same effect carries the closing arm, and no test mounts a modal to watch it close | unverified |
-| `CHROME-088` | `POST` | Escape and a click on the backdrop MUST close a modal, and MUST clear its signal. | this spec section 2 | none. Two handlers drive the signal from the element. A regression leaves a closed modal whose signal still reads open, which blocks the next open -- the failure is not the dismissal, it is the one after | unverified |
-| `CHROME-089` | `FRAME` | Closing a modal MUST NOT leave the frame loop suspended. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none, and this is the dangerous half: a missing pause costs a few frames of work, and a missing resume leaves the surface frozen with the interface answering normally around it. The resume callback is passed by the same three modals that pass the pause, and by no one else | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-011` | `POST` | A modal MUST suspend the frame loop while it is open. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none | unheld -- three modals pass a pause callback and the launcher's own confirmation dialog passes none. Nothing joins opening a modal to the state of the loop | unverified |
+| `CHROME-012` | `POST` | Setting a modal's open signal MUST show the element. | this spec section 2 | none | unheld -- one effect drives the element from the signal, and no test mounts a modal to watch it open | unverified |
+| `CHROME-091` | `POST` | Clearing a modal's open signal MUST hide the element. | this spec section 2 | none | unheld -- the same effect carries the closing arm, and no test mounts a modal to watch it close | unverified |
+| `CHROME-088` | `POST` | Escape and a click on the backdrop MUST close a modal, and MUST clear its signal. | this spec section 2 | none | unheld -- two handlers drive the signal from the element. A regression leaves a closed modal whose signal still reads open, which blocks the next open: the failure is not the dismissal, it is the one after | unverified |
+| `CHROME-089` | `FRAME` | Closing a modal MUST NOT leave the frame loop suspended. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none | unheld -- and this is the dangerous half: a missing pause costs a few frames of work, and a missing resume leaves the surface frozen with the interface answering normally around it. The resume callback is passed by the same three modals that pass the pause, and by no one else | unverified |
 
 ### 1.6 A drag drives a control
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `CHROME-015` | `POST` | A control driven by a drag MUST coalesce the burst into one command. | this spec section 2 | none. A debouncer reschedules its timer on each call, and each caller decides whether to use it. Nothing refuses a slider wired straight to a command, which is one command per pixel of travel | unverified |
-| `CHROME-090` | `FRAME` | Coalescing a burst MUST NOT drop its last value. | this spec section 2 | none. The debouncer keeps the most recent call and fires it when the timer runs out, so the rule is held by the reschedule being written that way; nothing drives a burst that ends before the delay. Dropping the tail leaves the control showing one value and the document holding another | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-015` | `POST` | A control driven by a drag MUST coalesce the burst into one command. | this spec section 2 | none | unheld -- a debouncer reschedules its timer on each call, and each caller decides whether to use it. Nothing refuses a slider wired straight to a command, which is one command per pixel of travel | unverified |
+| `CHROME-090` | `FRAME` | Coalescing a burst MUST NOT drop its last value. | this spec section 2 | none | unheld -- the debouncer keeps the most recent call and fires it when the timer runs out, so the rule is held by the reschedule being written that way, and nothing drives a burst that ends before the delay. Dropping the tail leaves the control showing one value and the document holding another | unverified |
 * **Budget.** none: the chrome renders in the DOM, off the frame loop, and
   `ambre-spec-budgets.md` budgets no chrome operation. What the chrome does spend on
   the frame is the pause of `CHROME-011`, which saves rather than costs.

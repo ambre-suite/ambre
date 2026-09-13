@@ -20,24 +20,24 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-102` | `INV` | A format MUST NOT change what a cell holds. | this spec section 2 | type-level: `format_display` takes `&self` and returns a `String`; its one call site is the viewport packing loop, so no formatted text can reach `cells_{sheet}` | verified |
-| `TRAME-157` | `OBS` | A formatted cell MUST show the text its family renders for the value it holds. | this spec section 2 | `ambre_trame::logic::tests::group1::set_cell_style_round_trips_and_formats_numbers`, which reads `314.2%` off the packed viewport for a cell holding `3.14159` under Percent with one decimal. One family of the nine, and the only test that reaches `format_display` at all | verified |
-| `TRAME-103` | `OBS` | A value that is not a number MUST be shown unchanged, whatever format the cell carries. | this spec section 2 | none. `format_display` falls back to the text when the parse fails, and no test formats a word | unverified |
-| `TRAME-104` | `OBS` | A decimal count MUST be offered only for a family that renders decimal places. | this spec section 3 | `ambre_bus::has_decimals_is_true_only_for_numeric_families`, exhaustive over the ten families; the predicate's one use is the `disabled` attribute of the two buttons. It guards the control, never the write -- section 5 | verified |
-| `TRAME-106` | `OBS` | A fraction MUST keep the sign of a value below one, and MUST NOT print a whole as sixteenths. | this spec section 2 | `ambre_trame::logic::packing::tests::fraction_format_keeps_the_sign_and_carries`, which calls the renderer directly, not through a packed cell | verified |
-| `TRAME-107` | `OBS` | A date-formatted cell MUST show a calendar date, never the day serial behind it. | this spec section 5 | none, and the code does the **opposite**: `Date` and `Time` print the serial as a number | unverified |
-| `TRAME-108` | `OBS` | A formatted value MUST read the same everywhere it is shown as text. | this spec section 5 | none, and the code does the **opposite**: find, replace and CSV export read the unformatted value, so a cell shown as `50.0%` is found by searching `0.5` | unverified |
-| `TRAME-109` | `OBS` | A cell carrying a custom pattern MUST show that pattern applied. | this spec section 5 | none, and the code does the **opposite**: `Custom` returns the text untouched, so the pattern is stored and silently ignored | unverified |
-| `TRAME-110` | `OBS` | A currency and a date MUST follow the document's locale, not the machine's. | this spec section 5 | not built -- lands with the "One document locale" Story (`ambre-roadmap.md` E8) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-102` | `INV` | A format MUST NOT change what a cell holds. | this spec section 2 | type-level -- `format_display` takes `&self` and returns a `String`, and its one call site is the viewport packing loop, so no formatted text can reach `cells_{sheet}` | none | verified |
+| `TRAME-157` | `OBS` | A formatted cell MUST show the text its family renders for the value it holds. | this spec section 2 | `ambre_trame::logic::tests::group1::set_cell_style_round_trips_and_formats_numbers` -- it reads `314.2%` off the packed viewport for a cell holding `3.14159` under Percent with one decimal, one family of the nine and the only test that reaches `format_display` at all | none | verified |
+| `TRAME-103` | `OBS` | A value that is not a number MUST be shown unchanged, whatever format the cell carries. | this spec section 2 | none | unheld -- `format_display` falls back to the text when the parse fails, and no test formats a word | unverified |
+| `TRAME-104` | `OBS` | A decimal count MUST be offered only for a family that renders decimal places. | this spec section 3 | `ambre_bus::has_decimals_is_true_only_for_numeric_families` -- exhaustive over the ten families, the predicate's one use being the `disabled` attribute of the two buttons, so it guards the control and never the write (section 5) | none | verified |
+| `TRAME-106` | `OBS` | A fraction MUST keep the sign of a value below one, and MUST NOT print a whole as sixteenths. | this spec section 2 | `ambre_trame::logic::packing::tests::fraction_format_keeps_the_sign_and_carries` -- it calls the renderer directly, not through a packed cell | none | verified |
+| `TRAME-107` | `OBS` | A date-formatted cell MUST show a calendar date, never the day serial behind it. | this spec section 5 | none | fails -- `Date` and `Time` print the serial as a number | unverified |
+| `TRAME-108` | `OBS` | A formatted value MUST read the same everywhere it is shown as text. | this spec section 5 | none | fails -- find, replace and CSV export read the unformatted value, so a cell shown as `50.0%` is found by searching `0.5` | unverified |
+| `TRAME-109` | `OBS` | A cell carrying a custom pattern MUST show that pattern applied. | this spec section 5 | none | fails -- `Custom` returns the text untouched, so the pattern is stored and silently ignored | unverified |
+| `TRAME-110` | `OBS` | A currency and a date MUST follow the document's locale, not the machine's. | this spec section 5 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
 
 ### 1.2 Change the decimal count
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-105` | `POST` | Increasing the decimals MUST add one place to the count the cell already carries. | this spec section 3 | none, and the code does the **opposite**: the two buttons write the constants `0` and `2`, so the control is a two-value switch, not a step | unverified |
-| `TRAME-158` | `FRAME` | Changing the decimal count MUST NOT change a computed value. | this spec section 3 | none. The restyle writes the style containers alone and drives no engine pass; the viewport re-packs from the values it already held, and no test asserts that it re-packs the same ones | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-105` | `POST` | Increasing the decimals MUST add one place to the count the cell already carries. | this spec section 3 | none | fails -- the two buttons write the constants `0` and `2`, so the control is a two-value switch, not a step | unverified |
+| `TRAME-158` | `FRAME` | Changing the decimal count MUST NOT change a computed value. | this spec section 3 | none | unheld -- the restyle writes the style containers alone and drives no engine pass, the viewport re-packs from the values it already held, and no test asserts that it re-packs the same ones | unverified |
 
 * **Budget.** none of its own: a format is a pure function of a value and a pattern, applied per
   displayed cell inside the frame phases of `ambre-spec-budgets.md section 2`.

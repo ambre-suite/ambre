@@ -16,35 +16,35 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-003` | `OBS` | The table of contents MUST list the document's headings, in document order, each reading the heading's own text. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-060` | `OBS` | An entry's page number MUST be the page its heading starts on in the layout being drawn. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-113` | `INV` | The document MUST hold no entry: the block carries the deepest level it shows and whether it numbers them, and nothing else. | this spec section 3; this spec section 5 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-061` | `OBS` | A heading deeper than the configured level MUST NOT appear in the table of contents. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-062` | `OBS` | A section number MUST appear in front of an entry only while the table of contents is configured as numbered. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-114` | `CONC` | Two peers whose settings have converged MUST list the same entries, at the same depth, numbered the same way. | this spec section 2; this spec section 5 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-003` | `OBS` | The table of contents MUST list the document's headings, in document order, each reading the heading's own text. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-060` | `OBS` | An entry's page number MUST be the page its heading starts on in the layout being drawn. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-113` | `INV` | The document MUST hold no entry: the block carries the deepest level it shows and whether it numbers them, and nothing else. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-061` | `OBS` | A heading deeper than the configured level MUST NOT appear in the table of contents. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-062` | `OBS` | A section number MUST appear in front of an entry only while the table of contents is configured as numbered. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-114` | `CONC` | Two peers whose settings have converged MUST list the same entries, at the same depth, numbered the same way. | this spec section 2; this spec section 5 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Insert a table of contents
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-115` | `POST` | After the command, a table of contents MUST sit at the place in the tree the command named, showing the depth and the numbering it carried. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-116` | `FRAME` | Inserting one MUST NOT touch a heading, and MUST NOT write an entry anywhere. | derived | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-115` | `POST` | After the command, a table of contents MUST sit at the place in the tree the command named, showing the depth and the numbering it carried. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-116` | `FRAME` | Inserting one MUST NOT touch a heading, and MUST NOT write an entry anywhere. | derived | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Change what it shows
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-117` | `POST` | After the command, the block MUST carry the depth and the numbering asked for, and the next layout MUST list its entries by them. | this spec section 3 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-118` | `FRAME` | Changing one block's settings MUST NOT touch a heading, nor the settings of another table of contents. | this spec section 5 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-117` | `POST` | After the command, the block MUST carry the depth and the numbering asked for, and the next layout MUST list its entries by them. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-118` | `FRAME` | Changing one block's settings MUST NOT touch a heading, nor the settings of another table of contents. | this spec section 5 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Click an entry
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-UI-082` | `POST` | A click on an entry MUST bring the heading it reads into view. | this spec section 4 | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-083` | `FRAME` | Following an entry MUST NOT write to the document: where this reader looks is not a change a peer receives. | derived | not built -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-082` | `POST` | A click on an entry MUST bring the heading it reads into view. | this spec section 4 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-083` | `FRAME` | Following an entry MUST NOT write to the document: where this reader looks is not a change a peer receives. | derived | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the table-of-contents build over fifty headings, one row of
   `ambre-spec-budgets.md section 1`. What the repeated build costs when the entries move the

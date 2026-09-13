@@ -20,36 +20,36 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SRV-004` | `INV` | A snapshot MUST be reachable only through the document it belongs to. | audit `C4`; this spec section 3 | `ambre_server::s3::tests::snapshot_key_validation_scopes_to_document`; the lookup filters on the document and the snapshot together, so a member of one document cannot name another's | verified |
-| `SRV-052` | `INV` | A presigned link MUST expire within fifteen minutes. | `ambre-spec-zero-knowledge.md`, `ZK-008` | none. The lifetime is one operational figure with a fifteen-minute default and no ceiling, so a deployment may set a day with no code change, and no test reads the expiry back out of a link | unverified |
-| `SRV-059` | `INV` | The relay MUST NOT hold an address derived from a blob's plaintext. | `ZK-007`; `ambre-spec-media.md`, `SYNC-050` | none, and **the rule fails today**: the address is a hash of the plaintext, the confirmation stores it beside the document, and the object name is built from it, so the relay can hash a file it already has and ask whether this document holds it. Answered by the `The media address is not the plaintext` Story (`ambre-roadmap.md` E7) | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-004` | `INV` | A snapshot MUST be reachable only through the document it belongs to. | audit `C4`; this spec section 3 | `ambre_server::s3::tests::snapshot_key_validation_scopes_to_document` -- the lookup filters on the document and the snapshot together, so a member of one document cannot name another's | none | verified |
+| `SRV-052` | `INV` | A presigned link MUST expire within fifteen minutes. | `ambre-spec-zero-knowledge.md`, `ZK-008` | none | unheld -- the lifetime is one operational figure with a fifteen-minute default and no ceiling, so a deployment may set a day with no code change, and no test reads the expiry back out of a link | unverified |
+| `SRV-059` | `INV` | The relay MUST NOT hold an address derived from a blob's plaintext. | `ZK-007`; `ambre-spec-media.md`, `SYNC-050` | none | fails -- the address is a hash of the plaintext, the confirmation stores it beside the document, and the object name is built from it, so the relay can hash a file it already has and ask whether this document holds it. Answered by the `The media address is not the plaintext` Story (`ambre-roadmap.md` E7) | unverified |
 
 ### 1.2 Issue a presigned link
 
 One gesture in two directions: the relay checks who is asking and what they named, then signs. The
 refusals are the same set whichever way the bytes will travel, so the two share a table.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SRV-053` | `POST` | A presigned upload link MUST bind the size the caller declared. | this spec section 3 | `ambre_server::s3::tests::presigned_upload_url_signs_content_length` asserts the length is among the signed headers, which is what makes object storage refuse a body of any other size | verified |
-| `SRV-078` | `FRAME` | Issuing a link MUST NOT read or write the object it names. | this spec section 3; `ZK-001` | none. The relay signs a name and the transfer goes straight to storage, which is what keeps the bytes out of this process. Nothing refuses the convenience fetch that would put them back in it, and the rule is the reason no row here budgets a blob | unverified |
-| `SRV-002` | `FAIL` | A caller who is not a member MUST be refused a link. | `ZK-008`; this spec section 3 | none for the membership itself. Role refusals are covered (`ambre_server::routes::tests::handler_tests::media_confirm_upload_denied_to_viewer`, `::rotate_key_denied_to_editor`) and **no test asserts that a non-member is refused a link**, so the gate is held for roles and not for membership | unverified |
-| `SRV-056` | `FAIL` | A member who may only read MUST NOT obtain an upload link. | `SRV-008`; this spec section 3 | `ambre_server::routes::tests::handler_tests::media_confirm_upload_denied_to_viewer` covers the confirmation, which is the write the link leads to; the link route gates on the same pair of roles and no test asks it | unverified |
-| `SRV-054` | `FAIL` | An object name a caller supplies MUST resolve inside the document the caller named. | audit `C4`, `C5`; this spec section 3 | `ambre_server::s3::tests::snapshot_key_validation_scopes_to_document` refuses a foreign prefix, a traversal, an empty name and a nested one; `::content_hash_validation` refuses everything that is not sixty-four lowercase hexadecimal characters | verified |
-| `SRV-055` | `FAIL` | A blob MUST NOT exceed the cap its kind declares. | this spec section 3 | none. The inline delta half is `SRV-010`. The media and snapshot halves are compared against a figure of the deployment before the link is issued and again on the confirmation, and no test drives either comparison | unverified |
-| `SRV-058` | `FAIL` | A download link MUST be refused for an object the document does not hold. | this spec section 3 | none, and **the rule fails today**: the media link is built from the address the caller supplies without reading the media index, so a member gets a signed link for any well-formed address inside their own document -- section 6. Answered by the `A download link names an object the document holds` Story (`ambre-roadmap.md` E7) | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-053` | `POST` | A presigned upload link MUST bind the size the caller declared. | this spec section 3 | `ambre_server::s3::tests::presigned_upload_url_signs_content_length` -- the length is among the signed headers, which is what makes object storage refuse a body of any other size | none | verified |
+| `SRV-078` | `FRAME` | Issuing a link MUST NOT read or write the object it names. | this spec section 3; `ZK-001` | none | unheld -- the relay signs a name and the transfer goes straight to storage, which is what keeps the bytes out of this process. Nothing refuses the convenience fetch that would put them back in it, and the rule is the reason no row here budgets a blob | unverified |
+| `SRV-002` | `FAIL` | A caller who is not a member MUST be refused a link. | `ZK-008`; this spec section 3 | none | unheld -- role refusals are covered by `ambre_server::routes::tests::handler_tests::media_confirm_upload_denied_to_viewer` and `::rotate_key_denied_to_editor`, and no test asserts that a non-member is refused a link, so the gate is held for roles and not for membership | unverified |
+| `SRV-056` | `FAIL` | A member who may only read MUST NOT obtain an upload link. | `SRV-008`; this spec section 3 | `ambre_server::routes::tests::handler_tests::media_confirm_upload_denied_to_viewer` -- the confirmation, which is the write the link leads to | partial -- the link route gates on the same pair of roles and no test asks it | unverified |
+| `SRV-054` | `FAIL` | An object name a caller supplies MUST resolve inside the document the caller named. | audit `C4`, `C5`; this spec section 3 | `ambre_server::s3::tests::snapshot_key_validation_scopes_to_document` -- a foreign prefix, a traversal, an empty name and a nested one; `::content_hash_validation` -- everything that is not sixty-four lowercase hexadecimal characters | none | verified |
+| `SRV-055` | `FAIL` | A blob MUST NOT exceed the cap its kind declares. | this spec section 3 | none | unheld -- the inline delta half is `SRV-010`. The media and snapshot halves are compared against a figure of the deployment before the link is issued and again on the confirmation, and no test drives either comparison | unverified |
+| `SRV-058` | `FAIL` | A download link MUST be refused for an object the document does not hold. | this spec section 3 | none | fails -- the media link is built from the address the caller supplies without reading the media index, so a member gets a signed link for any well-formed address inside their own document, section 6. Answered by the `A download link names an object the document holds` Story (`ambre-roadmap.md` E7) | unverified |
 
 ### 1.3 Delete a document
 
 The relay drops the document's rows. What it named in storage is a second act, and it does not
 happen.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SRV-057` | `POST` | An object MUST NOT outlive the document it belongs to. | this spec section 3 | none, and **the rule fails today**: deleting a document removes its rows and no object, so every snapshot, every delta and every picture it ever held stays in storage with nothing left pointing at it. Answered by the `A deleted document leaves nothing` Story (`ambre-roadmap.md` E7) | unverified |
-| `SRV-079` | `FRAME` | Deleting a document MUST NOT remove an object another document names. | this spec section 3; derived | none, and the reason it holds today is that nothing is removed at all. The object layout is keyed by document, so the sweep `SRV-057` is missing has one prefix to walk -- and a sweep written against the blob address instead would reach a picture two documents share | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-057` | `POST` | An object MUST NOT outlive the document it belongs to. | this spec section 3 | none | fails -- deleting a document removes its rows and no object, so every snapshot, every delta and every picture it ever held stays in storage with nothing left pointing at it. Answered by the `A deleted document leaves nothing` Story (`ambre-roadmap.md` E7) | unverified |
+| `SRV-079` | `FRAME` | Deleting a document MUST NOT remove an object another document names. | this spec section 3; derived | none | unheld -- the reason it holds today is that nothing is removed at all. The object layout is keyed by document, so the sweep `SRV-057` is missing has one prefix to walk, and a sweep written against the blob address instead would reach a picture two documents share | unverified |
 
 * **Budget.** the presigned link of `ambre-spec-budgets.md section 3`, under 50 ms, and the
   document cold start of the same table, under 500 ms, whose download half is here and whose replay

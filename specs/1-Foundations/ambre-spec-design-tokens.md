@@ -21,21 +21,21 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `UI-THREAD-029` | `INV` | Every colour, spacing, radius and type size the interface uses MUST be declared in the one token source. | this spec section 2 | none, and **the rule fails today**: the shell stylesheet carries fifty-eight literal colours, twenty-five of them distinct, of which every shadow and every white on a coloured ground, and no check counts them. The repair is the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | unverified |
-| `UI-THREAD-030` | `INV` | The stylesheet and the drawing constants MUST both be generated from that source, in one build step. | this spec section 2 | type-level: the drawing crate includes the generated constants and the generated sheet as files the build step writes, so neither exists unless that step ran and read the source | verified |
-| `UI-THREAD-031` | `INV` | A stylesheet MUST NOT read a token the source does not emit and the sheet does not declare. | this spec section 2 | none, and **the rule fails today**: five names are read and defined nowhere -- the content ground, a danger colour, a foreground, a shadow and a dimmed text -- and the foreground carries no fallback, so a label on the home screen has no colour of its own. The repair is the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | unverified |
-| `UI-THREAD-033` | `INV` | The unmarked stylesheet MUST carry the light set, so a page that never sets the theme attribute renders light rather than unstyled. | this spec section 2; section 4, row 4 | none. The generator writes the light colours into the unmarked block and the dark ones into the attributed one, so the default is the order of two blocks in one build script, and nothing goes red the day they swap | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `UI-THREAD-029` | `INV` | Every colour, spacing, radius and type size the interface uses MUST be declared in the one token source. | this spec section 2 | none | fails -- the shell stylesheet carries fifty-eight literal colours, twenty-five of them distinct, of which every shadow and every white on a coloured ground, and no check counts them. The repair is the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | unverified |
+| `UI-THREAD-030` | `INV` | The stylesheet and the drawing constants MUST both be generated from that source, in one build step. | this spec section 2 | target-build -- the drawing crate includes the generated constants and the generated sheet as files the build step writes, so neither exists unless that step ran and read the source | none | verified |
+| `UI-THREAD-031` | `INV` | A stylesheet MUST NOT read a token the source does not emit and the sheet does not declare. | this spec section 2 | none | fails -- five names are read and defined nowhere: the content ground, a danger colour, a foreground, a shadow and a dimmed text. The foreground carries no fallback, so a label on the home screen has no colour of its own. The repair is the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | unverified |
+| `UI-THREAD-033` | `INV` | The unmarked stylesheet MUST carry the light set, so a page that never sets the theme attribute renders light rather than unstyled. | this spec section 2; section 4, row 4 | none | unheld -- the generator writes the light colours into the unmarked block and the dark ones into the attributed one, so the default is the order of two blocks in one build script, and nothing goes red the day they swap | unverified |
 
 ### 1.2 Switch the theme
 
 The user flips the theme control. One act must move both halves, and it must move nothing else.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `UI-THREAD-032` | `POST` | A theme switch MUST reach the browser half and the drawing half together, from one act. | this spec section 2 | none. One control carries the active theme, the launcher sets the document attribute from it and the render loop reads it on the next frame. Nothing drives a switch and observes both halves, and no test in the suite names the theme at all | unverified |
-| `UI-THREAD-034` | `FRAME` | A theme switch MUST NOT change a spacing, a radius or a type size. | this spec section 2; section 4, row 5 | none. The generator emits the scales once, into the unmarked block, and the drawing palette declares twelve colours and no scale field -- so a theme-dependent scale takes an edit to the build script, which compiles and which no test reads | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `UI-THREAD-032` | `POST` | A theme switch MUST reach the browser half and the drawing half together, from one act. | this spec section 2 | none | unheld -- one control carries the active theme, the launcher sets the document attribute from it and the render loop reads it on the next frame. Nothing drives a switch and observes both halves, and no test in the suite names the theme at all | unverified |
+| `UI-THREAD-034` | `FRAME` | A theme switch MUST NOT change a spacing, a radius or a type size. | this spec section 2; section 4, row 5 | none | unheld -- the generator emits the scales once, into the unmarked block, and the drawing palette declares twelve colours and no scale field, so a theme-dependent scale takes an edit to the build script, which compiles and which no test reads | unverified |
 
 * **Budget.** none: a token is a constant resolved at build time, so it costs nothing at run time.
   A theme switch repaints the content once, which is the frame budget of

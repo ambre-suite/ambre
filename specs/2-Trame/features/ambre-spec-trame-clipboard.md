@@ -15,32 +15,32 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-124` | `CONC` | Two peers MUST converge when one pastes a block over cells the other is editing. | this spec section 2 | none. `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` interleaves fourteen operations over two peers, and its operation set holds neither the paste nor the batch clear a cut sends: the gestures this document owns are the ones the property never generates | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-124` | `CONC` | Two peers MUST converge when one pastes a block over cells the other is editing. | this spec section 2 | none | unheld -- `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` interleaves fourteen operations over two peers, and its operation set holds neither the paste nor the batch clear a cut sends: the gestures this document owns are the ones the property never generates | unverified |
 
 ### 1.2 Copy the selection
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-059` | `POST` | A copy MUST cover the whole selection, never only the cells the viewport holds. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport`, which spans five hundred rows and asserts the far cell is in the payload | verified |
-| `TRAME-UI-060` | `FRAME` | A copy MUST NOT change the document. | this spec section 3 | the same test asserts the outcome carries no delta, over the type-level argument the row used to rest on alone: `copy_range` takes `&self` and returns `TrameOutcome::display_only` (`logic/clipboard.rs`) | verified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-059` | `POST` | A copy MUST cover the whole selection, never only the cells the viewport holds. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it spans five hundred rows and asserts the far cell is in the payload | none | verified |
+| `TRAME-UI-060` | `FRAME` | A copy MUST NOT change the document. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it asserts the outcome carries no delta; type-level -- `copy_range` takes `&self` and returns `TrameOutcome::display_only` (`logic/clipboard.rs`) | none | verified |
 
 ### 1.3 Cut the selection
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-064` | `POST` | A cut MUST clear its source only once the paste lands. | this spec section 4 | none. `finish_paste` is the only site that clears, and it runs after the paste command is sent; nothing drives a cut end to end | unverified |
-| `TRAME-UI-125` | `FRAME` | A cut MUST NOT clear its source when the paste did not reach the document. | this spec section 5; derived | none, and the code does the opposite: `grid_paste_payload` logs a full channel, drops the paste, and calls `finish_paste` anyway, which sends the source clear as a lossless batch. The gesture the decision was built to make safe destroys the range in exactly that case, and it is the shape `BUS-018` bans. Answered by the `A lost edit is never shown as applied` Story (`ambre-roadmap.md` E7) | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-064` | `POST` | A cut MUST clear its source only once the paste lands. | this spec section 4 | none | unheld -- `finish_paste` is the only site that clears, and it runs after the paste command is sent, and nothing drives a cut end to end | unverified |
+| `TRAME-UI-125` | `FRAME` | A cut MUST NOT clear its source when the paste did not reach the document. | this spec section 5; derived | none | fails -- `grid_paste_payload` logs a full channel, drops the paste, and calls `finish_paste` anyway, which sends the source clear as a lossless batch. The gesture the decision was built to make safe destroys the range in exactly that case, and it is the shape `BUS-018` bans. Answered by the `A lost edit is never shown as applied` Story (`ambre-roadmap.md` E7) | unverified |
 
 ### 1.4 Paste
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-061` | `POST` | A pasted formula MUST have its relative references shifted by the paste offset. | this spec section 3 | `ambre_trame::logic::tests::group5::paste_reindexes_relative_formula` | verified |
-| `TRAME-UI-063` | `POST` | A paste MUST be one undo item, whatever the size of the range. | this spec section 3 | none. `paste_range` opens one undo group and pre-materializes every cell so the writes collapse into one commit; the paste test asserts the values, never the undo | unverified |
-| `TRAME-UI-065` | `POST` | A paste MUST prefer this tab's own copy while the clipboard still carries its ownership token. | this spec section 3 | none. The token is written synchronously by the host and read back into `own_copy`; the ladder below it has no test | unverified |
-| `TRAME-UI-062` | `FRAME` | A blank source cell MUST leave its destination untouched. | this spec section 3 | half. The copy side is asserted -- `::copy_range_covers_the_full_selection_not_a_viewport` counts exactly two cells in a five-hundred-row payload, so the blanks are omitted. The paste side is not: no test pastes over occupied cells and reads back what the blanks did not overwrite | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-061` | `POST` | A pasted formula MUST have its relative references shifted by the paste offset. | this spec section 3 | `ambre_trame::logic::tests::group5::paste_reindexes_relative_formula` | none | verified |
+| `TRAME-UI-063` | `POST` | A paste MUST be one undo item, whatever the size of the range. | this spec section 3 | none | unheld -- `paste_range` opens one undo group and pre-materializes every cell so the writes collapse into one commit, and the paste test asserts the values, never the undo | unverified |
+| `TRAME-UI-065` | `POST` | A paste MUST prefer this tab's own copy while the clipboard still carries its ownership token. | this spec section 3 | none | unheld -- the token is written synchronously by the host and read back into `own_copy`, and the ladder below it has no test | unverified |
+| `TRAME-UI-062` | `FRAME` | A blank source cell MUST leave its destination untouched. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it counts exactly two cells in a five-hundred-row payload, so the copy side omits the blanks | partial -- the paste side is not asserted: no test pastes over occupied cells and reads back what the blanks did not overwrite | unverified |
 
 * **Budget.** none: a copy serialises the selection once, and
   `ambre-spec-budgets.md` budgets no clipboard operation.

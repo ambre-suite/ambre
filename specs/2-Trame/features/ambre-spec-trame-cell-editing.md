@@ -22,87 +22,87 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-011` | `INV` | The viewport MUST carry each cell's raw text alongside its displayed value, so reopening the editor shows the formula. | this spec section 3 | `ambre_trame::ui::grid::tests::group2::viewport_data_preserves_formula_raw_for_editing`, `::optimistic_commit_does_not_echo_formula_as_result` | verified |
-| `TRAME-UI-050` | `INV` | The editor MUST hold no buffer of its own: every buffer operation resolves to the shared text core. | this spec section 3 | type-level: `CellEditor` owns a `TextEditor` and nothing else, and reaches it through `Deref`/`DerefMut`, so no second buffer can exist. `ambre_trame::ui::grid::tests::editor_parity::parity_caret_motion_and_insert`, `::parity_shift_selection`, `::parity_select_replace_and_delete`, `::parity_backspace_and_delete_forward`, `::parity_selection_collapse_on_arrows` hold the behaviour equal to the core's | verified |
-| `TRAME-UI-055` | `INV` | The formula bar and the in-cell editor MUST show one buffer, never two. | this spec section 4 | none. The mirroring runs on browser-only signals (`ui/view/frame.rs`), which no headless test can reach | unverified |
-| `TRAME-UI-155` | `INV` | An edit session MUST open on a user gesture alone. | this spec section 4 | none, and the code does the opposite: while the formula input holds focus, the frame opens a session whenever its text differs from the active cell's stored value, so a collaborator writing into that cell opens an edit the user never started, seeded with the stale text | unverified |
-| `TRAME-FEAT-024` | `INV` | Protection MUST identify its owner by `UserId`, never by `pub_key`. | this spec section 3 | not built -- lands with the "Range protection" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `TRAME-UI-010` | `OBS` | An optimistic commit MUST NOT display the formula source as its own result. | this spec section 3 | `ambre_trame::ui::grid::tests::group2::optimistic_commit_does_not_echo_formula_as_result` | verified |
-| `TRAME-UI-091` | `OBS` | The formula bar MUST show the reference of the cell the edit will reach. | this spec section 4 | none. The reference is a browser-only signal set beside the active cell, and no headless test reaches it | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-011` | `INV` | The viewport MUST carry each cell's raw text alongside its displayed value, so reopening the editor shows the formula. | this spec section 3 | `ambre_trame::ui::grid::tests::group2::viewport_data_preserves_formula_raw_for_editing`; `::optimistic_commit_does_not_echo_formula_as_result` | none | verified |
+| `TRAME-UI-050` | `INV` | The editor MUST hold no buffer of its own: every buffer operation resolves to the shared text core. | this spec section 3 | type-level -- `CellEditor` owns a `TextEditor` and nothing else, and reaches it through `Deref` and `DerefMut`, so no second buffer can exist; `ambre_trame::ui::grid::tests::editor_parity::parity_caret_motion_and_insert`; `::parity_shift_selection`; `::parity_select_replace_and_delete`; `::parity_backspace_and_delete_forward`; `::parity_selection_collapse_on_arrows` -- the behaviour equal to the core's | none | verified |
+| `TRAME-UI-055` | `INV` | The formula bar and the in-cell editor MUST show one buffer, never two. | this spec section 4 | none | unheld -- the mirroring runs on browser-only signals (`ui/view/frame.rs`), which no headless test can reach | unverified |
+| `TRAME-UI-155` | `INV` | An edit session MUST open on a user gesture alone. | this spec section 4 | none | fails -- while the formula input holds focus, the frame opens a session whenever its text differs from the active cell's stored value, so a collaborator writing into that cell opens an edit the user never started, seeded with the stale text | unverified |
+| `TRAME-FEAT-024` | `INV` | Protection MUST identify its owner by `UserId`, never by `pub_key`. | this spec section 3 | not built | unbuilt -- lands with the `Range protection` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `TRAME-UI-010` | `OBS` | An optimistic commit MUST NOT display the formula source as its own result. | this spec section 3 | `ambre_trame::ui::grid::tests::group2::optimistic_commit_does_not_echo_formula_as_result` | none | verified |
+| `TRAME-UI-091` | `OBS` | The formula bar MUST show the reference of the cell the edit will reach. | this spec section 4 | none | unheld -- the reference is a browser-only signal set beside the active cell, and no headless test reaches it | unverified |
 
 ### 1.2 Open an edit session and type
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-156` | `POST` | Opening a session on a cell that holds a formula MUST seed the buffer with the formula, never with its result. | this spec section 4 | none. `cell_seed` reads the cache's `raw` field, which `TRAME-UI-011` keeps; the seeding itself lives on `TrameView` and no test drives it | unverified |
-| `TRAME-UI-157` | `POST` | `Alt+Enter` MUST be the only way to put a newline inside a cell. | this spec section 4 | none. `interact.rs` routes `Enter` with `alt` to the buffer's `newline` and every other `Enter` to a commit; nothing drives either | unverified |
-| `TRAME-UI-158` | `FRAME` | An open session MUST NOT write to the document before it is committed. | this spec section 3 | none. `begin_edit` sends no command and the only writes leave from `commit_edit` and `commit_edit_filled`; no test states the absence | unverified |
-| `TRAME-UI-159` | `FRAME` | While a session is open, a key that edits the buffer MUST NOT move the grid selection. | this spec section 4 | none. The edit-mode arm of `interact.rs` returns before the grid keymap for every buffer key, `Ctrl+A` included; nothing asserts the grid stayed put | unverified |
-| `TRAME-UI-056` | `FRAME` | A composition in progress MUST NOT reach the document before it ends. | this spec section 4 | none. `CompositionUpdate` writes only the editor preedit and `CompositionEnd` commits it into the buffer; no test drives either | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-156` | `POST` | Opening a session on a cell that holds a formula MUST seed the buffer with the formula, never with its result. | this spec section 4 | none | unheld -- `cell_seed` reads the cache's `raw` field, which `TRAME-UI-011` keeps, and the seeding itself lives on `TrameView`, where no test drives it | unverified |
+| `TRAME-UI-157` | `POST` | `Alt+Enter` MUST be the only way to put a newline inside a cell. | this spec section 4 | none | unheld -- `interact.rs` routes `Enter` with `alt` to the buffer's `newline` and every other `Enter` to a commit, and nothing drives either | unverified |
+| `TRAME-UI-158` | `FRAME` | An open session MUST NOT write to the document before it is committed. | this spec section 3 | none | unheld -- `begin_edit` sends no command and the only writes leave from `commit_edit` and `commit_edit_filled`, and no test states the absence | unverified |
+| `TRAME-UI-159` | `FRAME` | While a session is open, a key that edits the buffer MUST NOT move the grid selection. | this spec section 4 | none | unheld -- the edit-mode arm of `interact.rs` returns before the grid keymap for every buffer key, `Ctrl+A` included, and nothing asserts the grid stayed put | unverified |
+| `TRAME-UI-056` | `FRAME` | A composition in progress MUST NOT reach the document before it ends. | this spec section 4 | none | unheld -- `CompositionUpdate` writes only the editor preedit and `CompositionEnd` commits it into the buffer, and no test drives either | unverified |
 
 ### 1.3 Commit the edit
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-051` | `PRE` | A commit started from the grid MUST read the buffer only after the paint flush applied the queued edits. | this spec section 3 | none. A grid commit parks a `PendingCommit` and the tail of `ui/view/frame.rs` drains it after `draw_edit` flushes, which holds by the order of two statements in one function. Nothing in the types forbids a second drain site, and no test reads the buffer at key time to show the difference | unverified |
-| `TRAME-UI-160` | `POST` | A commit MUST send the buffer's raw text to the cell the session opened on. | this spec section 3 | none. `commit_edit` sends `SetCellText` for `editor.row`/`editor.col`; the session lives on `TrameView`, on the far side of the headless seam | unverified |
-| `TRAME-UI-054` | `POST` | A commit of empty text MUST clear the cell. | this spec section 3 | `ambre_trame::logic::tests::group1::edited_text_overrides_generated_label` writes a value, then commits an empty `SetCellText`, and reads the cell back blank | verified |
-| `TRAME-UI-052` | `POST` | A commit MUST close the undo group, so one edit is one undo item. | this spec section 3 | `ambre_trame::logic::tests::group1::undo_then_redo_round_trips_a_cell_edit`, `group2::filtered_column_edit_is_one_undo_item` | verified |
-| `TRAME-UI-161` | `POST` | A commit by `Enter` MUST move the selection down. | this spec section 4 | none. The chord parks `PendingCommit::Nav(1, 0)`, drained beside the commit; no test drives it | unverified |
-| `TRAME-UI-171` | `POST` | A commit by `Tab` MUST move the selection right. | this spec section 4 | none. The chord parks `PendingCommit::Nav(0, 1)`, drained beside the commit; no test drives it | unverified |
-| `TRAME-UI-162` | `FRAME` | A commit MUST NOT write to any cell other than the one the session opened on. | this spec section 3 | none. `commit_edit` names one cell in the command and one in the local cache; nothing watches the rest of the sheet | unverified |
-| `TRAME-UI-163` | `FAIL` | A commit the channel cannot carry MUST NOT leave the cell reading as written. | this spec section 3 | none, and the code does the opposite: on a full channel `commit_edit` logs "retry next frame", updates the local cache anyway and drops the command. No retry exists, so the cell shows a value the document never took | unverified |
-| `TRAME-UI-164` | `FAIL` | A write the document cannot store MUST say so. | this spec section 3; section 5 | none, and the code does the opposite: `write_cell` returns without writing when the cell lies beyond the materialization cap, with no event and no toast, against the section 5 decision that a refusal always answers | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-051` | `PRE` | A commit started from the grid MUST read the buffer only after the paint flush applied the queued edits. | this spec section 3 | none | unheld -- a grid commit parks a `PendingCommit` and the tail of `ui/view/frame.rs` drains it after `draw_edit` flushes, which holds by the order of two statements in one function. Nothing in the types forbids a second drain site, and no test reads the buffer at key time to show the difference | unverified |
+| `TRAME-UI-160` | `POST` | A commit MUST send the buffer's raw text to the cell the session opened on. | this spec section 3 | none | unheld -- `commit_edit` sends `SetCellText` for the editor's row and column, and the session lives on `TrameView`, on the far side of the headless seam | unverified |
+| `TRAME-UI-054` | `POST` | A commit of empty text MUST clear the cell. | this spec section 3 | `ambre_trame::logic::tests::group1::edited_text_overrides_generated_label` -- it writes a value, then commits an empty `SetCellText`, and reads the cell back blank | none | verified |
+| `TRAME-UI-052` | `POST` | A commit MUST close the undo group, so one edit is one undo item. | this spec section 3 | `ambre_trame::logic::tests::group1::undo_then_redo_round_trips_a_cell_edit`; `group2::filtered_column_edit_is_one_undo_item` | none | verified |
+| `TRAME-UI-161` | `POST` | A commit by `Enter` MUST move the selection down. | this spec section 4 | none | unheld -- the chord parks `PendingCommit::Nav(1, 0)`, drained beside the commit, and no test drives it | unverified |
+| `TRAME-UI-171` | `POST` | A commit by `Tab` MUST move the selection right. | this spec section 4 | none | unheld -- the chord parks `PendingCommit::Nav(0, 1)`, drained beside the commit, and no test drives it | unverified |
+| `TRAME-UI-162` | `FRAME` | A commit MUST NOT write to any cell other than the one the session opened on. | this spec section 3 | none | unheld -- `commit_edit` names one cell in the command and one in the local cache, and nothing watches the rest of the sheet | unverified |
+| `TRAME-UI-163` | `FAIL` | A commit the channel cannot carry MUST NOT leave the cell reading as written. | this spec section 3 | none | fails -- on a full channel `commit_edit` logs "retry next frame", updates the local cache anyway and drops the command. No retry exists, so the cell shows a value the document never took | unverified |
+| `TRAME-UI-164` | `FAIL` | A write the document cannot store MUST say so. | this spec section 3; section 5 | none | fails -- `write_cell` returns without writing when the cell lies beyond the materialization cap, with no event and no toast, against the section 5 decision that a refusal always answers | unverified |
 
 ### 1.4 Cancel the edit
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-165` | `POST` | Escape MUST close the session and leave the cell reading as it was stored. | this spec section 4 | none. `cancel_edit` drops the editor and resets the formula text from `cell_seed`; both live on `TrameView` | unverified |
-| `TRAME-UI-015` | `FRAME` | Escape MUST emit no `TrameCommand`. | this spec section 4 | none. The handler exists (`ui/view/lifecycle.rs::cancel_edit`), the absence of an outbound command is asserted nowhere -- and an absence is exactly what a test has to state | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-165` | `POST` | Escape MUST close the session and leave the cell reading as it was stored. | this spec section 4 | none | unheld -- `cancel_edit` drops the editor and resets the formula text from `cell_seed`, and both live on `TrameView` | unverified |
+| `TRAME-UI-015` | `FRAME` | Escape MUST emit no `TrameCommand`. | this spec section 4 | none | unheld -- the handler exists (`ui/view/lifecycle.rs::cancel_edit`) and the absence of an outbound command is asserted nowhere, which is exactly what a test has to state | unverified |
 
 ### 1.5 Fill the selection with one value
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-053` | `POST` | One value typed into a multi-cell selection MUST be one undo item, not one per cell. | this spec section 4 | `ambre_trame::logic::tests::group2::batch_write_is_one_undo_item` | verified |
-| `TRAME-UI-166` | `POST` | A filled formula MUST reach every selected cell as typed, with no reference shifted. | this spec section 4 | none. `commit_edit_filled` clones one string per cell, so the text cannot shift; no test fills a formula and reads a reference back | unverified |
-| `TRAME-UI-167` | `POST` | A fill MUST keep the selection and the active cell where they were. | this spec section 4 | none. `commit_edit_filled` moves neither, unlike the `Nav` commit beside it; nothing asserts it | unverified |
-| `TRAME-UI-168` | `FRAME` | A fill MUST NOT reach a cell outside the selection. | this spec section 4 | none. The batch is built from `selection.selected_cells()`; nothing watches a cell beside the selection | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-053` | `POST` | One value typed into a multi-cell selection MUST be one undo item, not one per cell. | this spec section 4 | `ambre_trame::logic::tests::group2::batch_write_is_one_undo_item` | none | verified |
+| `TRAME-UI-166` | `POST` | A filled formula MUST reach every selected cell as typed, with no reference shifted. | this spec section 4 | none | unheld -- `commit_edit_filled` clones one string per cell, so the text cannot shift, and no test fills a formula and reads a reference back | unverified |
+| `TRAME-UI-167` | `POST` | A fill MUST keep the selection and the active cell where they were. | this spec section 4 | none | unheld -- `commit_edit_filled` moves neither, unlike the `Nav` commit beside it, and nothing asserts it | unverified |
+| `TRAME-UI-168` | `FRAME` | A fill MUST NOT reach a cell outside the selection. | this spec section 4 | none | unheld -- the batch is built from `selection.selected_cells()`, and nothing watches a cell beside the selection | unverified |
 
 ### 1.6 Edit from the formula bar
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-169` | `POST` | A commit from the formula bar MUST write the bar's text, not the buffer the grid last held. | this spec section 4 | none. The commit arm pushes `formula_text` into the editor before committing; the path is browser-only | unverified |
-| `TRAME-UI-092` | `FRAME` | Typing in the formula bar MUST NOT move the focus out of it. | this spec section 4 | none. `begin_edit_external` opens the session without touching focus, precisely so the keystrokes keep landing in the bar; nothing asserts it | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-169` | `POST` | A commit from the formula bar MUST write the bar's text, not the buffer the grid last held. | this spec section 4 | none | unheld -- the commit arm pushes `formula_text` into the editor before committing, and the path is browser-only | unverified |
+| `TRAME-UI-092` | `FRAME` | Typing in the formula bar MUST NOT move the focus out of it. | this spec section 4 | none | unheld -- `begin_edit_external` opens the session without touching focus, so the keystrokes keep landing in the bar, and nothing asserts it | unverified |
 
 ### 1.7 Write into a protected or validated range
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-FEAT-023` | `PRE` | The write MUST be judged against the user the session carries, never an identity read out of the payload. | this spec section 3 | not built -- lands with the "Range protection" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `TRAME-FEAT-021` | `POST` | A `Warn` validation MUST allow the mutation and surface a warning alongside it. | this spec section 3 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-FEAT-047` | `FRAME` | A blocked write MUST emit no CRDT delta. | this spec section 3 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-FEAT-020` | `FAIL` | A `Reject` validation MUST block the local mutation and name the rule it broke. | this spec section 3; section 5 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-FEAT-048` | `FAIL` | A write by a user a protection does not allow MUST be blocked, and MUST answer with the protection's description. | this spec section 3 | not built -- lands with the "Range protection" Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-FEAT-023` | `PRE` | The write MUST be judged against the user the session carries, never an identity read out of the payload. | this spec section 3 | not built | unbuilt -- lands with the `Range protection` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `TRAME-FEAT-021` | `POST` | A `Warn` validation MUST allow the mutation and surface a warning alongside it. | this spec section 3 | not built | unbuilt -- lands with the `Data tools` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-FEAT-047` | `FRAME` | A blocked write MUST emit no CRDT delta. | this spec section 3 | not built | unbuilt -- lands with the `Data tools` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-FEAT-020` | `FAIL` | A `Reject` validation MUST block the local mutation and name the rule it broke. | this spec section 3; section 5 | not built | unbuilt -- lands with the `Data tools` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-FEAT-048` | `FAIL` | A write by a user a protection does not allow MUST be blocked, and MUST answer with the protection's description. | this spec section 3 | not built | unbuilt -- lands with the `Range protection` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.8 Take in a write from a collaborator
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-FEAT-022` | `POST` | A remote delta violating a local validation or protection MUST be applied, and MUST surface a warning. | this spec section 3; section 5 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-FEAT-049` | `FRAME` | Taking in a remote delta MUST NOT refuse it, whatever local rule it breaks. | this spec section 3; section 5 | not built -- lands with the "Data tools" Story (`ambre-roadmap.md` E6) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-FEAT-022` | `POST` | A remote delta violating a local validation or protection MUST be applied, and MUST surface a warning. | this spec section 3; section 5 | not built | unbuilt -- lands with the `Data tools` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-FEAT-049` | `FRAME` | Taking in a remote delta MUST NOT refuse it, whatever local rule it breaks. | this spec section 3; section 5 | not built | unbuilt -- lands with the `Data tools` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.9 Complete a name being typed
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TRAME-UI-057` | `POST` | A function name being typed in a formula MUST offer its completions. | this spec section 5 | not built -- lands with the "Grid surface" Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-UI-058` | `POST` | A cell reference being typed in a formula MUST offer its completions. | this spec section 5 | not built -- lands with the "Post-V1 surface" Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `TRAME-UI-170` | `FRAME` | Offering a completion MUST NOT ask the Logic thread. | this spec section 5 | not built -- lands with the "Grid surface" Story (`ambre-roadmap.md` E6) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-UI-057` | `POST` | A function name being typed in a formula MUST offer its completions. | this spec section 5 | not built | unbuilt -- lands with the `Grid surface` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-UI-058` | `POST` | A cell reference being typed in a formula MUST offer its completions. | this spec section 5 | not built | unbuilt -- lands with the `Post-V1 surface` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `TRAME-UI-170` | `FRAME` | Offering a completion MUST NOT ask the Logic thread. | this spec section 5 | not built | unbuilt -- lands with the `Grid surface` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1`: the keystroke to a draft in

@@ -17,52 +17,52 @@ is one undo item. Prose's own turn is what a document match is, and how a replac
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-148` | `OBS` | The matches of a search MUST be highlighted for the peer that started it, and MUST NOT be drawn for any other peer. | this spec section 5 | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-033` | `INV` | A search MUST match text in the body blocks and nothing else: comment and reply bodies, suggestion metadata, footnote bodies and the text of headers and footers MUST NOT be matched. | this spec section 3 | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-034` | `INV` | A match MUST lie inside one block; a query spanning a block boundary MUST NOT match. | this spec section 3 | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-035` | `INV` | Matches MUST NOT overlap: after one match, the search MUST resume past its end. | this spec section 3 | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-148` | `OBS` | The matches of a search MUST be highlighted for the peer that started it, and MUST NOT be drawn for any other peer. | this spec section 5 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-033` | `INV` | A search MUST match text in the body blocks and nothing else: comment and reply bodies, suggestion metadata, footnote bodies and the text of headers and footers MUST NOT be matched. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-034` | `INV` | A match MUST lie inside one block; a query spanning a block boundary MUST NOT match. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-035` | `INV` | Matches MUST NOT overlap: after one match, the search MUST resume past its end. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Open a search
 
 The walk itself is `ambre-spec-find.md section 1.1`. Document order is Prose's own.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-150` | `POST` | A search MUST report every match in the document, in document order. | this spec section 3 | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-151` | `FRAME` | Opening a search MUST NOT write to the document, MUST NOT move the caret and MUST NOT change the selection: the selection is read to seed the query, and is not written. | derived | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-150` | `POST` | A search MUST report every match in the document, in document order. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-151` | `FRAME` | Opening a search MUST NOT write to the document, MUST NOT move the caret and MUST NOT change the selection: the selection is read to seed the query, and is not written. | derived | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Walk to another match
 
 Where the walk lands, and that the match is brought on screen, are `ambre-spec-find.md`. What the
 walk may not disturb is Prose's.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-152` | `FRAME` | Walking to another match MUST NOT write to the document, MUST NOT change the selection and MUST NOT change the match list: only the current index moves. | derived | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-152` | `FRAME` | Walking to another match MUST NOT write to the document, MUST NOT change the selection and MUST NOT change the match list: only the current index moves. | derived | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Replace the current match
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-153` | `POST` | Replacing the current match MUST replace exactly the range the search reported for it, with the text the gesture carries. | this spec section 4 | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-155` | `FRAME` | Replacing one match MUST NOT change the text of any other match, and MUST NOT change the query or its case and whole-word switches. | derived | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-153` | `POST` | Replacing the current match MUST replace exactly the range the search reported for it, with the text the gesture carries. | this spec section 4 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-155` | `FRAME` | Replacing one match MUST NOT change the text of any other match, and MUST NOT change the query or its case and whole-word switches. | derived | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Replace every match
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-156` | `POST` | A replace-all MUST replace every match the search reported, each with the text the gesture carries. | this spec section 3 | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-036` | `POST` | A replace-all MUST apply its replacements from the end of the document backwards, so that no replacement invalidates a later position. | this spec section 3 | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-157` | `FRAME` | A replace-all MUST NOT change any character outside the ranges the search reported, and MUST NOT change the query or its switches. | derived | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-156` | `POST` | A replace-all MUST replace every match the search reported, each with the text the gesture carries. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-036` | `POST` | A replace-all MUST apply its replacements from the end of the document backwards, so that no replacement invalidates a later position. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-157` | `FRAME` | A replace-all MUST NOT change any character outside the ranges the search reported, and MUST NOT change the query or its switches. | derived | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Close the search
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-158` | `POST` | Closing the search MUST end the session: the query, the match list and the index MUST be dropped, and no match MUST remain highlighted. | this spec section 4 | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-159` | `FRAME` | Closing the search MUST NOT write to the document, MUST NOT move the caret and MUST NOT change the selection. | derived | not built -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-158` | `POST` | Closing the search MUST end the session: the query, the match list and the index MUST be dropped, and no match MUST remain highlighted. | this spec section 4 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-159` | `FRAME` | Closing the search MUST NOT write to the document, MUST NOT move the caret and MUST NOT change the selection. | derived | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the search over the document and the replace-all, two rows of
   `ambre-spec-budgets.md section 1`.

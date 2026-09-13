@@ -19,31 +19,31 @@ prefix is `ARCH`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `ARCH-002` | `INV` | The crate graph MUST stay acyclic. | this spec section 2 | `cargo`: a cycle between two workspace crates fails to resolve, so the edit that would create one never builds | verified |
-| `ARCH-004` | `INV` | Every cryptographic operation MUST run in the Sync worker. | README pillar "Zero-Knowledge"; `ambre-spec-zero-knowledge.md`, `ZK-002` | `cargo deny` -- `deny.toml` grants `ambre-crypto` to `ambre-sync`, and to `ambre-logic` for one host-only fixture hash. Every other crate fails the CI job | verified |
-| `ARCH-012` | `INV` | The client MUST build against a shared memory with atomics enabled. | this spec section 2 | the build: the flags are scoped to the wasm target in `.cargo/config.toml`, and the threading runtime fails to link without them | verified |
-| `ARCH-001` | `INV` | The client MUST run as two WebAssembly instances: one holding the UI and Logic threads over a single shared heap, one holding the Sync worker with its own memory. | this spec section 2 | none. The page loads two artefacts, and nothing refuses a third or a merge of the two | unverified |
-| `ARCH-003` | `INV` | The Logic thread MUST NOT declare a dependency on the render runtime or on the interface toolkit. | this spec section 2 | none. `ambre-logic` declares neither, and no capability ban refuses the line that would add one | unverified |
-| `ARCH-005` | `INV` | Every network call MUST leave from the Sync worker. | this spec section 2; `ZK-001` | none. The transport crates are declared by `ambre-sync` alone; the launcher's same-origin reads are the stated exception of `UI-THREAD-004` | unverified |
-| `ARCH-006` | `INV` | The wire protocol types MUST have one definition, shared by the worker and the relay. | this spec section 2 | none. Both crates depend on `ambre-protocol` and neither redeclares a type; nothing refuses a local copy | unverified |
-| `ARCH-007` | `INV` | The Main thread MUST drain the Logic to Sync channel once per frame, before it draws. | this spec section 2 | none. The relay runs in the per-frame hook, ahead of the gate that can freeze the render; no test drives a frame | unverified |
-| `ARCH-010` | `INV` | The engine MUST be created once per session and MUST survive every route change. | this spec section 2 | none for the lifetime itself. `ambre_app::route::tests::path_doc_roundtrip`, `::cross_kind_open_needs_reload` cover the parsing the per-frame route poll rests on | unverified |
-| `ARCH-011` | `INV` | Each browser tab MUST run a complete client of its own. | this spec section 2 | none. Two tabs load the same two artefacts twice, and nothing refuses a design that shared one worker between them -- which is the shortcut this rule exists to close | unverified |
-| `ARCH-014` | `INV` | The client MUST NOT rely on a channel disconnection to detect a thread failure. | this spec section 2 | none. The panic hook fires before the abort, so the notice does not wait on a channel; nothing refuses a second detection path that would. A disconnection arrives late, or never, because a wedged thread holds its end open | unverified |
-| `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | none. Convergence is covered per application by the two-peer belt, which drives two engines in one process; nothing drives two tabs, and the two differ in exactly the place that matters -- one relay, two sessions, one identity | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `ARCH-002` | `INV` | The crate graph MUST stay acyclic. | this spec section 2 | crate-graph -- a cycle between two workspace crates fails to resolve, so the edit that would create one never builds | none | verified |
+| `ARCH-004` | `INV` | Every cryptographic operation MUST run in the Sync worker. | README pillar "Zero-Knowledge"; `ambre-spec-zero-knowledge.md`, `ZK-002` | cargo-deny -- `deny.toml` grants `ambre-crypto` to `ambre-sync`, and to `ambre-logic` for one host-only fixture hash, so every other crate fails the CI job | none | verified |
+| `ARCH-012` | `INV` | The client MUST build against a shared memory with atomics enabled. | this spec section 2 | target-build -- the flags are scoped to the wasm target in `.cargo/config.toml`, and the threading runtime fails to link without them | none | verified |
+| `ARCH-001` | `INV` | The client MUST run as two WebAssembly instances: one holding the UI and Logic threads over a single shared heap, one holding the Sync worker with its own memory. | this spec section 2 | none | unheld -- the page loads two artefacts, and nothing refuses a third or a merge of the two | unverified |
+| `ARCH-003` | `INV` | The Logic thread MUST NOT declare a dependency on the render runtime or on the interface toolkit. | this spec section 2 | none | unheld -- `ambre-logic` declares neither, and no capability ban refuses the line that would add one | unverified |
+| `ARCH-005` | `INV` | Every network call MUST leave from the Sync worker. | this spec section 2; `ZK-001` | none | unheld -- the transport crates are declared by `ambre-sync` alone, and the launcher's same-origin reads are the stated exception of `UI-THREAD-004` | unverified |
+| `ARCH-006` | `INV` | The wire protocol types MUST have one definition, shared by the worker and the relay. | this spec section 2 | none | unheld -- both crates depend on `ambre-protocol` and neither redeclares a type, and nothing refuses a local copy | unverified |
+| `ARCH-007` | `INV` | The Main thread MUST drain the Logic to Sync channel once per frame, before it draws. | this spec section 2 | none | unheld -- the relay runs in the per-frame hook, ahead of the gate that can freeze the render, and no test drives a frame | unverified |
+| `ARCH-010` | `INV` | The engine MUST be created once per session and MUST survive every route change. | this spec section 2 | `ambre_app::route::tests::path_doc_roundtrip`; `::cross_kind_open_needs_reload` -- the parsing the per-frame route poll rests on | partial -- nothing holds the lifetime itself | unverified |
+| `ARCH-011` | `INV` | Each browser tab MUST run a complete client of its own. | this spec section 2 | none | unheld -- two tabs load the same two artefacts twice, and nothing refuses a design that shared one worker between them, which is the shortcut this rule exists to close | unverified |
+| `ARCH-014` | `INV` | The client MUST NOT rely on a channel disconnection to detect a thread failure. | this spec section 2 | none | unheld -- the panic hook fires before the abort, so the notice does not wait on a channel, and nothing refuses a second detection path that would. A disconnection arrives late, or never, because a wedged thread holds its end open | unverified |
+| `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | none | unheld -- convergence is covered per application by the two-peer belt, which drives two engines in one process. Nothing drives two tabs, and the two differ in exactly the place that matters: one relay, two sessions, one identity | unverified |
 
 ### 1.2 A thread fails
 
 Something unrecoverable happens on one of the three. The two rules below are what stands between
 that and a page that looks alive and answers nothing.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `ARCH-009` | `POST` | A thread that detects an unrecoverable condition MUST emit a fatal event before it exits. | this spec section 2 | none. Each view latches an inert state when it receives one, and nothing drives the path | unverified |
-| `ARCH-008` | `POST` | A thread failure MUST reach the user out of band. | this spec section 2 | none as a test. The panic hook calls the page's fatal hook before the abort, and the terminal screen on the drawing surface is wired to it | unverified |
-| `ARCH-015` | `FRAME` | A failing thread MUST NOT write to the document on its way out. | this spec section 2; derived | none. The fatal path emits an event and stops, so a half-applied operation is not flushed today. Nothing holds it: a thread failing mid-write is the one moment the document can be left in a state no peer will ever converge to | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `ARCH-009` | `POST` | A thread that detects an unrecoverable condition MUST emit a fatal event before it exits. | this spec section 2 | none | unheld -- each view latches an inert state when it receives one, and nothing drives the path | unverified |
+| `ARCH-008` | `POST` | A thread failure MUST reach the user out of band. | this spec section 2 | none | unheld -- the panic hook calls the page's fatal hook before the abort, and the terminal screen on the drawing surface is wired to it, and no test drives either | unverified |
+| `ARCH-015` | `FRAME` | A failing thread MUST NOT write to the document on its way out. | this spec section 2; derived | none | unheld -- the fatal path emits an event and stops, so a half-applied operation is not flushed today. Nothing holds it, and a thread failing mid-write is the one moment the document can be left in a state no peer will ever converge to | unverified |
 
 * **Budget.** the whole of `ambre-spec-budgets.md`: this stack is what every row of that register
   measures. The two rows belonging to the stack itself are the channel hop and the worker hop of

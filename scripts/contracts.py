@@ -90,6 +90,27 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
+# Every closed vocabulary this file checks against is the template's, read from
+# it. What each one means is stated there, beside the table it is read from, and
+# is not repeated here (`ambre-spec-template.md section 1.B`).
+from template_vocabulary import (  # noqa: F401  -- re-exported to the other gates
+    BARE_GAP_OPENERS,
+    BARE_TOKENS,
+    CARRIED_GAP_OPENERS,
+    GAP,
+    GAP_OPENERS,
+    KIND,
+    KINDS,
+    LOCATED_TOKENS,
+    OPERATION_KINDS,
+    SOURCES,
+    STATE_KINDS,
+    STATEMENT,
+    STATUSES,
+    VERIFICATION,
+    VERIFICATION_TOKENS,
+)
+
 ROOT = Path(__file__).resolve().parent.parent
 SPECS = ROOT / "specs"
 CRATES = ROOT / "crates"
@@ -100,7 +121,6 @@ JOURNAL = "ambre-roadmap-journal.md"  # closed epics, cut there verbatim
 AUDIT = "security-audit.md"  # numbered findings, cited by the rows that close them
 CEILINGS = Path(__file__).resolve().parent / "contract_ceilings.json"
 STATEMENT_CEILINGS = Path(__file__).resolve().parent / "statement_ceilings.json"
-STATUSES = ("verified", "unverified", "human-review", "qa-manual", "unimplemented")
 LOOSE = ("unverified", "human-review", "qa-manual")  # built, and no test would fail
 APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose")
 
@@ -207,11 +227,10 @@ ROW = re.compile(
     r"(?P<rest>.*)\|\s*(?P<status>[a-z-]+)\s*\|\s*$"
 )
 
-# The header of a contract table, and whether it declares the `Kind` column.
-# A document that declares it is held to the vocabulary and to the completeness
-# rule below; one that does not is a table the column has not
-# reached, so the corpus migrates a document at a time
-# (`ambre-spec-template.md section 1.B`).
+# The header of a contract table. A table keyed by `ID` that declares `Kind` is
+# a contract table, and it MUST declare `Gap` too: the mechanism and what the
+# mechanism leaves open are two columns, and a header that merges them back into
+# one is refused (`ambre-spec-template.md section 1.B`).
 TABLE_HEAD = re.compile(r"^\|\s*ID\s*\|")
 
 
@@ -225,13 +244,27 @@ def header_cells(header: str) -> list[str]:
     return [c.strip() for c in header.strip().strip("|").split("|")]
 
 
-# What a rule binds. A state kind holds at every instant; an operation kind
-# holds at one point of one operation's run, and the four of them are what
-# design by contract adds. The two families never share a table: one table per
-# operation is what makes a missing row visible.
-STATE_KINDS = ("INV", "CONC", "OBS", "IO")
-OPERATION_KINDS = ("PRE", "POST", "FRAME", "FAIL")
-KINDS = STATE_KINDS + OPERATION_KINDS
+def row_cells(columns: list[str] | None, rest: str) -> dict[str, str]:
+    """One row's cells, keyed by the name its own header declares.
+
+    `rest` starts after the `ID` cell, so a header index shifts by one. Reading a
+    cell by its position is what a seventh column breaks in silence: the
+    `Verification` cell was "the last one before the status" everywhere below,
+    and `Gap` took that place (`ambre-spec-template.md section 1.B`).
+    """
+    if not columns:
+        return {}
+    cells = [c.strip() for c in rest.split("|")]
+    return {
+        name: cells[at - 1] for at, name in enumerate(columns) if 0 < at <= len(cells)
+    }
+
+
+# `STATE_KINDS` and `OPERATION_KINDS` come from the template's `Binds` column:
+# a state kind holds at every instant, an operation kind at one point of one
+# operation's run. The two families never share a table, which is what makes a
+# missing row visible, and `table_defects` below is where that is refused.
+#
 # Both families carry a list by right: a `FAIL` binds the refusal, the notice and
 # the rollback as one outcome, and a `FRAME` names everything one operation must
 # not touch. The conjunction measure below leaves them alone.
@@ -268,6 +301,95 @@ SOURCE_FORMS = (
     re.compile(r"^derived\b"),  # nothing but the design itself
     re.compile(r"`[\w./-]+\.md`"),  # a named document, with the rule it cites
 )
+
+
+# `VERIFICATION_TOKENS` is the template's mechanism table, and every token of it
+# names a rung of the ladder `1-Foundations/ambre-spec-testing.md section 2`
+# owns. The cell is read whole: one token off that list fails the row, whatever
+# the prose around it says, because a cell a gate reads half of is a cell
+# nothing holds. `BARE_TOKENS` name no mechanism, so no clause can locate one;
+# `LOCATED_TOKENS` name a shape a reader cannot grep for, so each one must.
+#
+# The belt: a backticked Rust path, or the `::name` continuation of the path
+# before it. An application name may precede it where one rule is held once per
+# application -- `Toile `ambre_toile::...``.
+MECHANISM_PATH = re.compile(
+    r"^(?:(?:Trame|Toile|Prose|chrome)\s+)?"
+    r"`(?:::)?[a-z_][A-Za-z0-9_]*(?:::[A-Za-z0-9_]+)*`$"
+)
+
+# `GAP_OPENERS` is the closed set a `Gap` cell opens on. The template writes the
+# five carrying an argument with the dash and the space that argument follows,
+# and `none` bare, so the two families are read off the spelling rather than
+# named again here. That prose is the one place in the row where an argument
+# belongs.
+
+
+def verification_defects(where: str, cell: str) -> list[str]:
+    """Whether a `Verification` cell is a mechanism, and nothing else.
+
+    A total read. The cell is a `;`-separated list, and every item of it must be
+    a token or a path. Prose fails here even when the prose is true: what it
+    says belongs in `Gap`, where a reader and a script can both find it.
+    """
+    if not cell:
+        return [f"{where}: the `Verification` cell is empty -- write `none`, which claims nothing"]
+    defects = []
+    for item in cell.split(";"):
+        item = item.strip()
+        token, _, clause = item.partition(" -- ")
+        if MECHANISM_PATH.match(token):
+            continue
+        if token not in VERIFICATION_TOKENS:
+            defects.append(
+                f"{where}: `Verification` carries {item[:60]!r}, which is no mechanism -- "
+                f"the cell is a `;`-separated list of the closed set, and an argument "
+                f"about what it does not hold belongs in `Gap`"
+            )
+        elif clause and token in BARE_TOKENS:
+            defects.append(
+                f"{where}: `Verification` reads {item[:60]!r} -- {token!r} names no "
+                f"mechanism for a clause to locate, so what follows it is an "
+                f"argument, and an argument belongs in `Gap`"
+            )
+        elif token in LOCATED_TOKENS and not clause:
+            defects.append(
+                f"{where}: `Verification` is {token!r} on its own -- a reader cannot "
+                f"find what it names, so write `{token} -- ` and then the construction "
+                f"that holds the rule"
+            )
+    return defects
+
+
+def gap_defects(where: str, cell: str, verification: str, status: str) -> list[str]:
+    """Whether a `Gap` cell states what the mechanism leaves open.
+
+    The opener is read whole; what follows it is prose and is read by nobody.
+    The two rules across the columns are here because neither can be asked of
+    one cell: they compare `Gap` against `Verification` and against `Status`.
+    """
+    defects = []
+    bare = cell in BARE_GAP_OPENERS
+    if not bare and not any(cell.startswith(o) for o in CARRIED_GAP_OPENERS):
+        defects.append(
+            f"{where}: `Gap` opens on {cell[:60]!r} -- write "
+            f"{', '.join(repr(o) for o in BARE_GAP_OPENERS)}, or one of "
+            f"{', '.join(repr(o.strip()) for o in CARRIED_GAP_OPENERS)} "
+            f"and then the argument"
+        )
+        return defects
+    if verification in BARE_TOKENS and bare:
+        defects.append(
+            f"{where}: `Verification` is {verification!r} and `Gap` is {cell!r} -- a row "
+            f"with no mechanism and no gap claims a coverage it does not have"
+        )
+    if status == "verified" and not bare:
+        defects.append(
+            f"{where}: status is `verified` beside a `Gap` that is not `none` -- a "
+            f"status saying something turns red, next to a cell saying which half "
+            f"is loose, is two answers to one question"
+        )
+    return defects
 
 
 def row_defects(where: str, kind_cell: str, statement: str, sources: str) -> list[str]:
@@ -927,13 +1049,21 @@ def main() -> int:
                     errors += table_defects(rel, table)
                 table = []
                 columns = header_cells(line) if head else None
-                if columns is not None and "Kind" not in columns:
+                if columns is not None and KIND not in columns:
                     columns = None  # a table keyed by `ID` that is not a contract
             m = ROW.match(line)
+            # The row's cells by name. `Gap` is where an `unimplemented` row
+            # names its Story, so it is the cell the citation check reads. A row
+            # under a header that declares neither `Kind` nor `Gap` is refused
+            # below; its last cell is read here so the citation check still runs.
+            cell = row_cells(columns, m["rest"]) if m else {}
+            binding = cell.get(GAP, "")
+            if m and not binding:
+                binding = m["rest"].rsplit("|", 1)[-1]
             # a story the row's own binding already answers for, checked below
             bound: set[str] = set()
             if m and m["status"] == "unimplemented":
-                cite = cited_story(m["rest"].rsplit("|", 1)[-1])
+                cite = cited_story(binding)
                 if cite:
                     bound.add(story_key(cite[0].strip('`"')))
             errors += loose_citation_defects(
@@ -953,16 +1083,23 @@ def main() -> int:
                     f"eight kinds, so a table without it checks nothing"
                 )
             else:
-                # `rest` starts after the ID cell, so a header index shifts by one.
-                cells = [c.strip() for c in rest.split("|")]
-                cell = {
-                    name: cells[at - 1]
-                    for at, name in enumerate(columns)
-                    if 0 < at <= len(cells)
-                }
-                kind_cell = cell.get("Kind", "")
-                statement = cell.get("Statement (RFC 2119)", "")
-                errors += row_defects(where, kind_cell, statement, cell.get("Sources", ""))
+                kind_cell = cell.get(KIND, "")
+                statement = cell.get(STATEMENT, "")
+                errors += row_defects(where, kind_cell, statement, cell.get(SOURCES, ""))
+                # Both grammars need the two cells apart. A header that declares
+                # no `Gap` states the mechanism and the argument about it in one
+                # cell, which is the shape neither grammar can read.
+                if GAP not in (columns or []):
+                    errors.append(
+                        f"{where}: a contract row under a header that declares no "
+                        f"`Gap` column -- the mechanism and what it leaves open "
+                        f"are two cells, and one cell holding both is what the "
+                        f"seventh column exists to take apart"
+                    )
+                else:
+                    mechanism = cell.get(VERIFICATION, "")
+                    errors += verification_defects(where, mechanism)
+                    errors += gap_defects(where, cell.get(GAP, ""), mechanism, status)
                 kind = kind_cell.strip("`")
                 table.append((lineno, rid, kind))
                 if kind not in BUNDLING_KINDS and CONJUNCTION.search(statement):
@@ -989,13 +1126,18 @@ def main() -> int:
                 else:
                     cited_audit.add(token)
 
-            verification = rest.rsplit("|", 1)[-1]
+            # The mechanism cell by name, never by position. `binding` is the cell
+            # the story citation lives in, which the split moved into `Gap`.
+            verification = cell.get(VERIFICATION, rest.rsplit("|", 1)[-1])
             if status == "unimplemented":
-                errors += story_defects(where, verification, schedule, closed)
+                errors += story_defects(where, binding, schedule, closed)
             if status != "unimplemented" and "not built" in verification:
                 errors.append(f"{where}: says 'not built' but status is {status!r}")
             if status != "unimplemented":
-                for defect in unresolved_citations(verification, per_crate, pooled):
+                # A `Gap` names a test too -- "the half that is held is `::name`" --
+                # so both cells are read for a path the workspace does not carry.
+                cited_in = f"{verification} | {cell.get(GAP, '')}"
+                for defect in unresolved_citations(cited_in, per_crate, pooled):
                     errors.append(f"{where}: {defect}")
             if status == "verified":
                 for token in CITED.findall(verification):

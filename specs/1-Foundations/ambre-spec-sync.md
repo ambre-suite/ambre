@@ -22,58 +22,58 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SYNC-002` | `INV` | The document key and the private signing key MUST NOT appear in any outbound message; only the public half travels. | `ZK-002`; this spec section 2 | crate graph: `deny.toml` refuses the exchange, the cipher and `ambre-crypto` itself outside this worker, so no other crate holds a type either key could travel in | verified |
-| `SYNC-095` | `INV` | A key MUST be wiped from memory when it goes out of scope. | `ZK-002`; this spec section 2 | type-level: both key types derive `ZeroizeOnDrop`, so the wipe is the destructor and cannot be forgotten at a call site. It is what makes a sign-out mean anything on a machine the attacker may later read | verified |
-| `SYNC-011` | `INV` | The Sync worker MUST compile no CRDT code. | this spec section 2 | crate graph: `deny.toml` grants `loro` to the four application crates alone, so this worker fails the `deny` job on the line that would add it | verified |
-| `SYNC-096` | `INV` | The Sync worker MUST compile no rendering code. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-057` | none. The manifest declares neither the canvas nor `wgpu`, and no `deny.toml` entry refuses them here -- unlike the CRDT and cryptography bans beside it. The rule is read off a manifest rather than enforced by a job | unverified |
-| `SYNC-056` | `INV` | The Sync worker MUST run in its own instance, with a linear memory the rest of the client cannot address. | `ambre-spec-architecture.md section 2` | none. The crate builds a standalone artifact and is loaded as a dedicated worker, which the build shape makes true, and nothing in continuous integration boots the pair to observe it | unverified |
-| `SYNC-060` | `INV` | A token MUST live in this worker's memory alone: never in browser storage, never in a cookie. | `ambre-spec-session.md`, `SRV-031` | none. The store is a field of this worker and the crate opens no storage handle, so the rule holds by absence; nothing would fail the day a writer appeared | unverified |
-| `SYNC-061` | `INV` | A token MUST NOT reach a log. | `ZK-006`; `ambre-spec-session.md`, `SRV-031` | none, and **the rule fails today**: the socket carries its token as a query parameter, and the whole address is logged on every connection attempt and on every failure. The repair is the `SYNC P4` hardening Story | unverified |
-| `SYNC-013` | `INV` | Application code MUST contain no unchecked memory access. | README pillar "Security" | measured zero across the workspace, and this crate carries no crate-level refusal of it: two crates of seventeen do (`ambre-spec-testing.md section 8`) | unverified |
-| `SYNC-058` | `INV` | The worker MUST NOT block its own event loop: the socket and the requests MUST stay serviceable. | `ambre-spec-architecture.md section 4` | none, and none is possible on host: the property is about a browser event loop. The loop awaits two channels whose producers both live in this worker, which is what makes the historical freeze unreachable by construction | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-002` | `INV` | The document key and the private signing key MUST NOT appear in any outbound message; only the public half travels. | `ZK-002`; this spec section 2 | crate-graph -- `deny.toml` refuses the exchange, the cipher and `ambre-crypto` itself outside this worker, so no other crate holds a type either key could travel in | none | verified |
+| `SYNC-095` | `INV` | A key MUST be wiped from memory when it goes out of scope. | `ZK-002`; this spec section 2 | type-level -- both key types derive `ZeroizeOnDrop`, so the wipe is the destructor and cannot be forgotten at a call site. It is what makes a sign-out mean anything on a machine the attacker may later read | none | verified |
+| `SYNC-011` | `INV` | The Sync worker MUST compile no CRDT code. | this spec section 2 | crate-graph -- `deny.toml` grants `loro` to the four application crates alone, so this worker fails the `deny` job on the line that would add it | none | verified |
+| `SYNC-096` | `INV` | The Sync worker MUST compile no rendering code. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-057` | none | unheld -- the manifest declares neither the canvas nor `wgpu`, and no `deny.toml` entry refuses them here, unlike the CRDT and cryptography bans beside it. The rule is read off a manifest rather than enforced by a job | unverified |
+| `SYNC-056` | `INV` | The Sync worker MUST run in its own instance, with a linear memory the rest of the client cannot address. | `ambre-spec-architecture.md section 2` | none | unheld -- the crate builds a standalone artifact and is loaded as a dedicated worker, which the build shape makes true, and nothing in continuous integration boots the pair to observe it | unverified |
+| `SYNC-060` | `INV` | A token MUST live in this worker's memory alone: never in browser storage, never in a cookie. | `ambre-spec-session.md`, `SRV-031` | none | unheld -- the store is a field of this worker and the crate opens no storage handle, so the rule holds by absence, and nothing would fail the day a writer appeared | unverified |
+| `SYNC-061` | `INV` | A token MUST NOT reach a log. | `ZK-006`; `ambre-spec-session.md`, `SRV-031` | none | fails -- the socket carries its token as a query parameter, and the whole address is logged on every connection attempt and on every failure. The repair is the `SYNC P4` hardening Story | unverified |
+| `SYNC-013` | `INV` | Application code MUST contain no unchecked memory access. | README pillar "Security" | none | unheld -- the workspace measures zero unchecked access today, and this crate carries no crate-level refusal of it: two crates of seventeen do (`ambre-spec-testing.md section 8`) | unverified |
+| `SYNC-058` | `INV` | The worker MUST NOT block its own event loop: the socket and the requests MUST stay serviceable. | `ambre-spec-architecture.md section 4` | none | unheld -- none is possible on host: the property is about a browser event loop. The loop awaits two channels whose producers both live in this worker, which is what makes the historical freeze unreachable by construction | unverified |
 
 ### 1.2 The worker starts
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SYNC-057` | `POST` | No command MUST be lost while the worker starts: everything sent before it is listening MUST wait. | this spec section 2 | none. The worker announces itself as the last step of its start, and the relay on the other side holds every command until it sees that announcement. No test boots a worker slowly to see the first command survive | unverified |
-| `SYNC-065` | `POST` | An edit made before the session is ready MUST be held, never dropped. | this spec section 2 | none. The edit is buffered and replayed once the document is open, and no test issues an edit before a session: the host path seeds its keys before anything runs | unverified |
-| `SYNC-097` | `FRAME` | Commands held during the start MUST NOT be reordered when they are released. | this spec section 2; `ambre-spec-delta-order.md` | none. The holding buffer is a queue and the release drains it in order, so the rule is held by the container's own shape; nothing asserts it. Releasing an open after the edit that depends on it drops the edit, which is `SYNC-065` failing by another route | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-057` | `POST` | No command MUST be lost while the worker starts: everything sent before it is listening MUST wait. | this spec section 2 | none | unheld -- the worker announces itself as the last step of its start, and the relay on the other side holds every command until it sees that announcement. No test boots a worker slowly to see the first command survive | unverified |
+| `SYNC-065` | `POST` | An edit made before the session is ready MUST be held, never dropped. | this spec section 2 | none | unheld -- the edit is buffered and replayed once the document is open, and no test issues an edit before a session: the host path seeds its keys before anything runs | unverified |
+| `SYNC-097` | `FRAME` | Commands held during the start MUST NOT be reordered when they are released. | this spec section 2; `ambre-spec-delta-order.md` | none | unheld -- the holding buffer is a queue and the release drains it in order, so the rule is held by the container's own shape, and nothing asserts it. Releasing an open after the edit that depends on it drops the edit, which is `SYNC-065` failing by another route | unverified |
 
 ### 1.3 The socket connects, and reconnects
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SYNC-063` | `POST` | A socket the relay refuses on authentication MUST be renewed, not merely retried. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-046` | none. The refusal has its own close code, and the handler renews on that code alone and backs off on every other. No host test drives a close event | unverified |
-| `SYNC-070` | `POST` | A socket error MUST tear the connection down and schedule a reconnect, exactly as a close does. | audit `M10`; this spec section 2 | none. The error handler takes the same teardown and backoff path as the close handler, and no host test raises a socket error: the event belongs to a browser | unverified |
-| `SYNC-064` | `POST` | The reconnect delay MUST grow while no frame arrives. | this spec section 2 | none. The delay is doubled on each teardown, and nothing observes it | unverified |
-| `SYNC-098` | `POST` | The reconnect delay MUST reset on an inbound frame, and never on a bare open. | this spec section 2 | none. The reset is the first statement of the inbound handler, so a connection that opens and is refused never reaches it -- which is the whole point: resetting on the open turns a relay refusing every connection into a client retrying without a backoff at all | unverified |
-| `SYNC-059` | `FRAME` | The worker MUST stop reading the socket while the path back to the rest of the client is full. | `ambre-spec-architecture.md section 4` | none, and **the rule fails today**: the worker cannot know. It posts messages one way with no answer, so the queue on the other side fills and the receiving thread blocks on it instead. The repair is the `SYNC P4` hardening Story | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-063` | `POST` | A socket the relay refuses on authentication MUST be renewed, not merely retried. | this spec section 2; `ambre-spec-broadcast.md`, `SRV-046` | none | unheld -- the refusal has its own close code, and the handler renews on that code alone and backs off on every other. No host test drives a close event | unverified |
+| `SYNC-070` | `POST` | A socket error MUST tear the connection down and schedule a reconnect, exactly as a close does. | audit `M10`; this spec section 2 | none | unheld -- the error handler takes the same teardown and backoff path as the close handler, and no host test raises a socket error: the event belongs to a browser | unverified |
+| `SYNC-064` | `POST` | The reconnect delay MUST grow while no frame arrives. | this spec section 2 | none | unheld -- the delay is doubled on each teardown, and nothing observes it | unverified |
+| `SYNC-098` | `POST` | The reconnect delay MUST reset on an inbound frame, and never on a bare open. | this spec section 2 | none | unheld -- the reset is the first statement of the inbound handler, so a connection that opens and is refused never reaches it, which is the whole point: resetting on the open turns a relay refusing every connection into a client retrying without a backoff at all | unverified |
+| `SYNC-059` | `FRAME` | The worker MUST stop reading the socket while the path back to the rest of the client is full. | `ambre-spec-architecture.md section 4` | none | fails -- the worker cannot know. It posts messages one way with no answer, so the queue on the other side fills and the receiving thread blocks on it instead. The repair is the `SYNC P4` hardening Story | unverified |
 
 ### 1.4 A request is made
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SYNC-062` | `POST` | A request refused for an expired token MUST be retried once, after a silent renewal. | `ambre-spec-session.md`, `SRV-025` | none. Every request helper renews once and replays, and no test drives a refusal: the helpers are the browser fetch path, and the transport the host tier substitutes is above them | unverified |
-| `SYNC-071` | `FAIL` | A request that receives no answer MUST be abandoned, never awaited without end. | audit `M9`; this spec section 2 | none. Every call attaches a thirty-second abort signal, and no test drives a request that never answers: the request path is the browser fetch | unverified |
-| `SYNC-099` | `FRAME` | A renewal MUST NOT replay a request refused for anything but an expired token. | `ambre-spec-session.md`, `SRV-025` | none. The retry is keyed on the one status a stale token produces, and nothing asserts the other refusals fall through. Replaying a write refused for a missing permission sends it twice against a relay that already said no | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-062` | `POST` | A request refused for an expired token MUST be retried once, after a silent renewal. | `ambre-spec-session.md`, `SRV-025` | none | unheld -- every request helper renews once and replays, and no test drives a refusal: the helpers are the browser fetch path, and the transport the host tier substitutes is above them | unverified |
+| `SYNC-071` | `FAIL` | A request that receives no answer MUST be abandoned, never awaited without end. | audit `M9`; this spec section 2 | none | unheld -- every call attaches a thirty-second abort signal, and no test drives a request that never answers: the request path is the browser fetch | unverified |
+| `SYNC-099` | `FRAME` | A renewal MUST NOT replay a request refused for anything but an expired token. | `ambre-spec-session.md`, `SRV-025` | none | unheld -- the retry is keyed on the one status a stale token produces, and nothing asserts the other refusals fall through. Replaying a write refused for a missing permission sends it twice against a relay that already said no | unverified |
 
 ### 1.5 Content leaves for the relay
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SYNC-067` | `POST` | A document name MUST reach the relay sealed under the document key. | `ZK-001`; this spec section 2 | none. The name is sealed on create and on rename and opened for the list, and no test seals one: the three legs run in a browser. `CHROME-036` holds the half about what a card shows | unverified |
-| `SYNC-068` | `FRAME` | A sealed document name MUST NOT open under any document but its own. | `ambre-spec-sealed-envelope.md`, `SYNC-018` | none, and **the rule fails today**: the name is sealed with one constant string as additional data, no commitment tag and no signature, so the relay can move a sealed name from one document to another and nothing notices -- section 5. Answered by the `The document name is sealed like every other payload` Story (`ambre-roadmap.md` E7) | unverified |
-| `SYNC-069` | `FAIL` | A channel message MUST reach the relay or be refused: it MUST NOT be dropped in silence. | this spec section 2 | none, and **the rule fails today**: the client subscribes to a channel and both send paths log the payload and discard it, so a message a user writes disappears with no error. Answered by the `SYNC P4` / `SRV P1` channels and meetings Story | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-067` | `POST` | A document name MUST reach the relay sealed under the document key. | `ZK-001`; this spec section 2 | none | unheld -- the name is sealed on create and on rename and opened for the list, and no test seals one: the three legs run in a browser. `CHROME-036` holds the half about what a card shows | unverified |
+| `SYNC-068` | `FRAME` | A sealed document name MUST NOT open under any document but its own. | `ambre-spec-sealed-envelope.md`, `SYNC-018` | none | fails -- the name is sealed with one constant string as additional data, no commitment tag and no signature, so the relay can move a sealed name from one document to another and nothing notices, section 5. Answered by the `The document name is sealed like every other payload` Story (`ambre-roadmap.md` E7) | unverified |
+| `SYNC-069` | `FAIL` | A channel message MUST reach the relay or be refused: it MUST NOT be dropped in silence. | this spec section 2 | none | fails -- the client subscribes to a channel and both send paths log the payload and discard it, so a message a user writes disappears with no error. Answered by the `SYNC P4` / `SRV P1` -- channels and meetings Story (`ambre-roadmap.md` E5) | unverified |
 
 ### 1.6 The session ends
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SYNC-066` | `POST` | A sign-out MUST close the socket and clear every key. | `ambre-spec-zero-knowledge.md`, `ZK-002` | none. The keys are cleared and wipe themselves on drop (`SYNC-095`), and nothing asserts the socket is closed or that a later frame finds no state to apply | unverified |
-| `SYNC-100` | `FRAME` | A sign-out MUST leave no token behind it. | `ZK-006`; `ambre-spec-session.md`, `SRV-026` | none, and **the rule fails today**: the two tokens are plain strings, dropped rather than wiped, so the access token and the refresh token both stay in the worker's linear memory after the session they belong to has ended | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-066` | `POST` | A sign-out MUST close the socket and clear every key. | `ambre-spec-zero-knowledge.md`, `ZK-002` | none | unheld -- the keys are cleared and wipe themselves on drop (`SYNC-095`), and nothing asserts the socket is closed or that a later frame finds no state to apply | unverified |
+| `SYNC-100` | `FRAME` | A sign-out MUST leave no token behind it. | `ZK-006`; `ambre-spec-session.md`, `SRV-026` | none | fails -- the two tokens are plain strings, dropped rather than wiped, so the access token and the refresh token both stay in the worker's linear memory after the session they belong to has ended | unverified |
 
 * **Budget.** the relay hop of `ambre-spec-budgets.md section 1` -- one encode plus one
   transfer under 1 ms -- and the two per-session holders of

@@ -15,45 +15,45 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-005` | `INV` | A list item's depth MUST be derived from its ancestors; it MUST NOT be stored in the document. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-002` | `INV` | List ordinals MUST be derived when the list is read; they MUST NOT be stored in the document. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-026` | `OBS` | The ordinal drawn on an ordered item MUST count only the unbroken run of neighbouring items that share one parent and one numbering style. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-136` | `OBS` | A run that resumes after an interruption MUST be drawn starting at one. | this spec section 5 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-137` | `CONC` | Two peers whose block trees have converged MUST draw the same ordinal on every item of a list. | this spec section 5 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-005` | `INV` | A list item's depth MUST be derived from its ancestors; it MUST NOT be stored in the document. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-002` | `INV` | List ordinals MUST be derived when the list is read; they MUST NOT be stored in the document. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-026` | `OBS` | The ordinal drawn on an ordered item MUST count only the unbroken run of neighbouring items that share one parent and one numbering style. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-136` | `OBS` | A run that resumes after an interruption MUST be drawn starting at one. | this spec section 5 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-137` | `CONC` | Two peers whose block trees have converged MUST draw the same ordinal on every item of a list. | this spec section 5 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Add an item
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-138` | `POST` | The new item MUST be a child of the given parent, placed after the given sibling, and carry the requested style. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-139` | `FRAME` | Adding an item MUST NOT write to any other block: no ordinal, no depth and no text is written on the items that follow it. | derived | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-138` | `POST` | The new item MUST be a child of the given parent, placed after the given sibling, and carry the requested style. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-139` | `FRAME` | Adding an item MUST NOT write to any other block: no ordinal, no depth and no text is written on the items that follow it. | derived | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Change an item's style
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-140` | `POST` | The item MUST carry the requested style. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-278` | `POST` | A checkbox item MUST carry the requested ticked state. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-141` | `FRAME` | Changing a style MUST NOT touch the item's text, its place in the block tree, or the style of any other item. | derived | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-140` | `POST` | The item MUST carry the requested style. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-278` | `POST` | A checkbox item MUST carry the requested ticked state. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-141` | `FRAME` | Changing a style MUST NOT touch the item's text, its place in the block tree, or the style of any other item. | derived | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Indent an item
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-142` | `POST` | The indented item MUST become a child of the item that preceded it. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-143` | `POST` | The item's descendants MUST follow it in the same operation, keeping their order and their parent chain below it. | this spec section 5 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-028` | `FAIL` | Indenting the first item of a run MUST be refused and reported; it MUST NOT be applied. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-144` | `FRAME` | Indenting an item MUST NOT touch its text or its style. | derived | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-142` | `POST` | The indented item MUST become a child of the item that preceded it. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-143` | `POST` | The item's descendants MUST follow it in the same operation, keeping their order and their parent chain below it. | this spec section 5 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-028` | `FAIL` | Indenting the first item of a run MUST be refused and reported; it MUST NOT be applied. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-144` | `FRAME` | Indenting an item MUST NOT touch its text or its style. | derived | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Outdent an item
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-FEAT-027` | `POST` | Outdenting a top-level item MUST turn it into an ordinary paragraph; it MUST NOT leave it a list item. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-145` | `POST` | Outdenting a nested item MUST make it a child of its grandparent, placed after the subtree of its former parent. | this spec section 3 | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-146` | `FRAME` | Outdenting an item MUST NOT touch its text, nor the style of any item it leaves behind. | derived | not built -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-027` | `POST` | Outdenting a top-level item MUST turn it into an ordinary paragraph; it MUST NOT leave it a list item. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-145` | `POST` | Outdenting a nested item MUST make it a child of its grandparent, placed after the subtree of its former parent. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-146` | `FRAME` | Outdenting an item MUST NOT touch its text, nor the style of any item it leaves behind. | derived | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the ordinal and the section numbering, one row of
   `ambre-spec-budgets.md section 1`: both are read-time walks over the block tree, and

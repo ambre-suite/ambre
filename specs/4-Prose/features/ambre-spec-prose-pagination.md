@@ -20,58 +20,58 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-010` | `INV` | Pagination MUST run in the Logic thread. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-064` | `INV` | The layout the Logic thread produces MUST be the single source of truth for both the screen and PDF export: a second layout computation MUST NOT exist beside it. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-033` | `INV` | The page layout MUST be derived on every read: a page number, a break position or a measured height MUST NOT be read back from a stored copy. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-065` | `INV` | No container MUST hold a page number, a break position or a measured height. | this spec section 2; `ambre-spec-prose-schema.md section 3` | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5); the schema declares no such container, which is the format holding this row before any code does | unimplemented |
-| `PROSE-011` | `INV` | Every in-range page index MUST resolve to a list, empty if the page holds nothing: a reader MUST NOT hit a missing entry. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-066` | `INV` | What a page carries MUST include the continuation of a block broken onto it, not the blocks that start there alone. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-067` | `INV` | A layout MUST carry the first page on which it differs from the layout it replaces. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-016` | `INV` | A header or footer MUST NOT consume more than a quarter of the page height. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-017` | `INV` | A fresh page MUST accept at least one line: the layout MUST NOT produce a degenerate empty page. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-068` | `INV` | A footnote ordinal MUST be assigned from the position of its reference in the document flow, and MUST NOT change when placement moves the note to another page. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-034` | `INV` | Every font family label MUST be resolved to a loaded face before shaping; an unmatched label MUST NOT be handed to the shaper. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-036` | `INV` | A full shaped layout MUST be retained past measurement only for a block that splits across pages; every other block MUST keep its line metrics alone. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-012` | `OBS` | A manual page break MUST never be relaxed: it opens a page whatever else the placement is weighing. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-069` | `OBS` | Margin collapse MUST never be skipped: it sits above every heuristic in the constraint order. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-013` | `OBS` | A heading MUST NOT be split across pages: it is pushed whole to the next page. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-014` | `OBS` | An image MUST NOT be split across pages. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-015` | `OBS` | A footnote MUST appear on the same page as the line that references it, and MUST follow that line through any later relocation. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-018` | `OBS` | A block continuation MUST start at the top of its page. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-070` | `OBS` | A block continuation MUST NOT carry the block's leading margin. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-071` | `OBS` | A block MUST be broken only at a boundary its own type defines -- a text block between two lines, a table between two rows -- and never inside one. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-072` | `OBS` | A block broken across pages MUST leave at least two of its lines on the page it breaks from, unless the whole block is three lines or fewer. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-073` | `OBS` | A block broken across pages MUST carry at least two of its lines onto the page it continues on, unless honouring that would leave fewer than two behind. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-074` | `OBS` | A heading, or a block that asks to stay with its successor, MUST NOT be placed where fewer than two lines of what follows it fit under it, unless moving it would waste over a quarter of the page. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-075` | `OBS` | A block MUST NOT be broken across pages unless no page of its own holds it whole. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-010` | `INV` | Pagination MUST run in the Logic thread. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-064` | `INV` | The layout the Logic thread produces MUST be the single source of truth for both the screen and PDF export: a second layout computation MUST NOT exist beside it. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-033` | `INV` | The page layout MUST be derived on every read: a page number, a break position or a measured height MUST NOT be read back from a stored copy. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-065` | `INV` | No container MUST hold a page number, a break position or a measured height. | this spec section 2; `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5); the schema declares no such container, which is the format holding this row before any code does | unimplemented |
+| `PROSE-011` | `INV` | Every in-range page index MUST resolve to a list, empty if the page holds nothing: a reader MUST NOT hit a missing entry. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-066` | `INV` | What a page carries MUST include the continuation of a block broken onto it, not the blocks that start there alone. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-067` | `INV` | A layout MUST carry the first page on which it differs from the layout it replaces. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-016` | `INV` | A header or footer MUST NOT consume more than a quarter of the page height. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-017` | `INV` | A fresh page MUST accept at least one line: the layout MUST NOT produce a degenerate empty page. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-068` | `INV` | A footnote ordinal MUST be assigned from the position of its reference in the document flow, and MUST NOT change when placement moves the note to another page. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-034` | `INV` | Every font family label MUST be resolved to a loaded face before shaping; an unmatched label MUST NOT be handed to the shaper. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-036` | `INV` | A full shaped layout MUST be retained past measurement only for a block that splits across pages; every other block MUST keep its line metrics alone. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-012` | `OBS` | A manual page break MUST never be relaxed: it opens a page whatever else the placement is weighing. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-069` | `OBS` | Margin collapse MUST never be skipped: it sits above every heuristic in the constraint order. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-013` | `OBS` | A heading MUST NOT be split across pages: it is pushed whole to the next page. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-014` | `OBS` | An image MUST NOT be split across pages. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-015` | `OBS` | A footnote MUST appear on the same page as the line that references it, and MUST follow that line through any later relocation. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-018` | `OBS` | A block continuation MUST start at the top of its page. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-070` | `OBS` | A block continuation MUST NOT carry the block's leading margin. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-071` | `OBS` | A block MUST be broken only at a boundary its own type defines -- a text block between two lines, a table between two rows -- and never inside one. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-072` | `OBS` | A block broken across pages MUST leave at least two of its lines on the page it breaks from, unless the whole block is three lines or fewer. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-073` | `OBS` | A block broken across pages MUST carry at least two of its lines onto the page it continues on, unless honouring that would leave fewer than two behind. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-074` | `OBS` | A heading, or a block that asks to stay with its successor, MUST NOT be placed where fewer than two lines of what follows it fit under it, unless moving it would waste over a quarter of the page. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-075` | `OBS` | A block MUST NOT be broken across pages unless no page of its own holds it whole. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Lay the whole document out again
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-076` | `POST` | A full recomputation MUST measure both bands and assign every footnote ordinal before it places its first block. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-077` | `POST` | A full recomputation MUST place blocks in the order of a depth-first walk of the block tree: that walk is the document flow. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-078` | `POST` | Placement MUST resolve a constraint it cannot meet by moving forward: it MUST NOT revisit a page it has already emitted. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-079` | `FRAME` | Laying the document out MUST NOT write to the document it measures. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-076` | `POST` | A full recomputation MUST measure both bands and assign every footnote ordinal before it places its first block. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-077` | `POST` | A full recomputation MUST place blocks in the order of a depth-first walk of the block tree: that walk is the document flow. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-078` | `POST` | Placement MUST resolve a constraint it cannot meet by moving forward: it MUST NOT revisit a page it has already emitted. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-079` | `FRAME` | Laying the document out MUST NOT write to the document it measures. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Reflow after an edit
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-080` | `POST` | A partial reflow MUST produce the layout a full recomputation of the same document would have produced. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-081` | `POST` | A partial reflow MUST resume placement at the edited block and MUST stop at the first later block whose page and page-relative position are what they already were. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-035` | `POST` | An edit that inserts or removes a footnote reference MUST force a full recomputation: the incremental path MUST NOT leave an ordinal or a page reservation stale. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-082` | `POST` | A change to the page box, to either band, to a document default, or a whole-document import MUST force a full recomputation. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-083` | `FRAME` | A partial reflow MUST NOT re-shape a block whose text and whose resolved style are both unchanged. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-080` | `POST` | A partial reflow MUST produce the layout a full recomputation of the same document would have produced. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-081` | `POST` | A partial reflow MUST resume placement at the edited block and MUST stop at the first later block whose page and page-relative position are what they already were. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-035` | `POST` | An edit that inserts or removes a footnote reference MUST force a full recomputation: the incremental path MUST NOT leave an ordinal or a page reservation stale. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-082` | `POST` | A change to the page box, to either band, to a document default, or a whole-document import MUST force a full recomputation. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-083` | `FRAME` | A partial reflow MUST NOT re-shape a block whose text and whose resolved style are both unchanged. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Settle the table of contents
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `PROSE-019` | `POST` | Table-of-contents stabilization MUST run as a bounded multi-pass step. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-084` | `FRAME` | Settling the table of contents MUST NOT run on the path that answers a keystroke. | this spec section 2 | not built -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-019` | `POST` | Table-of-contents stabilization MUST run as a bounded multi-pass step. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-084` | `FRAME` | Settling the table of contents MUST NOT run on the path that answers a keystroke. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the full recomputation of 100 pages, the partial reflow, the cold shape of ten dirty
   blocks, the cold shape at open and the layout handoff: five rows of

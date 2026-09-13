@@ -21,42 +21,42 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SRV-060` | `INV` | An organization MUST NOT be left without an owner. | this spec section 3 | `ambre_server::routes::orgs::tests::integration::owner_cannot_demote_last_owner`, `::owner_cannot_remove_last_owner`, `::owner_can_leave_when_another_owner_remains`. The count is taken inside the same transaction as the change, so two concurrent departures cannot both pass it | verified |
-| `SRV-066` | `INV` | The relay MUST NOT be able to combine a set of shares into a secret. | `ambre-spec-zero-knowledge.md`, `ZK-004`; `ambre-spec-server.md`, `SRV-012` | crate graph: `deny.toml` refuses the secret-sharing crate in this process, and the continuous-integration `deny` job fails the manifest that declares it. It was declared and unused until audit `C4` removed it | verified |
-| `SRV-067` | `INV` | A member's escrowed key MUST reach the relay already sealed to the organization. | `ZK-001`; this spec section 3 | none, and **no route deposits one**: the register carries the column and the release reads it, and nothing anywhere writes it, so the release can only ever answer that there is nothing to release -- section 5 | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-060` | `INV` | An organization MUST NOT be left without an owner. | this spec section 3 | `ambre_server::routes::orgs::tests::integration::owner_cannot_demote_last_owner`; `::owner_cannot_remove_last_owner`; `::owner_can_leave_when_another_owner_remains` -- the count is taken inside the same transaction as the change, so two concurrent departures cannot both pass it | none | verified |
+| `SRV-066` | `INV` | The relay MUST NOT be able to combine a set of shares into a secret. | `ambre-spec-zero-knowledge.md`, `ZK-004`; `ambre-spec-server.md`, `SRV-012` | cargo-deny; crate-graph -- `deny.toml` refuses the secret-sharing crate in this process, and the continuous-integration `deny` job fails the manifest that declares it | none | verified |
+| `SRV-067` | `INV` | A member's escrowed key MUST reach the relay already sealed to the organization. | `ZK-001`; this spec section 3 | none | fails -- no route deposits one. The register carries the column and the release reads it, and nothing anywhere writes it, so the release can only ever answer that there is nothing to release, section 5 | unverified |
 
 ### 1.2 Create an organization
 
 The caller supplies a name, a public key and the quorum it wants its escrow to require.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SRV-062` | `FAIL` | A declared quorum MUST NOT exceed the quorum the relay enforces. | audit `N1`; this spec section 3 | `ambre_server::routes::orgs::tests::shamir_threshold_above_1_rejected_until_reconstruction_lands`, `::shamir_threshold_1_accepted`, `::shamir_out_of_range_rejected`: the three read the refusal, the one value accepted and the range | verified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-062` | `FAIL` | A declared quorum MUST NOT exceed the quorum the relay enforces. | audit `N1`; this spec section 3 | `ambre_server::routes::orgs::tests::shamir_threshold_above_1_rejected_until_reconstruction_lands`; `::shamir_threshold_1_accepted`; `::shamir_out_of_range_rejected` -- the three read the refusal, the one value accepted and the range | none | verified |
 
 ### 1.3 Change who is in the organization
 
 An owner or an administrator adds a member, changes a role, or removes someone. Every clamp is on
 the caller's own rank.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SRV-061` | `FAIL` | A caller MUST NOT grant an organization role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::orgs::tests::admin_cannot_grant_owner`, `::org_role_rank_ordering`; `routes::orgs::tests::integration::admin_cannot_escalate_via_add_member` | verified |
-| `SRV-071` | `FAIL` | A caller MUST NOT remove an organization member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::orgs::tests::integration::admin_cannot_remove_owner`: an administrator asking for an owner's removal is refused | verified |
-| `SRV-076` | `FAIL` | A caller MUST NOT change the role of an organization member ranked above it. | audit `N2`; this spec section 3 | none. `::update_member_role_rejects_invalid_role` was cited for this and asserts something else: an unknown role name is a clean refusal, and a valid change by an owner succeeds. Nothing drives an administrator at an owner's role | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-061` | `FAIL` | A caller MUST NOT grant an organization role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::orgs::tests::admin_cannot_grant_owner`; `::org_role_rank_ordering`; `::integration::admin_cannot_escalate_via_add_member` | none | verified |
+| `SRV-071` | `FAIL` | A caller MUST NOT remove an organization member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::orgs::tests::integration::admin_cannot_remove_owner` -- an administrator asking for an owner's removal is refused | none | verified |
+| `SRV-076` | `FAIL` | A caller MUST NOT change the role of an organization member ranked above it. | audit `N2`; this spec section 3 | none | unheld -- `::update_member_role_rejects_invalid_role` was cited for this and asserts something else: an unknown role name is a clean refusal, and a valid change by an owner succeeds. Nothing drives an administrator at an owner's role | unverified |
 
 ### 1.4 Release an escrowed key
 
 An owner asks for a departed member's sealed seed. Nothing is reconstructed on the relay: it hands
 over an opaque blob.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SRV-064` | `POST` | Every release of an escrowed key MUST be recorded. | this spec section 3 | none. The release writes one row naming the organization, the subject, the caller and the instant, before it answers; no test reads that row back, and nothing refuses a release whose record failed to write | unverified |
-| `SRV-065` | `POST` | A release MUST require the quorum the organization declared. | audit `N1`; this spec section 3 | not built -- lands with the `Split-secret organization recovery` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `SRV-077` | `FRAME` | A release MUST NOT change the subject's key material. | this spec section 3, the escrow as designed; derived | none. The route reads the sealed column and writes only the record, so a release is a read of the escrow and never a re-issue of it. Nothing asserts the column is unchanged afterwards, and a release that rewrote it would take the member's own recovery away | unverified |
-| `SRV-063` | `FAIL` | Only an owner MUST be able to release a member's escrowed key. | this spec section 3; `SRV-062` | `ambre_server::routes::orgs::tests::integration::recovery_requires_auth` covers the caller with no session. Nothing drives an administrator or an ordinary member against the route, which is the refusal that matters while the quorum is one | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-064` | `POST` | Every release of an escrowed key MUST be recorded. | this spec section 3 | none | unheld -- the release writes one row naming the organization, the subject, the caller and the instant, before it answers; no test reads that row back, and nothing refuses a release whose record failed to write | unverified |
+| `SRV-065` | `POST` | A release MUST require the quorum the organization declared. | audit `N1`; this spec section 3 | not built | unbuilt -- lands with the `Split-secret organization recovery` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `SRV-077` | `FRAME` | A release MUST NOT change the subject's key material. | this spec section 3, the escrow as designed; derived | none | unheld -- the route reads the sealed column and writes only the record, so a release is a read of the escrow and never a re-issue of it. Nothing asserts the column is unchanged afterwards, and a release that rewrote it would take the member's own recovery away | unverified |
+| `SRV-063` | `FAIL` | Only an owner MUST be able to release a member's escrowed key. | this spec section 3; `SRV-062` | `ambre_server::routes::orgs::tests::integration::recovery_requires_auth` -- the caller with no session | partial -- nothing drives an administrator or an ordinary member against the route, which is the refusal that matters while the quorum is one | unverified |
 
 * **Budget.** none. Nothing here is on a hot path: an organization is read when a person opens their
   settings, and a release is a rare deliberate act. No row of

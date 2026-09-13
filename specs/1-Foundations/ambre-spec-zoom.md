@@ -21,33 +21,33 @@ status values are normative in `ambre-spec-template.md`. The prefix is `ZOOM`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `ZOOM-004` | `INV` | `Ctrl` with `=`, `-` or `0`, `Ctrl` with the wheel, and a trackpad pinch MUST zoom in every application. | this spec section 3 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `ZOOM-006` | `INV` | The preset ladder MUST be one ladder for every application, read by the shared chip. | this spec section 2; `ambre-spec-chrome.md`, `CHROME-014` | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `ZOOM-004` | `INV` | `Ctrl` with `=`, `-` or `0`, `Ctrl` with the wheel, and a trackpad pinch MUST zoom in every application. | this spec section 3 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `ZOOM-006` | `INV` | The preset ladder MUST be one ladder for every application, read by the shared chip. | this spec section 2; `ambre-spec-chrome.md`, `CHROME-014` | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
 
 ### 1.2 Zoom the view
 
 The user presses a chord, turns the wheel under `Ctrl`, or pinches. One factor moves, about one
 point.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `ZOOM-002` | `POST` | A zoom MUST clamp to the application's supported range, away from zero, whatever the input. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `ZOOM-003` | `POST` | A zoom about a point MUST leave that point under the pointer, in the application's own mapping. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `ZOOM-005` | `POST` | `Ctrl` with `0` MUST return the factor to one, a hundred per cent. | this spec section 3 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `ZOOM-001` | `FRAME` | A zoom MUST emit no CRDT delta. | this spec section 2 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `ZOOM-008` | `FRAME` | A zoom MUST reach no collaborator. | this spec section 2; `ambre-spec-presence.md` | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8). It is not the same rule as emitting no delta: a presence sample is broadcast and written to no document, so a factor riding one would reach every peer while `ZOOM-001` still held | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `ZOOM-002` | `POST` | A zoom MUST clamp to the application's supported range, away from zero, whatever the input. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `ZOOM-003` | `POST` | A zoom about a point MUST leave that point under the pointer, in the application's own mapping. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `ZOOM-005` | `POST` | `Ctrl` with `0` MUST return the factor to one, a hundred per cent. | this spec section 3 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `ZOOM-001` | `FRAME` | A zoom MUST emit no CRDT delta. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `ZOOM-008` | `FRAME` | A zoom MUST reach no collaborator. | this spec section 2; `ambre-spec-presence.md` | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8). It is not the same rule as emitting no delta: a presence sample is broadcast and written to no document, so a factor riding one would reach every peer while `ZOOM-001` still held | unimplemented |
 
 ### 1.3 Zoom to a selection
 
 The user asks for the selection to fill the view. The target may be empty.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `ZOOM-007` | `POST` | A zoom to a selection MUST frame it and clamp. | this spec section 3 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `ZOOM-010` | `FRAME` | A zoom to a selection MUST NOT change the selection. | this spec section 3; derived | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8). The gesture reads a selection to compute a factor, and an application that grew or collapsed it while framing would make the command unrepeatable | unimplemented |
-| `ZOOM-009` | `FAIL` | A zoom to an empty target MUST be ignored, never applied as a degenerate factor. | this spec section 3 | not built -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8). It is the half `ZOOM-007` carried, and the one with a failure mode of its own: framing nothing is a division by a zero-sized box, which clamps to the range bound rather than to anything the user asked for | unimplemented |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `ZOOM-007` | `POST` | A zoom to a selection MUST frame it and clamp. | this spec section 3 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `ZOOM-010` | `FRAME` | A zoom to a selection MUST NOT change the selection. | this spec section 3; derived | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8). The gesture reads a selection to compute a factor, and an application that grew or collapsed it while framing would make the command unrepeatable | unimplemented |
+| `ZOOM-009` | `FAIL` | A zoom to an empty target MUST be ignored, never applied as a degenerate factor. | this spec section 3 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8). It is the half `ZOOM-007` carried, and the one with a failure mode of its own: framing nothing is a division by a zero-sized box, which clamps to the range bound rather than to anything the user asked for | unimplemented |
 
 * **Budget.** none of its own: a zoom recomputes one view transform and repaints, which is the frame
   cost the application's viewport already carries in `ambre-spec-budgets.md`. This document adds no

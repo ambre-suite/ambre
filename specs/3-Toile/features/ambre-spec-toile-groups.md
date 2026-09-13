@@ -18,51 +18,51 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TOILE-149` | `INV` | An element MUST belong to at most one container, a group or a frame. | this spec section 3 | none: the binding detaches a member from its current container and the frame handler does the same, and no test puts one element in two lists and reads the second one back | unverified |
-| `TOILE-009` | `INV` | A group's box MUST be the union of its members' boxes. | this spec section 3 | `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` asserts the union of two corner rects; `::moving_a_group_translates_its_members` asserts it again after a translation | verified |
-| `TOILE-150` | `INV` | A group MUST carry no coordinates of its own. | this spec section 3 | structural, and the construction is the proof: the group seed writes a kind, a rotation, a lock flag and a style register, and no x, y, width or height, so there is no field a peer could author a box into | verified |
-| `TOILE-054` | `INV` | A group left with no member MUST be removed, so the caches stay equal to a rebuild. | this spec section 3; `TOILE-004` | none: `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` would catch a group left behind, because a rebuild never materializes a childless group's box and the incremental cache would keep the stale one. No test drives a group to empty and asserts it is gone | unverified |
-| `TOILE-056` | `INV` | Reading which container an element belongs to MUST NOT cost a walk of the whole board. | `ambre-spec-budgets.md section 1`; this spec section 6 | none, and **the rule fails today**: the lookup materializes the entire element map and scans it, and the visible-set walk calls it once per visible element -- section 6. Answered by the "Engine and render optimization" Story (`ambre-roadmap.md` E6), which names the parent-lookup scan | unverified |
-| `TOILE-UI-119` | `OBS` | Every painted element MUST name its immediate enclosing group, and MUST name none when it has no group. | this spec section 3 | `ambre_toile::logic::convergence_tests::derive_populates_the_group_edge_on_members` reads the edge off the derived viewport for both members and for the group itself, three assertions for the two halves of the rule | verified |
-| `TOILE-UI-120` | `OBS` | A group MUST paint nothing of its own: no fill, no border, no title. | this spec section 4 | none: the derivation emits the group as a node with a derived box, and no test reads a group node's style back -- what the user sees around it is the selection box, which another document owns | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-149` | `INV` | An element MUST belong to at most one container, a group or a frame. | this spec section 3 | none | unheld -- the binding detaches a member from its current container and the frame handler does the same, and no test puts one element in two lists and reads the second one back | unverified |
+| `TOILE-009` | `INV` | A group's box MUST be the union of its members' boxes. | this spec section 3 | `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- the union of two corner rects; `ambre_toile::logic::convergence_tests::moving_a_group_translates_its_members` -- the same union again after a translation | none | verified |
+| `TOILE-150` | `INV` | A group MUST carry no coordinates of its own. | this spec section 3 | structural -- the group seed writes a kind, a rotation, a lock flag and a style register, and no x, y, width or height, so there is no field a peer could author a box into | none | verified |
+| `TOILE-054` | `INV` | A group left with no member MUST be removed, so the caches stay equal to a rebuild. | this spec section 3; `TOILE-004` | none | unheld -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` would catch a group left behind, because a rebuild never materializes a childless group's box and the incremental cache would keep the stale one, but no test drives a group to empty and asserts it is gone | unverified |
+| `TOILE-056` | `INV` | Reading which container an element belongs to MUST NOT cost a walk of the whole board. | `ambre-spec-budgets.md section 1`; this spec section 6 | none | fails -- the lookup materializes the entire element map and scans it, and the visible-set walk calls it once per visible element, section 6. Answered by the `Engine and render optimization` Story (`ambre-roadmap.md` E6), which names the parent-lookup scan | unverified |
+| `TOILE-UI-119` | `OBS` | Every painted element MUST name its immediate enclosing group, and MUST name none when it has no group. | this spec section 3 | `ambre_toile::logic::convergence_tests::derive_populates_the_group_edge_on_members` -- it reads the edge off the derived viewport for both members and for the group itself, three assertions for the two halves of the rule | none | verified |
+| `TOILE-UI-120` | `OBS` | A group MUST paint nothing of its own: no fill, no border, no title. | this spec section 4 | none | unheld -- the derivation emits the group as a node with a derived box, and no test reads a group node's style back. What the user sees around it is the selection box, which another document owns | unverified |
 
 ### 1.2 Bind a selection into a group
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TOILE-052` | `POST` | A group MUST enter the paint order below its lowest member, so the members keep their relative order above it. | this spec section 3 | `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members`, its second assertion: the paint order reads group, then the two members in their prior order | verified |
-| `TOILE-151` | `POST` | An id the board no longer holds MUST be dropped from the binding. | this spec section 3 | none: the filter reads the bounds cache for each requested id, and no test asks to bind an id a peer has just deleted | unverified |
-| `TOILE-152` | `POST` | A selected element that encloses another selected element MUST be dropped from the binding, and the enclosed ones MUST be bound. | this spec section 3; section 5 | none: the filter walks each member's subtree looking for a sibling of the request, and no test selects a group together with one of its own members -- section 6 | unverified |
-| `TOILE-153` | `FRAME` | Binding a group MUST NOT move any member. | this spec section 3 | none: the binding writes a membership list and a paint-order entry, and the binding test reads the group's own box back and never a member's | unverified |
-| `TOILE-055` | `FAIL` | A binding left with fewer than two distinct members MUST create no group. | this spec section 3 | none, and the refusal is silent: the handler returns an empty outcome with no notice, so a user pressing the chord on one element sees nothing at all -- section 6. Answered by the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-052` | `POST` | A group MUST enter the paint order below its lowest member, so the members keep their relative order above it. | this spec section 3 | `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- its second assertion, where the paint order reads group, then the two members in their prior order | none | verified |
+| `TOILE-151` | `POST` | An id the board no longer holds MUST be dropped from the binding. | this spec section 3 | none | unheld -- the filter reads the bounds cache for each requested id, and no test asks to bind an id a peer has just deleted | unverified |
+| `TOILE-152` | `POST` | A selected element that encloses another selected element MUST be dropped from the binding, and the enclosed ones MUST be bound. | this spec section 3; section 5 | none | unheld -- the filter walks each member's subtree looking for a sibling of the request, and no test selects a group together with one of its own members, section 6 | unverified |
+| `TOILE-153` | `FRAME` | Binding a group MUST NOT move any member. | this spec section 3 | none | unheld -- the binding writes a membership list and a paint-order entry, and the binding test reads the group's own box back and never a member's | unverified |
+| `TOILE-055` | `FAIL` | A binding left with fewer than two distinct members MUST create no group. | this spec section 3 | none | unheld -- the refusal is silent: the handler returns an empty outcome with no notice, so a user pressing the chord on one element sees nothing at all, section 6. Answered by the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | unverified |
 
 ### 1.3 Move a group
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TOILE-154` | `POST` | A transform on a group MUST reach every member. | this spec section 3 | `ambre_toile::logic::convergence_tests::moving_a_group_translates_its_members` asserts both members at their translated rects | verified |
-| `TOILE-053` | `POST` | A transform on a group MUST reach every leaf of its subtree, however deep the nesting. | this spec section 3 | none: the test above nests nothing, and the two-peer property (`TOILE-017`) generates a group of a group but asserts agreement, not correctness -- a move that stopped at the first level would leave both peers agreeing on it -- section 6 | unverified |
-| `TOILE-155` | `FRAME` | A transform on a group MUST NOT resize it: its box is derived. | this spec section 3 | none: the resize command names one element and the group carries no geometry to write (`TOILE-150`), so the refusal is structural at the schema and unread at the command -- section 6 | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-154` | `POST` | A transform on a group MUST reach every member. | this spec section 3 | `ambre_toile::logic::convergence_tests::moving_a_group_translates_its_members` -- both members at their translated rects | none | verified |
+| `TOILE-053` | `POST` | A transform on a group MUST reach every leaf of its subtree, however deep the nesting. | this spec section 3 | none | unheld -- the test above nests nothing, and the two-peer property (`TOILE-017`) generates a group of a group but asserts agreement, not correctness: a move that stopped at the first level would leave both peers agreeing on it, section 6 | unverified |
+| `TOILE-155` | `FRAME` | A transform on a group MUST NOT resize it: its box is derived. | this spec section 3 | none | unheld -- the resize command names one element and the group carries no geometry to write (`TOILE-150`), so the refusal is structural at the schema and unread at the command, section 6 | unverified |
 
 ### 1.4 Ungroup
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TOILE-010` | `POST` | Ungrouping MUST preserve the surviving children and their relative order. | this spec section 3 | `ambre_toile::logic::convergence_tests::ungroup_keeps_children_and_order`, its second assertion: the paint order after the unbind reads the two children in their prior order | verified |
-| `TOILE-156` | `POST` | Ungrouping MUST remove the group itself. | this spec section 3 | the same test, its first assertion: the group has no box after the unbind | verified |
-| `TOILE-157` | `POST` | The children MUST be re-parented to the group's own container. | this spec section 3 | none: the test ungroups a top-level group, where the container is the board and the re-parenting is a no-op. The nested case, where the children join the enclosing group's list, is driven by nothing | unverified |
-| `TOILE-158` | `FRAME` | Ungrouping MUST NOT move any element. | this spec section 3 | none: the unbind writes a membership list and a paint-order entry, and the test reads the order back, never a position | unverified |
-| `TOILE-159` | `FAIL` | Ungrouping an id that is not a group MUST change nothing. | this spec section 3 | none, and the refusal is silent: the handler returns an empty outcome, which is what makes ungrouping a mixed selection a partial success nobody is told about -- section 6. Answered by the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | unverified |
-| `TOILE-160` | `FAIL` | Ungrouping an id the board does not hold MUST tell the user. | this spec section 3 | none: the handler returns the missing-element error, and no test reads that notice back for this command | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-010` | `POST` | Ungrouping MUST preserve the surviving children and their relative order. | this spec section 3 | `ambre_toile::logic::convergence_tests::ungroup_keeps_children_and_order` -- its second assertion, where the paint order after the unbind reads the two children in their prior order | none | verified |
+| `TOILE-156` | `POST` | Ungrouping MUST remove the group itself. | this spec section 3 | `ambre_toile::logic::convergence_tests::ungroup_keeps_children_and_order` -- its first assertion, where the group has no box after the unbind | none | verified |
+| `TOILE-157` | `POST` | The children MUST be re-parented to the group's own container. | this spec section 3 | none | unheld -- the test ungroups a top-level group, where the container is the board and the re-parenting is a no-op. The nested case, where the children join the enclosing group's list, is driven by nothing | unverified |
+| `TOILE-158` | `FRAME` | Ungrouping MUST NOT move any element. | this spec section 3 | none | unheld -- the unbind writes a membership list and a paint-order entry, and the test reads the order back, never a position | unverified |
+| `TOILE-159` | `FAIL` | Ungrouping an id that is not a group MUST change nothing. | this spec section 3 | none | unheld -- the refusal is silent: the handler returns an empty outcome, which is what makes ungrouping a mixed selection a partial success nobody is told about, section 6. Answered by the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | unverified |
+| `TOILE-160` | `FAIL` | Ungrouping an id the board does not hold MUST tell the user. | this spec section 3 | none | unheld -- the handler returns the missing-element error, and no test reads that notice back for this command | unverified |
 
 ### 1.5 Delete a group
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TOILE-161` | `POST` | Deleting a group MUST delete its members. | this spec section 3 | `ambre_toile::logic::convergence_tests::deleting_a_group_cascades_to_members` asserts an empty board and an empty paint order after deleting the group of two | verified |
-| `TOILE-162` | `FRAME` | Deleting a group MUST NOT remove an element outside its own subtree. | this spec section 3 | none: the delete expands the request to the subtree and strips exactly that set, plus the connectors it orphans, and no test puts a bystander on the board and reads it back | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-161` | `POST` | Deleting a group MUST delete its members. | this spec section 3 | `ambre_toile::logic::convergence_tests::deleting_a_group_cascades_to_members` -- an empty board and an empty paint order after deleting the group of two | none | verified |
+| `TOILE-162` | `FRAME` | Deleting a group MUST NOT remove an element outside its own subtree. | this spec section 3 | none | unheld -- the delete expands the request to the subtree and strips exactly that set, plus the connectors it orphans, and no test puts a bystander on the board and reads it back | unverified |
 
 * **Budget.** the transform command under 1 ms and a remote change under 2 ms, two rows of
   `ambre-spec-budgets.md section 1`. `TOILE-056` is why neither holds on a large board: the

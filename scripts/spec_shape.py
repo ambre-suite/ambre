@@ -102,6 +102,10 @@ import sys
 from collections import namedtuple
 from pathlib import Path
 
+# The `Implementation` vocabulary is the template's, read from it, and the other
+# two gates read it from the same place (`scripts/template_vocabulary.py`).
+from template_vocabulary import IMPLEMENTATION_VALUES
+
 # What `classify` returns: the same partition counted twice, in lines and in
 # words. Named because a six-tuple indexed by position is how a caller reads
 # `[3]` and gets the wrong unit.
@@ -295,9 +299,10 @@ SECTION_HEADING = re.compile(r"^##\s+(\d+)\s*(bis)?\s*[.:]")
 # Documents that describe no code, so they carry no `Implementation` field.
 NO_CODE_DOCS = SCHEDULE_DOCS | {TEMPLATE, BUDGETS}
 
-# The header field, and the only three values it takes
-# (`ambre-spec-template.md section 1.A`). One clause may follow, after a ` -- `,
-# naming what is missing: "partial -- the file round trip is not built".
+# The header field, and the only values it takes, read from the table that
+# states them (`ambre-spec-template.md section 1.A`). One clause may follow,
+# after a ` -- `, naming what is missing: "partial -- the file round trip is
+# not built".
 #
 # The value ends at the space or at the line: a word boundary let `implemented.`
 # through, and a value the gate reads as one of three while the corpus carries
@@ -305,7 +310,9 @@ NO_CODE_DOCS = SCHEDULE_DOCS | {TEMPLATE, BUDGETS}
 # value is a clause, so it announces itself with the dash the template writes.
 HEADER_FIELDS = ("Type", "Implementation")
 IMPLEMENTATION = re.compile(
-    r"^\*\*Implementation:\*\* (implemented|partial|design-only)( -- \S.*)?$"
+    r"^\*\*Implementation:\*\* ("
+    + "|".join(re.escape(v) for v in IMPLEMENTATION_VALUES)
+    + r")( -- \S.*)?$"
 )
 
 # A feature document describes the current state. These betray the steps.

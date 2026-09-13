@@ -41,19 +41,22 @@ import re
 import sys
 from pathlib import Path
 
+# The template states both closed sets this file reads, and `contracts.py` reads
+# them from the same place (`scripts/template_vocabulary.py`).
+from template_vocabulary import IMPLEMENTATION_VALUES, STATUSES
+
 ROOT = Path(__file__).resolve().parent.parent
 SPECS = ROOT / "specs"
 
-# The five status values (`ambre-spec-architecture.md section 4`). A row is built
-# unless it is `unimplemented`; `unverified`, `human-review` and `qa-manual` are
-# built surface whose evidence is weaker than a test.
-STATUSES = ("verified", "unverified", "human-review", "qa-manual", "unimplemented")
+# A row is built unless it is `unimplemented`; `unverified`, `human-review` and
+# `qa-manual` are built surface whose evidence is weaker than a test.
 LOOSE = ("unverified", "human-review", "qa-manual")
 
-# The reading order of the file: what the application does, then what it half
-# does, then what it only describes. Alphabetical inside a state, so a diff of
-# the generated file shows the feature that moved and nothing else.
-STATES = ("implemented", "partial", "design-only")
+# `STATES` is the template's `Implementation` vocabulary, and its order is the
+# reading order of the file: what the application does, then what it half does,
+# then what it only describes. Alphabetical inside a state, so a diff of the
+# generated file shows the feature that moved and nothing else.
+STATES = IMPLEMENTATION_VALUES
 
 # Same row grammar as `contracts.py`: an id, then cells, then the status last.
 ROW = re.compile(r"^\|\s*`(?P<id>[A-Z][A-Z0-9-]*-\d{3})`\s*\|.*\|\s*(?P<status>[a-z-]+)\s*\|\s*$")

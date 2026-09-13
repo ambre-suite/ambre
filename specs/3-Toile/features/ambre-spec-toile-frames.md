@@ -18,23 +18,23 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TOILE-011` | `INV` | A frame's children MUST paint after the frame: a child's place in the paint order MUST be later than its frame's. | this spec section 3 | `ambre_toile::logic::convergence_tests::frame_children_paint_after_their_frame`, which creates both children before the frame so the clamp has to fire, and reads the paint order back. The two membership tests this row also cited never read that order | verified |
-| `TOILE-049` | `INV` | An element MUST belong to at most one container: joining a frame MUST detach it from its group. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_detaches_from_a_group`, which reads both memberships back | verified |
-| `TOILE-051` | `CONC` | A frame's speaker-notes container MUST exist from its birth, so two peers editing it first MUST converge. | this spec section 3; `TOILE-029` | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` | verified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-011` | `INV` | A frame's children MUST paint after the frame: a child's place in the paint order MUST be later than its frame's. | this spec section 3 | `ambre_toile::logic::convergence_tests::frame_children_paint_after_their_frame` -- it creates both children before the frame so the clamp has to fire, and reads the paint order back. The two membership tests this row also cited never read that order | none | verified |
+| `TOILE-049` | `INV` | An element MUST belong to at most one container: joining a frame MUST detach it from its group. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_detaches_from_a_group` -- both memberships are read back | none | verified |
+| `TOILE-051` | `CONC` | A frame's speaker-notes container MUST exist from its birth, so two peers editing it first MUST converge. | this spec section 3; `TOILE-029` | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` | none | verified |
 
 ### 1.2 Add a selection to a frame
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `TOILE-099` | `POST` | Adding elements to a frame MUST make each one a member. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_adds_and_removes_membership` reads the membership back after an add of two | verified |
-| `TOILE-237` | `POST` | Removing elements from a frame MUST take each one out. | this spec section 3 | the same test, on its remove step: one of the two members leaves and the membership is read back without it | verified |
-| `TOILE-100` | `POST` | An element removed and added again in one gesture MUST end up last in the frame. | this spec section 3 | none, and it is the half `TOILE-099` was carrying. The handler removes before it adds for exactly this, and the membership test does its add and its remove in two separate commands | unverified |
-| `TOILE-048` | `POST` | A membership change MUST be one undo item, the clamping of the paint order included. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_is_one_undo_item` creates the frame before the child, so the child already paints above it and the clamp never fires; **the rule fails when it does** -- the two commits leave in one broadcast and split into two undo items, so the first undo reverts the reordering alone -- section 6 | unverified |
-| `TOILE-101` | `FRAME` | An element the frame cannot take MUST NOT stop the rest: the frame itself, an id the board does not hold and a current member are skipped, and the other elements of the same gesture still join. | this spec section 3 | none. Each of the three is a `continue` in the add loop, and no test mixes an eligible id with an ineligible one | unverified |
-| `TOILE-102` | `FRAME` | A membership change that changes nothing MUST write nothing and broadcast nothing. | this spec section 3 | none. The handler returns before any commit when neither list moved, and no test sends a gesture with no effect | unverified |
-| `TOILE-050` | `FAIL` | A membership change aimed at an element that is not a frame MUST be refused, and MUST write nothing. | this spec section 3 | none. The handler returns silently, with no event at all, where a frame the board does not hold returns an unknown-element error, so a surface cannot tell the refusal from a no-op. Neither path is tested | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-099` | `POST` | Adding elements to a frame MUST make each one a member. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_adds_and_removes_membership` -- the membership is read back after an add of two | none | verified |
+| `TOILE-237` | `POST` | Removing elements from a frame MUST take each one out. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_adds_and_removes_membership` -- its remove step: one of the two members leaves and the membership is read back without it | none | verified |
+| `TOILE-100` | `POST` | An element removed and added again in one gesture MUST end up last in the frame. | this spec section 3 | none | unheld -- it is the half `TOILE-099` was carrying. The handler removes before it adds for exactly this, and the membership test does its add and its remove in two separate commands | unverified |
+| `TOILE-048` | `POST` | A membership change MUST be one undo item, the clamping of the paint order included. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_is_one_undo_item` -- it creates the frame before the child, so the child already paints above it and the clamp never fires | fails -- when the clamp does fire, the two commits leave in one broadcast and split into two undo items, so the first undo reverts the reordering alone, section 6 | unverified |
+| `TOILE-101` | `FRAME` | An element the frame cannot take MUST NOT stop the rest: the frame itself, an id the board does not hold and a current member are skipped, and the other elements of the same gesture still join. | this spec section 3 | none | unheld -- each of the three is a `continue` in the add loop, and no test mixes an eligible id with an ineligible one | unverified |
+| `TOILE-102` | `FRAME` | A membership change that changes nothing MUST write nothing and broadcast nothing. | this spec section 3 | none | unheld -- the handler returns before any commit when neither list moved, and no test sends a gesture with no effect | unverified |
+| `TOILE-050` | `FAIL` | A membership change aimed at an element that is not a frame MUST be refused, and MUST write nothing. | this spec section 3 | none | unheld -- the handler returns silently, with no event at all, where a frame the board does not hold returns an unknown-element error, so a surface cannot tell the refusal from a no-op. Neither path is tested | unverified |
 
 * **Budget.** the membership change under 1 ms, the transform-command row of
   `ambre-spec-budgets.md section 1`. The clamp is a loop that re-materializes the whole paint

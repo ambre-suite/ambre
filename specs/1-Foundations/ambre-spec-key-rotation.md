@@ -22,35 +22,35 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SYNC-044` | `INV` | The cache of previous keys MUST be bounded. | this spec section 3 | none. The bound is a truncation at ten with no test: nothing rotates eleven times and counts what is held | unverified |
-| `SYNC-078` | `INV` | A key leaving the cache MUST be wiped. | this spec section 3; `ZK-011` | type-level: the document key derives `ZeroizeOnDrop`, so truncating the cache wipes what it drops and a key type that did not would be a change to the type rather than to this path | verified |
-| `SYNC-045` | `INV` | An inbound frame MUST be opened with the key its parent snapshot names, never by trying every key in turn. | this spec section 3 | none, and **the rule fails today**: the open tries the current key, then every cached key, then the current key again, so a frame nobody can open costs eleven attempts and a frame sealed under a revoked key still opens. Answered by the `A revoked key opens nothing` Story (`ambre-roadmap.md` E7) | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-044` | `INV` | The cache of previous keys MUST be bounded. | this spec section 3 | none | unheld -- the bound is a truncation at ten with no test: nothing rotates eleven times and counts what is held | unverified |
+| `SYNC-078` | `INV` | A key leaving the cache MUST be wiped. | this spec section 3; `ZK-011` | type-level -- the document key derives `ZeroizeOnDrop`, so truncating the cache wipes what it drops and a key type that did not would be a change to the type rather than to this path | none | verified |
+| `SYNC-045` | `INV` | An inbound frame MUST be opened with the key its parent snapshot names, never by trying every key in turn. | this spec section 3 | none | fails -- the open tries the current key, then every cached key, then the current key again, so a frame nobody can open costs eleven attempts and a frame sealed under a revoked key still opens. Answered by the `A revoked key opens nothing` Story (`ambre-roadmap.md` E7) | unverified |
 
 ### 1.2 Remove a member
 
 The initiating client asks the relay to drop the member, then generates a key, re-wraps it for
 everyone who stays and posts every copy at once.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SYNC-041` | `POST` | A revoke MUST rotate the key, so the member removed cannot open what is written after it. | `ZK-001`; this spec section 3 | none, and **the rule fails today**: the removal is posted first, and every later step can fail on its own. The user is told the revoke failed while the member is already out of the list, and nothing retries the rotation. Answered by the "A revoke either completes or changes nothing" Story (`ambre-roadmap.md` E7) | unverified |
-| `SYNC-042` | `POST` | A rotation MUST re-key everything the document key seals, not the deltas alone. | this spec section 3 | none, and **the rule fails today**: the document name and every media blob stay sealed under the previous key and no member can open either again, so a revoke silently blanks the name and every picture. Answered by the "The rotation re-keys the whole document" Story (`ambre-roadmap.md` E7) | unverified |
-| `SYNC-046` | `POST` | Whoever rotates MUST become the wrapper of record, so a later unwrap resolves against their key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-034` | `ambre_server::routes::tests::revoke_then_rotate_replaces_owner_key`: it reads the wrapper recorded after the rotation and fails when the inviter is still named | verified |
-| `SYNC-047` | `POST` | The rotation notice MUST reach the other clients only after the new keys are stored. | this spec section 3; `ambre-spec-server.md` | none. The relay writes every wrapped copy in one transaction and broadcasts after it commits, and no test asserts the order: a broadcast before the commit would let a client fetch the previous copy and see no error | unverified |
-| `SYNC-048` | `POST` | A rotation MUST seal a fresh snapshot under the new key, so the state after it stands on its own. | this spec section 3 | not built -- lands with the "The rotation re-keys the whole document" Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SYNC-079` | `FRAME` | A revoke MUST NOT change the document's content. | this spec section 3, the opening of the model | none. A rotation changes which key opens the document and never what it holds, and no test reads the state back across one. The re-key `SYNC-042` is missing would touch the name and the blobs, which is the one place the two rules meet | unverified |
-| `SYNC-043` | `FAIL` | A member the rotation cannot re-wrap for MUST be reported, never dropped in silence. | this spec section 3 | none, and **the rule fails today**: `ambre_sync::sharing::tests::rotate_entries_cover_valid_members_and_skip_malformed` asserts the skip this rule forbids. A member whose exchange key does not parse keeps a copy of the previous key and loses the document without a message to anyone. Answered by the "A revoke either completes or changes nothing" Story (`ambre-roadmap.md` E7) | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-041` | `POST` | A revoke MUST rotate the key, so the member removed cannot open what is written after it. | `ZK-001`; this spec section 3 | none | fails -- the removal is posted first, and every later step can fail on its own. The user is told the revoke failed while the member is already out of the list, and nothing retries the rotation. Answered by the "A revoke either completes or changes nothing" Story (`ambre-roadmap.md` E7) | unverified |
+| `SYNC-042` | `POST` | A rotation MUST re-key everything the document key seals, not the deltas alone. | this spec section 3 | none | fails -- the document name and every media blob stay sealed under the previous key and no member can open either again, so a revoke silently blanks the name and every picture. Answered by the "The rotation re-keys the whole document" Story (`ambre-roadmap.md` E7) | unverified |
+| `SYNC-046` | `POST` | Whoever rotates MUST become the wrapper of record, so a later unwrap resolves against their key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-034` | `ambre_server::routes::tests::revoke_then_rotate_replaces_owner_key` -- it reads the wrapper recorded after the rotation and fails when the inviter is still named | none | verified |
+| `SYNC-047` | `POST` | The rotation notice MUST reach the other clients only after the new keys are stored. | this spec section 3; `ambre-spec-server.md` | none | unheld -- the relay writes every wrapped copy in one transaction and broadcasts after it commits, and no test asserts the order: a broadcast before the commit would let a client fetch the previous copy and see no error | unverified |
+| `SYNC-048` | `POST` | A rotation MUST seal a fresh snapshot under the new key, so the state after it stands on its own. | this spec section 3 | not built | unbuilt -- lands with the "The rotation re-keys the whole document" Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SYNC-079` | `FRAME` | A revoke MUST NOT change the document's content. | this spec section 3, the opening of the model | none | unheld -- a rotation changes which key opens the document and never what it holds, and no test reads the state back across one. The re-key `SYNC-042` is missing would touch the name and the blobs, which is the one place the two rules meet | unverified |
+| `SYNC-043` | `FAIL` | A member the rotation cannot re-wrap for MUST be reported, never dropped in silence. | this spec section 3 | none | fails -- `ambre_sync::sharing::tests::rotate_entries_cover_valid_members_and_skip_malformed` asserts the skip this rule forbids. A member whose exchange key does not parse keeps a copy of the previous key and loses the document without a message to anyone. Answered by the "A revoke either completes or changes nothing" Story (`ambre-roadmap.md` E7) | unverified |
 
 ### 1.3 Take on a rotation
 
 Every other client is told the key rotated, fetches its new wrapped copy and swaps.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
-|---|---|---|---|---|---|
-| `SYNC-080` | `POST` | Taking on a rotation MUST install the new key and move the previous one into the cache. | this spec section 3, every other client, step 3 | none. The swap and the cache push are one call, and no test drives the notice through to the key a client holds afterwards | unverified |
-| `SYNC-081` | `FRAME` | Taking on a rotation MUST NOT close the document. | this spec section 3, a rotation is not a removal | none. Being removed is a separate, targeted notice on the user's own channel, and the rotation notice reports no departure. Nothing asserts the two stay apart, and a client that closed on a rotation would drop every member who stayed | unverified |
+| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-080` | `POST` | Taking on a rotation MUST install the new key and move the previous one into the cache. | this spec section 3, every other client, step 3 | none | unheld -- the swap and the cache push are one call, and no test drives the notice through to the key a client holds afterwards | unverified |
+| `SYNC-081` | `FRAME` | Taking on a rotation MUST NOT close the document. | this spec section 3, a rotation is not a removal | none | unheld -- being removed is a separate, targeted notice on the user's own channel, and the rotation notice reports no departure. Nothing asserts the two stay apart, and a client that closed on a rotation would drop every member who stayed | unverified |
 
 * **Budget.** one elliptic-curve operation per remaining member, about 150 us each on mobile, plus
   one full snapshot seal once `SYNC-048` lands: the crypto rows of
