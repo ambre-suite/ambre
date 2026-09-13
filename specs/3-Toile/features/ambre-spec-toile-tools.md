@@ -45,7 +45,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-249` | POST | A press that does not drag MUST fall back to the tool's default size. | this spec section 2 | `ambre_toile::ui::tool::tests::shape_click_uses_default_size` and `::sticky_click_creates_sticky_with_empty_text_and_picked_fill`, which also holds the picked colour riding the tool | verified |
 | `TOILE-UI-250` | FRAME | A gesture MUST NOT write while the pointer is down: no command, no history entry, no round trip. | this spec section 2; section 4 | `::resize_preview_then_release_emits_exactly_one_command` asserts the intermediate move produces nothing while the live override is already there | verified |
 | `TOILE-UI-251` | FAIL | A press on an element that moves nothing MUST emit no command. | this spec section 2 | `ambre_toile::ui::tool::tests::click_without_movement_emits_no_command` | verified |
-| `TOILE-UI-252` | FAIL | A press on a transform handle that moves nothing MUST emit no command. | this spec section 2 | none, and **the rule fails today**: the release emits a resize or a rotate whatever the pointer did, so a stray click on a handle costs a delta and an undo item for a geometry nobody changed -- section 5 | unverified |
+| `TOILE-UI-252` | FAIL | A press on a transform handle that moves nothing MUST emit no command. | this spec section 2 | none, and **the rule fails today**: the release emits a resize or a rotate whatever the pointer did, so a stray click on a handle costs a delta and an undo item for a geometry nobody changed -- section 5. Answered by the `The board tools let go` Story (`ambre-roadmap.md` E7) | unverified |
 | `TOILE-UI-253` | FAIL | A connector released anywhere but on a second element MUST emit nothing. | this spec section 2 | `ambre_toile::ui::tool::tests::connector_release_on_empty_emits_nothing` | verified |
 | `TOILE-UI-254` | FAIL | A pen path of fewer than two nodes MUST emit nothing. | this spec section 2 | none. The guard is there and no test drives it; the sibling guard on the freehand stroke is unreachable, because press and release each add a sample -- section 5 | unverified |
 
@@ -55,7 +55,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|
 | `TOILE-UI-041` | POST | Holding `Space` MUST pan, in any tool. | this spec section 3; `features/ambre-spec-toile-viewport.md section 1` | none. The key sets a flag the pointer handler reads before it dispatches to the machine, and no test drives the pair | unverified |
 | `TOILE-UI-255` | FRAME | A space-drag MUST NOT start the active tool's gesture. | this spec section 3 | none. The pan branch returns before the machine is reached, so the rule holds by the early return and nothing would go red the day the branch moved | unverified |
-| `TOILE-UI-256` | POST | Releasing `Space` MUST give the board back to its tool. | this spec section 3 | none, and **the rule fails today**: the flag is raised on the key and lowered by nothing, so one press turns every later drag into a pan for the rest of the session -- section 5 | unverified |
+| `TOILE-UI-256` | POST | Releasing `Space` MUST give the board back to its tool. | this spec section 3 | none, and **the rule fails today**: the flag is raised on the key and lowered by nothing, so one press turns every later drag into a pan for the rest of the session -- section 5. Answered by the `The board tools let go` Story (`ambre-roadmap.md` E7) | unverified |
 
 ### 1.5 Cancel a gesture
 

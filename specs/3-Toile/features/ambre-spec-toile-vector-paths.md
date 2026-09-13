@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|
 | `TOILE-FEAT-006` | `INV` | Each combinator MUST be area-correct: a union is the two areas minus their overlap, an intersection is the overlap, a subtraction is the subject minus the union of the rest, an exclusion is the symmetric difference. | this spec section 3 | `ambre_toile::logic::boolean::tests::union_area_is_combined_minus_overlap`, `::intersect_area_is_overlap`, `::subtract_removes_the_clip`, `::exclude_is_symmetric_difference`, and on the degenerate inputs `::union_of_disjoint_keeps_both`, `::intersect_of_disjoint_is_empty`, `::subtract_folds_over_multiple_clips` | verified |
 | `TOILE-FEAT-033` | `INV` | A combinator MUST return the same outline for the same inputs. | this spec section 3 | `ambre_toile::logic::boolean::tests::deterministic_across_runs` calls the solver twice in one process and compares the SVG, so it holds one build against itself; nothing compares two builds or two platforms, which is what the row said | verified |
-| `TOILE-FEAT-018` | `INV` | A boolean operation MUST be reachable from a surface. | this spec section 4 | none, and **the rule fails today**: the command has no menu entry, no button and no chord anywhere in the workspace, so the tests hold behaviour nothing can invoke -- section 6 | unverified |
+| `TOILE-FEAT-018` | `INV` | A boolean operation MUST be reachable from a surface. | this spec section 4 | none, and **the rule fails today**: the command has no menu entry, no button and no chord anywhere in the workspace, so the tests hold behaviour nothing can invoke -- section 6. It lands with the `Boolean operations reach a surface` Story (`ambre-roadmap.md` E6) | unverified |
 
 ### 1.2 Draw a path with the pen
 

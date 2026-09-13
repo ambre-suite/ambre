@@ -35,7 +35,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-034` | OBS | The selection box and its handles MUST follow a single element's rotation. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_rotates_box_and_handles_for_a_rotated_element`, `ambre_toile::ui::tool::tests::hover_handle_follows_the_element_rotation` | verified |
 | `TOILE-UI-229` | OBS | A single selection MUST wear four corner squares and a rotate handle above the top edge. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_draws_box_and_handles_for_single_selection` | verified |
 | `TOILE-UI-230` | OBS | A multi-selection MUST wear an upright union box and no resize handle, having no shared angle to resize along. | this spec section 3; section 4 | none: no test paints a two-element selection | unverified |
-| `TOILE-UI-231` | OBS | A locked element MUST NOT wear a selection box. | this spec section 3 | none: the overlay reads the id list and never the lock, and select-all puts a locked element in that list -- **the rule fails today** -- section 5 | unverified |
+| `TOILE-UI-231` | OBS | A locked element MUST NOT wear a selection box. | this spec section 3 | none: the overlay reads the id list and never the lock, and select-all puts a locked element in that list -- **the rule fails today** -- section 5. Answered by the `A locked element is locked on every surface` Story (`ambre-roadmap.md` E7) | unverified |
 
 ### 1.2 Click an element
 
@@ -52,8 +52,8 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|
 | `TOILE-UI-031` | POST | A marquee MUST take every element it covers. | this spec section 2 | `ambre_toile::ui::hit::tests::marquee_selects_covered_elements` | verified |
 | `TOILE-UI-235` | POST | A marquee MUST replace the selection on release, not while it is dragged. | this spec section 3 | `ambre_toile::ui::tool::tests::drag_empty_makes_a_marquee_then_selects` | verified |
-| `TOILE-UI-236` | POST | A marquee MUST return the same target a click on the same element would return. | this spec section 2; section 4 | none: the marquee returns raw members and never climbs the group chain, so one gesture selects a group and the other its parts -- **the rule fails today** -- section 5 | unverified |
-| `TOILE-UI-237` | POST | A rotated element MUST be judged by the shape the user sees, not by the upright box around it. | this spec section 2 | none: containment is read on the unrotated bounds, so a tilted shape is taken by a rectangle that does not cover it -- **the rule fails today** -- section 5 | unverified |
+| `TOILE-UI-236` | POST | A marquee MUST return the same target a click on the same element would return. | this spec section 2; section 4 | none: the marquee returns raw members and never climbs the group chain, so one gesture selects a group and the other its parts -- **the rule fails today** -- section 5. Answered by the `A marquee takes what it was drawn around` Story (`ambre-roadmap.md` E7) | unverified |
+| `TOILE-UI-237` | POST | A rotated element MUST be judged by the shape the user sees, not by the upright box around it. | this spec section 2 | none: containment is read on the unrotated bounds, so a tilted shape is taken by a rectangle that does not cover it -- **the rule fails today** -- section 5. Answered by the `A marquee takes what it was drawn around` Story (`ambre-roadmap.md` E7) | unverified |
 | `TOILE-UI-238` | FRAME | A marquee MUST NOT take a locked element or a group node. | this spec section 2 | none: `ambre_toile::ui::hit::tests::marquee_selects_covered_elements` covers one element inside and one outside, and neither is locked nor a group | unverified |
 
 ### 1.4 Enter and leave a group scope
@@ -68,8 +68,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `TOILE-UI-033` | POST | Select-all MUST cover the whole board, not the part the UI thread holds. | this spec section 3; section 4 | none: the walk is over the culled set, so **the rule fails off screen** -- section 5 | unverified |
-| `TOILE-UI-241` | POST | Select-all MUST obey the exclusions a pick obeys: no locked element, no group node. | this spec section 3 | none: the walk drops connectors and nothing else, so a locked element joins the selection and the next delete takes it -- **the rule fails today** -- section 5 | unverified |
+| `TOILE-UI-033` | POST | Select-all MUST cover the whole board, not the part the UI thread holds. | this spec section 3; section 4 | none: the walk is over the culled set, so **the rule fails off screen** -- section 5. Answered by the `Toile reads the board, not the screen` Story (`ambre-roadmap.md` E7) | unverified |
+| `TOILE-UI-241` | POST | Select-all MUST obey the exclusions a pick obeys: no locked element, no group node. | this spec section 3 | none: the walk drops connectors and nothing else, so a locked element joins the selection and the next delete takes it -- **the rule fails today** -- section 5. Answered by the `A locked element is locked on every surface` Story (`ambre-roadmap.md` E7) | unverified |
 | `TOILE-UI-242` | FRAME | Select-all MUST NOT alter the group scope the user has entered. | this spec section 3 | verified: structural, and the construction is the proof -- the walk writes the id list and the redraw flag, and no other field | verified |
 
 * **Budget.** the content hit-test and input dispatch under 0.2 ms, one row of

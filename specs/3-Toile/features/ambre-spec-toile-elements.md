@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-193` | POST | A rotate MUST grow the recorded box to the corners the angle sweeps. | this spec section 3 | `ambre_toile::logic::convergence_tests::rotate_expands_the_aabb`, which asserts the four bounds against the sweep | verified |
 | `TOILE-012` | FRAME | A move MUST NOT touch a locked element. | this spec section 3 | `ambre_toile::logic::convergence_tests::locked_element_ignores_move` | verified |
 | `TOILE-036` | FAIL | A resize, a rotate or a body overwrite naming an element the board does not hold MUST answer an error and MUST leave the document unchanged. | this spec section 3 | none. The three handlers share one error helper (`ambre_toile::logic::state::err_no_element`) and no test drives a missing id into them. The connector half has one (`TOILE-007`) | unverified |
-| `TOILE-194` | FAIL | A move or a restyle naming an element the board does not hold MUST answer an error too. | this spec section 3 | none, and the rule fails today: both handlers skip an id that does not resolve and answer as though it had -- section 6 | unverified |
+| `TOILE-194` | FAIL | A move or a restyle naming an element the board does not hold MUST answer an error too. | this spec section 3 | none, and the rule fails today: both handlers skip an id that does not resolve and answer as though it had -- section 6. Answered by the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | unverified |
 
 ### 1.4 Overwrite the body of a note
 
@@ -65,7 +65,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-198` | POST | Deleting an element MUST remove every connector that touched it at either endpoint. | this spec section 3 | `ambre_toile::logic::convergence_tests::delete_drops_owned_connectors`, which deletes one of two joined elements and leaves the board with the other alone | verified |
 | `TOILE-199` | POST | Deleting a container MUST take its members with it, drop each removed id from its membership list, and prune what the removal emptied. | this spec section 3 | `ambre_toile::logic::convergence_tests::deleting_a_group_cascades_to_members` | verified |
 | `TOILE-200` | FRAME | A delete MUST NOT remove an element that is neither named nor a member of one that is. | this spec section 3 | structural, and the construction is the proof: the handler expands the named ids to their subtrees once and walks that set alone | verified |
-| `TOILE-201` | FAIL | A delete naming an element the board does not hold MUST answer an error. | this spec section 3 | none, and the rule fails today: the handler removes what resolves and answers as though the rest had -- section 6 | unverified |
+| `TOILE-201` | FAIL | A delete naming an element the board does not hold MUST answer an error. | this spec section 3 | none, and the rule fails today: the handler removes what resolves and answers as though the rest had -- section 6. Answered by the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | unverified |
 
 ### 1.6 Lock and unlock an element
 

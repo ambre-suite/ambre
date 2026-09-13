@@ -58,7 +58,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|
 | `TOILE-UI-020` | POST | At most one cull request MUST leave the UI thread per frame. | this spec section 2 | structural, and the type is the proof: the pending request is one `Option<Viewport>` on the view, so a second request in the same frame replaces the first, and the frame flush is its only send site | verified |
 | `TOILE-UI-274` | FRAME | Asking for the visible set MUST NOT stall the frame. | this spec section 2; `BUS-004` | structural, and the construction is the proof: the flush is a try-send on a bounded channel and the frame continues on either arm, so no paint waits on the Logic thread | verified |
-| `TOILE-UI-275` | FAIL | A cull request the channel refuses MUST NOT leave the board painting a stale set. | this spec section 2; section 5 | none, and **the rule fails today**: a full channel drops the request without a warning, the dirty flag is cleared in the same frame, and the board keeps the previous culled set until the camera moves again -- section 5 | unverified |
+| `TOILE-UI-275` | FAIL | A cull request the channel refuses MUST NOT leave the board painting a stale set. | this spec section 2; section 5 | none, and **the rule fails today**: a full channel drops the request without a warning, the dirty flag is cleared in the same frame, and the board keeps the previous culled set until the camera moves again -- section 5. Answered by the `A dropped display request leaves a trace` Story (`ambre-roadmap.md` E7) | unverified |
 
 * **Budget.** the board paint under 16 ms at 2 000 visible elements, a row of
   `ambre-spec-budgets.md section 2`, beside the frame phases it sits inside. An idle board
