@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 |---|---|---|---|---|---|
 | `SYNC-044` | `INV` | The cache of previous keys MUST be bounded. | this spec section 3 | none. The bound is a truncation at ten with no test: nothing rotates eleven times and counts what is held | unverified |
 | `SYNC-078` | `INV` | A key leaving the cache MUST be wiped. | this spec section 3; `ZK-011` | type-level: the document key derives `ZeroizeOnDrop`, so truncating the cache wipes what it drops and a key type that did not would be a change to the type rather than to this path | verified |
-| `SYNC-045` | `INV` | An inbound frame MUST be opened with the key its parent snapshot names, never by trying every key in turn. | this spec section 3 | none, and **the rule fails today**: the open tries the current key, then every cached key, then the current key again, so a frame nobody can open costs eleven attempts and a frame sealed under a revoked key still opens | unverified |
+| `SYNC-045` | `INV` | An inbound frame MUST be opened with the key its parent snapshot names, never by trying every key in turn. | this spec section 3 | none, and **the rule fails today**: the open tries the current key, then every cached key, then the current key again, so a frame nobody can open costs eleven attempts and a frame sealed under a revoked key still opens. Answered by the `A revoked key opens nothing` Story (`ambre-roadmap.md` E7) | unverified |
 
 ### 1.2 Remove a member
 
