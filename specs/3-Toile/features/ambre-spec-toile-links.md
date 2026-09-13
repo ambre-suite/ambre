@@ -4,9 +4,9 @@
 **Implementation:** partial -- the register, the command, the chooser and the three navigations. What
 is not built is a way back from a jump, and any mark saying a target is gone.
 
-> A user makes an element clickable. It opens a web address, jumps the camera to a frame on this
-> board, or opens another Ambre document. A legend becomes navigation, and a frame becomes a table
-> of contents.
+> A user makes an element clickable: a web address, a frame on this board, or another Ambre
+> document. The click opens the address, jumps the camera to the frame, or opens the document. A
+> legend becomes navigation, and a frame becomes a table of contents.
 
 Following a link changes nothing in the document. It is the one board gesture that writes nothing.
 

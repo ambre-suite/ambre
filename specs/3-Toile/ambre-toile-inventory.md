@@ -16,19 +16,19 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `toile-auto-layout` | A frame lays its children out by a rule instead of by their coordinates: a direction, a gap, a padding, an alignment and a sizing mode. | implemented | 23 | 6 |
-| `toile-board-rendering` | The board paints what the Logic thread says is visible, in the order it says, and nothing else. | implemented | 26 | 16 |
+| `toile-auto-layout` | A frame lays its children out by a rule instead of by their coordinates: a direction, a gap, a padding, an alignment and a sizing mode. | implemented | 24 | 6 |
+| `toile-board-rendering` | The board paints what the Logic thread says is visible, in the order it says, and nothing else. | implemented | 29 | 18 |
 | `toile-clipboard` | A user copies a selection and pastes it, on this board or another, in this tab or another. | implemented | 17 | 6 |
 | `toile-comments` | A user pins a remark on an element or on empty board, and a teammate answers it hours later. | implemented | 29 | 5 |
-| `toile-connectors` | A user drags from one shape to another and gets an arrow. | implemented | 38 | 20 |
+| `toile-connectors` | A user drags from one shape to another and gets an arrow. | implemented | 39 | 21 |
 | `toile-elements` | Everything on a board is an element: a note, a shape, a picture, a frame, a stroke. | implemented | 30 | 7 |
 | `toile-embeds` | A board holds more than shapes: a web page, and another Ambre document a user edits in place without leaving the board. | implemented | 44 | 13 |
 | `toile-engine` | A user drags a note across an endless plane, and every collaborator sees it move. | implemented | 37 | 11 |
 | `toile-find` | A user types a word and the board takes them to it, wherever it is -- including far off screen. | implemented | 15 | 8 |
-| `toile-frames` | A frame is a titled region of the board. | implemented | 9 | 5 |
+| `toile-frames` | A frame is a titled region of the board. | implemented | 10 | 5 |
 | `toile-freehand` | A user drags with the pen and a line follows the pointer. | implemented | 11 | 6 |
 | `toile-groups` | A user selects several elements and binds them: from then on one click takes the set, and one drag moves it. | implemented | 23 | 15 |
-| `toile-links` | A user makes an element clickable: it opens a web address, jumps the camera to a frame on this board, or opens another Ambre document. | implemented | 12 | 7 |
+| `toile-links` | A user makes an element clickable: a web address, a frame on this board, or another Ambre document. | implemented | 12 | 7 |
 | `toile-media` | A picture on the board is stored once, wherever it appears, and the server that keeps it never sees it. | implemented | 28 | 5 |
 | `toile-menus` | A user right-clicks and gets what applies to what is under the cursor. | implemented | 48 | 18 |
 | `toile-presence` | A user sees where the others are: a pointer in their colour, the elements they hold, the stroke they are drawing and the trail of their highlighter. | implemented | 24 | 5 |
@@ -42,8 +42,8 @@
 | `toile-z-order` | What overlaps what. | implemented | 16 | 12 |
 | `toile-import-export` | A user brings a drawing that came from somewhere else onto the board, and hands the board back as a file someone without Ambre can open. | partial | 53 | 16 |
 | `toile-pdf-export` | Toile's half of the shared PDF export (`ambre-spec-pdf-export.md`): one page per slide, and the clip that keeps a page to its own frame. | partial | 16 | 4 |
-| `toile-reactions` | A user drops an emoji on a note and everyone sees it, with a count. | partial | 32 | 10 |
-| `toile-text-editing` | A user double-clicks a note and types into it, where it sits, at the size it will keep. | partial | 35 | 31 |
-| `toile-viewport` | A user pans and zooms an endless plane. | partial | 31 | 14 |
+| `toile-reactions` | A user drops an emoji on a note and everyone sees it, with a count. | partial | 34 | 10 |
+| `toile-text-editing` | A user double-clicks a note and types into it, where it sits, at the size it will keep. | partial | 36 | 31 |
+| `toile-viewport` | A user pans and zooms an endless plane. | partial | 32 | 14 |
 
-**29 features: 24 implemented, 5 partial, 0 design-only. 760 contract rows, 301 loose.**
+**29 features: 24 implemented, 5 partial, 0 design-only. 770 contract rows, 304 loose.**
