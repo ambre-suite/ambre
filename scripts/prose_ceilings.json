@@ -2169,13 +2169,6 @@
     "para": 1,
     "passive": 11
   },
-  "specs/1-Foundations/ambre-spec-drawing-surface.md": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 10,
-    "para": 0,
-    "passive": 13
-  },
   "specs/1-Foundations/ambre-spec-find.md": {
     "ascii": 0,
     "latin": 0,
@@ -2280,13 +2273,6 @@
     "long": 13,
     "para": 1,
     "passive": 19
-  },
-  "specs/1-Foundations/ambre-spec-schema-version.md": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 9,
-    "para": 1,
-    "passive": 13
   },
   "specs/1-Foundations/ambre-spec-sealed-envelope.md": {
     "ascii": 0,
@@ -2603,13 +2589,6 @@
     "para": 1,
     "passive": 15
   },
-  "specs/3-Toile/features/ambre-spec-toile-connectors.md": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 17,
-    "para": 1,
-    "passive": 17
-  },
   "specs/3-Toile/features/ambre-spec-toile-elements.md": {
     "ascii": 0,
     "latin": 0,
@@ -2665,13 +2644,6 @@
     "long": 12,
     "para": 0,
     "passive": 21
-  },
-  "specs/3-Toile/features/ambre-spec-toile-links.md": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 8,
-    "para": 1,
-    "passive": 14
   },
   "specs/3-Toile/features/ambre-spec-toile-media.md": {
     "ascii": 0,

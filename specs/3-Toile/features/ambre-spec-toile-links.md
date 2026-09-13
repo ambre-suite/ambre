@@ -4,9 +4,9 @@
 **Implementation:** partial -- the register, the command, the chooser and the three navigations. What
 is not built is a way back from a jump, and any mark saying a target is gone.
 
-> A user makes an element clickable: it opens a web address, jumps the camera to a frame on this
-> board, or opens another Ambre document. A legend becomes navigation, and a frame becomes a table of
-> contents.
+> A user makes an element clickable. It opens a web address, jumps the camera to a frame on this
+> board, or opens another Ambre document. A legend becomes navigation, and a frame becomes a table
+> of contents.
 
 Following a link changes nothing in the document. It is the one board gesture that writes nothing.
 
@@ -47,21 +47,23 @@ status values are normative in `ambre-spec-template.md`.
 * **Budget.** none of its own once built: setting a link is one register write, which lands under the
   transform-command row of `ambre-spec-budgets.md section 1`. A jump to a frame is a
   camera change, budgeted by `features/ambre-spec-toile-viewport.md`.
-* **Boundary.** the one board feature that names an outbound path. A web address is handed to the
-  shell and opened in a sandboxed tab; the board never fetches it, so no request carries document
-  content and `ZK-001` is untouched. The address itself is document data, sealed like the rest
-  (`TOILE-065`).
+* **Boundary.** the one board feature that names an outbound path. The view hands a web address to
+  the shell, which opens it in a sandboxed tab. The board never fetches it, so no request carries
+  document content and nothing touches `ZK-001`. The address itself is document data, sealed like
+  the rest (`TOILE-065`).
 * **Verification.** 5 `verified`, 7 `unverified`, 0 `unimplemented`, over four tests and three
-  structural readings. The half that lands in the document is held: the register is its own, it
-  survives its target's deletion, and setting it moves nothing else -- that last one reads the
-  painted element before and after rather than trusting the handler. The half that leaves the
-  document is held by its shape instead of by a run: following resolves to a value with three arms,
-  and the two outbound ones are handed out rather than acted on, which is what makes the fetch ban
-  an audit (`TOILE-110`) rather than a test of a request nobody makes. What stays loose is every
-  rule whose subject is the surface -- which click follows, where the camera lands, what the shell
-  does with the value -- because the view is not host-constructible and the shell is a browser. Two
-  of those (`TOILE-064`, `TOILE-115`) are held only by the absence of code, which is the weakest
-  reading in the ladder and the honest one here.
+  structural readings.
+  * Tests hold the half that lands in the document. The register is its own, it survives its
+    target's deletion, and setting it moves nothing else. That last test reads the painted element
+    before and after, rather than trusting the handler.
+  * The shape holds the half that leaves the document, instead of a run. Following resolves to a
+    value with three arms, and the view hands the two outbound ones out rather than acting on them.
+    That is what makes the fetch ban an audit (`TOILE-110`), rather than a test of a request nobody
+    makes.
+  * What stays loose is every rule whose subject is the surface: which click follows, where the
+    camera lands, what the shell does with the value. The view is not host-constructible, and the
+    shell is a browser. Only the absence of code holds two of those (`TOILE-064`, `TOILE-115`).
+    That is the weakest reading in the ladder, and the honest one here.
 
 ---
 
@@ -92,34 +94,35 @@ pub enum LinkTarget {
 }
 ```
 
-The document arm carries its type beside its id, where the design carried an id alone: a route
-cannot be built without the type, and asking the server for it turns a follow into a round trip that
-can fail. An embed's reference is shaped the same way, for the same reason
+The document arm carries its type beside its id, where the design carried an id alone. The shell
+cannot build a route without the type, and asking the server for it turns a follow into a round trip
+that can fail. An embed's reference takes the same shape, for the same reason
 (`features/ambre-spec-toile-embeds.md`).
 
 **Command** (`ambre-bus`): `SetLink { id, link }`, where an absent link clears the register. One
 register write and one undo item, and nothing else on the element moves (`TOILE-066`,
 `TOILE-111`). A locked element refuses it like it refuses every other edit.
 
-**Why the link is not part of the style.** The style register is one value written whole, so
-folding a link into it would make every restyle of a selection overwrite the links of its members.
-A link is navigation, not a visual attribute, which is the same reason the lock flag sits outside it
+**Why the link is not part of the style.** The style register is one value written whole. Folding
+a link into it would make every restyle of a selection overwrite the links of its members. A link is
+navigation, not a visual attribute, and the lock flag sits outside the style for that same reason
 (`features/ambre-spec-toile-styles.md`).
 
-**Steps, when a link is followed:**
+**Steps, when the view follows a link:**
 
 1. read the target from the painted element, which carries the register;
 2. for a frame, **ask the board for that frame's box** and fit the camera to the answer
-   (`TOILE-113`); a frame nobody holds answers no box, and the fit then does nothing, with no
+   (`TOILE-113`). A frame nobody holds answers no box, so the fit does nothing and raises no
    error (`TOILE-064`);
 3. for a web address, hand it to the shell, which opens it sandboxed (`TOILE-065`);
 4. for a document, hand it to the shell too (`TOILE-114`).
 
-The frame is asked for rather than read off the screen. The design had it read from the painted
-element, and that is wrong for the case links exist to serve: a link to a frame is how a user reaches
-one that is **off screen**, and an off-screen element is not in the culled frame. The board answers
-the bounds of an id it holds, which makes the dead-target refusal fall out of the same path instead
-of needing a check of its own.
+The view asks the board for the frame rather than reading it off the screen. The design read it from
+the painted element, and that fails the case links exist to serve. A link to a frame is how a user
+reaches one that sits **off screen**, and the culled frame holds no off-screen element.
+
+The board answers the bounds of an id it holds. The dead-target refusal then falls out of the same
+path, rather than needing a check of its own.
 
 Step 2 sends `RequestSelectionStats`, which the engine answers without a commit; the other two send
 nothing at all. So no step writes (`TOILE-063`) and none reaches the undo history (`TOILE-115`).
@@ -148,17 +151,17 @@ What the Story owes, stated so the rows above have a section to cite:
 | a plain click, with the select tool | selects, as always: a link never blocks editing (`TOILE-112`) |
 | a plain click, in presentation mode | follows the link, because editing is off (`features/ambre-spec-toile-presentation.md`) |
 
-**Where the chooser lives.** In the shell, not in the style panel the design named. Two of the three
-targets are things only the shell can offer: an address it validates where the user can still read
-the refusal, and the documents this user may open. The frame list is the deck's, which already holds
-every frame on the board -- including the off-screen ones a link exists to reach. The board is
-handed a target that is already well formed, which is the same inversion the embed entries take
+**Where the chooser lives.** In the shell, not in the style panel the design named. Only the shell
+can offer two of the three targets. It validates an address where the user can still read the
+refusal, and it knows the documents this user may open. The frame list is the deck's, which already
+holds every frame on the board -- including the off-screen ones a link exists to reach. The shell
+hands the board a target that is already well formed, and the embed entries take the same inversion
 (`features/ambre-spec-toile-embeds.md`).
 
 **What a linked element looks like.** A small badge outside its top-right corner, painted in screen
-space so it keeps its size through the zoom. Always painted, not shown on hover: a link nobody can
-see is a link nobody follows, and the painted element carries the register, so the badge costs a
-walk of the culled frame and no state.
+space so it keeps its size through the zoom. Always painted, not shown on hover: nobody follows a
+link nobody can see. The painted element carries the register, so the badge costs a walk of the
+culled frame and no state.
 
 ---
 
@@ -177,26 +180,28 @@ walk of the culled frame and no state.
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **A dead link and an unclicked one are the same event** (`TOILE-064`). A follow the board
-  cannot resolve does nothing and reports nothing, so a user cannot tell a target that was deleted
-  from a glyph they missed. The register is kept because the frame may come back through a late
-  change or an undo, and nothing on the screen says it is waiting.
+  cannot resolve does nothing and reports nothing.
+  * A user therefore cannot tell a target someone deleted from a glyph they missed. The board keeps
+    the register, because the frame may come back through a late change or an undo. Nothing on the
+    screen says it is waiting.
 * **A jump has no way back** (`TOILE-115`). Following writes nothing, so it enters no history:
-  `Ctrl+Z` after a jump reverts the last edit and leaves the camera where the link put it. Whether
-  a board owes a back gesture is unruled, and the presentation case below is the same hole one
+  `Ctrl+Z` after a jump reverts the last edit and leaves the camera where the link put it. No rule
+  says whether a board owes a back gesture, and the presentation case below is the same hole one
   document wider.
-* **A link on a connector is not built.** An arrow can now be selected and carries a style of its
-  own (`features/ambre-spec-toile-connectors.md`), so the reason this was deferred is gone; what is
-  left is that the register lives on an element map and an arrow is not one. Nothing offers it, and
-  the chooser addresses the element selection only.
-* **A link is set on one element at a time.** The chooser answers with one target and the view
-  applies it to a single selection; a multi-selection is ignored rather than fanned out, because a
+* **A link on a connector is not built.** A user can now select an arrow, and an arrow carries a
+  style of its own (`features/ambre-spec-toile-connectors.md`), so the reason for the deferral is
+  gone.
+  * What is left is that the register lives on an element map and an arrow is not one. Nothing
+    offers it, and the chooser addresses the element selection only.
+* **A link covers one element at a time.** The chooser answers with one target and the view
+  applies it to a single selection. It drops a multi-selection rather than fanning out, because a
   chooser cannot mean "these five all point here" without saying so. Nothing on screen says why the
   entry did nothing.
-* **The frame list has no names.** A frame's title is designed and unwritten
+* **The frame list has no names.** The design names a frame title, and nobody has written it
   (`features/ambre-spec-toile-frames.md`), so the chooser lists every frame as "Untitled frame".
   On a board with four frames, choosing the right one is guesswork until that lands.
-* **Nothing validates an address.** Whether a malformed address is refused at the write or ignored at
-  the follow is open, and the shared open-URL model the roadmap names is where it should be settled
-  once (`ambre-roadmap.md`, "Links in Trame").
+* **Nothing validates an address.** Two answers stay open: the write refuses a malformed address,
+  or the follow ignores it. The shared open-URL model the roadmap names is where one answer belongs
+  (`ambre-roadmap.md`, "Links in Trame").
 * **A link out of a presentation has no back.** Following a document link during a presentation leaves
   the board, and nothing returns the presenter to the slide they left.
