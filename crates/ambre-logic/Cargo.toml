@@ -85,3 +85,11 @@ kurbo = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
+
+# The corpus driver (`ambre-spec-fixtures.md` section 3), behind the same feature
+# as the code it drives: `required-features` keeps it out of every other build,
+# including the wasm one, so `FIXTURE-007` holds for the binary too.
+[[bin]]
+name = "ambre-fixtures"
+path = "src/bin/ambre-fixtures.rs"
+required-features = ["fixtures"]

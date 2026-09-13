@@ -40,8 +40,8 @@ lint:
 # design (`ambre-spec-fixtures.md` §5: `ambre-logic` ships to wasm, so the loader
 # and the driver must not be reachable from a client build). It propagates to
 # `ambre-core` / `ambre-trame` / `ambre-toile`, each of which declares the
-# forward. `FIXTURES P1` replaces this recipe with `just fixtures-check`, which
-# adds the golden drift gate on top of the same belts.
+# forward. `just fixtures-check` then runs on the same tier: the belts verify the
+# machinery, and the drift gate verifies the committed corpus.
 #
 # `--features ambre-toile/pdf` reaches the 8 tests behind that feature
 # (`logic::interop::pdf_export`, `logic::state::presentation::pdf_tests`,
@@ -60,6 +60,27 @@ lint:
 # native x86_64, in one build.
 test-native:
     cargo test --workspace --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf
+    just fixtures-check
+
+# Regenerate `fixtures/current/` in place and drop any artifact whose generator
+# is gone (`ambre-spec-fixtures.md` section 3). The fix for a red
+# `fixtures-check` is always this recipe, never a manual edit of an artifact:
+# the bytes are a generator's output, not a document a person maintains. The run
+# also applies the frozen retention cap (`FIXTURE-021`, `FIXTURE-026`).
+fixtures:
+    cargo run -p ambre-logic --features fixtures --bin ambre-fixtures -- generate
+
+# The drift gate. Regenerates into a temporary directory, diffs against the
+# committed goldens, and loads every frozen artifact through the migration path.
+# Exits non-zero on any drift; runs in the CI host job.
+fixtures-check:
+    cargo run -p ambre-logic --features fixtures --bin ambre-fixtures -- check
+
+# Copy one artifact out of `current/` into `frozen/`, deriving the version
+# suffix from its manifest. Takes a generator name (`trame/grid_literals`),
+# because which lineage keeps migration coverage is a deliberate choice.
+fixtures-freeze name:
+    cargo run -p ambre-logic --features fixtures --bin ambre-fixtures -- freeze {{name}}
 
 # The `db` feature flips the `cfg_attr(not(feature = "db"), ignore = ...)` gate
 # off so the otherwise ignored tests run. Bring services up first with

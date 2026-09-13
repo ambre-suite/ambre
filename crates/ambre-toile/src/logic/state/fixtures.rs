@@ -13,10 +13,17 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use ambre_core::{FixtureShape, ShapeBody};
+use ambre_core::{
+    DocType, FixtureGen, FixtureShape, ShapeBody, fixture_peer_count, seeded_document_id,
+};
 use loro::LoroValue;
 
-use crate::logic::model::NodeId;
+use kurbo::{Point, Size};
+
+use crate::logic::command::{InitContent, ToileCommand, ToileEvent, ZTarget};
+use crate::logic::model::{
+    Anchor, ConnectorId, ElementId, ElementKind, EndCaps, NodeId, PathType, ShapeKind,
+};
 
 use super::{CONNECTORS, ELEMENTS, ToileState};
 
@@ -44,7 +51,8 @@ impl ToileState {
             _ => 0,
         };
         FixtureShape {
-            peers: u8::try_from(self.doc.oplog_vv().len()).unwrap_or(u8::MAX),
+            // The loader's own pinned peer is not an author of the document.
+            peers: fixture_peer_count(self.doc.oplog_vv().keys().copied()),
             body: ShapeBody::Toile {
                 elements,
                 frames,
@@ -187,4 +195,218 @@ fn hex_of(bytes: &[u8]) -> String {
         out.push_str(&format!("{b:02x}"));
     }
     out
+}
+
+// -----------------------------------------------------------------------------
+// The correctness generators
+// -----------------------------------------------------------------------------
+
+/// Which board a generator builds.
+///
+/// One closed enum plus a `match`, rather than one type per document: the
+/// registry holds trait objects, so the alternative is two near-identical impl
+/// blocks. Here the compiler checks that every variant declares a name, a seed,
+/// a version and a body.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ToileFixture {
+    /// A frame holding shapes and text, with one restacked node and one locked
+    /// element. The plain board, and the one whose paint order is not its
+    /// creation order.
+    ShapesAndFrame,
+    /// Four shapes, one group over two of them, and three connectors with
+    /// labels. The document whose canonical dump has to rewrite every
+    /// id-valued field to a paint index (`FIXTURE-016`).
+    ConnectorsAndGroups,
+}
+
+/// Toile's half of the shipping registry (`ambre-logic`'s `REGISTRY`).
+///
+/// Declared next to the generators rather than spelled out in `ambre-logic`. A
+/// generator added here reaches the corpus without a second edit one crate down.
+/// That second edit is the one a contributor forgets.
+pub const TOILE_FIXTURES: &[&dyn FixtureGen] = &[
+    &ToileFixture::ShapesAndFrame,
+    &ToileFixture::ConnectorsAndGroups,
+];
+
+impl FixtureGen for ToileFixture {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::ShapesAndFrame => "toile/shapes_and_frame",
+            Self::ConnectorsAndGroups => "toile/connectors_and_groups",
+        }
+    }
+
+    fn doc_type(&self) -> DocType {
+        DocType::Toile
+    }
+
+    fn seed(&self) -> u64 {
+        // Distinct per generator, so no two artifacts share a `document_id` and
+        // a copied file is visible in the diff rather than plausible.
+        match self {
+            Self::ShapesAndFrame => 0x5EED_70115_u64 << 16 | 0x0001,
+            Self::ConnectorsAndGroups => 0x5EED_70115_u64 << 16 | 0x0002,
+        }
+    }
+
+    fn generator_version(&self) -> u32 {
+        1
+    }
+
+    fn build(&self) -> Vec<u8> {
+        let seed = self.seed();
+        let mut state = ToileState::with_peer(seed);
+        match self {
+            Self::ShapesAndFrame => build_shapes_and_frame(&mut state),
+            Self::ConnectorsAndGroups => build_connectors_and_groups(&mut state),
+        }
+        state.export_ambre_plaintext(seeded_document_id(seed))
+    }
+}
+
+/// A frame, six shapes, two stickies and a text node, then one restack and one
+/// lock.
+///
+/// The restack is the point. It separates the paint order from the creation
+/// order. A canonical dump that walked the `elements` map instead of the
+/// `layers` list then shows up in the artifact rather than staying plausible.
+fn build_shapes_and_frame(state: &mut ToileState) {
+    create(
+        state,
+        ElementKind::Frame,
+        Point::new(-40.0, -40.0),
+        Size::new(640.0, 400.0),
+        InitContent::None,
+    );
+    let shapes = [ShapeKind::Rect, ShapeKind::Ellipse, ShapeKind::Triangle];
+    let ids: Vec<ElementId> = (0..6)
+        .map(|i| {
+            create(
+                state,
+                ElementKind::Shape(shapes[i % shapes.len()]),
+                Point::new(f64::from(i as u32) * 90.0, 60.0),
+                Size::new(70.0, 50.0),
+                InitContent::None,
+            )
+        })
+        .collect();
+    for (i, body) in ["first note", "second note"].iter().enumerate() {
+        create(
+            state,
+            ElementKind::Sticky,
+            Point::new(f64::from(i as u32) * 140.0, 220.0),
+            Size::new(120.0, 120.0),
+            InitContent::Text((*body).to_owned()),
+        );
+    }
+    let caption = create(
+        state,
+        ElementKind::Text,
+        Point::new(0.0, 300.0),
+        Size::new(300.0, 40.0),
+        InitContent::Text("quarterly plan".to_owned()),
+    );
+    state.handle_command(ToileCommand::Reorder {
+        node: NodeId::Element(caption),
+        to: ZTarget::Back,
+    });
+    state.handle_command(ToileCommand::LockElements {
+        ids: vec![ids[0].clone()],
+        locked: true,
+    });
+}
+
+/// Four shapes, a group over two of them, and three connectors, one captioned.
+///
+/// Every one of those carries an id-valued field: a group's `children`, a
+/// connector's endpoints. The canonical dump rewrites each such field to a paint
+/// index. Two documents built by different routes then compare equal.
+fn build_connectors_and_groups(state: &mut ToileState) {
+    let ids: Vec<ElementId> = (0..4)
+        .map(|i| {
+            create(
+                state,
+                ElementKind::Shape(ShapeKind::Rect),
+                Point::new(f64::from(i as u32) * 160.0, 0.0),
+                Size::new(100.0, 60.0),
+                // No text seed: `CreateElement` accepts one for a sticky or a
+                // text node only, and rejects it on a shape.
+                InitContent::None,
+            )
+        })
+        .collect();
+    for (from, to, path_type) in [
+        (0, 1, PathType::Straight),
+        (1, 2, PathType::Elbow),
+        (2, 3, PathType::Curved),
+    ] {
+        state.handle_command(ToileCommand::CreateConnector {
+            from: ids[from].clone(),
+            from_anch: Anchor::Right,
+            to: ids[to].clone(),
+            to_anch: Anchor::Left,
+            path_type,
+            arrows: EndCaps {
+                start: false,
+                end: true,
+            },
+        });
+        state.handle_command(ToileCommand::SetConnectorLabel {
+            id: last_connector(state),
+            text: format!("{from} to {to}"),
+        });
+    }
+    // Grouped after the connectors, so the group's `children` and the
+    // connectors' endpoints name nodes that the paint order already holds.
+    state.handle_command(ToileCommand::GroupElements {
+        ids: vec![ids[2].clone(), ids[3].clone()],
+    });
+}
+
+/// Create one element and return the id the engine minted.
+///
+/// Panics when the reply carries no `ElementCreated`. A generator drives
+/// commands it chose itself. A refusal is therefore a defect in this module,
+/// not a runtime condition (`FixtureGen::build`).
+fn create(
+    state: &mut ToileState,
+    kind: ElementKind,
+    at: Point,
+    size: Size,
+    content: InitContent,
+) -> ElementId {
+    let outcome = state.handle_command(ToileCommand::CreateElement {
+        kind,
+        at,
+        size,
+        content,
+        fill: None,
+    });
+    outcome
+        .display
+        .iter()
+        .find_map(|event| match event {
+            ToileEvent::ElementCreated(id) => Some(id.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("CreateElement must report the element it minted: {kind:?}"))
+}
+
+/// The id of the connector a `CreateConnector` just minted.
+///
+/// Read off the paint order rather than off the reply, because the reply carries
+/// no connector id. Reading is not writing: `FIXTURE-004` forbids a generator
+/// *building* through the containers, and this one still builds through
+/// `handle_command` alone.
+fn last_connector(state: &ToileState) -> ConnectorId {
+    state
+        .layer_order()
+        .iter()
+        .rev()
+        .find_map(|node| match node {
+            NodeId::Connector(id) => Some(id.clone()),
+            NodeId::Element(_) => None,
+        })
+        .unwrap_or_else(|| panic!("CreateConnector must leave a connector in the paint order"))
 }

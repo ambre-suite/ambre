@@ -81,7 +81,7 @@ file and the fixture loader **is** the production importer.
 | :--- | :--- | :--- |
 | `[x]` `DOCFILE P0` -- the container | -- | the `.ambre` file: one header, one version, one migration path, plaintext export and import |
 | `[x]` `FIXTURES P0` -- deterministic generation | -- | a document built from a seed is byte-identical every time, on any machine |
-| `[ ]` `FIXTURES P1` -- the corpus and its gate | -- | the committed test documents, the interop export sources, and a CI gate that fails when one drifts |
+| `[x]` `FIXTURES P1` -- the corpus and its gate | -- | the committed test documents, the interop export sources, and a CI gate that fails when one drifts |
 | `[ ]` `CONTRIBUTING.md` | -- | the file, which does not exist, and the two checklists that need somewhere to live |
 | `[x]` `ARCH P8` -- persisted schema versioning | -- | a document says which schema it holds; an older one migrates, a newer one is refused without damage, and a record the client cannot decode reaches the user instead of vanishing (`SCHEMA-003` to `SCHEMA-010`) |
 | `[x]` `DOCFILE P1` -- user-facing export and import | V1 | save a document to a file and open one back, in any app |

@@ -15,7 +15,9 @@
 
 use std::collections::BTreeMap;
 
-use ambre_core::{FixtureShape, ShapeBody};
+use ambre_core::{
+    DocType, FixtureGen, FixtureShape, ShapeBody, fixture_peer_count, seeded_document_id,
+};
 
 use super::*;
 
@@ -167,8 +169,255 @@ impl TrameState {
 
     /// Number of distinct peers whose ops are present (1 for a solo document).
     /// `oplog_vv()` derefs to a map keyed by `PeerID`; the codebase already calls
-    /// it on both engines' sync paths.
+    /// it on both engines' sync paths. The count drops the loader's own pinned
+    /// peer, so a restored solo document still reports one author.
     fn fixture_peer_count(&self) -> u8 {
-        u8::try_from(self.doc.oplog_vv().len()).unwrap_or(u8::MAX)
+        fixture_peer_count(self.doc.oplog_vv().keys().copied())
     }
+}
+
+// -----------------------------------------------------------------------------
+// The correctness generators
+// -----------------------------------------------------------------------------
+
+/// Which workbook a generator builds.
+///
+/// One closed enum plus a `match`, rather than one type per document: the
+/// registry holds trait objects, so the alternative is four near-identical impl
+/// blocks. Here the compiler checks that every variant declares a name, a seed,
+/// a version and a body.
+///
+/// Each variant is a *correctness* corpus. It rebuilds inside the
+/// `just fixtures` budget, and it takes the shape of one feature a test would
+/// exercise. The scale corpora belong to `FIXTURES P2` and stay uncommitted.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TrameFixture {
+    /// A dense literal grid with a header row, one merge and one inserted row.
+    /// The plain workbook, and the one whose structural operations shifted the
+    /// stable ids away from their grid positions.
+    GridLiterals,
+    /// A 40-deep formula chain over a literal column, plus three aggregate
+    /// cells. The document a recomputation test starts from, and the one whose
+    /// canonical dump carries both cell representations (`FIXTURE-017`).
+    FormulaDag,
+    /// Three sheets, a tab order that is not the creation order, and a named
+    /// range a formula reads.
+    MultiSheet,
+    /// The post-convergence workbook: two pinned peers edit disjoint cells and
+    /// exchange snapshots both ways. Its manifest reports two peers, which is
+    /// what no single-peer generator can produce.
+    TwoPeerMerge,
+}
+
+/// Trame's half of the shipping registry (`ambre-logic`'s `REGISTRY`).
+///
+/// Declared next to the generators rather than spelled out in `ambre-logic`.
+/// A generator added here reaches the corpus without a second edit one crate
+/// down -- the edit a contributor forgets.
+pub const TRAME_FIXTURES: &[&dyn FixtureGen] = &[
+    &TrameFixture::GridLiterals,
+    &TrameFixture::FormulaDag,
+    &TrameFixture::MultiSheet,
+    &TrameFixture::TwoPeerMerge,
+];
+
+impl FixtureGen for TrameFixture {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::GridLiterals => "trame/grid_literals",
+            Self::FormulaDag => "trame/formula_dag",
+            Self::MultiSheet => "trame/multi_sheet",
+            Self::TwoPeerMerge => "trame/two_peer_merge",
+        }
+    }
+
+    fn doc_type(&self) -> DocType {
+        DocType::Trame
+    }
+
+    fn seed(&self) -> u64 {
+        // Distinct per generator, so no two artifacts share a `document_id` and
+        // a copied file is visible in the diff rather than plausible.
+        match self {
+            Self::GridLiterals => 0x5EED_7A1E_0000_0001,
+            Self::FormulaDag => 0x5EED_7A1E_0000_0002,
+            Self::MultiSheet => 0x5EED_7A1E_0000_0003,
+            Self::TwoPeerMerge => 0x5EED_7A1E_0000_0004,
+        }
+    }
+
+    fn generator_version(&self) -> u32 {
+        1
+    }
+
+    fn build(&self) -> Vec<u8> {
+        let seed = self.seed();
+        let mut state = TrameState::with_peer(seed);
+        match self {
+            Self::GridLiterals => build_grid_literals(&mut state),
+            Self::FormulaDag => build_formula_dag(&mut state),
+            Self::MultiSheet => build_multi_sheet(&mut state),
+            // The only body that needs a second state, and therefore the only
+            // one that does not fit the shared `state` above.
+            Self::TwoPeerMerge => build_two_peer_merge(&mut state, seed),
+        }
+        state.export_ambre_plaintext(seeded_document_id(seed))
+    }
+}
+
+/// 20 rows by 8 columns of literals, then one merge and one inserted row.
+///
+/// The structural operations are the point. They move the stable row ids away
+/// from their grid positions. A fixture from this artifact then exercises the
+/// index, not a grid whose positions and ids still agree.
+fn build_grid_literals(state: &mut TrameState) {
+    let header = ["region", "q1", "q2", "q3", "q4", "target", "owner", "note"];
+    let mut cells: Vec<(u32, u32, String)> = header
+        .iter()
+        .enumerate()
+        .map(|(col, text)| (0, col as u32, (*text).to_owned()))
+        .collect();
+    cells.extend((1..20).flat_map(|row| {
+        (0..8).map(move |col| {
+            let text = match col {
+                0 => format!("region {row}"),
+                6 => format!("owner {}", row % 4),
+                7 => String::new(),
+                _ => (row * 100 + col).to_string(),
+            };
+            (row, col, text)
+        })
+    }));
+    state.handle_command(TrameCommand::SetCellsBatch { cells });
+    // A merged title band over the header, then a row inserted under it.
+    state.handle_command(TrameCommand::MergeCells {
+        row: 0,
+        col: 1,
+        row_end: 0,
+        col_end: 4,
+    });
+    state.handle_command(TrameCommand::InsertRow { at: 1 });
+}
+
+/// A 40-deep dependency chain plus three aggregates.
+///
+/// Deep rather than wide. A recomputation order defect shows up in a chain, and
+/// one wrong link changes every cell below it in the dump.
+fn build_formula_dag(state: &mut TrameState) {
+    const DEPTH: u32 = 40;
+    let mut cells: Vec<(u32, u32, String)> = (0..DEPTH)
+        .map(|row| (row, 0, (row + 1).to_string()))
+        .collect();
+    // B1 seeds the chain; every later B reads the A beside it and the B above.
+    cells.push((0, 1, "=A1".to_owned()));
+    cells.extend((1..DEPTH).map(|row| (row, 1, format!("=A{}+B{}", row + 1, row))));
+    cells.push((0, 2, format!("=SUM(A1:A{DEPTH})")));
+    cells.push((1, 2, format!("=AVERAGE(A1:A{DEPTH})")));
+    cells.push((2, 2, format!("=IF(C1>100,B{DEPTH},C2)")));
+    state.handle_command(TrameCommand::SetCellsBatch { cells });
+}
+
+/// Three sheets, a tab order that is not the creation order, and a named range.
+///
+/// A formula on the defining sheet reads the named range. A cross-sheet
+/// reference binds to the display name, a known gap (`trame-sheets`). The
+/// fixture would record a parse error rather than a feature.
+fn build_multi_sheet(state: &mut TrameState) {
+    state.handle_command(TrameCommand::SetCellsBatch {
+        cells: (0..6)
+            .map(|row| (row, 0, format!("summary {row}")))
+            .collect(),
+    });
+    for name in ["Data", "Notes"] {
+        let outcome = state.handle_command(TrameCommand::CreateSheet {
+            name: name.to_owned(),
+        });
+        let sheet_id = new_sheet_id(&outcome, name);
+        state.handle_command(TrameCommand::ActivateSheet {
+            sheet_id: sheet_id.clone(),
+        });
+        let cells = (0..8)
+            .map(|row| {
+                let text = match name {
+                    "Data" => (row * 7 + 1).to_string(),
+                    _ => format!("note {row}"),
+                };
+                (row, 0, text)
+            })
+            .collect();
+        state.handle_command(TrameCommand::SetCellsBatch { cells });
+        if name == "Data" {
+            state.handle_command(TrameCommand::DefineName {
+                name: "readings".to_owned(),
+                // Sheet-qualified: an unqualified reference in a name definition
+                // resolves against the sheet at index 0, which is not this one.
+                reference: "Data!A1:A8".to_owned(),
+            });
+            state.handle_command(TrameCommand::SetCellText {
+                row: 0,
+                col: 2,
+                text: "=SUM(readings)".to_owned(),
+            });
+            // The tab order stops matching the creation order, so a dump that
+            // walked the `sheets` map instead of the order list is visible.
+            state.handle_command(TrameCommand::MoveSheet {
+                sheet_id,
+                to_index: 0,
+            });
+        }
+    }
+}
+
+/// Two pinned peers edit disjoint cells and exchange snapshots both ways.
+///
+/// The artifact leaves from `state`; the second peer lives here and ends with
+/// the call. The generator replays both directions, so the exported history
+/// carries both peers and the manifest reports two (`FIXTURE-028`).
+///
+/// The two peers materialize their rows and columns independently, so the merged
+/// grid concatenates both axes (20 rows, 6 columns) instead of overlapping them.
+/// That is what merging two documents born apart looks like, and the corpus wants
+/// it on record.
+fn build_two_peer_merge(state: &mut TrameState, seed: u64) {
+    let mut other = TrameState::with_peer(seed ^ 0xFFFF_FFFF);
+    state.handle_command(TrameCommand::SetCellsBatch {
+        cells: (0..10)
+            .map(|row| (row, 0, format!("local {row}")))
+            .collect(),
+    });
+    other.handle_command(TrameCommand::SetCellsBatch {
+        cells: (0..10)
+            .map(|row| (row, 3, format!("remote {row}")))
+            .collect(),
+    });
+    other.apply_remote(&state.export_snapshot());
+    state.apply_remote(&other.export_snapshot());
+    // One edit after convergence, so the artifact holds ops that follow a merge
+    // rather than only ops that precede one. The formula reads one cell from each
+    // peer, so a reload that lost either side's ops changes the result.
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 5,
+        text: "=A1&E11".to_owned(),
+    });
+}
+
+/// The id of the sheet a `CreateSheet` just minted, read off the refreshed
+/// `SheetList`.
+///
+/// Panics when the event is absent or names no such sheet. A generator drives
+/// commands it chose itself, so a missing reply is a defect here rather than
+/// a runtime condition (`FixtureGen::build`).
+fn new_sheet_id(outcome: &TrameOutcome, name: &str) -> String {
+    outcome
+        .display
+        .iter()
+        .find_map(|event| match event {
+            TrameEvent::SheetList { sheets, .. } => sheets
+                .iter()
+                .find(|(_, label)| label == name)
+                .map(|(id, _)| id.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("CreateSheet must report the sheet it minted: {name}"))
 }

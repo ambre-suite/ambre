@@ -1,0 +1,19 @@
+{
+  "generator": "trame/two_peer_merge",
+  "generator_version": 1,
+  "seed": 6840257678313259012,
+  "doc_type": "Trame",
+  "ambre_version": 1,
+  "schema_version": 1,
+  "digest": "990506e304f3985029d572cc172e5bbc1b8de434dbb2268dab47cf661717922b",
+  "shape": {
+    "peers": 2,
+    "body": {
+      "Trame": {
+        "cells": 21,
+        "sheets": 1,
+        "formulas": 1
+      }
+    }
+  }
+}

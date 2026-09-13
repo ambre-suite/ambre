@@ -1,0 +1,19 @@
+{
+  "generator": "trame/formula_dag",
+  "generator_version": 1,
+  "seed": 6840257678313259010,
+  "doc_type": "Trame",
+  "ambre_version": 1,
+  "schema_version": 1,
+  "digest": "f69cf34cb94e778b3f8e1dfddb9e1fa2c44f6703215ae71ff146b67a959e251c",
+  "shape": {
+    "peers": 1,
+    "body": {
+      "Trame": {
+        "cells": 83,
+        "sheets": 1,
+        "formulas": 43
+      }
+    }
+  }
+}

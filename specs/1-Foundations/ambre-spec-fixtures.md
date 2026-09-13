@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
 | `FIXTURE-007` | `INV` | Fixture machinery MUST NOT reach a client build. The three production symbols named in section 2 are the whole exception. | this spec section 2; section 3 | crate graph: `ambre-app` names no `fixtures` feature, and Cargo never enables a dependency feature implicitly. The surface is therefore unreachable from the wasm artifact today. Nothing refuses the manifest line that would change that | unverified |
-| `FIXTURE-010` | `INV` | Two generators MUST NOT share a name: the name is the artifact's identity on disk. | this spec section 2 | none today. `fixtures_corpus::the_shipping_registry_has_no_duplicate_names` says so in its own comment: it is vacuous while `REGISTRY` is empty, and the registry is empty until the corpus lands. `::the_driver_walks_a_whole_registry_and_creates_its_subdirectories` drives two generators with distinct names and asserts the subdirectories, never the collision | unverified |
+| `FIXTURE-010` | `INV` | Two generators MUST NOT share a name: the name is the artifact's identity on disk. | this spec section 2 | `fixtures_corpus::the_shipping_registry_has_no_duplicate_names` over the six shipping generators, and it refuses an empty registry first: the dedup alone passes on nothing at all | verified |
 | `FIXTURE-005` | `INV` | Every committed artifact MUST trace to a generator run from a seed, and MUST NOT come from a real user document. | this spec section 2 | none is possible: a real document and a generated one are both Loro bytes, so no gate can tell them apart. It is a **review rule**, and it belongs in the contribution checklist. A committed real document would place plaintext user content in a public AGPL repository, permanently, in git history; a fixture that is interesting *because* it came from real data is exactly the one that must not be committed -- write a generator that reproduces its shape instead | human-review |
 | `FIXTURE-024` | `INV` | A benchmark built on a fixture MUST NOT be reported as a frame-rate validation. | this spec section 3; `ambre-spec-testing.md section 5` | none, and none is possible: the claim is made in a pull request, not in a test. The reviewer refuses it, and section 3 states what the corpus does measure so the honest claim is at hand | human-review |
 | `FIXTURE-022` | `INV` | A benchmark corpus MUST NOT be committed. | this spec section 3 | not built -- lands with `FIXTURES P2 -- scale corpora and benches` (`ambre-roadmap.md` EF). The `.gitignore` entry lands with the recipe that writes the corpus | unimplemented |
@@ -74,14 +74,14 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
-| `FIXTURE-006` | `POST` | A committed fixture whose bytes drift MUST fail CI. | this spec section 3 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). Nothing is committed and no recipe compares a corpus against a regeneration | unimplemented |
-| `FIXTURE-019` | `POST` | A migrated frozen artifact MUST produce the canonical dump of the live artifact its manifest names. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
-| `FIXTURE-020` | `POST` | That comparison MUST be retired, not failed, when the frozen manifest and the live generator disagree on `generator_version`. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
-| `FIXTURE-026` | `POST` | A frozen artifact whose manifest names a generator that no longer exists MUST report as degraded, and MUST be dropped at the next retention pass. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). The outcome of `FIXTURE-020` for a different cause: a renamed or deleted generator leaves the comparison without a second term rather than with a stale one | unimplemented |
-| `FIXTURE-021` | `POST` | The frozen set MUST keep the newest three artifacts per document type, and drop the rest. | this spec section 2 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
-| `FIXTURE-025` | `FAIL` | A committed artifact whose generator is gone MUST fail the gate. | this spec section 3 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). A byte diff alone reports nothing here, because the term it would compare against is the one that vanished | unimplemented |
-| `FIXTURE-031` | `FAIL` | A generator with no committed artifact MUST fail the gate. | this spec section 3 | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF). The mirror of `FIXTURE-025`, and the one that passes silently on the very run that introduces it: a new generator with no artifact yet is a diff with nothing to diff | unimplemented |
-| `FIXTURE-018` | `FRAME` | A frozen artifact MUST NOT be regenerated. | this spec section 2; `ambre-spec-docfile.md section 3` | not built -- lands with `FIXTURES P1 -- the corpus and its gate` (`ambre-roadmap.md` EF) | unimplemented |
+| `FIXTURE-006` | `POST` | A committed fixture whose bytes drift MUST fail CI. | this spec section 3 | `fixtures_gate::a_generator_that_changes_its_output_drifts_against_the_committed_bytes`; `::a_red_gate_leaves_the_committed_tree_untouched` holds the other half, that the gate judges the tree without rewriting it. `just fixtures-check` runs the same gate over the committed corpus in the host job | verified |
+| `FIXTURE-019` | `POST` | A migrated frozen artifact MUST produce the canonical dump of the live artifact its manifest names. | this spec section 2 | `fixtures_gate::a_frozen_artifact_dumps_like_the_live_one_it_names` and `::a_frozen_artifact_that_no_longer_matches_the_live_one_fails_the_gate` -- the second is the one with teeth, since a comparison that cannot fail holds nothing | verified |
+| `FIXTURE-020` | `POST` | That comparison MUST be retired, not failed, when the frozen manifest and the live generator disagree on `generator_version`. | this spec section 2 | `fixtures_gate::a_generator_version_bump_retires_the_frozen_comparison` asserts all three: the gate stays green, the artifact reports degraded, and the held count drops | verified |
+| `FIXTURE-026` | `POST` | A frozen artifact whose manifest names a generator that no longer exists MUST report as degraded, and MUST be dropped at the next retention pass. | this spec section 2 | `fixtures_gate::a_frozen_artifact_whose_generator_vanished_degrades_then_drops`, which also asserts the gate itself deletes nothing. The outcome of `FIXTURE-020` for a different cause: a renamed or deleted generator leaves the comparison without a second term rather than with a stale one | verified |
+| `FIXTURE-021` | `POST` | The frozen set MUST keep the newest three artifacts per document type, and drop the rest. | this spec section 2 | `fixtures_gate::retention_keeps_the_newest_three_frozen_artifacts_per_doc_type`, which also holds that the gate reports an overflow rather than deleting behind the contributor; `::retention_reads_the_version_suffix_as_numbers_not_as_text` pins the ordering past the tenth bump | verified |
+| `FIXTURE-025` | `FAIL` | A committed artifact whose generator is gone MUST fail the gate. | this spec section 3 | `fixtures_gate::a_committed_artifact_with_no_generator_left_fails_the_gate`. A byte diff alone reports nothing here, because the term it would compare against is the one that vanished | verified |
+| `FIXTURE-031` | `FAIL` | A generator with no committed artifact MUST fail the gate. | this spec section 3 | `fixtures_gate::a_generator_with_no_committed_artifact_fails_the_gate`. The mirror of `FIXTURE-025`, and the one that passes silently on the very run that introduces it: a new generator with no artifact yet is a diff with nothing to diff | verified |
+| `FIXTURE-018` | `FRAME` | A frozen artifact MUST NOT be regenerated. | this spec section 2; `ambre-spec-docfile.md section 3` | `fixtures_gate::freezing_the_same_version_pair_twice_is_refused`, which freezes, edits the generator, freezes again, and asserts the first bytes survived. No recipe writes into `frozen/` at all, and only the freeze recipe ever creates a file there | verified |
 
 * **Budget.** the tooling targets of `ambre-spec-budgets.md`: `just fixtures` in
   ~30 s, `just fixtures-check` in ~10 s, and the committed artifact cap. `FIXTURE-021` is what keeps
@@ -91,11 +91,12 @@ status values are normative in `ambre-spec-template.md`.
   that `ambre-app` never names (`FIXTURE-007`), so it links into no shipped binary and reaches no
   relay. The one key it touches is derived at test setup, guards nothing, and is never written to
   disk (section 2).
-* **Verification.** 16 `verified`, 3 `unverified`, 2 `human-review`, 10 `unimplemented`. Determinism
+* **Verification.** 25 `verified`, 2 `unverified`, 2 `human-review`, 2 `unimplemented`. Determinism
   is held on four axes including the cross-process one, and the whole loader is held: the round
-  trip, every typed failure, the root resolution and both canonical-dump rules. Every
-  `unimplemented` row is the corpus itself, which does not exist: `fixtures/` is not in the tree, so
-  freezing, retention, drift and the match against the registry are specified and unbuilt. Three
+  trip, every typed failure, the root resolution and both canonical-dump rules. The corpus exists
+  and the gate runs in the host job, so drift, membership, freezing and retention are each held by a
+  belt over a throwaway corpus root. The two `unimplemented` rows are the benchmark corpus, which
+  lands with `FIXTURES P2`. Three
   conjunctions came apart, and each separated a covered half from a half that carries the weight.
   `FIXTURE-001` claimed byte-identical output across runs **and** across processes, and the second
   is the one the spike was written for: Rust reseeds hash-map state per process, so an encoder
@@ -366,10 +367,13 @@ degraded and re-freezing at the next bump restores the coverage. A generator tha
 or deleted degrades the same way and stays degraded, since the manifest then names nothing at all
 (`FIXTURE-026`).
 
-**"Newest" is the lexicographic order of the version pair** the filename already carries
-(`FIXTURE-021`). The two axes are independent, but a freeze only ever happens at a bump of one of
-them and neither ever decreases, so the pair is strictly increasing across freezes of a given
-document type and orders them totally. No timestamp is stored, and none is needed.
+**"Newest" is the numeric order of the version pair** the filename already carries
+(`FIXTURE-021`): the container version first, the schema version second, each read as an integer.
+The two axes are independent, but a freeze only ever happens at a bump of one of them, and neither
+ever decreases. The pair therefore increases strictly across freezes of a given document type, and
+orders them totally. No timestamp is stored, and none is needed. The comparison reads numbers, not
+text, because the suffix is decimal. Ten bumps in, a string order reads `s10` as older than `s9`,
+and drops the newest artifact of the set, which migration coverage needs most.
 
 **The db tier reuses the same fixture, never a second artifact.** Where a server-side test needs
 stored bytes, the fixture takes the ordinary client path: the importer strips the header, because
@@ -424,7 +428,7 @@ The surface is a contributor's, not a user's: five recipes and one feature flag.
 
 | Trigger | Behaviour |
 |---|---|
-| `just fixtures` | regenerate `fixtures/current/` in place, and delete any artifact whose generator no longer exists. Detecting an orphan is the gate's job; removing one is this recipe's, so the fix for a red gate is always to run this, never a manual delete |
+| `just fixtures` | regenerate `fixtures/current/` in place, delete any artifact whose generator no longer exists, and run the frozen retention pass (`FIXTURE-021`, `FIXTURE-026`). Detecting an orphan or an overflow is the gate's job; removing one is this recipe's, so the fix for a red gate is always to run this, never a manual delete |
 | `just fixtures-check` | regenerate into a temporary directory and diff against the committed goldens, refuse a golden whose generator is gone and a generator with no golden (`FIXTURE-025`), then load every frozen artifact and assert its migration (`FIXTURE-006`). Runs in the CI host job |
 | `just fixtures-freeze <name>` | copy the **named** artifact out of `current/` into `frozen/`, deriving the version suffix from its manifest rather than from a person typing it. A name, not a document type: several generators share one, and which lineage keeps migration coverage is a deliberate choice |
 | `just fixtures-bench-corpus` | produce the large, git-ignored scale corpora into `fixtures/bench/` (`FIXTURE-022`) |
@@ -486,14 +490,11 @@ host with no GPU through the recording surface.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The corpus does not exist.** There is no `fixtures/` directory in the tree, so ten rows of
-  section 1 describe a corpus, a gate, a freeze and a retention cap that nothing performs. The
-  machinery underneath them is built and held by its own belt.
-* **None of the five recipes exists.** The host job carries a package-scoped `cargo test` line in
-  place of `just fixtures-check`, so the loader and the driver are exercised while the corpus rules
-  are not.
-* **No generator is registered outside a test.** Both engines carry a fixture module and the driver
-  walks a registry, and the only registries that exist are built inside the belt.
+* **The frozen tree is empty.** Freezing is a step of a version bump and no version has been bumped
+  yet, so the gate holds zero semantic comparisons today. Every frozen rule is held by a belt over a
+  throwaway corpus root instead, and the first bump is what puts a real artifact under them.
+* **Two of the five recipes do not exist.** `just fixtures-bench-corpus` and `just fixtures-bench`
+  land with `FIXTURES P2`, and with them the two benchmark rows of section 1.
 * **Determinism has been measured on one architecture.** Every figure and every determinism test
   runs on x86_64. A failure elsewhere reopens `FIXTURE-001`, and the fallback is a semantic digest,
   which is weaker because it cannot see a peer-derived id.
@@ -503,7 +504,7 @@ host with no GPU through the recording surface.
 * **The 2-peer generator is Trame-only.** It reuses the mock sync seam that replays the relay step
   without a network, and `ambre-toile` has no counterpart, so a post-convergence fixture is a Trame
   document until one exists.
-* **A fixture proves no convergence.** One planned generator emits a post-convergence state; that
+* **A fixture proves no convergence.** One generator emits a post-convergence state; that
   is a fixture **produced by** the converged engine, never a proof of it. The 2-peer property tests
   remain the sole authority.
 * **One link of the load path stays out of reach.** A db-tier test exercises the real read path over

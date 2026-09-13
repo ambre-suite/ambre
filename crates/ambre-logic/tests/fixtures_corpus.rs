@@ -286,10 +286,11 @@ fn regenerating_rewrites_the_same_bytes() {
 
 #[test]
 fn the_shipping_registry_has_no_duplicate_names() {
-    // Vacuous while `REGISTRY` is empty (P0 ships the mechanism, P1 the corpus),
-    // and it is here now because a name is the artifact stem: two generators
-    // sharing one would silently overwrite each other's fixture.
+    // A name is the artifact stem, so two generators sharing one would silently
+    // overwrite each other's fixture on every run. The emptiness check is part of
+    // the rule here: an empty registry passes the dedup and verifies nothing.
     let mut names: Vec<&str> = fixtures::REGISTRY.iter().map(|g| g.name()).collect();
+    assert!(!names.is_empty(), "an empty registry verifies nothing here");
     let count = names.len();
     names.sort_unstable();
     names.dedup();
@@ -533,9 +534,10 @@ fn the_shape_counts_what_the_document_holds() {
 fn a_solo_document_reports_one_peer_and_a_merged_one_reports_two() {
     let (_id, solo) = fixtures::import_fixture(&TRAME.build()).expect("loads");
     // The importing state commits its own scaffolding under its own peer before
-    // the merge, so a restored solo document already carries two peers' ops. What
-    // the field must never do is stay pinned at 1 whatever it is handed.
-    assert!(shape_of(&solo).peers >= 1);
+    // the merge, so a restored document always carries one peer that is the
+    // reader rather than an author. `FIXTURE_IMPORT_PEER` is what lets the count
+    // subtract exactly that one, so a solo document still reports one.
+    assert_eq!(shape_of(&solo).peers, 1, "one author");
 
     let mut alice = TrameState::with_peer(1);
     let mut bob = TrameState::with_peer(2);

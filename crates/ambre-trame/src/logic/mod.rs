@@ -346,10 +346,12 @@ pub mod docfile;
 mod fill;
 mod filters;
 mod find;
-/// The per-app half of `shape_of` / `canonical_dump` (`fixtures`). Fixture
-/// code (I4): behind the non-default `fixtures` feature, never in a client build.
+/// The generators, and the per-app half of `shape_of` / `canonical_dump`
+/// (`fixtures`). Public, because `ambre-logic`'s registry names the generators;
+/// fixture code (I4), so the whole module is behind the non-default `fixtures`
+/// feature and reaches no client build.
 #[cfg(feature = "fixtures")]
-mod fixtures;
+pub mod fixtures;
 mod helpers;
 mod interop;
 mod merges;

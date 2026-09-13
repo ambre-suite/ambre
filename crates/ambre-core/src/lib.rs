@@ -43,7 +43,10 @@ pub use docfile::{
 };
 pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
 #[cfg(feature = "fixtures")]
-pub use fixtures::{FixtureGen, FixtureManifest, FixtureShape, ShapeBody, seeded_document_id};
+pub use fixtures::{
+    FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape, ShapeBody, fixture_peer_count,
+    seeded_document_id,
+};
 pub use id::{ChannelId, DocumentId, MeetingId, SnapshotId, UserId};
 pub use public_key::PublicKey;
 pub use role::Role;
