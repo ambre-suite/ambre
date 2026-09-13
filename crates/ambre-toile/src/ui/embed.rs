@@ -7,11 +7,11 @@
 // module holds the two things `ToileView` needs and nothing else:
 //
 //   - `visible_embeds`: the culled `doc_embed`s projected to screen space, which
-//     the view PUBLISHES for `FrameHost`. `ambre-toile` cannot paint a child, nor
-//     route input into one: both need `AppView`, the closed enum that lives in
-// the launcher, downstream of every app crate (architecture / ARCH P2). So
-//     the composition inverts -- the view describes its embeds, the launcher acts
-//     on them.
+//     the view PUBLISHES for `FrameHost`. `ambre-toile` cannot paint a child,
+//     nor route input into one. Both need `AppView`, the closed enum that lives
+//     in the launcher, downstream of every app crate (architecture / ARCH P2).
+//     So the composition inverts -- the view describes its embeds, the launcher
+//     acts on them.
 //   - `to_child_space`: the pointer transform. Screen -> world -> the element's
 //     unrotated local frame -> child pixels.
 //
@@ -32,14 +32,14 @@ use ambre_canvas::InputEvent;
 use super::viewport::ViewportTransform;
 
 /// How long a `doc_embed` must stay out of the culled set before its child
-/// document's sync session is closed ("Opening the child").
+/// document's sync session closes ("Opening the child").
 ///
-/// Visibility comes from the Logic R-tree cull set, which flips on every
-/// pan. Binding the session lifecycle straight to it would thrash the WebSocket:
-/// a scroll oscillation would storm open/close, and each re-open costs a members
-/// fetch, a key unwrap and a snapshot hydration. So an embed opens the instant it
-/// enters the cull set but only closes after staying out for this long; it
-/// re-entering cancels the pending close.
+/// Visibility comes from the Logic R-tree cull set, which flips on every pan.
+/// Binding the session lifecycle straight to it would thrash the WebSocket. A
+/// scroll oscillation would storm open and close, and each re-open costs a
+/// members fetch, a key unwrap and a snapshot hydration. So an embed opens the
+/// instant it enters the cull set, and only closes after staying out for this
+/// long. Re-entering cancels the pending close.
 pub const EMBED_CLOSE_DEBOUNCE_MS: f64 = 5_000.0;
 
 /// One `doc_embed` in the current culled frame, projected to screen space and
@@ -48,25 +48,25 @@ pub const EMBED_CLOSE_DEBOUNCE_MS: f64 = 5_000.0;
 pub struct VisibleEmbed {
     /// The board element carrying the reference (the focus / hit-test key).
     pub element: ElementId,
-    /// The embedded document itself -- the key into `FrameHost`'s child views and
-    /// the id the child's own commands are addressed to.
+    /// The embedded document itself -- the key into `FrameHost`'s child views
+    /// and the id the child's own commands carry.
     pub document_id: DocumentId,
     pub doc_type: DocType,
     /// Where to paint the child, in physical screen pixels. The axis-aligned
-    /// bounding box of the element's (possibly rotated) quad: `push_clip` is
+    /// bounding box of the element's (possibly rotated) quad. `push_clip` is
     /// rect-only, so a rotated embed clips to its AABB -- accepted, see
     /// "Clip limitation".
     pub screen_rect: Rect,
-    /// The child's own canvas size in physical pixels. A child pixel is a screen
-    /// pixel by construction (both are world units scaled by the camera's zoom),
-    /// so this is just the element's world size at the current zoom.
+    /// The child's own canvas size in physical pixels. A child pixel is a
+    /// screen pixel by construction, since the camera's zoom scales both from
+    /// world units. So this is the element's world size at the current zoom.
     pub child_size: Size,
     /// Child pixels -> physical screen pixels: what a painter pushes before
     /// drawing the child, so a rotated embed paints its child rotated
     /// (`TOILE-UI-096`). The exact inverse of [`to_child_space`], which is what
-    /// makes the paint and the pointer agree; translating to `screen_rect`'s
+    /// makes the paint and the pointer agree. Translating to `screen_rect`'s
     /// corner instead puts the child straight, in the wrong place, while the
-    /// pointer arrives as though it were turned.
+    /// pointer arrives as though the element had turned it.
     pub to_screen: Affine,
     /// View-local focus ("Input focus"): while true, `FrameHost` maps canvas
     /// input into this child and hands it to the child's own `handle_input`.
@@ -75,10 +75,12 @@ pub struct VisibleEmbed {
 
 /// Map a screen point into a `doc_embed`'s child pixel space.
 ///
-/// `screen -> world` undoes the camera; `world -> local` undoes the element's
-/// rotation (elements store geometry in the unrotated frame bounded by `bounds`,
-/// with `transform` the rotation about that AABB's center -- see `hit.rs`); then
-/// the child's origin is `bounds.origin` and its scale is the camera's zoom.
+/// * `screen -> world` undoes the camera.
+/// * `world -> local` undoes the element's rotation. An element stores geometry
+///   in the unrotated frame bounded by `bounds`, and `transform` is the
+///   rotation about that AABB's center (see `hit.rs`).
+/// * The child's origin is then `bounds.origin`, and its scale is the camera's
+///   zoom.
 ///
 /// Deltas need no equivalent: a child pixel *is* a screen pixel, since the same
 /// `zoom` scales both. A wheel delta forwards verbatim.
@@ -94,9 +96,12 @@ pub fn to_child_space(elem: &DisplayElement, cam: &ViewportTransform, screen: Po
 /// Map the child's own pixel space onto the screen: the inverse of
 /// [`to_child_space`] (`TOILE-UI-096`).
 ///
-/// Read right to left, a child pixel is divided by the zoom to become a world
-/// offset, moved to the element's unrotated origin, turned by the element's own
-/// rotation, and finally taken through the camera.
+/// Read right to left:
+///
+/// * The zoom divides a child pixel into a world offset.
+/// * The translation moves it to the element's unrotated origin.
+/// * The element's own rotation turns it.
+/// * The camera carries it to the screen.
 pub fn to_screen(elem: &DisplayElement, cam: &ViewportTransform) -> Affine {
     cam.world_to_screen()
         * elem.transform
@@ -112,9 +117,9 @@ pub fn child_size(elem: &DisplayElement, cam: &ViewportTransform) -> Size {
     )
 }
 
-/// The screen-space AABB of an element's (possibly rotated) quad. All four
-/// corners are mapped, so a rotated embed yields the box that contains it --
-/// unlike a two-corner projection, which collapses under rotation.
+/// The screen-space AABB of an element's (possibly rotated) quad. This maps all
+/// four corners, so a rotated embed yields the box that contains it -- unlike a
+/// two-corner projection, which collapses under rotation.
 pub fn screen_aabb(elem: &DisplayElement, cam: &ViewportTransform) -> Rect {
     let t = cam.world_to_screen() * elem.transform;
     let b = elem.bounds;
@@ -169,13 +174,13 @@ pub fn visible_embeds(
 // -- Placing an embed ---------------------------------------------------------
 //
 // The gesture that puts an embed on the board (`TOILE-086`, `TOILE-087`). The
-// shell owns both dialogs -- a web address is typed, and the document list is
-// the launcher's -- so what crosses into the view is the answer, not the
-// gesture, exactly as a dropped file does (`ui::interop::DroppedFile`).
+// shell owns both dialogs -- the user types a web address, and the document
+// list is the launcher's -- so what crosses into the view is the answer, not
+// the gesture, exactly as a dropped file does (`ui::interop::DroppedFile`).
 
 /// The default world size of a freshly placed embed. A web page and a nested
-/// document alike land at a readable reading width rather than at a point the
-/// user then has to drag open; the ratio is a browser window's, not a slide's.
+/// document alike land at a readable width, rather than at a point the user
+/// then has to drag open. The ratio is a browser window's, not a slide's.
 pub const DEFAULT_EMBED_SIZE: Size = Size::new(640.0, 400.0);
 
 /// What a placement dialog answered with.
@@ -193,7 +198,7 @@ pub enum EmbedTarget {
 
 /// An embed the shell resolved and the view has yet to place (`TOILE-086`,
 /// `TOILE-087`). `at` is the drop point in physical pixels, or `None` when a
-/// menu entry started the placement and there is no point to speak of -- the
+/// menu entry started the placement and there is no point to speak of. The
 /// view then centres it on what the user is looking at, like a picker import.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlacedEmbed {
@@ -205,7 +210,7 @@ pub struct PlacedEmbed {
 /// reads, so the wording lives with the rule rather than at the dialog.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AddressError {
-    /// Nothing was typed.
+    /// The user typed nothing.
     Empty,
     /// A scheme other than `https`. This is the security-bearing refusal: a
     /// `javascript:` or a `data:` address in a frame runs in the embedder's
@@ -230,22 +235,23 @@ impl AddressError {
 /// Turn what a user typed into the address a frame may load, or say why it
 /// cannot (`TOILE-088`).
 ///
-/// **Only `https` survives.** A bare `example.com` is read as `https://example.com`;
-/// every explicit scheme other than `https` is refused, `http` included. Two
-/// reasons, and neither is taste: a `javascript:`, `data:` or `blob:` frame
-/// executes with the embedder's own origin as its opener and is the whole of the
-/// attack `TOILE-088` names, and a plain-`http` frame inside a page served over
-/// TLS is blocked by the browser as mixed content -- so accepting one would put a
-/// box on the board that can never paint.
+/// **Only `https` survives.** A bare `example.com` reads as
+/// `https://example.com`, and every explicit scheme other than `https` gets a
+/// refusal, `http` included. Two reasons, and neither is taste.
 ///
-/// The parse is done by hand rather than through a URL crate: the board needs
-/// the scheme and a non-empty host and nothing else, while a conforming parser
-/// carries the IDNA tables into the wasm bundle for the rest.
+/// * A `javascript:`, `data:` or `blob:` frame executes with the embedder's own
+///   origin as its opener, which is the whole of the attack `TOILE-088` names.
+/// * The browser blocks a plain-`http` frame inside a page served over TLS as
+///   mixed content. Accepting one would put a box on the board that never
+///   paints.
+///
+/// This parses by hand rather than through a URL crate. The board needs the
+/// scheme and a non-empty host and nothing else. A conforming parser would
+/// carry the IDNA tables into the wasm bundle for the rest.
 pub fn normalize_web_address(typed: &str) -> Result<String, AddressError> {
-    // A control character or a space inside an address is either a paste
-    // accident or an attempt to hide a scheme from a naive prefix test
-    // (`java\nscript:`), and no legal address needs one: strip the ends, refuse
-    // the middle.
+    // A control character or a space inside an address is never legitimate. It
+    // is a paste accident, or an attempt to hide a scheme from a naive prefix
+    // test (`java\nscript:`). Strip the ends, and refuse the middle.
     let trimmed = typed.trim_matches(|c: char| c.is_whitespace() || c.is_control());
     if trimmed.is_empty() {
         return Err(AddressError::Empty);
@@ -279,15 +285,15 @@ pub fn normalize_web_address(typed: &str) -> Result<String, AddressError> {
 }
 
 /// Split `s` at an explicit URL scheme, returning it and the remainder. `None`
-/// when the text carries no scheme -- which a `host:port` deliberately does not,
-/// since what follows its colon is a port rather than a path.
+/// when the text carries no scheme. A `host:port` deliberately carries none:
+/// what follows its colon is a port rather than a path.
 fn split_scheme(s: &str) -> Option<(&str, &str)> {
     let colon = s.find(':')?;
     let (scheme, rest) = s.split_at(colon);
     let rest = &rest[1..];
     // RFC 3986: a scheme starts with a letter and holds letters, digits and
-    // `+ - .` -- and a `host:8080` matches that too, which is why the digits
-    // after the colon are what tells the two apart.
+    // `+ - .`. A `host:8080` matches that shape too, so the digits after the
+    // colon are what tells the two apart.
     let shaped = !scheme.is_empty()
         && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
         && scheme
@@ -304,9 +310,9 @@ fn split_scheme(s: &str) -> Option<(&str, &str)> {
 /// the board ("Input focus").
 ///
 /// `inside` answers whether a screen point lands in the focused embed's quad,
-/// and `last_pointer` is where the cursor was last seen. Split out of the view
-/// so the routing rule is host-tested: `ToileView` is not natively
-/// constructible, and this is where the two rules that matter live --
+/// and `last_pointer` is where the cursor was last seen. Splitting this out of
+/// the view keeps the routing rule host-tested, since `ToileView` is not
+/// natively constructible. Two rules matter here:
 ///
 /// * `Escape` is never captured (`TOILE-UI-331`): the board needs it to blur,
 ///   and a child that swallowed it would trap the user inside the embed;
@@ -338,7 +344,7 @@ where
 pub struct VisibleWebEmbed {
     /// The board element carrying the address: the shell's key for its frame.
     pub element: ElementId,
-    /// The address, as stored -- already normalized when it was placed.
+    /// The address, as stored: the placement normalized it already.
     pub url: String,
     /// Where the frame goes, in physical screen pixels: the AABB of the
     /// element's quad, like a nested document's. What the board clips to.
@@ -346,9 +352,9 @@ pub struct VisibleWebEmbed {
     /// The frame's own layout size, in world units -- the element's size, and
     /// **not** a function of the zoom.
     ///
-    /// A page is laid out at this size once and then scaled by the transform
-    /// below, so zooming the board moves a frame rather than reflowing the page
-    /// inside it. Sizing the frame in screen pixels instead would re-run the
+    /// The browser lays a page out at this size once. The transform below then
+    /// scales it, so zooming the board moves a frame rather than reflowing the
+    /// page inside it. Sizing the frame in screen pixels instead would re-run the
     /// page's layout on every wheel notch, at a cost the board does not control.
     pub layout_size: Size,
     /// Layout units -> physical screen pixels: where the frame sits, turned by
@@ -356,8 +362,8 @@ pub struct VisibleWebEmbed {
     /// device pixel ratio.
     pub to_screen: Affine,
     /// View-local focus, on the same arbitration as a nested document's: a click
-    /// enters, a drag moves. Until it is entered the frame must let the pointer
-    /// through to the board, or the embed could never be moved or resized.
+    /// enters, a drag moves. Until the user enters it, the frame must let the
+    /// pointer through to the board, or no one could move or resize the embed.
     pub focused: bool,
 }
 
@@ -394,8 +400,8 @@ pub fn visible_web_embeds(
 }
 
 /// How far (physical pixels) the pointer may travel between press and release
-/// and still count as a click that focuses a `doc_embed` rather than a drag that
-/// moves it ("Input focus").
+/// and still count as a click. A click focuses a `doc_embed`, and a longer
+/// travel is a drag that moves it ("Input focus").
 pub const CLICK_SLOP: f64 = 4.0;
 
 /// Which `doc_embed`, if any, holds input focus, and the press-to-release
@@ -403,21 +409,22 @@ pub const CLICK_SLOP: f64 = 4.0;
 /// CRDT: a peer's focus is not ours, and `derive.rs` always emits
 /// `focused: false`.
 ///
-/// Pure: it is fed the press target, the release point and whatever `Escape` /
-/// culling do, and answers only "did focus change" so the view can mark itself
-/// dirty. Split out of `ToileView` because that type is not natively
+/// Pure: the view feeds it the press target, the release point and whatever
+/// `Escape` and culling do. It answers only "did focus change", so the view can
+/// mark itself dirty. Split out of `ToileView` because that type is not natively
 /// constructible, and the click-vs-drag rule is the behavioural core of 3.c.
 #[derive(Default)]
 pub struct EmbedFocus {
     /// The focused embed's board element, if any.
     focused: Option<ElementId>,
     /// The embed under the last press (`None` = empty canvas / non-embed) and
-    /// where it landed. Focus is settled on RELEASE, and only if the pointer
-    /// barely moved: a drag that starts on an embed must still move it on the
-    /// board, so entering a document is a distinct gesture from repositioning it.
-    /// The press records the hit even when it is the already-focused embed, so a
-    /// release there is a no-op rather than a blur (a repeat click, e.g. the
-    /// second of a double-click, must not kick focus out).
+    /// where it landed. The release settles focus, and only if the pointer
+    /// barely moved. A drag that starts on an embed must still move it on the
+    /// board, so entering a document is a distinct gesture from repositioning.
+    ///
+    /// The press records the hit even when it names the already-focused embed.
+    /// A release there does nothing rather than blurring: a repeat click, for
+    /// example the second of a double-click, must not kick focus out.
     press: Option<(Option<ElementId>, Point)>,
 }
 
@@ -435,10 +442,10 @@ impl EmbedFocus {
     }
 
     /// A release landed at `screen`. If the pointer stayed within [`CLICK_SLOP`]
-    /// of the press it is a click: on an embed it focuses that embed, on empty
-    /// canvas it returns focus to the board. Past the slop it is a drag (a move /
-    /// resize / marquee) and focus is left untouched. Returns whether focus
-    /// changed.
+    /// of the press it is a click. On an embed that click focuses the embed,
+    /// and on empty canvas it returns focus to the board. Past the slop it is a
+    /// drag (a move / resize / marquee) and focus stays put. Returns whether
+    /// focus changed.
     pub fn on_release(&mut self, screen: Point) -> bool {
         let Some((hit, from)) = self.press.take() else {
             return false;
@@ -462,15 +469,16 @@ impl EmbedFocus {
     }
 
     /// Return focus to the board (`Escape`, a document swap). Returns whether
-    /// anything was focused.
+    /// focus sat on an embed.
     pub fn blur(&mut self) -> bool {
         self.press = None;
         self.focused.take().is_some()
     }
 
-    /// Drop focus if `still_present` reports the focused element is gone from the
-    /// culled frame -- a peer deleted it, or it scrolled far enough to be closed,
-    /// leaving nothing to route input into. Returns whether focus changed.
+    /// Drop focus if `still_present` reports the focused element gone from the
+    /// culled frame. A peer deleted it, or it scrolled far enough for the cull
+    /// to close it, and nothing remains to route input into. Returns whether
+    /// focus changed.
     pub fn retain_if<F>(&mut self, still_present: F) -> bool
     where
         F: Fn(&ElementId) -> bool,
@@ -486,8 +494,9 @@ impl EmbedFocus {
 /// The child sync sessions this board has open, and the debounce that keeps a
 /// pan from thrashing them ("Opening the child").
 ///
-/// Pure: it is told what is visible and what time it is, and answers with the
-/// session commands to send. `ToileView` owns one and forwards its output.
+/// Pure: the view tells it what is visible and what time it is, and it answers
+/// with the session commands to send. `ToileView` owns one and forwards its
+/// output.
 #[derive(Default)]
 pub struct EmbedSessions {
     /// Open children. `Some(deadline)` = out of the cull set, closing at that
@@ -501,13 +510,17 @@ impl EmbedSessions {
     /// (`TOILE-UI-338`, `TOILE-UI-339`).
     ///
     /// The order is the whole point. Writing the open set first and sending
-    /// afterwards loses a command for good on a full channel: the set already
-    /// says the work is done, so no later frame retries it -- a dropped open
-    /// leaves a blank placeholder until the board is left, and a dropped close
-    /// leaks a child session nothing names any more. Recording on the answer
-    /// instead makes both self-healing: the embed is still in the cull set next
-    /// frame, so the open is re-offered; the child is still in the open set, so
-    /// the close is re-offered on the frame after its deadline.
+    /// afterwards loses a command for good on a full channel. The set already
+    /// marks the work done, so no later frame retries it.
+    ///
+    /// * A dropped open leaves a blank placeholder until the user leaves the
+    ///   board.
+    /// * A dropped close leaks a child session nothing names any more.
+    ///
+    /// Recording on the answer instead makes both self-healing. The embed is
+    /// still in the cull set next frame, so that frame offers the open again.
+    /// The child is still in the open set, so the frame after its deadline
+    /// offers the close again.
     ///
     /// `send` returns whether the command left. A caller that cannot send (a
     /// full channel, a disconnected one) returns `false` and the state stays as
@@ -603,9 +616,9 @@ fn references(display: &DisplayViewport, document_id: &DocumentId) -> bool {
 /// including the `locked` skip -- a locked embed is not interactive.
 ///
 /// Both kinds, because the gesture is the same for both: a click enters, a drag
-/// moves. What entering means differs -- a nested document takes canvas events
-/// through the board, a web page takes DOM events directly from its frame -- and
-/// that is settled downstream of this.
+/// moves. What entering means differs: a nested document takes canvas events
+/// through the board, while a web page takes DOM events directly from its
+/// frame. Code downstream of this settles that difference.
 pub fn embed_at(display: &DisplayViewport, world: Point) -> Option<&DisplayElement> {
     display
         .nodes
@@ -622,10 +635,10 @@ pub fn embed_at(display: &DisplayViewport, world: Point) -> Option<&DisplayEleme
         .find(|e| !e.locked && e.bounds.contains(e.transform.inverse() * world))
 }
 
-// ── Tests (host tier) ───────────────────────────────────────────────────────
+// -- Tests (host tier) -------------------------------------------------------
 // Pure geometry + the session debounce. No GPU, no DOM: `ToileView` itself is
-// not natively constructible (it wants a `TextInput` and leptos signals), which
-// is exactly why the decidable parts live here rather than inside it.
+// not natively constructible, since it wants a `TextInput` and leptos signals.
+// That is exactly why the decidable parts live here rather than inside it.
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -737,8 +750,8 @@ mod tests {
     fn screen_aabb_contains_a_rotated_quad() {
         let cam = ViewportTransform::new(1000.0, 800.0);
         // A 100x20 bar turned a quarter turn: its AABB must become 20x100. A
-        // two-corner projection would report it as 100x20 still, and the child
-        // would be clipped away to nothing.
+        // two-corner projection would report it as 100x20 still, and the clip
+        // would take the whole child away.
         let e = doc_embed(
             "e1",
             DocumentId::new(),
@@ -753,9 +766,9 @@ mod tests {
     // -- Publishing for FrameHost ---------------------------------------------
 
     /// `TOILE-UI-096`: what the painter pushes is the exact inverse of what the
-    /// pointer undoes. One half of the mapping proved and the other contradicting
-    /// it is what put a rotated embed's child straight, in the wrong corner,
-    /// while its pointer arrived turned.
+    /// pointer undoes. Proving one half of the mapping while the other half
+    /// contradicts it is the old bug. It put a rotated embed's child straight,
+    /// in the wrong corner, while its pointer arrived turned.
     #[test]
     fn the_paint_transform_is_the_inverse_of_the_pointer_transform() {
         let bounds = Rect::new(40.0, 30.0, 240.0, 130.0);
@@ -769,7 +782,7 @@ mod tests {
                 };
                 let paint = to_screen(&e, &cam);
                 // Round-trip a handful of child pixels: paint them onto the
-                // screen, then map them back the way a pointer event is mapped.
+                // screen, then map them back the way a pointer event travels.
                 for child in [
                     Point::new(0.0, 0.0),
                     Point::new(10.0, 4.0),
@@ -786,7 +799,7 @@ mod tests {
     }
 
     /// The child's origin lands where the element's own top-left is, not where
-    /// its bounding box begins: the two differ the moment the embed is turned.
+    /// its bounding box begins: the two differ the moment the embed turns.
     #[test]
     fn the_paint_origin_is_the_elements_corner_not_its_bounding_box() {
         let bounds = Rect::new(0.0, 0.0, 200.0, 100.0);
@@ -909,8 +922,8 @@ mod tests {
         let mut f = EmbedFocus::default();
         f.on_press(Some(&eid("e1")), Point::ZERO);
         f.on_release(Point::ZERO);
-        // Clicking the focused embed again must not blur it: the press is not
-        // armed (it is already focused), so the release is a no-op, not a blur.
+        // Clicking the focused embed again must not blur it. The press arms
+        // nothing, since focus already sits there, so the release does nothing.
         // Otherwise the second click of a double-click would kick focus out.
         f.on_press(Some(&eid("e1")), Point::ZERO);
         assert!(
@@ -960,7 +973,7 @@ mod tests {
 
     // -- Session lifecycle + debounce -----------------------------------------
 
-    /// Reconcile with a channel that takes everything, returning what was sent.
+    /// Reconcile with a channel that takes everything, returning what left.
     fn sync(s: &mut EmbedSessions, dv: &DisplayViewport, now_ms: f64) -> Vec<LogicCommand> {
         let mut sent = Vec::new();
         s.sync(dv, now_ms, |cmd| {
@@ -970,8 +983,8 @@ mod tests {
         sent
     }
 
-    /// Reconcile with a channel that refuses everything, returning what it was
-    /// offered. Nothing may be recorded from it.
+    /// Reconcile with a channel that refuses everything, returning what the
+    /// registry offered it. The registry MUST record nothing from it.
     fn sync_refused(s: &mut EmbedSessions, dv: &DisplayViewport, now_ms: f64) -> Vec<LogicCommand> {
         let mut offered = Vec::new();
         s.sync(dv, now_ms, |cmd| {
@@ -1039,7 +1052,7 @@ mod tests {
         let empty = viewport(Vec::new());
         sync(&mut s, &board_with(child), 0.0);
 
-        // Leaves the cull set: the countdown starts, nothing is sent yet.
+        // Leaves the cull set: the countdown starts, and nothing leaves yet.
         assert!(sync(&mut s, &empty, 1_000.0).is_empty());
         // One millisecond short of the deadline: still nothing.
         let almost = 1_000.0 + EMBED_CLOSE_DEBOUNCE_MS - 1.0;
@@ -1104,8 +1117,8 @@ mod tests {
         ]);
         sync(&mut s, &dv, 0.0);
 
-        // The board is going away: no debounce, and the registry is emptied so a
-        // later frame cannot close them twice.
+        // The board is going away: no debounce, and the sweep empties the
+        // registry so a later frame cannot close them twice.
         let got: std::collections::HashSet<DocumentId> =
             closed(&close_all(&mut s)).into_iter().collect();
         assert_eq!(got, std::collections::HashSet::from([a, b]));
@@ -1113,10 +1126,10 @@ mod tests {
         assert!(!s.is_open(&a) && !s.is_open(&b));
     }
 
-    /// `TOILE-UI-338`: an open the channel refuses is offered again on the next
-    /// frame. Recording it before it left is what used to lose it for good --
-    /// the set said the work was done, so no frame retried and the embed stayed
-    /// a blank placeholder until the board was left.
+    /// `TOILE-UI-338`: when the channel refuses an open, the next frame offers
+    /// it again. Recording it before it left used to lose it for good: the set
+    /// marked the work done, so no frame retried. The embed then stayed a blank
+    /// placeholder until the user left the board.
     #[test]
     fn an_open_the_channel_refuses_comes_back_next_frame() {
         let mut s = EmbedSessions::default();
@@ -1132,10 +1145,11 @@ mod tests {
         assert!(sync(&mut s, &dv, 32.0).is_empty());
     }
 
-    /// `TOILE-UI-339`: a close the channel refuses is offered again, so a full
-    /// channel defers the session rather than leaking it. Forgetting the child
-    /// before the command left used to leave a session open with nothing that
-    /// named it -- which `close_all` could not reclaim either.
+    /// `TOILE-UI-339`: when the channel refuses a close, the next frame offers
+    /// it again, so a full channel defers the session rather than leaking it.
+    /// Forgetting the child before the command left used to leave a session
+    /// open with nothing that named it, which `close_all` could not reclaim
+    /// either.
     #[test]
     fn a_close_the_channel_refuses_comes_back_next_frame() {
         let mut s = EmbedSessions::default();
@@ -1154,7 +1168,7 @@ mod tests {
     }
 
     /// `TOILE-UI-339` on the way out: a child whose close the channel refuses
-    /// stays in the registry, so a caller that tries again can still reclaim it.
+    /// stays in the registry. A caller that tries again still reclaims it.
     #[test]
     fn close_all_keeps_what_the_channel_refused() {
         let mut s = EmbedSessions::default();
@@ -1165,7 +1179,8 @@ mod tests {
         ]);
         sync(&mut s, &dv, 0.0);
 
-        // Only `a` gets through; `b` is refused and must survive the sweep.
+        // Only `a` gets through; the channel refuses `b`, which must survive
+        // the sweep.
         s.close_all(
             |cmd| matches!(cmd, LogicCommand::CloseDocument { document_id } if document_id == a),
         );
@@ -1178,8 +1193,8 @@ mod tests {
     fn two_embeds_of_the_same_document_share_one_session() {
         let mut s = EmbedSessions::default();
         let child = DocumentId::new();
-        // The same document placed twice on one board: sessions are keyed by
-        // document, not by element, so this must open exactly one.
+        // The same document placed twice on one board: the registry keys a
+        // session by document, not by element, so this must open exactly one.
         let dv = viewport(vec![
             DisplayNode::Element(doc_embed("e1", child, Rect::new(0.0, 0.0, 10.0, 10.0), 0.0)),
             DisplayNode::Element(doc_embed(
@@ -1226,7 +1241,7 @@ mod address_tests {
             normalize_web_address("https://example.com/a"),
             Ok("https://example.com/a".to_owned())
         );
-        // The scheme is compared without case, and normalized on the way out.
+        // The parser compares the scheme without case, then normalizes it.
         assert_eq!(
             normalize_web_address("HTTPS://Example.COM/A"),
             Ok("https://Example.COM/A".to_owned())
@@ -1255,7 +1270,7 @@ mod address_tests {
     }
 
     /// A scheme split by a control character is the classic way past a prefix
-    /// test, so the control character is refused before the scheme is read.
+    /// test. The parser therefore rejects the control character first.
     #[test]
     fn a_scheme_hidden_behind_a_control_character_is_refused() {
         for typed in ["java\nscript:alert(1)", "java\tscript:alert(1)"] {
@@ -1264,17 +1279,17 @@ mod address_tests {
                 "{typed:?} must not be accepted"
             );
         }
-        // Leading control characters are stripped, and the scheme beneath them
-        // is then read for what it is.
+        // The parser strips leading control characters, then reads the scheme
+        // beneath them for what it is.
         assert_eq!(
             normalize_web_address("\u{0}\njavascript:alert(1)"),
             Err(AddressError::NotHttps)
         );
     }
 
-    /// Plain http is refused rather than silently upgraded: a frame served over
-    /// http inside a page served over TLS is blocked as mixed content, so
-    /// accepting it would put a box on the board that can never paint.
+    /// The parser refuses plain http rather than silently upgrading it. The
+    /// browser blocks an http frame inside a page served over TLS as mixed
+    /// content. Accepting one would put a box on the board that never paints.
     #[test]
     fn plain_http_is_refused_and_not_upgraded() {
         assert_eq!(
@@ -1329,7 +1344,7 @@ mod web_embed_tests {
     use super::{DisplayElement, ViewportTransform, visible_web_embeds};
 
     /// A web `embed` element: the doc-embed helper with its geometry swapped, so
-    /// the two kinds are built from one place.
+    /// one helper covers both kinds.
     fn web(id: &str, bounds: Rect, url: &str) -> DisplayElement {
         let mut e = doc_embed(id, DocumentId::new(), bounds, 0.0);
         e.geom = DisplayGeom::Embed(url.to_owned());
@@ -1343,8 +1358,8 @@ mod web_embed_tests {
         }
     }
 
-    /// The shell is handed the web embeds and nothing else: a nested document is
-    /// a child view, not a frame, and the two lists must not cross.
+    /// The view hands the shell the web embeds and nothing else. A nested
+    /// document is a child view, not a frame, and the two lists must not cross.
     #[test]
     fn only_web_embeds_are_published_for_the_shell() {
         let page = web("w", Rect::new(0.0, 0.0, 100.0, 50.0), "https://example.com");
@@ -1372,8 +1387,9 @@ mod web_embed_tests {
         assert!(visible_web_embeds(&dv, &cam(), None).is_empty());
     }
 
-    /// A page is laid out once, at the element's world size, and moved by the
-    /// transform: zooming the board must not reflow the page inside the frame.
+    /// The browser lays the page out once, at the element's world size, and the
+    /// transform moves it from there. Zooming the board must not reflow the
+    /// page inside the frame.
     #[test]
     fn the_frames_layout_size_does_not_move_with_the_zoom() {
         let dv = viewport(vec![DisplayNode::Element(web(
@@ -1455,9 +1471,9 @@ mod routing_tests {
         assert!(routes_to_child(&wheel(), inside, quad()));
     }
 
-    /// `TOILE-UI-331`: `Escape` is the board's whatever the pointer is doing --
-    /// it is the only way out of an embed, so a child that swallowed it would
-    /// trap the user inside.
+    /// `TOILE-UI-331`: `Escape` stays the board's, whatever the pointer is
+    /// doing. It is the only way out of an embed, so a child that swallowed it
+    /// would trap the user inside.
     #[test]
     fn escape_never_reaches_the_child() {
         let ev = InputEvent::Key {

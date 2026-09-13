@@ -1,16 +1,17 @@
 // ambre-toile/src/ui/comments.rs
 // ============================================================================
 // The comment pins and the panel's pure model (toile-comments). A pin is a
-// screen-space marker over the board: one badge per thread whose anchor resolves
-// in the current camera, carrying the message count and the resolved state the
-// derived viewport hands it -- never a body (`TOILE-205`).
+// screen-space marker over the board: one badge per thread whose anchor
+// resolves in the current camera. The badge carries the message count and the
+// resolved state the derived viewport hands it, never a body (`TOILE-205`).
 //
-// A pin keeps one screen size through the whole zoom range (`TOILE-UI-022`) and
-// paints after every content and overlay pass, so nothing on the board hides it
-// (`TOILE-UI-306`). The pick answers before the element hit-test, so a pin over a
-// note takes the click and the note under it stays unselected (`TOILE-UI-308`).
+// * A pin keeps one screen size through the whole zoom range (`TOILE-UI-022`).
+// * A pin paints after every content and overlay pass, so nothing on the board
+//   hides it (`TOILE-UI-306`).
+// * The pick answers before the element hit-test, so a pin over a note takes
+//   the click and the note under it stays unselected (`TOILE-UI-308`).
 //
-// Pure over `DrawSurface` and over plain geometry, so the painter is
+// Pure over `DrawSurface` and over plain geometry. The painter is therefore
 // host-testable against `RecordingSurface` with no GPU, and the pick and the
 // badge are ordinary unit tests. The wasm-only Leptos panel (`chrome::comments`)
 // consumes the model types declared here.
@@ -34,8 +35,8 @@ const PIN_FONT_PX: f32 = 11.0;
 const PIN_OFFSET: f64 = 10.0;
 
 /// What the badge of a pin reads (`TOILE-UI-024`): the message count, or a check
-/// mark once the thread is resolved. Readable from the board alone, without
-/// opening the thread or the panel.
+/// mark once a reader resolves the thread. Readable from the board alone,
+/// without opening the thread or the panel.
 ///
 /// A count over 9 reads `9+`: the marker is a constant 22 logical pixels across,
 /// and three digits do not fit in it.
@@ -60,9 +61,9 @@ pub fn pin_circle(at: Point, w2s: &Affine) -> Circle {
 /// The thread whose pin covers `screen`, topmost last-painted first, or `None`
 /// when the click missed every pin.
 ///
-/// The caller runs this **before** the element hit-test, so a pin over a note
-/// takes the click and the note under it stays unselected (`TOILE-UI-082`,
-/// `TOILE-UI-308`).
+/// The caller runs this **before** the element hit-test. A pin over a note
+/// therefore takes the click, and the note under it stays unselected
+/// (`TOILE-UI-082`, `TOILE-UI-308`).
 pub fn hit_pin(pins: &[CommentPin], w2s: &Affine, screen: Point) -> Option<ThreadId> {
     pins.iter()
         .rev()
@@ -75,7 +76,7 @@ pub fn hit_pin(pins: &[CommentPin], w2s: &Affine, screen: Point) -> Option<Threa
 
 /// What a left press on the board resolves to before any gesture starts
 /// (`TOILE-UI-082`, `TOILE-UI-308`). A pin answers first, so a press on one
-/// opens its thread and never reaches the element under it; everything else is
+/// opens its thread and never reaches the element under it. Everything else is
 /// the board's own press.
 #[derive(Clone, Debug, PartialEq)]
 pub enum BoardPress {
@@ -86,9 +87,9 @@ pub enum BoardPress {
 }
 
 /// Resolve a press at `screen`. Only a left press with the Select tool picks a
-/// pin: a creation tool still places where it clicks, and the right button opens
-/// the menu. Pure, so the order the view applies is host-tested rather than
-/// buried in the pointer path.
+/// pin. A creation tool still places where it clicks, and the right button
+/// opens the menu. Pure, so a host test covers the order the view applies,
+/// rather than the pointer path burying it.
 pub fn press_target(
     select_tool: bool,
     button: i16,
@@ -132,8 +133,8 @@ fn paint_pin<S: DrawSurface>(
 ) {
     let circle = pin_circle(pin.at, w2s);
     let path = circle.to_path(0.1);
-    // A resolved thread is settled: it reads as background, an open one as an
-    // accent, so the board says which is which at a glance (`TOILE-UI-024`).
+    // A resolved thread reads as background, an open one as an accent. The
+    // board therefore says which is which at a glance (`TOILE-UI-024`).
     let fill = if pin.resolved {
         palette.header_bg
     } else {
@@ -207,10 +208,10 @@ impl ThreadFilter {
     }
 }
 
-/// A composer the comment tool just opened at a click (`TOILE-UI-307`): where
-/// the thread will hang, and where on screen the field must appear, so the user
-/// types where they clicked. Local view state: the thread exists only once the
-/// first message is posted.
+/// A composer the comment tool just opened at a click (`TOILE-UI-307`). It
+/// carries where the thread will hang, and where on screen the field must
+/// appear, so the user types where they clicked. Local view state: the thread
+/// exists only once the user posts the first message.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CommentDraft {
     pub anchor: CommentAnchor,
@@ -219,8 +220,8 @@ pub struct CommentDraft {
 }
 
 /// What the panel and the composer ask the canvas view to do
-/// (`TOILE-UI-023`): the DOM holds no board state, so every intent is drained by
-/// the view, which owns the camera and the command channel.
+/// (`TOILE-UI-023`). The DOM holds no board state, so the view drains every
+/// intent: it owns the camera and the command channel.
 #[derive(Clone, Debug, PartialEq)]
 pub enum CommentIntent {
     /// Post the draft composer's first message, opening the thread.
@@ -240,7 +241,7 @@ pub enum CommentIntent {
 }
 
 /// The signals the canvas view and the DOM panel share (`toile-comments`
-/// section 4). The panel holds no board state of its own (`TOILE-UI-023`): the
+/// section 4). The panel holds no board state of its own (`TOILE-UI-023`). The
 /// view writes what it read back from Logic, and reads the intents the panel
 /// emits, exactly like the style inspector's model / restyle pair.
 #[cfg(target_arch = "wasm32")]
@@ -340,9 +341,9 @@ mod tests {
         );
     }
 
-    /// The badge reads the thread's state from the board alone: the count while
-    /// it is open, a mark once it is resolved, and never three digits
-    /// (`TOILE-UI-024`).
+    /// The badge reads the thread's state from the board alone. It shows the
+    /// count while the thread is open, a mark once it closes, and never three
+    /// digits (`TOILE-UI-024`).
     #[test]
     fn the_badge_reads_the_count_and_the_resolved_state() {
         assert_eq!(pin_badge(&pin("t", Point::ZERO, 3, false)), "3");
@@ -383,8 +384,8 @@ mod tests {
         );
     }
 
-    /// A press on a pin resolves to its thread, and the element under the pin is
-    /// never reached: the board's own press is what selects (`TOILE-UI-308`).
+    /// A press on a pin resolves to its thread, and never reaches the element
+    /// under the pin. Only the board's own press selects (`TOILE-UI-308`).
     #[test]
     fn a_pin_takes_the_press_before_the_board_does() {
         let w2s = Affine::IDENTITY;

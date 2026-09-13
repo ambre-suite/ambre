@@ -17,10 +17,10 @@
 // Prose, Trame and Toile. The paint entry point is a pure function over
 // `DrawSurface`, so it is host-testable against `RecordingSurface` with no GPU.
 //
-// End-to-end multi-user is gated on SYNC P4 (the `pub_key` -> `UserId`
-// resolution that keys inbound frames, `toile-presence`): until it lands, remote
-// frames never reach this thread. The render pass itself is complete and
-// exercised now against synthetic `PeerPresence` events.
+// End-to-end multi-user waits on SYNC P4, the `pub_key` -> `UserId` resolution
+// that keys inbound frames (`toile-presence`). Until it lands, remote frames
+// never reach this thread, though the render pass itself is complete and
+// synthetic `PeerPresence` events exercise it today.
 // ============================================================================
 
 use std::collections::HashMap;
@@ -38,9 +38,9 @@ use ambre_draw::{
 
 use super::viewport::ViewportTransform;
 
-/// Maximum laser-trail samples kept per peer. The trail is a short ring buffer
-/// stroked as a fading polyline; older samples decay to transparent so the trail
-/// "melts" behind the moving highlighter without any wall-clock timer.
+/// Maximum laser-trail samples kept per peer. The painter strokes the ring
+/// buffer as a fading polyline, and older samples decay to transparent. The
+/// trail "melts" behind the moving highlighter without any wall-clock timer.
 const LASER_TRAIL_MAX: usize = 24;
 
 /// Screen size of a remote cursor arrow, in logical pixels.
@@ -55,20 +55,20 @@ const LABEL_FONT_PX: f32 = 12.0;
 const LASER_FADE_MS: f64 = 1_200.0;
 
 /// How often the local peer sends a sample while nothing changes, in
-/// milliseconds. It is what keeps this client in the others' live set
-/// (`PRESENCE-009`), and what advances the Logic thread's only clock, so it must
-/// stay well under `PRESENCE_TTL_MS`: several heartbeats may be lost before a
-/// peer is aged out.
+/// milliseconds. The heartbeat keeps this client in the others' live set
+/// (`PRESENCE-009`), and it advances the Logic thread's only clock. It MUST
+/// stay well under `PRESENCE_TTL_MS`, since the network may drop several
+/// heartbeats before a peer ages out.
 pub const PRESENCE_HEARTBEAT_MS: f64 = 2_000.0;
 
 /// The broadcast schedule for this peer's own presence (`TOILE-UI-073`). Pure:
 /// it decides whether the sample built this frame is worth sending, and holds
 /// nothing else.
 ///
-/// A sample goes out when it differs from the last one sent -- a moved pointer,
-/// a changed selection, a stroke sample, a laser point -- or when the heartbeat
-/// is due. The gesture path is what carries the latency; the heartbeat only says
-/// "still here".
+/// A sample goes out when it differs from the last one, or when the heartbeat
+/// falls due. A moved pointer, a changed selection, a stroke sample and a laser
+/// point all differ. The gesture path carries the latency, and the heartbeat
+/// only says "still here".
 #[derive(Default)]
 pub struct PresenceSender {
     last: Option<PresencePayload>,
@@ -89,7 +89,7 @@ impl PresenceSender {
         Some(sample)
     }
 
-    /// Forget what was sent, so the next frame sends afresh. The seam for a
+    /// Forget the last sample, so the next frame sends afresh. The seam for a
     /// document swap: the board these samples described is not the one the view
     /// is about to paint.
     pub fn reset(&mut self) {
@@ -105,25 +105,26 @@ pub struct PeerCursors {
     peers: HashMap<UserId, PeerState>,
 }
 
-/// One peer's latest presence plus the derived laser trail (the payload carries
-/// a single laser point; the trail is accumulated render-side).
+/// One peer's latest presence plus the derived laser trail. The payload carries
+/// a single laser point, and the render thread accumulates the trail.
 struct PeerState {
     presence: PresencePayload,
-    /// Laser samples with the frame clock each arrived at, so the trail fades by
-    /// age rather than by rank (`TOILE-UI-077`): a highlighter held still melts
-    /// away instead of freezing its tail.
+    /// Laser samples with the frame clock each arrived at. The trail therefore
+    /// fades by age rather than by rank (`TOILE-UI-077`): a highlighter held
+    /// still melts away instead of freezing its tail.
     laser_trail: VecDeque<(Point, f64)>,
 }
 
 impl PeerCursors {
-    /// Adopt the whole live peer set (`PRESENCE-009`): every entry replaces that
-    /// peer's presence, and a peer absent from the set is dropped, trail
-    /// included -- which is how a departure is painted without a departure
+    /// Adopt the whole live peer set (`PRESENCE-009`). Every entry replaces that
+    /// peer's presence, and this drops a peer absent from the set, trail
+    /// included. That is how the overlay paints a departure without a departure
     /// signal (`TOILE-UI-075`, `TOILE-185`).
     ///
-    /// A laser point extends the peer's trail (a ring buffer capped at
-    /// [`LASER_TRAIL_MAX`], each sample stamped `now_ms`); `laser = None` clears
-    /// it, so the trail vanishes as soon as the peer lifts the highlighter.
+    /// A laser point extends the peer's trail, a ring buffer capped at
+    /// [`LASER_TRAIL_MAX`] whose samples each carry `now_ms`. `laser = None`
+    /// clears it, so the trail vanishes as soon as the peer lifts the
+    /// highlighter.
     pub fn adopt(&mut self, peers: Vec<PresenceUpdate>, now_ms: f64) {
         self.peers
             .retain(|id, _| peers.iter().any(|p| &p.user_id == id));
@@ -150,7 +151,8 @@ impl PeerCursors {
         self.peers.clear();
     }
 
-    /// True when no peer presence is known -- the overlay pass can be skipped.
+    /// True when no peer presence has arrived, so the view may skip the overlay
+    /// pass.
     pub fn is_empty(&self) -> bool {
         self.peers.is_empty()
     }
@@ -225,9 +227,9 @@ fn paint_peer<S: DrawSurface>(
     }
 }
 
-/// Stroke the laser ring buffer as an age-faded polyline: a segment's alpha
-/// falls with how long ago it arrived, and one older than [`LASER_FADE_MS`] is
-/// not drawn at all. Fading by age rather than by rank is what makes a
+/// Stroke the laser ring buffer as an age-faded polyline. A segment's alpha
+/// falls with how long ago it arrived, and this skips one older than
+/// [`LASER_FADE_MS`]. Fading by age rather than by rank is what makes a
 /// highlighter held still fade out instead of freezing its tail
 /// (`TOILE-UI-077`).
 fn paint_laser<S: DrawSurface>(
@@ -345,7 +347,7 @@ pub fn short_handle(user_id: &UserId) -> String {
 }
 
 /// The world-space AABB of a displayed element, or `None` when the id is not in
-/// the culled set (an off-screen selection ghost simply has no box this frame).
+/// the culled set. An off-screen selection ghost has no box this frame.
 fn element_bounds(vp: &DisplayViewport, id: &ElementId) -> Option<Rect> {
     vp.nodes.iter().find_map(|n| match n {
         DisplayNode::Element(e) if &e.id == id => Some(e.bounds),
@@ -470,7 +472,7 @@ mod tests {
             &mut cursors,
             user(5),
             PresencePayload {
-                // "a" is on-board, "gone" is culled out -> only one box.
+                // "a" is on-board, the cull dropped "gone" -> only one box.
                 selection: vec![ElementId("a".into()), ElementId("gone".into())],
                 ..Default::default()
             },
@@ -523,8 +525,8 @@ mod tests {
         assert_eq!(s.count(|o| matches!(o, DrawOp::StrokeLine { .. })), 0);
     }
 
-    /// TOILE-UI-075 / TOILE-185: a peer absent from the live set stops being
-    /// painted, trail included. No departure signal exists anywhere; the set is
+    /// TOILE-UI-075 / TOILE-185: the overlay drops a peer absent from the live
+    /// set, trail included. No departure signal exists anywhere, so the set is
     /// the whole answer (`PRESENCE-009`).
     #[test]
     fn a_peer_absent_from_the_set_stops_being_painted() {
@@ -598,7 +600,7 @@ mod tests {
                 .count(|o| matches!(o, DrawOp::StrokeLine { .. })),
             2
         );
-        // Read a fade later, with no new sample: nothing is drawn.
+        // Read a fade later, with no new sample: the painter draws nothing.
         assert_eq!(
             paint_at(&cursors, &vp_with(vec![]), LASER_FADE_MS + 1.0)
                 .count(|o| matches!(o, DrawOp::StrokeLine { .. })),
@@ -622,7 +624,7 @@ mod tests {
     }
 
     /// TOILE-UI-073: a sample goes out when it changed, and otherwise only on
-    /// the heartbeat -- which is what keeps this peer in the others' live set.
+    /// the heartbeat. The heartbeat keeps this peer in the others' live set.
     #[test]
     fn a_sample_is_sent_on_a_change_or_on_the_heartbeat() {
         let mut sender = PresenceSender::default();
@@ -643,7 +645,8 @@ mod tests {
             sender.due(at(1.0), 2.0 + PRESENCE_HEARTBEAT_MS).is_some(),
             "an idle peer still says it is there"
         );
-        // A document swap forgets what was sent, so the new board sends afresh.
+        // A document swap forgets the last sample, so the new board sends
+        // afresh.
         sender.reset();
         assert!(sender.due(at(1.0), 2.0 + PRESENCE_HEARTBEAT_MS).is_some());
     }

@@ -1378,13 +1378,6 @@
     "para": 0,
     "passive": 5
   },
-  "crates/ambre-toile/src/ui/embed.rs": {
-    "ascii": 1,
-    "latin": 1,
-    "long": 15,
-    "para": 0,
-    "passive": 12
-  },
   "crates/ambre-toile/src/ui/find.rs": {
     "ascii": 0,
     "latin": 0,
@@ -1441,13 +1434,6 @@
     "para": 1,
     "passive": 13
   },
-  "crates/ambre-toile/src/ui/presence.rs": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 4,
-    "para": 0,
-    "passive": 5
-  },
   "crates/ambre-toile/src/ui/present.rs": {
     "ascii": 0,
     "latin": 0,
@@ -1499,10 +1485,10 @@
   },
   "crates/ambre-toile/src/ui/view.rs": {
     "ascii": 0,
-    "latin": 4,
-    "long": 63,
+    "latin": 0,
+    "long": 49,
     "para": 0,
-    "passive": 40
+    "passive": 29
   },
   "crates/ambre-toile/src/ui/viewport.rs": {
     "ascii": 0,
