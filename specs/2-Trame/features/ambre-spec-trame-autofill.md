@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-071` | `FRAME` | A fill MUST NOT write outside the rectangle the drag covered. | this spec section 3 | none. `fill_range` refuses a destination that does not contain the source and walks only the destination, and no test drives a malformed range | unverified |
 | `TRAME-UI-072` | `FRAME` | A drag that ends where it started MUST write nothing. | this spec section 4 | none. Both sides guard it -- the release returns early and the engine returns early -- and neither guard is asserted | unverified |
 | `TRAME-UI-074` | `FRAME` | A fill MUST NOT touch a sheet other than the active one. | this spec section 3 | none. `fill_range` returns empty when the command names another sheet, which is a guard nothing exercises | unverified |
-| `TRAME-UI-133` | `FRAME` | A fill whose command did not reach the Logic thread MUST NOT grow the selection over cells it did not write. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none. **The rule fails today** -- section 6: the release logs the full channel and grows the selection anyway | unverified |
+| `TRAME-UI-133` | `FRAME` | A fill whose command did not reach the Logic thread MUST NOT grow the selection over cells it did not write. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none. **The rule fails today** -- section 6: the release logs the full channel and grows the selection anyway. Answered by the `A lost edit is never shown as applied` Story (`ambre-roadmap.md` E7) | unverified |
 
 * **Budget.** the 50-cell batch of `ambre-spec-budgets.md section 1`, in < 1 ms: a fill is
   the operation that row was written for. No bench measures it.
@@ -128,7 +128,8 @@ modifier is read at release, not at press, so changing your mind mid-drag counts
 * **A fill that races an unmerge.** The two-peer table's last row: the blocks are already written
   when the source splits, and nothing says whether they should follow.
 * **A date series.** A detected date pattern has been promised in the corpus and is not built: the
-  engine extrapolates numbers only, and no row above claims otherwise.
+  engine extrapolates numbers only, and no row above claims otherwise. It lands with the
+  `A fill extrapolates a date series` Story (`ambre-roadmap.md` E6).
 * **The gesture has no test.** The mode choice reads the pointer and the modifier, so it sits in
   `TrameView`, on the untestable side of the seam -- the same wall as the edit session
   (`features/ambre-spec-trame-cell-editing.md section 6`). The destination geometry does not: it is

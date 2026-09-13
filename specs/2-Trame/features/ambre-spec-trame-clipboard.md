@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Status |
 |---|---|---|---|---|---|
 | `TRAME-UI-064` | `POST` | A cut MUST clear its source only once the paste lands. | this spec section 4 | none. `finish_paste` is the only site that clears, and it runs after the paste command is sent; nothing drives a cut end to end | unverified |
-| `TRAME-UI-125` | `FRAME` | A cut MUST NOT clear its source when the paste did not reach the document. | this spec section 5; derived | none, and the code does the opposite: `grid_paste_payload` logs a full channel, drops the paste, and calls `finish_paste` anyway, which sends the source clear as a lossless batch. The gesture the decision was built to make safe destroys the range in exactly that case, and it is the shape `BUS-018` bans | unverified |
+| `TRAME-UI-125` | `FRAME` | A cut MUST NOT clear its source when the paste did not reach the document. | this spec section 5; derived | none, and the code does the opposite: `grid_paste_payload` logs a full channel, drops the paste, and calls `finish_paste` anyway, which sends the source clear as a lossless batch. The gesture the decision was built to make safe destroys the range in exactly that case, and it is the shape `BUS-018` bans. Answered by the `A lost edit is never shown as applied` Story (`ambre-roadmap.md` E7) | unverified |
 
 ### 1.4 Paste
 

@@ -130,6 +130,7 @@ plane touches, and it unblocks Toile's inline rich text and Trame's text colours
 | `[ ]` Persisted page setup | V1 | paper size, margins and orientation stored with the document instead of asked at export |
 | `[ ]` A machine-readable error | V1 | an error carries a code a host can branch on, not only a sentence |
 | `[ ]` Bounded float objects | V1 | an absurd image or chart size cannot make layout cost unbounded |
+| `[ ]` A fill extrapolates a date series | V1 | a drag over two dates repeats them: the fill extrapolates numbers alone, and a date pattern the corpus promises is detected nowhere |
 
 ### Toile
 
@@ -171,6 +172,10 @@ plane touches, and it unblocks Toile's inline rich text and Trame's text colours
 | `[ ]` The member list shows no invented identity | V1 | a member row whose identifier does not parse is given a freshly generated one, so the list shows a person nothing can act on and a revoke aimed at that row addresses nobody (`SYNC-038`) |
 | `[ ]` A failed members request is not an absent document | V1 | a network failure and a genuine absence take the same branch, so the open generates a throwaway key, marks the document local and never hydrates (`SYNC-040`) |
 | `[ ]` Toile reports what its undo engine holds | MVP | two command handlers of thirty emit the undo state and the view discards the event, so the undo and redo affordances of a shipped MVP report nothing (`UNDO-006`) |
+| `[ ]` The selection reaches the Logic thread whole | MVP | the active-cell report carries one pair of coordinates, and a header band is clamped to the last non-empty cell of the UI cache. So a disjoint selection answers for the rectangle clicked last, and a column longer than the screen answers for its first screen -- in the total, the sort, the style, the delete and the copy alike (`TRAME-UI-129`, `TRAME-UI-033`, `TRAME-UI-104`) |
+| `[ ]` Every selection change refreshes the aggregates | MVP | the refresh hangs off the active-cell announcement, and extending a header band is the one selection path that does not announce, so sweeping columns A to D leaves the total of A on screen with no sign it is stale (`TRAME-UI-109`) |
+| `[ ]` A filter converges as one definition | -- | the shared filter converges field by field, so a concurrent race can join one user's column to another user's operator. Every peer agrees on a definition no user applied (`TRAME-FEAT-025`) |
+| `[ ]` One viewport request per frame | -- | the one-slot queue coalesces the scroll path alone, and two other call sites send past it, so a keystroke answered by a data reset in the same frame as a scroll sends two requests (`TRAME-UI-025`) |
 
 ---
 
