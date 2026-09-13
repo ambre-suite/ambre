@@ -50,7 +50,7 @@ CEILINGS = Path(__file__).resolve().parent / "prose_ceilings.json"
 RUST_ROOTS = (ROOT / "crates",)
 # The English the corpus owns, beyond the specs' own shape gate.
 MARKDOWN_ROOTS = (ROOT / "specs", ROOT / "ai")
-MARKDOWN_FILES = (ROOT / "README.md", ROOT / "AGENTS.md")
+MARKDOWN_FILES = (ROOT / "README.md", ROOT / "AGENTS.md", ROOT / "CONTRIBUTING.md")
 
 # One sentence, one idea: 25 words for descriptive text (20 for a rule, which no
 # script can tell apart from the rest).

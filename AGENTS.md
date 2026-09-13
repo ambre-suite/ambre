@@ -19,6 +19,7 @@ This file is a directory, not a manual. Each row says what a file holds and when
 | [`ai/ambre-rust-style.md`](ai/ambre-rust-style.md) | Before writing or modifying Rust, including the type definitions and signatures a spec is allowed to carry. |
 | [`ai/ambre-testing.md`](ai/ambre-testing.md) | Before writing a test, and before writing a contract row: the mechanism decides what the rule may claim. |
 | [`ai/ambre-writing-style.md`](ai/ambre-writing-style.md) | Before writing any English: spec, analysis, rustdoc, comment, commit message. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Before a commit, and before a review. Which channel is open to whom, the checks no gate performs, and the `human-review` rows a reviewer holds by hand. |
 
 ## Specs
 

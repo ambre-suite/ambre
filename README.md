@@ -210,9 +210,10 @@ See the `LICENSE` file for full terms and conditions.
 
 ## Contributing
 
-Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) (to be
-written) and adhere to the project's coding standards and architectural principles. Agents work
-from [`AGENTS.md`](AGENTS.md).
+Only a repository collaborator may open a pull request. Issues stay open to everyone, and a
+reproduced bug is welcome. [`CONTRIBUTING.md`](CONTRIBUTING.md) states what each channel accepts,
+the checks no gate performs, and the contract rows a reviewer holds by hand. Agents work from
+[`AGENTS.md`](AGENTS.md).
 
 ---
 

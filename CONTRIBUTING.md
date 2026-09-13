@@ -1,0 +1,108 @@
+# AMBRE -- CONTRIBUTING
+
+> Which channel is open to whom, and the two checklists no machine performs.
+
+Read [`README.md`](README.md) first. It states what Ambre is, and the pillars a change must hold.
+
+---
+
+## 1. WHAT IS OPEN
+
+| Channel | Who may open one | State |
+| :--- | :--- | :--- |
+| An issue that reports a reproduced bug | anyone | open |
+| An issue that asks about a specification | anyone | open |
+| A pull request | a repository collaborator | closed to everyone else |
+
+The repository settings restrict pull request creation to collaborators. A fork stays available, and
+the AGPL grants every right the licence names. This repository closes the pull request step, and
+nothing else.
+
+**Why the project closes it.** An open pull request commits a maintainer to a careful review. Ambre
+carries a normative specification corpus, and a change that ignores the corpus costs more to review
+than to write again. One maintainer cannot hold that standard on an open channel. The project
+states the limit before the channel exists, rather than leaving an author to discover the limit in
+a closed pull request.
+
+**The restriction is revisable.** It holds while the corpus changes faster than an outside reader
+can follow. Ask in an issue before you start work on a story.
+
+---
+
+## 2. OPENING AN ISSUE
+
+The maintainer reads every issue. State:
+
+1. the commit you ran;
+2. the steps that reproduce the failure;
+3. what you expected, and what happened;
+4. the browser, the operating system and the render backend, for a rendering failure. The backend is
+   WebGL2 by default, and WebGPU under the `?webgpu` flag.
+
+**An automated audit is not a bug report.** The maintainer closes, without discussion, an issue
+that lists the findings of a scanner or of an assistant and carries no reproduction. The project
+runs its own audits, and [`specs/security-audit.md`](specs/security-audit.md) holds the findings.
+
+A problem you found yourself, and can demonstrate, is a bug report. The tool that helped you find it
+does not matter.
+
+---
+
+## 3. THE AUTHOR CHECKLIST
+
+CI holds every rule a machine can hold. `./run_tests.sh` runs the same recipes locally, and the
+`justfile` holds the exact command lines. A gate goes red on its own, so no checklist repeats one.
+
+Enable the commit-message hook once per clone. git ships no hook inside a clone, so this step is an
+adoption, not an imposition:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The table holds what no gate sees. Read it before you commit.
+
+| Check | Why no gate holds it |
+| :--- | :--- |
+| Every committed fixture comes from a generator run from a seed, and never from a real document (`FIXTURE-005`) | a real document and a generated one are both Loro bytes, so no check tells them apart. A real document places plaintext user content in a public repository, permanently |
+| A commit that refreshes a golden artifact moves `generator_version` in the same commit | the gate compares the corpus against the code, never against the history of the corpus, so a regenerate-and-commit always passes |
+| You read a snapshot diff before you accept it | `cargo insta accept` accepts blindly |
+| Every mermaid block you touched renders locally first | `just spec-code` checks the fence tag, not the diagram. A broken diagram fails on the forge |
+| A benchmark figure names what it measures, and never a frame rate (`FIXTURE-024`) | the claim is made in a pull request, not in a test |
+
+---
+
+## 4. THE REVIEW CHECKLIST
+
+`ambre-spec-testing.md section 1` states what a reviewer reads: public signatures, property names,
+mutant reports, snapshot diffs, the `Verification` column. Function bodies are not on the list.
+
+A contract row with the status `human-review` has no mechanism except the reviewer, by decision. Each
+row lives in the spec of the component it constrains, and the table below is the list of them.
+
+| Row | What the reviewer refuses | Spec |
+| :--- | :--- | :--- |
+| `ZK-006` | a log line or a tracing span that carries a payload, plaintext or ciphertext | `ambre-spec-zero-knowledge.md` |
+| `SRV-001` | a relay path that stores or logs a plaintext document payload | `ambre-spec-server.md` |
+| `UI-THREAD-003` | a value the dispatcher pushes into a signal, and that also lives in the state of a view | `ambre-spec-ui.md` |
+| `DOCFILE-008` | a version bump whose commit freezes no artifact for a `doc_type` | `ambre-spec-docfile.md` |
+| `FIXTURE-005` | a committed artifact that comes from a real user document | `ambre-spec-fixtures.md` |
+| `FIXTURE-024` | a benchmark figure reported as a frame-rate validation | `ambre-spec-fixtures.md` |
+
+A new `human-review` row adds a line to the table. The corpus is the arbiter, and
+`grep -rn "human-review" specs/` reads it.
+
+---
+
+## 5. WHERE THE RULES LIVE
+
+| File | What it holds |
+| :--- | :--- |
+| [`README.md`](README.md) | what Ambre is: the pillars, the crate map, the map of the spec corpus |
+| [`AGENTS.md`](AGENTS.md) | the reading order an assistant follows, and the file to open for each task |
+| [`ai/ambre-git-strategy.md`](ai/ambre-git-strategy.md) | the author of a commit, the forbidden trailer, the pre-commit runs, the shape of a message |
+| [`ai/ambre-rust-style.md`](ai/ambre-rust-style.md) | the Rust rules a change follows |
+| [`ai/ambre-writing-style.md`](ai/ambre-writing-style.md) | the English every description uses, a commit message included |
+| [`specs/ambre-spec-template.md`](specs/ambre-spec-template.md) | the contract every spec follows, and the grammar of a contract row |
+| [`specs/1-Foundations/ambre-spec-testing.md`](specs/1-Foundations/ambre-spec-testing.md) | how Ambre is verified, and the only place the method lives |
+| [`specs/ambre-roadmap.md`](specs/ambre-roadmap.md) | the only place anything is scheduled, one row per story |
