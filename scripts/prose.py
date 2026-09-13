@@ -301,8 +301,10 @@ def main() -> int:
             for lineno, reason in opener_breaches(lines):
                 errors.append(f"{rel}:{lineno}: {reason}")
         counts, detail = measure(text, lines)
-        if any(counts.values()):
-            fresh[rel] = counts
+        # Every measured file lands here, a clean one included. A file rewritten
+        # to zero has to reach the writer below, or its old ceiling survives the
+        # rewrite and the ratchet never closes on it.
+        fresh[rel] = counts
         recorded = ceilings.get(rel) or {}
         for key, label in METRICS:
             ceiling = recorded.get(key, 0)
@@ -320,8 +322,11 @@ def main() -> int:
             recorded = merged.get(rel) or {}
             # A ceiling only falls. `--raise` is the reviewed exception, so a
             # growth is recorded in a diff instead of happening in silence.
+            # An unnamed file and an unnamed metric both stand at zero, the same
+            # default the check above reads. Anything else would let this pass
+            # hand a breaching file the ceiling it needs to go green.
             merged[rel] = {
-                key: (counts[key] if allow_raise else min(counts[key], recorded.get(key, counts[key])))
+                key: (counts[key] if allow_raise else min(counts[key], recorded.get(key, 0)))
                 for key, _ in METRICS
             }
         # A file with no breach left carries no entry: the ceiling is zero.

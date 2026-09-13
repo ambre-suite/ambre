@@ -440,13 +440,6 @@
     "para": 0,
     "passive": 6
   },
-  "crates/ambre-core/src/docfile.rs": {
-    "ascii": 0,
-    "latin": 0,
-    "long": 8,
-    "para": 0,
-    "passive": 13
-  },
   "crates/ambre-core/src/error.rs": {
     "ascii": 3,
     "latin": 0,
