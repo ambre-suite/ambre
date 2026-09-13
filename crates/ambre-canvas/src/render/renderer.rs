@@ -1,9 +1,10 @@
 // ambre-canvas/src/render/renderer.rs
 // ============================================================================
-// QuadRenderer: owns the four wgpu pipelines (quad, glyph, color glyph, blit),
-// the GlyphAtlas, the ping-pong offscreen pair for the persistent cells layer, and
-// the per-frame dirty-rect flush. Also the offscreen target and the repaint
-// plan enums. The `include_str!("*.wgsl")` calls resolve against this dir.
+// QuadRenderer owns the four wgpu pipelines (quad, glyph, color glyph, blit)
+// and the GlyphAtlas. It also owns the ping-pong offscreen pair for the
+// persistent cells layer, and the per-frame dirty-rect flush. Also the
+// offscreen target and the repaint plan enums. The `include_str!("*.wgsl")`
+// calls resolve against this dir.
 // ============================================================================
 
 use super::*;
@@ -58,7 +59,7 @@ impl OffscreenTarget {
 /// `Scroll` shifts the previous frame's offscreen via `copy_texture_to_texture`
 /// then renders the freshly pushed content geometry on top (typically the strip
 /// entering the viewport). `Reuse` skips all content work and re-blits the
-/// existing offscreen unchanged — the orchestrator must NOT have called
+/// existing offscreen unchanged -- the orchestrator must NOT have called
 /// `begin_layer(Layer::Content)` in this case.
 #[derive(Clone, Copy, Debug)]
 pub enum ContentRepaint {
@@ -71,7 +72,7 @@ pub enum ContentRepaint {
 ///
 /// `Redraw` uploads the freshly pushed overlay geometry to the GPU.
 /// `Reuse` skips the upload and re-issues the draw call using the previously
-/// uploaded GPU buffer — used on idle frames where nothing visible changed.
+/// uploaded GPU buffer -- used on idle frames where nothing visible changed.
 #[derive(Clone, Copy, Debug)]
 pub enum OverlayRepaint {
     Redraw,
@@ -135,19 +136,19 @@ pub struct QuadRenderer {
 /// How much VRAM the uploaded pictures may hold together, mip chains included.
 ///
 /// The wgpu row of `ambre-spec-budgets.md section 6` caps textures and buffers
-/// at 20 MB, of which the two glyph atlases already claim up to 20; pictures are
-/// charged their own ceiling rather than sharing an unstated remainder. At four
-/// bytes a texel a full budget is roughly six 1024x1024 photographs, and the
-/// chain adds a third to each.
+/// at 20 MB, and the two glyph atlases already claim up to 20. Pictures
+/// therefore carry their own ceiling rather than sharing an unstated remainder.
+/// At four bytes a texel a full budget is roughly six 1024x1024 photographs, and
+/// the chain adds a third to each.
 const IMAGE_VRAM_BUDGET: usize = 24 * 1024 * 1024;
 
 /// One cached picture: what a draw binds, and what holding it costs.
 struct CacheEntry<T> {
     payload: T,
     bytes: usize,
-    /// The size it was uploaded at. A key reused at a different size is content
-    /// that changed behind its identity, so the entry is replaced rather than
-    /// stretched (`ImageSource::key`).
+    /// The size of the upload. A key reused at a different size is content that
+    /// changed behind its identity, so the cache replaces the entry rather than
+    /// stretching it (`ImageSource::key`).
     width: u32,
     height: u32,
     /// Frame ordinal of the last draw that bound it, for eviction.
@@ -162,15 +163,15 @@ struct CacheEntry<T> {
 /// The two are not interchangeable -- pixels feed an upload, and what is bound
 /// per draw is what lives here.
 ///
-/// It is generic over what it holds so its policy -- when an entry is a hit,
-/// what is dropped when the budget binds -- can be exercised on the host tier,
-/// where no GPU adapter exists to mint a bind group
+/// It is generic over what it holds, so a test can drive its policy on the host
+/// tier. That policy is what counts as a hit, and what the cache drops when the
+/// budget binds. The host tier has no GPU adapter to mint a bind group
 /// (`ambre-spec-testing.md section 2`).
 struct ImageCache<T> {
     map: HashMap<ImageKey, CacheEntry<T>>,
     bytes: usize,
     budget: usize,
-    /// Monotonic per-frame counter, stamped onto an entry when it is drawn.
+    /// Monotonic per-frame counter, stamped onto an entry at each draw.
     clock: u64,
 }
 
@@ -196,17 +197,17 @@ impl<T> ImageCache<T> {
         Some(&entry.payload)
     }
 
-    /// The payload for a run being encoded. Unlike `get` this asks no question
-    /// about size: the run was recorded against the entry as uploaded, and an
-    /// entry evicted in between simply is not there.
+    /// The payload for a run the encoder is writing. Unlike `get` this asks no
+    /// question about size. The walk recorded the run against the entry as
+    /// uploaded, and an entry evicted in between simply is not there.
     fn bound(&self, key: ImageKey) -> Option<&T> {
         self.map.get(&key).map(|e| &e.payload)
     }
 
     /// Insert an upload, evicting the least recently drawn entries until the
-    /// budget holds again. An image larger than the whole budget is stored
-    /// anyway -- refusing it would paint nothing at all, and the next insert
-    /// evicts it.
+    /// budget holds again. The cache stores an image larger than the whole
+    /// budget anyway. Refusing it would paint nothing at all, and the next
+    /// insert evicts it.
     fn insert(&mut self, key: ImageKey, entry: CacheEntry<T>) {
         if let Some(old) = self.map.remove(&key) {
             self.bytes -= old.bytes;
@@ -235,11 +236,11 @@ type ImageTextures = ImageCache<wgpu::BindGroup>;
 
 /// Record one quad's index range against the texture it needs bound.
 ///
-/// The run in flight is extended when it already binds this texture and the new
-/// range continues it; anything else opens a run. That is what makes ten copies
-/// of one picture a single draw while keeping two different pictures in the
-/// order the walk drew them -- a merge that ignored order would let the later
-/// picture land under the earlier one.
+/// The run in flight grows when it already binds this texture and the new range
+/// continues it. Anything else opens a run. That is what makes ten copies of one
+/// picture a single draw, while keeping two different pictures in the order the
+/// walk drew them. A merge that ignored order would let the later picture land
+/// under the earlier one.
 fn extend_runs(runs: &mut Vec<ImageRun>, key: ImageKey, start: u32, end: u32) {
     match runs.last_mut() {
         Some(run) if run.key == key && run.end == start => run.end = end,
@@ -668,9 +669,9 @@ impl QuadRenderer {
         }
     }
 
-    /// Resize the ping-pong offscreens. Must be called whenever the canvas
-    /// size changes. Both offscreens are reallocated and their content lost;
-    /// the next frame must use `ContentRepaint::Full`.
+    /// Resize the ping-pong offscreens. Call it whenever the canvas size
+    /// changes. Both offscreens get a fresh allocation and lose their content,
+    /// so the next frame must use `ContentRepaint::Full`.
     pub fn resize_offscreens(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         self.offscreens = [
             OffscreenTarget::new(
@@ -708,22 +709,22 @@ impl QuadRenderer {
     }
 
     /// Per-frame init: ticks the atlas and updates the cached viewport size.
-    /// Does NOT touch per-layer CPU batches — call `begin_layer` to clear and
-    /// arm a layer for rebuild this frame; layers not begun keep their last
-    /// uploaded GPU state and can be redrawn from cache (idle frames).
+    /// Does NOT touch per-layer CPU batches. Call `begin_layer` to clear and
+    /// arm a layer for rebuild this frame. A layer nobody begins keeps its last
+    /// uploaded GPU state, and the pass can redraw it from cache (idle frames).
     pub fn begin_frame(&mut self, width: f32, height: f32) {
         self.atlas.begin_frame();
         // Advance the eviction clock so "least recently drawn" means a frame
-        // count and not an arbitrary order: an image the walk stops drawing is
+        // count and not an arbitrary order. An image the walk stops drawing is
         // the first to go when the VRAM budget binds.
         self.images.clock = self.images.clock.wrapping_add(1);
         self.width = width;
         self.height = height;
     }
 
-    /// Mark `layer` as being rebuilt this frame: clears its CPU batch, sets it
-    /// as the active push target, and arms `upload_if_rebuilding` so the next
-    /// `flush_dirty_rect` will transfer the new geometry to the GPU.
+    /// Mark `layer` as rebuilding this frame. That clears its CPU batch and
+    /// sets it as the active push target. It also arms `upload_if_rebuilding`,
+    /// so the next `flush_dirty_rect` transfers the new geometry to the GPU.
     pub fn begin_layer(&mut self, layer: Layer) {
         self.batches_mut(layer).begin_rebuild();
         self.active_layer = layer;
@@ -814,10 +815,11 @@ impl QuadRenderer {
     /// Append a pre-tessellated triangle mesh to the active layer's quad batch.
     ///
     /// `vertices` are screen-space positions and `indices` reference them
-    /// locally (0-based); they are rebased onto the current batch. Used by
-    /// `WgpuSurface::{fill_path, stroke_path}` after lyon tessellation -- path
-    /// meshes share the solid-color quad pipeline (same `QuadVertex`, same
-    /// `TriangleList` topology), so they need no pipeline of their own.
+    /// locally (0-based). This function rebases them onto the current batch.
+    /// Used by `WgpuSurface::{fill_path, stroke_path}` after lyon
+    /// tessellation. Path meshes share the solid-color quad pipeline (same
+    /// `QuadVertex`, same `TriangleList` topology), so they need no pipeline of
+    /// their own.
     pub fn push_mesh(&mut self, vertices: &[[f32; 2]], indices: &[u32], color: Color) {
         if vertices.is_empty() || indices.is_empty() {
             return;
@@ -833,14 +835,14 @@ impl QuadRenderer {
     // -- Images ---------------------------------------------------------------
 
     /// Append one textured quad for `image`, uploading its texture the first
-    /// time this key is seen (`CANVAS-065`).
+    /// time this key arrives (`CANVAS-065`).
     ///
     /// `corners` are `[tl, tr, br, bl]` in screen space, already mapped through
-    /// the active transform, so a rotated element rotates its picture with it
-    /// rather than stretching an upright one into the box.
+    /// the active transform. A rotated element therefore rotates its picture
+    /// with it, rather than stretching an upright one into the box.
     ///
-    /// A source whose buffer is shorter than its declared size draws nothing:
-    /// the caller decoded it, so a short buffer is its bug, and uploading
+    /// A source whose buffer is shorter than its declared size draws nothing.
+    /// The caller decoded it, so a short buffer is the caller's bug. Uploading
     /// whatever follows in memory would put arbitrary bytes on screen.
     pub fn push_image(
         &mut self,
@@ -1054,9 +1056,9 @@ impl QuadRenderer {
 
     /// Append a coverage-mask glyph quad from four explicit corner positions
     /// (screen space, CCW from the top-left in glyph-local orientation), for a
-    /// **rotated** glyph run: the caller has already mapped the quad corners
-    /// through the run transform, so the glyph bitmap rotates with the text rather
-    /// than staying upright (`toile-tools`). `corners` are
+    /// **rotated** glyph run. The caller has already mapped the quad corners
+    /// through the run transform. The glyph bitmap therefore rotates with the
+    /// text rather than staying upright (`toile-tools`). `corners` are
     /// `[tl, tr, br, bl]`, matching the `uv_min`/`uv_max` mapping of
     /// [`push_glyph`].
     pub fn push_glyph_quad(
@@ -1130,7 +1132,7 @@ impl QuadRenderer {
     /// - `Scroll` : `copy_texture_to_texture` from the current offscreen to
     ///   the other with the requested pixel offset, then render
     ///   the cells geometry over the exposed strip.
-    /// - `Reuse`  : skip both. The existing offscreen is blitted unchanged.
+    /// - `Reuse`  : skip both. The pass re-blits the existing offscreen.
     ///   The orchestrator must NOT have called
     ///   `begin_layer(Layer::Content)` this frame.
     ///
@@ -1172,7 +1174,7 @@ impl QuadRenderer {
             });
         }
         self.atlas.flush_uploads(queue);
-        // Only uploads if the matching `begin_rebuild` was called this frame.
+        // Only uploads when this frame called the matching `begin_rebuild`.
         self.cells.upload_if_rebuilding(device, queue, "cells");
         if matches!(overlay, OverlayRepaint::Redraw) {
             self.overlay.upload_if_rebuilding(device, queue, "overlay");
@@ -1232,7 +1234,7 @@ impl QuadRenderer {
                     pass.draw_indexed(0..q_count, 0, 0..1);
                 }
                 // Pictures sit between the shapes and the text, one draw per
-                // run. That is a paint order, not a z-order: a shape the walk
+                // run. That is a paint order, not a z-order. A shape the walk
                 // drew after a picture still lands under it, the same way text
                 // already lands over both. The board's real order is the
                 // `paint-order rewrite` of `ambre-roadmap.md` E6.
@@ -1365,7 +1367,7 @@ mod image_cache_tests {
     }
 
     /// A resident picture is a hit, and the hit stamps the frame clock
-    /// (`CANVAS-066`): without the stamp every entry looks equally old and
+    /// (`CANVAS-066`). Without the stamp every entry looks equally old, and
     /// eviction picks at random rather than least-recently-drawn.
     #[test]
     fn a_hit_stamps_the_entry_with_the_current_frame() {
@@ -1376,9 +1378,9 @@ mod image_cache_tests {
         assert_eq!(c.map[&ImageKey(1)].last_used, 7);
     }
 
-    /// A key that comes back at a different size is a miss, so the caller
-    /// re-uploads instead of stretching the old texture over new content
-    /// (`ImageSource::key`).
+    /// A key that comes back at a different size is a miss. The caller
+    /// therefore re-uploads instead of stretching the old texture over new
+    /// content (`ImageSource::key`).
     #[test]
     fn a_key_at_another_size_is_a_miss() {
         let mut c: ImageCache<u32> = ImageCache::new(1024);
@@ -1403,7 +1405,7 @@ mod image_cache_tests {
         assert_eq!(c.bytes, 80);
     }
 
-    /// Re-inserting a key replaces it rather than counting its bytes twice: an
+    /// Re-inserting a key replaces it rather than counting its bytes twice. An
     /// image re-uploaded at a new size must not leak the budget of the old one.
     #[test]
     fn reinserting_a_key_replaces_its_cost() {
@@ -1414,9 +1416,9 @@ mod image_cache_tests {
         assert_eq!(c.bytes, 64);
     }
 
-    /// One picture larger than the whole budget is kept: evicting down to
-    /// nothing would paint a placeholder where the user put a photograph, and
-    /// the next insert reclaims it anyway.
+    /// The cache keeps one picture larger than the whole budget. Evicting down
+    /// to nothing would paint a placeholder where the user put a photograph,
+    /// and the next insert reclaims it anyway.
     #[test]
     fn a_lone_oversized_entry_survives() {
         let mut c: ImageCache<u32> = ImageCache::new(100);
@@ -1439,8 +1441,8 @@ mod image_run_tests {
     }
 
     /// Consecutive quads of one picture collapse into a single draw
-    /// (`CANVAS-066`): a board showing ten copies of one logo costs one bind and
-    /// one `draw_indexed`, not ten.
+    /// (`CANVAS-066`). A board showing ten copies of one logo costs one bind
+    /// and one `draw_indexed`, not ten.
     #[test]
     fn consecutive_quads_of_one_picture_are_one_run() {
         assert_eq!(
@@ -1460,7 +1462,7 @@ mod image_run_tests {
         );
     }
 
-    /// A gap in the index range opens a run even for the same picture: the
+    /// A gap in the index range opens a run even for the same picture. The
     /// merged draw would otherwise cover indices no quad of this run wrote.
     #[test]
     fn a_discontinuous_range_opens_a_run() {

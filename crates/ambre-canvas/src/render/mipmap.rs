@@ -2,17 +2,18 @@
 // ============================================================================
 // The mip chain of a decoded image, built on the CPU.
 //
-// A picture on a board is almost always minified: a photograph is thousands of
-// texels wide and its element box is a few hundred pixels. Sampling that through
-// level 0 alone makes each screen pixel take one texel out of many, so the
-// picture crawls as the board pans -- the most visible defect a raster path can
-// have. A mip chain is what a trilinear sampler needs to average them instead.
-//
-// The chain is built here rather than on the GPU on purpose. Generating it with
-// render passes costs one pass per level per upload, and with a compute shader
-// it costs a dispatch -- the stage `ambre-spec-frame.md section 4` refuses, and
-// the one a WebGL2 back end does not have. An image is uploaded once and drawn
-// for as long as it stays on screen, so the CPU pays once and no frame pays.
+// * A picture on a board is almost always minified. A photograph is thousands
+//   of texels wide, and its element box is a few hundred pixels. Sampling only
+//   level 0 makes each screen pixel take one texel out of many. The picture
+//   then crawls as the board pans, the most visible defect a raster path can
+//   have. A mip chain is what a trilinear sampler needs to average them
+//   instead.
+// * The CPU builds the chain rather than the GPU, on purpose. Render passes
+//   would cost one pass per level per upload, and a compute shader would cost
+//   a dispatch. `ambre-spec-frame.md section 4` refuses that stage, and a
+//   WebGL2 back end does not have it.
+// * The upload path writes an image once, then draws it for as long as it
+//   stays on screen. So the CPU pays once and no frame pays.
 // ============================================================================
 
 /// One level of a mip chain: RGBA8 samples and the dimensions they describe.
@@ -26,9 +27,9 @@ pub struct MipLevel {
 /// 1x1. Level 0 is not copied: the caller already holds those pixels and this
 /// avoids duplicating a multi-megabyte buffer to upload it.
 ///
-/// Each dimension halves independently and floors at 1, which is the rule wgpu
-/// uses to count levels, so a 1024x16 image yields a chain that stays 1 texel
-/// tall while its width keeps halving.
+/// Each dimension halves independently and floors at 1, the rule wgpu itself
+/// uses to count levels. A 1024x16 image therefore yields a chain that stays
+/// 1 texel tall while its width keeps halving.
 ///
 /// `pixels` shorter than `width * height * 4` yields no levels at all: a
 /// malformed source is a caller bug the upload path already declines to guess at.
@@ -68,20 +69,19 @@ pub fn level_count(width: u32, height: u32) -> u32 {
 
 /// Average each 2x2 block of `src` into one texel of the destination.
 ///
-/// The averaging is done in the sample space the pixels arrive in, not in
-/// linear light: `ImageSource` carries non-premultiplied sRGB RGBA8 and the
-/// pipeline blends it as such, so converting here would make a reduced level
-/// disagree with the level above it.
-///
-/// An odd dimension leaves a final row or column with no partner; each such
-/// texel takes the block that starts at its own doubled coordinate, clamped, so
-/// the edge is carried rather than dropped.
+/// * The average stays in the sample space the pixels arrive in, never in
+///   linear light. `ImageSource` carries non-premultiplied sRGB RGBA8 and the
+///   pipeline blends it as such. Converting here would make a reduced level
+///   disagree with the level above it.
+/// * An odd dimension leaves a final row or column with no partner. Each such
+///   texel takes the block that starts at its own doubled coordinate, clamped.
+///   The clamp carries the edge rather than dropping it.
 fn reduce(src: &[u8], w: u32, h: u32, nw: u32, nh: u32) -> Vec<u8> {
     let mut dst = vec![0u8; (nw as usize) * (nh as usize) * 4];
     for y in 0..nh {
         for x in 0..nw {
-            // The 2x2 block this destination texel averages, clamped so an odd
-            // source dimension reads its last row or column twice instead of
+            // The 2x2 block this destination texel averages. The clamp makes an
+            // odd source dimension read its last row or column twice instead of
             // sampling past the end.
             let x0 = (x * 2).min(w - 1);
             let y0 = (y * 2).min(h - 1);
@@ -113,7 +113,7 @@ mod tests {
         let chain = build_chain(&px, 8, 8);
         let dims: Vec<(u32, u32)> = chain.iter().map(|l| (l.width, l.height)).collect();
         assert_eq!(dims, vec![(4, 4), (2, 2), (1, 1)]);
-        // Level 0 is excluded, so the chain is one shorter than wgpu's count.
+        // The chain omits level 0, so it holds one level less than wgpu counts.
         assert_eq!(chain.len() as u32 + 1, level_count(8, 8));
     }
 
@@ -130,9 +130,9 @@ mod tests {
     }
 
     /// A reduced texel is the mean of the four it replaces, per channel. This is
-    /// the whole point of the chain: a checkerboard must become its average grey
-    /// rather than one of its two colours, which is what a nearest reduction --
-    /// or no chain at all -- would leave on screen.
+    /// the whole point of the chain: a checkerboard must become its average
+    /// grey rather than one of its two colours. A nearest reduction, or no
+    /// chain at all, leaves one of the two colours on screen.
     #[test]
     fn a_reduced_texel_is_the_mean_of_its_block() {
         // 2x2: black, white, white, black, fully opaque.
@@ -145,8 +145,8 @@ mod tests {
     }
 
     /// An odd dimension carries its last row rather than reading past it
-    /// (`CANVAS-065`): the reduction clamps, so a 3-wide image yields a 1-wide
-    /// level built from real texels and no out-of-bounds index.
+    /// (`CANVAS-065`). The reduction clamps, so a 3-wide image yields a 1-wide
+    /// level made of real texels and no out-of-bounds index.
     #[test]
     fn an_odd_dimension_clamps_instead_of_overrunning() {
         let px = vec![200u8; 3 * 4];
@@ -156,9 +156,9 @@ mod tests {
         assert_eq!(chain[0].pixels, vec![200, 200, 200, 200]);
     }
 
-    /// A source shorter than its declared size yields no chain, so the upload
-    /// path declines it instead of building levels out of whatever follows in
-    /// memory.
+    /// A source shorter than its declared size yields no chain. The upload path
+    /// therefore declines it instead of building levels out of whatever follows
+    /// in memory.
     #[test]
     fn a_malformed_source_yields_no_levels() {
         assert!(build_chain(&[0, 1, 2], 2, 2).is_empty());

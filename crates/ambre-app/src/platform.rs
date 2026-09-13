@@ -1,9 +1,9 @@
 // ambre-app/src/platform.rs
 // ============================================================================
-// Leaf platform helpers for the launcher: command dispatch, Sync-worker spawn /
-// postMessage, theme injection, dev-login URL/localStorage plumbing, the canvas
-// context-menu and keyboard installers, and small formatting utilities. All
-// pure glue with no reactive state of their own.
+// Leaf platform helpers for the launcher. Command dispatch, Sync-worker spawn
+// and postMessage, theme injection, dev-login URL and localStorage plumbing,
+// the canvas context-menu and keyboard installers, and small formatting
+// utilities. All pure glue with no reactive state of their own.
 // ============================================================================
 
 use super::*;
@@ -11,7 +11,8 @@ use ambre_draw::Point;
 
 /// Convert a canvas-relative anchor (CSS px, as published by the view for the
 /// active cell) into client-space coordinates, by adding the canvas's viewport
-/// offset. Falls back to the top-left of the canvas when no anchor is set. Used
+/// offset. Falls back to the top-left of the canvas when the view publishes no
+/// anchor. Used
 /// to position the filter popover under the active column header.
 pub(crate) fn client_anchor(anchor: Option<(f64, f64)>) -> (f64, f64) {
     let (ox, oy) = leptos::prelude::document()
@@ -26,8 +27,8 @@ pub(crate) fn client_anchor(anchor: Option<(f64, f64)>) -> (f64, f64) {
 }
 
 /// Dispatch a `CommandId` to the currently routed document, if any. Reads the
-/// active document untracked (this runs in an event handler, not a reactive
-/// scope) and no-ops on the landing route, where no document is open.
+/// active document untracked, because this runs in an event handler and not a
+/// reactive scope. Does nothing on the landing route, where no document is open.
 pub(crate) fn dispatch_to_current(
     id: CommandId,
     current_doc: RwSignal<Option<DocumentId>>,
@@ -43,10 +44,10 @@ pub(crate) fn dispatch_to_current(
 
 /// Open a transient `<input type="file">` picker for a CSV import
 /// (`trame-import-export`). On selection it reads the file bytes off the main
-/// thread (`File::array_buffer`) and sends a [`TrameCommand::ImportCsv`] to the
-/// Logic thread, which converts them into a new sheet client-side. The picker
-/// element is never attached to the DOM; the change closure is leaked because the
-/// picker is one-shot and lives only until the user picks a file.
+/// thread (`File::array_buffer`). It then sends a [`TrameCommand::ImportCsv`]
+/// to the Logic thread, which converts them into a new sheet client-side. The
+/// picker element never reaches the DOM. The code leaks the change closure,
+/// because the picker is one-shot and lives only until the user picks a file.
 pub(crate) fn open_csv_picker(
     document_id: DocumentId,
     tx: flume::Sender<LogicCommand>,
@@ -97,17 +98,19 @@ pub(crate) fn open_csv_picker(
 }
 
 /// Service the toolbar/menu Paste button by reading the OS clipboard with the
-/// async Clipboard API. `read()` recovers the private Ambre payload (full styled
-/// / formula-reindexed paste) when present, else the plain text; on a browser
-/// without `read()` it falls back to `readText()`. Best-effort: a clipboard the
-/// browser will not surface (permission denied, unsupported) is logged, not
-/// fatal -- Ctrl+V still works.
+/// async Clipboard API. `read()` recovers the private Ambre payload (full
+/// styled / formula-reindexed paste) when present, else the plain text. On a
+/// browser without `read()` it falls back to `readText()`. Best-effort: a
+/// clipboard the browser will not surface (permission denied, unsupported)
+/// earns a log line, not a failure -- Ctrl+V still works.
 ///
-/// **This is a second paste path and it is a known defect** -- it takes neither
-/// the ownership token nor the view's in-memory copy, so it cannot reach the two
-/// best rungs of the fidelity ladder, and it names Trame inside the launcher, so
-/// the button does nothing in any other application (`ambre-spec-clipboard.md`,
-/// `UI-THREAD-024`, `UI-THREAD-025`).
+/// **This is a second paste path and it is a known defect**
+/// (`ambre-spec-clipboard.md`, `UI-THREAD-024`, `UI-THREAD-025`).
+///
+/// * It takes neither the ownership token nor the view's in-memory copy, so it
+///   cannot reach the two best rungs of the fidelity ladder.
+/// * It names Trame inside the launcher, so the button does nothing in any
+///   other application.
 pub(crate) async fn paste_from_clipboard(
     read_promise: js_sys::Promise,
     clipboard: web_sys::Clipboard,
@@ -122,8 +125,8 @@ pub(crate) async fn paste_from_clipboard(
         });
     };
 
-    // Structured read: rich Ambre type first, then plain text. `read_promise` was
-    // started synchronously in the click handler so the user gesture is preserved.
+    // Structured read: rich Ambre type first, then plain text. The click
+    // handler started `read_promise` synchronously, which keeps the gesture.
     if let Ok(val) = wasm_bindgen_futures::JsFuture::from(read_promise).await
         && let Ok(items) = val.dyn_into::<js_sys::Array>()
     {
@@ -182,11 +185,12 @@ pub(crate) async fn read_clipboard_item(
 
 /// Dev-only: resolve the dev login identity from `?user=<name>` in the boot URL.
 ///
-/// The engine lives for the whole session now (SPA), so a single boot-time
-/// `DevLogin` re-derives the session keys once and they persist across client
-/// navigations -- no `localStorage` round-trip is needed (the old full-page-load
-/// workaround). The landing's dev-login field dispatches `DevLogin` directly
-/// thereafter. The `https://`->`{url_scheme}://` fix lives in `ambre-sync`.
+/// The engine lives for the whole session now (SPA). A single boot-time
+/// `DevLogin` therefore re-derives the session keys once, and they persist
+/// across client navigations. No `localStorage` round-trip remains, which was
+/// the old full-page-load workaround. The landing's dev-login field dispatches
+/// `DevLogin` directly thereafter. The `https://`->`{url_scheme}://` fix lives
+/// in `ambre-sync`.
 pub(crate) fn dev_user_from_url() -> Option<String> {
     let window = web_sys::window()?;
     window
@@ -199,8 +203,8 @@ pub(crate) fn dev_user_from_url() -> Option<String> {
         .filter(|u| !u.is_empty())
 }
 
-/// localStorage key under which the active dev username is remembered, so a
-/// refresh re-establishes the dev session without `?user=` in the URL.
+/// localStorage key holding the active dev username, so a refresh
+/// re-establishes the dev session without `?user=` in the URL.
 const DEV_USER_KEY: &str = "ambre.dev_user";
 
 /// Read the dev username remembered from a prior session, if any.
@@ -238,10 +242,11 @@ pub(crate) fn sync_warning_message(code: SyncWarningCode) -> &'static str {
 }
 
 /// URL of the Sync worker's loader. Trunk builds `ambre-sync` as a separate
-/// `data-type="worker"` wasm artifact and emits this `importScripts`-based
-/// loader (a CLASSIC worker; it calls `wasm_bindgen(...)`, which creates the
-/// worker's own shared `WebAssembly.Memory` and runs `#[wasm_bindgen(start)]`).
-/// `filehash` is off (Trunk.toml), so the path is stable.
+/// `data-type="worker"` wasm artifact, and emits this `importScripts`-based
+/// loader. The loader is a CLASSIC worker: it calls `wasm_bindgen(...)`, which
+/// creates the worker's own shared `WebAssembly.Memory` and runs
+/// `#[wasm_bindgen(start)]`. `filehash` is off (Trunk.toml), so the path is
+/// stable.
 const SYNC_WORKER_URL: &str = "/ambre-sync_loader.js";
 
 /// Fetch the server's public auth config (`GET /api/auth/config`) and return
@@ -332,9 +337,9 @@ pub(crate) fn post_to_worker(worker: &web_sys::Worker, bytes: &[u8]) {
 /// thread. The single place where UI affordances become IPC payloads; every
 /// trigger routes through here.
 ///
-/// Returns `Ok(())` when the command was enqueued, or an error when the Logic
-/// channel is full (lossless traffic class: formatting commands must not be
-/// silently dropped).
+/// Returns `Ok(())` once the Logic channel takes the command. Returns an error
+/// when that channel is full, because the lossless traffic class forbids
+/// dropping a formatting command in silence.
 pub(crate) fn dispatch_command(
     id: CommandId,
     document_id: DocumentId,
@@ -399,10 +404,10 @@ pub(crate) fn install_canvas_context_menu(ctx_menu: RwSignal<Option<(f64, f64)>>
 /// reaches the importer at the point it landed on (`TOILE-IO-020`,
 /// `TOILE-IO-023`). Runs in a post-mount effect, like the context menu.
 ///
-/// The drop point is converted to physical pixels here, the same scaling the
-/// pointer path applies, because that is the space the canvas view works in. The
-/// bytes are read off the main thread and published into the shared signal the
-/// view drains next frame; the board decides what it can read
+/// This function converts the drop point to physical pixels, the same scaling
+/// the pointer path applies. That is the space the canvas view works in. The
+/// read takes the bytes off the main thread and publishes them into the shared
+/// signal the view drains next frame. The board decides what it can read
 /// (`toile_chrome::accepts_file`), so the launcher holds no format list.
 pub(crate) fn install_canvas_file_drop(
     dropped: RwSignal<Option<toile_chrome::DroppedFile>>,
@@ -441,7 +446,7 @@ pub(crate) fn install_canvas_file_drop(
 }
 
 /// Open a transient `<input type="file">` for a board import (`TOILE-IO-020`).
-/// The picker offers what the board reads and nothing else; a file picked this
+/// The picker offers what the board reads and nothing else. A file picked this
 /// way has no drop point, so the view lands it in the middle of the viewport.
 pub(crate) fn open_board_import_picker(
     dropped: RwSignal<Option<toile_chrome::DroppedFile>>,
@@ -471,16 +476,16 @@ pub(crate) fn open_board_import_picker(
 }
 
 /// Read `file` into memory and publish it for the board, or tell the user why
-/// not (`TOILE-IO-022`). A type no converter reads is refused before the bytes
-/// are read, so a dropped video never costs a copy of itself.
+/// not (`TOILE-IO-022`). The check refuses a type no converter reads before it
+/// touches the bytes, so a dropped video never costs a copy of itself.
 fn read_file_into(
     file: web_sys::File,
     at: Option<Point>,
     dropped: RwSignal<Option<toile_chrome::DroppedFile>>,
     toasts: Toasts,
 ) {
-    // The browser leaves the type empty for a format it does not know; fall back
-    // to the extension, which is all an `.svg` drop carries on some platforms.
+    // The browser leaves the type empty for a format it does not know. Fall
+    // back to the extension, all an `.svg` drop carries on some platforms.
     let mut mime = file.type_();
     if mime.is_empty() && file.name().to_ascii_lowercase().ends_with(".svg") {
         mime = "image/svg+xml".to_owned();
@@ -503,8 +508,8 @@ fn read_file_into(
     });
 }
 
-/// A media type as a user reads it: the subtype alone (`png`), or a word for a
-/// file whose type the browser could not name at all.
+/// A media type as a user reads it: the subtype alone (`png`). Failing that, a
+/// word for a file whose type the browser could not name.
 fn label(mime: &str) -> String {
     match mime.rsplit('/').next() {
         Some(sub) if !sub.is_empty() => sub.to_owned(),
@@ -512,9 +517,9 @@ fn label(mime: &str) -> String {
     }
 }
 
-/// Whether a keyboard event targets an editable element (a text `<input>` /
-/// `<textarea>` or a contenteditable host), in which case a bare tool chord must
-/// not be stolen (`toile-tools`). The pure decision lives in
+/// Whether a keyboard event targets an editable element: a text `<input>`, a
+/// `<textarea>`, or a contenteditable host. A bare tool chord must not steal
+/// such an event (`toile-tools`). The pure decision lives in
 /// `ambre_toile::ui::palette::is_editable_tag` (host-tested); this only reads the
 /// tag name and contenteditable flag off the event target.
 fn target_is_editable(event: &web_sys::KeyboardEvent) -> bool {
@@ -533,8 +538,8 @@ fn target_is_editable(event: &web_sys::KeyboardEvent) -> bool {
 }
 
 /// Install the global command-keybinding listener (the keymap's DOM half).
-/// A `keydown` whose chord resolves in the keymap is owned: default prevented,
-/// command dispatched to the routed document. Unmatched keys fall through to the
+/// This listener owns a `keydown` whose chord resolves in the keymap: default
+/// prevented, command dispatched to the routed document. Unmatched keys fall through to the
 /// canvas listener (content navigation), so this never steals arrow keys.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn install_command_keys(
@@ -559,10 +564,10 @@ pub(crate) fn install_command_keys(
             let Some(id) = keymap.resolve(chord) else {
                 return;
             };
-            // Toile board: the tool chords (`toile-tools`) and
-            // Find (`toile-find`) are UI-only intents handled here;
-            // every other Toile id is decoded canvas-side in
-            // `ToileView::handle_key`, so it is left for that listener.
+            // Toile board: the tool chords (`toile-tools`) and Find
+            // (`toile-find`) are UI-only intents this listener handles.
+            // `ToileView::handle_key` decodes every other Toile id
+            // canvas-side, so this listener leaves it alone.
             if boot_is_toile {
                 if let Some(tool) = toile_chrome::tool_for_command(id) {
                     // Don't steal a bare tool key while the user is typing (the
@@ -608,25 +613,28 @@ pub(crate) fn install_command_keys(
 /// the document it carries (`ambre-spec-docfile.md section 4`).
 ///
 /// The launcher owns this gesture because the file owns the choice of
-/// application: at the moment of picking, no document is open and no engine is
-/// booted, and the header is what names the owner. That is also why the
-/// container layer is read here rather than in an app -- `read_ambre_plaintext`
+/// application. At the moment of picking, no document is open and no engine has
+/// booted, so the header is what names the owner. That is also why this file
+/// reads the container layer rather than an app. `read_ambre_plaintext`
 /// migrates an older container or refuses a newer one before anything sees a
 /// payload (`DOCFILE-002`, `DOCFILE-003`, `DOCFILE-013`).
 ///
-/// The payload reaches the engine through the local snapshot store rather than
-/// through a channel, because the path always reloads the page (below) and a
-/// channel does not survive that. The store is where a document's bytes already
-/// wait for a boot, so the file lands exactly where a refresh would have left
-/// them and the existing restore leg picks it up -- schema gate included
-/// (`SCHEMA-006`).
+/// * The payload reaches the engine through the local snapshot store, never
+///   through a channel. The path always reloads the page (below), and a
+///   channel does not survive that.
+/// * The store is where a document's bytes already wait for a boot. The file
+///   therefore lands exactly where a refresh would have left them, and the
+///   existing restore leg picks it up, schema gate included (`SCHEMA-006`).
 ///
 /// **The reload is unconditional**, where opening a *card* reloads only across
-/// render kinds (`route::needs_reload`). Two reasons: the booted `AppView` is
-/// fixed per page load, so half the files would need one anyway; and the
-/// restore leg runs at boot, not on a router swap, so a pushState would land on
-/// an empty document. One path, taken every time, beats two that differ by the
-/// byte at offset 5.
+/// render kinds (`route::needs_reload`). Two reasons.
+///
+/// * The page load fixes the booted `AppView`, so half the files would need a
+///   reload anyway.
+/// * The restore leg runs at boot, not on a router swap, so a pushState would
+///   land on an empty document.
+///
+/// One path, taken every time, beats two that differ by the byte at offset 5.
 pub(crate) fn open_ambre_file_picker(toasts: Toasts, on_sealed: Callback<Vec<u8>>) {
     let Some(document) = web_sys::window().and_then(|w| w.document()) else {
         return;
@@ -654,10 +662,15 @@ pub(crate) fn open_ambre_file_picker(toasts: Toasts, on_sealed: Callback<Vec<u8>
 /// Read `file`, attribute it, persist its payload and navigate to it.
 ///
 /// Every refusal reaches the user by name and leaves the session untouched
-/// (`DOCFILE-005`): a file that is not a container, one this build is too old
-/// to read, one whose type no engine renders, and a snapshot store that did not
-/// take the bytes. Nothing is navigated to on any of them, so a refused file
-/// costs the user a message and nothing else.
+/// (`DOCFILE-005`).
+///
+/// * A file that is not a container.
+/// * One this build is too old to read.
+/// * One whose type no engine renders.
+/// * A snapshot store that did not take the bytes.
+///
+/// None of them navigates anywhere, so a refused file costs the user a message
+/// and nothing else.
 fn read_ambre_file(file: web_sys::File, toasts: Toasts, on_sealed: Callback<Vec<u8>>) {
     wasm_bindgen_futures::spawn_local(async move {
         let Ok(buf) = wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await else {

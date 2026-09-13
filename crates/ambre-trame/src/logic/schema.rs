@@ -4,12 +4,12 @@
 // `TrameState` dependency; re-exported by the parent so the impl submodules
 // reach it through their `use super::*`.
 //
-// The version protocol -- where the register lives, what an absent one means,
-// what each comparison implies, how a registry is walked -- is
-// `ambre_core::schema` and is shared with every other application
-// (`ambre-spec-schema-version.md`). What lives here is what only Trame can
-// know: which version its containers are at today, and what each past layout
-// has to become.
+// `ambre_core::schema` holds the version protocol, and every other application
+// shares it (`ambre-spec-schema-version.md`). The protocol says where the
+// register lives, what an absent one means, what each comparison implies, and
+// how a reader walks a registry. What lives here is what only Trame can know:
+// which version its containers are at today, and what each past layout has to
+// become.
 
 use std::borrow::Cow;
 
@@ -22,12 +22,12 @@ use ambre_core::schema::{
 
 /// Stable id of the implicit default sheet created by [`TrameState::new`].
 ///
-/// A single constant (not a per-instance generated id) so that two fresh
-/// `TrameState`s -- the document creator and a peer/reload restoring its
-/// snapshot -- address the *same* per-sheet containers (`cells_s0`, `rows_s0`,
-/// ...) and merge cleanly. Explicit additional sheets (a later step) get unique
-/// ids and populate `sheet_order`; with one sheet, `sheet_order` is left empty
-/// to avoid a duplicate `push` on merge (see `trame-schema`).
+/// A single constant, never a per-instance generated id. The document creator
+/// and a peer or reload restoring its snapshot are two fresh `TrameState`s.
+/// Both must address the *same* per-sheet containers (`cells_s0`, `rows_s0`)
+/// and merge cleanly. Explicit additional sheets (a later step) get unique ids
+/// and populate `sheet_order`. With one sheet, `sheet_order` stays empty to
+/// avoid a duplicate `push` on merge (see `trame-schema`).
 pub(crate) const DEFAULT_SHEET: &str = "s0";
 
 /// Loro map holding sheet metadata: `{sheet_id -> name}`. Step 1 stores the name
@@ -36,11 +36,11 @@ pub(crate) const DEFAULT_SHEET: &str = "s0";
 pub(crate) const SHEETS_MAP: &str = "sheets";
 
 /// `LoroMovableList` holding the tab-strip order as a sequence of `sheet_id`s
-/// (`trame-schema`, `trame-sheets`). The implicit [`DEFAULT_SHEET`] is *not*
-/// eagerly pushed here (two fresh peers would each push it and converge to a
-/// duplicate); it is treated as
-/// the implicit first tab by [`TrameState::sheet_order_ids`]. Explicit sheets
-/// are appended on [`TrameCommand::CreateSheet`].
+/// (`trame-schema`, `trame-sheets`). This list *never* carries the implicit
+/// [`DEFAULT_SHEET`] eagerly, because two fresh peers would each push it and
+/// converge to a duplicate. [`TrameState::sheet_order_ids`] treats it as the
+/// implicit first tab instead. [`TrameCommand::CreateSheet`] appends an
+/// explicit sheet.
 pub(crate) const SHEET_ORDER: &str = "sheet_order";
 
 /// Loro map holding workbook named ranges: `{name -> reference}` where the
@@ -52,32 +52,35 @@ pub(crate) const NAMED_RANGES_MAP: &str = "named_ranges";
 /// Maximum number of rows/columns a single write may materialize past the
 /// current used-range high-water mark. Bounds the pathological "lone value far
 /// down the grid" case that would otherwise create ~100k placeholder elements
-/// (see `trame-rows-and-columns`). A write beyond it is dropped.
+/// (see `trame-rows-and-columns`). The write path drops anything beyond it.
 pub(crate) const MATERIALIZE_CAP: usize = 10_000;
 
 /// Commit origin tagging the implicit row/column scaffolding that a cell edit
-/// forces into existence (see [`TrameState::materialize`]). The `UndoManager` is
-/// told to exclude this prefix, so that scaffolding never lands on the undo
-/// stack -- only the user-intended value change does. Explicit structural ops
-/// (`InsertRow`, etc.) use the default origin and stay undoable.
+/// forces into existence (see [`TrameState::materialize`]). Construction tells
+/// the `UndoManager` to exclude this prefix, so scaffolding never lands on the
+/// undo stack -- only the user-intended value change does. Explicit structural
+/// ops such as `InsertRow` use the default origin and stay undoable.
 pub(crate) const MATERIALIZE_ORIGIN: &str = "mat";
 
-/// Per-sheet container names (`cells_{sheet}`, etc.). Keyed by sheet id so a
-/// multi-sheet document keeps each sheet's cells/rows/columns/formatting
-/// isolated (`trame-schema`).
+/// Per-sheet container names, `cells_{sheet}` and its siblings. Keyed by sheet
+/// id so a multi-sheet document keeps each sheet's
+/// cells/rows/columns/formatting isolated (`trame-schema`).
 pub(crate) fn cells_map_name(sheet: &str) -> String {
     format!("cells_{sheet}")
 }
-/// Per-sheet cell-style map (`cellstyle_{sheet}`, `trame-cell-styles`): one atomic
-/// LWW register per styled cell, keyed by the stable id pair so the style follows
-/// its cell across structural ops. The value is the whole visual style of the
-/// cell -- bold/italic plus the full [`CellStyle`] (alignments, wrap, colours,
-/// borders, font, number format, decimals, size) -- postcard-encoded into the
-/// register's binary value. One register per cell (not one per attribute) is the
-/// convergence invariant: two peers that concurrently restyle the same cell race
-/// exactly once, so the merged style is always one writer's, never a per-attribute
-/// blend across containers (`trame-schema`, `TRAME-016`). Absence = the
-/// grid default style.
+/// Per-sheet cell-style map (`cellstyle_{sheet}`, `trame-cell-styles`): one
+/// atomic LWW register per styled cell. The stable id pair keys it, so the
+/// style follows its cell across structural ops. Absence = the grid default
+/// style.
+///
+/// * The value is the whole visual style of the cell, postcard-encoded into
+///   the register's binary value. That is bold/italic plus the full
+///   [`CellStyle`]: alignments, wrap, colours, borders, font, number format,
+///   decimals, size.
+/// * One register per cell, never one per attribute, is the convergence
+///   invariant. Two peers that concurrently restyle the same cell race exactly
+///   once, so the merged style is always one writer's. It is never a
+///   per-attribute blend across containers (`trame-schema`, `TRAME-016`).
 pub(crate) fn cellstyle_map_name(sheet: &str) -> String {
     format!("cellstyle_{sheet}")
 }
@@ -103,8 +106,8 @@ pub(crate) fn filters_map_name(sheet: &str) -> String {
 }
 
 /// Per-sheet hidden-row set (`filter_hidden_{sheet}`): `{row_uid -> true}` for
-/// every row the active filter hides. Kept separate from `rows_{sheet}` to avoid
-/// polluting the order list, and keyed by stable `row_uid` so the hidden set
+/// every row the active filter hides. Kept separate from `rows_{sheet}` to
+/// avoid polluting the order list. Keyed by stable `row_uid`, so the hidden set
 /// follows the data across a sort/insert (`trame-shared-filter`).
 pub(crate) fn filter_hidden_map_name(sheet: &str) -> String {
     format!("filter_hidden_{sheet}")
@@ -130,7 +133,7 @@ pub(crate) fn row_heights_map_name(sheet: &str) -> String {
 pub(crate) const DEFAULT_COL_WIDTH: f32 = 80.0;
 pub(crate) const DEFAULT_ROW_HEIGHT: f32 = 20.0;
 /// Lower clamp on a resize (physical px), matching the UI `MIN_COL_WIDTH` /
-/// `MIN_ROW_HEIGHT`. A drag that would shrink past this is pinned here.
+/// `MIN_ROW_HEIGHT`. The resize pins a drag that would shrink past this.
 pub(crate) const MIN_COL_WIDTH: f32 = 24.0;
 pub(crate) const MIN_ROW_HEIGHT: f32 = 12.0;
 
@@ -149,17 +152,17 @@ pub(crate) enum Axis {
 /// The schema version this build writes into every workbook it creates
 /// (`SCHEMA-004`).
 ///
-/// Raising it is not a decision about this constant: it is a layout change to a
-/// persisted record -- the packed [`StyleRecord`](super::StyleRecord) above is
-/// the one most likely to move -- which obliges a [`MIGRATIONS`] row that
-/// carries an existing workbook across it (`SCHEMA-009`).
+/// Raising it is not a decision about this constant. It is a layout change to a
+/// persisted record, and the packed [`StyleRecord`](super::StyleRecord) above
+/// is the one most likely to move. Such a change obliges a [`MIGRATIONS`] row
+/// which carries an existing workbook across it (`SCHEMA-009`).
 pub const SCHEMA_VERSION: u32 = 1;
 
 /// Write the current version into a workbook's `meta` register.
 ///
-/// Called from workbook construction, inside the scaffolding commit, so the
-/// number is present before any user edit and travels with the document through
-/// every persistence path rather than through the one that happens to check it.
+/// Called from workbook construction, inside the scaffolding commit. The number
+/// therefore reaches the document before any user edit. It then travels through
+/// every persistence path, not through the one that happens to check it.
 pub(crate) fn stamp(doc: &LoroDoc) {
     let _ = doc
         .get_map(SCHEMA_META_MAP)
@@ -170,10 +173,10 @@ pub(crate) fn stamp(doc: &LoroDoc) {
 /// present and unreadable.
 ///
 /// An **absent** register is [`SCHEMA_VERSION_ABSENT`] (`SCHEMA-005`): a
-/// workbook written before the register existed needs no rewriting. A register
-/// that is present but holds something other than a `u32` is refused instead
-/// (`SchemaError::VersionUnreadable`) -- reading it as 0 would send a document
-/// this build cannot understand down the migration path and open it.
+/// workbook written before the register existed needs no rewriting. A present
+/// register holding something other than a `u32` earns a refusal instead
+/// (`SchemaError::VersionUnreadable`). Reading it as 0 would send a document
+/// this build cannot understand down the migration path, and open it.
 ///
 /// # Errors
 /// [`SchemaError::VersionUnreadable`] for a register holding a non-integer, a
@@ -198,9 +201,9 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 /// Trame's registry: one row per version bump, appended never rewritten.
 ///
 /// `0 -> 1` is the register's own arrival. Every workbook written before it
-/// existed reads as version 0 and is identical in layout to a version 1
-/// workbook, so the step stamps the number and changes nothing else -- which is
-/// what makes it a migration and not a rewrite.
+/// existed reads as version 0, and its layout is identical to a version 1
+/// workbook. The step therefore stamps the number and changes nothing else,
+/// which is what makes it a migration rather than a rewrite.
 const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
     from: 0,
     to: 1,
@@ -215,27 +218,31 @@ fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
     Ok(())
 }
 
-/// The full-state read rule, applied before a single container is used
-/// (`SCHEMA-006`).
+/// The full-state read rule, applied before the caller touches a single
+/// container (`SCHEMA-006`).
 ///
-/// Returns the bytes the caller should actually import: the payload untouched
-/// when the versions match, a migrated snapshot when the workbook is older
-/// (`SCHEMA-007`), and an error when it is newer (`SCHEMA-008`) or the engine
-/// refuses the bytes. Nothing here writes to the live document, so a refused
-/// read leaves the workbook exactly as it was (`SCHEMA-012`).
+/// Returns the bytes the caller should actually import.
 ///
-/// **Cost.** The payload is imported into a scratch document before the live
-/// state is touched, so a full-state read decodes the snapshot twice. That is
-/// the price of `SCHEMA-012`: reading the version off the live document means
-/// the refused workbook is already merged into the grid the user is looking at,
-/// and the only way back out is to throw their session away. A scratch document
-/// is discarded for free.
+/// * The payload untouched, when the versions match.
+/// * A migrated snapshot, when the workbook is older (`SCHEMA-007`).
+/// * An error, when the workbook is newer (`SCHEMA-008`) or the engine refuses
+///   the bytes.
+///
+/// Nothing here writes to the live document, so a refused read leaves the
+/// workbook exactly as it was (`SCHEMA-012`).
+///
+/// **Cost.** [`gate`] imports the payload into a scratch document before it
+/// touches the live state, so a full-state read decodes the snapshot twice.
+/// `SCHEMA-012` is the reason: reading the version off the live document would
+/// merge the refused workbook into the grid the user has open. The only way
+/// back out would be to throw their session away, and a scratch document costs
+/// nothing to drop.
 ///
 /// # Errors
-/// [`SchemaError::PayloadRejected`] when the CRDT engine will not read the
-/// bytes, [`SchemaError::DocumentTooNew`] when the workbook was written by a
-/// newer client, and the migration variants when the chain cannot carry an
-/// older one.
+/// * [`SchemaError::PayloadRejected`] when the CRDT engine will not read the
+///   bytes.
+/// * [`SchemaError::DocumentTooNew`] when a newer client wrote the workbook.
+/// * A migration variant when the chain cannot carry an older workbook.
 pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
     let scratch = LoroDoc::new();
     scratch.import(payload).map_err(|e| {
@@ -269,9 +276,9 @@ mod tests {
     use super::*;
     use crate::TrameState;
 
-    /// A snapshot of a workbook carrying `version` in its register, or none at
-    /// all when `version` is `None` -- which is every workbook written before
-    /// `ARCH P8`.
+    /// A snapshot of a workbook carrying `version` in its register. A `None`
+    /// version writes no register at all, which is every workbook written
+    /// before `ARCH P8`.
     fn snapshot_at(version: Option<u32>) -> Vec<u8> {
         let doc = LoroDoc::new();
         doc.get_map(SHEETS_MAP)
@@ -361,16 +368,16 @@ mod tests {
         );
     }
 
-    /// `SCHEMA-003`: a style register this build cannot decode loses its
-    /// formatting -- unavoidably -- but the user is told, instead of reading a
-    /// workbook that looks intact and is not.
+    /// `SCHEMA-003`: a style register this build cannot decode unavoidably
+    /// loses its formatting. The notice reaches the user, who would otherwise
+    /// read a workbook that looks intact and is not.
     #[test]
     fn a_register_that_cannot_be_decoded_reaches_the_user() {
         use ambre_bus::{TrameCommand, TrameEvent};
 
         // A real styled cell first, so the register sits under the cell key the
-        // reseed resolves through its own index -- an invented key is skipped
-        // before any decode is attempted, which would prove nothing.
+        // reseed resolves through its own index. The reseed skips an invented
+        // key before it attempts any decode, which would prove nothing.
         let mut source = TrameState::new();
         source.handle_command(TrameCommand::SetActiveCell {
             row: 0,
@@ -429,8 +436,8 @@ mod tests {
         );
     }
 
-    /// `SCHEMA-013`: the back door `SCHEMA-005` opens. A register holding
-    /// something that is not a version must not be read as no register at all.
+    /// `SCHEMA-013`: the back door `SCHEMA-005` opens. The gate must not treat a
+    /// register holding something other than a version as no register at all.
     #[test]
     fn a_register_holding_something_other_than_a_version_is_refused() {
         let doc = LoroDoc::new();

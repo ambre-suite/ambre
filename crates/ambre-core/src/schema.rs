@@ -1,11 +1,12 @@
 //! The persisted schema version -- the protocol half
 //! (`ambre-spec-schema-version.md`).
 //!
-//! A stored document is a valid CRDT whatever it holds, so an engine imports it
-//! happily and then reads containers that no longer mean what it expects. A
-//! successful open of a wrong document is silent loss, and this module is what
-//! makes that case decidable: where the number lives, what an absent one means,
-//! what each comparison implies, and how a registry of forward steps is walked.
+//! A stored document is a valid CRDT whatever it holds. An engine therefore
+//! imports it happily, then reads containers that no longer mean what it
+//! expects. A successful open of a wrong document is silent loss, and this
+//! module is what makes that case decidable. It says where the number lives,
+//! what an absent one means, what each comparison implies, and how a reader
+//! walks a forward registry.
 //!
 //! What is *not* here, deliberately:
 //!
@@ -13,16 +14,16 @@
 //!   beside its own containers, because a Trame layout change says nothing about
 //!   a Toile one.
 //! * **the migrations.** What a container meant in version 2 and means in
-//!   version 3 is the application's own semantics (`SCHEMA-010`), so the steps
-//!   are supplied by the caller and only walked here.
-//! * **any CRDT type.** This crate is linked by `ambre-server`, which must never
-//!   be able to decode a document (`ZK-001`), so nothing here knows what a
-//!   `LoroDoc` is. [`migrate_schema`] is generic over the document it walks and
-//!   the applications instantiate it at their own engine type.
+//!   version 3 is the application's own semantics (`SCHEMA-010`). The caller
+//!   supplies the steps, and this module only walks them.
+//! * **any CRDT type.** `ambre-server` links this crate, and the server must
+//!   never decode a document (`ZK-001`), so nothing here knows what a
+//!   `LoroDoc` is. [`migrate_schema`] is generic over the document it walks,
+//!   and the applications instantiate it at their own engine type.
 //!
 //! Shaped like [`crate::docfile`] on purpose: two versions guard a stored
-//! document -- the container header guards the bytes around the payload, this
-//! one guards what is inside -- and a reader who has learnt one carries the
+//! document. The container header guards the bytes around the payload, and
+//! this one guards what is inside. A reader who has learnt one carries the
 //! other for free.
 
 use thiserror::Error;
@@ -35,29 +36,29 @@ pub const SCHEMA_VERSION_KEY: &str = "schema_version";
 
 /// What a document with no version register reads as (`SCHEMA-005`).
 ///
-/// Absent means zero so that no document written before the register existed
-/// needs rewriting; the alternative is a migration whose only purpose is to
-/// enable migrations.
+/// Absent means zero, so no document written before the register existed needs
+/// rewriting. The alternative is a migration whose only purpose is to enable
+/// migrations.
 pub const SCHEMA_VERSION_ABSENT: u32 = 0;
 
 /// The comparison of a document's schema version against the binary's, and the
 /// only three outcomes there are (`SCHEMA-006`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SchemaVerdict {
-    /// The versions match: the document is used as it is.
+    /// The versions match, and the caller reads the document as it is.
     Current,
     /// The document predates this binary: its migration chain runs first
     /// (`SCHEMA-007`).
     Older,
-    /// The document was written by a newer binary: the open is refused whole
+    /// A newer binary wrote the document, and the reader refuses the open whole
     /// (`SCHEMA-008`).
     Newer,
 }
 
 /// Compare a document's version with this binary's.
 ///
-/// A free function rather than an `Ord` impl: the three names are the point --
-/// a call site that reads `Older` runs a migration, where one that reads
+/// A free function rather than an `Ord` impl, because the three names are the
+/// point. A call site that reads `Older` runs a migration. One that reads
 /// `Less` has to remember which way round the arguments went.
 #[must_use]
 pub fn verdict(document: u32, binary: u32) -> SchemaVerdict {
@@ -70,14 +71,14 @@ pub fn verdict(document: u32, binary: u32) -> SchemaVerdict {
 
 /// Why a full-state read refused a document.
 ///
-/// Every variant is fatal to *that read* and to nothing else: the caller still
-/// holds the state it had, because no path here is reached with the document
-/// already applied (`SCHEMA-012`).
+/// Every variant is fatal to *that read* and to nothing else. The caller still
+/// holds the state it had, because no path here runs with the document already
+/// applied (`SCHEMA-012`).
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum SchemaError {
-    /// The document was written by a newer client. Not recoverable by anything
-    /// this binary can do: reading it on a best-effort basis is the silent-loss
-    /// case the register exists to remove, so the user is asked to update
+    /// A newer client wrote the document. Nothing this binary can do recovers
+    /// it: reading it on a best-effort basis is the silent-loss case the
+    /// register exists to remove. The error therefore tells the user to update
     /// (`SCHEMA-008`).
     #[error(
         "this document was written by a newer client (schema {document}, this build reads {binary}); update to open it"
@@ -98,10 +99,10 @@ pub enum SchemaError {
     /// an integer outside `u32`.
     ///
     /// Refused rather than read as absent. A register this build does not
-    /// understand belongs to a document it does not understand, and reading it
-    /// as version 0 would open a *newer* document as an older one -- the
-    /// silent-loss case the whole register exists to remove. `found` describes
-    /// the value for a report, never for a decision.
+    /// understand belongs to a document it does not understand. Reading it as
+    /// version 0 would open a *newer* document as an older one, the silent-loss
+    /// case the whole register exists to remove. `found` describes the value
+    /// for a report, never for a decision.
     #[error("the schema version register holds {found}, which this build cannot read")]
     VersionUnreadable { found: String },
 
@@ -131,8 +132,8 @@ pub struct SchemaMigration<D> {
 /// time (`SCHEMA-007`).
 ///
 /// `from == target` is the identity and runs nothing. A `from` above `target`
-/// is [`SchemaError::DocumentTooNew`]: the caller is expected to have refused it
-/// already, and a chain that silently accepted it would be a downgrade path.
+/// is [`SchemaError::DocumentTooNew`]. The caller should already have refused
+/// it, and a chain that silently accepted it would open a downgrade path.
 ///
 /// # Errors
 /// [`SchemaError::NoMigrationPath`] when no step leaves the version reached, and
@@ -151,8 +152,8 @@ pub fn migrate_schema<D>(
     }
     let mut current = from;
     while current < target {
-        // `to > current` is required, not merely expected: it is what makes the
-        // walk terminate, whatever a future registry row looks like.
+        // The walk demands `to > current` rather than merely expecting it. That
+        // is what makes the walk terminate, whatever a future row looks like.
         let step = steps
             .iter()
             .find(|step| step.from == current && step.to > current)
@@ -172,14 +173,14 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
 
-    /// A document the walk can write to, standing in for a `LoroDoc`: the steps
-    /// record the hops they ran, which is what the ordering assertions read.
+    /// A document the walk can write to, standing in for a `LoroDoc`. The steps
+    /// record the hops they ran, and the ordering assertions read that record.
     #[derive(Default)]
     struct Trace(RefCell<Vec<u32>>);
 
     fn step_to(to: u32) -> fn(&Trace) -> Result<(), String> {
-        // One body per version this test registry reaches; a closure cannot be
-        // used because a registry row holds a plain `fn`.
+        // One body per version this test registry reaches. A registry row holds
+        // a plain `fn`, so a closure will not do.
         match to {
             1 => |t: &Trace| {
                 t.0.borrow_mut().push(1);
