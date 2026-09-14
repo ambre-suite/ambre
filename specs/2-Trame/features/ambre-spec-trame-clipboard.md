@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-064` | `POST` | A cut MUST clear its source only once the paste lands. | this spec section 4 | none | unheld -- `finish_paste` is the only site that clears, and it runs after the paste command is sent, and nothing drives a cut end to end | unverified |
-| `TRAME-UI-125` | `FRAME` | A cut MUST NOT clear its source when the paste did not reach the document. | this spec section 5; derived | none | fails -- `grid_paste_payload` logs a full channel, drops the paste, and calls `finish_paste` anyway, which sends the source clear as a lossless batch. The gesture the decision was built to make safe destroys the range in exactly that case, and it is the shape `BUS-018` bans. Answered by the `A lost edit is never shown as applied` Story (`ambre-roadmap.md` E7) | unverified |
+| `TRAME-UI-125` | `FRAME` | A cut MUST NOT clear its source when the paste did not reach the document. | this spec section 5; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), the early return in `grid_paste_payload` that leaves `finish_paste` unreached, plus the branch inside it that keeps the range when the clear is refused. Reached by cutting a range and pasting while the outbox refuses | none | qa-manual |
 
 ### 1.4 Paste
 
@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** the OS clipboard carries the selection out of the application, in plaintext, by the
   user's own gesture. `ambre-spec-clipboard.md` fixes what it may hold and the window it may be
   written in. Nothing here reaches the relay or holds a key.
-* **Verification.** 3 `verified`, 6 `unverified`. The three that hold are the three that live in
+* **Verification.** 3 `verified`, 5 `unverified`, 1 `qa-manual`. The three that hold are the three that live in
   the Logic thread, where a test can reach them, and one of them is stronger than it was written:
   the copy test asserts the empty delta, so `TRAME-UI-060` no longer rests on the signature alone.
   Everything above the seam -- the ownership token and the cut -- is browser state, and the gap is

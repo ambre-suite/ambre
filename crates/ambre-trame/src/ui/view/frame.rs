@@ -125,8 +125,8 @@ impl TrameView {
                 self.state.select_rect(r1, c1, r2, c2);
                 self.needs_full = true;
                 self.viewport_changed = true;
-                if let Err(SendError::Full) = self.send_command_lossless(self.set_active_cmd()) {
-                    tracing::error!("Trame: UI->Logic channel full, SelectRange dropped");
+                if let Err(SendError::Refused) = self.send_command_lossless(self.set_active_cmd()) {
+                    tracing::error!("Trame: the outbox is full, SelectRange dropped");
                 }
                 self.park_input_on(r1, c1);
                 self.announce_active();
@@ -178,6 +178,10 @@ impl TrameView {
     }
 
     pub fn update(&mut self) {
+        // Offer the held commands to the channel first: the Logic thread drained
+        // while the frame was out. The grid stays busy for as long as one
+        // command waits (`BUS-011`, `BUS-016`).
+        self.flush_outbox();
         // Drain every queued UiEvent without blocking. A `Disconnected` error
         // means the Logic thread is gone (panic=abort or shutdown) — there is
         // no recovery, so flip to the fatal state instead of silently looping.
@@ -578,6 +582,13 @@ impl TrameView {
     }
 
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
+        // The outbox holds a command the Logic thread has not taken, so the grid
+        // stops accepting input until the queue drains (`BUS-016`). Consuming
+        // the event is what makes the refusal visible: a key that fell through
+        // to the browser would scroll the page under a frozen grid.
+        if self.is_busy() {
+            return true;
+        }
         // Wheel / two-finger touchpad scroll pans the viewport in any mode and
         // never disturbs the cursor or an open editor.
         if let InputEvent::Wheel {

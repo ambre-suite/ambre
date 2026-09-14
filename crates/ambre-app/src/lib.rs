@@ -539,6 +539,13 @@ pub fn main() {
     // entry, so there is one filter code path with two entry points.
     let filter_open_pub = ambre_canvas::FilterOpenPublisher::new();
 
+    // Canvas->DOM busy channel (`BUS-016`): the active view raises this level
+    // while its lossless outbox holds a command the Logic thread has not taken.
+    // The view refuses input for as long as it is up, so the shell owes the user
+    // a reason. One publisher covers the session: an embedded child sends on the
+    // same channel as its host board, so both meet the same saturation.
+    let busy_pub = ambre_canvas::BusyPublisher::new();
+
     // Formula bar signals (HTML input -> TrameView sync). RwSignal is Copy, so
     // we create them once and pass clones to both TrameView and the Leptos shell.
     let formula_ref = RwSignal::new(String::new());
@@ -967,8 +974,10 @@ pub fn main() {
     let anchor_pub_pump = anchor_pub.clone();
     let perf_pub_pump = perf_pub.clone();
     let filter_open_pump = filter_open_pub.clone();
+    let busy_pump = busy_pub.clone();
     let persist_store_frame = Rc::clone(&persist_store);
     let mut last_anchor: Option<(f64, f64)> = None;
+    let mut last_busy = false;
     let mut last_perf_push_ms: f64 = 0.0;
     let mut list_requested = false;
     let relay_tx = ui_to_logic_tx.clone();
@@ -1501,6 +1510,20 @@ pub fn main() {
             anchor_pos.set(next);
         }
 
+        // Say that the view stopped taking input, and say when it resumes
+        // (`BUS-016`). The view restates the level every frame, so this reads the
+        // edge: one notice per episode rather than one per frame. Without it the
+        // user meets a document answering nothing and reads it as a freeze.
+        let busy = busy_pump.is_busy();
+        if busy != last_busy {
+            last_busy = busy;
+            if busy {
+                toasts.warning("The document is catching up. Your edit is queued.");
+            } else {
+                toasts.info("The document is up to date.");
+            }
+        }
+
         // Open the shared filter popover when the canvas raised the one-shot
         // intent (`trame-shared-filter`): a click on an in-canvas autofilter button.
         // The view already moved the active cell onto the button's column (so the
@@ -1550,6 +1573,9 @@ pub fn main() {
     let child_to_logic = ui_to_logic_tx.clone();
     let child_routes_factory = Rc::clone(&child_routes);
     let child_theme_ctl = theme_ctl.clone();
+    // An embedded child sends on its host board's UI->Logic channel, so the two
+    // share one busy level rather than each holding a level nobody reads.
+    let child_busy_pub = busy_pub.clone();
     let ch_toile_ctx_scope = RwSignal::new(ambre_toile::ui::menu::CtxScope::default());
     let ch_toile_menu_cmd = RwSignal::new(None::<CommandId>);
     let ch_toile_active_tool = RwSignal::new(ambre_toile::ui::Tool::default());
@@ -1606,6 +1632,7 @@ pub fn main() {
                 text_input,
                 true,
                 ambre_canvas::PerfPublisher::new(),
+                child_busy_pub.clone(),
                 child_theme_ctl.clone(),
                 ch_toile_ctx_scope,
                 ch_toile_menu_cmd,
@@ -1636,6 +1663,7 @@ pub fn main() {
                 true,
                 ambre_canvas::AnchorPublisher::new(),
                 ambre_canvas::PerfPublisher::new(),
+                child_busy_pub.clone(),
                 ambre_canvas::FilterOpenPublisher::new(),
                 child_theme_ctl.clone(),
                 ch_formula_ref,
@@ -1665,6 +1693,7 @@ pub fn main() {
                     text_input,
                     false,
                     perf_pub,
+                    busy_pub,
                     theme_ctl,
                     toile_ctx_scope,
                     toile_menu_cmd,
@@ -1694,6 +1723,7 @@ pub fn main() {
                     false,
                     anchor_pub,
                     perf_pub,
+                    busy_pub,
                     filter_open_pub,
                     theme_ctl,
                     formula_ref_tv,

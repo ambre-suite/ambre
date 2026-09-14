@@ -20,6 +20,7 @@ impl TrameView {
         embedded: bool,
         anchor: AnchorPublisher,
         perf_pub: PerfPublisher,
+        busy_pub: BusyPublisher,
         filter_open: FilterOpenPublisher,
         theme_ctl: ThemeControl,
         #[cfg(target_arch = "wasm32")] formula_ref: RwSignal<String>,
@@ -44,6 +45,8 @@ impl TrameView {
 
         Self {
             document_id,
+            outbox: Outbox::new(to_logic.clone()),
+            busy_pub,
             to_logic,
             from_logic,
             state: TrameUiState::new(canvas_width, canvas_height),
@@ -125,7 +128,7 @@ impl TrameView {
         match self.to_logic.try_send(msg) {
             Ok(()) => {}
             Err(flume::TrySendError::Full(_)) => {
-                tracing::warn!("Trame: UI→Logic channel full, dropping lossy command");
+                tracing::warn!("Trame: UI->Logic channel full, dropping lossy command");
             }
             Err(flume::TrySendError::Disconnected(_)) => {
                 tracing::error!("Trame: UI→Logic channel disconnected");
@@ -134,23 +137,55 @@ impl TrameView {
     }
 
     /// Send a lossless `TrameCommand` to the Logic thread (edits, cell
-    /// selection).
+    /// selection) through the outbox.
     ///
-    /// Lossless: returns the `TrySendError` on `Full` so the caller can decide
-    /// whether to retry or alert the user. The UI thread never blocks; backpressure
-    /// is surfaced synchronously at the call-site.
-    pub(crate) fn send_command_lossless(&self, cmd: TrameCommand) -> Result<(), SendError> {
+    /// On a full channel the outbox holds the command for a later frame
+    /// (`BUS-011`), and the grid refuses input until the queue drains
+    /// (`BUS-016`). `Ok(())` therefore means the command is on its way, not
+    /// that it already left.
+    ///
+    /// `Err` is the command the outbox took nowhere. A caller that mirrors it
+    /// into its own grid cache MUST read this and decline (`BUS-018`). A cell
+    /// showing an edit the document never received hides the loss.
+    pub(crate) fn send_command_lossless(&mut self, cmd: TrameCommand) -> Result<(), SendError> {
         if self.fatal {
-            return Ok(());
+            return Err(SendError::Disconnected);
         }
         let msg = LogicCommand::App {
             document_id: self.document_id,
             command: AppCommand::Trame(cmd),
         };
-        self.to_logic.try_send(msg).map_err(|err| match err {
-            flume::TrySendError::Full(_) => SendError::Full,
-            flume::TrySendError::Disconnected(_) => SendError::Disconnected,
-        })
+        match self.outbox.send(msg) {
+            SendOutcome::Sent => Ok(()),
+            SendOutcome::Held => {
+                tracing::warn!("Trame: UI->Logic channel full, command held for a later frame");
+                Ok(())
+            }
+            SendOutcome::Refused => Err(SendError::Refused),
+            SendOutcome::Disconnected => Err(SendError::Disconnected),
+        }
+    }
+
+    /// Offer the held lossless commands to the channel, then publish the busy
+    /// level the chrome shows and the input gate reads (`BUS-016`).
+    ///
+    /// Called from the frame hook.
+    pub(crate) fn flush_outbox(&mut self) {
+        if self.fatal {
+            return;
+        }
+        if self.outbox.flush() == SendOutcome::Disconnected {
+            self.signal_fatal("UI->Logic channel disconnected");
+            return;
+        }
+        if self.busy_pub.publish(self.outbox.is_busy()) && !self.outbox.is_busy() {
+            tracing::info!("Trame: the UI->Logic channel cleared, input resumes");
+        }
+    }
+
+    /// Whether the grid is refusing input because the outbox holds a command.
+    pub(crate) fn is_busy(&self) -> bool {
+        self.outbox.is_busy()
     }
 
     /// Enter the inert fatal state: a worker thread is gone, so no command can
@@ -306,18 +341,33 @@ impl TrameView {
             editor.col,
             text,
         );
-        if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::SetCellText {
+        let sent = self.send_command_lossless(TrameCommand::SetCellText {
             row: editor.row,
             col: editor.col,
             text: text.clone(),
-        }) {
-            tracing::error!("[UI] channel full, edit dropped — retry next frame");
-        }
+        });
         // Close the undo group on cell exit so the whole edit is one undo item
-        // (`trame-cell-editing`). Lossless: it must not be dropped, or the group
-        // would stay open until the next command and could absorb a later edit.
-        let _ = self.send_command_lossless(TrameCommand::CommitEdit);
-        self.state.set_cell_text(editor.row, editor.col, text);
+        // (`trame-cell-editing`). It travels only behind an edit that left: a
+        // boundary around nothing would seal the previous group early.
+        if sent.is_ok()
+            && self
+                .send_command_lossless(TrameCommand::CommitEdit)
+                .is_err()
+        {
+            // A dropped boundary leaves the group open, so the next edit joins
+            // it and one undo takes both. It must not be discarded in silence
+            // (`TRAME-UI-142`).
+            tracing::error!("Trame: the undo group boundary was refused, the group stays open");
+        }
+        // The grid cache mirrors the document, so it takes the text only when
+        // the command is on its way (`BUS-018`). A refused edit leaves the cell
+        // as the document holds it. The user then reads the loss, rather than a
+        // value no peer will ever receive.
+        if sent.is_ok() {
+            self.state.set_cell_text(editor.row, editor.col, text);
+        } else {
+            tracing::error!("[UI] the edit was refused, the cell keeps its stored value");
+        }
         // Content layer must repaint to show the committed text; overlay too, to
         // drop the edit field.
         self.needs_full = true;
@@ -350,14 +400,15 @@ impl TrameView {
         // One batch command so the whole fill is a single undo item (a stream of
         // SetCellText would be one undo item per cell).
         let batch = cells.iter().map(|&(r, c)| (r, c, text.clone())).collect();
-        if let Err(SendError::Full) =
-            self.send_command_lossless(TrameCommand::SetCellsBatch { cells: batch })
-        {
-            tracing::error!("[UI] channel full, fill batch dropped");
-        }
-        // Optimistic local update, mirroring the batch.
-        for &(row, col) in &cells {
-            self.state.set_cell_text(row, col, text.clone());
+        let sent = self.send_command_lossless(TrameCommand::SetCellsBatch { cells: batch });
+        // The optimistic update mirrors the batch, so it runs only when the
+        // batch is on its way (`BUS-018`).
+        if sent.is_ok() {
+            for &(row, col) in &cells {
+                self.state.set_cell_text(row, col, text.clone());
+            }
+        } else {
+            tracing::error!("[UI] the fill was refused, the cells keep their stored values");
         }
         self.needs_full = true;
         self.edit_dirty = true;

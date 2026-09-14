@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE CLIENT MESSAGE BUS
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the three planes, the four envelopes and the role gate all ship; the
-lossless class is designed and both applications drop an edit instead.
+**Implementation:** partial -- the three planes, the four envelopes, the role gate and the lossless
+outbox all ship; the lossy class coalesces by habit and no test drives it.
 
 > The contract the three threads talk over. It fixes what a message may carry, who allocates its
 > identity, and what happens to it when nobody is listening.
@@ -34,9 +34,10 @@ is what a full channel means.
 |---|---|---|---|---|---|---|
 | `BUS-012` | `POST` | A lossy command MUST be coalesced to one send per frame. | this spec section 2 | none | unheld -- each view keeps one `pending_viewport` and flushes it from its frame hook, so the coalescing is held by reading the code, and no test drives two requests inside one frame | unverified |
 | `BUS-017` | `POST` | A stale answer to a lossy request MUST be discarded by its version. | this spec section 2 | none | unheld -- only one application holds it: `TrameUiState::on_viewport_data` compares against `accepted_version`, and every test that drives it feeds an increasing version, so the discard branch runs in no test. Toile's viewport carries no version at all | unverified |
-| `BUS-011` | `POST` | A lossless command MUST NOT be dropped. | this spec section 2 | not built | unbuilt -- lands with the `A lost edit is never shown as applied` Story (`ambre-roadmap.md` E7). Toile's `send_edit` treats a full channel as a warning, Trame returns the error, and both call sites log it, one of them with the group boundary discarded outright | unimplemented |
-| `BUS-016` | `POST` | A full command channel MUST reach the user as a busy signal, and the view MUST stop accepting input until it clears. | this spec section 2 | not built | unbuilt -- lands with the `A lost edit is never shown as applied` Story (`ambre-roadmap.md` E7). No path in either application surfaces the condition or stops accepting input | unimplemented |
-| `BUS-018` | `FRAME` | A command that failed to send MUST NOT be reflected in the view state. | this spec section 2; derived | not built | unbuilt -- lands with the `A lost edit is never shown as applied` Story (`ambre-roadmap.md` E7). `commit_edit` logs the full channel and then writes the same text into its own grid state unconditionally, so the user reads an edit the document never received | unimplemented |
+| `BUS-011` | `POST` | A lossless command MUST NOT be dropped. | this spec section 2 | `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it`; `::a_flush_after_the_reader_drains_sends_the_held_command`; `::a_held_queue_keeps_the_order_the_user_typed`; `::a_send_while_busy_never_overtakes_a_held_command` | none | verified |
+| `BUS-016` | `POST` | A full command channel MUST reach the user as a busy signal. | this spec section 2 | `ambre_canvas::busy::tests::only_the_first_frame_of_an_episode_reports_a_change` -- the publisher reports the edge once per episode, so the shell raises one notice and clears it once; `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it` -- the level the publisher carries; qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), the shell's per-frame read of that level and the notice it raises, reached by typing into a document whose Logic thread is saturated | none | qa-manual |
+| `BUS-022` | `POST` | A view MUST stop accepting input while its outbox is busy. | this spec section 2; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), one early return at the head of each `handle_input`, reached by typing into a document whose Logic thread is saturated. The level it reads is `BUS-016` | none | qa-manual |
+| `BUS-018` | `FRAME` | A command that failed to send MUST NOT be reflected in the view state. | this spec section 2; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), one branch at each Trame commit path, read back off the cell after a refused send. The outcome it branches on is `BUS-011` | none | qa-manual |
 
 ### 1.3 Logic routes a content command
 
@@ -71,22 +72,27 @@ is what a full channel means.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 9 `verified`, 9 `unverified`, 3 `unimplemented`. What holds is the Logic
+* **Verification.** 10 `verified`, 9 `unverified`, 3 `qa-manual`. What holds is the Logic
   dispatcher: it can be driven on host through an unknown document, a viewer's edit, a child's own
   role, a service round trip in both directions and a response that arrives after its document
-  closed. What is loose is every path nobody drives -- the encode of a variant no test names, a full
-  channel, a stale version, a handler that captures a sender, and the registry entry no test asserts
-  was never created. Four conjunctions came apart, and
+  closed. The lossless outbox joins it: the decision a full channel forces, lifted out of the views
+  into a type a host test drives. What is loose is every path nobody drives -- the
+  encode of a variant no test names, a stale version, a handler that captures a sender, and the
+  registry entry no test asserts was never created. Three rows live in the DOM glue, and the
+  doctrine rules them `qa-manual`: the busy notice, the input gate and the call site that must not
+  write what it failed to send. Five conjunctions came apart, and
   each hid an uncovered half behind a covered one. `BUS-004` claimed both who allocates an identity
   and that every hop echoes it: the echo is pinned three times over, and who allocates is a `PRE` no
   code could refuse, because the worker holds a counter of its own and a collision would be silent.
   `BUS-009` claimed the request and its response, which are different arms with different tests, and
   the response has a documented exception the old row denied outright. `BUS-011` claimed the edit
-  survives and the user learns it did not, and neither is built. `BUS-012` claimed the coalescing and
-  the stale discard, and only one application has a version to discard by. Three rows are new rather
-  than split: `BUS-018` is the frame condition the lost-edit Story is really about -- the view writes
-  the text it just failed to send -- and `BUS-019` and `BUS-021` name what the two relays must leave
-  alone, the registry and the payload.
+  survives and the user learns it did not, which are two rules with two mechanisms. `BUS-012` claimed
+  the coalescing and the stale discard, and only one application has a version to discard by.
+  `BUS-016` claimed the busy signal and the input gate. A host test reads the signal, which is a
+  level; the gate is a branch inside the view, and `BUS-022` carries it. Three rows are new
+  rather than split: `BUS-018` is the frame condition the lost-edit Story is really about -- the view
+  writes the text it just failed to send -- and `BUS-019` and `BUS-021` name what the two relays must
+  leave alone, the registry and the payload.
 
 ---
 
@@ -178,7 +184,7 @@ The bus has no control of its own. What a user meets is what it does under load.
 | scrolling faster than the Logic thread answers | requests are dropped and the last one wins; the view never lags behind by more than a frame |
 | a document opened from the home screen | edits route immediately, and the permission arrives a beat later |
 | editing a document shared read-only | the command is dropped locally, so no failed write reaches the relay |
-| a saturated Logic thread | an edit is lost with a log line, which is what `BUS-011` exists to forbid |
+| a saturated Logic thread | the edit is held rather than dropped, the view stops taking input, and a notice says the document is catching up until the backlog clears |
 
 ---
 
@@ -201,14 +207,17 @@ The bus has no control of its own. What a user meets is what it does under load.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **A lost edit is displayed as applied.** Trame's cell commit sends the text, logs the failure when
-  the channel is full, and then writes the same text into its own view state. The user sees the
-  edit; the document never received it (`BUS-018`).
-* **Toile drops an edit with a warning.** `send_edit` treats a full channel as a logging event, so
-  the lossless class exists in Trame alone and neither application surfaces a busy signal.
-* **An undo group boundary is discarded outright.** The command that closes the group after a cell
-  exit is sent with its result ignored, next to a comment stating that it must not be dropped. A
-  dropped boundary leaves the group open and lets a later edit join it.
+* **The two view halves of the lossless class run in no test.** A host test drives the outbox. The
+  branches that read it compile only under `wasm32`, where no test builds a view. Those are the
+  input gate (`BUS-022`) and the commit that must not write a refused edit (`BUS-018`).
+* **Nothing refuses a lossless send routed around the outbox.** Each view still holds a raw
+  `flume::Sender`, which the lossy class and the session commands need. A call site added tomorrow
+  can `try_send` a lossless command on it, and drop it exactly as both views used to. The
+  outbox holds `BUS-011` for every caller that goes through it, and no type refuses the caller that
+  does not.
+* **The hold queue has a bound, and past it the command is refused.** Sixty-four commands, after
+  which the outbox reports a refusal rather than growing without limit. The input gate closes on the
+  first held command, so reaching the bound takes a saturation no test has produced.
 * **Nothing refuses an encoder on the UI to Logic path.** `BUS-001` is held by nobody calling one.
 * **The postcard round trip is a sample.** Twelve variants of one envelope and nineteen of the other
   are covered by nine cases between them, and no test enumerates the variants (`BUS-003`).

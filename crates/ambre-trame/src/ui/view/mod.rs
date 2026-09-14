@@ -12,13 +12,13 @@
 // ============================================================================
 
 use ambre_bus::{
-    AppCommand, AppEvent, DocumentId, FillMode, GridRange, LogicCommand, TrameCommand, TrameEvent,
-    UiEvent,
+    AppCommand, AppEvent, DocumentId, FillMode, GridRange, LogicCommand, Outbox, SendOutcome,
+    TrameCommand, TrameEvent, UiEvent,
 };
 use ambre_canvas::{
-    Anchor, AnchorPublisher, ContentRepaint, FilterOpenPublisher, FrameStats, InputEvent,
-    OverlayRepaint, PerfPublisher, PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme,
-    ThemeControl, WgpuSurface,
+    Anchor, AnchorPublisher, BusyPublisher, ContentRepaint, FilterOpenPublisher, FrameStats,
+    InputEvent, OverlayRepaint, PerfPublisher, PerfSnapshot, RepaintPlan, TextCache, TextInput,
+    Theme, ThemeControl, WgpuSurface,
 };
 use ambre_draw::{Clock, FontContext, Rect};
 #[cfg(target_arch = "wasm32")]
@@ -129,8 +129,10 @@ pub(crate) enum ScrollOutcome {
 /// `flume::TrySendError` variants without carrying the (large) `LogicCommand`
 /// payload, so the `Err` path stays cheap (see `clippy::result_large_err`).
 pub(crate) enum SendError {
-    /// The channel buffer is full; the caller may retry or alert the user.
-    Full,
+    /// The outbox took the command nowhere: the channel was full and the hold
+    /// queue already stood at its bound. Nothing carries it further, so the
+    /// caller MUST NOT reflect it in the view state (`BUS-018`).
+    Refused,
     /// The Logic thread is gone; the channel is permanently disconnected.
     Disconnected,
 }
@@ -212,8 +214,14 @@ pub enum PendingCommit {
 pub struct TrameView {
     /// The document this view renders (from the active route).
     document_id: DocumentId,
-    /// Outbound channel to the Logic thread.
+    /// Outbound channel to the Logic thread, for the lossy class only.
     to_logic: flume::Sender<LogicCommand>,
+    /// The lossless send path: it keeps a command a full channel could not take,
+    /// and offers it again on a later frame (`BUS-011`).
+    outbox: Outbox,
+    /// The busy level the chrome reads while the outbox holds anything
+    /// (`BUS-016`).
+    busy_pub: BusyPublisher,
     /// Inbound channel from the Logic thread, drained each frame in `update`.
     from_logic: flume::Receiver<UiEvent>,
 

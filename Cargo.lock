@@ -83,6 +83,7 @@ name = "ambre-bus"
 version = "0.1.0"
 dependencies = [
  "ambre-core",
+ "flume",
  "kurbo",
  "postcard",
  "serde",

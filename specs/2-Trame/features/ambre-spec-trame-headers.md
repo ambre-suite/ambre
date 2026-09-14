@@ -151,9 +151,10 @@ the state `BUS-018` bans and does not yet hold (`ambre-spec-message-bus.md secti
   place the selection is visible.
 * **The click through an insert affordance is untested** (`TRAME-UI-048`, `TRAME-UI-123`). It
   moves the tracked active cell before firing the intent, so a dropped command leaves the active
-  cell moved and nothing inserted. The half-step is ruled by `BUS-018`, which is `unimplemented`,
-  and the drop is possible here because the insert is the one document mutation of this crate sent
-  on the lossy class rather than the lossless one (`BUS-011`).
+  cell moved and nothing inserted. The half-step is ruled by `BUS-018`, and the drop is possible
+  here because the insert is the one document mutation of this crate sent on the lossy class rather
+  than the lossless one, so it reaches neither the outbox that holds a command nor the gate that
+  refuses input while it waits (`BUS-011`).
 * **The row strip is asserted only in the negative** (`TRAME-UI-121`, `TRAME-UI-122`). Every
   recording of it passes no active row and reads no label text, so the tint that marks the active
   row and the number that names a row are both held by reading the code. The column strip has a

@@ -615,8 +615,8 @@ impl TrameView {
         }
         self.state.select_extend(row, col);
         self.viewport_changed = true;
-        if let Err(SendError::Full) = self.send_command_lossless(self.set_active_cmd()) {
-            tracing::error!("Trame: UI->Logic channel full, selection extend dropped");
+        if let Err(SendError::Refused) = self.send_command_lossless(self.set_active_cmd()) {
+            tracing::error!("Trame: the outbox is full, the selection extend was dropped");
         }
         self.park_input_on(row, col);
         self.announce_active();
@@ -627,8 +627,8 @@ impl TrameView {
     pub(crate) fn disjoin_cell(&mut self, row: u32, col: u32) {
         self.state.select_disjoint(row, col);
         self.viewport_changed = true;
-        if let Err(SendError::Full) = self.send_command_lossless(self.set_active_cmd()) {
-            tracing::error!("Trame: UI->Logic channel full, disjoint select dropped");
+        if let Err(SendError::Refused) = self.send_command_lossless(self.set_active_cmd()) {
+            tracing::error!("Trame: the outbox is full, the disjoint select was dropped");
         }
         self.park_input_on(row, col);
         self.announce_active();
@@ -641,8 +641,8 @@ impl TrameView {
     pub(crate) fn apply_cursor_move(&mut self, mv: Option<CursorMove>) -> bool {
         self.viewport_changed = true;
         if let Some(mv) = mv {
-            if let Err(SendError::Full) = self.send_command_lossless(mv.active) {
-                tracing::error!("Trame: UI→Logic channel full, cursor move dropped");
+            if let Err(SendError::Refused) = self.send_command_lossless(mv.active) {
+                tracing::error!("Trame: the outbox is full, the cursor move was dropped");
             }
             if let Some(scroll) = mv.scroll {
                 self.pending_viewport = Some(scroll);
@@ -662,10 +662,10 @@ impl TrameView {
         let cells = self.state.selection.selected_cells();
         // One batch command so the whole clear is a single undo item.
         let batch = cells.iter().map(|&(r, c)| (r, c, String::new())).collect();
-        if let Err(SendError::Full) =
+        if let Err(SendError::Refused) =
             self.send_command_lossless(TrameCommand::SetCellsBatch { cells: batch })
         {
-            tracing::error!("Trame: UI→Logic channel full, cell clear dropped");
+            tracing::error!("Trame: the outbox is full, the cell clear was dropped");
         }
         for &(row, col) in &cells {
             self.state.set_cell_text(row, col, String::new());

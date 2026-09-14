@@ -22,10 +22,10 @@ use ambre_bus::app::toile::{
     DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, End, LinkTarget,
     PresencePayload, ThreadId, ToileCommand, ToileEvent, Viewport,
 };
-use ambre_bus::{AppCommand, AppEvent, DocumentId, LogicCommand, UiEvent};
+use ambre_bus::{AppCommand, AppEvent, DocumentId, LogicCommand, Outbox, SendOutcome, UiEvent};
 use ambre_canvas::{
-    ContentRepaint, FrameStats, InputEvent, OverlayRepaint, PerfPublisher, PerfSnapshot,
-    RepaintPlan, TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
+    BusyPublisher, ContentRepaint, FrameStats, InputEvent, OverlayRepaint, PerfPublisher,
+    PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
 };
 use ambre_draw::{BoundingBox, FontContext, Point, Rect, Vec2};
 
@@ -208,6 +208,12 @@ pub struct ToileView {
     document_id: DocumentId,
     to_logic: flume::Sender<LogicCommand>,
     from_logic: flume::Receiver<UiEvent>,
+    /// The lossless send path: it keeps an edit a full channel could not take,
+    /// and offers it again on a later frame (`BUS-011`).
+    outbox: Outbox,
+    /// The busy level the chrome reads while the outbox holds anything
+    /// (`BUS-016`).
+    busy_pub: BusyPublisher,
 
     /// The render-thread camera (world <-> screen), updated locally on pan/zoom.
     cam: ViewportTransform,
@@ -538,6 +544,7 @@ impl ToileView {
         // A top-level view passes `false` and focuses immediately, as before.
         embedded: bool,
         perf_pub: PerfPublisher,
+        busy_pub: BusyPublisher,
         theme_ctl: ThemeControl,
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<super::menu::CtxScope>,
         #[cfg(target_arch = "wasm32")] menu_cmd: RwSignal<Option<CommandId>>,
@@ -564,6 +571,8 @@ impl ToileView {
         let theme = theme_ctl.get();
         Self {
             document_id,
+            outbox: Outbox::new(to_logic.clone()),
+            busy_pub,
             to_logic,
             from_logic,
             cam: ViewportTransform::new(canvas_width, canvas_height),
@@ -694,24 +703,58 @@ impl ToileView {
         }
     }
 
-    /// Send a mutating command (edits). Warns (does not panic) on backpressure.
-    fn send_edit(&self, cmd: ToileCommand) {
+    /// Send a mutating command (edits) through the lossless outbox.
+    ///
+    /// On a full channel the outbox holds the command for a later frame
+    /// (`BUS-011`), and the board refuses input until the queue drains
+    /// (`BUS-016`). The return says whether the command is on its way, so
+    /// a caller mirroring it into the view state can decline (`BUS-018`).
+    fn send_edit(&mut self, cmd: ToileCommand) -> bool {
         if self.fatal {
-            return;
+            return false;
         }
         let msg = LogicCommand::App {
             document_id: self.document_id,
             command: AppCommand::Toile(cmd),
         };
-        match self.to_logic.try_send(msg) {
-            Ok(()) => {}
-            Err(flume::TrySendError::Full(_)) => {
-                tracing::warn!("Toile: UI->Logic channel full, edit dropped");
+        match self.outbox.send(msg) {
+            SendOutcome::Sent => true,
+            SendOutcome::Held => {
+                tracing::warn!("Toile: UI->Logic channel full, edit held for a later frame");
+                true
             }
-            Err(flume::TrySendError::Disconnected(_)) => {
+            SendOutcome::Refused => {
+                tracing::error!("Toile: the outbox is full, edit refused");
+                false
+            }
+            SendOutcome::Disconnected => {
                 tracing::error!("Toile: UI->Logic channel disconnected");
+                false
             }
         }
+    }
+
+    /// Offer the held lossless commands to the channel, then publish the busy
+    /// level the chrome shows and the input gate reads (`BUS-016`).
+    ///
+    /// Called from the frame hook. A disconnected channel is fatal here as
+    /// everywhere else: the Logic thread is gone, and it answers nothing.
+    fn flush_outbox(&mut self) {
+        if self.fatal {
+            return;
+        }
+        if self.outbox.flush() == SendOutcome::Disconnected {
+            self.signal_fatal("Logic thread disconnected");
+            return;
+        }
+        if self.busy_pub.publish(self.outbox.is_busy()) && !self.outbox.is_busy() {
+            tracing::info!("Toile: the UI->Logic channel cleared, input resumes");
+        }
+    }
+
+    /// Whether the board is refusing input because the outbox holds an edit.
+    pub fn is_busy(&self) -> bool {
+        self.outbox.is_busy()
     }
 
     /// Queue a coalesced `SetViewport` for the current camera (flushed in `update`).
@@ -2244,9 +2287,15 @@ impl ToileView {
             match key {
                 // Undo / redo (`toile-undo`). Ctrl+Shift+Z and
                 // Ctrl+Y both redo.
-                "z" | "Z" if shift => self.send_edit(ToileCommand::Redo),
-                "z" | "Z" => self.send_edit(ToileCommand::Undo),
-                "y" | "Y" => self.send_edit(ToileCommand::Redo),
+                "z" | "Z" if shift => {
+                    self.send_edit(ToileCommand::Redo);
+                }
+                "z" | "Z" => {
+                    self.send_edit(ToileCommand::Undo);
+                }
+                "y" | "Y" => {
+                    self.send_edit(ToileCommand::Redo);
+                }
                 // Duplicate the selection with a small diagonal nudge
                 // (`toile-undo`).
                 "d" | "D" if !self.selection.is_empty() => {
@@ -2748,6 +2797,10 @@ impl ToileView {
 
 impl ToileView {
     pub fn update(&mut self) {
+        // Offer the held edits to the channel first: the Logic thread drained
+        // while the frame was out. The board stays busy for as long as one
+        // command waits (`BUS-011`, `BUS-016`).
+        self.flush_outbox();
         loop {
             match self.from_logic.try_recv() {
                 Ok(UiEvent::Viewport {
@@ -3027,6 +3080,13 @@ impl ToileView {
         // the board consumes early, such as an open inline editor below.
         // `FrameHost` reads `child_route()` after every `handle_input`.
         self.child_route = None;
+        // The outbox holds an edit the Logic thread has not taken, so the board
+        // stops accepting input until the queue drains (`BUS-016`). Consuming
+        // the event is what makes the refusal visible: a gesture that fell
+        // through to the browser would scroll the page under a frozen board.
+        if self.is_busy() {
+            return true;
+        }
         // While an inline editor is open it gets first refusal on input
         // (`toile-tools`): `Some(consumed)` settles the event, `None` falls
         // through to the board handlers below (chords, wheel pan/zoom keep working

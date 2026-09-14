@@ -35,7 +35,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-109` | `POST` | A change to the selection MUST refresh the aggregates. | this spec section 2 | none | fails -- the refresh is called from the active-cell announcement alone, which extending a header band does not reach (section 5). Answered by the `Every selection change refreshes the aggregates` Story (`ambre-roadmap.md` E7) | unverified |
-| `TRAME-UI-136` | `FRAME` | A refresh whose request did not reach the Logic thread MUST NOT leave the band showing the totals of another selection. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none | fails -- the request is lossy, a full channel is logged, and the previous totals stay on screen (section 5). Answered by the `A lost edit is never shown as applied` Story (`ambre-roadmap.md` E7) | unverified |
+| `TRAME-UI-136` | `FRAME` | A refresh whose request did not reach the Logic thread MUST NOT leave the band showing the totals of another selection. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none | fails -- the request is lossy, a full channel is logged, and the previous totals stay on screen (section 5). Answered by the `A dropped lossy request does not leave a stale screen` Story (`ambre-roadmap.md` E7) | unverified |
 
 * **Budget.** none: the tallies are one walk over the selection, and
   `ambre-spec-budgets.md` budgets no aggregate. The band paints inside the frame

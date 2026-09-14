@@ -45,6 +45,9 @@ pub mod anchor;
 // -- One-shot UI intents: canvas->DOM "open a floating surface now" pulses ----
 pub mod intent;
 
+// -- Busy level: canvas->DOM channel for a view that refuses input -----------
+pub mod busy;
+
 // -- Perf snapshot: canvas->DOM channel for the performance HUD --------------
 pub mod perf;
 
@@ -59,6 +62,7 @@ pub mod request_registry;
 
 // -- Convenience re-exports --------------------------------------------------
 pub use anchor::{Anchor, AnchorPublisher};
+pub use busy::BusyPublisher;
 pub use editor::{CARET_WIDTH, EditIntent, TextEditor, TextEditorStyle};
 pub use fatal::{fatal_message, signal_fatal};
 #[cfg(target_arch = "wasm32")]

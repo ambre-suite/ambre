@@ -22,3 +22,7 @@ kurbo = { workspace = true }
 postcard = { workspace = true }
 # `ToileError` derives `thiserror::Error`.
 thiserror = { workspace = true }
+# The UI -> Logic channel the lossless outbox sends on (`outbox` module). The
+# send discipline of that hop is this crate's contract (`BUS-011`), so the type
+# that holds it belongs here rather than copied into each application view.
+flume = { workspace = true }

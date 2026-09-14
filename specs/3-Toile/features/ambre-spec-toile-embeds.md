@@ -322,10 +322,9 @@ never the gesture, exactly as a dropped file does.
   host tests that prove it the exact inverse of the pointer transform, and nothing proves the
   launcher pushes it.
 * **What a saturated child costs.** `TOILE-UI-340` no longer drops an event, but a queue has a
-  bound and a full one still drops its oldest with an error line. The real answer is the busy
-  signal `BUS-016` prescribes -- surface the condition and stop accepting input -- which lands with
-  `A lost edit is never shown as applied` (`ambre-roadmap.md` E7) and is not this feature's to
-  build.
+  bound and a full one still drops its oldest with an error line. The busy signal `BUS-016`
+  prescribes now ships, but it reads the UI to Logic outbox, which is a different hop: nothing
+  publishes the state of this queue, so the child stays saturated in silence.
 * **A route is never reclaimed.** Holding `TOILE-UI-098` means a document's fan-out entry survives
   the view it was opened for, and nothing removes the empty entry afterwards: a few dozen bytes per
   document embedded at least once in this session, bounded by the boards a user opens. The trade

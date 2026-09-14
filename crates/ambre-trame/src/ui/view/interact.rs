@@ -245,8 +245,12 @@ impl TrameView {
             },
             mode,
         };
-        if let Err(SendError::Full) = self.send_command_lossless(cmd) {
-            tracing::error!("Trame: UI->Logic channel full, FillRange dropped");
+        if self.send_command_lossless(cmd).is_err() {
+            // The fill never left, so the selection must not grow over cells the
+            // document never wrote (`BUS-018`, `TRAME-UI-133`).
+            tracing::error!("Trame: the fill was refused, the selection stays on the source");
+            self.announce_active();
+            return;
         }
         // Grow the selection to the whole filled rectangle (anchor top-left,
         // active bottom-right), matching Sheets after a fill-handle drag.
@@ -254,8 +258,8 @@ impl TrameView {
         self.state.selection.active = (dr2, dc2);
         self.state.selection.extra.clear();
         self.viewport_changed = true;
-        if let Err(SendError::Full) = self.send_command_lossless(self.set_active_cmd()) {
-            tracing::error!("Trame: UI->Logic channel full, fill selection dropped");
+        if let Err(SendError::Refused) = self.send_command_lossless(self.set_active_cmd()) {
+            tracing::error!("Trame: the outbox is full, the fill selection was dropped");
         }
         self.announce_active();
     }
@@ -268,8 +272,8 @@ impl TrameView {
         }
         self.state.select(row, col);
         self.viewport_changed = true;
-        if let Err(SendError::Full) = self.send_command_lossless(self.set_active_cmd()) {
-            tracing::error!("Trame: UI→Logic channel full, cell selection dropped");
+        if let Err(SendError::Refused) = self.send_command_lossless(self.set_active_cmd()) {
+            tracing::error!("Trame: the outbox is full, the cell selection was dropped");
         }
         self.park_input_on(row, col);
         self.announce_active();
@@ -354,8 +358,8 @@ impl TrameView {
     pub(crate) fn select_axis(&mut self, kind: crate::ui::grid::SelKind, idx: u32) {
         self.state.selection = Selection::axis(kind, idx, idx);
         self.viewport_changed = true;
-        if let Err(SendError::Full) = self.send_command_lossless(self.axis_active_cmd()) {
-            tracing::error!("Trame: UI->Logic channel full, axis select dropped");
+        if let Err(SendError::Refused) = self.send_command_lossless(self.axis_active_cmd()) {
+            tracing::error!("Trame: the outbox is full, the axis select was dropped");
         }
         self.announce_active();
     }
@@ -370,8 +374,8 @@ impl TrameView {
             crate::ui::grid::SelKind::Cells => return,
         }
         self.viewport_changed = true;
-        if let Err(SendError::Full) = self.send_command_lossless(self.axis_active_cmd()) {
-            tracing::error!("Trame: UI->Logic channel full, axis extend dropped");
+        if let Err(SendError::Refused) = self.send_command_lossless(self.axis_active_cmd()) {
+            tracing::error!("Trame: the outbox is full, the axis extend was dropped");
         }
     }
 
@@ -380,8 +384,8 @@ impl TrameView {
     pub(crate) fn select_all(&mut self) {
         self.state.selection = Selection::axis(crate::ui::grid::SelKind::Cols, 0, TOTAL_COLS - 1);
         self.viewport_changed = true;
-        if let Err(SendError::Full) = self.send_command_lossless(self.axis_active_cmd()) {
-            tracing::error!("Trame: UI->Logic channel full, select-all dropped");
+        if let Err(SendError::Refused) = self.send_command_lossless(self.axis_active_cmd()) {
+            tracing::error!("Trame: the outbox is full, the select-all was dropped");
         }
         self.announce_active();
     }
@@ -454,8 +458,8 @@ impl TrameView {
         }
         // Authoritative build lives on the Logic thread; the UI holds only the
         // marching-ants anchor and the cut flag (both UI state), set now.
-        if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::CopyRange) {
-            tracing::error!("Trame: UI->Logic channel full, copy dropped");
+        if let Err(SendError::Refused) = self.send_command_lossless(TrameCommand::CopyRange) {
+            tracing::error!("Trame: the outbox is full, the copy was dropped");
             return CopyOutcome::Nothing;
         }
         self.state.clipboard_anchor = Some(self.state.selection.bounds());
@@ -509,12 +513,18 @@ impl TrameView {
     pub fn grid_paste_payload(&mut self, payload: ambre_bus::ClipboardPayload) {
         let (row, col) = (self.state.active_row(), self.state.active_col());
         let (rows, cols) = (payload.rows, payload.cols);
-        if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::PasteRange {
+        let sent = self.send_command_lossless(TrameCommand::PasteRange {
             target_row: row,
             target_col: col,
             payload,
-        }) {
-            tracing::error!("Trame: UI->Logic channel full, paste dropped");
+        });
+        if sent.is_err() {
+            // The paste never left, so neither the selection nor the pending cut
+            // may act as though it had (`BUS-018`). Clearing the source here is
+            // how a cut destroys a range it never moved (`TRAME-UI-125`).
+            tracing::error!("Trame: the paste was refused, the source range is left alone");
+            self.needs_full = true;
+            return;
         }
         // Select the whole destination rectangle, not just the landing cell, so
         // the pasted block reads back as a single selection (`trame-clipboard`).
@@ -557,12 +567,15 @@ impl TrameView {
             cols,
             cells,
         };
-        if let Err(SendError::Full) = self.send_command_lossless(TrameCommand::PasteRange {
+        let sent = self.send_command_lossless(TrameCommand::PasteRange {
             target_row: row,
             target_col: col,
             payload,
-        }) {
-            tracing::error!("Trame: UI->Logic channel full, paste dropped");
+        });
+        if sent.is_err() {
+            tracing::error!("Trame: the paste was refused, the selection stays where it was");
+            self.needs_full = true;
+            return;
         }
         // Select the whole destination rectangle (see `grid_paste_payload`).
         self.select_pasted_region(row, col, rows, cols);
@@ -589,11 +602,21 @@ impl TrameView {
             let batch = (r1..=r2)
                 .flat_map(|r| (c1..=c2).map(move |c| (r, c, String::new())))
                 .collect();
-            let _ = self.send_command_lossless(TrameCommand::SetCellsBatch { cells: batch });
-            for r in r1..=r2 {
-                for c in c1..=c2 {
-                    self.state.set_cell_text(r, c, String::new());
+            // The source clear is a document mutation like any other. The grid
+            // may only forget the range once the command is on its way
+            // (`BUS-018`). A refused clear would otherwise show an empty range
+            // the document still holds (`TRAME-UI-142`).
+            if self
+                .send_command_lossless(TrameCommand::SetCellsBatch { cells: batch })
+                .is_ok()
+            {
+                for r in r1..=r2 {
+                    for c in c1..=c2 {
+                        self.state.set_cell_text(r, c, String::new());
+                    }
                 }
+            } else {
+                tracing::error!("Trame: the source clear was refused, the cut range is kept");
             }
         }
         self.cut_pending = false;
