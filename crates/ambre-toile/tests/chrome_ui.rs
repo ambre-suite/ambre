@@ -672,11 +672,15 @@ fn deck_panel_empty_deck_invites_a_first_slide() {
 
 // -- The interop notifications (`toile-import-export`) ------------------------
 
-/// Mount a live toast host and hand `event` to Toile's notifier, returning the
-/// container so the test can read what the user would see.
+/// Hand `event` to Toile's notifier, then mount a live toast host, returning
+/// the container so the test can read what the user would see.
+///
+/// The notice goes up before the mount so the first `<For>` render carries it.
+/// A later push reaches the DOM through an effect. The runtime queues that
+/// effect on a microtask, so a test reading the container on the same turn
+/// finds an empty host.
 fn mount_notified(event: ToileEvent) -> web_sys::Element {
     let toasts = Toasts::new();
-    let root = mount_in_container(move || view! { <ToastHost toasts=toasts /> });
     ambre_toile::chrome::notify_event(
         &toasts,
         &UiEvent::Viewport {
@@ -684,7 +688,7 @@ fn mount_notified(event: ToileEvent) -> web_sys::Element {
             event: AppEvent::Toile(event),
         },
     );
-    root
+    mount_in_container(move || view! { <ToastHost toasts=toasts /> })
 }
 
 /// An import report reaches the user, and a lossy one says what it dropped
