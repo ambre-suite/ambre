@@ -197,6 +197,18 @@ contracts-write:
 spec-shape:
     python3 scripts/spec_shape.py --check
 
+# A contract row is seven columns, and four of them answer a reviewer rather than
+# a reader: where the rule comes from, which mechanism holds it, what that leaves
+# open, and where it stands. They are why the table is trustworthy, and why one
+# row wraps over four screen widths. This prints the same rows reduced to the
+# three a reader asks for, from the same parser `contracts.py` uses, so the view
+# can never state a rule the ledger does not. It writes nothing: a reading view
+# on disk is a second copy of every rule, free to go stale.
+
+# reading view of one spec's contract: the id, the kind, the rule.
+spec-read FILE:
+    python3 scripts/spec_read.py {{FILE}}
+
 # The three answers under a contract table are one paragraph to a reader, and the
 # corpus let them run to 463 words of which most was the document's own history:
 # which conjunction came apart, what the pass added, which row carried which

@@ -146,6 +146,9 @@ govern them, and each answers one question:
 
 The CI `lint` job runs `just contracts` and `just spec-code` over the corpus.
 
+`just spec-read <file>` prints one document's rules alone -- the id, the kind and the statement,
+without the four columns a review reads. It writes nothing, and the file stays the only source.
+
 ## Getting Started
 
 ### Prerequisites
