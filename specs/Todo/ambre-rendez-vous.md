@@ -1,7 +1,11 @@
 # AMBRE -- APP: RENDEZ-VOUS (VIDEO & SYNCHRONOUS COLLABORATION)
+
+**Type:** Sketch (an application that has not started)
 **Implementation:** design-only
 
-> Specifications for the WebRTC engine, encrypted signaling, and context sharing.
+> A sketch, and not a specification: what Rendez-Vous would be, written before a crate exists. It
+> declares no contract row, so it binds nothing and no rule is cited from it. The WebRTC engine,
+> encrypted signaling, and context sharing.
 
 ## 1. VISION & FLOW
 Rendez-vous transforms Ambre into a living meeting space. Unlike Zoom or Teams, video is not an isolated window, but a layer (overlay) superimposed on your Trame, Prose, or Toile documents.

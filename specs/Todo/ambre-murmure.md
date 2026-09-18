@@ -1,7 +1,11 @@
 # AMBRE -- APP: MURMURE (COLLABORATIVE MESSAGING)
+
+**Type:** Sketch (an application that has not started)
 **Implementation:** design-only
 
-> Specifications for real-time communication, channels, and E2EE persistence.
+> A sketch, and not a specification: what Murmure would be, written before a crate exists. It
+> declares no contract row, so it binds nothing and no rule is cited from it. Real-time
+> communication, channels, and E2EE persistence.
 
 ## 1. VISION & FLOW
 Murmure is the command and discussion center. Unlike classic SaaS tools, every message is an encrypted CRDT mutation, ensuring that even the "Blind Relay" server cannot read the content.
