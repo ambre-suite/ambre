@@ -209,6 +209,37 @@ class Render(unittest.TestCase):
         ])
         self.assertIn("5 contract rows, 3 loose", text)
 
+    def test_foundations_is_a_layer_and_not_an_application(self):
+        """An application row reads `the application`, and Foundations ships no
+        product: its rows are the behaviours the three share."""
+        shared = inventory.render("foundations", [self.entry("implemented")])
+        self.assertIn("What the shared layer does", shared)
+        self.assertIn("What the application does", inventory.render("trame", [self.entry("implemented")]))
+
+
+class Layers(unittest.TestCase):
+    """Which documents each inventory is built from."""
+
+    def foundations(self) -> list[str]:
+        return [name for path, slug, docs in inventory.layers() if slug == "foundations"
+                for name in [p.name for p in docs]]
+
+    def test_the_layer_is_inventoried_from_its_own_directory(self):
+        """Foundations keeps no `features/` directory: what makes a document a
+        feature there is the contract table, not the folder."""
+        self.assertIn("ambre-spec-message-bus.md", self.foundations())
+
+    def test_a_register_is_not_a_feature(self):
+        for register in inventory.NOT_A_FEATURE:
+            with self.subTest(register=register):
+                self.assertNotIn(register, self.foundations())
+
+    def test_a_generated_file_does_not_inventory_itself(self):
+        """Naming the ledger by hand was the version that counted the inventory
+        as its own row the moment the file was first written."""
+        self.assertNotIn("ambre-foundations-inventory.md", self.foundations())
+        self.assertNotIn("ambre-contract-ledger.md", self.foundations())
+
 
 if __name__ == "__main__":
     unittest.main()

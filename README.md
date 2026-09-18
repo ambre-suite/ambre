@@ -121,7 +121,7 @@ The `specs/` directory is the source of truth for behaviour. Layout:
 | [`specs/ambre-roadmap.md`](specs/ambre-roadmap.md) | The only place anything is scheduled: every epic and every story, one row each. No spec carries a backlog. |
 | [`specs/ambre-roadmap-journal.md`](specs/ambre-roadmap-journal.md) | Closed epics, cut here verbatim the day they closed. What shipped, and under which epic. |
 | [`specs/ambre-spec-template.md`](specs/ambre-spec-template.md) | The contract every spec follows: the header fields, the contract table, the rule that keeps implementation out, and the section order of the two document kinds. |
-| `specs/1-Foundations/` | Horizontal specs: the three-thread stack, the message bus, the zero-knowledge boundary, the persisted schema and testing, then one document per shared subsystem -- client side, the Sync worker, the sealed envelope, delta order, membership, key rotation, the media transfer; relay side, the blind relay, the session, the sequencer, the broadcast, the blob store, organizations -- and one per shared feature: the UI thread, the frame, the render assets, the drawing surface, the inline text editor, high density, the chrome shell, the text input pipe, accessibility, the adaptive layout, the launcher, key verification, the command model, the design tokens, the clipboard, presence, the native file, the fixtures. It also holds the budget register, which is not a spec. |
+| `specs/1-Foundations/` | Horizontal specs: the three-thread stack, the message bus, the zero-knowledge boundary, the persisted schema and testing, then one document per shared subsystem -- client side, the Sync worker, the sealed envelope, delta order, membership, key rotation, the media transfer; relay side, the blind relay, the session, the sequencer, the broadcast, the blob store, organizations -- and one per shared feature: the UI thread, the frame, the render assets, the drawing surface, the inline text editor, high density, the chrome shell, the text input pipe, accessibility, the adaptive layout, the launcher, key verification, the command model, the design tokens, the clipboard, presence, the native file, the fixtures. It also holds three files that are not specs: the budget register, the generated inventory of the layer and the generated contract ledger. |
 | `specs/2-Trame/`, `specs/3-Toile/`, `specs/4-Prose/` | Vertical specs, one directory per application. |
 | `specs/<app>/features/` | One document per feature, always current: its contract, its model and its whole surface. A feature is the smallest thing a user can name, ship alone and specify end to end. |
 | `specs/Todo/` | Applications not started: Murmure, Rendez-Vous. |
@@ -135,7 +135,7 @@ three started applications all follow this shape.
 Every spec declares its rules as a contract table, one falsifiable rule per row. Three documents
 govern them, and each answers one question:
 
-* **What a rule looks like** -- the grammar, the five status values, the binding of an unbuilt row to
+* **What a rule looks like** -- the grammar, the six status values, the binding of an unbuilt row to
   a story: [`specs/ambre-spec-template.md`](specs/ambre-spec-template.md). Normative.
 * **How a rule is verified** -- the mechanism ladder, the three tiers, the regime per component
   shape: [`specs/1-Foundations/ambre-spec-testing.md`](specs/1-Foundations/ambre-spec-testing.md).
