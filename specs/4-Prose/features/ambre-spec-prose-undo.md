@@ -1,4 +1,4 @@
-# AMBRE -- FEATURE: UNDO AND REDO
+# AMBRE -- FEATURE: PROSE UNDO AND REDO
 
 **Type:** Vertical (feature)
 **Implementation:** design-only
@@ -51,7 +51,7 @@ point from it. The caret moves there (`PROSE-UI-045`), and an open selection col
 (`PROSE-UI-073`). Both are view state, and neither is written back (`PROSE-UI-074`).
 
 **What is one undo item.** A replace-all is one (`ambre-spec-find.md`, `FIND-006`;
-`features/ambre-spec-prose-find-replace.md`); everything else is section 4.
+`features/ambre-spec-prose-find-replace.md`); everything else is section 5.
 
 **Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
 
@@ -69,7 +69,21 @@ point from it. The caret moves there (`PROSE-UI-045`), and an open selection col
 
 ---
 
-## 4. NOT BUILT, AND NOT YET RULED
+## 4. REJECTED ALTERNATIVES
+
+The shared decisions are `ambre-spec-undo.md section 5`: the local-only revert, the broadcast
+inverse, the whole reseed, the stack that dies with the document. Prose's own, all of them design:
+
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The caret lands at the edit the undo took back | leaving the caret where the user left it | an undo the author cannot see is an undo they press again. The edit point is in the delta the change carries, so the view reads it there and needs nothing stored |
+| An open selection collapses to that caret | restoring the selection the edit was made with | the selection that made the edit is not in the document, and a peer's writes have moved the text under it. A caret is a position the inverse operation still defines; a range is not |
+| The caret is view state, never written back | recording it beside the text | where this author looks is not a change a peer receives (`PROSE-UI-074`). A caret in the document turns every undo into an operation the relay carries and the other author's view obeys |
+| A version is a named entry the user saves | a longer history, or the Loro snapshot kept in the document | the session's stack answers "take back what I just did" and nothing longer. What a user wants a month later is a name, and the snapshot behind it is sealed with the document key and stored beside the document, not inside it (`ambre-spec-prose-schema.md section 3`) |
+
+---
+
+## 5. NOT BUILT, AND NOT YET RULED
 
 The shared gaps are in `ambre-spec-undo.md section 6`. Prose's own:
 

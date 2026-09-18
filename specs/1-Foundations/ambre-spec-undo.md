@@ -149,7 +149,7 @@ never re-enables a button. Which keys carry these intents is `ambre-spec-command
 * **Toile's affordances are never told anything** (`UNDO-006`). The availability event is emitted by
   two handlers and dropped by the view, so a fresh board always offers Undo. Trame's counterpart is
   held on two tests; the transposition is the cheapest gap in Toile to close
-  (`3-Toile/features/ambre-spec-toile-undo.md section 4`).
+  (`3-Toile/features/ambre-spec-toile-undo.md section 5`).
 * **Version history is designed and unbuilt.** The stack dies with the session, and the answer across
   sessions is a named version, not a longer stack. Prose carries a design and Trame carries none, so
   the shape is open -- per document or per application, a write or a fork. It is the

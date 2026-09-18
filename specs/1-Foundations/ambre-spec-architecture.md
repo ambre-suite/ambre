@@ -123,7 +123,11 @@ receiving side reads an empty channel rather than a closed one. A disconnection 
 clean shutdown, and never a crash.
 
 **One tab, one client.** Each tab instantiates the whole stack. Two tabs on one document are two
-independent peers that converge through the relay, exactly as two users do.
+independent peers (`ARCH-013`). They converge through the relay, exactly as two users do. Each tab
+sees its own edit at once, and the other tab's when the relay delivers it.
+
+**No two-peer table here.** This document holds no document state of its own: what converges is each
+application's, and the scenario tables are theirs.
 
 **The crate graph is the boundary.** There is one binary per instance and no runtime check, so the
 separation is carried by what each crate is allowed to declare.

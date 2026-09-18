@@ -1,4 +1,4 @@
-# AMBRE -- FEATURE: UNDO AND REDO
+# AMBRE -- FEATURE: TOILE UNDO AND REDO
 
 **Type:** Vertical (feature)
 **Implementation:** partial -- undo and redo ship; the buttons are never told what is available.
@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
   through the command path become one item each. What is loose is the four triggers of section 3,
   three of them chords no test reads. The two failures are the rules the code answers with something
   else. A membership change whose clamp fires takes two items (`TOILE-048`), and a multi-selection
-  ungroup takes one per group. The shared rules are `ambre-spec-undo.md`; Toile's gaps are section 4.
+  ungroup takes one per group. The shared rules are `ambre-spec-undo.md`; Toile's gaps are section 5.
 
 ---
 
@@ -91,11 +91,26 @@ The engine field is the shared `undo_manager` (`ambre-spec-undo.md section 3`).
 | Undo and Redo, in the edit menu | the same two intents |
 
 The two entries are never disabled, because the availability never reaches them (`UNDO-006`,
-section 4).
+section 5).
 
 ---
 
-## 4. NOT BUILT, AND NOT YET RULED
+## 4. REJECTED ALTERNATIVES
+
+The shared decisions are `ambre-spec-undo.md section 5`: the local-only revert, the broadcast
+inverse, the whole reseed, the stack that dies with the document. Toile's own:
+
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| A drag is one item, sealed on release | one item per frame the pointer moved | a drag writes the position dozens of times a second, and each write is a commit. One item per commit would make `Ctrl+Z` walk the path the hand took, which is not what the user did: they moved the element once |
+| A freehand stroke is one item, however many samples it holds | one item per sample | the same reason, and worse: a stroke holds hundreds. What the user drew is the stroke |
+| A whole file import is one item | one item per element the file carried | a user who imports a board of two thousand elements means one action, and the only useful undo is the one that takes the file back out |
+| A comment never enters the history | recording it like any other write | undo would retract a message a teammate has already read (`TOILE-FEAT-017`). A message is addressed to someone, and taking it back is not the same act as taking back a drawing |
+| The camera, the tool and the presence frame enter no history | recording what the user is looking at | they write no document, so there is nothing to revert and no peer receives them. An undo that scrolled the board back would spend the user's one chord on their own viewport |
+
+---
+
+## 5. NOT BUILT, AND NOT YET RULED
 
 The shared gaps are in `ambre-spec-undo.md section 6`. Toile's own:
 
