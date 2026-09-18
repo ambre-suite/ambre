@@ -2,8 +2,9 @@
 // ============================================================================
 // Command surface for the Toile tool palette / primary toolbar
 // (`toile-tools`). The host-visible half: the `CommandId`s the palette
-// contributes, the pure `CommandId -> Tool` map, the bare-key tool chords, and
-// the pure focus-guard predicate the launcher applies before stealing a key.
+// contributes, the pure `CommandId -> Tool` map and the bare-key tool chords.
+// Also the pure focus-guard predicate the launcher applies before stealing a
+// key.
 //
 // Kept in the always-compiled `ui` module (not the wasm-only `chrome`) so it is
 // host-unit-tested, exactly like `ui::find` and `ui::menu`. The wasm-only
@@ -66,8 +67,8 @@ pub const TOOL_COMMANDS: &[CommandId] = &[
 ];
 
 /// Map a tool `CommandId` to the [`Tool`] it selects, or `None` for any id that
-/// is not a tool (a non-tool Toile command such as `FIND`, or an unknown id).
-/// `TOOL_SHAPE` selects the rectangle by default (`toile-tools`).
+/// is not a tool. That covers a non-tool Toile command such as `FIND`, and an
+/// unknown id. `TOOL_SHAPE` selects the rectangle by default (`toile-tools`).
 pub fn tool_for_command(id: CommandId) -> Option<Tool> {
     match id {
         TOOL_SELECT => Some(Tool::Select),
@@ -114,17 +115,17 @@ pub fn bind_tool_keys(keymap: &mut Keymap) {
 }
 
 /// A note-shaped CSS cursor (inlined SVG data URI) shown while the Sticky tool is
-/// armed, so it is obvious a click will drop a note (`toile-tools`,
-/// feedback). `%23` encodes `#` inside the URI; the hotspot is the note's
-/// top-left corner. Falls back to `crosshair` if the data URI is unsupported.
+/// armed. It is then obvious a click will drop a note (`toile-tools`, feedback).
+/// `%23` encodes `#` inside the URI; the hotspot is the note's top-left corner.
+/// Falls back to `crosshair` if the data URI is unsupported.
 pub const STICKY_CURSOR: &str = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><rect x='4' y='4' width='18' height='18' fill='%23FEF08A' stroke='%23333333' stroke-width='1'/><path d='M17 22 L22 22 L22 17 Z' fill='%23E4CE5C'/></svg>\") 4 4, crosshair";
 
-/// The CSS `cursor` value for the canvas while `tool` is active
-/// (`toile-tools`, "Cursor feedback"): a note-shaped cursor while the Sticky tool
-/// is armed, a crosshair for the other creation tools (so a click visibly means
-/// "place here"), a grab hand for the pan-only Hand tool, and the default arrow
-/// for Select. Pure so the chrome can bind it to the active-tool signal without
-/// any canvas round-trip, and host-tested.
+/// The CSS `cursor` value for the canvas while `tool` is active (`toile-tools`,
+/// "Cursor feedback"). A note-shaped cursor while the Sticky tool is armed, and a
+/// crosshair for the other creation tools: a click visibly means "place here". A
+/// grab hand for the pan-only Hand tool, and the default arrow for Select. Pure
+/// so the chrome can bind it to the active-tool signal without any canvas
+/// round-trip, and host-tested.
 pub fn cursor_css(tool: Tool) -> &'static str {
     match tool {
         Tool::Select => "default",
@@ -142,16 +143,19 @@ pub fn cursor_css(tool: Tool) -> &'static str {
 
 /// A rotation cursor (inlined SVG data URI) shown on the rotate handle so it is
 /// obvious the drag will rotate rather than resize (`toile-tools`).
+///
 /// Built from the shared `icondata::LuRotateCw` glyph (Lucide "rotate-cw", a
-/// clockwise circular arrow): its paths are wrapped in a full `<svg>` and painted
-/// twice -- a white under-stroke then a dark top-stroke -- so it stays legible on
-/// any board colour. The glyph's `"` are swapped for `'` so the markup survives
-/// inside the CSS `url("…")`, and `#` is percent-encoded. Hotspot at the icon
-/// centre; falls back to `grab` if the data URI is unsupported. Lazily built once.
+/// clockwise circular arrow). Its paths are wrapped in a full `<svg>` and
+/// painted twice: a white under-stroke then a dark top-stroke. It stays legible
+/// on any board colour.
+///
+/// The glyph's `"` are swapped for `'` so the markup survives inside the CSS
+/// `url("...")`, and `#` is percent-encoded. Hotspot at the icon centre; falls
+/// back to `grab` if the data URI is unsupported. Lazily built once.
 pub static ROTATE_CURSOR: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
-    // Swap `"` for `'` (so the markup survives inside `url("…")`) and collapse all
-    // whitespace to single spaces -- the glyph data spans two lines, and a raw
-    // newline is a control char that invalidates the whole data URI / cursor.
+    // Swap `"` for `'` (so the markup survives inside `url("...")`) and collapse all
+    // whitespace to single spaces. The glyph data spans two lines, and a raw newline
+    // is a control char that invalidates the whole data URI / cursor.
     let paths = icondata::LuRotateCw
         .data
         .replace('"', "'")
@@ -169,10 +173,10 @@ pub static ROTATE_CURSOR: std::sync::LazyLock<String> = std::sync::LazyLock::new
     )
 });
 
-/// The Lucide "move-horizontal" glyph (a horizontal double-headed arrow, `<->`,
-/// centred at 12,12 in a 0 0 24 24 box): rotated to any angle it becomes the
+/// The Lucide "move-horizontal" glyph: a horizontal double-headed arrow, `<->`,
+/// centred at 12,12 in a 0 0 24 24 box. Rotated to any angle it becomes the
 /// directional resize cursor for that axis. Its `"` are swapped for `'` and its
-/// whitespace collapsed so the markup survives inside the CSS `url("…")`. Built
+/// whitespace collapsed so the markup survives inside the CSS `url("...")`. Built
 /// once; shared by every rotated resize cursor.
 static MOVE_PATHS: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
     icondata::LuMoveHorizontal
@@ -198,8 +202,8 @@ fn resize_axis_base(h: Handle) -> Option<f64> {
 }
 
 /// Snap a resize-axis angle (radians) to the nearest of the four native CSS resize
-/// keywords -- the crisp cursor for an axis-aligned box, and the graceful fallback
-/// when a data-URI cursor is unsupported.
+/// keywords. That is the crisp cursor for an axis-aligned box, and the graceful
+/// fallback when a data-URI cursor is unsupported.
 fn nearest_resize_keyword(a: f64) -> &'static str {
     use std::f64::consts::{FRAC_PI_4, PI};
     match (a.rem_euclid(PI) / FRAC_PI_4).round() as i64 % 4 {
@@ -211,9 +215,10 @@ fn nearest_resize_keyword(a: f64) -> &'static str {
 }
 
 /// A directional resize cursor rotated `deg` degrees: the `MOVE_PATHS` double
-/// arrow wrapped in a `rotate(deg 12 12)` group, painted twice (white under-stroke
-/// then dark top-stroke) so it stays legible on any board colour, hotspot centred.
-/// `fallback` is the native keyword shown if the data URI is unsupported.
+/// arrow wrapped in a `rotate(deg 12 12)` group, hotspot centred. It is painted
+/// twice (white under-stroke then dark top-stroke) so it stays legible on any
+/// board colour. `fallback` is the native keyword shown if the data URI is
+/// unsupported.
 fn rotated_resize_cursor(deg: f64, fallback: &str) -> String {
     let paths = MOVE_PATHS.as_str();
     let d = deg.rem_euclid(360.0).round() as i64;
@@ -229,14 +234,15 @@ fn rotated_resize_cursor(deg: f64, fallback: &str) -> String {
 }
 
 /// The CSS `cursor` value for hovering / dragging a selection transform handle
-/// (`toile-tools`, "Cursor feedback"): a directional double-arrow that
-/// matches the axis a corner or side resizes along, and a rotation cursor on the
-/// rotate handle. `theta` is the element's rotation (radians). For an axis-aligned
-/// element (`theta == 0`) it returns the crisp **native** CSS keyword; for a
-/// rotated one it returns a **custom SVG cursor rotated to the exact angle**
-/// (`resize_axis_base(h) + theta`), so the arrow tilts continuously with the box
-/// -- native resize cursors are fixed OS bitmaps and cannot be rotated. Pure and
-/// host-tested.
+/// (`toile-tools`, "Cursor feedback"). A directional double-arrow matches the
+/// axis a corner or side resizes along, and a rotation cursor sits on the
+/// rotate handle. `theta` is the element's rotation (radians).
+///
+/// For an axis-aligned element (`theta == 0`) it returns the crisp **native**
+/// CSS keyword. For a rotated one it returns a **custom SVG cursor rotated to
+/// the exact angle** (`resize_axis_base(h) + theta`), so the arrow tilts
+/// continuously with the box. Native resize cursors are fixed OS bitmaps and
+/// cannot be rotated. Pure and host-tested.
 pub fn resize_cursor(h: Handle, theta: f64) -> Cow<'static, str> {
     let Some(base) = resize_axis_base(h) else {
         return Cow::Borrowed(ROTATE_CURSOR.as_str());
@@ -254,12 +260,12 @@ pub fn resize_cursor(h: Handle, theta: f64) -> Cow<'static, str> {
 }
 
 /// Whether a keyboard event targeting an element with this tag / contenteditable
-/// flag should be treated as "typing", so a bare tool chord must NOT be stolen.
-/// True for form text fields (`INPUT`, `TEXTAREA`) and any contenteditable host.
-/// The tag is compared case-insensitively (`Element.tagName` is upper-case in
-/// HTML, but be defensive). The launcher's `target_is_editable` reads `tagName`
-/// and `isContentEditable` off the event target and delegates here so the
-/// decision stays pure and host-tested.
+/// flag should be treated as "typing". A bare tool chord must then NOT be
+/// stolen. True for form text fields (`INPUT`, `TEXTAREA`) and any
+/// contenteditable host. The tag is compared case-insensitively
+/// (`Element.tagName` is upper-case in HTML, but be defensive). The launcher's
+/// `target_is_editable` reads `tagName` and `isContentEditable` off the event
+/// target and delegates here so the decision stays pure and host-tested.
 pub fn is_editable_tag(tag_name: &str, content_editable: bool) -> bool {
     if content_editable {
         return true;
@@ -305,7 +311,8 @@ mod tests {
         let mut keymap = Keymap::new();
         bind_tool_keys(&mut keymap);
         // Each chord resolves to its command, and the command maps back to the
-        // expected tool -- the full key -> command -> tool wiring, no DOM.
+        // expected tool. That is the full key -> command -> tool wiring, no
+        // DOM.
         let cases = [
             ('v', TOOL_SELECT, Tool::Select),
             ('p', TOOL_PEN, Tool::Pen),
@@ -371,7 +378,7 @@ mod tests {
         );
         assert!(ROTATE_CURSOR.starts_with("url(\""));
         assert!(ROTATE_CURSOR.ends_with("grab"));
-        // The Lucide glyph made it in, and its `"` were swapped for `'` so the only
+        // The Lucide glyph made it in, and its `"` were swapped for `'`. The only
         // double quotes left are the two wrapping the `url(...)` value.
         assert!(ROTATE_CURSOR.contains("<path"));
         assert_eq!(ROTATE_CURSOR.matches('"').count(), 2);
@@ -381,7 +388,7 @@ mod tests {
     fn resize_cursor_rotates_continuously_when_the_element_is_rotated() {
         use std::f64::consts::{FRAC_PI_2, FRAC_PI_6};
         // A rotated element yields a custom SVG cursor tilted to the exact angle,
-        // not a native keyword: the E handle at a quarter turn points along 90 deg.
+        // not a native keyword. The E handle at a quarter turn points along 90 deg.
         let c = resize_cursor(Handle::E, FRAC_PI_2);
         assert!(
             c.starts_with("url(\""),

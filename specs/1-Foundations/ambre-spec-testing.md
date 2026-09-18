@@ -75,8 +75,8 @@ here only when it brings a shape this table does not hold.
 | A GPU pipeline, or DOM glue | assisted review plus a visual check | `qa-manual` through `/run`. Surface minimisation keeps this small: any rule that can live in pure Rust must live there |
 
 **CRDT convergence is mandatory.** Every collaborative CRDT state ships a property test of
-convergence: `proptest`-generated operation sequences, interleaved across two peers or more,
-asserting identical final states once every delta has been exchanged.
+convergence. It generates operation sequences with `proptest`, interleaves them across two peers or
+more, and asserts identical final states once every delta has been exchanged.
 
 ---
 
@@ -92,11 +92,13 @@ asserting identical final states once every delta has been exchanged.
 `#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]`. A bare
 `#[ignore]` is a test that no job runs and no reader counts.
 
-**A cited mechanism must run in CI.** A test name that resolves to a `fn` behind a Cargo feature no
-job enables is the same claim as a name that resolves to nothing. `contracts.py` holds the first
-half. Nothing holds the second, and it went unseen for six months: the five tests that are the whole
-`Verification` cell of `SRV-006` sat behind `--features test-helpers`, which no CI job enabled, and
-eight `ambre-toile` PDF tests sat behind `--features pdf`. Both features are in `just test-db` and
+**A cited mechanism must run in CI.** A test name behind a Cargo feature no job enables
+claims as much as a name that resolves to nothing. `contracts.py` holds the first half. Nothing
+holds the second, and it went unseen for six months.
+
+The five tests that are the whole
+`Verification` cell of `SRV-006` sat behind `--features test-helpers`, which no CI job enabled.
+Eight `ambre-toile` PDF tests sat behind `--features pdf`. Both features are in `just test-db` and
 `just test-native` now, which is where local and CI parity is defined.
 
 `just test-wasm` covers `ambre-trame`, `ambre-chrome` and `ambre-app`.
@@ -176,8 +178,8 @@ One row per crate: what runs, what stands in for the world, and the belt an incr
 | `ambre-prose`, `ambre-murmure` | -- | -- | -- | none yet: stubs |
 
 **A belt is a floor, not a list.** It says what an increment cannot land without. The tests that
-verify a rule are named in that rule's `Verification` cell and nowhere else: a list of intended tests
-has no join to the suite and no way to fail.
+verify a rule are named in that rule's `Verification` cell and nowhere else. A list of intended
+tests has no join to the suite and no way to fail.
 
 **Where an application needs a harness of its own**, that harness is a feature. It gets a document in
 the application's folder, cited from this table. `ambre-spec-fixtures.md` is the shape, and it sits in

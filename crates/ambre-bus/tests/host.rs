@@ -4,9 +4,9 @@
 //   - the two pure helpers carried on the content plane (`to_tsv`,
 //     `has_decimals`),
 //   - the `RequestId` allocator invariant (monotonic, shared `AtomicU64`),
-//   - postcard round-trips of the Logic <-> Sync envelopes -- the contract that
-//     `SyncCommand` / `LogicEvent` (and the `Rest*` family they carry) survive
-//     the `postMessage` hop unchanged, while application payloads stay `Vec<u8>`.
+//   - postcard round-trips of the Logic <-> Sync envelopes. The contract:
+//     `SyncCommand` / `LogicEvent`, and the `Rest*` family they carry, survive the
+//     `postMessage` hop unchanged, while application payloads stay `Vec<u8>`.
 // No DOM, no serialization on the UI <-> Logic path (that link is `flume` by
 // move and intentionally carries no `Serialize` derive).
 // ============================================================================
@@ -17,7 +17,7 @@ use ambre_bus::{
     LogicEvent, RequestId, RestCommand, RestEvent, Role, SyncCommand, TrameCommand, UserId,
 };
 
-// ── Content plane: ClipboardPayload::to_tsv ─────────────────────────────────
+// -- Content plane: ClipboardPayload::to_tsv ---------------------------------
 
 fn cell(dr: u32, dc: u32, raw: &str) -> ClipboardCell {
     ClipboardCell {
@@ -88,7 +88,7 @@ fn to_tsv_out_of_bounds_offsets_are_ignored() {
     assert_eq!(payload.to_tsv(), "a");
 }
 
-// ── Content plane: CellFormat::has_decimals (exhaustive) ─────────────────────
+// -- Content plane: CellFormat::has_decimals (exhaustive) ---------------------
 
 #[test]
 fn has_decimals_is_true_only_for_numeric_families() {
@@ -112,7 +112,7 @@ fn has_decimals_is_true_only_for_numeric_families() {
     }
 }
 
-// ── Service plane: RequestId allocator ──────────────────────────────────────
+// -- Service plane: RequestId allocator --------------------------------------
 
 #[test]
 fn request_id_is_strictly_monotonic() {
@@ -146,7 +146,7 @@ fn request_id_is_unique_under_concurrency() {
     assert_eq!(seen.lock().unwrap().len(), 8 * 1000);
 }
 
-// ── Logic <-> Sync envelope round-trips (postcard, the postMessage codec) ────
+// -- Logic <-> Sync envelope round-trips (postcard, the postMessage codec) ----
 
 fn roundtrip_sync(cmd: &SyncCommand) {
     let bytes = postcard::to_allocvec(cmd).expect("encode SyncCommand");
@@ -234,12 +234,12 @@ fn request_id_echo_is_preserved_across_the_hop() {
     assert_eq!(id.0, back.0);
 }
 
-// ── Role gate: AppCommand::is_mutating (`architecture`) ─────────
+// -- Role gate: AppCommand::is_mutating (`architecture`) ---------
 //
-// The classification decides what a viewer may still do. Getting it wrong is
-// silent in both directions -- a misclassified read-only command costs a viewer
-// its navigation, a misclassified write slips past the client gate -- so the
-// two ends of each family are pinned here rather than trusted to review.
+// The classification decides what a viewer may still do, and getting it wrong is silent in
+// both directions. A misclassified read-only command costs a viewer its navigation, and a
+// misclassified write slips past the client gate. The two ends of each family are pinned
+// here rather than trusted to review.
 
 #[test]
 fn read_only_and_local_commands_are_not_mutating() {

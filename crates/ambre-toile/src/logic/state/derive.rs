@@ -37,9 +37,9 @@ impl ToileState {
 
     /// Build the culled, z-ordered `DisplayViewport` for an **arbitrary** camera
     /// `vp`, without touching `self.viewport`. The presentation / PDF-export
-    /// passes drive one board through a sequence of slide cameras:
-    /// they must not mutate-then-restore `self.viewport`, which would race a
-    /// concurrent `SetViewport` from the live UI thread. Read-only, so the same
+    /// passes drive one board through a sequence of slide cameras. They must not
+    /// mutate-then-restore `self.viewport`, which would race a concurrent
+    /// `SetViewport` from the live UI thread. Read-only, so the same
     /// `ToileState` can be walked from any camera.
     pub(super) fn derive_viewport_at(&self, vp: Viewport) -> DisplayViewport {
         let visible: HashSet<ElementId> = self.index.query_visible(&vp).collect();
@@ -69,10 +69,10 @@ impl ToileState {
 
     /// Capture a frame's animatable set as a [`FrameSnapshot`] for Smart Animate
     /// (`toile-presentation`). The elements are the frame's **declared**
-    /// `children` (membership is explicit, not spatial), each carrying the
-    /// unrotated element rect, its rotation and style opacity / fill the solver
-    /// interpolates. The rect is the raw `x/y/w/h` (not the rotation-expanded
-    /// `bounds` cache) with rotation kept separate, mirroring
+    /// `children`, membership being explicit, not spatial. Each carries the
+    /// unrotated element rect, its rotation, and the style opacity / fill the
+    /// solver interpolates. The rect is the raw `x/y/w/h` (not the
+    /// rotation-expanded `bounds` cache) with rotation kept separate, mirroring
     /// [`display_element`](Self::display_element) so the tween matches what the
     /// renderer paints. A child whose element map is gone is skipped. Read-only:
     /// this derives the two snapshots the camera pass feeds to `smart_animate`.
@@ -227,8 +227,8 @@ impl ToileState {
     /// Decode a `"style"` register, noting a blob this build cannot read
     /// (`SCHEMA-003`) before falling back to the default look.
     ///
-    /// The fallback itself is unavoidable -- an unreadable register cannot be
-    /// drawn as anything else -- so the rule is about the notice, not the pixels.
+    /// The fallback itself is unavoidable, since an unreadable register cannot be
+    /// drawn as anything else. The rule is about the notice, not the pixels.
     pub(super) fn style_read(&self, bytes: &[u8]) -> ElementStyle {
         ElementStyle::try_from_bytes(bytes).unwrap_or_else(|| {
             self.note_undecodable(bytes);

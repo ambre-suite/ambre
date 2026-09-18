@@ -1,9 +1,9 @@
 // ambre-trame/src/ui/renderer/edit.rs
 // Inline cell editor rendering: delegates to the shared `ambre_canvas::TextEditor`
-// core (parley PlainEditor). The core lays out the buffer, resolves any queued
-// pointer hits against that layout, and paints the selection band, glyphs (with
-// the live IME preedit) and caret. This module only supplies the cell geometry +
-// pinned style and paints the edit field background under it.
+// core (parley PlainEditor). The core lays out the buffer and resolves any queued
+// pointer hits against that layout. It paints the selection band, the glyphs (with
+// the live IME preedit) and the caret. This module only supplies the cell geometry
+// + pinned style and paints the edit field background under it.
 
 use super::*;
 
@@ -49,8 +49,8 @@ pub fn draw_edit<S: DrawSurface>(
 
     // The field grows downward to fit every line, overflowing the cell like a
     // spreadsheet, and is never shorter than the row. A layout that fits the row
-    // stays vertically centred (matches the static cell); a taller one top-aligns
-    // with a small pad so line 0 reads at the cell top.
+    // stays vertically centred, matching the static cell. A taller one top-aligns
+    // with a small pad, so line 0 reads at the cell top.
     let text_h = editor.core.layout_height().unwrap_or(0.0) as f64;
     let (y_off, box_h) = if text_h + 2.0 * pad <= ch {
         (((ch - text_h) / 2.0).max(0.0), ch)

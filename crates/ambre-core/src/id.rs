@@ -1,12 +1,12 @@
 //! Strongly-typed identifiers.
 //!
-//! Each identifier is a distinct newtype over [`Uuid`], so the compiler refuses
-//! to pass (say) a [`UserId`] where a [`DocumentId`] is expected — a class of
-//! bug that an untyped `Uuid` everywhere cannot catch.
+//! Each identifier is a distinct newtype over [`Uuid`], so the compiler refuses to
+//! pass (say) a [`UserId`] where a [`DocumentId`] is expected. That is a class of
+//! bug an untyped `Uuid` everywhere cannot catch.
 //!
-//! The wire representation is unchanged: every newtype is `#[serde(transparent)]`,
-//! so a `DocumentId` serializes byte-for-byte like the inner `Uuid` (postcard /
-//! JSON compatibility is preserved across the network and IPC boundaries).
+//! The wire representation is unchanged. Every newtype is `#[serde(transparent)]`,
+//! so a `DocumentId` serializes byte-for-byte like the inner `Uuid`. Postcard and
+//! JSON compatibility is preserved across the network and IPC boundaries.
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -54,6 +54,10 @@ macro_rules! define_id {
             /// Parses an identifier from its string representation.
             ///
             /// Accepts both hyphenated and non-hyphenated forms.
+            ///
+            /// # Errors
+            ///
+            /// [`UuidError::InvalidString`] when `s` is not a UUID in either form.
             pub fn parse_str(s: &str) -> Result<Self, UuidError> {
                 Ok(Self(Uuid::parse_str(s)?))
             }
@@ -92,7 +96,7 @@ macro_rules! define_id {
 }
 
 define_id! {
-    /// Identifies a document (Prose, Trame, Toile, …) across the whole system.
+    /// Identifies a document (Prose, Trame, Toile, ...) across the whole system.
     DocumentId
 }
 
@@ -117,13 +121,13 @@ define_id! {
 }
 
 impl SnapshotId {
-    /// The genesis snapshot of a document: a deterministic id every client
-    /// agrees on without a server round-trip, reusing the document's own bytes.
+    /// The genesis snapshot of a document: a deterministic id every client agrees
+    /// on without a server round-trip, reusing the document's own bytes.
     ///
     /// A brand-new document has no uploaded snapshot, yet its first deltas must
-    /// reference SOME parent. If each client invented a random base id, a peer
-    /// (or the same client after a refresh) opening the document would never
-    /// recognise that parent and would quarantine those deltas forever. Anchoring
+    /// reference SOME parent. If a client invented a random base id, a peer (or
+    /// the same client after a refresh) opening the document would never
+    /// recognise that parent. It would quarantine those deltas forever. Anchoring
     /// the pre-first-snapshot base to `genesis(document_id)` makes the parent
     /// universally known, so the earliest deltas are always releasable. Once a
     /// real snapshot is uploaded, that snapshot's id supersedes the genesis.

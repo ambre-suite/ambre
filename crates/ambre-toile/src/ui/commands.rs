@@ -3,24 +3,24 @@
 // Toile's command registry: one `Command` per affordance (`ambre-spec-commands.md`,
 // UI-THREAD-019).
 //
-// The identities stay in the module that resolves them -- `ui::menu` beside
+// The identities stay in the module that resolves them: `ui::menu` beside
 // `resolve_menu_command`, `ui::menu_bar` beside `menu_bar_edit`, `ui::palette`
-// beside `tool_for_command` -- and this file describes them: the label, the
-// icon, the chord the affordance announces, the category. Every view reads a
-// word from here: the context menu, the menu bar, the tool palette.
+// beside `tool_for_command`. This file describes them, that is the label, the icon,
+// the chord the affordance announces, the category. Every view reads a word from
+// here: the context menu, the menu bar, the tool palette.
 //
 // The registry carries `IconId`, a string. `chrome::icons` resolves it to the
-// concrete `icondata::Icon`, which keeps `ambre-commands` a leaf with an empty
-// dependency table (UI-THREAD-027) and keeps Toile's icon set out of the shared
+// concrete `icondata::Icon`. That keeps `ambre-commands` a leaf with an empty
+// dependency table (UI-THREAD-027), and keeps Toile's icon set out of the shared
 // crate.
 //
-// A declared chord is what the affordance announces, not a claim about who
-// routes it. Toile binds Ctrl+F and the bare tool letters in the launcher
-// keymap; the board chords (undo, redo, clipboard, nudge) are decoded
-// canvas-side in `ToileView::handle_key`, and the menu bar displays them.
-// Undo, Redo and the three clipboard intents take the chord lists the shared
-// crate declares, so the two applications announce the same chords for the same
-// operation and Ctrl+Y redoes on both.
+// A declared chord is what the affordance announces, not a claim about who routes
+// it. Toile binds Ctrl+F and the bare tool letters in the launcher keymap. The
+// board chords (undo, redo, clipboard, nudge) are decoded canvas-side in
+// `ToileView::handle_key`, and the menu bar displays them. Undo, Redo and the three
+// clipboard intents take the chord lists the shared crate declares. The two
+// applications then announce the same chords for the same operation, and Ctrl+Y
+// redoes on both.
 // ============================================================================
 
 use ambre_commands::{
@@ -37,7 +37,7 @@ use crate::ui::palette;
 ///
 /// A macro because `Command::title` is a plain `fn` pointer: it captures
 /// nothing, so every command needs a function item of its own. Generating them
-/// from one line each is what makes the single declaration site real -- a second
+/// from one line each is what makes the single declaration site real. A second
 /// label for a command cannot be written without a second line here.
 macro_rules! describe {
     ($($title_fn:ident: $id:expr, $label:literal, $icon:expr, $chords:expr, $category:expr;)*) => {
@@ -93,10 +93,10 @@ const fn letter(c: char) -> KeyBinding {
 /// (`ambre-spec-chrome.md`, `CHROME-008`).
 pub const PALETTE: CommandId = CommandId("toile.palette.open");
 
-// The labels are the ones the chrome shows today: the context-menu entries of
-// `chrome::menu`, the dropdown rows of `ui::menu_bar`, the zoom cluster and the
-// tool buttons of `chrome::palette`. Nine of them were written twice, once for
-// the menu bar and once for the right-click menu.
+// The labels are the ones the chrome shows today. They are the context-menu
+// entries of `chrome::menu`, the dropdown rows of `ui::menu_bar`, the zoom
+// cluster and the tool buttons of `chrome::palette`. Nine of them were written
+// twice, once for the menu bar and once for the right-click menu.
 describe! {
     CUT: menu::CUT, "Cut", Some(IconId("content-cut")), shared::CUT_CHORDS, CLIPBOARD;
     COPY: menu::COPY, "Copy", Some(IconId("content-copy")), shared::COPY_CHORDS, CLIPBOARD;
@@ -198,7 +198,7 @@ mod tests {
     }
 
     /// `DOCFILE-009`: the surface that offers the export states that the file
-    /// carries no encryption of its own, and the label is where a user reads it
+    /// carries no encryption of its own. The label is where a user reads it
     /// before clicking. Trame asserts the same on its own label -- the rule is
     /// per surface, and the suite has two.
     #[test]
@@ -221,9 +221,9 @@ mod tests {
         }
     }
 
-    /// The three clipboard intents are described under the shared identities
-    /// and announce the shared chords, the modern one and the legacy one, so a
-    /// copy is one command in every application (`UI-THREAD-011`).
+    /// The three clipboard intents are described under the shared identities,
+    /// and announce the shared chords, the modern one and the legacy one. A
+    /// copy is then one command in every application (`UI-THREAD-011`).
     #[test]
     fn the_clipboard_intents_carry_the_shared_identity() {
         let intents = [

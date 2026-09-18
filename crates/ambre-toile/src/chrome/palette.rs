@@ -1,29 +1,27 @@
 // ambre-toile/src/chrome/palette.rs
-// ============================================================================
-// The tool palette / primary toolbar (`toile-tools`), wasm-only. A
-// floating vertical toolbar with one button per Toile tool (Select, Pen, Shape,
-// Connector, Draw, Sticky, Text, Hand). Exactly one button reads active,
-// reflecting the current `Tool`; clicking switches the tool.
+// ============================================================================ The
+// tool palette / primary toolbar (`toile-tools`), wasm-only. A floating vertical
+// toolbar with one button per Toile tool (Select, Pen, Shape, Connector, Draw,
+// Sticky, Text, Hand). Exactly one button reads active, reflecting the current
+// `Tool`; clicking switches the tool.
 //
-// The Sticky button is a split affordance: clicking it opens a small colour
-// popover of pastel swatches; picking a swatch arms `Tool::Sticky(colour)` so
-// the next click places notes in that colour (folded into `CreateElement.fill`,
+// The Sticky button is a split affordance. Clicking it opens a small colour popover
+// of pastel swatches, and picking a swatch arms `Tool::Sticky(colour)`. The next
+// click then places notes in that colour (folded into `CreateElement.fill`,
 // `toile-elements`). This mirrors the Miro / Figma-whiteboard sticky flow.
 //
-// Styling is SHARED with the Trame command bar: the container carries the
-// `.ambre-commandbar` class (so buttons, hover, the `[aria-pressed="true"]`
-// active fill, `.sep` separators and the `aria-label` tooltip all come from the
-// launcher CSS, pixel-identical to Trame) plus an `.ambre-tool-palette` modifier
-// that only re-docks it as a floating vertical bar. Icons come from `icondata`
-// rendered by `leptos-icons`, exactly like the Trame `FormatBar` and the Toile
-// context menu (`chrome::menu`).
+// Styling is SHARED with the Trame command bar. The container carries the
+// `.ambre-commandbar` class. So buttons, hover, the `[aria-pressed="true"]` active
+// fill, `.sep` separators and the `aria-label` tooltip all come from the launcher
+// CSS, pixel-identical to Trame. An `.ambre-tool-palette` modifier only re-docks it
+// as a floating vertical bar. Icons come from `icondata` rendered by `leptos-icons`,
+// exactly like the Trame `FormatBar` and the Toile context menu (`chrome::menu`).
 //
 // The active tool is UI-only, canvas-local state (`toile-tools`): it is NOT a
 // `ToileCommand`. The palette writes a shared `RwSignal<Tool>` that the canvas
 // `ToileView` applies each frame; the keyboard chords (`ui::palette::bind_tool_keys`)
-// write the very same signal. The pure command surface (ids, key chords, the
-// id -> Tool map, the swatch set) lives in the always-compiled, host-tested
-// `ui::palette`.
+// write the very same signal. The pure command surface (ids, key chords, the id ->
+// Tool map, the swatch set) lives in the always-compiled, host-tested `ui::palette`.
 // ============================================================================
 
 use ambre_chrome::commands::{CommandId, Locale};
@@ -42,14 +40,15 @@ use crate::ui::palette::{
 use super::icons;
 
 /// One palette button. `aria-pressed` compares the active tool by variant
-/// (`mem::discriminant`), so any `Shape(kind)` reads pressed while the Shape tool
-/// is active regardless of the current kind sub-option (`toile-tools`). The
-/// `mousedown` `prevent_default` keeps DOM focus on the canvas text pipe -- a
-/// button stealing focus broke the next canvas click and the clipboard (the same
-/// hazard documented on the Trame `FormatBar`).
-/// `command` names the tool: its tooltip and its glyph come from the registry
-/// (`UI-THREAD-019`), and `tool_for_command` says which tool the click arms, so
-/// the button, the keyboard chord and the command palette all agree.
+/// (`mem::discriminant`). So any `Shape(kind)` reads pressed while the Shape tool
+/// is active, regardless of the current kind sub-option (`toile-tools`). The
+/// `mousedown` `prevent_default` keeps DOM focus on the canvas text pipe. A
+/// button stealing focus broke the next canvas click and the clipboard, the same
+/// hazard documented on the Trame `FormatBar`.
+///
+/// `command` names the tool. Its tooltip and its glyph come from the registry
+/// (`UI-THREAD-019`), and `tool_for_command` says which tool the click arms.
+/// The button, the keyboard chord and the command palette then all agree.
 fn tool_button(active: RwSignal<Tool>, command: CommandId) -> impl IntoView {
     let label = registry::title(command, &Locale::En).unwrap_or_default();
     let icon = registry::icon(command).and_then(icons::resolve);
@@ -72,7 +71,8 @@ fn tool_button(active: RwSignal<Tool>, command: CommandId) -> impl IntoView {
 /// opens the popover; picking a pastel swatch arms `Tool::Sticky(colour)` (which
 /// remembers the colour for the next note) and closes it. `aria-pressed` reads
 /// active for any `Sticky(_)` regardless of colour. The popover dismisses on any
-/// pointer-down outside the control (a click on the canvas, another tool, etc.).
+/// pointer-down outside the control, such as a click on the canvas or on another
+/// tool.
 fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
     let open = RwSignal::new(false);
     // The picked colour tints the button's strip so the palette shows what the
@@ -147,9 +147,9 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
     }
 }
 
-/// The Toile tool palette. `active` is the shared active-tool signal (the same
-/// signal the keyboard chords write and the canvas view reads); the buttons write
-/// it on click and read it for their pressed state.
+/// The Toile tool palette. `active` is the shared active-tool signal, the same
+/// signal the keyboard chords write and the canvas view reads. The buttons write
+/// it on click, and read it for their pressed state.
 #[component]
 pub fn ToolPalette(active: RwSignal<Tool>) -> impl IntoView {
     view! {

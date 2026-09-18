@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE TOILE ENGINE
 **Type:** Vertical (feature)
-**Implementation:** partial -- the engine, the seam and the delta cursor are built; an index update
-and a remote change cost the whole board.
+**Implementation:** partial -- the engine, the seam and the delta cursor are built. An index
+update and a remote change cost the whole board.
 
 > A user drags a note across an endless plane, and every collaborator sees it move. One thread holds
 > the board, writes the change, and answers with the elements the screen shows. The other thread
@@ -23,12 +23,13 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-001` | `INV` | The board CRDT MUST NOT leave the Logic thread; it exits only as bytes. | this spec section 3; `ambre-spec-architecture.md section 2` | type-level -- `ToileState.doc` is private and **no public signature in `ambre-toile` names `LoroDoc`**, and both exits return `Vec<u8>` | none | verified |
 | `TOILE-004` | `INV` | The spatial index MUST be a derived cache: the incrementally maintained index MUST hold the same elements as a from-scratch rebuild. | this spec section 3 | proptest -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` draws an upsert and remove stream and compares the population and the paint set against a rebuild; proptest -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` draws an operation stream and compares the same (neither compares them at a camera that culls, which is `TOILE-206`) | none | verified |
-| `TOILE-206` | `INV` | The visible set the incremental index answers MUST equal the rebuild's at a camera that culls, not only at one that shows everything. | this spec section 3 | none | unheld -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` probes one viewport covering the whole populated area, and both `ToileState` proptests derive under `wide_viewport`, whose comment says it culls nothing. The equivalence is held over the population, never over a cull | unverified |
-| `TOILE-005` | `INV` | The visible set MUST be resolved from the spatial index, and MUST NOT drop an element that meets the viewport. | this spec section 3 | `ambre_toile::logic::index::tests::query_visible_culls_offscreen`; `ambre_toile::logic::index::tests::remove_then_query_is_empty`; `ambre_toile::logic::convergence_tests::viewport_culls_offscreen_nodes` | none | verified |
-| `TOILE-207` | `INV` | The answer the UI receives MUST carry nothing the camera does not meet. | this spec section 3 | none | fails -- the derivation culls elements against the index and walks connectors unconditionally, so every connector of the board is routed and shipped at every camera. `viewport_culls_offscreen_nodes` filters `DisplayNode::Connector` out of what it reads, so no test can see it. Answered by the `Engine and render optimization` Story (`ambre-roadmap.md` E6) | unverified |
+| `TOILE-206` | `INV` | The visible set the incremental index answers MUST equal the rebuild's at a camera that culls, not only at one that shows everything. | this spec section 3 | none | unheld -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` probes one viewport covering the whole populated area, and both `ToileState` proptests derive under `wide_viewport`, whose comment says it culls nothing. The equivalence is held over the population, never over a cull; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-005` | `INV` | The visible set MUST be resolved from the spatial index. | this spec section 3 | `ambre_toile::logic::index::tests::remove_then_query_is_empty`; `ambre_toile::logic::convergence_tests::viewport_culls_offscreen_nodes` | none | verified |
+| `TOILE-240` | `INV` | The visible set MUST NOT drop an element that meets the viewport. | this spec section 3 | `ambre_toile::logic::index::tests::query_visible_culls_offscreen` -- what the viewport meets and what it does not | none | verified |
+| `TOILE-207` | `INV` | The answer the UI receives MUST carry nothing the camera does not meet. | this spec section 3 | none | fails -- the derivation culls elements against the index and walks connectors unconditionally, so every connector of the board is routed and shipped at every camera. `viewport_culls_offscreen_nodes` filters `DisplayNode::Connector` out of what it reads, so no test can see it; lands with the `Engine and render optimization` Story (`ambre-roadmap.md` E6) | failing |
 | `TOILE-017` | `CONC` | Two peers exchanging the same operations in any interleaving MUST converge to the same board and the same derived caches. | this spec section 2; `ambre-spec-testing.md` | `ambre_toile::logic::convergence_tests::two_peers_converge` -- the same operations in two interleavings; proptest -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` draws create, move, resize, rotate, restyle, delete, reorder, group, ungroup, connect, stroke, frame, slide order, auto-layout and react | none | verified |
 | `TOILE-208` | `INV` | The answer the UI receives MUST carry no presence sample and no acknowledgement. | this spec section 3 | type-level -- `DisplayViewport` has four fields (the camera, the paint order, the reaction tallies and the comment pins), no display event acknowledges a command, and the absence is the proof | none | verified |
-| `TOILE-023` | `INV` | `ambre-toile` MUST contain no `unsafe`. | README pillar "Security" | none | claim -- the crate measures zero `unsafe` today, but its root carries no `#![forbid(unsafe_code)]`, so nothing refuses the next one (`ambre-spec-testing.md`, the mechanism ladder) | unverified |
+| `TOILE-023` | `INV` | `ambre-toile` MUST contain no `unsafe`. | README pillar "Security" | none | claim -- the crate measures zero `unsafe` today, but its root carries no `#![forbid(unsafe_code)]`, so nothing refuses the next one (`ambre-spec-testing.md`, the mechanism ladder); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-089` | `INV` | A command handler MUST NOT send on a channel: it returns an outcome, and nothing else. | this spec section 3; `ambre-spec-message-bus.md` | type-level -- `ToileState` holds no sink and no sender, every handler returns `ToileOutcome` by value, and the absence is the proof | none | verified |
 | `TOILE-UI-099` | `INV` | Every board mutation MUST leave the UI thread as a command; the UI MUST NOT write board state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the three outbound paths of `ui/view.rs` (`send_lossy`, `send_edit`, `send_open`) each hand a command to the Logic channel, there is no other sender, and `TOILE-UI-001` bans the CRDT on this side | none | verified |
 | `TOILE-UI-311` | `INV` | The UI thread MUST NOT block on the Logic channel. | `ambre-spec-architecture.md section 2`; `ambre-spec-ui.md section 1` | type-level -- the three senders are `try_send` and no path awaits capacity, and the absence is the proof | none | verified |
@@ -38,7 +39,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-209` | `PRE` | A command MUST cull against the last camera the UI reported, or against the default one while no camera has arrived. | this spec section 3 | none | unheld -- the field is seeded with `Viewport::default()` and no caller checks whether the UI has reported yet. Nothing refuses a command on an unreported camera, and nothing reads what it answers | unverified |
+| `TOILE-209` | `PRE` | A command MUST cull against the last camera the UI reported, or against the default one while no camera has arrived. | this spec section 3 | none | unheld -- the field is seeded with `Viewport::default()` and no caller checks whether the UI has reported yet. Nothing refuses a command on an unreported camera, and nothing reads what it answers; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-002` | `POST` | Derivation MUST finish before the command returns. | this spec section 3 | type-level -- `handle_command` returns `ToileOutcome` by value and the crate has no async path; `ambre_toile::logic::state::derive::tests::derive_viewport_at_uses_the_given_camera` | none | verified |
 | `TOILE-210` | `POST` | The outcome MUST carry every display event the command produced. | this spec section 3 | `ambre_toile::logic::convergence_tests::viewport_culls_offscreen_nodes` -- it reads the derivation through a test accessor, while thirty-odd tests of the same file read `out.display` directly, over creation, deletion, grouping, find, stats and presence | none | verified |
 | `TOILE-211` | `FAIL` | A command naming an element that is gone MUST answer with an error and MUST NOT advance the export cursor. | this spec section 3; `ambre-spec-delta-order.md` | type-level -- the two refusal helpers return `ToileOutcome::display_only`, which carries no delta and never reaches the cursor, and the construction is the proof | none | verified |
@@ -48,10 +49,10 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-092` | `POST` | A remote change MUST rebuild only the derived caches it touched. | this spec section 3 | none | fails -- the remote path calls `rebuild_caches`, which clears the bounds map, bulk-loads the index, re-reads the paint order and re-unions every group to a fixpoint, whatever the change carried. Answered by the `Engine and render optimization` Story (`ambre-roadmap.md` E6) | unverified |
-| `TOILE-213` | `POST` | A batch of remote deltas MUST repaint once, not once per delta. | this spec section 3 | none | unheld -- `apply_remote_batch` amortizes the rebuild by construction, but no test of `ambre-toile` calls it. Trame holds the same rule with a test (`features/ambre-spec-trame-engine.md`) | unverified |
-| `TOILE-214` | `FAIL` | A remote change that cannot be imported MUST tell the user their board is behind. | this spec section 3 | none | fails -- the failure is reported as `ToileEvent::Error` carrying an empty element id, and the canvas logs that variant without surfacing it, so a board silently stops receiving a collaborator's work. Answered by the `A remote change the board cannot apply is announced` Story (`ambre-roadmap.md` E7) | unverified |
-| `TOILE-215` | `FAIL` | One delta of a batch that fails to import MUST NOT leave the board silently behind the rest. | this spec section 3 | none | fails -- the batch path logs the failed delta, keeps merging the others and reports success as long as one import succeeded, so the board is short a change nobody is told about. Answered by the `A remote change the board cannot apply is announced` Story (`ambre-roadmap.md` E7) | unverified |
+| `TOILE-092` | `POST` | A remote change MUST rebuild only the derived caches it touched. | this spec section 3 | none | fails -- the remote path calls `rebuild_caches`, which clears the bounds map, bulk-loads the index, re-reads the paint order and re-unions every group to a fixpoint, whatever the change carried; lands with the `Engine and render optimization` Story (`ambre-roadmap.md` E6) | failing |
+| `TOILE-213` | `POST` | A batch of remote deltas MUST repaint once, not once per delta. | this spec section 3 | none | unheld -- `apply_remote_batch` amortizes the rebuild by construction, but no test of `ambre-toile` calls it. Trame holds the same rule with a test (`features/ambre-spec-trame-engine.md`); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-214` | `FAIL` | A remote change that cannot be imported MUST tell the user their board is behind. | this spec section 3 | none | fails -- the failure is reported as `ToileEvent::Error` carrying an empty element id, and the canvas logs that variant without surfacing it, so a board silently stops receiving a collaborator's work; lands with the `A remote change the board cannot apply is announced` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-215` | `FAIL` | One delta of a batch that fails to import MUST NOT leave the board silently behind the rest. | this spec section 3 | none | fails -- the batch path logs the failed delta, keeps merging the others and reports success as long as one import succeeded, so the board is short a change nobody is told about; lands with the `A remote change the board cannot apply is announced` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-216` | `FRAME` | A remote change MUST NOT be re-broadcast. | this spec section 3; `ambre-spec-delta-order.md` | type-level -- the remote path returns `Vec<ToileEvent>` and not an outcome, so it has nowhere to put a delta | none | verified |
 
 ### 1.4 Hand a change to the Sync worker
@@ -67,14 +68,14 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-093` | `POST` | A snapshot request MUST answer with the board's snapshot. | this spec section 3 | none | fails -- the snapshot command returns an empty outcome, and the dispatcher answers a Sync request from the document state directly instead. No caller sends the command. Answered by the `Toile's snapshot command answers` Story (`ambre-roadmap.md` E7) | unverified |
+| `TOILE-093` | `POST` | A snapshot request MUST answer with the board's snapshot. | this spec section 3 | none | fails -- the snapshot command returns an empty outcome, and the dispatcher answers a Sync request from the document state directly instead. No caller sends the command; lands with the `Toile's snapshot command answers` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-219` | `FRAME` | Answering with a snapshot MUST NOT write to the board and MUST NOT move the export cursor. | this spec section 3; `ambre-spec-delta-order.md` | type-level -- `export_snapshot` takes `&self`, so it can write neither the board nor the cursor | none | verified |
 
 ### 1.6 Move one element in the index
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-091` | `POST` | Dropping an element from the spatial index MUST NOT cost a walk of the index. | this spec section 3; `ambre-spec-budgets.md section 1` | none | fails -- `SpatialIndex::remove` scans every leaf to find the one it removes, and `update` is a remove followed by an insert, so one drag step costs a walk of the whole board. Answered by the `Engine and render optimization` Story (`ambre-roadmap.md` E6) | unverified |
+| `TOILE-091` | `POST` | Dropping an element from the spatial index MUST NOT cost a walk of the index. | this spec section 3; `ambre-spec-budgets.md section 1` | none | fails -- `SpatialIndex::remove` scans every leaf to find the one it removes, and `update` is a remove followed by an insert, so one drag step costs a walk of the whole board; lands with the `Engine and render optimization` Story (`ambre-roadmap.md` E6) | failing |
 | `TOILE-220` | `POST` | An element dropped from the index MUST NOT come back in a query. | this spec section 3 | `ambre_toile::logic::index::tests::remove_then_query_is_empty`; proptest -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` draws a removal branch and compares against a rebuild | none | verified |
 | `TOILE-221` | `FRAME` | Updating one element's leaf MUST NOT change another element's. | this spec section 3 | proptest -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` draws an interleaved upsert and remove stream over eight keys and reads it against a model map, so a leaf touched in place of another diverges from the rebuild | none | verified |
 
@@ -84,7 +85,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-UI-312` | `POST` | A command sent from the drawing thread MUST reach the Logic thread addressed to the document it was drawn on. | this spec section 4; `ambre-spec-message-bus.md` | type-level -- the two board paths wrap the command in `LogicCommand::App` with the view's own document id, the id is not a parameter of the send, and the construction is the proof | none | verified |
 | `TOILE-UI-100` | `FAIL` | A full channel MUST drop an edit rather than block the frame, and MUST say so. | `ambre-spec-architecture.md section 2`; `ambre-spec-ui.md section 1` | type-level -- the edit path and the embed-session path are `try_send` and each handles `TrySendError::Full` with a warning | none | verified |
-| `TOILE-UI-313` | `FAIL` | A full channel MUST drop a camera request rather than block the frame, and MUST say so. | `ambre-spec-ui.md section 1` | none | fails -- `send_lossy` matches `TrySendError::Disconnected` alone, so a full channel discards the camera request with no log at all. The drop is deliberate (the next coalesced request supersedes it), but a board that stops re-culling leaves no trace of why. Answered by the `A dropped display request leaves a trace` Story (`ambre-roadmap.md` E7) | unverified |
+| `TOILE-UI-313` | `FAIL` | A full channel MUST drop a camera request rather than block the frame, and MUST say so. | `ambre-spec-ui.md section 1` | none | fails -- `send_lossy` matches `TrySendError::Disconnected` alone, so a full channel drops the camera request with no log at all. The drop is deliberate (the next coalesced request supersedes it), but a board that stops re-culling leaves no trace of why; lands with the `A dropped display request leaves a trace` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-UI-314` | `FRAME` | Sending a command MUST NOT change what the canvas draws: the gesture is already on screen and no answer is awaited. | this spec section 4 | type-level -- the three senders take `&self`, so no send can touch the view's render state | none | verified |
 
 ### 1.8 Fan one answer out to the three threads
@@ -94,26 +95,17 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-222` | `POST` | One outcome MUST reach the three destinations it names: the display events to the drawing thread, the delta and the presence frame to the Sync worker, the service requests to the service plane. | this spec section 3; `ambre-spec-message-bus.md` | `ambre_logic::dispatch::tests::toile_upload_request_lowers_with_doc_id_and_records_route` -- the service-request leg alone, the others being held by the dispatcher's own belt (`ambre-spec-architecture.md section 2`) | none | verified |
 | `TOILE-223` | `FRAME` | Fanning an outcome out MUST NOT let a session or a connection event reach the board state, except the canonical user id the session seeds. | this spec section 3; `ambre-spec-membership.md` | type-level -- the only session-shaped entry point on the state is the user-id seed, no connection type appears in any signature of `ToileState`, and the absence is the proof | none | verified |
 
-* **Budget.** the Toile rows of `ambre-spec-budgets.md section 1` -- the visible-set query
-  under 1 ms at 50 000 elements, the single-element index update under 50 us, a remote change under
-  2 ms and a transform command under 1 ms -- plus the board holder of
-  `ambre-spec-budgets.md section 6`. None of the four
-  has a benchmark behind it, and two of them are the rules the code breaks, `TOILE-091` and
-  `TOILE-092`.
+* **Budget.** four rows of `ambre-spec-budgets.md section 1`, plus the board holder of section 6. The rows:
+  the visible-set query under 1 ms at 50 000 elements, the index update under 50 us. Then a remote change
+  under 2 ms, a transform command under 1 ms. None has a benchmark; two are rules the code breaks
+  (`TOILE-091`, `TOILE-092`).
 * **Boundary.** none of its own: the board lives in this thread's CRDT and leaves as bytes the Sync
-  worker seals (`ZK-001`). Toile's one outbound flow of user content is the media path of
-  `features/ambre-spec-toile-media.md section 1`. `UI-THREAD-004` bans a network, crypto or
-  persistence path on the other side of the seam.
-* **Verification.** 26 `verified`, 11 `unverified`, 0 `unimplemented`. The delta cursor closed the
-  gap that mattered most and is the one corner here paid for in tests rather than in shapes: six
-  assertions over the three rules of section 1.4, each of which fails when the handler is reverted.
-  The rest of the table still pays in the shapes its types forbid -- ten of the `verified` rows are
-  structural, a private field, a `&self`, a return type with nowhere to put a delta -- and no such
-  row should be read as coverage. The eleven gaps are three kinds: six rules the code answers with
-  something else, three of them naming the Story that closes them; four rules nothing exercises at
-  all; and `TOILE-023`, a measurement rather than a mechanism. What the engine holds best is the
-  pair no other application holds: the index equivalence and the convergence of every derived
-  cache, both under one property test -- neither of them at a camera that culls (`TOILE-206`).
+  worker seals (`ZK-001`). Its one outbound flow of user content is the media path of
+  `features/ambre-spec-toile-media.md section 1`.
+* **Verification.** 27 `verified`, 7 `failing`, 4 `untested`. What holds is the pair no other application
+  holds: the index equivalence and the convergence of every derived cache. Both under one property test,
+  neither at a culling camera (`TOILE-206`). What is loose is four rules nothing exercises and `TOILE-023`, a
+  measurement; ten verified rows are structural.
 
 ---
 
@@ -134,10 +126,10 @@ Convergence rests on a rule the format owns: an element is named by a minted id,
 (`ambre-spec-toile-schema.md section 2`, `TOILE-003`). Two peers holding the same operations hold the
 same board.
 
-**What this table cannot see.** Both proptests derive under a camera wide enough to cull nothing,
-and both end by exchanging whole snapshots. A cull that answers wrongly (`TOILE-206`), a connector
-shipped to a screen it never meets (`TOILE-207`) and an export cursor that skips or repeats a range
-(`TOILE-090`, `TOILE-217`) all survive every row above.
+**What this table cannot see.** Both proptests derive under a camera wide enough to cull nothing, and both end
+by exchanging whole snapshots. Three things survive every row above: a cull that answers wrongly
+(`TOILE-206`), and a connector shipped to a screen it never meets (`TOILE-207`). Also an export cursor that
+skips or repeats a range (`TOILE-090`, `TOILE-217`).
 
 ---
 
@@ -218,13 +210,12 @@ A rotated element is indexed by the box of its rotated corners, so the tree over
 never hides a visible element, which is what `TOILE-005` asks of it, and the exact test refines the
 answer. The stored coordinates are the truth; the box is derived, which is `TOILE-004`.
 
-**The two paths that maintain it must agree**, and unlike Trame that equivalence is held: one
-property test drives an operation stream through the incremental path and compares the result to a
-rebuild. It is held over the population and over one probe that covers the whole populated area, so
-what is compared is which elements exist and never which ones a camera keeps (`TOILE-206`). What is
-not held is the cost. `remove` finds its leaf by walking every leaf, and `update`
-is a remove followed by an insert, so the index that exists to make a frame O(log N) makes a drag
-step O(N) (`TOILE-091`).
+**The two paths that maintain it must agree**, and unlike Trame that equivalence is held. One property test
+drives an operation stream through the incremental path and compares the result to a rebuild. It is held over
+the population and over one probe that covers the whole populated area. So what is compared is which elements
+exist, never which ones a camera keeps (`TOILE-206`). What is not held is the cost: `remove` finds its leaf by
+walking every leaf, and `update` is a remove followed by an insert. So the index that exists to make a frame
+O(log N) makes a drag step O(N) (`TOILE-091`).
 
 ### C. What one command costs
 
@@ -285,29 +276,27 @@ impl ToileState {
 }
 ```
 
-The dispatcher routes by document id, calls one of the five, then explodes the result: the display
-events to the UI, the delta and the presence frame to Sync, the requests to the service plane
-(`TOILE-222`). Its routing is normative in `ambre-spec-message-bus.md`. A session or a connection
-event never reaches the state, except that the session seeds the canonical user id (`TOILE-223`).
+The dispatcher routes by document id, calls one of the five, then explodes the result. The display events go
+to the UI, the delta and the presence frame to Sync, the requests to the service plane (`TOILE-222`). Its
+routing is normative in `ambre-spec-message-bus.md`. A session or a connection event never reaches the state,
+except that the session seeds the canonical user id (`TOILE-223`).
 
-**An import that fails is not reported.** A remote delta the document refuses answers with an error
-event carrying an empty element id, which the canvas logs and never surfaces, so the board stops
-taking a collaborator's work with nothing on screen to say so (`TOILE-214`). In a batch the failed
-delta is logged and skipped, and the batch reports success as long as one import succeeds
-(`TOILE-215`). The batch path itself has no test in this crate, so the one repaint it exists for is
-a claim about its construction (`TOILE-213`).
+**An import that fails is not reported.** A remote delta the document refuses answers with an error event
+carrying an empty element id, which the canvas logs and never surfaces. So the board stops taking a
+collaborator's work with nothing on screen to say so (`TOILE-214`). In a batch the failed delta is logged and
+skipped, and the batch reports success as long as one import succeeds (`TOILE-215`). The batch path itself has
+no test in this crate, so the one repaint it exists for is a claim about its construction (`TOILE-213`).
 
-**A second constructor pins the identity.** A fresh board draws a random peer, and every minted id
-carries that peer, so the same command sequence produces two different boards. `ToileState::with_peer`
-pins the peer and drops the commit clock before the scaffolding write, which is what makes a board
-reproducible for a fixture generator or a deterministic test (`ambre-spec-fixtures.md section 2`).
-It is never for a live document: two writers sharing a peer mint colliding ids, which is the one
-hazard the minting argument rests on avoiding.
+**A second constructor pins the identity.** A fresh board draws a random peer, and every minted id carries
+that peer, so the same command sequence produces two different boards. `ToileState::with_peer` pins the peer
+and drops the commit clock before the scaffolding write. That is what makes a board reproducible for a fixture
+generator or a deterministic test (`ambre-spec-fixtures.md section 2`). It is never for a live document. Two
+writers sharing a peer mint colliding ids, the one hazard the minting argument rests on avoiding.
 
-**The delta is a cursor, not a drain.** The export reads from the last exported version vector, and
-the cursor advances **only** when that export succeeded (`TOILE-090`): a failure keeps the range,
-and the next flush offers it again. Advancing regardless -- swallowing the error -- dropped those
-operations for good, because no later export reads from behind the cursor.
+**The delta is a cursor, not a drain.** The export reads from the last exported version vector, and the cursor
+advances **only** when that export succeeded (`TOILE-090`). A failure keeps the range, and the next flush
+offers it again. Advancing regardless -- swallowing the error -- dropped those operations for good, because no
+later export reads from behind the cursor.
 
 Three movements, and each is a different rule:
 
@@ -317,31 +306,28 @@ Three movements, and each is a different rule:
 | a peer's delta imported | advances past what arrived, **keeping this peer's own counter** (`TOILE-236`) |
 | a restore from local storage | does not move (`TOILE-236`) |
 
-The second is what stops a peer from receiving its own work back. Its exception is the one Trame
-learned the hard way: a board opens by committing its scaffolding under a fresh random peer id, and
-the first import lands before any flush, so absorbing our own counter would make the next local
-delta depend on operations no peer holds -- and an unresolvable dependency is not an error a peer
-reports, it is an edit that never appears.
+The second is what stops a peer from receiving its own work back. Its exception is the one Trame learned the
+hard way. A board opens by committing its scaffolding under a fresh random peer id, and the first import lands
+before any flush. So absorbing our own counter would make the next local delta depend on operations no peer
+holds. An unresolvable dependency is not an error a peer reports; it is an edit that never appears.
 
-The third is where Toile parts from Trame deliberately. A restore reads what this client wrote
-before it closed, which may have reached nobody, and a reopen mints a fresh peer id -- so the
-exception above cannot save it, and absorbing the restored history would drop an offline session
-for good. Toile leaves the cursor alone there and re-offers the restored history on the first
-flush; the relay already holds most of it and drops what it knows. Trame absorbs it
-(`features/ambre-spec-trame-engine.md`), and carries the hazard.
+The third is where Toile parts from Trame deliberately. A restore reads what this client wrote before it
+closed, which may have reached nobody, and a reopen mints a fresh peer id. So the exception above cannot save
+it, and absorbing the restored history would drop an offline session for good. Toile leaves the cursor alone
+there, and re-offers the restored history on the first flush. The relay already holds most of it and drops
+what it knows. Trame absorbs it (`features/ambre-spec-trame-engine.md`), and carries the hazard.
 
-**The registry is flat.** A board that carries another Ambre document adds no dispatch step and no
-recursion: the child is an ordinary entry keyed by its own document id. Why that is the shape is
+**The registry is flat.** A board that carries another Ambre document adds no dispatch step and no recursion.
+The child is an ordinary entry keyed by its own document id. Why that is the shape is
 `features/ambre-spec-toile-embeds.md section 5`.
 
 ### E. What the UI thread receives
 
-The answer is one culled, paint-ordered snapshot of the board, built for the visible set alone. It
-carries the camera it was culled against, a single back-to-front sequence of elements and connectors,
-the reaction tallies of the visible targets, and the comment pins whose anchor resolves in it. It
-carries no board data beyond that: the render
-side never links the CRDT (`TOILE-UI-001`), and one snapshot per relevant change is the whole
-contract between the two threads.
+The answer is one culled, paint-ordered snapshot of the board, built for the visible set alone. It carries the
+camera it was culled against, and a single back-to-front sequence of elements and connectors. It carries the
+reaction tallies of the visible targets, and the comment pins whose anchor resolves in it. It carries no board
+data beyond that: the render side never links the CRDT (`TOILE-UI-001`). One snapshot per relevant change is
+the whole contract between the two threads.
 
 ```rust
 pub struct DisplayViewport {
@@ -363,9 +349,9 @@ pub enum DisplayNode {
 }
 ```
 
-**The cull is the elements' alone.** The derivation resolves elements against the index and walks
-the connectors of the whole board unconditionally, so a camera showing one corner still ships every
-connector on the plane (`TOILE-207`).
+**The cull is the elements' alone.** The derivation resolves elements against the index, and walks the
+connectors of the whole board unconditionally. So a camera showing one corner still ships every connector on
+the plane (`TOILE-207`).
 
 Two shapes are deliberately absent, and each one is a rule (`TOILE-208`):
 
@@ -399,12 +385,12 @@ and it is why the two are one property test.
 
 ## 4. SURFACE
 
-The user touches no part of this document directly. What it exposes is the answer every other Toile
-feature draws from, and the rules that keep the drawing thread honest: it holds view state and the
-current visible set and nothing else (`TOILE-UI-001`), every mutation leaves as a command
-(`TOILE-UI-099`), carrying the document it was drawn on (`TOILE-UI-312`) and touching nothing the
-canvas draws (`TOILE-UI-314`). A full channel drops that command rather than blocking the frame: the
-edit path says so (`TOILE-UI-100`), the camera path drops it in silence (`TOILE-UI-313`).
+The user touches no part of this document directly. What it exposes is the answer every other Toile feature
+draws from, and the rules that keep the drawing thread honest. It holds view state and the current visible set
+and nothing else (`TOILE-UI-001`). Every mutation leaves as a command (`TOILE-UI-099`), carrying the document
+it was drawn on (`TOILE-UI-312`) and touching nothing the canvas draws (`TOILE-UI-314`). A full channel drops
+that command rather than blocking the frame: the edit path says so (`TOILE-UI-100`), the camera path drops it
+in silence (`TOILE-UI-313`).
 
 **Where each event lands.** One arm per event and **no wildcard arm**, so a new event is a compile
 error rather than a silent drop (`TOILE-UI-101`).
@@ -445,30 +431,30 @@ error rather than a silent drop (`TOILE-UI-101`).
   offered again on the next flush -- which is the next local edit. A board nobody is editing
   therefore holds its unsent operations until someone touches it, and no timer, no backoff and no
   notice cover the gap. The peers are not diverged, only late, and nothing says how late.
-* **An index update walks the index** (`TOILE-091`). Removing a leaf is a linear search, and a
-  geometry write is a remove followed by an insert, so a drag at 60 frames a second walks the whole
-  board 60 times a second. Answered by the "Engine and render optimization" Story (`ambre-roadmap.md` E6).
+* **An index update walks the index** (`TOILE-091`). Removing a leaf is a linear search, and a geometry write
+  is a remove followed by an insert. So a drag at 60 frames a second walks the whole board 60 times a second.
+  Answered by the "Engine and render optimization" Story (`ambre-roadmap.md` E6).
 * **A remote change rebuilds everything** (`TOILE-092`). One moved note from a collaborator clears
   the bounds map, bulk-loads the index and re-reads the paint order. The same rebuild runs on an
   undo and on a redo. Answered by the same Story.
 * **A snapshot request answers nothing** (`TOILE-093`). The command is declared and returns an empty
   outcome; no code sends it, and the dispatcher takes the snapshot from the state directly. It is a
   variant with no behaviour on either side.
-* **The differential answer is deferred.** A remote change that touches a few visible elements still
-  pushes the whole visible set. The engine could instead send the changed elements and the removals,
-  which the UI applies onto the set it holds, and keep the whole push as the fallback. The decision
-  is the engine's, keyed on the size of the change. Nothing of it is built, and it lands with the
+* **The differential answer is deferred.** A remote change that touches a few visible elements still pushes
+  the whole visible set. The engine could instead send the changed elements and the removals, which the UI
+  applies onto the set it holds. The whole push stays as the fallback. The decision is the engine's, keyed on
+  the size of the change. Nothing of it is built, and it lands with the
   "Engine and render optimization" Story (`ambre-roadmap.md` E6).
-* **A connector is never culled** (`TOILE-207`). Elements are resolved against the index and
-  connectors are walked whole, so a board of a thousand arrows pays for all of them at every
-  camera. The one test that names the cull filters connectors out of what it asserts on, so the
-  belt cannot see it. Answered by the "Engine and render optimization" Story (`ambre-roadmap.md` E6).
-* **A failed import is silent** (`TOILE-214`, `TOILE-215`). A remote delta that will not import is
-  reported as an error with an empty element id, which the canvas logs and drops; inside a batch it
-  is logged and skipped and the batch still reports success. Either way the board is behind and the
-  user is not told. No Story is bound to it yet.
+* **A connector is never culled** (`TOILE-207`). Elements are resolved against the index and connectors are
+  walked whole. So a board of a thousand arrows pays for all of them at every camera. The one test that names
+  the cull filters connectors out of what it asserts on, so the belt cannot see it. Answered by the "Engine
+  and render optimization" Story (`ambre-roadmap.md` E6).
+* **A failed import is silent** (`TOILE-214`, `TOILE-215`). A remote delta that will not import is reported as
+  an error with an empty element id, which the canvas logs and drops. Inside a batch it is logged and skipped,
+  and the batch still reports success. Either way the board is behind and the user is not told. No Story is
+  bound to it yet.
 * **A full camera channel drops without a trace** (`TOILE-UI-313`). The camera sender matches a
-  disconnected channel alone, so a full one discards the request silently. The drop is right -- the
+  disconnected channel alone, so a full one drops the request silently. The drop is right -- the
   next coalesced camera supersedes it -- but a board that stops re-culling leaves nothing to read.
 * **No budget is measured.** Not one of the Toile rows of `ambre-spec-budgets.md` has
   a benchmark, so every cost above is a claim about a number nothing weighs. Two of those rows are

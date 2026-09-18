@@ -5,7 +5,7 @@
 use super::*;
 
 /// A multi-cell batch (Ctrl+Enter fill / Delete over a range) is a SINGLE
-/// undo item: every write shares one undo group, so one `Undo` restores all
+/// undo item. Every write shares one undo group, so one `Undo` restores all
 /// the affected cells at once.
 #[test]
 fn batch_write_is_one_undo_item() {
@@ -42,10 +42,10 @@ fn batch_write_is_one_undo_item() {
 }
 
 /// A cell edit that also rewrites the active filter's hidden set commits the
-/// `LoroDoc` twice (the cell write + the filter recompute), yet the edit must
+/// `LoroDoc` twice (the cell write + the filter recompute). Yet the edit must
 /// stay a single undo item (`trame-cell-editing`). `SetCellText` opens a group
 /// that `CommitEdit` seals on cell exit, so both commits collapse into one
-/// step: a single `Undo` restores the pre-edit value and the prior hidden set.
+/// step. A single `Undo` restores the pre-edit value and the prior hidden set.
 #[test]
 fn filtered_column_edit_is_one_undo_item() {
     let mut state = TrameState::new();
@@ -84,9 +84,10 @@ fn filtered_column_edit_is_one_undo_item() {
     );
 }
 
-/// Every mutating command refreshes the Undo/Redo availability so the chrome
-/// enables the Undo button right after the first edit -- without waiting for
-/// the user to trigger an undo. A non-mutating command emits no `UndoState`.
+/// Every mutating command refreshes the Undo/Redo availability, so the
+/// chrome enables the Undo button right after the first edit. It does not
+/// wait for the user to trigger an undo. A non-mutating command emits no
+/// `UndoState`.
 #[test]
 fn mutating_command_reports_undo_state() {
     let mut state = TrameState::new();
@@ -142,7 +143,7 @@ fn undo_with_empty_stack_is_a_noop() {
 
 /// Undo is local-only (`trame-undo`): `UndoManager` tracks only this peer's
 /// commits, never imported remote ops. Peer B writes its own cell, receives a
-/// remote edit from A, then undoes -- only B's own edit is reverted; A's remote
+/// remote edit from A, then undoes. Only B's own edit is reverted; A's remote
 /// value stays put (Google Sheets / collaborative-editor behavior).
 #[test]
 fn undo_local_only_not_remote() {
@@ -201,9 +202,9 @@ fn undo_local_only_not_remote() {
     );
 }
 
-/// Undoing an `InsertRow` must rebuild the `SheetIndex` so positions resolve
-/// against the restored row order: the row that had shifted down returns to its
-/// original position and the inserted blank row is gone.
+/// Undoing an `InsertRow` must rebuild the `SheetIndex`, so positions resolve
+/// against the restored row order. The row that had shifted down returns to its
+/// original position, and the inserted blank row is gone.
 #[test]
 fn undo_insert_row_rebuilds_sheet_index() {
     let mut state = TrameState::new();
@@ -231,9 +232,9 @@ fn undo_insert_row_rebuilds_sheet_index() {
     assert_eq!(read_cell(&mut state, 2, 0), "", "inserted row removed");
 }
 
-/// The undo stack lives for the open-document session only (`trame-undo`:
-/// "no undo stack persistence between sessions"). Reopening a document from its
-/// persisted snapshot starts with a fresh, empty `UndoManager`: a prior edit is
+/// The undo stack lives for the open-document session only (`trame-undo`: "no
+/// undo stack persistence between sessions"). Reopening a document from its
+/// persisted snapshot starts with a fresh, empty `UndoManager`. A prior edit is
 /// not undoable, so Ctrl+Z is a no-op on the reopened doc.
 #[test]
 fn undo_stack_cleared_on_doc_close() {
@@ -355,9 +356,9 @@ fn insert_and_delete_column_shift_cells() {
     assert_eq!(read_cell(&mut state, 0, 1), "b", "shift back after delete");
 }
 
-/// Drag reorder moves a whole row by uid: its cells travel with it, and a
-/// formula referencing the moved data follows it to the new position (`trame-formula-engine`, the
-/// same guarantee as sort -- no reference rewrite, no reseed).
+/// Drag reorder moves a whole row by uid: its cells travel with it. A formula referencing the
+/// moved data follows it to the new position (`trame-formula-engine`). That is the same guarantee
+/// as sort: no reference rewrite, no reseed.
 #[test]
 fn move_row_carries_cells_and_formula_follows_data() {
     let mut state = TrameState::new();
@@ -406,11 +407,10 @@ fn move_column_carries_cells() {
     assert_eq!(read_cell(&mut state, 0, 2), "y");
 }
 
-/// References are positional and never rewritten (`trame-formula-engine`):
-/// after deleting the
-/// row that held a formula's source, the formula reads whatever now sits at
-/// that grid position -- here an emptied cell. (Full id-based `#REF!` on
-/// delete is a separate broken-references story.)
+/// References are positional and never rewritten (`trame-formula-engine`).
+/// After deleting the row that held a formula's source, the formula reads
+/// whatever now sits at that grid position -- here an emptied cell. (Full
+/// id-based `#REF!` on delete is a separate broken-references story.)
 #[test]
 fn formula_reference_is_positional_after_delete() {
     let mut state = TrameState::new();

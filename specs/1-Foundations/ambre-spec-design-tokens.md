@@ -1,11 +1,11 @@
 # AMBRE -- FEATURE: THE DESIGN TOKENS
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- one source generates both sides and the theme switch works; the
+**Implementation:** partial -- one source generates both sides and the theme switch works. The
 stylesheet still carries fifty-eight colours the source never declared.
 
-> The interface is drawn twice, once by the browser and once by the graphics card, and the two
-> halves must not disagree about what a surface, an accent or a body size looks like. One file
+> The interface is drawn twice, once by the browser and once by the graphics card. The two halves
+> must not disagree about what a surface, an accent or a body size looks like. One file
 > declares them, and a build step gives each half its own copy.
 
 The two halves cannot share a value at run time: one needs a stylesheet, the other needs Rust
@@ -23,10 +23,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `UI-THREAD-029` | `INV` | Every colour, spacing, radius and type size the interface uses MUST be declared in the one token source. | this spec section 2 | none | fails -- the shell stylesheet carries fifty-eight literal colours, twenty-five of them distinct, of which every shadow and every white on a coloured ground, and no check counts them. The repair is the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | unverified |
+| `UI-THREAD-029` | `INV` | Every colour, spacing, radius and type size the interface uses MUST be declared in the one token source. | this spec section 2 | none | fails -- the shell stylesheet carries fifty-eight literal colours, twenty-five of them distinct, of which every shadow and every white on a coloured ground, and no check counts them; lands with the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | failing |
 | `UI-THREAD-030` | `INV` | The stylesheet and the drawing constants MUST both be generated from that source, in one build step. | this spec section 2 | target-build -- the drawing crate includes the generated constants and the generated sheet as files the build step writes, so neither exists unless that step ran and read the source | none | verified |
-| `UI-THREAD-031` | `INV` | A stylesheet MUST NOT read a token the source does not emit and the sheet does not declare. | this spec section 2 | none | fails -- five names are read and defined nowhere: the content ground, a danger colour, a foreground, a shadow and a dimmed text. The foreground carries no fallback, so a label on the home screen has no colour of its own. The repair is the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | unverified |
-| `UI-THREAD-033` | `INV` | The unmarked stylesheet MUST carry the light set, so a page that never sets the theme attribute renders light rather than unstyled. | this spec section 2; section 4, row 4 | none | unheld -- the generator writes the light colours into the unmarked block and the dark ones into the attributed one, so the default is the order of two blocks in one build script, and nothing goes red the day they swap | unverified |
+| `UI-THREAD-031` | `INV` | A stylesheet MUST NOT read a token the source does not emit and the sheet does not declare. | this spec section 2 | none | fails -- five names are read and defined nowhere: the content ground, a danger colour, a foreground, a shadow and a dimmed text. The foreground carries no fallback, so a label on the home screen has no colour of its own; lands with the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | failing |
+| `UI-THREAD-033` | `INV` | The unmarked stylesheet MUST carry the light set, so a page that never sets the theme attribute renders light rather than unstyled. | this spec section 2; section 4, row 4 | none | unheld -- the generator writes the light colours into the unmarked block and the dark ones into the attributed one, so the default is the order of two blocks in one build script, and nothing goes red the day they swap; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Switch the theme
 
@@ -34,21 +34,17 @@ The user flips the theme control. One act must move both halves, and it must mov
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `UI-THREAD-032` | `POST` | A theme switch MUST reach the browser half and the drawing half together, from one act. | this spec section 2 | none | unheld -- one control carries the active theme, the launcher sets the document attribute from it and the render loop reads it on the next frame. Nothing drives a switch and observes both halves, and no test in the suite names the theme at all | unverified |
-| `UI-THREAD-034` | `FRAME` | A theme switch MUST NOT change a spacing, a radius or a type size. | this spec section 2; section 4, row 5 | none | unheld -- the generator emits the scales once, into the unmarked block, and the drawing palette declares twelve colours and no scale field, so a theme-dependent scale takes an edit to the build script, which compiles and which no test reads | unverified |
+| `UI-THREAD-032` | `POST` | A theme switch MUST reach the browser half and the drawing half together, from one act. | this spec section 2 | none | unheld -- one control carries the active theme, the launcher sets the document attribute from it and the render loop reads it on the next frame. Nothing drives a switch and observes both halves, and no test in the suite names the theme at all; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `UI-THREAD-034` | `FRAME` | A theme switch MUST NOT change a spacing, a radius or a type size. | this spec section 2; section 4, row 5 | none | unheld -- the generator emits the scales once, into the unmarked block, and the drawing palette declares twelve colours and no scale field, so a theme-dependent scale takes an edit to the build script, which compiles and which no test reads; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** none: a token is a constant resolved at build time, so it costs nothing at run time.
   A theme switch repaints the content once, which is the frame budget of
-  `ambre-spec-budgets.md section 2`, and the generated sheet is a few hundred bytes inside
-  the binary budget of `ambre-spec-budgets.md section 5`.
+  `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: a token is a colour and a number, generated into the binary. Nothing here
   reaches the relay, holds a key or opens a socket, and the chosen theme is never sent anywhere.
-* **Verification.** 1 `verified`, 5 `unverified`, 0 `unimplemented`. The one held rule is held by
-  the compiler and holds the half that matters most: the two sides cannot come from two sources.
-  What nothing holds is whether a value bypassed the source, and both failing rows say it did. The
-  two rows the pass added are the gaps it exposed: `UI-THREAD-033`, the unmarked default, and
-  `UI-THREAD-034`, the frame condition of the switch. Both were written as decisions in section 4
-  and ruled nowhere, and neither has a mechanism.
+* **Verification.** 1 `verified`, 2 `failing`, 3 `untested`, 0 `unimplemented`. The one held rule is
+  held by the compiler and holds the half that matters: the two sides cannot come from two sources.
+  What nothing holds is whether a value bypassed the source, and both failing rows say it did.
 
 ---
 
@@ -82,14 +78,14 @@ change with the theme.
 
 **Where the two halves diverge, and why that is correct.** The chrome names a surface and the
 content names a grid line, and neither needs the other's vocabulary. What they must agree on is the
-accent, the text colour and the scales, and those are the entries that appear in both groups under
-the same name.
+accent, the text colour and the scales. Those are the entries that appear in both groups under the
+same name.
 
 **The theme is a run-time value, not a build one.** Both palettes are in the binary and the active
-one is selected by a control the chrome writes and the render loop reads. The browser half is
-selected by an attribute on the document root: the light set is the unmarked default and the dark
-set is the attributed one, so a page that fails to set the attribute is light rather than
-unstyled.
+one is selected by a control the chrome writes and the render loop reads. An attribute on the
+document root selects the browser
+half. The light set is the unmarked default, the dark set the attributed one. A page
+that fails to set the attribute is light rather than unstyled.
 
 **Code.**
 
@@ -131,7 +127,7 @@ The user touches one thing: the theme control. Everything else is what they see.
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **The shell stylesheet carries fifty-eight literal colours.** Every shadow is a literal, so no theme
-  changes one, and every white on a coloured ground is a literal, so a light theme cannot lighten
+  changes one. Every white on a coloured ground is a literal too, so a light theme cannot lighten
   the ground under it. The file's own header still promises the token sets for later, and the sets
   are there (`UI-THREAD-029`).
 * **Five tokens are read and declared nowhere:** the content ground, a danger colour, a foreground,
@@ -141,17 +137,16 @@ The user touches one thing: the theme control. Everything else is what they see.
   declares an error colour, and the sheet asks for a danger one and falls back to a red of its own.
   Two names, one meaning, and the one the source emits is unused.
 * **Two accent fallbacks contradict the accent.** Where the sheet writes the accent with a
-  fallback, the fallback is a blue and the token is amber, so the two disagree about the product's
-  own colour.
+  fallback, the fallback is a blue and the token is amber. The two disagree about the product's own
+  colour.
 * **No test names the theme.** Neither tier constructs a palette, reads the generated sheet or
   drives a switch, so every row here except the compiler-held one is checked by reading.
-* **Nothing rules on contrast.** The two palettes are chosen by eye and no rule states a minimum
-  ratio between a text colour and the ground it is drawn on
-  (`ambre-spec-accessibility.md`).
+* **Nothing rules on contrast.** The two palettes are chosen by eye. No rule states a minimum ratio
+  between a text colour and the ground it is drawn on (`ambre-spec-accessibility.md`).
 * **Nothing rules on a third theme, or on the system preference.** The switch has two values and
   the page never reads what the operating system asks for.
-* **The scales have no unit in the source.** They are unitless integers read as pixels by one half
-  and as a floating-point length by the other, and nothing states which unit they are in.
+* **The scales have no unit in the source.** They are unitless integers, read as pixels by one half and as
+  a floating-point length by the other. Nothing states which unit they are in.
 
 ---
 

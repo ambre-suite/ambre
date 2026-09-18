@@ -79,9 +79,9 @@ impl TrameView {
 
     /// Measure a column/row's cached cells and emit a resize sized to its content
     /// (`trame-resize`). UI-side over the viewport cache: the parley layouts of every
-    /// cached cell of the axis are measured and the max natural extent (plus
-    /// padding, clamped to the minimum) becomes the new width/height. A column
-    /// with no cached content snaps to the default.
+    /// cached cell of the axis are measured. The max natural extent, plus padding and
+    /// clamped to the minimum, becomes the new width/height. A column with no cached
+    /// content snaps to the default.
     pub(crate) fn resolve_autofit(
         &mut self,
         hit: HeaderHit,
@@ -156,7 +156,7 @@ impl TrameView {
     }
 
     /// Inline "+" insert at a column boundary (`trame-headers`): move the tracked
-    /// active cell onto column `c`, then fire the existing `InsertColLeft` intent
+    /// active cell onto column `c`. Then fire the existing `InsertColLeft` intent
     /// so the Logic thread resolves the position exactly as from the menu.
     pub(crate) fn insert_col_at(&mut self, c: u32) {
         self.select_cell(self.state.active_row(), c);
@@ -195,18 +195,18 @@ impl TrameView {
         }
         let (sr1, sc1, sr2, sc2) = src;
         let (dr1, dc1, dr2, dc2) = dest;
-        // Ctrl inverts the default Excel/Sheets behaviour, but the single- vs
-        // multi-cell test is per fill line, i.e. on the source extent *along the
-        // drag axis* (a vertical drag fills column lines, so it cares about the
-        // source row count; a horizontal drag cares about the source col count).
-        // A single source value along that axis forces a +1 numeric Series; a
+        // Ctrl inverts the default Excel/Sheets behaviour. But the single- vs
+        // multi-cell test is per fill line, that is, on the source extent *along the
+        // drag axis*. A vertical drag fills column lines, so it cares about the
+        // source row count; a horizontal drag cares about the source col count. A
+        // single source value along that axis forces a +1 numeric Series; a
         // multi-value source forces a verbatim Copy. Without Ctrl, Auto lets the
         // Logic thread pick Series vs Copy.
         //
-        // A merged source counts blocks, not raw cells, along the drag axis: one
-        // block is a single value (Ctrl -> +1 Series), several blocks are several
-        // values (Ctrl -> Copy). `block` is the merge span; divide the source
-        // extent by it to get the block count along the axis.
+        // A merged source counts blocks, not raw cells, along the drag axis. One
+        // block is a single value (Ctrl -> +1 Series), and several blocks are
+        // several values (Ctrl -> Copy). `block` is the merge span; divide the
+        // source extent by it to get the block count along the axis.
         let vertical = dr1 < sr1 || dr2 > sr2;
         let single_line = if block != (1, 1) {
             let n = if vertical {
@@ -282,10 +282,10 @@ impl TrameView {
     /// Build the active-cell report for a whole-axis selection
     /// (`trame-selection`). The band has no on-screen rectangle, so the
     /// perpendicular extent is bounded by the UI's used-range cache
-    /// (`trame-grid-viewport`): a column band
-    /// spans rows `0..=last_used_row`, a row band spans cols `0..=last_used_col`.
-    /// The Logic thread then resolves sort / filter / delete / style against that
-    /// rectangle, and tracks the clicked column/row as the active cell.
+    /// (`trame-grid-viewport`). A column band spans rows `0..=last_used_row`, and
+    /// a row band spans cols `0..=last_used_col`. The Logic thread then resolves
+    /// sort / filter / delete / style against that rectangle, and tracks the
+    /// clicked column/row as the active cell.
     pub(crate) fn axis_active_cmd(&self) -> TrameCommand {
         let sel = &self.state.selection;
         let (last_row, last_col) = self
@@ -326,11 +326,11 @@ impl TrameView {
     }
 
     /// Finish a header reorder drag (Excel-style): drop the grabbed column/row at
-    /// the previewed insertion slot, emitting `MoveColumn` / `MoveRow` unless it
-    /// lands back on its origin, then reselect the moved band and clear the drag.
-    /// The slot is an "insert before" index; `LoroMovableList::mov` takes the
-    /// destination index *after* the source is removed, so a slot past the origin
-    /// shifts down by one.
+    /// the previewed insertion slot. It emits `MoveColumn` / `MoveRow` unless it
+    /// lands back on its origin, then reselects the moved band and clears the
+    /// drag. The slot is an "insert before" index. `LoroMovableList::mov` takes
+    /// the destination index *after* the source is removed, so a slot past the
+    /// origin shifts down by one.
     pub(crate) fn end_reorder_drag(&mut self) {
         let Some((kind, from)) = self.reorder_drag.take() else {
             return;
@@ -421,13 +421,14 @@ impl TrameView {
 
     /// Resolve a copy/cut synchronously inside the native clipboard event
     /// (`trame-clipboard`). An open in-cell text selection wins and returns its
-    /// text directly ([`CopyOutcome::Text`]); otherwise the grid copy is
-    /// authoritative: the whole selection is built Logic-side (no viewport limit),
-    /// so we only emit [`TrameCommand::CopyRange`], arm the marching-ants anchor
-    /// and the cut-pending flag synchronously, and return [`CopyOutcome::Deferred`]
-    /// -- the payload arrives one frame later via `TrameEvent::Clipboard` and is
-    /// mirrored to the OS clipboard by [`poll_clipboard`](Self::poll_clipboard).
-    /// [`CopyOutcome::Nothing`] means "let the browser default proceed".
+    /// text directly ([`CopyOutcome::Text`]). Otherwise the grid copy is
+    /// authoritative: the whole selection is built Logic-side, with no viewport
+    /// limit. So we only emit [`TrameCommand::CopyRange`], arm the marching-ants
+    /// anchor and the cut-pending flag synchronously, and return
+    /// [`CopyOutcome::Deferred`]. The payload arrives one frame later via
+    /// `TrameEvent::Clipboard` and is mirrored to the OS clipboard by
+    /// [`poll_clipboard`](Self::poll_clipboard). [`CopyOutcome::Nothing`] means
+    /// "let the browser default proceed".
     pub fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
         use ambre_bus::CopyOutcome;
         // In-cell text selection takes precedence over the grid range.
@@ -444,8 +445,8 @@ impl TrameView {
         }
         // Copy is authoritative (Logic reads the full doc), so we cannot decide
         // emptiness from the viewport cache without reintroducing the limit. Only
-        // the trivial case -- a single active cell that is empty in cache -- lets
-        // the browser default proceed; any multi-cell selection defers to Logic.
+        // the trivial case, a single active cell that is empty in cache, lets the
+        // browser default proceed. Any multi-cell selection defers to Logic.
         let (r1, c1, r2, c2) = self.state.selection.bounds();
         if (r1, c1) == (r2, c2)
             && self
@@ -468,8 +469,8 @@ impl TrameView {
         CopyOutcome::Deferred
     }
 
-    /// Drain the clipboard blob built from the last `TrameEvent::Clipboard` reply,
-    /// so the host can mirror it to the OS clipboard within the transient user
+    /// Drain the clipboard blob built from the last `TrameEvent::Clipboard` reply.
+    /// The host can then mirror it to the OS clipboard within the transient user
     /// activation window (`trame-clipboard`). Yields the blob at most once per copy.
     pub fn poll_clipboard(&mut self) -> Option<ambre_bus::ClipboardBlob> {
         self.pending_clipboard.take()
@@ -477,11 +478,11 @@ impl TrameView {
 
     /// Service a paste from the shared [`ClipboardBlob`](ambre_bus::ClipboardBlob)
     /// transport (`trame-clipboard`). Fidelity order: an open in-cell edit takes
-    /// the plain text to the caret; else, when `own_copy` (the synchronous
-    /// ownership token was still on the clipboard), the in-memory `last_clip` at
-    /// full fidelity -- immune to the async OS write having failed; else the blob's
-    /// decoded Ambre payload (cross-tab/app internal round-trip); else the
-    /// `text/plain` mirror as literal cells.
+    /// the plain text to the caret. Else, when `own_copy` says the synchronous
+    /// ownership token was still on the clipboard, the in-memory `last_clip` at
+    /// full fidelity. That one is immune to the async OS write having failed. Else
+    /// the blob's decoded Ambre payload (cross-tab/app internal round-trip), else
+    /// the `text/plain` mirror as literal cells.
     pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
         if self.is_editing() {
             // In-cell edit: a typed payload is meaningless inside a text field;
@@ -490,7 +491,7 @@ impl TrameView {
             return;
         }
         // `own_copy` means the clipboard still carries THIS tab's ownership token,
-        // so it holds our own last copy: paste it from memory at full fidelity,
+        // so it holds our own last copy. Paste it from memory at full fidelity,
         // immune to the (Firefox-fragile) async OS payload write. Otherwise a
         // foreign copy replaced it -- honor the OS blob.
         let source = match &self.last_clip {

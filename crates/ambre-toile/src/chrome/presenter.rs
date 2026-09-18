@@ -1,15 +1,15 @@
 // ambre-toile/src/chrome/presenter.rs
-// ============================================================================
-// The presenter overlay panel (toile-presentation): a floating Leptos chrome
-// panel shown while presentation mode is active. It surfaces the active slide's
-// speaker notes (editable, char-CRDT via `EditNotes`) plus a `k / n` counter and
-// Prev / Next / Exit navigation. It is chrome, not a WebGPU overlay
-// (`toile-presentation`) -- the same split as the Find panel:
-// a pure model in `ui::presenter` (host-tested) and this wasm-only `#[component]`.
+// ============================================================================ The
+// presenter overlay panel (toile-presentation): a floating Leptos chrome panel
+// shown while presentation mode is active. It surfaces the active slide's speaker
+// notes (editable, char-CRDT via `EditNotes`) plus a `k / n` counter and Prev /
+// Next / Exit navigation. It is chrome, not a WebGPU overlay
+// (`toile-presentation`). The same split as the Find panel: a pure model in
+// `ui::presenter` (host-tested), and this wasm-only `#[component]`.
 //
-// The launcher feeds it four signals (open / index / count / notes) mirrored
-// from the enriched `SlideChanged` + `PresentModeChanged` events, and one
-// `on_intent` callback the launcher maps to the matching `ToileCommand`.
+// The launcher feeds it four signals (open / index / count / notes), mirrored from
+// the enriched `SlideChanged` + `PresentModeChanged` events. Plus one `on_intent`
+// callback the launcher maps to the matching `ToileCommand`.
 // ============================================================================
 
 use ambre_bus::UserId;
@@ -20,10 +20,10 @@ use crate::logic::command::TextDelta;
 use crate::ui::presenter::{notes_delta, slide_counter_label};
 
 /// An intent emitted by the presenter panel. The launcher maps each variant to a
-/// `ToileCommand` sent to Logic: `Prev`/`Next` -> `PrevSlide`/`NextSlide`,
-/// `Exit` -> `ExitPresent`, `EditNotes` -> `EditNotes { frame, delta }` (the
-/// launcher supplies the active `frame` from the last slide change),
-/// `ToggleBroadcast` -> `SetPresentBroadcast`, `Follow` -> `FollowPresenter`
+/// `ToileCommand` sent to Logic. `Prev`/`Next` -> `PrevSlide`/`NextSlide`,
+/// `Exit` -> `ExitPresent`, and `EditNotes` -> `EditNotes { frame, delta }`, the
+/// launcher supplying the active `frame` from the last slide change. Then
+/// `ToggleBroadcast` -> `SetPresentBroadcast`, and `Follow` -> `FollowPresenter`
 /// ("Follow presenter").
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PresenterIntent {
@@ -57,10 +57,11 @@ pub fn PresenterPanel(
     let notes_ref = NodeRef::<html::Textarea>::new();
 
     // The last value we pushed into the textarea. A slide change updates `notes`
-    // and this effect writes it into the DOM node; local keystrokes update the
+    // and this effect writes it into the DOM node. Local keystrokes update the
     // same signal, so without a guard the effect would fight the caret. We only
     // rewrite the node when the incoming value actually differs from what the
-    // element currently holds (a fresh slide), never on the user's own edit.
+    // element currently holds, that is on a fresh slide. Never on the user's own
+    // edit.
     Effect::new(move |_| {
         let next = notes.get();
         if let Some(area) = notes_ref.get()
@@ -145,8 +146,8 @@ pub fn PresenterPanel(
                         node_ref=notes_ref
                         on:input=move |ev| {
                             let new = event_target_value(&ev);
-                            // Diff against the last known value (untracked so the
-                            // read does not re-run this handler), then commit the
+                            // Diff against the last known value, untracked so the
+                            // read does not re-run this handler. Then commit the
                             // splice and adopt the new text as the baseline.
                             let old = notes.get_untracked();
                             if let Some(delta) = notes_delta(&old, &new) {

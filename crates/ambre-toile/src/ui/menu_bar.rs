@@ -2,19 +2,21 @@
 // ============================================================================
 // Command surface for the Toile top menu bar and zoom control
 // (`toile-menus`). The host-visible half: the `CommandId`s that only the menu
-// bar contributes (Undo / Redo / Present and the five zoom actions), the
-// `MenuId` grouping, and the pure per-menu layout the DOM builder renders.
+// bar contributes, that is Undo / Redo / Present and the five zoom actions.
+// Also the `MenuId` grouping and the pure per-menu layout the DOM builder
+// renders.
 //
 // Kept in the always-compiled `ui` module (not the wasm-only `chrome`) so it is
 // host-unit-tested, exactly like `ui::menu`, `ui::palette` and `ui::find`.
 // The wasm-only Leptos component that renders these (`chrome::TopMenuBar`)
-// consumes them and routes every selection through the same `on_command` path as
-// the context menu (the shared command channel of the chrome surfaces).
+// consumes them. It routes every selection through the same `on_command` path
+// as the context menu, the shared command channel of the chrome surfaces.
 //
 // The Edit / Object rows REUSE the ids already declared for the context menu
-// (`ui::menu`): a menu id is minted once and shared by every trigger, so a menu-
-// bar "Group" and a right-click "Group" are the very same command. Only the
-// entries with no other home (Undo/Redo, the zoom actions, Present) are new here.
+// (`ui::menu`). A menu id is minted once and shared by every trigger, so a
+// menu-bar "Group" and a right-click "Group" are the very same command. Only
+// the entries with no other home (Undo/Redo, the zoom actions, Present) are new
+// here.
 // ============================================================================
 
 use ambre_bus::app::toile::ToileCommand;
@@ -70,8 +72,8 @@ pub const EMBED_WEB: CommandId = CommandId("toile.file.embed_web");
 pub const EMBED_DOC: CommandId = CommandId("toile.file.embed_doc");
 /// Put a link on the selected element (`TOILE-066`). A UI-only intent: the
 /// shell owns the chooser, because two of the three targets are things only it
-/// can offer -- an address it validates like an embed's, and the documents this
-/// user may open.
+/// can offer. Those are an address it validates like an embed's, and the
+/// documents this user may open.
 pub const LINK_SET: CommandId = CommandId("toile.object.link_set");
 /// Take the link off the selected element (`TOILE-066`). Resolves through the
 /// same intent as the chooser, carrying no target.
@@ -81,15 +83,15 @@ pub const LINK_CLEAR: CommandId = CommandId("toile.object.link_clear");
 pub const EXPORT_SVG: CommandId = CommandId("toile.file.export_svg");
 /// Take the deck out as a PDF, one page per slide (`TOILE-IO-029`). Resolves to
 /// a board command, like [`EXPORT_SVG`], but the render walk runs on the Logic
-/// thread rather than in the board's own state: the pages are drawn, not
+/// thread rather than in the board's own state. The pages are drawn, not
 /// serialized, and the base font faces live there.
 pub const EXPORT_PDF: CommandId = CommandId("toile.file.export_pdf");
 /// Write the whole board to a native `.ambre` file (`ambre-spec-docfile.md`).
-/// Unlike the two exports above it drops nothing -- the payload **is** the
-/// document (`DOCFILE-001`) -- and unlike them it is plaintext, which is why its
+/// Unlike the two exports above it drops nothing: the payload **is** the
+/// document (`DOCFILE-001`). Unlike them it is also plaintext, which is why its
 /// own label says so (`DOCFILE-009`). Resolves to a board command the Logic
-/// thread serves, because the container's header carries the document's
-/// identity and the board does not know it.
+/// thread serves, because the container's header carries the document's identity
+/// and the board does not know it.
 pub const SAVE_FILE: CommandId = CommandId("toile.file.save_file");
 /// Write the whole board to a native `.ambre` file **sealed under a
 /// passphrase** (`ambre-spec-docfile.md section 5`). The same file as
@@ -147,7 +149,7 @@ pub const TOP_MENUS: &[(MenuId, &str)] = &[
 
 /// One row of a dropdown: a selectable command, or a group separator. Pure
 /// data; the wasm builder turns it into an `ambre_chrome::MenuEntry`, reading
-/// the label and the accelerator from `ui::commands` (`UI-THREAD-019`), so a
+/// the label and the accelerator from `ui::commands` (`UI-THREAD-019`). A
 /// layout declares an order and a grouping and never a word the user reads.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MenuRow {
@@ -157,16 +159,17 @@ pub enum MenuRow {
     Separator,
 }
 
-/// The rows of one menu (`toile-menus`), grouped with separators. Inapplicable-
-/// row hiding by selection state is NOT done here (unlike the context menu): a
-/// menu bar shows a stable layout and relies on the command's registry state to
-/// disable an entry, so the layout is a pure function of the `MenuId`.
+/// The rows of one menu (`toile-menus`), grouped with separators.
+/// Inapplicable-row hiding by selection state is NOT done here, unlike the
+/// context menu. A menu bar shows a stable layout and relies on the command's
+/// registry state to disable an entry. The layout is a pure function of the
+/// `MenuId`.
 pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
     let row = MenuRow::Command;
     match id {
         // The share dialog is app-agnostic chrome (E2), so File carries the
         // local file, the two lossy exports and the presentation entry point.
-        // The save sits above the separator with the exports below it: one of
+        // The save sits above the separator with the exports below it. One of
         // the three keeps everything, and the grouping is the only place that
         // difference shows before the user clicks.
         MenuId::File => vec![
@@ -239,7 +242,7 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
 
 /// The direct board command a menu-bar id emits, if any. Undo / Redo and the
 /// presentation entry point resolve to a `ToileCommand` independent of the
-/// selection or local transform; the zoom ids are local-transform intents and
+/// selection or local transform. The zoom ids are local-transform intents and
 /// return `None` (serviced by the view). Pure, so the wiring is host-tested.
 pub fn menu_bar_edit(id: CommandId) -> Option<ToileCommand> {
     match id {
@@ -249,7 +252,7 @@ pub fn menu_bar_edit(id: CommandId) -> Option<ToileCommand> {
         // controls of toile-presentation will layer on the resulting
         // PresentModeChanged signal later.
         PRESENT => Some(ToileCommand::EnterPresent { focus: true }),
-        // The board is on the Logic thread, so the serialization is too; the
+        // The board is on the Logic thread, so the serialization is too. The
         // bytes come back as an event the view hands to the browser
         // (`TOILE-IO-085`).
         EXPORT_SVG => Some(ToileCommand::ExportSvg),
@@ -395,8 +398,8 @@ mod tests {
     }
 
     /// The two placement entries are UI-only intents (`TOILE-086`,
-    /// `TOILE-087`): the shell owns the dialog, and the board is handed the
-    /// answer -- an address or a document -- never the gesture.
+    /// `TOILE-087`). The shell owns the dialog, and the board is handed the
+    /// answer, an address or a document, never the gesture.
     #[test]
     fn the_placement_entries_are_shell_intents() {
         let cmds = item_commands(&menu_layout(MenuId::File));

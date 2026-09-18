@@ -175,7 +175,7 @@ fn countif_and_sumif() {
 #[test]
 fn countif_numeric_criterion_over_non_numeric_cells() {
     // A cell that does not coerce to a number can never satisfy an ordering
-    // criterion, but `<>5` must count it: "not equal to 5" is true of any text.
+    // criterion. But `<>5` must count it: "not equal to 5" is true of any text.
     let r = range(3, 1, vec![num(5.0), txt("apple"), num(7.0)]);
     assert_eq!(countif(&[r.clone(), txt("<>5")]).to_display(), "2");
     assert_eq!(countif(&[r.clone(), txt(">5")]).to_display(), "1");

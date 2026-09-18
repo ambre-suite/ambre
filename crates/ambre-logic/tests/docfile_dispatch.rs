@@ -1,16 +1,16 @@
-// ambre-logic/tests/docfile_dispatch.rs
-// The cross-app half of the `.ambre` belt (`ambre-spec-docfile.md`,
-// `DOCFILE-002`).
+// ambre-logic/tests/docfile_dispatch.rs The cross-app half of the `.ambre`
+// belt (`ambre-spec-docfile.md`, `DOCFILE-002`).
 //
-// The dispatch rule is a statement about two apps at once -- "a Toile file
-// handed to the Trame importer yields `WrongDocType { found: Toile }` and is
-// accepted by the Toile importer unchanged" -- so it cannot be asserted from
-// inside either app crate. `ambre-logic` is the first crate that links both,
-// and it is where the file-open router will live when `DOCFILE P1` wires the
-// chrome, so the belt sits here rather than in a test-only crate.
+// The dispatch rule is a statement about two apps at once, so it cannot be
+// asserted from inside either app crate. It reads: a Toile file handed to the
+// Trame importer yields `WrongDocType { found: Toile }` and is accepted by
+// the Toile importer unchanged. `ambre-logic` is the first crate that links
+// both. It is also where the file-open router will live when `DOCFILE P1`
+// wires the chrome. The belt therefore sits here rather than in a test-only
+// crate.
 //
-// Real files on both sides: each is produced by its own app's exporter, never
-// hand-assembled, so the test would catch a header written by one app and
+// Real files on both sides. Each is produced by its own app's exporter, never
+// hand-assembled. The test would catch a header written by one app and
 // unreadable by the other.
 
 use ambre_core::{
@@ -93,7 +93,7 @@ fn a_trame_file_offered_to_toile_names_the_app_that_should_have_it() {
 #[test]
 fn routing_reads_the_type_off_the_header_without_asking_an_app_first() {
     // What "open a `.ambre`" is: one user action, one header read, then the app
-    // is chosen -- not four importers tried in turn (I2 / I5).
+    // is chosen. Not four importers tried in turn (I2 / I5).
     for (bytes, expected) in [
         (trame_file(), DocType::Trame),
         (toile_file(), DocType::Toile),

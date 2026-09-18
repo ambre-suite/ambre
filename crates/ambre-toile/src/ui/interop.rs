@@ -1,9 +1,9 @@
 // ambre-toile/src/ui/interop.rs
 // ============================================================================
-// What the board accepts from the file system (toile-import-export). Pure, so
-// the shell -- which owns the file dialog and the drop listener -- asks the
-// board what it reads instead of holding a list of its own, and the answer is
-// host-tested rather than discovered at a drop.
+// What the board accepts from the file system (toile-import-export), pure. The
+// shell owns the file dialog and the drop listener, and asks the board what it
+// reads instead of holding a list of its own. The answer is host-tested rather
+// than discovered at a drop.
 // ============================================================================
 
 use ambre_draw::Point;
@@ -29,10 +29,10 @@ pub struct DroppedFile {
     pub at: Option<Point>,
 }
 
-/// What an import tells the user (`TOILE-IO-022`). The count is the point --
-/// a user who dropped a drawing wants to know it arrived -- and a lossy import
-/// says so in the same breath, naming the first few constructs it dropped rather
-/// than a list nobody reads at the corner of a screen.
+/// What an import tells the user (`TOILE-IO-022`). The count is the point: a
+/// user who dropped a drawing wants to know it arrived. A lossy import says so
+/// in the same breath, naming the first few constructs it dropped. A list nobody
+/// reads at the corner of a screen is the rejected alternative.
 pub fn import_message(imported: usize, skipped: &[String]) -> String {
     let head = match imported {
         1 => "Imported 1 element".to_owned(),
@@ -82,7 +82,7 @@ mod tests {
         }
     }
 
-    /// The picker's filter and the drop gate must agree: a type the picker offers
+    /// The picker's filter and the drop gate must agree. A type the picker offers
     /// and the gate then refuses is a file the user chose and the board dropped.
     #[test]
     fn the_picker_offers_only_what_the_gate_accepts() {

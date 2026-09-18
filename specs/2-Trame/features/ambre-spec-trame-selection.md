@@ -5,7 +5,7 @@ clamped to the visible rows (section 6).
 
 > A user points at a cell, sweeps a rectangle, adds a second one with a modifier, or takes a whole
 > column from its header. Every command that acts on a range -- merge, sort, fill, style, delete --
-> acts on what that selection covers, and the keyboard reaches all of it without the mouse.
+> acts on what that selection covers. The keyboard reaches all of it without the mouse.
 
 Selection is local view state: it writes nothing to the document and reaches no collaborator. What
 a collaborator changes is the data underneath it, which is what section 2 is about.
@@ -23,11 +23,11 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-UI-031` | `INV` | A cell covered by two selected rectangles MUST be acted on once. | this spec section 3 | `ambre_trame::ui::grid::tests::group1::selected_cells_enumerates_and_dedups` -- it covers the enumeration two paths read, the clear and the `Ctrl`+`Enter` fill, which carry their cells | none | verified |
 | `TRAME-UI-032` | `INV` | A range operation MUST act on the rectangle the user selected, never on the active cell alone. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_selection_resolves_against_tracked_selection` -- a `SetActiveCell` reporting A1:B3, then a parameterless `SortSelectionAsc`, sorts the three rows | none | verified |
-| `TRAME-UI-129` | `INV` | A range operation MUST act on every rectangle the user selected, not on the live one alone. | this spec section 4 | none | fails -- `SetActiveCell` carries one pair, so the rectangles the modifier committed never reach the Logic thread (section 6). Answered by the `The selection reaches the Logic thread whole` Story (`ambre-roadmap.md` E7) | unverified |
+| `TRAME-UI-129` | `INV` | A range operation MUST act on every rectangle the user selected, not on the live one alone. | this spec section 4 | none | fails -- `SetActiveCell` carries one pair, so the rectangles the modifier committed never reach the Logic thread (section 6); lands with the `The selection reaches the Logic thread whole` Story (`ambre-roadmap.md` E7) | failing |
 | `TRAME-UI-035` | `INV` | A selection MUST NOT be written to the document. | `ambre-spec-ui.md section 2` | structural -- `Selection` lives in `ui/grid/`, which `TRAME-UI-001` forbids any document access. The Logic thread keeps its own copy, and there the argument is an enumeration: the field is private and its ten readers each resolve a geometry | none | verified |
-| `TRAME-UI-130` | `INV` | A selection MUST NOT reach a peer. | `ambre-spec-ui.md section 2` | none | claim -- the rule holds by absence today, Trame sending no ephemeral frame at all, and becomes a claim to prove when `TRAME-UI-019` lands | unverified |
+| `TRAME-UI-130` | `INV` | A selection MUST NOT reach a peer. | `ambre-spec-ui.md section 2` | none | claim -- the rule holds by absence today, Trame sending no ephemeral frame at all, and becomes a claim to prove when `TRAME-UI-019` lands; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-034` | `OBS` | A lone selected cell MUST show the active border. | this spec section 4 | `ambre_trame::ui::renderer::tests::draw_overlay_draws_headers_and_active_border` -- one 2px stroke in the selection colour; `::multi_cell_selection_fills_and_outlines_each_range` -- the other side, that a multi-cell selection draws none | none | verified |
-| `TRAME-UI-131` | `OBS` | A lone selected cell MUST show no range fill behind it. | this spec section 4 | none | unheld -- the single-cell test counts the border and never counts the tint, so nothing fails if the fill returns | unverified |
+| `TRAME-UI-131` | `OBS` | A lone selected cell MUST show no range fill behind it. | this spec section 4 | none | unheld -- the single-cell test counts the border and never counts the tint, so nothing fails if the fill returns; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-019` | `INV` | A remote cursor MUST NOT force a viewport re-derive. | this spec section 3 | not built | unbuilt -- lands with the `Grid surface` Story (`ambre-roadmap.md` E6). The half about leaving no trace in the document is `PRESENCE-001` | unimplemented |
 
 ### 1.2 Move or extend the selection
@@ -41,29 +41,20 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-033` | `FRAME` | A whole-column or whole-row selection MUST NOT require the document height from the UI thread. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::axis_selection_spans_the_band` -- the band shape, which carries no extent across its axis | fails -- the band test does not cover the command built from it, and that command reads the extent out of the UI cache (section 6). Answered by the `The selection reaches the Logic thread whole` Story (`ambre-roadmap.md` E7) | unverified |
+| `TRAME-UI-033` | `FRAME` | A whole-column or whole-row selection MUST NOT require the document height from the UI thread. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::axis_selection_spans_the_band` -- the band shape, which carries no extent across its axis | fails -- the band test does not cover the command built from it, and that command reads the extent out of the UI cache (section 6); lands with the `The selection reaches the Logic thread whole` Story (`ambre-roadmap.md` E7) | failing |
 
 * **Budget.** none: the selection is view state, and `ambre-spec-budgets.md` budgets
   no selection operation. Painting it sits in the frame phases of
   `ambre-spec-budgets.md section 2`.
-* **Boundary.** `TRAME-UI-019` is the one exception: another user's selection travels as an
-  ephemeral frame, which `ZK-005` seals with the `DocumentKey` and leaves the relay `document_id`,
+* **Boundary.** `TRAME-UI-019` is the one exception. Another user's selection travels as an
+  ephemeral frame, which `ZK-005` seals with the `DocumentKey`. The relay is left `document_id`,
   `pub_key` and `counter` alone. The local selection stops at the Logic thread, which holds it in
-  memory to resolve the parameterless intents (`TRAME-UI-032`); nothing carries it further.
-* **Verification.** 6 `verified`, 4 `unverified`, 1 `unimplemented`. Three rules the selection
-  depends on are declared elsewhere and cited, not restated: a merged block selects whole
-  (`TRAME-UI-009`), a hidden row is stepped over (`TRAME-UI-008`), and hit-testing inverts the
-  drawn geometry (`TRAME-UI-007`). Two claims are withdrawn here. `TRAME-UI-032` rested on the
-  shape of the bus -- that a range intent carries no geometry, so the Logic thread can only read
-  the tracked pair -- and the bus carries both forms, `MergeCells` beside `MergeSelection`, with
-  the UI itself sending `FillRange` and `PasteRange` with their corners; what holds the rule is a
-  test of the intent path, and what the old argument hid is `TRAME-UI-129`. `TRAME-UI-035` claimed
-  the selection never leaves the UI thread, and it does. Three of
-  the four unbuilt presence rows are **retired, not moved** (the register is `contracts.py`):
-  `TRAME-UI-016`, `-017` and `-018` each restated a rule three applications share and carried no
-  Trame mechanism, and the rule is
-  `PRESENCE-003` to `PRESENCE-006` of `1-Foundations/ambre-spec-presence.md`. What stays Trame's
-  own is the `CellAnchor` of section 3, and the re-derive half of `TRAME-UI-019`.
+  memory to resolve the parameterless intents (`TRAME-UI-032`).
+* **Verification.** 6 `verified`, 2 `failing`, 2 `untested`, 1 `unimplemented`. What holds is the
+  intent path, plus three rules declared elsewhere and cited here. A merged block selects whole, a
+  hidden row is stepped over, and hit-testing inverts the drawn geometry. What is loose is the
+  `CellAnchor` of section 3 and the re-derive half of `TRAME-UI-019`. The failures are the bus
+  carrying both intent forms (`TRAME-UI-129`) and a selection that does leave the UI thread.
 
 ---
 
@@ -110,14 +101,14 @@ that rectangle, and a cell in two of them is enumerated once (`TRAME-UI-031`).
 
 **Steps, on every move of the active cell:**
 
-1. step from the active cell; on a merge master, step by the whole span, so the move cannot land on
+1. step from the active cell. On a merge master, step by the whole span, so the move cannot land on
    a covered cell and snap straight back (`TRAME-UI-009`);
 2. clamp to the grid, then skip the run of rows the filter hides in the travel direction;
 3. collapse to a single cell, dropping the rectangles the modifier committed
    (`TRAME-UI-132`), or move the active corner alone when the user is extending
    (`TRAME-UI-030`);
-4. snap a collapsing move onto the block master, and leave an extending one on its raw corner, so
-   the rectangle can still grow cell by cell;
+4. snap a collapsing move onto the block master. Leave an extending one on its raw corner, so the
+   rectangle can still grow cell by cell;
 5. report the new pair to the Logic thread, and scroll the target into view if it left the screen
    (`features/ambre-spec-trame-grid-viewport.md section 2`).
 
@@ -131,10 +122,10 @@ that rectangle, and a cell in two of them is enumerated once (`TRAME-UI-031`).
 * `ui/renderer/overlay.rs` -- the range fill, the active border, the band tint.
 
 **The other users' selections**, not built. The behaviour is one the three applications share and
-is `1-Foundations/ambre-spec-presence.md`, `PRESENCE-001` to `PRESENCE-010`: the ephemeral
-transport, the identity resolution, the keying by `UserId`, the shared colour, the whole-set event
-and the drop of an anchor that resolves to nothing. What is Trame's own is the anchor, and the two
-shapes it sits in.
+is `1-Foundations/ambre-spec-presence.md`, `PRESENCE-001` to `PRESENCE-010`. That covers the
+ephemeral transport, the identity resolution, the keying by `UserId` and the shared colour. It
+covers the whole-set event and the drop of an anchor that resolves to nothing. What is Trame's own
+is the anchor, and the two shapes it sits in.
 
 ```rust
 /// The wire payload, postcard-encoded into the `Ephemeral` bytes. It carries no
@@ -169,11 +160,12 @@ pub struct RemoteCursorPayload {
 ```
 
 An anchor holds uids because a remote cursor must follow its cell through the inserts, deletes and
-sorts a collaborator makes while the frame is in flight; a position would make it jump
+sorts a collaborator makes. A position would make it jump while the frame is in flight
 (`PRESENCE-007`). An anchor that resolves to no live sheet, row or column is dropped in silence
-(`PRESENCE-008`), and the cursor reappears on its own once the delta arrives. The four steps an
-inbound frame takes are `1-Foundations/ambre-spec-presence.md section 3` and are not restated; the
-fourth is this application's, and paints each peer's cell border and name badge in the peer colour.
+(`PRESENCE-008`). The cursor reappears on its own once the delta arrives. The four steps an
+inbound frame takes are `1-Foundations/ambre-spec-presence.md section 3` and are not restated. The
+fourth is this application's, and paints each peer's cell border and name badge in the peer
+colour.
 
 Nothing of this exists in Trame today: `TrameState::apply_ephemeral` takes the payload and returns
 an empty list, and it does not even receive the resolved author. Toile ships the receiving half
@@ -218,9 +210,9 @@ modifier.
 | the active cell | announced to the accessibility tree on every move |
 
 **What reads the selection.** Merge, unmerge, sort, filter, structural insert and delete, cell
-style, and the status bar aggregates send an intent with no geometry and let the Logic thread read
-the tracked pair (`TRAME-UI-032`). The fill handle and the paste are the exception: they carry the
-two rectangles they resolved, because the source and the destination are not the selection. The
+style, and the status bar aggregates send an intent with no geometry. The Logic thread reads the
+tracked pair for them (`TRAME-UI-032`). The fill handle and the paste are the exception. They carry
+the two rectangles they resolved, because the source and the destination are not the selection. The
 clear and the `Ctrl`+`Enter` fill carry their cell list, which is the one place the deduplicated
 enumeration is read (`TRAME-UI-031`).
 
@@ -242,40 +234,39 @@ enumeration is read (`TRAME-UI-031`).
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **A remote structural change moves the data, not the selection.** The selection is a pair of
-  absolute indices, so an insert above it, a delete, a reorder or a sort leaves it where it was,
-  now covering different cells. No rule says whether it should follow the data, and section 2 row 5
-  carries no verification.
+  absolute indices. An insert above it, a delete, a reorder or a sort therefore leaves it where it
+  was, now covering different cells. No rule says whether it should follow the data, and section 2
+  row 5 carries no verification.
 * **`End` stops at the edge of what has been fetched.** The scan reads the local cell cache, which
-  holds the requested window alone, so on a large sheet the key lands short of the real last cell.
-  The Logic thread knows the used range and is not asked.
+  holds the requested window alone. On a large sheet the key therefore lands short of the real last
+  cell. The Logic thread knows the used range and is not asked.
 * **A modifier drag adds nothing.** Only a modifier click commits a rectangle, so a user cannot
   sweep a second range.
 * **A disjoint selection is one rectangle to every menu** (`TRAME-UI-129`). `SetActiveCell` carries
-  one pair of corners, so the rectangles a modifier click committed stay in the UI thread and the
+  one pair of corners. The rectangles a modifier click committed stay in the UI thread, and the
   Logic thread resolves its intents against the live one alone. A user who takes two blocks and
-  presses bold styles the second; the first keeps its old weight and nothing says so. Only the two
+  presses bold styles the second. The first keeps its old weight and nothing says so. Only the two
   paths that carry their own cell list -- the clear and the `Ctrl`+`Enter` fill -- reach the whole
   selection.
 * **The sort dialog reads one rectangle and the sort another.** The dialog opens over a snapshot of
-  the selection and offers that snapshot's columns, each sort key range-relative to it; applying
+  the selection and offers that snapshot's columns, each sort key range-relative to it. Applying
   sends the parameterless `SortSelectionMulti`, which the Logic thread resolves against the pair it
   tracks. Nothing pins the two together, and no rule says what a selection change between the two
-  means: the keys land on whichever columns the current rectangle happens to start at.
+  means. The keys land on whichever columns the current rectangle happens to start at.
 * **The band is resolved by the wrong thread, against the wrong data** (`TRAME-UI-033`). The
-  decision below section 5 says the UI cannot know where the data ends, and the code has it guess:
-  a header click builds a rectangle whose far corner is the last non-empty cell **in the local cell
-  cache**, which holds the requested window and its margin. So selecting a column longer than the
-  screen selects its first screen, and every command resolving against that rectangle -- the sort,
-  the style, the delete, the copy and the status-bar aggregates -- acts on part of the column.
+  decision below section 5 says the UI cannot know where the data ends, and the code has it guess.
+  A header click builds a rectangle whose far corner is the last non-empty cell **in the local cell
+  cache**: the requested window and its margin. Selecting a column longer than the screen therefore
+  selects its first screen. Every command resolving against that rectangle acts on part of the
+  column: the sort, the style, the delete, the copy and the status-bar aggregates.
   `features/ambre-spec-trame-status-bar.md section 5` states what a user sees.
 * **An empty band has no rule.** Nothing states what an operation does with a whole-axis selection
   on a sheet with no content.
 * **A collaborator's cursor is invisible** (`TRAME-UI-019`, `PRESENCE-001`). Everything under the
-  feature ships and nothing above it does: the ephemeral transport, the author resolution and the
-  shared colour function are built and tested, and Trame's own slice is a stub that drops the
-  payload. It is not
-  even shaped to receive one -- `apply_ephemeral` takes the bytes without the resolved author, so
-  the identity rule the design rests on cannot be applied at that signature.
+  feature ships and nothing above it does. The ephemeral transport, the author resolution and the
+  shared colour function are built and tested. Trame's own slice is a stub that drops the payload.
+  It is not even shaped to receive one: `apply_ephemeral` takes the bytes without the resolved
+  author. The identity rule the design rests on cannot be applied at that signature.
 * **A peer's selection rectangle is carried and never drawn.** `PresencePayload` holds the two
-  corners and `RemoteCursorPayload` resolves them, and no rule says what the renderer does with
-  them: whether a collaborator's range is tinted like the local one, outlined, or left invisible.
+  corners and `RemoteCursorPayload` resolves them. No rule says what the renderer does with them,
+  whether a collaborator's range is tinted like the local one, outlined, or left invisible.

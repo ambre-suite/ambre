@@ -1,12 +1,12 @@
 //! Media placeholder state machine + bounded local cache (`toile-media`).
 //!
-//! This is the **pure, host-testable** core of the media pipeline: it models the
-//! `Loading -> Ready | Failed` lifecycle of a content-addressed blob and the
+//! This is the **pure, host-testable** core of the media pipeline. It models the
+//! `Loading -> Ready | Failed` lifecycle of a content-addressed blob, and the
 //! local LRU cache that makes zoom/pan revisits refetch-free. It deliberately
-//! does **not** hash, encrypt, compress, or touch the network: per the real
-//! blake2b hashing (and all crypto) runs in the Sync thread, which owns the
-//! plaintext. The cache is keyed by a [`ContentHash`] the caller supplies, so
-//! nothing here ever inspects plaintext bytes.
+//! does **not** hash, encrypt, compress, or touch the network. The real blake2b
+//! hashing, and all crypto, runs in the Sync thread, which owns the plaintext.
+//! The cache is keyed by a [`ContentHash`] the caller supplies, so nothing here
+//! ever inspects plaintext bytes.
 //!
 //! The state machine is what Phase 0 needs standalone; Phase 1 wires it to the
 //! `RestCommand::UploadMedia` / `DownloadMedia` service plane.
@@ -25,9 +25,9 @@ impl ContentHash {
     }
 }
 
-/// Lifecycle of one cached blob. `Loading` is in-flight (a download was
-/// issued, pixels not yet back), `Ready` holds decoded pixels, `Failed` recorded
-/// a fetch/decode error so the UI can paint a broken-image affordance without
+/// Lifecycle of one cached blob. `Loading` is in-flight (a download was issued,
+/// pixels not yet back) and `Ready` holds decoded pixels. `Failed` recorded a
+/// fetch/decode error, so the UI can paint a broken-image affordance without
 /// re-issuing the request in a tight loop.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MediaState {
@@ -37,9 +37,9 @@ pub enum MediaState {
 }
 
 /// What a [`MediaCache::request`] resolved to. `Fetch` means this hash was not
-/// known and the caller must issue a `DownloadMedia`; `CacheHit` means an
-/// entry already exists (in-flight, ready, or failed) and **no** new fetch is due
-/// -- the content-addressing dedup that keeps identical images to a single blob.
+/// known and the caller must issue a `DownloadMedia`. `CacheHit` means an entry
+/// already exists (in-flight, ready, or failed) and **no** new fetch is due. That
+/// is the content-addressing dedup that keeps identical images to a single blob.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RequestOutcome {
     Fetch,
@@ -53,11 +53,11 @@ struct Entry {
     pixels: Option<Vec<u8>>,
 }
 
-/// Bounded, content-addressed LRU cache with placeholder-then-load semantics
-/// Eviction is least-recently-used, but an in-flight `Loading` entry is
-/// never evicted (its pending download would resolve into a dropped slot). The
-/// cache never holds plaintext beyond the session -- it lives in Logic-thread
-/// memory only, consistent with the confidentiality posture.
+/// Bounded, content-addressed LRU cache with placeholder-then-load semantics.
+/// Eviction is least-recently-used, but an in-flight `Loading` entry is never
+/// evicted (its pending download would resolve into a dropped slot). The cache
+/// never holds plaintext beyond the session -- it lives in Logic-thread memory
+/// only, consistent with the confidentiality posture.
 pub struct MediaCache {
     capacity: usize,
     entries: HashMap<ContentHash, Entry>,
@@ -108,8 +108,8 @@ impl MediaCache {
 
     /// Resolve an in-flight (or unknown) blob to `Ready`, storing its decoded
     /// pixels. Returns `true` if a `Loading` slot was fulfilled, `false` if it
-    /// resolved an unknown or already-terminal slot (the transition is still
-    /// applied -- last write wins, matching a late-arriving download). Touches the
+    /// resolved an unknown or already-terminal slot. The transition is still
+    /// applied: last write wins, matching a late-arriving download. Touches the
     /// entry as most-recently-used.
     pub fn resolve(&mut self, hash: &ContentHash, pixels: Vec<u8>) -> bool {
         let was_loading = matches!(

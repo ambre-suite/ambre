@@ -1,8 +1,8 @@
 //! Wire protocol error types.
 //!
-//! This module defines `Error`, an enum that encompasses all errors that can
-//! originate from the `ambre‑protocol` crate (serialization, validation, version
-//! mismatches, etc.).
+//! This module defines `Error`, the enum for every error the `ambre-protocol`
+//! crate can originate: a version mismatch, a serialization failure and a
+//! validation failure.
 
 use thiserror::Error;
 
@@ -19,7 +19,7 @@ pub enum Error {
     #[error("serialization error: {0}")]
     Serialization(#[from] SerializationError),
 
-    /// A field validation failed (length, range, etc.).
+    /// A field validation failed, on a length or a range.
     #[error("validation error: {0}")]
     Validation(#[from] ValidationError),
 }
@@ -36,8 +36,8 @@ pub enum SerializationError {
 /// the wire messages (see [`crate::messages`]).
 ///
 /// Length invariants (nonce = 24, commitment tag = 32, signature = 64, public
-/// key = 32) are intentionally absent: those fields are fixed-size arrays, so
-/// postcard decoding already rejects any other length. Only invariants that a
+/// key = 32) are intentionally absent: those fields are fixed-size arrays.
+/// Postcard decoding already rejects any other length. Only invariants that a
 /// well-formed decode can still violate live here.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum ValidationError {

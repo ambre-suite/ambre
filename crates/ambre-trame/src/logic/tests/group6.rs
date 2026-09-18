@@ -6,9 +6,8 @@ use super::*;
 
 /// Autofill of a merged-cell source fills block by block and re-merges every
 /// tile (`trame-autofill`). A 2x1 merge at A1:A2 holding "x", dragged to A6,
-/// yields
-/// merged blocks A3:A4 and A5:A6 each carrying "x"; the in-between covered cells
-/// stay blank and unmerged.
+/// yields merged blocks A3:A4 and A5:A6 each carrying "x". The in-between
+/// covered cells stay blank and unmerged.
 #[test]
 fn fill_merged_source_tiles_and_remerges_blocks() {
     use crate::{FillMode, GridRange};
@@ -104,7 +103,7 @@ fn fill_merged_series_increments_per_block() {
     assert_eq!(a5.text, "3", "third block increments to 3");
 }
 
-/// Dragging a stack of two equal merged blocks tiles the whole pattern: the
+/// Dragging a stack of two equal merged blocks tiles the whole pattern. The
 /// fill re-merges every destination block and, under `Auto`, the two numeric
 /// masters form a series that keeps progressing across the new blocks.
 #[test]
@@ -490,22 +489,22 @@ fn csv_import_export_roundtrip() {
 }
 
 /// Malformed CSV input must never panic the Logic thread
-/// (`trame-import-export`, and the CSV fuzz belt of `ambre-spec-fixtures.md`):
-/// ragged rows, embedded quotes/newlines, mixed delimiters, lone quotes and
-/// random bytes all parse to *some* graceful result -- no `unwrap` blow-up.
+/// (`trame-import-export`, and the CSV fuzz belt of `ambre-spec-fixtures.md`).
+/// Ragged rows, embedded quotes/newlines, mixed delimiters, lone quotes and
+/// random bytes all parse to *some* graceful result, with no `unwrap` blow-up.
 #[test]
 fn csv_import_malformed_never_panics() {
     // Hand-picked adversarial inputs covering the documented failure shapes.
     let cases: &[&[u8]] = &[
         b"",                                                // empty file
-        b"\n\n\n",                                          // only blank lines
-        b"a,b,c\n1,2\n3\n4,5,6,7,8",                        // ragged rows (varying field counts)
-        b"\"unterminated,quote\nnext,row",                  // lone opening quote spanning lines
-        b"a,\"b\nc\",d\n",         // embedded newline inside a quoted field
-        b"a,\"b\"\"q\"\"\",c\n",   // embedded escaped quotes
-        b"x;y,z\tw|v\n1;2,3\t4|5", // mixed delimiters on one line
-        b",,,\n,,,\n",             // all-empty fields
-        &[0xff, 0xfe, 0x00, 0x01, b'\n', 0x80, b',', 0x7f], // invalid UTF-8 / control bytes
+        b"\n\n\n",                                          // blank lines
+        b"a,b,c\n1,2\n3\n4,5,6,7,8",                        // ragged rows
+        b"\"unterminated,quote\nnext,row",                  // lone opening quote
+        b"a,\"b\nc\",d\n",                                  // newline in a quoted field
+        b"a,\"b\"\"q\"\"\",c\n",                            // escaped quotes
+        b"x;y,z\tw|v\n1;2,3\t4|5",                          // mixed delimiters
+        b",,,\n,,,\n",                                      // empty fields
+        &[0xff, 0xfe, 0x00, 0x01, b'\n', 0x80, b',', 0x7f], // invalid UTF-8 bytes
     ];
     for (i, data) in cases.iter().enumerate() {
         let mut state = TrameState::new();
@@ -563,9 +562,9 @@ fn csv_import_random_bytes_never_panics() {
     }
 }
 
-/// Export is bounded to the actually-used range: columns materialized by a
-/// scroll or a since-cleared edit (here a far cell written then deleted) must
-/// not pad the output with trailing empty columns.
+/// Export is bounded to the actually-used range. Columns materialized by a
+/// scroll or a since-cleared edit (a far cell written then deleted) must not
+/// pad the output with trailing empty columns.
 #[test]
 fn csv_export_trims_empty_trailing_columns() {
     let mut state = TrameState::new();
@@ -603,7 +602,7 @@ fn csv_export_trims_empty_trailing_columns() {
 }
 
 /// Reproduce the real flow: import a CSV whose rows carry trailing empty
-/// columns, then export the active sheet -- the output must NOT carry the
+/// columns, then export the active sheet. The output must NOT carry the
 /// padding columns back.
 #[test]
 fn csv_import_then_export_drops_trailing_empties() {

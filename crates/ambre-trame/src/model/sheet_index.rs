@@ -5,8 +5,8 @@
 // Rows and columns of a sheet live in two `LoroMovableList`s. Each element
 // carries an own, move-invariant `Uid` that *we* mint, stored as the element's
 // *value* (a string), NOT a Loro cursor id. Cells are keyed in `cells_{sheet}`
-// by the *pair* of uids `"{row_uid}:{col_uid}"`, so a row insert is one Loro op
-// and never rewrites a cell key, and a reorder (`mov`) leaves every key intact
+// by the *pair* of uids `"{row_uid}:{col_uid}"`. A row insert is then one Loro
+// op and never rewrites a cell key. A reorder (`mov`) leaves every key intact,
 // because the uid travels with the value (`trame-rows-and-columns`).
 //
 // The lists are **dense over the used range** `[0..hwm]`: list index == grid
@@ -117,9 +117,9 @@ impl SheetIndex {
     }
 
     /// Stable id of the row/column at grid position `pos`, if materialized.
-    /// Unlike [`resolve`](Self::resolve) this needs only one axis, so it works
-    /// even when the other axis has zero materialized elements (used by the
-    /// structural delete path to identify the row/column being removed).
+    /// Unlike [`resolve`](Self::resolve) this needs only one axis. So it works
+    /// even when the other axis has zero materialized elements, as in the
+    /// structural delete path that identifies the row/column being removed.
     pub fn row_id(&self, pos: usize) -> Option<Uid> {
         self.row_by_pos.get(pos).copied()
     }
@@ -221,10 +221,10 @@ impl SheetIndex {
 }
 
 /// Read a movable list in order and parse each element's uid *value*
-/// (`trame-rows-and-columns`).
-/// Each element holds a `"{peer:016x}_{counter:08x}"` string; a missing or
-/// malformed value would be a corruption, logged and skipped (it must not
-/// desync the dense `Vec`, so we never push a gap).
+/// (`trame-rows-and-columns`). Each element holds a
+/// `"{peer:016x}_{counter:08x}"` string. A missing or malformed value
+/// would be a corruption, logged and skipped. It must not desync the dense
+/// `Vec`, so we never push a gap.
 fn collect_ids(list: &LoroMovableList) -> (Vec<Uid>, HashMap<Uid, usize>) {
     let LoroValue::List(items) = list.get_value() else {
         return (Vec::new(), HashMap::new());

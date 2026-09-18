@@ -1,14 +1,14 @@
 # AMBRE -- FEATURE: THE FRAME
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the loop, the two layers and the fatal screen ship; the frame
+**Implementation:** partial -- the loop, the two layers and the fatal screen ship. The frame
 read-out is Trame's alone, and no accessibility tree exists.
 
 > One frame, from the browser's tick to the pixels on the screen. Every application draws its
 > content through this one loop, and none of them owns a loop of its own.
 
-The content of a document -- a grid, a page, a board -- is drawn by our code and never by the DOM,
-so the path from an event to the pixels is ours to measure. The chrome around it is
+The content of a document -- a grid, a page, a board -- is drawn by our code and never by the DOM.
+The path from an event to the pixels is therefore ours to measure. The chrome around it is
 `ambre-spec-chrome.md`, the boundary between the two is `ambre-spec-ui.md`, and neither is restated
 here.
 
@@ -26,27 +26,27 @@ one numbering over the four documents the rendering layer produces.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-001` | `INV` | A GPU resource MUST NOT leave the UI thread. | this spec section 2; `ambre-spec-architecture.md section 2` | type-level -- `wgpu::Device`, `HTMLCanvasElement` and the atlas textures are `!Send`, so moving one to another thread does not compile | none | verified |
-| `CANVAS-008` | `INV` | Rendering code MUST contain no `unsafe`. | README pillar "Security" | none | unheld -- a count gives zero `unsafe` in `ambre-canvas`, `ambre-draw` and `ambre-pdf`, and no crate carries `#![forbid(unsafe_code)]`, so what holds the pillar is a reader counting rather than a build refusing | unverified |
-| `CANVAS-057` | `INV` | A crate that needs `unsafe` MUST stay encapsulated behind the rendering layer, never reached from an application. | README pillar "Security"; this spec section 2 | none | unheld -- `wgpu` and `swash` are declared by the rendering crates, and no `deny.toml` entry refuses an application crate taking either directly, unlike the cryptography and CRDT bans, which do | unverified |
-| `CANVAS-009` | `INV` | The canvas element MUST NOT be the end of the accessibility tree: what it draws MUST also have a presence in the page. | this spec section 3; `ambre-spec-accessibility.md` | none | unheld -- a focusable input element and a hidden live region sit beside the canvas and carry the focused unit, which is the mechanism that replaced the platform tree this row used to name. One view of three writes to them, and nothing observes it | unverified |
+| `CANVAS-008` | `INV` | Rendering code MUST contain no `unsafe`. | README pillar "Security" | none | unheld -- a count gives zero `unsafe` in `ambre-canvas`, `ambre-draw` and `ambre-pdf`, and no crate carries `#![forbid(unsafe_code)]`, so what holds the pillar is a reader counting rather than a build refusing; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-057` | `INV` | A crate that needs `unsafe` MUST stay encapsulated behind the rendering layer, never reached from an application. | README pillar "Security"; this spec section 2 | none | unheld -- `wgpu` and `swash` are declared by the rendering crates, and no `deny.toml` entry refuses an application crate taking either directly, unlike the cryptography and CRDT bans, which do; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-009` | `INV` | The canvas element MUST NOT be the end of the accessibility tree: what it draws MUST also have a presence in the page. | this spec section 3; `ambre-spec-accessibility.md` | none | unheld -- a focusable input element and a hidden live region sit beside the canvas and carry the focused unit, which is the mechanism that replaced the platform tree this row used to name. One view of three writes to them, and nothing observes it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-016` | `INV` | The frame read-out MUST be available in every application, not in one. | this spec section 3 | not built | unbuilt -- lands with the `One performance read-out` Story (`ambre-roadmap.md` E8). `PerfPublisher` ships and Trame is its only consumer | unimplemented |
 
 ### 1.2 The loop runs a frame
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CANVAS-004` | `PRE` | GPU initialization MUST have completed before the rAF loop is started. | this spec section 2 | none | unheld -- the call order in `host.rs` resolves `bootstrap_gpu` before `start_raf_loop`, and a reversed order compiles and runs. What it costs is silent: Firefox calibrates vsync on the empty frames and the whole loop is paced wrong afterwards | unverified |
-| `CANVAS-005` | `POST` | A frame MUST fit the 16.6 ms budget at 60 FPS on the reference device. | `ambre-spec-budgets.md section 2`, the frame phases | none | unheld -- a developer reads the frame time by hand off the perf chip. No `criterion` threshold holds the budget, and nobody has taken the mobile measurement it is written against | unverified |
-| `CANVAS-010` | `POST` | The present phase MUST run on every frame, whatever the repaint plan decides. | this spec section 2 | none | unheld -- phase 5 sits outside the conditional in `render`, and a skipped present leaves the swapchain showing whatever it held. Nothing reads back a pixel | unverified |
-| `CANVAS-011` | `POST` | The rAF loop MUST keep ticking while the content is static, so an inbound event is drained on the next frame. | this spec section 2 | none | unheld -- the loop re-arms unconditionally, and a regression looks like a document that stops updating rather than like a crash | unverified |
-| `CANVAS-003` | `FRAME` | A layer planned `Reuse` MUST skip both its CPU batch build and its GPU upload. | this spec section 2 | none | unheld -- `RepaintPlan` decides per layer in `render/renderer.rs`, and nothing observes the skip. A regression costs frame time and still looks correct on screen, which is why it is the one frame condition here that no reviewer catches either | unverified |
+| `CANVAS-004` | `PRE` | GPU initialization MUST have completed before the rAF loop is started. | this spec section 2 | none | unheld -- the call order in `host.rs` resolves `bootstrap_gpu` before `start_raf_loop`, and a reversed order compiles and runs. What it costs is silent: Firefox calibrates vsync on the empty frames and the whole loop is paced wrong afterwards; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-005` | `POST` | A frame MUST fit the 16.6 ms budget at 60 FPS on the reference device. | `ambre-spec-budgets.md section 2`, the frame phases | none | unheld -- a developer reads the frame time by hand off the perf chip. No `criterion` threshold holds the budget, and nobody has taken the mobile measurement it is written against; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-010` | `POST` | The present phase MUST run on every frame, whatever the repaint plan decides. | this spec section 2 | none | unheld -- phase 5 sits outside the conditional in `render`, and a skipped present leaves the swapchain showing whatever it held. Nothing reads back a pixel; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-011` | `POST` | The rAF loop MUST keep ticking while the content is static, so an inbound event is drained on the next frame. | this spec section 2 | none | unheld -- the loop re-arms unconditionally, and a regression looks like a document that stops updating rather than like a crash; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-003` | `FRAME` | A layer planned `Reuse` MUST skip both its CPU batch build and its GPU upload. | this spec section 2 | none | unheld -- `RepaintPlan` decides per layer in `render/renderer.rs`, and nothing observes the skip. A regression costs frame time and still looks correct on screen, which is why it is the one frame condition here that no reviewer catches either; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 The loop is paused
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CANVAS-012` | `POST` | A paused loop MUST hold its last frame on screen. | this spec section 2; `ambre-spec-chrome.md`, `CHROME-011` | none | unheld -- `RafControl` is an `AtomicBool` the frame callback reads before it does any work, and nothing reads a pixel back to see what the surface then shows | unverified |
-| `CANVAS-058` | `FRAME` | A paused loop MUST NOT dispatch and MUST NOT render. | this spec section 2 | none | unheld -- the two halves fail apart: skipping the render and still dispatching drains the inbound queue into a surface nobody repaints, so the events are consumed and their effect is never drawn. Nothing asserts that both are skipped | unverified |
+| `CANVAS-012` | `POST` | A paused loop MUST hold its last frame on screen. | this spec section 2; `ambre-spec-chrome.md`, `CHROME-011` | none | unheld -- `RafControl` is an `AtomicBool` the frame callback reads before it does any work, and nothing reads a pixel back to see what the surface then shows; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-058` | `FRAME` | A paused loop MUST NOT dispatch and MUST NOT render. | this spec section 2 | none | unheld -- the two halves fail apart: skipping the render and still dispatching drains the inbound queue into a surface nobody repaints, so the events are consumed and their effect is never drawn. Nothing asserts that both are skipped; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 A fatal condition is signalled
 
@@ -54,39 +54,25 @@ one numbering over the four documents the rendering layer produces.
 |---|---|---|---|---|---|---|
 | `CANVAS-013` | `POST` | A fatal condition MUST latch: the first message MUST be the one a reader gets. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_canvas::fatal::tests::first_message_wins_and_latches` -- nothing is latched to begin with, and the first of two messages is what reads back | none | verified |
 | `CANVAS-059` | `FRAME` | A later fatal condition MUST NOT overwrite the first. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_canvas::fatal::tests::first_message_wins_and_latches` -- a second signal leaves the first message the one read, and a thread dying takes its neighbours with it, so the last message to arrive is the least informative one | none | verified |
-| `CANVAS-014` | `POST` | Once the process is fatal, the frame MUST paint a terminal screen instead of holding the last good frame. | this spec section 2 | none | unheld -- the frame callback reads the latch and switches, and no test observes what the canvas then shows. Holding the last good frame is the failure that looks like nothing is wrong | unverified |
+| `CANVAS-014` | `POST` | Once the process is fatal, the frame MUST paint a terminal screen instead of holding the last good frame. | this spec section 2 | none | unheld -- the frame callback reads the latch and switches, and no test observes what the canvas then shows. Holding the last good frame is the failure that looks like nothing is wrong; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.5 The theme changes
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CANVAS-015` | `POST` | A theme switch MUST repaint the content. | this spec section 2; `ambre-spec-design-tokens.md` | none | unheld -- each view reads its palette from `ThemeControl` per frame, so a switch is picked up on the next tick; nothing drives a switch and reads what is drawn | unverified |
-| `CANVAS-060` | `FRAME` | The renderer MUST hold no colour of its own. | this spec section 2; `ambre-spec-design-tokens.md` | none | unheld -- the palette is read per frame and the second colour store has nowhere to live today. Nothing refuses the field that would add one, and a cached colour survives exactly one theme switch before it is wrong | unverified |
+| `CANVAS-015` | `POST` | A theme switch MUST repaint the content. | this spec section 2; `ambre-spec-design-tokens.md` | none | unheld -- each view reads its palette from `ThemeControl` per frame, so a switch is picked up on the next tick; nothing drives a switch and reads what is drawn; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-060` | `FRAME` | The renderer MUST hold no colour of its own. | this spec section 2; `ambre-spec-design-tokens.md` | none | unheld -- the palette is read per frame and the second colour store has nowhere to live today. Nothing refuses the field that would add one, and a cached colour survives exactly one theme switch before it is wrong; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
-* **Budget.** the frame phases of `ambre-spec-budgets.md section 2`, cited by `CANVAS-005`,
-  and the `< 5 MB` vertex-buffer row plus the `< 20 MB` texture row of
-  `ambre-spec-budgets.md section 6`. Not one of them is measured by a bench: a developer
-  reads the frame time by hand off the perf chip.
+* **Budget.** the frame phases of `ambre-spec-budgets.md section 2`, cited by `CANVAS-005`, and the
+  vertex-buffer and texture rows of `ambre-spec-budgets.md section 6`. Not one is measured by a
+  bench: a developer reads the frame time by hand off the perf chip.
 * **Boundary.** none: this loop opens no socket, holds no key and writes nothing. The one network
-  path the layer opens at all is the same-origin font fetch of `ambre-spec-render-assets.md`, which
-  `UI-THREAD-004` names as the single exception to the UI thread's ban.
-* **Verification.** 3 `verified`, 13 `unverified`, 1 `unimplemented`. The verified rules are the
-  ones a host tier can reach: a type-level `!Send` and a process-global latch. Every unverified rule
-  is a property of a frame that has already been presented, and no headless browser reads a pixel
-  back from a wgpu canvas (`ambre-spec-testing.md section 8`), so the gap is the whole loop and it
-  is one gap, not thirteen. Four conjunctions came apart, and three of them separated a duty from a
-  ban -- which is the shape a frame condition hides in. `CANVAS-012` claimed a paused loop holds its
-  frame **and** skips two phases; the two skips fail apart, because skipping the render while still
-  dispatching drains the inbound queue into a surface nobody repaints. `CANVAS-015` claimed a
-  repaint **and** that the renderer stores no colour, which is the ban that makes the repaint mean
-  anything: a cached colour survives exactly one switch before it is wrong. `CANVAS-013` claimed a
-  latch **and** the refusal of a later message, and its one test asserts both -- so both are
-  `verified`, and the second is the row that matters, since a thread dying takes its neighbours with
-  it and the last message to arrive is the least informative. `CANVAS-008` bundled a ban on our own
-  `unsafe` with a rule about the crates that need it, and only the second could ever be enforced by
-  a ban: `CANVAS-057` is the entry `deny.toml` does not have, unlike the cryptography and CRDT ones
-  next to it. One reading correction: `CANVAS-004` is not an unverified rule but a `PRE` -- nothing
-  can refuse a reversed call order, and the cost is a vsync calibrated on empty frames.
+  path the layer opens is the same-origin font fetch of `ambre-spec-render-assets.md`, which
+  `UI-THREAD-004` names as the single exception.
+* **Verification.** 3 `verified`, 13 `untested`, 1 `unimplemented`. The verified rules are the ones
+  a host tier can reach: a type-level `!Send` and a process-global latch. Every untested rule is a
+  property of a frame already presented, and no headless browser reads a pixel back from a wgpu
+  canvas. The gap is therefore the whole loop, rather than thirteen gaps.
 ---
 
 ## 2. MODEL
@@ -163,18 +149,18 @@ It compounds with the empty-frame calibration that `CANVAS-004` gates the loop a
 | Chrome, WebGL2 | about 150 Hz | no 60 Hz warmup |
 
 **The fatal latch.** A process-global `AtomicBool` plus its message, in `ambre-canvas`. The UI and
-Logic threads share one linear memory, so either can set it; the Sync worker is a separate instance
-and reaches it as a `UiEvent::FatalError` the view forwards. The `window.ambreFatal` DOM overlay is
-the last resort for a panic on the UI thread itself, where the loop dies and the canvas can no
-longer repaint.
+Logic threads share one linear memory, so either can set it. The Sync worker is a separate
+instance, and reaches it as a `UiEvent::FatalError` the view forwards. The `window.ambreFatal` DOM
+overlay is the last resort for a panic on the UI thread itself. There the loop dies, and the canvas
+can no longer repaint.
 
 **The theme.** The content renderer reads its colours and metrics from the generated constants of
 `ambre-spec-design-tokens.md` and caches none of them. A switch flips `ThemeControl` and raises
 the dirty flag; the next frame paints the new palette (`CANVAS-015`).
 
 **Code:** `crates/ambre-canvas/src/host.rs` holds `bootstrap_gpu`, `start_raf_loop` and
-`RafControl`; `crates/ambre-canvas/src/render/renderer.rs` holds the pipelines, the layer batches
-and the ping-pong pair; `crates/ambre-canvas/src/view.rs` holds the per-frame value types;
+`RafControl`. `crates/ambre-canvas/src/render/renderer.rs` holds the pipelines, the layer batches
+and the ping-pong pair. `crates/ambre-canvas/src/view.rs` holds the per-frame value types;
 `crates/ambre-canvas/src/fatal.rs` holds the latch; `crates/ambre-canvas/src/perf.rs` holds
 `PerfPublisher`. The driver is `crates/ambre-app/src/host/frame.rs` and its DOM wiring is
 `crates/ambre-app/src/host/run.rs`.
@@ -215,20 +201,22 @@ it, so the chip and the timings panel exist in the spreadsheet alone (`CANVAS-01
 | Animation is a lerp in the frame callback | a declarative keyframe runtime | a transition here is a value moving over a few frames, and the callback already runs every frame. |
 | The perf read-out is a canvas primitive | a per-application HUD | it is what exists today and what `CANVAS-016` withdraws: a frame read-out that exists in one application measures one application. The chip and the panel are wired the same way everywhere or they compare nothing. |
 
-**When the two vector-rasterizer rows are reopened.** Their four arguments do not age together, so
-the refusal is reconsidered on two conditions **met at once**, and not on the state of browser
-compute support alone:
+**When the two vector-rasterizer rows are reopened.** Their four arguments do not age together. The
+refusal is reconsidered on two conditions **met at once**, and not on the state of browser compute
+support alone:
 
-1. WebGPU is the only back end this client ships, so the WebGL2 fallback -- a CPU rasterizer at 5 to
+1. WebGPU is the only back end this client ships. The WebGL2 fallback -- a CPU rasterizer at 5 to
    10 FPS -- is no longer part of the answer; **and**
 2. a phase of `ambre-spec-budgets.md section 2` is missed on the reference device *because of the
-   cost of the geometry itself*, measured, and not because of how much of it a frame was handed.
+   cost of the geometry itself*, measured. The cause is not how much of it a frame was handed.
 
 The second condition is the one that decides. Two of the four arguments are outside the browser's
-reach: a tile-based mobile GPU is made slower by a compute barrier whatever the runtime does, and a
-grid, a text page and a board are instanced quads plus a glyph atlas, so a generalist path
-rasterizer stays generality we would pay for and not use. A frame missed because the cull handed it
-too many elements is a cull to fix, and reopening this row would answer a question nobody asked.
+reach. A tile-based mobile GPU is made slower by a compute barrier, whatever the runtime does. A
+grid, a text page and a board are instanced quads plus a glyph atlas. A generalist path rasterizer
+stays generality we would pay for and not use.
+
+A frame missed because the cull handed it too many elements is a cull to fix. Reopening this row
+would answer a question nobody asked.
 
 Nothing here schedules the review: the Story would be written in `ambre-roadmap.md` on the day both
 conditions hold.
@@ -237,8 +225,8 @@ conditions hold.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **No frame is verifiable in CI.** A headless browser reads back a blank frame from a wgpu canvas,
-  so nine of the thirteen rows above have no mechanism available to them at all. The Story is
+* **No frame is verifiable in CI.** A headless browser reads back a blank frame from a wgpu canvas.
+  Nine of the thirteen rows above have no mechanism available to them at all. The Story is
   `Visual tests of canvas content` (`ambre-roadmap.md` E9), and until it lands the contract is held
   by review.
 * **GPU context loss is handled and unruled.** `ambre-app` listens for `webglcontextlost`, calls
@@ -252,7 +240,7 @@ conditions hold.
   nothing on the frame path, and `CANVAS P2 -- frame quality` owns it. No row states it, because
   nothing can currently observe it.
 * **One view of three gives its content a presence in the page.** The mechanism is shared and the
-  callers are not, so a board and a page draw content that reaches no screen reader at all
+  callers are not. A board and a page draw content that reaches no screen reader at all
   (`CANVAS-009`, `ambre-spec-accessibility.md`).
 
 ---

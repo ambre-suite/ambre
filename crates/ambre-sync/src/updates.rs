@@ -4,9 +4,9 @@ impl SyncState {
     // -- Causal quarantine (`ambre-spec-delta-order.md`) ------------
 
     /// Ingest one server-sequenced [`Update`]. If its parent snapshot is known,
-    /// it is decrypted and delivered immediately; otherwise it is held in
-    /// quarantine until the parent snapshot arrives (then released in `clock`
-    /// order by [`release_quarantine`]).
+    /// it is decrypted and delivered immediately. Otherwise it is held in
+    /// quarantine until the parent snapshot arrives, then released in `clock`
+    /// order by [`release_quarantine`].
     #[allow(dead_code)]
     pub(crate) fn receive_update(&mut self, seq: Seq, update: Update) {
         let document_id = update.public_data.document_id;
@@ -22,8 +22,8 @@ impl SyncState {
 
     /// Bookkeeping + decrypt for one server-sequenced [`Update`], WITHOUT
     /// delivering it to Logic. Returns the decrypted result when the update is
-    /// ready (its parent snapshot is known), or `None` when it was held in
-    /// quarantine (or the doc is not open). Split out of [`receive_update`] so a
+    /// ready, that is when its parent snapshot is known. `None` when it was held
+    /// in quarantine, or the doc is not open. Split out of [`receive_update`] so a
     /// batched replay ([`WsServerMsg::MissingUpdates`]) can collect many decrypted
     /// payloads and deliver them as one [`LogicEvent::RemoteUpdateBatch`].
     pub(crate) fn ingest_update(
@@ -32,12 +32,12 @@ impl SyncState {
         update: Update,
     ) -> Option<Result<Vec<u8>, pipeline::PipelineError>> {
         let document_id = update.public_data.document_id;
-        // The per-author clock counter is not persisted across a reload; after F5
+        // The per-author clock counter is not persisted across a reload. After F5
         // it restarts at 0 and would re-emit a clock the server already consumed
-        // (CLOCK_MISMATCH). The server echoes our own updates back to us, so we
-        // treat every update authored by THIS client as a high-water-mark and
-        // advance `local_clock` past it -- the next `seal_update` then continues
-        // from the right value.
+        // (CLOCK_MISMATCH). The server echoes our own updates back to us. Every
+        // update authored by THIS client is treated as a high-water-mark, and
+        // `local_clock` is advanced past it. The next `seal_update` then
+        // continues from the right value.
         let authored_by_us = self.signing_key.as_ref().is_some_and(|sk| {
             sk.verifying_key().to_bytes() == *update.public_data.pub_key.as_array()
         });
@@ -54,7 +54,7 @@ impl SyncState {
         if doc_state.known_snapshots.contains(&snapshot_id) {
             let opened = doc_state.open_update_fallback(&update);
             tracing::info!(
-                "[Sync→Logic] decrypted update doc={document_id} seq={} clock={} size={}",
+                "[Sync->Logic] decrypted update doc={document_id} seq={} clock={} size={}",
                 seq.0,
                 update.public_data.clock.0,
                 opened.as_ref().map(|b| b.len()).unwrap_or(0),
@@ -75,7 +75,7 @@ impl SyncState {
         None
     }
 
-    /// Keep a document's quarantine within [`QUARANTINE_LIMIT`]: request the
+    /// Keep a document's quarantine within [`QUARANTINE_LIMIT`]. Request the
     /// missing history at the soft threshold, and drop the oldest update (by
     /// `clock`) past the hard cap, raising a `SyncWarning`.
     pub(crate) fn enforce_quarantine_bounds(&mut self, document_id: DocumentId) {
@@ -182,7 +182,7 @@ impl SyncState {
 
     pub(crate) fn handle_open_document(&mut self, document_id: DocumentId, doc_type: DocType) {
         // Without session keys we cannot authenticate the members fetch or unwrap
-        // the document key: opening now would insert a local-only doc with a
+        // the document key. Opening now would insert a local-only doc with a
         // throwaway key and never hydrate. Queue it until the session is ready.
         // (Only in the real wasm path; the mock/host path has `event_tx == None`
         // and seeds keys synchronously.)
@@ -218,13 +218,12 @@ impl SyncState {
                 .await
                 {
                     Ok(Some(resp)) => {
-                        // Our own role rides the same response
-                        // (`architecture`). An absent or unparseable
-                        // row means we cannot establish write access, so fall back
-                        // to the safest client-side assumption rather than the
-                        // most permissive one: `Viewer` merely hides affordances,
-                        // whereas a wrong `Owner` would offer edits the server
-                        // then rejects.
+                        // Our own role rides the same response (`architecture`).
+                        // An absent or unparseable row means we cannot establish
+                        // write access. Fall back to the safest client-side
+                        // assumption, not the most permissive one. `Viewer` merely
+                        // hides affordances, whereas a wrong `Owner` would offer
+                        // edits the server then rejects.
                         let role = crate::sharing::own_role(
                             resp.members
                                 .iter()
@@ -232,7 +231,7 @@ impl SyncState {
                             my_user_id,
                         );
                         // Harvest the presence directory from the same response
-                        // that carries our wrapped key: every member's Ed25519
+                        // that carries our wrapped key. Every member's Ed25519
                         // signing key is already here, so resolving an ephemeral
                         // author needs no extra round-trip
                         // (`ambre-spec-membership.md`).
@@ -243,9 +242,9 @@ impl SyncState {
                         );
                         // The document exists server-side: our wrapped
                         // DocumentKey MUST unwrap cleanly. A failure here is a
-                        // genuine auth error (wrong exchange key, tampered row,
-                        // or a real attack) -- never substitute a random key,
-                        // which would "open" the document and then fail every
+                        // genuine auth error: a wrong exchange key, a tampered
+                        // row, or a real attack. Never substitute a random key.
+                        // That would "open" the document and then fail every
                         // subsequent decrypt with a confusing commitment
                         // mismatch instead of a clear auth error (H3).
                         match &exchange_key {
@@ -391,7 +390,7 @@ impl SyncState {
 
         // The DH peer is whoever WRAPPED our key (the inviter, or ourselves at
         // creation) -- not our own key. Fall back to the member's own key if an
-        // older server omits the wrapper field (e.g. a self-wrapped owner row).
+        // older server omits the wrapper field (for example a self-wrapped owner row).
         let wrapper_pub_hex = if entry.wrapper_exchange_pub_key.is_empty() {
             &entry.exchange_pub_key
         } else {
@@ -469,7 +468,7 @@ impl SyncState {
 
     pub(crate) fn handle_send_update(&mut self, document_id: DocumentId, payload: Vec<u8>) {
         let Some(signing_key) = self.signing_key.clone() else {
-            // Session not established yet (e.g. an edit landed in the gap between
+            // Session not established yet (for example an edit landed in the gap between
             // an F5 and DevLogin completing). Buffer instead of dropping; flushed
             // once the document opens (see `pending_pre_session_updates`).
             tracing::info!("[Sync] SendUpdate before session ready, buffering doc={document_id}");
@@ -508,7 +507,7 @@ impl SyncState {
         match pipeline::seal_update(&payload, public_data, &doc_state.doc_key, &signing_key) {
             Ok(update) => {
                 tracing::info!(
-                    "[Sync] seal_update ok doc={document_id} clock={} → {} bytes ciphertext",
+                    "[Sync] seal_update ok doc={document_id} clock={} -> {} bytes ciphertext",
                     doc_state.local_clock,
                     update.ciphertext.0.len(),
                 );
@@ -591,7 +590,7 @@ impl SyncState {
             pub_key,
             snapshot_id: doc_state.current_snapshot_id,
             // The BLAKE2b parent chain is a post-MVP hardening (see
-            // ambre-spec-sealed-envelope.md): an empty proof seals a standalone snapshot,
+            // ambre-spec-sealed-envelope.md). An empty proof seals a standalone snapshot,
             // which the compaction model accepts for the genesis-parented MVP.
             parent_snapshot_proof: Vec::new(),
             parent_snapshot_update_clocks: Vec::new(),
@@ -628,7 +627,7 @@ impl SyncState {
                 return;
             }
         };
-        // The snapshot folds in every delta this client had received, i.e. up to
+        // The snapshot folds in every delta this client had received, that is, up to
         // its high-water `last_seq`. The server stores it so other clients can
         // gate their post-open replay and skip this history.
         let covered_seq = doc_state.last_seq.0 as i64;
@@ -854,7 +853,7 @@ mod tests {
         assert_eq!(state.documents[&doc].quarantine_len(), QUARANTINE_LIMIT - 1);
     }
 
-    // ── Snapshot lifecycle (upload adoption + cold-start seq gating) ──────────
+    // -- Snapshot lifecycle (upload adoption + cold-start seq gating) ----------
 
     /// Drain the WsClientMsg this state sent to its mock WS, decoded.
     fn drain_ws(rx: &flume::Receiver<Vec<u8>>) -> Vec<WsClientMsg> {
@@ -864,8 +863,8 @@ mod tests {
     }
 
     /// A downloaded snapshot covering up to seq N must make the post-open
-    /// `RequestMissing` start AFTER N -- replaying only the deltas the snapshot
-    /// does not already contain, not the whole history since genesis.
+    /// `RequestMissing` start AFTER N. Only the deltas the snapshot does not
+    /// already contain are replayed, not the whole history since genesis.
     #[test]
     fn open_document_ready_gates_request_missing_on_covered_seq() {
         let (mut state, _rx, doc, key, _sk, _snap) = setup();
@@ -942,7 +941,7 @@ mod tests {
     }
 
     /// A departure is attributed by the member directory, exactly like a cursor
-    /// (`PRESENCE-014`): the relay names the key, and the key resolves to the
+    /// (`PRESENCE-014`). The relay names the key, and the key resolves to the
     /// `UserId` the view keys presence by. A key nobody knows is dropped rather
     /// than attributed to a guess -- the peer then ages out of the live set.
     #[test]
@@ -986,12 +985,12 @@ mod tests {
     }
 
     /// A server document opened over a live WS is only fully hydrated once its
-    /// post-open catch-up replay (`MissingUpdates`) lands -- the snapshot does
-    /// not cover deltas committed after it, and a delta-only document has NO
-    /// snapshot at all. So `DocumentReady` (which dismisses the UI loading
-    /// overlay) must be DEFERRED to that first replay, not fired at open: firing
-    /// at open would clear the overlay while the grid is still empty, exactly the
-    /// 5s-empty-grid bug. The snapshot is still emitted at open.
+    /// post-open catch-up replay (`MissingUpdates`) lands. The snapshot does not
+    /// cover deltas committed after it, and a delta-only document has NO snapshot
+    /// at all. So `DocumentReady`, which dismisses the UI loading overlay, must
+    /// be DEFERRED to that first replay rather than fired at open. Firing at open
+    /// would clear the overlay while the grid is still empty, exactly the
+    /// 5-second empty-grid bug. The snapshot is still emitted at open.
     #[test]
     fn open_document_ready_deferred_to_initial_replay() {
         let (mut state, rx, doc, key, _sk, _snap) = setup();
@@ -1049,7 +1048,7 @@ mod tests {
     }
 
     /// A local-only (not yet server-created) or offline open has no replay to
-    /// wait for, so `DocumentReady` fires immediately at open -- otherwise the
+    /// wait for, so `DocumentReady` fires immediately at open. Otherwise the
     /// overlay would hang forever with no `MissingUpdates` ever coming.
     #[test]
     fn open_document_ready_immediate_without_replay() {
@@ -1082,8 +1081,8 @@ mod tests {
     }
 
     /// The role resolved at open must reach Logic on `DocumentReady`
-    /// (`architecture`) -- on BOTH emission paths. The deferred one is
-    /// the fragile case: the event fires from the replay handler, long after the
+    /// (`architecture`) -- on BOTH emission paths. The deferred one is the
+    /// fragile case. The event fires from the replay handler, long after the
     /// open, so the role has to survive on `SyncDocumentState` rather than ride
     /// the call stack.
     #[test]
@@ -1131,8 +1130,8 @@ mod tests {
     }
 
     /// A completed snapshot upload adopts the server-assigned snapshot id as the
-    /// document's current parent and registers it as known (so later deltas
-    /// parented on it are delivered, not quarantined).
+    /// document's current parent and registers it as known. Later deltas
+    /// parented on it are then delivered, not quarantined.
     #[test]
     fn snapshot_uploaded_adopts_snapshot_id() {
         let (mut state, _rx, doc, _key, _sk, _snap) = setup();

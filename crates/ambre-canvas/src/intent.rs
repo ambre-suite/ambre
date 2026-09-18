@@ -1,15 +1,15 @@
 // ambre-canvas/src/intent.rs
 // ============================================================================
 // One-shot UI intents: canvas->DOM channel for "open a floating chrome surface
-// now" pulses (`trame-shared-filter`). Unlike `AnchorPublisher`, which
-// the view re-publishes every frame and the chrome reads non-destructively,
-// these carry a single edge: the view raises the flag on a click, the launcher
-// consumes it once per frame and resets it.
+// now" pulses (`trame-shared-filter`). Unlike `AnchorPublisher`, which the view
+// re-publishes every frame and the chrome reads non-destructively, these carry
+// a single edge. The view raises the flag on a click. The launcher consumes it
+// once per frame and resets it.
 //
 // First user: the in-canvas autofilter button. A left-click on the button can
-// not reach the DOM `FilterPopover` directly (the view only owns canvas input),
-// so it selects the button's column and raises this flag; the launcher then
-// opens the popover through the same path as the context-menu entry.
+// not reach the DOM `FilterPopover` directly (the view only owns canvas input).
+// It selects the button's column and raises this flag. The launcher then opens
+// the popover through the same path as the context-menu entry.
 //
 // Pure value plumbing (an `Rc<Cell<bool>>`): compiles on every target, depends
 // on no UI framework. Lives on the UI thread only, so it stays `!Send`.

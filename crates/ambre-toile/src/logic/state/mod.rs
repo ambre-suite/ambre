@@ -207,6 +207,11 @@ impl ToileState {
     /// mint conflicting `OpID`s and corrupt the history. This exists for
     /// single-owner, offline, host-side reproduction (a fixture generator, a
     /// deterministic test). The client path is [`new`](Self::new).
+    ///
+    /// # Panics
+    ///
+    /// When a fresh `LoroDoc` refuses `peer`, which it does only after an op is
+    /// recorded. No op precedes this call.
     pub fn with_peer(peer: u64) -> Self {
         let doc = LoroDoc::new();
         // `set_peer_id` before any op: this peer owns the board scaffolding, and

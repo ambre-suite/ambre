@@ -1,15 +1,14 @@
 //! Toile's half of the fixture loader surface (`ambre-spec-fixtures.md`).
 //!
-//! `shape_of` and `canonical_dump` are declared in `ambre-logic` over `DocState`;
-//! their per-app bodies live here, next to the schema they read, for the same
-//! reason puts generators next to their engine: a schema change and the code
-//! that decodes it move in one commit. `ambre-logic` only dispatches.
+//! `shape_of` and `canonical_dump` are declared in `ambre-logic` over `DocState`.
+//! Their per-app bodies live here, next to the schema they read, for the same
+//! reason the corpus puts generators next to their engine. A schema change and
+//! the code that decodes it move in one commit. `ambre-logic` only dispatches.
 //!
-//! Fixture code (I4): the whole module sits behind the non-default `fixtures`
+//! Fixture code (I4). The whole module sits behind the non-default `fixtures`
 //! feature and is unreachable from any client build. The determinism seam
 //! (`ToileState::with_peer`) is *not* here -- it is engine API, documented in
-//! `toile-engine` and ungated, as is
-//! [`ToileState::import_snapshot`].
+//! `toile-engine` and ungated, as is [`ToileState::import_snapshot`].
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -30,9 +29,9 @@ use super::{CONNECTORS, ELEMENTS, ToileState};
 impl ToileState {
     /// The coarse shape of this board, as the manifest records it.
     ///
-    /// Counted from the CRDT rather than declared by the generator: checks the
-    /// manifest against a recomputed shape, and a generator declaring its own
-    /// would assert only that it agrees with itself.
+    /// Counted from the CRDT rather than declared by the generator. This
+    /// checks the manifest against a recomputed shape; a generator declaring
+    /// its own would assert only that it agrees with itself.
     pub fn fixture_shape(&self) -> FixtureShape {
         let mut elements = 0u32;
         let mut frames = 0u16;
@@ -64,23 +63,23 @@ impl ToileState {
     /// The canonical semantic form of this board: every user-visible value, in a
     /// deterministic order, as text.
     ///
-    /// **Not** the CRDT -- two boards agreeing on content still differ in op
-    /// history, peer ids and commit timestamps, so no byte or state comparison
-    /// can express "same document by a different route". This is what the
-    /// frozen belt of compares, and text means a failure prints a readable
-    /// diff rather than a length mismatch.
+    /// **Not** the CRDT. Two boards agreeing on content still differ in op
+    /// history, peer ids and commit timestamps. No byte or state comparison can
+    /// express "same document by a different route". This is what the frozen belt
+    /// compares, and text means a failure prints a readable diff rather than a
+    /// length mismatch.
     ///
     /// **Nodes are walked in paint order and named by their position in it**, not
-    /// by their [`ElementId`](crate::logic::model::ElementId): an id is
-    /// `(peer, counter)` and is therefore exactly what two documents reached by
+    /// by their [`ElementId`](crate::logic::model::ElementId). An id is `(peer,
+    /// counter)`, and is therefore exactly what two documents reached by
     /// different routes are allowed to differ in. Z-order *is* user-visible, so
     /// it makes a canonical index. Every id-valued field -- a connector endpoint,
     /// a group's `children` -- is rewritten to that index for the same reason.
     ///
     /// **Floats are formatted shortest-round-trip** (Rust's `{}` for `f64`),
-    /// which is deterministic for a given value. It is *not* a tolerance: two
+    /// which is deterministic for a given value. It is *not* a tolerance. Two
     /// paths that compute geometry differently to the last bit differ here, and
-    /// that is intended -- a migration is not supposed to move geometry at all.
+    /// that is intended. A migration is not supposed to move geometry at all.
     pub fn canonical_dump(&self) -> String {
         // The paint order, materialized: `self.layers` is derived from the
         // `layers` movable list and is the order the user sees.
@@ -126,8 +125,8 @@ impl ToileState {
         }
         // Anything the `layers` list does not mention is invisible to the user
         // but still in the document. Reported after the ordered nodes, sorted by
-        // rendered content so the section is itself deterministic, and counted
-        // rather than named -- an unlayered node has no canonical index.
+        // rendered content so the section is itself deterministic. Counted
+        // rather than named: an unlayered node has no canonical index.
         let mut orphans: Vec<String> = elements
             .iter()
             .filter(|(id, _)| !position.contains_key(*id))
@@ -153,7 +152,7 @@ impl ToileState {
 ///
 /// Map keys are emitted in sorted order (`BTreeMap`), so the hash-map iteration
 /// order Rust reseeds per process cannot leak into the output. Any string that
-/// names a node in `position` becomes `#<paint index>`, which is what makes a
+/// names a node in `position` becomes `#<paint index>`. That is what makes a
 /// group's `children` and a connector's endpoints comparable across two
 /// documents built by different routes.
 fn render(value: &LoroValue, position: &HashMap<String, usize>) -> String {

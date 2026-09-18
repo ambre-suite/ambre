@@ -41,7 +41,7 @@ impl FormulaEngine {
         }
     }
 
-    /// Discard all formula state. Used before a full reseed.
+    /// Drop all formula state. Used before a full reseed.
     pub fn reset(&mut self) {
         *self = Self::new();
     }
@@ -81,7 +81,7 @@ impl FormulaEngine {
     }
 
     /// Mark every formula cell and every cached plain cell dirty. Used after a
-    /// structural reorder (sort) that keeps the uid-anchored bytecode intact: the
+    /// structural reorder (sort) that keeps the uid-anchored bytecode intact. The
     /// references resolve to fresh positions, so a recompute makes results follow
     /// the moved data without re-parsing any cell text.
     pub fn mark_all_dirty(&mut self) {
@@ -415,8 +415,8 @@ mod tests {
 
         // Swap rows 0 and 1 (a sort-style permutation) and recompute WITHOUT
         // re-parsing: the uid-anchored bytecode is preserved. B1 is bound to row
-        // uid 0, which is now at position 1, so it keeps reading that row's A
-        // value (10) -- it follows the data, it is NOT the positional 20 that a
+        // uid 0, which is now at position 1. So it keeps reading that row's A
+        // value (10): it follows the data. It is NOT the positional 20 that a
         // re-parse against the new order would produce.
         let mut moved = index_with(10, 10);
         moved.apply_move_row(0, 1);

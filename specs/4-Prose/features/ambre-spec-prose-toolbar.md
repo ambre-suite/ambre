@@ -3,8 +3,8 @@
 **Type:** Vertical (feature)
 **Implementation:** design-only
 
-> Select a few words and a small bar appears above them, showing what the selection already is --
-> bold, italic, a heading -- and letting the author change it.
+> Select a few words and a small bar appears above them. It shows what the selection already is --
+> bold, italic, a heading -- and lets the author change it.
 
 The bar shows a state and sends a command; it owns neither. What a mark means is
 `features/ambre-spec-prose-inline-styles.md`, what a heading level is
@@ -23,7 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-054` | `OBS` | Each control MUST report the state of the whole selection. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-096` | `OBS` | A selection that is formatted in part MUST be reported as mixed, and MUST NOT be reported as the state of either end. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-096` | `OBS` | A selection that is formatted in part MUST be reported as mixed, never as the state of either end. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-055` | `OBS` | The bar MUST stay over the text it was raised on while the page scrolls or zooms. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-057` | `INV` | The bar MUST NOT hold document content: the state it renders MUST arrive from the Logic thread with the selection it describes. | this spec section 3; `PROSE-UI-001` | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-097` | `INV` | The state a control shows MUST be rebuilt from the current selection; a mark MUST NOT be carried over from the selection before it. | this spec section 5 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -49,18 +49,18 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-102` | `POST` | A control MUST apply or remove its formatting over the whole selection. | this spec section 4 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-103` | `POST` | A control reporting mixed MUST apply its formatting to the whole selection, and MUST NOT remove it. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-103` | `POST` | A control reporting mixed MUST apply its formatting to the whole selection rather than remove it. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-104` | `FRAME` | A control MUST NOT change the text of the selection, its extent, or any formatting the control does not name. | derived | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** none of its own. The bar is repositioned inside the frame that paints the page, and
-  that frame is the row of `ambre-spec-budgets.md section 2`; a static element over the
-  canvas costs a compositor recomposition and no layout pass (`ambre-spec-ui.md section 4`).
+* **Budget.** none of its own. The bar is repositioned inside the frame that paints the page, the
+  row of `ambre-spec-budgets.md section 2`. A static element over the canvas costs a compositor
+  recomposition and no layout pass (`ambre-spec-ui.md section 4`).
 * **Boundary.** none: the bar reads view state and emits commands. It holds no key, opens no
   socket, and every mutation it starts is a `ProseCommand` (`PROSE-UI-002`).
 * **Verification.** 14 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-UI-054` and `PROSE-UI-096` are the two a host test reaches without a browser, because the
-  mixed state is a fold over the marks of a range and needs no element; so are the three rows a
-  control writes, which a delta answers. `PROSE-UI-055` and `PROSE-UI-053` are browser behaviour
+  `PROSE-UI-054` and `PROSE-UI-096` are a fold over the marks of a range, so a host test reaches
+  them without a browser. So are the three rows a control writes, which a delta answers.
+  `PROSE-UI-055` and `PROSE-UI-053` are browser behaviour
   and land in the wasm tier of `ambre-spec-testing.md section 6`.
 
 ---
@@ -86,8 +86,8 @@ names the row each scenario rests on.
 **Containers.** This feature owns none. It reads the marks of the selected range and writes them
 through the commands of `features/ambre-spec-prose-inline-styles.md`.
 
-**The state the view publishes.** The bar is a DOM element and the canvas view is what knows where
-the selection is, so the view publishes a state and the element renders it
+**The state the view publishes.** The bar is a DOM element, and the canvas view is what knows where
+the selection is. The view publishes a state and the element renders it
 (`ambre-spec-ui.md section 2`, Canvas to DOM by signal).
 
 ```rust
@@ -114,7 +114,7 @@ pub enum TriState { Off, On, Mixed }
 ```
 
 **Three states, not two.** A selection covering formatted and unformatted text is neither on nor
-off, and reporting it as either makes the next click do the opposite of what the author expects
+off. Reporting it as either makes the next click do the opposite of what the author expects
 (`PROSE-UI-096`). `Mixed` is what a control shows, and a click on a mixed control applies the mark
 to the whole range rather than removing it (`PROSE-UI-103`).
 
@@ -128,7 +128,7 @@ to the whole range rather than removing it (`PROSE-UI-103`).
    (`PROSE-UI-055`).
 
 **What a control sends.** A control invokes a command id of `ambre-commands`, the same id the
-keyboard chord invokes, and the id resolves to one command of the plane
+keyboard chord invokes. That id resolves to one command of the plane
 (`features/ambre-spec-prose-engine.md section 3`). There is no toolbar-only path into the document
 (`PROSE-UI-098`).
 
@@ -140,8 +140,8 @@ keyboard chord invokes, and the id resolves to one command of the plane
 | the quote control | `SetBlockStyle`, with the built-in `quote` style |
 | the overflow control | opens the colour and size controls, which write through `ApplyMark` |
 
-**The bar holds nothing.** `ToolbarState` is view state and is rebuilt from the selection and from
-what the Logic thread reports about it; the bar never remembers a mark across a selection change
+**The bar holds nothing.** `ToolbarState` is view state, rebuilt from the selection and from what
+the Logic thread reports about it. The bar never remembers a mark across a selection change
 (`PROSE-UI-097`).
 
 **Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
@@ -181,11 +181,11 @@ respecified here (`ambre-spec-chrome.md`).
 * **Nothing exists.** `crates/ambre-prose/src/lib.rs` is seven lines, so the bar, its state and its
   anchor are a design, and every row above is `unimplemented`.
 * **The fold has no declared source.** `ActiveMarks` is a fold over the marks of a range, and no
-  event of `ProseEvent` carries the marks of a range: the view is told the layout and the runs, not
-  the formatting of a selection (`features/ambre-spec-prose-engine.md section 3`). Either an event is
+  event of `ProseEvent` carries them. The view is told the layout and the runs, not the formatting
+  of a selection (`features/ambre-spec-prose-engine.md section 3`). Either an event is
   missing or the fold is meant to run over the run cache, and no document says which.
 * **The controls are fewer than the marks.** The registry declares eleven presentation marks plus
-  the link (`ambre-spec-prose-schema.md section 3`); the bar names five, a link, three heading
+  the link (`ambre-spec-prose-schema.md section 3`). The bar names five, a link, three heading
   levels and a quote, and defers colour and size to an overflow nothing specifies. Superscript,
   subscript and clearing formatting reach no surface at all.
 * **No control opens a comment or a suggestion.** Both features record the same absence, and the
@@ -193,13 +193,13 @@ respecified here (`ambre-spec-chrome.md`).
   (`features/ambre-spec-prose-comments.md section 6`,
   `features/ambre-spec-prose-track-changes.md section 6`).
 * **A refused mark value has nowhere to go.** `PROSE-FEAT-022` requires a malformed value to be
-  reported to the author, and no event carries the refusal, so the colour and size controls have
-  no failure path (`features/ambre-spec-prose-inline-styles.md section 6`). It lands with the
+  reported to the author, and no event carries the refusal. The colour and size controls therefore
+  have no failure path (`features/ambre-spec-prose-inline-styles.md section 6`). It lands with the
   `A refused command names what it refused` Story (`ambre-roadmap.md` E5).
 * **What a control applies to is stated twice, and differently.** Section 4 says a control
-  applies its formatting to the whole selection, which is what `PROSE-UI-102` carries; the control
+  applies its formatting to the whole selection, which is what `PROSE-UI-102` carries. The control
   table of section 3 sends the heading and quote controls to the block the selection starts in.
   A selection spanning three paragraphs therefore has two answers, and nothing rules between them.
 * **The anchor has no rule when the selection leaves the window.** A selection scrolled off screen
-  keeps an anchor with no pixels under it, and nothing says whether the bar hides, sticks to the
+  keeps an anchor with no pixels under it. Nothing says whether the bar hides, sticks to the
   edge or follows the anchor out of view.

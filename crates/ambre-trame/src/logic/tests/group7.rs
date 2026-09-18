@@ -53,9 +53,9 @@ fn csv_export_evaluates_formulas() {
 
 /// Repro: a brand-new document where the author types a value, then autofills a
 /// numeric series down. A peer that re-opens the document hydrates from the
-/// replayed incremental `SendUpdate` deltas (NOT a full snapshot -- that is what
-/// "going back to the home page and reopening" does on the wire). The reopened
-/// peer must see the full filled series, not just the seed cell.
+/// replayed incremental `SendUpdate` deltas, not a full snapshot. That replay is
+/// what "going back to the home page and reopening" does on the wire. The
+/// reopened peer must see the full filled series, not just the seed cell.
 #[test]
 fn autofill_series_survives_incremental_delta_replay() {
     use ambre_bus::{FillMode, GridRange};
@@ -113,10 +113,10 @@ fn autofill_series_survives_incremental_delta_replay() {
 /// Generalized guard against the autofill-class bug: any batched command that
 /// formats cells must broadcast a self-contained incremental delta. The
 /// convergence proptest exchanges full snapshots, so it cannot catch an
-/// incremental delta that drops ops (the failure mode where a per-cell helper
-/// flushed mid-batch and discarded the delta). Here a single author formats a
-/// 3x3 selection whose rows/columns are NOT yet materialized -- forcing
-/// `persist_format` to scaffold lines mid-loop -- then a fresh peer replays only
+/// incremental delta that drops ops. That is the failure mode where a per-cell
+/// helper flushed mid-batch and dropped the delta. Here a single author formats
+/// a 3x3 selection whose rows/columns are NOT yet materialized, forcing
+/// `persist_format` to scaffold lines mid-loop. A fresh peer then replays only
 /// the broadcast delta. Every formatted cell must survive the reopen.
 #[test]
 fn batched_formatting_broadcasts_complete_delta() {
@@ -155,8 +155,8 @@ fn batched_formatting_broadcasts_complete_delta() {
 /// delta. A reopened session starts from a fresh `LoroDoc` (new random PeerID)
 /// whose constructor mints local genesis ops, THEN imports the document history.
 /// If the export cursor is advanced past those never-broadcast local ops, a
-/// later edit's delta depends on them -- a dangling causal dependency that a
-/// third peer (the next reopen) cannot apply, so the edit silently vanishes.
+/// later edit's delta depends on them. That is a dangling causal dependency a
+/// third peer, the next reopen, cannot apply, so the edit silently vanishes.
 #[test]
 fn edit_after_reopen_broadcasts_causally_complete_delta() {
     // Original author creates the doc and writes A1.
@@ -199,10 +199,11 @@ fn edit_after_reopen_broadcasts_causally_complete_delta() {
     );
 }
 
-/// A server history replay applied as a batch repaints once: `apply_remote_batch`
-/// merges every delta, then emits a single `DataReset` (not one per delta), while
-/// reconstructing the full grid. This is the fix for the reopen flicker where a
-/// cell present only in the last delta flashed in across N intermediate renders.
+/// A server history replay applied as a batch repaints once. `apply_remote_batch`
+/// merges every delta, then emits a single `DataReset` rather than one per delta,
+/// while reconstructing the full grid. This is the fix for the reopen flicker
+/// where a cell present only in the last delta flashed in across N intermediate
+/// renders.
 #[test]
 fn apply_remote_batch_emits_single_datareset_with_full_state() {
     let mut author = TrameState::new();
@@ -325,7 +326,7 @@ fn concurrent_resize_of_same_col_converges_lww() {
 
 /// `CopyRange` builds the clipboard payload from the whole document, not a
 /// viewport cache (`trame-clipboard`). The selection spans a range far larger
-/// than any single viewport, with a populated cell near its bottom edge: the
+/// than any single viewport, with a populated cell near its bottom edge. The
 /// authoritative Logic-side build must include it, proving the old best-effort
 /// out-of-viewport limit is gone.
 #[test]

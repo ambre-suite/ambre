@@ -21,33 +21,36 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-018` | `INV` | No two menu-bar entries MUST carry the same command id. | this spec section 2 | `ambre_toile::ui::menu_bar::tests::menu_bar_ids_are_distinct` -- it sorts the bar-only id list and reads the deduplicated length back unchanged | none | verified |
-| `TOILE-UI-121` | `INV` | No context-menu entry MUST carry an id the menu bar already carries, except where both name the same command. | this spec section 2 | none | unheld -- the two id lists are declared in two modules and the bar reuses the context ids by name, so a collision would be a silent aliasing. `ambre_toile::ui::menu_bar::tests::menu_bar_ids_are_distinct` reads the bar list alone, never the union | unverified |
+| `TOILE-UI-121` | `INV` | No context-menu entry MUST carry an id the menu bar already carries, except where both name the same command. | this spec section 2 | none | unheld -- the two id lists are declared in two modules and the bar reuses the context ids by name, so a collision would be a silent aliasing. `ambre_toile::ui::menu_bar::tests::menu_bar_ids_are_distinct` reads the bar list alone, never the union; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-049` | `INV` | A menu entry MUST carry no geometry: it MUST be resolved against the selection the view already holds. | this spec section 2 | structural -- a row holds a command id, a label and an optional key binding, so there is no field a coordinate could travel in | none | verified |
 | `TOILE-UI-050` | `OBS` | The menu-bar layout MUST be a pure function of the menu, never of the selection. | this spec section 4 | type-level -- the layout builder takes a menu id and nothing else, so no selection can reach it | none | verified |
 | `TOILE-UI-122` | `OBS` | Every menu in the bar MUST carry at least one entry. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::every_menu_has_items` -- it walks the five menus and reads a non-empty item list from each | none | verified |
 | `TOILE-UI-123` | `OBS` | The View menu MUST show all five zoom actions. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::view_menu_exposes_all_zoom_actions` -- it reads the five zoom ids back | none | verified |
-| `TOILE-UI-124` | `OBS` | The Edit menu MUST show undo and redo, and MUST reuse the clipboard ids rather than mint its own. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::edit_menu_carries_undo_redo_and_reuses_clipboard_ids` -- it reads undo and redo, then reads the copy and select-all ids as the context menu's own | none | verified |
+| `TOILE-UI-124` | `OBS` | The Edit menu MUST show undo and redo. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::edit_menu_carries_undo_redo_and_reuses_clipboard_ids` -- it reads undo and redo | none | verified |
+| `TOILE-UI-364` | `OBS` | The Edit menu MUST reuse the clipboard ids rather than mint its own. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::edit_menu_carries_undo_redo_and_reuses_clipboard_ids` -- it reads the copy and select-all ids as the context menu's own | none | verified |
 | `TOILE-UI-125` | `OBS` | The Object menu MUST reuse the group, z-order and lock ids. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::object_menu_reuses_z_order_and_lock_ids` -- it reads the six ids as the ones the context menu emits | none | verified |
 | `TOILE-UI-355` | `OBS` | The Object menu MUST carry the six alignments and the two distributions, and each MUST resolve against the selection rather than to a board command of its own. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::the_align_entries_sit_under_object` -- it reads the eight ids in the layout and none of them resolving through `menu_bar_edit`; `ambre_toile::ui::menu::tests::an_align_id_resolves_to_one_batch_over_the_selection` -- what each one becomes | none | verified |
-| `TOILE-UI-047` | `OBS` | A context-menu entry MUST be left out when it does not apply to the selection under the cursor. | this spec section 3 | none | unheld -- the entry builder is wasm-only and reached by no test. What is covered is the scope the builder reads (section 1.2), not the omission it performs | unverified |
-| `TOILE-UI-126` | `OBS` | An entry that would move or remove a locked element MUST be left out when the selection is locked. | this spec section 3 | none | fails -- the builder gates only group, ungroup, lock, unlock and the frame pair, while cut, delete, duplicate and the four z-order rows are pushed unconditionally, so a locked element is offered every one of them. Answered by the `A locked element is locked on every surface` Story (`ambre-roadmap.md` E7) | unverified |
-| `TOILE-UI-052` | `OBS` | A shortcut shown beside an entry MUST be the one the keymap binds. | this spec section 3 | none | unheld -- `ambre_toile::ui::menu_bar::tests::shortcuts_render_canonically` covers how a binding renders, not that the rendered binding is the one bound, because the canvas decodes most board chords itself, outside the keymap the bar reads | unverified |
+| `TOILE-UI-047` | `OBS` | A context-menu entry MUST be left out when it does not apply to the selection under the cursor. | this spec section 3 | none | unheld -- the entry builder is wasm-only and reached by no test. What is covered is the scope the builder reads (section 1.2), not the omission it performs; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-126` | `OBS` | An entry that would move or remove a locked element MUST be left out when the selection is locked. | this spec section 3 | none | fails -- the builder gates only group, ungroup, lock, unlock and the frame pair, while cut, delete, duplicate and the four z-order rows are pushed unconditionally, so a locked element is offered every one of them; lands with the `A locked element is locked on every surface` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-052` | `OBS` | A shortcut shown beside an entry MUST be the one the keymap binds. | this spec section 3 | none | unheld -- `ambre_toile::ui::menu_bar::tests::shortcuts_render_canonically` covers how a binding renders, not that the rendered binding is the one bound, because the canvas decodes most board chords itself, outside the keymap the bar reads; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Right-click over the board
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-048` | `POST` | A right-click whose target is already selected MUST keep the whole selection. | this spec section 3 | none | unheld -- the handler resolves the hit to its group target and re-selects only when the target is absent from the selection, and no test drives a right-click | unverified |
-| `TOILE-UI-127` | `POST` | A right-click on an element outside the selection MUST collapse the selection to that element. | this spec section 3 | none | unheld -- the same handler as `TOILE-UI-048`, and the same absent test | unverified |
-| `TOILE-UI-128` | `POST` | A right-click that hits nothing MUST clear the selection, even when the point lies inside the selection box. | this spec section 3 | none | unheld -- an empty hit clears unconditionally, so a click in the gap between two selected elements loses the set, and no test drives it | unverified |
+| `TOILE-UI-048` | `POST` | A right-click whose target is already selected MUST keep the whole selection. | this spec section 3 | none | unheld -- the handler resolves the hit to its group target and re-selects only when the target is absent from the selection, and no test drives a right-click; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-127` | `POST` | A right-click on an element outside the selection MUST collapse the selection to that element. | this spec section 3 | none | unheld -- the same handler as `TOILE-UI-048`, and the same absent test; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-128` | `POST` | A right-click that hits nothing MUST clear the selection, even when the point lies inside the selection box. | this spec section 3 | none | unheld -- an empty hit clears unconditionally, so a click in the gap between two selected elements loses the set, and no test drives it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-129` | `POST` | An empty selection MUST publish the empty-canvas scope. | this spec section 2 | `ambre_toile::ui::menu::tests::empty_selection_is_empty_canvas_scope` -- it reads the scope as the default and not over a selection | none | verified |
-| `TOILE-UI-130` | `POST` | The scope MUST carry the number of selected elements, and MUST mark a multi-selection from two. | this spec section 2 | `ambre_toile::ui::menu::tests::single_unlocked_element_scope` -- a count of one and no multi flag; `ambre_toile::ui::menu::tests::multi_selection_enables_group` -- a count of two and the flag set | none | verified |
-| `TOILE-UI-131` | `POST` | The scope MUST say whether a group is selected, and MUST report both lock states separately. | this spec section 2 | `ambre_toile::ui::menu::tests::group_and_locked_flags` -- the group flag and both lock flags on a mixed pair; `ambre_toile::ui::menu::tests::single_unlocked_element_scope` -- the unlocked-only case | none | verified |
+| `TOILE-UI-130` | `POST` | The scope MUST carry the number of selected elements. | this spec section 2 | `ambre_toile::ui::menu::tests::single_unlocked_element_scope` -- a count of one; `ambre_toile::ui::menu::tests::multi_selection_enables_group` -- a count of two | none | verified |
+| `TOILE-UI-365` | `POST` | The scope MUST mark a multi-selection from two elements up. | this spec section 2 | `ambre_toile::ui::menu::tests::single_unlocked_element_scope` -- no multi flag on one; `ambre_toile::ui::menu::tests::multi_selection_enables_group` -- the flag set on two | none | verified |
+| `TOILE-UI-131` | `POST` | The scope MUST say whether a group is selected. | this spec section 2 | `ambre_toile::ui::menu::tests::group_and_locked_flags` -- the group flag on a mixed pair | none | verified |
+| `TOILE-UI-366` | `POST` | The scope MUST report both lock states separately. | this spec section 2 | `ambre_toile::ui::menu::tests::group_and_locked_flags` -- both lock flags on a mixed pair; `ambre_toile::ui::menu::tests::single_unlocked_element_scope` -- the unlocked-only case | none | verified |
 | `TOILE-UI-132` | `POST` | The scope MUST name the frame that contains the whole selection. | this spec section 2 | `ambre_toile::ui::menu::tests::containing_frame_detected` -- it reads the frame enclosing a sticky as the one named | none | verified |
 | `TOILE-UI-133` | `POST` | The scope MUST name no frame when the selection falls outside every frame. | this spec section 2 | `ambre_toile::ui::menu::tests::no_frame_when_selection_outside` -- no frame for a sticky placed beyond one | none | verified |
-| `TOILE-UI-134` | `POST` | The scope MUST describe the whole selection, not the part of it the viewport holds. | this spec section 5 | none | fails -- the classifier looks each selected id up in the culled set, so an element scrolled off screen is skipped, leaving the count, the flags and the union it feeds. Every scope test builds a viewport holding the whole selection. Answered by the `Toile reads the board, not the screen` Story (`ambre-roadmap.md` E7) | unverified |
-| `TOILE-UI-135` | `FRAME` | A right-click MUST NOT emit a board command. | this spec section 3 | none | unheld -- the handler writes the local selection and publishes the scope, and no test drives a right-click and reads the outgoing channel | unverified |
-| `TOILE-UI-136` | `FRAME` | A right-click MUST NOT move the camera. | this spec section 3 | none | unheld -- the handler reads the camera to map the point and never writes it, and no test drives a right-click | unverified |
+| `TOILE-UI-134` | `POST` | The scope MUST describe the whole selection, not the part of it the viewport holds. | this spec section 5 | none | fails -- the classifier looks each selected id up in the culled set, so an element scrolled off screen is skipped, leaving the count, the flags and the union it feeds. Every scope test builds a viewport holding the whole selection; lands with the `Toile reads the board, not the screen` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-135` | `FRAME` | A right-click MUST NOT emit a board command. | this spec section 3 | none | unheld -- the handler writes the local selection and publishes the scope, and no test drives a right-click and reads the outgoing channel; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-136` | `FRAME` | A right-click MUST NOT move the camera. | this spec section 3 | none | unheld -- the handler reads the camera to map the point and never writes it, and no test drives a right-click; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 Choose a context-menu entry
 
@@ -65,11 +68,11 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-146` | `POST` | The clear entry MUST emit an empty reaction per selected target. | this spec section 2 | `ambre_toile::ui::menu::tests::react_clear_resolves_to_none_reaction` -- the command carrying no reaction | none | verified |
 | `TOILE-UI-147` | `POST` | Paste and select-all MUST stay in the view: they MUST emit no board command. | this spec section 2 | `ambre_toile::ui::menu::tests::paste_and_select_all_are_ui_only` -- both resolving to nothing | none | verified |
 | `TOILE-UI-148` | `POST` | Add-to-frame MUST target the frame that geometrically contains the selection. | this spec section 2 | `ambre_toile::ui::menu::tests::add_to_frame_targets_container` -- the frame, the added ids and an empty removal list | none | verified |
-| `TOILE-UI-149` | `POST` | Remove-from-frame MUST target that same frame. | this spec section 3 | none | fails -- the removal reuses the geometric lookup, so an element whose real parent is another frame is removed from the wrong one and nothing changes. Only the add half is covered | unverified |
-| `TOILE-UI-150` | `POST` | Where frames overlap, the frame the entries target MUST be the front-most one that contains the selection. | this spec section 2 | none | unheld -- the lookup scans the painted order backwards and takes the first container, and the frame test holds one frame, so the choice is never exercised | unverified |
+| `TOILE-UI-149` | `POST` | Remove-from-frame MUST target that same frame. | this spec section 3 | none | fails -- the removal reuses the geometric lookup, so an element whose real parent is another frame is removed from the wrong one and nothing changes. Only the add half is covered; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TOILE-UI-150` | `POST` | Where frames overlap, the frame the entries target MUST be the front-most one that contains the selection. | this spec section 2 | none | unheld -- the lookup scans the painted order backwards and takes the first container, and the frame test holds one frame, so the choice is never exercised; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-151` | `FRAME` | Resolving an entry MUST NOT change the selection. | this spec section 2 | type-level -- the resolver borrows the selection immutably and returns commands, so it has no way to write it back | none | verified |
-| `TOILE-UI-152` | `FAIL` | An id the resolver does not know MUST be refused, and MUST NOT pass as a view-only intent. | this spec section 5 | none | fails -- the resolver falls through to an empty command list, which is exactly what paste and select-all return, so an unknown id is indistinguishable from a handled one and nobody is told. Answered by the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | unverified |
-| `TOILE-UI-153` | `FAIL` | With no enclosing frame, the two frame entries MUST tell the user why nothing happened. | this spec section 5 | none | fails -- both return an empty command list when the lookup finds no container, and no notice is raised. The entries are omitted in that scope, so this is reached only through the bar | unverified |
+| `TOILE-UI-152` | `FAIL` | An id the resolver does not know MUST be refused, and MUST NOT pass as a view-only intent. | this spec section 5 | none | fails -- the resolver falls through to an empty command list, which is exactly what paste and select-all return, so an unknown id is indistinguishable from a handled one and nobody is told; lands with the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-153` | `FAIL` | With no enclosing frame, the two frame entries MUST tell the user why nothing happened. | this spec section 5 | none | fails -- both return an empty command list when the lookup finds no container, and no notice is raised. The entries are omitted in that scope, so this is reached only through the bar; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | failing |
 
 ### 1.4 Choose a menu-bar entry
 
@@ -84,25 +87,21 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-051` | `FRAME` | A zoom action MUST NOT reach the document. | this spec section 2 | `ambre_toile::ui::menu_bar::tests::zoom_ids_are_view_local` -- the five zoom ids resolving to no board command | none | verified |
-| `TOILE-UI-157` | `POST` | Zoom in, zoom out and zoom to 100 % MUST move the camera and MUST ask for a fresh cull. | this spec section 3 | none | unheld -- each writes the camera and queues a viewport request, and the wiring is wasm-only, so no test reads the camera back after an entry | unverified |
-| `TOILE-UI-158` | `POST` | A fit MUST ask the Logic thread for the extent before it moves the camera. | this spec section 3 | none | unheld -- the view holds the culled set alone, so both fits arm a pending fit and request the stats, and no test drives the round trip | unverified |
-| `TOILE-UI-159` | `POST` | A pointer-mode entry MUST stay in the view: it MUST change no camera and reach no thread. | this spec section 3 | none | unheld -- each writes a view field and returns, and the wiring is wasm-only | unverified |
-| `TOILE-UI-160` | `FAIL` | A fit to the selection with nothing selected MUST tell the user why nothing happened. | this spec section 5 | none | fails -- the branch returns on an empty selection, raising no notice, and the View menu shows the entry whatever is selected | unverified |
+| `TOILE-UI-157` | `POST` | Zoom in, zoom out and zoom to 100 % MUST move the camera and queue a fresh cull. | this spec section 3 | none | unheld -- each writes the camera and queues a viewport request, and the wiring is wasm-only, so no test reads the camera back after an entry; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-158` | `POST` | A fit MUST ask the Logic thread for the extent before it moves the camera. | this spec section 3 | none | unheld -- the view holds the culled set alone, so both fits arm a pending fit and request the stats, and no test drives the round trip; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-159` | `POST` | A pointer-mode entry MUST stay in the view: it MUST change no camera and reach no thread. | this spec section 3 | none | unheld -- each writes a view field and returns, and the wiring is wasm-only; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-160` | `FAIL` | A fit to the selection with nothing selected MUST tell the user why nothing happened. | this spec section 5 | none | fails -- the branch returns on an empty selection, raising no notice, and the View menu shows the entry whatever is selected; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | failing |
 
 * **Budget.** none: a menu is built from a static entry set on the UI thread, and
   `ambre-spec-budgets.md` budgets no menu operation. What an entry commits is budgeted
   by the feature that owns the command.
 * **Boundary.** none: a menu is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. What an entry commits leaves as a command.
-* **Verification.** 30 `verified`, 18 `unverified`, against 25 distinct mechanisms -- one more than
-  the seven rows cited before the split, and the gain is a single test no row had claimed. The
-  ledger did not grow: a cell naming ten tests for one rule now states ten rules, each naming the
-  assertion that holds it, and four of the twenty-nine hold by construction. What the split
-  withdrew is larger. The omission rule loses its citation outright: the six tests it named classify
-  the selection, and the builder that omits an entry is wasm-only and reached by nothing. The zoom
-  rule keeps only the half its test proves. The rule that every entry resolves to a command is
-  false, so what survives is the distinctness of the bar's own ids. What no test reaches is still
-  the pointer -- which scope a right-click means, and what it does to the selection.
+* **Verification.** 33 `verified`, 6 `failing`, 12 `untested`, against 25 distinct mechanisms. What holds is
+  the entry set: what each entry says, and which command it carries. The bar's own ids are distinct too, four
+  of them by construction. What is loose is the pointer: which scope a right-click means, and what it does to
+  the selection. The failures are the omission rule, whose builder is wasm-only and reached by nothing, and
+  the zoom rule its test only half proves.
 
 ---
 
@@ -137,11 +136,11 @@ pub struct CtxScope {
 5. a zoom entry never reaches step 4: it moves the camera and queues a cull request
    (`TOILE-UI-051`).
 
-**Three families of id.** A board command resolves to one or more commands against the current
-selection. A view-only intent -- paste, select-all, the zoom actions, the pointer mode -- is
-serviced by the view and never leaves it, and resolves to an empty command list, which is also what
-an id nobody claims resolves to (`TOILE-UI-152`). Undo, redo and the presentation entry resolve to a board
-command with no selection to read, which is why that map is a pure function.
+**Three families of id.** A board command resolves to one or more commands against the current selection. A
+view-only intent -- paste, select-all, the zoom actions, the pointer mode -- is serviced by the view and never
+leaves it. It resolves to an empty command list, which is also what an id nobody claims resolves to
+(`TOILE-UI-152`). Undo, redo and the presentation entry resolve to a board command with no selection to read,
+which is why that map is a pure function.
 
 **Code:**
 
@@ -165,16 +164,15 @@ command with no selection to read, which is why that map is a pure function.
 | a group | the same, plus ungroup |
 | a locked element | unlock -- and, today, every entry that would move or remove it as well (`TOILE-UI-126`) |
 
-**What a right-click does to the selection.** The press resolves the hit through the group scope,
-so the target is the enclosing group and not the node under the cursor. A click whose target is
-already selected keeps the whole set, so the menu acts on it (`TOILE-UI-048`); a click on an element
-outside it collapses to that element (`TOILE-UI-127`). A click that hits nothing clears the
-selection, including one that lands in the gap between two selected elements (`TOILE-UI-128`).
+**What a right-click does to the selection.** The press resolves the hit through the group scope, so the
+target is the enclosing group and not the node under the cursor. A click whose target is already selected
+keeps the whole set, so the menu acts on it (`TOILE-UI-048`). A click on an element outside it collapses to
+that element (`TOILE-UI-127`). A click that hits nothing clears the selection, including one that lands in the
+gap between two selected elements (`TOILE-UI-128`).
 
-**The menu bar.** Five menus in bar order -- File, Edit, View, Object, Present -- each a fixed layout
-with separators, each entry showing its accelerator. Unlike the context menu, the bar hides nothing:
-an entry that does not apply is disabled by its command state, so the layout never moves under the
-user (`TOILE-UI-050`).
+**The menu bar.** Five menus in bar order -- File, Edit, View, Object, Present -- each a fixed layout with
+separators, each entry showing its accelerator. Unlike the context menu, the bar hides nothing. An entry that
+does not apply is disabled by its command state, so the layout never moves under the user (`TOILE-UI-050`).
 
 | Menu | Holds |
 |---|---|
@@ -184,15 +182,15 @@ user (`TOILE-UI-050`).
 | File | bringing a file onto the board, saving the board as a native `.ambre` file, and taking it out as a lossy one -- the save above the separator, the exports below it (`features/ambre-spec-toile-import-export.md section 4`) -- then the presentation entry point |
 | Present | the presentation entry point, listed in both, and the deck panel (`features/ambre-spec-toile-presentation.md section 4`) |
 
-**The zoom control.** Zoom out, the current percentage, zoom in, fit, and fit the selection. Each
-moves the camera and forwards one cull request (`TOILE-UI-157`); the percentage mirrors what the
-status bar reports (`features/ambre-spec-toile-status-bar.md`). Neither fit moves the camera on its
-own: both ask the Logic thread for the extent first, because the UI holds the culled set alone
-(`TOILE-UI-158`, `features/ambre-spec-toile-viewport.md`).
+**The zoom control.** Zoom out, the current percentage, zoom in, fit, and fit the selection. Each moves the
+camera and forwards one cull request (`TOILE-UI-157`); the percentage mirrors what the status bar reports
+(`features/ambre-spec-toile-status-bar.md`). Neither fit moves the camera on its own. Both ask the Logic
+thread for the extent first, because the UI holds the culled set alone (`TOILE-UI-158`,
+`features/ambre-spec-toile-viewport.md`).
 
-**Where each entry is specified.** The command an entry names is owned by the feature that
-implements it: the clipboard, the groups, the z-order, the frames and the reactions are each
-specified in their own document, and this one restates none of them.
+**Where each entry is specified.** The command an entry names is owned by the feature that implements it. The
+clipboard, the groups, the z-order, the frames and the reactions are each specified in their own document.
+This one restates none of them.
 
 ---
 
@@ -212,41 +210,38 @@ specified in their own document, and this one restates none of them.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The pointer half is untested.** The entry builder and the five layouts are covered, one test per
-  scope. The handler that decides which scope a right-click means, and what it does to the selection,
-  is reached by nothing. It is a pure function of a point and a selection, so it belongs on the host
-  tier and is the cheapest gap here to close.
-* **A displayed shortcut is not joined to the key that fires it** (`TOILE-UI-052`). The launcher
-  keymap binds the panel and the tool chords; the board chords -- undo, redo, duplicate, group,
-  select all, delete, the nudges -- are decoded on the canvas, so the accelerator a menu prints and
-  the key the canvas honours are two independent lists.
+* **The pointer half is untested.** The entry builder and the five layouts are covered, one test per scope.
+  The handler that decides which scope a right-click means, and what it does to the selection, is reached by
+  nothing. It is a pure function of a point and a selection. It belongs on the host tier, and it is the
+  cheapest gap here to close.
+* **A displayed shortcut is not joined to the key that fires it** (`TOILE-UI-052`). The launcher keymap binds
+  the panel and the tool chords. The board chords -- undo, redo, duplicate, group, select all, delete, the
+  nudges -- are decoded on the canvas. So the accelerator a menu prints and the key the canvas honours are two
+  independent lists.
 * **The clipboard has no keyboard chord on the canvas.** Cut, copy and paste are menu entries; the
   canvas key handler decodes neither, and paste rides the browser's own event. The menu prints an
   accelerator for each.
 * **No entry opens the menu from the keyboard.** The shared component navigates by keyboard once
   open, and nothing opens it, so a user without a pointer reaches none of these commands.
-* **The context menu hides the align rows by count alone.** The six alignments appear from two
-  selected elements and the two distributions from three, and neither gate reads the lock: a pair
-  where one element is locked is still offered every alignment, and the operation then moves one
-  box and refuses the other (`TOILE-234`, `features/ambre-spec-toile-elements.md`). It is the same
-  hole as `TOILE-UI-126`, in a newer row.
-* **The comment entry opens the panel and comments on nothing.** The View menu opens the board-wide
-  list, and no context-menu entry drops a thread on the element under the cursor: the tool and the
-  pin are the only ways in (`features/ambre-spec-toile-comments.md section 4`).
-* **A refused command answers with nothing.** The board refuses some commands -- a locked element
-  ignores a move -- and no rule states what the user is told when an entry produces no change. Three
-  refusals on this surface are already silent: an id the resolver does not know (`TOILE-UI-152`), a
-  frame entry with no enclosing frame (`TOILE-UI-153`), and a fit to the selection with nothing
-  selected (`TOILE-UI-160`).
-* **A locked element is offered every entry that would move it** (`TOILE-UI-126`). The builder gates
-  group, ungroup, lock, unlock and the frame pair on the scope; cut, delete, duplicate and the four
-  z-order rows are pushed whatever the lock state. The scope carries the flag, so the fix is a
-  condition, not a new signal.
-* **The scope describes the visible selection, not the selection** (`TOILE-UI-134`). Each selected
-  id is looked up in the culled set, so an element scrolled off screen leaves the count, the lock
-  flags and the union that finds the enclosing frame. Two entries resolve through the same lookup,
-  so an off-screen group is not ungrouped and an off-screen element is not added to its frame.
-* **The frame the entries target is geometric, not the real parent.** The lookup takes the
-  front-most frame whose box contains the selection, and no test holds two (`TOILE-UI-150`); removal
-  reuses it, so an element whose parent is another frame is removed from the wrong one and nothing
-  happens (`TOILE-UI-149`).
+* **The context menu hides the align rows by count alone.** The six alignments appear from two selected
+  elements and the two distributions from three, and neither gate reads the lock. A pair where one element is
+  locked is still offered every alignment. The operation then moves one box and refuses the other
+  (`TOILE-234`, `features/ambre-spec-toile-elements.md`). It is the same hole as `TOILE-UI-126`, in a newer
+  row.
+* **The comment entry opens the panel and comments on nothing.** The View menu opens the board-wide list, and
+  no context-menu entry drops a thread on the element under the cursor. The tool and the pin are the only ways
+  in (`features/ambre-spec-toile-comments.md section 4`).
+* **A refused command answers with nothing.** The board refuses some commands: a locked element ignores a
+  move. No rule states what the user is told when an entry produces no change. Three refusals here are already
+  silent: an id the resolver does not know (`TOILE-UI-152`) and a frame entry with no enclosing frame
+  (`TOILE-UI-153`). The third is a fit to the selection with nothing selected (`TOILE-UI-160`).
+* **A locked element is offered every entry that would move it** (`TOILE-UI-126`). The builder gates group,
+  ungroup, lock, unlock and the frame pair on the scope. Cut, delete, duplicate and the four z-order rows are
+  pushed whatever the lock state. The scope carries the flag, so the fix is a condition, not a new signal.
+* **The scope describes the visible selection, not the selection** (`TOILE-UI-134`). Each selected id is
+  looked up in the culled set. An element scrolled off screen leaves the count, the lock flags and the union
+  that finds the enclosing frame. Two entries resolve through the same lookup, so an off-screen group is not
+  ungrouped and an off-screen element is not added to its frame.
+* **The frame the entries target is geometric, not the real parent.** The lookup takes the front-most frame
+  whose box contains the selection, and no test holds two (`TOILE-UI-150`). Removal reuses it, so an element
+  whose parent is another frame is removed from the wrong one and nothing happens (`TOILE-UI-149`).

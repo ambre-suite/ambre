@@ -2,19 +2,18 @@
 // ============================================================================
 // MockSyncHandle -- a test double for the Sync thread.
 //
-// Controller tests exercise `TrameState` against a realistic collaboration
-// loop without a network: a `MockSyncHandle` plays the Sync worker, capturing
-// the `SyncCommand`s a controller emits (through the `ambre_bus::CommandSink`
-// seam) and relaying the captured CRDT deltas to a peer controller's
-// `apply_remote`.
+// Controller tests exercise `TrameState` against a realistic collaboration loop
+// without a network. A `MockSyncHandle` plays the Sync worker, capturing the
+// `SyncCommand`s a controller emits through the `ambre_bus::CommandSink` seam.
+// It relays the captured CRDT deltas to a peer controller's `apply_remote`.
 //
 // In production the Logic dispatcher (`ambre-logic::LogicState`) reads a
 // `TrameOutcome` and pushes `SyncCommand::SendUpdate` / `SendEphemeral` onto the
 // Logic->Sync channel. `TrameState` is a typed `DocState` variant that holds no
 // transport handle of its own (see `trame-engine` and
-// `ambre-spec-message-bus.md`). `MockSyncHandle::absorb` reproduces that
-// exact relay step over the `TrameOutcome` API, so tests drive the same
-// `SyncCommand`s through the same `CommandSink` seam the dispatcher emits.
+// `ambre-spec-message-bus.md`). `MockSyncHandle::absorb` reproduces that exact
+// relay step over the `TrameOutcome` API, so tests drive the same `SyncCommand`s
+// through the same `CommandSink` seam the dispatcher emits.
 // ============================================================================
 
 use std::cell::RefCell;
@@ -82,7 +81,7 @@ impl MockSyncHandle {
     }
 
     /// Drain only the CRDT-update payloads (`SendUpdate`), in capture order.
-    /// Other captured commands are discarded -- this is the relay payload a
+    /// Other captured commands are dropped -- this is the relay payload a
     /// peer needs.
     pub fn drain_update_payloads(&self) -> Vec<Vec<u8>> {
         self.drain()

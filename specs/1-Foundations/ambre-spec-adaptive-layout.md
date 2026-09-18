@@ -7,8 +7,8 @@ navigation, the panels and the toolbars do not.
 > How the interface changes with the width of the window. Three widths, one stylesheet, and a rule
 > that the narrow layout is the one everything starts from.
 
-The content is unaffected: a view lays out from the box it is handed, so the whole of this document
-is about the chrome around it.
+The content is unaffected. A view lays out from the box it is handed, so this document is about the
+chrome around it.
 
 ---
 
@@ -20,29 +20,23 @@ other five documents of the DOM side.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-030` | `INV` | The chrome MUST adapt at three declared widths. | this spec section 2 | none | unheld -- three width queries sit in one stylesheet, at under 600, from 600 and over 1024. Nothing refuses a fourth added beside them | unverified |
-| `CHROME-056` | `INV` | Each threshold MUST be written once. | this spec section 2 | none | unheld -- no file outside that stylesheet carries a threshold, so the rule holds by absence. Nothing refuses a second spelling of 600, which is how two components come to disagree about where a phone stops | unverified |
-| `CHROME-031` | `INV` | The narrowest layout MUST be the default: a wider window MUST only add to it. | this spec section 2 | none | unheld -- each adapting rule hides at the base and restores upward, so a component with no query at all is correct on a phone. Nothing refuses the reverse, which fails on the width nobody tests on | unverified |
-| `CHROME-032` | `OBS` | On a phone, a floating menu MUST become a sheet pinned to the bottom edge. | this spec section 2 | none | unheld -- the style pins all four edges and overrides the placement the arithmetic of `CHROME-003` computed, so the two agree by one of them winning. No test drives a narrow viewport | unverified |
-| `CHROME-057` | `OBS` | A keyboard chord MUST NOT be shown below the desktop width. | this spec section 2, the table of what moves today | none | unheld -- the chip is hidden at the base and restored over 1024, and a chord names a key a phone has not got. No test drives a narrow viewport, so nothing reads the chip at any width | unverified |
-| `CHROME-058` | `OBS` | On a phone, the sync state MUST show its icon without its label. | this spec section 2, the table of what moves today | none | unheld -- the label is hidden at the base and restored from 600, and nothing reads it at either width | unverified |
+| `CHROME-030` | `INV` | The chrome MUST adapt at three declared widths. | this spec section 2 | none | unheld -- three width queries sit in one stylesheet, at under 600, from 600 and over 1024. Nothing refuses a fourth added beside them; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-056` | `INV` | Each threshold MUST be written once. | this spec section 2 | none | unheld -- no file outside that stylesheet carries a threshold, so the rule holds by absence. Nothing refuses a second spelling of 600, which is how two components come to disagree about where a phone stops; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-031` | `INV` | The narrowest layout MUST be the default: a wider window MUST only add to it. | this spec section 2 | none | unheld -- each adapting rule hides at the base and restores upward, so a component with no query at all is correct on a phone. Nothing refuses the reverse, which fails on the width nobody tests on; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-032` | `OBS` | On a phone, a floating menu MUST become a sheet pinned to the bottom edge. | this spec section 2 | none | unheld -- the style pins all four edges and overrides the placement the arithmetic of `CHROME-003` computed, so the two agree by one of them winning. No test drives a narrow viewport; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-057` | `OBS` | A keyboard chord MUST NOT be shown below the desktop width. | this spec section 2, the table of what moves today | none | unheld -- the chip is hidden at the base and restored over 1024, and a chord names a key a phone has not got. No test drives a narrow viewport, so nothing reads the chip at any width; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-058` | `OBS` | On a phone, the sync state MUST show its icon without its label. | this spec section 2, the table of what moves today | none | unheld -- the label is hidden at the base and restored from 600, and nothing reads it at either width; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-033` | `OBS` | Navigation and panels MUST stay reachable at every width: a region MUST collapse, never disappear. | this spec section 2 | not built | unbuilt -- lands with the `The adaptive chrome` Story (`ambre-roadmap.md` E6). No sidebar, no drawer and no panel region exists at any width, so there is nothing to collapse yet | unimplemented |
-| `CHROME-034` | `INV` | A content view MUST lay out from the size it is given, never from a device class. | this spec section 2; `ambre-spec-frame.md` | none | unheld -- no code outside the stylesheet reads a width threshold, so the rule holds by absence. Nothing refuses the first view that reads the window and branches on it | unverified |
+| `CHROME-034` | `INV` | A content view MUST lay out from the size it is given, never from a device class. | this spec section 2; `ambre-spec-frame.md` | none | unheld -- no code outside the stylesheet reads a width threshold, so the rule holds by absence. Nothing refuses the first view that reads the window and branches on it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** none: adaptation is style, resolved by the browser, and
   `ambre-spec-budgets.md` budgets no chrome operation. A resize does cost a frame,
   and that is charged to `ambre-spec-frame.md`.
 * **Boundary.** none: the window width is read from the browser and never leaves the client. It is a
   signal the page already carries, and nothing sends it anywhere.
-* **Verification.** 0 `verified`, 7 `unverified`, 1 `unimplemented`. Nothing holds a single row, and
-  the reason is one reason: every rule is a property of a rendered page at a given width, and no
-  tier resizes a viewport. What the stylesheet declares is checked by looking at it. The pass added
-  three rows and no mechanism: `CHROME-056` is the half `CHROME-030` carried as a conjunction, and
-  `CHROME-057` and `CHROME-058` are two of the four entries the table of what moves today lists and
-  no row ruled. The fourth, the tightened spacing, is not a row here: it is written as five literal
-  lengths, so it is one of the values `UI-THREAD-029` already reports as bypassing the token
-  source.
-
+* **Verification.** 0 `verified`, 7 `untested`, 1 `unimplemented`. Nothing holds a single row, for
+  one reason. Every rule is a property of a rendered page at a given width, and no tier resizes a
+  viewport. What the stylesheet declares is checked by looking at it.
 ---
 
 ## 2. MODEL
@@ -80,9 +74,9 @@ adapts at none (`CHROME-033`).
 | the command palette | full screen | most of the window | half the window |
 | a wide data view | the priority columns, and horizontal scrolling | every column | every column, with a frozen edge |
 
-**The sheet, and the arithmetic it overrides.** On a phone the menu's placement is still computed --
-the click point, the flip and the clamp of `CHROME-003` -- and then every edge is overridden by the
-style, so the sheet wins. The arithmetic is not wrong there; it is simply not what a thumb wants.
+**The sheet, and the arithmetic it overrides.** On a phone the menu's placement is still computed: the
+click point, the flip and the clamp of `CHROME-003`. Every edge is then overridden by the style, so
+the sheet wins. The arithmetic is not wrong there; it is simply not what a thumb wants.
 
 **The content does not adapt, and that is the design.** A view is handed the size of its cell and
 lays out from it. Nothing in the content path reads a threshold, so a narrow window gives a smaller
@@ -123,20 +117,21 @@ The user touches nothing here. What they see is whether the interface fits.
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **Most of the adaptation table has no code.** The navigation, the panels, the toolbar overflow and
-  the data-view column priority are designed and absent, so the interface today is one layout with
+  the data-view column priority are designed and absent. The interface today is one layout with
   three small differences (`CHROME-033`).
 * **No tier resizes a viewport.** The wasm tier mounts components in a document of fixed size, so
   every row here is held by reading the stylesheet.
-* **The phone block writes its own lengths.** The tightened header, the tightened command bar, the
-  sheet's padding, its corner radius and its taller rows are five literal values, none of them from
-  the token source. They are a phone-only palette nobody declared (`ambre-spec-design-tokens.md`,
+* **The phone block writes its own lengths.** Five literal values carry the phone block: the tightened
+  header, the tightened command bar, the sheet's padding, its corner radius and its taller rows.
+  None comes from the token source. They are a phone-only palette nobody declared
+  (`ambre-spec-design-tokens.md`,
   `UI-THREAD-029`).
 * **An open menu does not re-place itself on a resize.** The placement is computed when the menu
   opens, and a window narrowed under it leaves it where it was.
 * **Nothing rules on orientation, or on a soft keyboard.** A phone rotated, or a keyboard covering
   half the viewport, changes the usable height and no rule reads it.
 * **Nothing rules on a pointer that is not a mouse.** The widths say how much room there is, not
-  whether the user has a finger or a cursor, and the two questions are not the same one.
+  whether the user has a finger or a cursor. The two questions are not the same one.
 * **The thresholds are unmeasured.** 600 and 1024 are the conventional pair and no measurement of
   this interface produced them.
 

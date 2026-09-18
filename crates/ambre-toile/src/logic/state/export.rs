@@ -123,6 +123,11 @@ impl ToileState {
     /// pixel this thread holds. The full-resolution blobs are ciphertext on the
     /// relay, and no cache on this side has them yet (`toile-media`). A page is
     /// therefore no sharper than the board is on screen.
+    ///
+    /// # Errors
+    ///
+    /// [`PdfExportError::Empty`] when the board yields no page, and
+    /// [`PdfExportError::Serialize`] when krilla refuses to assemble the bytes.
     pub fn export_pdf_document(
         &self,
         page: crate::logic::interop::PageSize,

@@ -1,8 +1,8 @@
 // ambre-chrome/src/format.rs
 // ============================================================================
-// Shared, app-agnostic text-format controls (ambre-spec-chrome.md), the rest
-// of the text-format cluster promoted out of Trame's cell toolbar so Trame cells
-// and Toile elements drive the SAME controls (mirrors `FontPicker` / `ColorPopover`):
+// Shared, app-agnostic text-format controls (ambre-spec-chrome.md). The rest of the
+// text-format cluster promoted out of Trame's cell toolbar. Trame cells and Toile
+// elements drive the SAME controls (mirrors `FontPicker` / `ColorPopover`):
 //
 //   FontSizeSelect -- the point-size dropdown (a curated preset list + an "unset"
 //                     entry), value-agnostic (`Option<u16>`, `None` = the unset /
@@ -16,9 +16,9 @@
 //
 // `FormatToggle` does `on:mousedown prevent_default` so a click never steals focus
 // from the host's text pipe (the palette / grid-focus hazard both apps guard
-// against). `FontSizeSelect` must NOT: on a native <select>, preventing the
-// mousedown default suppresses the browser's opening of the option list, so the
-// dropdown never appears. It relies on `on:change` instead.
+// against). `FontSizeSelect` must NOT: on a native <select>, preventing the mousedown
+// default suppresses the browser's opening of the option list, so the dropdown never
+// appears. It relies on `on:change` instead.
 // ============================================================================
 
 use leptos::prelude::*;
@@ -29,8 +29,8 @@ use leptos_icons::Icon;
 pub const FONT_SIZES: &[u16] = &[8, 9, 10, 11, 12, 14, 16, 18, 24, 36];
 
 /// The shared font-size dropdown. `current` is the active explicit size (`None` =
-/// unset -> the `auto_label` entry is selected); `on_pick` receives the chosen
-/// size (`None` when the unset entry is picked). `auto_label` names the unset entry
+/// unset -> the `auto_label` entry is selected). `on_pick` receives the chosen size
+/// (`None` when the unset entry is picked). `auto_label` names the unset entry
 /// ("Auto" for Toile's card auto-size, "Default" for Trame's body default).
 #[component]
 pub fn FontSizeSelect(
@@ -45,7 +45,7 @@ pub fn FontSizeSelect(
             // The unset entry has an empty value, so `None` selects it.
             prop:value=move || current.get().map(|s| s.to_string()).unwrap_or_default()
             // NOTE: unlike the toggle buttons, a native <select> must NOT
-            // preventDefault on mousedown -- doing so suppresses the browser's own
+            // preventDefault on mousedown. Doing so suppresses the browser's own
             // opening of the option list, so the dropdown never appears. The pick is
             // committed by on:change, which fires regardless of focus movement.
             on:change=move |ev| {

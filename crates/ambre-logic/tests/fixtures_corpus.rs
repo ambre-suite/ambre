@@ -127,8 +127,8 @@ const TOILE: ToileGen = ToileGen {
 // -----------------------------------------------------------------------------
 
 /// A directory removed when the test drops it. Local rather than a `tempfile`
-/// dependency: is explicit that this component adds no external crate, and
-/// a test needing one would be a signal it is reaching outside the engine.
+/// dependency. That is explicit that this component adds no external crate. A
+/// test needing one would be a signal it is reaching outside the engine.
 struct TempCorpus(PathBuf);
 
 impl TempCorpus {
@@ -220,9 +220,9 @@ fn a_flipped_header_byte_moves_the_digest() {
 
 #[test]
 fn a_generator_whose_doc_type_contradicts_its_bytes_is_refused() {
-    // The driver decodes what it just generated, so a generator that declared
-    // `Toile` and emitted a Trame container is caught before anything is written
-    // -- not committed and discovered later by a confused importer.
+    // The driver decodes what it just generated. A generator that declared
+    // `Toile` and emitted a Trame container is caught before anything is
+    // written. It is not committed and discovered later by a confused importer.
     struct Liar;
     impl FixtureGen for Liar {
         fn name(&self) -> &'static str {
@@ -264,7 +264,8 @@ fn the_driver_walks_a_whole_registry_and_creates_its_subdirectories() {
     assert_eq!(manifests[1].generator, TOILE.name());
     for generator in registry {
         // A generator name carries a `/`, which is a subdirectory the driver
-        // creates -- not an escape and not a flat filename with a slash in it.
+        // creates. It is not an escape. It is not a flat filename with a slash
+        // in it.
         assert!(fixtures::artifact_path(dir.path(), generator.name()).is_file());
         assert!(fixtures::manifest_path(dir.path(), generator.name()).is_file());
     }
@@ -346,7 +347,7 @@ fn a_container_failure_arrives_intact_never_flattened_into_a_string() {
     let dir = TempCorpus::new("container");
     std::fs::create_dir_all(dir.path().join("trame")).unwrap();
     // Long enough to clear `HEADER_LEN`, so the failure is the magic and not a
-    // truncation -- the two are different conditions and the belt names one.
+    // truncation. The two are different conditions, and the belt names one.
     std::fs::write(
         fixtures::artifact_path(dir.path(), "trame/soup"),
         b"XXXX definitely not an ambre container at all",
@@ -376,7 +377,7 @@ fn a_malformed_sidecar_is_reported_as_a_manifest_failure() {
 #[test]
 fn the_corpus_root_is_resolved_from_the_manifest_dir_not_the_cwd() {
     // C4/: `cargo test` runs each test binary with the CWD at its own package
-    // root, so a bare relative `fixtures/` would resolve differently for every
+    // root. A bare relative `fixtures/` would resolve differently for every
     // consumer crate. The root must be an absolute path under the workspace.
     let root = fixtures::corpus_root().expect("a workspace root above this crate");
     assert!(root.is_absolute(), "{}", root.display());
@@ -395,7 +396,7 @@ fn the_corpus_root_is_resolved_from_the_manifest_dir_not_the_cwd() {
 ///
 /// Asserted here rather than through `load_fixture`, which takes a corpus *name*
 /// and has no way to be handed byte soup. `ambre_core::docfile` has its own belt
-/// on the same conditions; this one proves the fixture path reports them without
+/// on the same conditions. This one proves the fixture path reports them without
 /// panicking and without inventing a variant of its own.
 #[test]
 fn every_header_failure_is_typed_and_none_of_them_panics() {
@@ -455,8 +456,8 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
             DocFileError::PayloadRejected,
         ),
         (
-            // Both apps, deliberately: Toile reports a refused payload as a
-            // display *event* rather than by returning nothing, so a loader that
+            // Both apps, deliberately. Toile reports a refused payload as a
+            // display *event* rather than by returning nothing. A loader that
             // inferred rejection from an empty event vector would accept this one
             // and hand back an empty board.
             "valid Toile header, payload the engine refuses",
@@ -476,17 +477,17 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
         assert_eq!(bytes, before, "{label}: a failed load rewrote its input");
     }
 
-    // A *valid* container for another app is not a rejection here: the loader is
-    // type-agnostic by design (it reads `doc_type` off the header and routes), so
-    // a Toile artifact loads as a Toile document.
+    // A *valid* container for another app is not a rejection here. The loader is
+    // type-agnostic by design: it reads `doc_type` off the header and routes. A
+    // Toile artifact loads as a Toile document.
     let (_id, state) = fixtures::import_fixture(&TOILE.build()).expect("a Toile fixture loads");
     assert_eq!(state.doc_type(), DocType::Toile);
 }
 
 #[test]
 fn a_doc_type_with_no_engine_degrades_cleanly() {
-    // Unreachable for any fixture this spec produces (excludes Prose and
-    // Murmure) and present so the loader degrades when they arrive -- a panic
+    // Unreachable for any fixture this spec produces, which excludes Prose
+    // and Murmure. Present so the loader degrades when they arrive: a panic
     // here would be a corpus that cannot be inspected at all.
     let prose = write_ambre_plaintext(DocType::Prose, Uuid::from_bytes([0x44; 16]), b"payload");
     match fixtures::import_fixture(&prose) {
@@ -534,8 +535,8 @@ fn the_shape_counts_what_the_document_holds() {
 fn a_solo_document_reports_one_peer_and_a_merged_one_reports_two() {
     let (_id, solo) = fixtures::import_fixture(&TRAME.build()).expect("loads");
     // The importing state commits its own scaffolding under its own peer before
-    // the merge, so a restored document always carries one peer that is the
-    // reader rather than an author. `FIXTURE_IMPORT_PEER` is what lets the count
+    // the merge. A restored document always carries one peer that is the reader
+    // rather than an author. `FIXTURE_IMPORT_PEER` is what lets the count
     // subtract exactly that one, so a solo document still reports one.
     assert_eq!(shape_of(&solo).peers, 1, "one author");
 
@@ -578,8 +579,8 @@ fn the_canonical_dump_carries_both_representations_of_a_formula() {
 
 #[test]
 fn the_canonical_dump_is_blind_to_the_route_a_document_took() {
-    // The property the frozen belt of rests on, and the reason rejects a
-    // byte or state comparison: two documents agreeing on every user-visible
+    // The property the frozen belt rests on, and the reason it rejects a
+    // byte or state comparison. Two documents agreeing on every user-visible
     // value still differ in op history, peer ids and commit timestamps.
     let build = |peer: u64, reversed: bool| {
         let mut state = TrameState::with_peer(peer);

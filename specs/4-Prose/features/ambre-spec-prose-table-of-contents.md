@@ -4,8 +4,8 @@
 **Implementation:** design-only
 
 > A list of the document's headings, with the page each one starts on. Nothing about it is written
-> down: it is read off the headings and the page layout every time the document is laid out, so it
-> is never out of date and two authors never merge two versions of it.
+> down. It is read off the headings and the page layout every time the document is laid out. It
+> is never out of date, and two authors never merge two versions of it.
 
 ---
 
@@ -52,21 +52,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the block carries two settings and no text, and `ZK-001` seals
   every payload before it leaves the client.
 * **Verification.** 12 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line
-  `lib.rs`, and `ambre-bus` carries no Prose command. Two rows stated two rules each, and both
-  second halves were the same ban said twice, so they become one: `PROSE-FEAT-113` is what the
-  block may hold, and the schema table already agrees -- the `Toc` node carries `max_level` and
-  `numbered` and nothing else (`ambre-spec-prose-schema.md section 3`), which is the closest thing
-  to a mechanism any row here has. `PROSE-FEAT-003` keeps document order, which the ban does not
-  imply: a list built by walking the headings in any other order stores nothing either.
-  `PROSE-FEAT-114` is the agreement the fourth scenario of section 2 rests on and no row carried,
-  and it is weaker than it reads -- it holds over the entries, not over the page numbers, which
-  section 6 records as an open gap of pagination. The two commands and the one gesture had no rows
-  at all: nothing said what an insert leaves behind or may not touch, nothing said that a settings
-  change reaches the next layout, and nothing said that following an entry writes nothing, which is
-  the whole difference between a link and an edit. `PROSE-FEAT-113`, `PROSE-FEAT-115`,
-  `PROSE-FEAT-116`, `PROSE-FEAT-117`, `PROSE-FEAT-118` and `PROSE-UI-083` are what a host test
-  holds over a document fixture; the six that read a layout need one and land in the wasm tier of
-  `ambre-spec-testing.md section 6`.
+  `lib.rs`, and `ambre-bus` carries no Prose command. The closest thing to a mechanism any row here
+  has is the schema, which already agrees on what the block may hold. The `Toc` node carries
+  `max_level` and `numbered` and nothing else (`ambre-spec-prose-schema.md section 3`). Six rows are
+  what a host test holds over a document fixture. The six that read a layout need one and land in
+  the wasm tier (`ambre-spec-testing.md section 6`).
 
 ---
 
@@ -87,8 +77,8 @@ Two peers over one outline. No test resolves yet: the last column names the row 
 
 ## 3. MODEL
 
-**Containers.** None of its own. The table of contents is one block type of the movable tree, and
-its two settings -- the deepest level it shows, and whether it numbers its entries -- are that
+**Containers.** None of its own. The table of contents is one block type of the movable tree. Its
+two settings -- the deepest level it shows, and whether it numbers its entries -- are that
 node's attributes, declared in `ambre-spec-prose-schema.md section 3`. The entries are not stored,
 so no container holds them.
 
@@ -125,7 +115,7 @@ pub struct TableOfContents {
 The build runs when the layout is published, and nothing it produces is written back
 (`PROSE-FEAT-003`).
 
-**Why the build repeats.** The table of contents is itself a block on a page, so its own height
+**Why the build repeats.** The table of contents is itself a block on a page. Its own height
 changes where the following blocks fall, which changes the page numbers it shows. Pagination runs
 the settling as a bounded, deferred pass, never inline on the keystroke path: the rule is
 `PROSE-019`, and the algorithm is `features/ambre-spec-prose-pagination.md section 3`.
@@ -177,13 +167,13 @@ rather than to a page (`features/ambre-spec-prose-pdf-export.md section 3`).
   `PROSE-FEAT-118` says only that one does not rewrite another's settings.
 * **Nothing bounds the configured depth.** `max_level` is a `u8` and a heading level is one to six
   (`features/ambre-spec-prose-headings.md`), so zero and two hundred are both storable. A depth of
-  zero is a table of contents that lists nothing, and no rule says whether a command may write one
+  zero is a table of contents that lists nothing. No rule says whether a command may write one,
   or what the block shows when it holds one.
 * **Nothing rules on the entries a table of contents lists of itself.** The block is not a heading,
-  so it lists nothing of its own; whether a heading *inside* a table cell is an entry is undecided,
+  so it lists nothing of its own. Whether a heading *inside* a table cell is an entry is undecided,
   and the walk of section 3 would keep it.
-* **The entry has no style.** Nothing says how a level-three entry differs from a level-one one, so
-  the leader dots, the indent and the type size are undecided and will be a decision of the page
+* **The entry has no style.** Nothing says how a level-three entry differs from a level-one one.
+  The leader dots, the indent and the type size are undecided. They will be a decision of the page
   rendering rather than of this feature.
 * **What the reader sees while the settling pass runs is not ruled on.** Pagination states the pass
   is deferred and bounded; nothing says whether the entries show the previous page numbers or
@@ -193,8 +183,8 @@ rather than to a page (`features/ambre-spec-prose-pdf-export.md section 3`).
   same one the cross references and the comments rest on. It lands with the `Two peers read the
   same page number` Story (`ambre-roadmap.md` E5).
 * **Three more derived blocks are designed and unbuilt, and each is this walk with another
-  predicate.** A table of figures and a table of tables list the captioned pictures and tables; an
+  predicate.** A table of figures and a table of tables list the captioned pictures and tables. An
   index lists the terms an author marked, alphabetically, with the pages they fall on. All three
-  reuse the settling pass and the page numbers of section 3, none has a block type in
-  `ambre-spec-prose-schema.md section 3`, and the index needs a mark key that is not declared
+  reuse the settling pass and the page numbers of section 3, and none has a block type in
+  `ambre-spec-prose-schema.md section 3`. The index needs a mark key that is not declared
   either. The Story is "The later writing set" (`ambre-roadmap.md` POST-V1).

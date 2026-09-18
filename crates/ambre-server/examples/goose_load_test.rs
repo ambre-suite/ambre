@@ -18,13 +18,11 @@
 //!
 //! ## CLI flags (goose built-in)
 //!
-//! | Flag              | Default                        |
-//! |-------------------|--------------------------------|
-//! | `-H, --host`      | `http://localhost:3000`        |
-//! | `-u, --users`     | 1000                           |
-//! | `-r, --hatch-rate`| 50                             |
-//! | `-t, --run-time`  | 120s                           |
-//! | `--report-file`   | (none: generate HTML report)   |
+//! * `-H, --host` -- default `http://localhost:3000`.
+//! * `-u, --users` -- default 1000.
+//! * `-r, --hatch-rate` -- default 50.
+//! * `-t, --run-time` -- default `120s`.
+//! * `--report-file` -- no default; pass it to generate an HTML report.
 
 use goose::prelude::*;
 use reqwest::cookie::Jar;
@@ -67,20 +65,20 @@ async fn session_setup(user: &mut GooseUser) -> TransactionResult {
 
 // -- REST transactions ---------------------------------------------------
 
-/// `GET /api/documents` — list all documents for the authenticated user.
+/// `GET /api/documents` -- list all documents for the authenticated user.
 async fn list_documents(user: &mut GooseUser) -> TransactionResult {
     let _goose = user.get("/api/documents").await?;
     Ok(())
 }
 
-/// `GET /api/documents/{id}` — fetch a single document's metadata.
+/// `GET /api/documents/{id}` -- fetch a single document's metadata.
 async fn get_document(user: &mut GooseUser) -> TransactionResult {
     let doc_id = user.get_session_data::<String>().unwrap().clone();
     let _goose = user.get(&format!("/api/documents/{doc_id}")).await?;
     Ok(())
 }
 
-/// `GET /api/documents/{id}/snapshot` — fetch latest snapshot metadata.
+/// `GET /api/documents/{id}/snapshot` -- fetch latest snapshot metadata.
 async fn get_snapshot(user: &mut GooseUser) -> TransactionResult {
     let doc_id = user.get_session_data::<String>().unwrap().clone();
     let _goose = user
@@ -89,7 +87,7 @@ async fn get_snapshot(user: &mut GooseUser) -> TransactionResult {
     Ok(())
 }
 
-/// `GET /api/documents/{id}/deltas` — fetch deltas since seq 0.
+/// `GET /api/documents/{id}/deltas` -- fetch deltas since seq 0.
 async fn get_deltas(user: &mut GooseUser) -> TransactionResult {
     let doc_id = user.get_session_data::<String>().unwrap().clone();
     let _goose = user

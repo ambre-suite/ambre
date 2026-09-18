@@ -36,3 +36,6 @@ wasm-bindgen = { workspace = true }
 js-sys               = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 tracing              = { workspace = true }
+
+[lints]
+workspace = true

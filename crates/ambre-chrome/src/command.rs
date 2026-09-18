@@ -35,7 +35,7 @@ use leptos::prelude::*;
 #[derive(Clone)]
 pub struct CommandStates {
     toggled: Rc<HashMap<ambre_commands::CommandId, RwSignal<bool>>>,
-    /// Per-command enabled state (e.g. Undo/Redo availability), keyed like
+    /// Per-command enabled state (for example Undo/Redo availability), keyed like
     /// `toggled`. Initially `true`: a command is actionable until the Logic
     /// thread reports otherwise (`TrameEvent::UndoState`, ...).
     enabled: Rc<HashMap<ambre_commands::CommandId, RwSignal<bool>>>,
@@ -44,7 +44,7 @@ pub struct CommandStates {
 impl CommandStates {
     /// Create a store with a toggle signal (initially `false`) and an enabled
     /// signal (initially `true`) for each id. Must run inside a Leptos reactive
-    /// owner (e.g. the mount closure).
+    /// owner (for example the mount closure).
     ///
     /// Takes identities rather than a slice so an app passes them straight from
     /// its command table (`ambre-spec-commands.md`, UI-THREAD-019) without
@@ -60,7 +60,7 @@ impl CommandStates {
     }
 
     /// The reactive toggle signal for `id`, for a chrome view to subscribe to
-    /// (e.g. a button's `aria-pressed`). `None` if the id was not registered.
+    /// (for example a button's `aria-pressed`). `None` if the id was not registered.
     pub fn toggled_signal(&self, id: ambre_commands::CommandId) -> Option<RwSignal<bool>> {
         self.toggled.get(&id).copied()
     }
@@ -74,7 +74,7 @@ impl CommandStates {
     }
 
     /// The reactive enabled signal for `id`, for a chrome view to subscribe to
-    /// (e.g. a button's `disabled` / `aria-disabled`). `None` if the id was not
+    /// (for example a button's `disabled` / `aria-disabled`). `None` if the id was not
     /// registered.
     pub fn enabled_signal(&self, id: ambre_commands::CommandId) -> Option<RwSignal<bool>> {
         self.enabled.get(&id).copied()
@@ -92,7 +92,7 @@ impl CommandStates {
 /// Translate a DOM `keydown`/`keyup` event into a [`KeyBinding`].
 ///
 /// This is where the control key and the command key fold into the primary
-/// accelerator: past this point one chord serves every platform, and no table
+/// accelerator. Past this point one chord serves every platform, and no table
 /// can name one machine's accelerator (`ambre-spec-commands.md`,
 /// `UI-THREAD-028`).
 ///
@@ -140,7 +140,7 @@ fn key_from_dom(s: &str) -> Option<Key> {
     })
 }
 
-// ── Tests (host tier) ───────────────────────────────────────────────────────
+// -- Tests (host tier) -------------------------------------------------------
 // `key_from_dom` is pure (`&str -> Option<Key>`), the host-testable seam of the
 // keybinding manager: `keybinding_from_event` is reduced to wrapping it with the
 // modifier bits read off a `web_sys::KeyboardEvent` (covered in the wasm tier).

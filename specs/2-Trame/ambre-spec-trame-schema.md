@@ -10,7 +10,7 @@
 
 ## 0. SCOPE, AND THE MENTION RULE
 
-A schema decision is often justified by an action: a row identity survives a sort, a delete and a
+A schema decision is often justified by an action. A row identity survives a sort, a delete and a
 reorder, and its `{peer}_{counter}` shape answers concurrent minting. So an action appears here as a
 **cause**, never as a **rule**.
 
@@ -33,30 +33,28 @@ reorder, and its `{peer}_{counter}` shape answers concurrent minting. So an acti
 
 Prefix `TRAME`, shared with `trame-engine`: one prefix, one numbering, no renumbering.
 `TRAME-003`, `TRAME-010` and `TRAME-016` sit here because each states a property of the format,
-not of the engine; `TRAME-221` and `TRAME-222` are the halves those last two hid, and each states
+not of the engine. `TRAME-221` and `TRAME-222` are the halves those last two hid, and each states
 what two peers reach, not what one holds. Grammar and status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-003` | `INV` | A row's or column's identity MUST be a minted `Uid` carried as the `LoroMovableList` element's **value**, never its position. | this spec section 2 | `ambre_trame::model::sheet_index::tests::build_maps_positions_to_stable_ids`; `::apply_move_row_permutes_order_and_reindexes`; `::cell_key_is_fixed_length_and_stable` -- the index; `ambre_trame::logic::tests::group4::sort_range_formulas_follow_data` -- the one that walks a real move on the `LoroMovableList` and reads the cells back under their unchanged keys, which is the hazard section 6 rejects the slot id for | none | verified |
-| `TRAME-010` | `INV` | Computed values MUST NOT enter the CRDT: a container MUST hold the raw text alone. | this spec section 3 | `ambre_trame::logic::tests::group1::sum_over_plain_literals_survives_reseed` -- it reads the raw text back after a snapshot round trip | partial -- a computed value **overwriting** the raw text goes red. A computed value stored **beside** it, the `t` of the declared, unbuilt `{v, t, s}` sub-map of section 5, leaves every test green and costs every peer the bandwidth | unverified |
+| `TRAME-010` | `INV` | Computed values MUST NOT enter the CRDT: a container MUST hold the raw text alone. | this spec section 3 | `ambre_trame::logic::tests::group1::sum_over_plain_literals_survives_reseed` -- it reads the raw text back after a snapshot round trip | partial -- a computed value **overwriting** the raw text goes red. A computed value stored **beside** it, the `t` of the declared, unbuilt `{v, t, s}` sub-map of section 5, leaves every test green and costs every peer the bandwidth; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-221` | `CONC` | Two peers that exchanged their whole history MUST show the same computed value, and a peer rebuilt from the converged snapshot MUST show it too. | this spec section 3 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest over 256 interleavings, comparing the rendered text of both peers, then of a third peer imported from the converged snapshot; `logic::tests::group1::sum_over_plain_literals_survives_reseed` -- the worked example | none | verified |
 | `TRAME-016` | `INV` | A cell's whole style MUST be one binary register, keyed by that cell's identity. | this spec section 3; architecture section 2.D | `ambre_trame::logic::convergence_tests::subset_style_edit_does_not_tear_a_whole_cell_rewrite` -- it goes red on a split register, because a partial patch racing a whole rewrite is what a second style container tears on; `logic::tests::group1::bold_stays_on_the_cell_not_the_selection` -- the key | none | verified |
 | `TRAME-222` | `CONC` | Two concurrent restyles of one cell MUST converge on the whole style one of the two wrote, never a per-attribute blend. | this spec section 3; architecture section 2.D | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`; `::subset_style_edit_does_not_tear_a_whole_cell_rewrite` | none | verified |
 | `TRAME-025` | `INV` | A Trame document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7; `ambre-spec-schema-version.md`, the protocol it obeys | `ambre_trame::logic::schema::tests::a_new_workbook_carries_the_current_version` -- `schema::stamp` writes the key inside the scaffolding commit of `from_doc`, alongside the implicit sheet, so a workbook carries it before any user edit | none | verified |
-| `TRAME-026` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | none | unheld -- the Trame half of `SCHEMA-009`. The rule binds a code change to a constant, and nothing compares this build's layouts against the previous release's, so a reviewer holds it. The registry it obliges exists now (`logic/schema.rs`), so the reviewer has somewhere to put the step | unverified |
+| `TRAME-026` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | none | unheld -- the Trame half of `SCHEMA-009`. The rule binds a code change to a constant, and nothing compares this build's layouts against the previous release's, so a reviewer holds it. The registry it obliges exists now (`logic/schema.rs`), so the reviewer has somewhere to put the step; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** none: a format has no operation to budget. What loading one costs is legs 3 and 4 of
   `ambre-spec-budgets.md section 4`, and both are recorded there as unbudgeted.
 * **Boundary.** none: `TRAME-010` keeps computed values out of the document, and the containers
   this table declares reach the relay as ciphertext alone (`ZK-001`).
-* **Verification.** 5 `verified`, 2 `unverified`, 0 `unimplemented`. Two conjunctions came apart:
-  `TRAME-010` and `TRAME-016` each stated a format rule and a convergence rule, and in both the
-  convergence half was the tested one. `TRAME-010` is the gap that remains, and it is narrower than
-  it reads: only a computed value stored **beside** the raw text escapes. Reported in
-  `ambre-spec-testing.md section 7`. `ARCH P8` closed the two unbuilt rows the same way it did in
-  Toile: `TRAME-025` is held by a test, and `TRAME-026` moves from unbuilt to unverifiable, which is
-  the one row this document's ceiling was raised for.
+* **Verification.** 5 `verified`, 2 `untested`. What holds is the shape a merge reads back. The
+  identity a cell keeps, the single register a style lives in, and the `meta.schema_version` every
+  document carries. What is loose is `TRAME-010`, narrower than it reads: only a computed value
+  stored **beside** the raw text escapes (`ambre-spec-testing.md section 7`). The version bump no
+  test can reach is loose too.
 
 ---
 
@@ -149,7 +147,7 @@ Only where a schema decision needs a reason. 40 words each.
   layout change is a schema change (`TRAME-026`).
 * **`merges_{sheet}`.** Keyed by the master corner, so a merge follows its cells through an insert
   or a delete of a line above it.
-* **`filters_{sheet}`.** Fields are separate keys, so two peers filtering at the same moment elect
+* **`filters_{sheet}`.** Fields are separate keys. Two peers filtering at the same moment elect
   each field on its own and can converge on a definition neither wrote. One register would hold the
   definition whole, as `cellstyle_{sheet}` does (`TRAME-FEAT-025`).
 * **`filter_hidden_{sheet}`.** Kept out of `rows_{sheet}` so a hidden flag never disturbs the order
@@ -165,9 +163,9 @@ Only where a schema decision needs a reason. 40 words each.
 ## 6. REJECTED ALTERNATIVES
 
 Section 3 declares no anchored-comment container, a parity gap with Prose's `annots` subsystem
-(`4-Prose/features/ambre-spec-prose-comments.md`). The shape is settled ahead of the container: a
+(`4-Prose/features/ambre-spec-prose-comments.md`). The shape is settled ahead of the container. A
 note keys on the move-invariant `(row_uid, col_uid)` pair, so it follows its cell through a sort and
-a reorder, and a delete of a bound line orphans it under the Prose model. Deciding it here is what
+a reorder. A delete of a bound line orphans it under the Prose model. Deciding it here is what
 stops the eventual container being keyed positionally by whoever writes it first.
 
 | Decision | Rejected alternative | Why not |

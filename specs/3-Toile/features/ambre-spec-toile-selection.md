@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: SELECTION ON THE BOARD
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- picking, the marquee and the handles are built; a marquee and a click
+**Implementation:** partial -- picking, the marquee and the handles are built. A marquee and a click
 disagree on what they select, select-all ignores the lock, and a connector cannot be picked.
 
 > A user clicks an element and gets it, not the one behind it. Dragging over empty board sweeps up
@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-223` | `INV` | Of the elements a point falls inside, the front-most MUST be the one picked. | this spec section 2 | `ambre_toile::ui::hit::tests::topmost_wins_front_to_back` | none | verified |
 | `TOILE-UI-006` | `INV` | A locked element MUST NOT be picked. | this spec section 2; `features/ambre-spec-toile-elements.md section 3` | `ambre_toile::ui::hit::tests::locked_never_hits` | none | verified |
 | `TOILE-UI-224` | `INV` | A group node MUST NOT be picked directly: it paints nothing, so a point inside it is a point on the space between its members. | this spec section 2; section 4 | `ambre_toile::ui::hit::tests::group_never_hits` | none | verified |
-| `TOILE-UI-225` | `INV` | A hairline MUST stay clickable at every zoom. | this spec section 2 | none | fails -- the pick floor is four world units, so it shrinks on screen as the user zooms out and swells as they zoom in: the rule holds at one zoom level, section 5 | unverified |
+| `TOILE-UI-225` | `INV` | A hairline MUST stay clickable at every zoom. | this spec section 2 | none | fails -- the pick floor is four world units, so it shrinks on screen as the user zooms out and swells as they zoom in: the rule holds at one zoom level, section 5; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TOILE-UI-226` | `INV` | The whole edge of the selection box MUST be grabbable, even though only the corners draw a square. | this spec section 3 | `ambre_toile::ui::tool::tests::edge_handle_at_picks_sides_corners_and_misses` | none | verified |
 | `TOILE-UI-227` | `INV` | A handle MUST answer a hover only when exactly one element is selected, the select tool is armed and no drag is in flight. | this spec section 3 | `ambre_toile::ui::tool::tests::hover_handle_only_for_a_single_select_at_rest` | none | verified |
 | `TOILE-UI-228` | `INV` | A selection MUST NOT reach any container: it is per user and per moment. | this spec section 4; `ambre-spec-toile-schema.md section 2` | structural -- the id list is a field on the view and the schema declares no container for it | none | verified |
@@ -34,16 +34,16 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-349` | `INV` | A picked connector MUST be selectable, so an arrow can be deleted, re-aimed, restyled and reordered like anything else on the board. | this spec section 2; `features/ambre-spec-toile-connectors.md section 4` | `ambre_toile::ui::arrow::tests::an_arrow_answers_delete_and_the_z_order`; `ambre_toile::ui::arrow::tests::a_release_over_a_shape_re_aims_that_end` -- together, what a selected arrow answers; structural -- the selection is its own field beside the element selection, exclusive with it (`TOILE-UI-354`), and an arrow has no box, so it joins no marquee, group or transform | none | verified |
 | `TOILE-UI-034` | `OBS` | The selection box and its handles MUST follow a single element's rotation. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_rotates_box_and_handles_for_a_rotated_element`; `ambre_toile::ui::tool::tests::hover_handle_follows_the_element_rotation` | none | verified |
 | `TOILE-UI-229` | `OBS` | A single selection MUST wear four corner squares and a rotate handle above the top edge. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_draws_box_and_handles_for_single_selection` | none | verified |
-| `TOILE-UI-230` | `OBS` | A multi-selection MUST wear an upright union box and no resize handle, having no shared angle to resize along. | this spec section 3; section 4 | none | unheld -- no test paints a two-element selection | unverified |
-| `TOILE-UI-231` | `OBS` | A locked element MUST NOT wear a selection box. | this spec section 3 | none | fails -- the overlay reads the id list and never the lock, and select-all puts a locked element in that list, section 5. Answered by the `A locked element is locked on every surface` Story (`ambre-roadmap.md` E7) | unverified |
+| `TOILE-UI-230` | `OBS` | A multi-selection MUST wear an upright union box and no resize handle, having no shared angle to resize along. | this spec section 3; section 4 | none | unheld -- no test paints a two-element selection; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-231` | `OBS` | A locked element MUST NOT wear a selection box. | this spec section 3 | none | fails -- the overlay reads the id list and never the lock, and select-all puts a locked element in that list, section 5; lands with the `A locked element is locked on every surface` Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.2 Click an element
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-007` | `POST` | A click MUST resolve to the top-most enclosing group unless the user has entered that group's scope. | this spec section 2 | `ambre_toile::ui::tool::tests::click_on_group_member_selects_top_most_group`; `ambre_toile::ui::tool::tests::scoped_click_selects_the_member_inside_the_scope`; `ambre_toile::ui::tool::tests::ungrouped_element_resolves_to_itself`; `ambre_toile::ui::tool::tests::pointer_down_on_a_member_selects_the_group` | none | verified |
-| `TOILE-UI-232` | `POST` | A click on an element already selected MUST keep the whole selection, so a multi-selection drags as one. | this spec section 3 | none | unheld -- no test presses on a member of a selection it did not just make | unverified |
-| `TOILE-UI-233` | `POST` | A click on empty board MUST clear the selection. | this spec section 3 | none | unheld -- the press arms a marquee and clears nothing, so the selection survives until the release, section 5 | unverified |
+| `TOILE-UI-232` | `POST` | A click on an element already selected MUST keep the whole selection, so a multi-selection drags as one. | this spec section 3 | none | unheld -- no test presses on a member of a selection it did not just make; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-233` | `POST` | A click on empty board MUST clear the selection. | this spec section 3 | none | unheld -- the press arms a marquee and clears nothing, so the selection survives until the release, section 5; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-234` | `FRAME` | A press MUST NOT write to the document. | this spec section 4 | type-level -- the press returns a local selection or nothing, and the command variant is reachable only from a release that moved | none | verified |
 
 ### 1.3 Drag over empty board
@@ -52,42 +52,37 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-UI-031` | `POST` | A marquee MUST take every element it covers. | this spec section 2 | `ambre_toile::ui::hit::tests::marquee_selects_covered_elements` | none | verified |
 | `TOILE-UI-235` | `POST` | A marquee MUST replace the selection on release, not while it is dragged. | this spec section 3 | `ambre_toile::ui::tool::tests::drag_empty_makes_a_marquee_then_selects` | none | verified |
-| `TOILE-UI-236` | `POST` | A marquee MUST return the same target a click on the same element would return. | this spec section 2; section 4 | none | fails -- the marquee returns raw members and never climbs the group chain, so one gesture selects a group and the other its parts, section 5. Answered by the `A marquee takes what it was drawn around` Story (`ambre-roadmap.md` E7) | unverified |
-| `TOILE-UI-237` | `POST` | A rotated element MUST be judged by the shape the user sees, not by the upright box around it. | this spec section 2 | none | fails -- containment is read on the unrotated bounds, so a tilted shape is taken by a rectangle that does not cover it, section 5. Answered by the `A marquee takes what it was drawn around` Story (`ambre-roadmap.md` E7) | unverified |
-| `TOILE-UI-238` | `FRAME` | A marquee MUST NOT take a locked element or a group node. | this spec section 2 | none | unheld -- `ambre_toile::ui::hit::tests::marquee_selects_covered_elements` covers one element inside and one outside, and neither is locked nor a group | unverified |
+| `TOILE-UI-236` | `POST` | A marquee MUST return the same target a click on the same element would return. | this spec section 2; section 4 | none | fails -- the marquee returns raw members and never climbs the group chain, so one gesture selects a group and the other its parts, section 5; lands with the `A marquee takes what it was drawn around` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-237` | `POST` | A rotated element MUST be judged by the shape the user sees, not by the upright box around it. | this spec section 2 | none | fails -- containment is read on the unrotated bounds, so a tilted shape is taken by a rectangle that does not cover it, section 5; lands with the `A marquee takes what it was drawn around` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-238` | `FRAME` | A marquee MUST NOT take a locked element or a group node. | this spec section 2 | none | unheld -- `ambre_toile::ui::hit::tests::marquee_selects_covered_elements` covers one element inside and one outside, and neither is locked nor a group; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 Enter and leave a group scope
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-032` | `POST` | A double-click MUST enter one nesting level of the group under it. | this spec section 3 | none | unheld -- nothing drives the double-click handler, which lives on the view | unverified |
-| `TOILE-UI-239` | `POST` | `Escape` MUST leave the scope and clear the selection in one press. | this spec section 3; `features/ambre-spec-toile-tools.md` | none | unheld -- nothing drives the key handler, and section 3 read as two presses until this row | unverified |
-| `TOILE-UI-240` | `FRAME` | A double-click on an element in no group MUST NOT change the scope. | this spec section 3 | none | unheld -- nothing drives the double-click handler | unverified |
+| `TOILE-UI-032` | `POST` | A double-click MUST enter one nesting level of the group under it. | this spec section 3 | none | unheld -- nothing drives the double-click handler, which lives on the view; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-239` | `POST` | `Escape` MUST leave the scope and clear the selection in one press. | this spec section 3; `features/ambre-spec-toile-tools.md` | none | unheld -- nothing drives the key handler, and section 3 read as two presses until this row; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-240` | `FRAME` | A double-click on an element in no group MUST NOT change the scope. | this spec section 3 | none | unheld -- nothing drives the double-click handler; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.5 Select the whole board
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-033` | `POST` | Select-all MUST cover the whole board, not the part the UI thread holds. | this spec section 3; section 4 | none | fails -- the walk is over the culled set, so the rule fails off screen, section 5. Answered by the `Toile reads the board, not the screen` Story (`ambre-roadmap.md` E7) | unverified |
-| `TOILE-UI-241` | `POST` | Select-all MUST obey the exclusions a pick obeys: no locked element, no group node. | this spec section 3 | none | fails -- the walk drops connectors and nothing else, so a locked element joins the selection and the next delete takes it, section 5. Answered by the `A locked element is locked on every surface` Story (`ambre-roadmap.md` E7) | unverified |
+| `TOILE-UI-033` | `POST` | Select-all MUST cover the whole board, not the part the UI thread holds. | this spec section 3; section 4 | none | fails -- the walk is over the culled set, so the rule fails off screen, section 5; lands with the `Toile reads the board, not the screen` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-241` | `POST` | Select-all MUST obey the exclusions a pick obeys: no locked element, no group node. | this spec section 3 | none | fails -- the walk drops connectors and nothing else, so a locked element joins the selection and the next delete takes it, section 5; lands with the `A locked element is locked on every surface` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-UI-242` | `FRAME` | Select-all MUST NOT alter the group scope the user has entered. | this spec section 3 | structural -- the walk writes the id list and the redraw flag, and no other field | none | verified |
 
 * **Budget.** the content hit-test and input dispatch under 0.2 ms, one row of
   `ambre-spec-budgets.md section 2`. It is a walk over the culled set, which the spatial index
   already bounds (`TOILE-005`), and no bench measures it. A stroke costs the distance to every
-  segment of its outline, which the cull does not bound: one freehand element under the pointer is
-  as many distance tests as it has points.
+  segment of its outline, which the cull does not bound.
 * **Boundary.** none: a selection is view state on the UI thread, where `UI-THREAD-004` bans a
-  network, crypto or persistence path. It leaves the client only as presence, which the Sync worker
-  seals like any other frame (`ZK-005`).
-* **Verification.** 16 `verified`, 13 `unverified`, 0 `unimplemented`, over twenty-two distinct
-  mechanisms where the flat table cited nineteen. Almost nothing new is proved: one row cited seven
-  hit tests for one conjunction, and the split hands each test the rule it actually asserts. The
-  gaps are the gestures, not the geometry -- the scope is entered and left by handlers no test
-  drives, and four rules on the marquee and select-all fail today. One row split in two when the
-  connector caption shipped: an arrow can be named by a click, and it is now selected by one too --
-  in a field of its own, because every container here holds an `ElementId` and an arrow has no box
-  to put in one.
+  network, crypto or persistence path. It leaves the client only as presence, sealed like any other
+  frame (`ZK-005`).
+* **Verification.** 16 `verified`, 6 `failing`, 7 `untested`. What holds is the geometry: twenty-two
+  mechanisms cover the hit tests, the box and the caption a click on an arrow now names. What is
+  loose is the gestures: the scope is entered and left by handlers no test drives. The failures are
+  on the marquee and select-all.
 
 ---
 
@@ -105,11 +100,11 @@ never synced.
 2. walk the culled sequence front to back, which is the paint order reversed;
 3. skip a locked element and a group node, neither of which is a pick target
    (`TOILE-UI-006`);
-4. undo the element's rotation, then test the geometry in its unrotated frame: a rectangle contains,
-   an ellipse tests its normalized radius, a triangle and a closed path test the winding, an open
-   path and a freehand stroke test the distance to their outline against half the stroke width,
-   floored at a pick radius (`TOILE-UI-225`, four world units, so it is a pick radius on screen at
-   one zoom level and a different one everywhere else);
+4. undo the element's rotation, then test the geometry in its unrotated frame. A rectangle
+   contains, an ellipse tests its normalized radius, a triangle and a closed path test the winding.
+   An open path and a freehand stroke test the distance to their outline against half the stroke
+   width, floored at a pick radius (`TOILE-UI-225`). That radius is four world units, so it is four
+   pixels on screen at one zoom level and a different count everywhere else;
 5. the first element that passes wins (`TOILE-UI-005`);
 6. resolve the hit against the group scope (`TOILE-UI-007`).
 
@@ -118,18 +113,18 @@ no scope entered, the walk climbs that edge to the top-most group, so a group tr
 Inside a scope, it stops one level below the scope, so a click reaches a member or an immediate
 sub-group. A hit outside the scope falls back to the top-most group.
 
-**The marquee, in steps:** take every element whose bounds the rectangle fully contains; for one that
-straddles the border, keep it when the rectangle holds its centre or when its geometry contains that
-centre; skip a locked element and a group (`TOILE-UI-031`, `TOILE-UI-238`).
+**The marquee, in steps:** take every element whose bounds the rectangle fully contains. For one
+that straddles the border, keep it when the rectangle holds its centre or when its geometry contains
+that centre. Skip a locked element and a group (`TOILE-UI-031`, `TOILE-UI-238`).
 
-The containment test reads the upright bounds, not the rotated geometry, so a long shape turned
-forty-five degrees is judged by a box larger than itself and is missed by a rectangle that covers
-it (`TOILE-UI-237`). And the marquee stops at the raw hits: it does not climb the group chain the
-way a click does, so the same two elements come back as their group under a click and as themselves
-under a rectangle (`TOILE-UI-236`).
+The containment test reads the upright bounds, not the rotated geometry. A long shape turned
+forty-five degrees is judged by a box larger than itself, so a rectangle that covers it misses it
+(`TOILE-UI-237`). The marquee also stops at the raw hits: it does not climb the group chain the way
+a click does. The same two elements come back as their group under a click and as themselves under a
+rectangle (`TOILE-UI-236`).
 
 **Handles.** For a single selection the box is four rotated edges with a square at each rotated
-corner, because a rotated rectangle drawn as a rectangle degrades to its upright bounding box on the
+corner. A rotated rectangle drawn as a rectangle would degrade to its upright bounding box on the
 surface. The pick reads a band around each corner and each side, so a side resizes without drawing a
 square (`TOILE-UI-034`). A multi-selection keeps an upright union box.
 
@@ -160,7 +155,7 @@ square (`TOILE-UI-034`). A multi-selection keeps an upright union box.
 edge (`TOILE-UI-229`). A single element tilts the whole set with it (`TOILE-UI-034`); a
 multi-selection stays upright and drops the corner squares, keeping the rotate handle alone
 (`TOILE-UI-230`). A locked element is not picked, and wears no handles because it cannot be a
-single selection through the pick -- but select-all can put one in the box (`TOILE-UI-231`). The
+single selection through the pick. But select-all can put one in the box (`TOILE-UI-231`). The
 hovered handle drives the cursor (`features/ambre-spec-toile-tools.md`).
 
 **What the user does not see.** A collaborator's selection: it travels as presence and paints as a
@@ -185,26 +180,26 @@ ghost outline, never as this box (`features/ambre-spec-toile-presence.md section
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **Select-all covers the visible board** (`TOILE-UI-033`). The walk reads the culled set, which is
-  the viewport plus what the cull carries, so a board larger than the screen selects its visible part
-  and the following command -- a delete, a style, a group -- applies to that part alone. The Logic
+  the viewport plus what the cull carries. A board larger than the screen selects its visible part.
+  The following command -- a delete, a style, a group -- applies to that part alone. The Logic
   thread already answers a whole-board aggregate for a fit, so the extent is reachable; the id list
   is not.
 * **A connector cannot be picked** (`TOILE-UI-035`). The pick walk drops every connector node before
   testing, so an arrow cannot be selected, styled, deleted on its own or double-clicked to caption
   it. The captioning half is a Story; the selection half has no owner today.
 * **Select-all takes what a click may not** (`TOILE-UI-241`, `TOILE-UI-231`). The walk drops
-  connectors and keeps everything else, so `Ctrl/Cmd+A` selects locked elements and group nodes
-  that no pick would return, wraps a locked element in a selection box, and hands the whole list to
-  the next delete. The lock stops the pointer and nothing else.
+  connectors and keeps everything else. `Ctrl/Cmd+A` selects locked elements and group nodes that no
+  pick would return, and wraps a locked element in a selection box. The whole list goes to the next
+  delete. The lock stops the pointer and nothing else.
 * **A marquee and a click do not select the same thing** (`TOILE-UI-236`). A click on a grouped
   element selects its top-most group; a rectangle over that same group selects its members. Two
   gestures for one job, and the group behaves as one object under only one of them.
 * **The pick radius is in world units** (`TOILE-UI-225`). The floor that keeps a hairline clickable
-  is four board units, not four pixels, so it is four pixels at one zoom and a fortieth of one at
+  is four board units, not four pixels. It is four pixels at one zoom and a fortieth of one at
   forty. Zoomed out, a thin line cannot be hit; zoomed in, a stroke grabs from far away.
 * **A double-click never leaves a scope** (`TOILE-UI-032`). It enters one level, and only `Escape`
-  goes back out -- taking the selection with it in the same press (`TOILE-UI-239`), so a user
-  cannot step out one level and keep what they had.
+  goes back out, taking the selection with it in the same press (`TOILE-UI-239`). A user cannot step
+  out one level and keep what they had.
 * **Nothing adds to a selection.** There is no modifier that extends it: a click replaces, and a
   marquee replaces. A user cannot select two elements far apart without a marquee that covers what
   lies between them.

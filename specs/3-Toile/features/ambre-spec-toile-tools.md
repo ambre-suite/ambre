@@ -32,9 +32,10 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-247` | `POST` | Arming a tool MUST abandon any gesture in flight on the previous one, and MUST emit nothing. | this spec section 2 | `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` -- it arms a shape, presses, switches, and reads the machine idle with no preview left | none | verified |
+| `TOILE-UI-247` | `POST` | Arming a tool MUST abandon any gesture in flight on the previous one. | this spec section 2 | `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` -- it arms a shape, presses, switches, and reads the machine idle | none | verified |
+| `TOILE-UI-369` | `POST` | Arming a tool MUST emit nothing of the gesture it abandons. | this spec section 2 | `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` -- it reads no preview left after the switch | none | verified |
 | `TOILE-UI-248` | `FRAME` | Arming a tool MUST NOT touch the document or the selection. | this spec section 2 | type-level -- the switch returns nothing and holds no document handle, so the only state it can reach is the draft it drops | none | verified |
-| `TOILE-UI-040` | `FAIL` | A bare-key tool chord MUST NOT be taken while the user is typing into a field. | this spec section 3 | `ambre_toile::ui::palette::tests::editable_tag_guards_text_entry` -- it holds the decision for a text field and a contenteditable host | partial -- nothing drives `ambre_app::platform::target_is_editable`, which reads the tag off the event and is the half that has to run | unverified |
+| `TOILE-UI-040` | `FAIL` | A bare-key tool chord MUST NOT be taken while the user is typing into a field. | this spec section 3 | `ambre_toile::ui::palette::tests::editable_tag_guards_text_entry` -- it holds the decision for a text field and a contenteditable host | partial -- nothing drives `ambre_app::platform::target_is_editable`, which reads the tag off the event and is the half that has to run; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 Drag on the board
 
@@ -45,32 +46,33 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-249` | `POST` | A press that does not drag MUST fall back to the tool's default size. | this spec section 2 | `ambre_toile::ui::tool::tests::shape_click_uses_default_size` -- the shape; `ambre_toile::ui::tool::tests::sticky_click_creates_sticky_with_empty_text_and_picked_fill` -- the note, and the picked colour riding the tool with it | none | verified |
 | `TOILE-UI-250` | `FRAME` | A gesture MUST NOT write while the pointer is down: no command, no history entry, no round trip. | this spec section 2; section 4 | `ambre_toile::ui::tool::tests::resize_preview_then_release_emits_exactly_one_command` -- it reads the intermediate move producing nothing while the live override is already there | none | verified |
 | `TOILE-UI-251` | `FAIL` | A press on an element that moves nothing MUST emit no command. | this spec section 2 | `ambre_toile::ui::tool::tests::click_without_movement_emits_no_command` | none | verified |
-| `TOILE-UI-252` | `FAIL` | A press on a transform handle that moves nothing MUST emit no command. | this spec section 2 | none | fails -- the release emits a resize or a rotate whatever the pointer did, so a stray click on a handle costs a delta and an undo item for a geometry nobody changed, section 5. Answered by the `The board tools let go` Story (`ambre-roadmap.md` E7) | unverified |
+| `TOILE-UI-252` | `FAIL` | A press on a transform handle that moves nothing MUST emit no command. | this spec section 2 | none | fails -- the release emits a resize or a rotate whatever the pointer did, so a stray click on a handle costs a delta and an undo item for a geometry nobody changed, section 5; lands with the `The board tools let go` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-UI-253` | `FAIL` | A connector released anywhere but on a second element MUST emit nothing. | this spec section 2 | `ambre_toile::ui::tool::tests::connector_release_on_empty_emits_nothing` | none | verified |
-| `TOILE-UI-254` | `FAIL` | A pen path of fewer than two nodes MUST emit nothing. | this spec section 2 | none | unheld -- the guard is there and no test drives it, and the sibling guard on the freehand stroke is unreachable, because press and release each add a sample, section 5 | unverified |
+| `TOILE-UI-254` | `FAIL` | A pen path of fewer than two nodes MUST emit nothing. | this spec section 2 | none | unheld -- the guard is there and no test drives it, and the sibling guard on the freehand stroke is unreachable, because press and release each add a sample, section 5; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 Hold `Space` to pan
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-041` | `POST` | Holding `Space` MUST pan, in any tool. | this spec section 3; `features/ambre-spec-toile-viewport.md section 1` | none | unheld -- the key sets a flag the pointer handler reads before it dispatches to the machine, and no test drives the pair | unverified |
-| `TOILE-UI-255` | `FRAME` | A space-drag MUST NOT start the active tool's gesture. | this spec section 3 | none | unheld -- the pan branch returns before the machine is reached, so the rule holds by the early return and nothing would go red the day the branch moved | unverified |
-| `TOILE-UI-256` | `POST` | Releasing `Space` MUST give the board back to its tool. | this spec section 3 | none | fails -- the flag is raised on the key and lowered by nothing, so one press turns every later drag into a pan for the rest of the session, section 5. Answered by the `The board tools let go` Story (`ambre-roadmap.md` E7) | unverified |
+| `TOILE-UI-041` | `POST` | Holding `Space` MUST pan, in any tool. | this spec section 3; `features/ambre-spec-toile-viewport.md section 1` | none | unheld -- the key sets a flag the pointer handler reads before it dispatches to the machine, and no test drives the pair; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-255` | `FRAME` | A space-drag MUST NOT start the active tool's gesture. | this spec section 3 | none | unheld -- the pan branch returns before the machine is reached, so the rule holds by the early return and nothing would go red the day the branch moved; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-256` | `POST` | Releasing `Space` MUST give the board back to its tool. | this spec section 3 | none | fails -- the flag is raised on the key and lowered by nothing, so one press turns every later drag into a pan for the rest of the session, section 5; lands with the `The board tools let go` Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.5 Cancel a gesture
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-009` | `POST` | `Escape` MUST cancel an in-flight gesture without emitting a command. | this spec section 2 | `ambre_toile::ui::tool::tests::escape_reverts_an_armed_creation_tool_to_select` -- it presses with a note armed, escapes, and reads the machine idle and the next click placing nothing | none | verified |
-| `TOILE-UI-257` | `POST` | `Escape` on a creation tool MUST re-arm Select, and MUST report the change so the palette follows. | this spec section 2 | `ambre_toile::ui::tool::tests::escape_reverts_an_armed_creation_tool_to_select` -- the revert and the report; `ambre_toile::ui::tool::tests::escape_on_the_select_tool_reports_no_tool_change` -- the tool that was already Select | none | verified |
+| `TOILE-UI-257` | `POST` | `Escape` on a creation tool MUST re-arm Select. | this spec section 2 | `ambre_toile::ui::tool::tests::escape_reverts_an_armed_creation_tool_to_select` -- the revert | none | verified |
+| `TOILE-UI-370` | `POST` | `Escape` MUST report exactly the tool change it made, so the palette follows. | this spec section 2 | `ambre_toile::ui::tool::tests::escape_reverts_an_armed_creation_tool_to_select` -- the report; `ambre_toile::ui::tool::tests::escape_on_the_select_tool_reports_no_tool_change` -- the tool that was already Select | none | verified |
 | `TOILE-UI-258` | `FRAME` | `Escape` MUST NOT touch the document. | this spec section 2 | type-level -- the cancel returns whether the tool changed and holds no document handle | none | verified |
 
 ### 1.6 Place a note or a text element
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-038` | `POST` | Placing a note or a text element MUST return the board to Select, so the next click does not place another one. | this spec section 3 | none | unheld -- the revert runs on the view where the placement command is sent, and the tool tests drive the machine below it, where the revert does not happen | unverified |
-| `TOILE-UI-259` | `POST` | Placing a note or a text element MUST open the inline editor on the new element once its id comes back. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 1` | none | unheld -- the view arms a flag and waits for the creation event, and no test drives the pair: the same view seam as the revert of `TOILE-UI-038` | unverified |
+| `TOILE-UI-038` | `POST` | Placing a note or a text element MUST return the board to Select, so the next click does not place another one. | this spec section 3 | none | unheld -- the revert runs on the view where the placement command is sent, and the tool tests drive the machine below it, where the revert does not happen; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-259` | `POST` | Placing a note or a text element MUST open the inline editor on the new element once its id comes back. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 1` | none | unheld -- the view arms a flag and waits for the creation event, and no test drives the pair: the same view seam as the revert of `TOILE-UI-038`; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-260` | `FRAME` | The revert MUST NOT clear the selection or move the camera: the new element stays selected and ready to type into. | this spec section 3 | structural -- the switch clears the draft, the preview and the overrides, and touches neither the selection nor the camera | none | verified |
 
 ### 1.7 Drop a comment thread
@@ -81,19 +83,16 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-261` | `FRAME` | Dropping a thread MUST NOT change the board: no element is created, moved or selected. | this spec section 3; `features/ambre-spec-toile-comments.md section 4` | `ambre_toile::ui::tool::tests::the_comment_tool_drops_a_thread_where_it_clicks` -- on the outcome it reads back: the drop yields an anchor and never a command, so nothing reaches the document | none | verified |
 
 * **Budget.** the content hit-test and input dispatch under 0.2 ms, one row of
-  `ambre-spec-budgets.md section 2`, and the view-state update under 0.5 ms on the same
-  table. Neither has a bench. The rule that keeps the gesture inside them is `TOILE-UI-250`: nothing
-  crosses to the Logic thread while the pointer is down, so a drag at sixty frames a second costs
-  repaints and presence frames and nothing else.
+  `ambre-spec-budgets.md section 2`, and the view-state update under 0.5 ms on the same table.
+  Neither has a bench. `TOILE-UI-250` keeps the gesture inside them: nothing crosses to the Logic
+  thread while the pointer is down.
 * **Boundary.** none: the machine is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What it emits is a command; what it streams mid-gesture is
   presence, sealed by the Sync worker like any other frame (`ZK-005`).
-* **Verification.** 20 `verified`, 8 `unverified`, 0 `unimplemented`. The growth is the split and
-  not new coverage: twenty-four distinct tests held the document before and twenty-four hold it
-  now, and the count rose because nine flat rows carried more than one rule each. What the split
-  bought is three refusals nobody could see while they were folded into a claim that read as
-  covered: a click on a transform handle, the release of `Space`, and a degenerate pen path. The
-  first two fail today (`TOILE-UI-252`, `TOILE-UI-256`).
+* **Verification.** 22 `verified`, 2 `failing`, 6 `untested`. What holds is the machine itself: the
+  modes, the transitions and the commands each gesture ends in. What is loose is the refusals: a
+  click on a transform handle, the release of `Space`, a degenerate pen path. The first two fail
+  today (`TOILE-UI-252`, `TOILE-UI-256`).
 
 ---
 
@@ -149,8 +148,8 @@ create-then-restyle.
 
 **The live preview is local.** A move, resize or rotate feeds the in-flight geometry into the same
 per-element override a presentation transition uses, so the object itself follows the drag. Nothing
-is written while the pointer is down, so the gesture costs no round trip and no history entry, and
-the release still commits one undo item.
+is written while the pointer is down. The gesture costs no round trip and no history entry, and the
+release still commits one undo item.
 
 **Cancelling.** `Escape` and a tool switch both drop the draft. `Escape` also re-arms Select, so an
 abandoned creation tool stops placing elements on the next click (`TOILE-UI-009`).
@@ -167,16 +166,17 @@ abandoned creation tool stops placing elements on the next click (`TOILE-UI-009`
 
 **The palette.** One button per tool, each a registry command whose active state reflects the
 machine (`ambre-spec-chrome.md`). The sticky button opens a swatch popover that arms the tool in the
-picked colour and remembers it. A tool sub-option that is not a per-element style -- the shape kind,
-the connector routing -- is a palette signal folded into the command the tool emits.
+picked colour and remembers it. A tool sub-option that is not a per-element style is a palette
+signal, folded into the command the tool emits. The shape kind and the connector routing are the
+two.
 
 **The chords.** One bare key per tool, the whiteboard letters, bound in the launcher keymap and
 refused while the pointer is in a text field (`TOILE-UI-040`).
 
 **The cursor.** A note-shaped cursor arms the sticky tool, a crosshair the other creation tools, a
-grab hand the Hand tool, an arrow Select. Over a single selection it also follows the hovered handle:
-the double arrow of the axis that side resizes along, tilted to the element's angle, and a rotation
-cursor on the rotate handle. An upright element takes the native keyword, a rotated one a drawn
+grab hand the Hand tool, an arrow Select. Over a single selection it also follows the hovered handle.
+It shows the double arrow of the axis that side resizes along, tilted to the element's angle, and a
+rotation cursor on the rotate handle. An upright element takes the native keyword, a rotated one a drawn
 cursor at the exact angle, because a native resize cursor cannot rotate (`TOILE-UI-039`).
 
 **The keyboard, on the canvas.**
@@ -193,8 +193,8 @@ cursor at the exact angle, because a native resize cursor cannot rotate (`TOILE-
 | `Ctrl/Cmd+A` | selects the board (`features/ambre-spec-toile-selection.md`) |
 | a printable character, on a single note or text element | enters the inline editor and replaces the body (`features/ambre-spec-toile-text-editing.md`) |
 
-**After a placement.** A note or a text element opens its editor as soon as its id comes back, and
-the board returns to Select, ready to type into (`TOILE-UI-038`).
+**After a placement.** A note or a text element opens its editor as soon as its id comes back. The
+board returns to Select, ready to type into (`TOILE-UI-038`).
 
 ---
 
@@ -215,7 +215,7 @@ the board returns to Select, ready to type into (`TOILE-UI-038`).
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The pen has no node editing.** A path is built across clicks and committed once; dragging the
+* **The pen has no node editing.** A path is built across clicks and committed once. Dragging the
   nodes of a committed path is described and unbuilt, so a path is editable by its box alone.
 * **The connector routing has one shape.** Every connector is created straight, with an arrow at the
   end. The routing modes and the end caps the model carries are not reachable from any gesture.
@@ -223,19 +223,19 @@ the board returns to Select, ready to type into (`TOILE-UI-038`).
   the workspace clears it: there is no `keyup` listener anywhere. One press turns every later drag
   into a pan for the rest of the session, whatever tool the palette shows (`TOILE-UI-256`).
 * **A click on a transform handle commits a null transform.** A body drag that moves nothing emits
-  nothing; a handle release emits its resize or its rotate unconditionally, so a stray click on a
+  nothing. A handle release emits its resize or its rotate unconditionally. A stray click on a
   handle costs a delta and an undo item for a geometry nobody changed (`TOILE-UI-252`).
 * **The freehand refusal is unreachable.** Press and release each push a sample, so the guard that
-  would drop a stroke of one point can never fire, and a click with Draw armed commits a two-point
+  would drop a stroke of one point can never fire. A click with Draw armed commits a two-point
   stroke standing still. The pen guard beside it is reachable and undriven (`TOILE-UI-254`).
-* **A resize has no floor.** The rectangle is normalised and nothing bounds it, so dragging a handle
-  past the opposite edge lands an element at zero width or height -- the case the decision above
-  says a degenerate gesture never reaches.
+* **A resize has no floor.** The rectangle is normalised and nothing bounds it. Dragging a handle
+  past the opposite edge lands an element at zero width or height. The decision above says a
+  degenerate gesture never reaches that case.
 * **The tool signal is compiled out on the host.** The call that tells the palette which tool is
-  armed exists under wasm alone, which is why the revert after a placement and the space-drag sit
+  armed exists under wasm alone. That is why the revert after a placement and the space-drag sit
   below any host test that would read them back (`TOILE-UI-038`, `TOILE-UI-041`).
 * **Half of the typing guard has no test.** The pure predicate is held for a field and for a
-  contenteditable host; the reader that pulls the tag off the event, the half that runs on every
+  contenteditable host. The reader that pulls the tag off the event, the half that runs on every
   keystroke, has none (`TOILE-UI-040`).
 * **Nothing here states what a gesture does over a focused embed.** The rule that routes a press to
   the child rather than to the board is written on the embed side alone

@@ -10,27 +10,26 @@ use super::*;
 impl TrameState {
     /// Single-column sort of a row range (`trame-sort`).
     ///
-    /// Reorders whole rows of the active sheet by the typed value in column
-    /// `col_start + sort_col`. Cells of a row outside `[col_start..=col_end]`
-    /// travel with it (Google Sheets "sort range").
+    /// Reorders whole rows of the active sheet by the typed value in column `col_start +
+    /// sort_col`. Cells of a row outside `[col_start..=col_end]` travel with it (Google
+    /// Sheets "sort range").
     ///
-    /// **Realized as a pure row-order permutation of `rows_{sheet}`**: each
-    /// sortable row is keyed by its own move-invariant `Uid` (the list element
-    /// *value*, not a Loro slot id), and the desired order is replayed with
-    /// `LoroMovableList::mov`. Cells keyed by `(row_uid, col_uid)` travel with
-    /// their row for free -- no cell content is read or rewritten
-    /// (`trame-rows-and-columns`, `trame-formula-engine`).
+    /// **Realized as a pure row-order permutation of `rows_{sheet}`**. Each sortable row
+    /// is keyed by its own move-invariant `Uid`, the list element *value*, not a Loro slot
+    /// id. The desired order is replayed with `LoroMovableList::mov`. Cells keyed by
+    /// `(row_uid, col_uid)` travel with their row for free -- no cell content is read or
+    /// rewritten (`trame-rows-and-columns`, `trame-formula-engine`).
     ///
-    /// References then **follow the data**: the formula engine's bytecode is
-    /// uid-anchored, so the sort preserves it (no reseed/re-parse) and merely
-    /// recomputes -- every `A1` resolves to its row/column's new position, the
-    /// `trame-formula-engine` guarantee. The `mov` ops produce a CRDT delta like any edit;
-    /// LWW on the row order resolves concurrent sorts deterministically.
+    /// References then **follow the data**. The formula engine's bytecode is uid-anchored,
+    /// so the sort preserves it (no reseed/re-parse) and merely recomputes. Every `A1`
+    /// then resolves to its row/column's new position, the `trame-formula-engine`
+    /// guarantee. The `mov` ops produce a CRDT delta like any edit; LWW on the row order
+    /// resolves concurrent sorts deterministically.
     ///
-    /// Sorting only ever targets the **active sheet** (the UI sends an
-    /// [`ActivateSheet`](TrameCommand::ActivateSheet) before any range op): the
-    /// formula cache the sort keys read from is pinned to index 0. A command for
-    /// any other sheet, or an empty/virtual range, is a no-op.
+    /// Sorting only ever targets the **active sheet**: the UI sends an
+    /// [`ActivateSheet`](TrameCommand::ActivateSheet) before any range op. The formula
+    /// cache the sort keys read from is pinned to index 0. A command for any other sheet,
+    /// or an empty/virtual range, is a no-op.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn sort_range(
         &mut self,
@@ -91,10 +90,10 @@ impl TrameState {
     /// Multi-column sort of a row range (`trame-sort`).
     ///
     /// Same pure row-order permutation as [`sort_range`](Self::sort_range), only
-    /// the comparator changes: rows are ordered lexicographically by `sort_keys`
-    /// in decreasing priority (`[primary, secondary, ...]`), each key applying its
-    /// own ascending/descending direction. Each `SortKey::col` is an index within
-    /// the range (`0` = `col_start`). Keys whose column falls outside the range are
+    /// the comparator changes. Rows are ordered lexicographically by `sort_keys` in
+    /// decreasing priority (`[primary, secondary, ...]`), each key applying its own
+    /// ascending/descending direction. Each `SortKey::col` is an index within the
+    /// range (`0` = `col_start`). Keys whose column falls outside the range are
     /// skipped. Cells follow their move-invariant row `Uid`, references follow the
     /// data (`trame-formula-engine`); LWW resolves concurrent sorts.
     #[allow(clippy::too_many_arguments)]
@@ -170,7 +169,7 @@ impl TrameState {
     }
 
     /// Realize a computed row permutation as `mov` ops on `rows_{sheet}` and
-    /// refresh the derived caches. Shared by the single- and multi-column sorts:
+    /// refresh the derived caches. Shared by the single- and multi-column sorts.
     /// `before` is the current uid order of the sortable region, `target` the
     /// desired one (same multiset), and `sort_start` the first sortable position.
     /// Returns [`TrameEvent::SortComplete`] alone (no CRDT delta) when the order
@@ -210,14 +209,13 @@ impl TrameState {
         outcome
     }
 
-    /// Shared tail of any whole-line reorder (sort, drag move): refresh the
-    /// position<->uid cache and the position-keyed derived caches (merges,
-    /// formatting, filter) for the new order. Crucially, do NOT reseed (re-parse)
-    /// the formula engine: the compiled bytecode is uid-anchored, so preserving it
-    /// and merely recomputing lets every reference resolve to its row/column's NEW
-    /// position -- references follow the moved data, the `trame-formula-engine` guarantee. A
-    /// full reseed would re-bind each `A1` against the post-move index and collapse
-    /// the engine back to positional semantics.
+    /// Shared tail of any whole-line reorder (sort, drag move): refresh the position<->uid
+    /// cache and the position-keyed derived caches (merges, formatting, filter) for the new
+    /// order. Crucially, do NOT reseed (re-parse) the formula engine. The compiled bytecode
+    /// is uid-anchored, so preserving it and merely recomputing lets every reference resolve
+    /// to its row/column's NEW position. References follow the moved data, the
+    /// `trame-formula-engine` guarantee. A full reseed would re-bind each `A1` against the
+    /// post-move index and collapse the engine back to positional semantics.
     pub(super) fn after_reorder(&mut self) -> TrameOutcome {
         self.rebuild_index();
         let mut display = self.rebuild_merges();

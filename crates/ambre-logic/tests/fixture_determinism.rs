@@ -3,11 +3,11 @@
 // The determinism and round-trip belts of `ambre-spec-fixtures.md` -- the two
 // that gate `FIXTURES P0`'s Definition of Done.
 //
-// **Ungated on purpose.** Everything asserted here is production API:
+// **Ungated on purpose.** Everything asserted here is production API. That is
 // `TrameState::with_peer` / `ToileState::with_peer` (the I1 seams, documented in
 // `ambre-spec-fixtures.md` / `toile-engine`), `export_ambre_plaintext`, and
 // `DocState::import_snapshot` / `export_snapshot` (I4's three ungated symbols).
-// So this belt runs under a bare `cargo test --workspace`, i.e. inside the CI
+// So this belt runs under a bare `cargo test --workspace`, that is, inside the CI
 // `test-native` job, which is what "green in CI" requires of P0. The corpus
 // machinery proper -- loader, manifest, driver -- is behind the `fixtures`
 // feature and has its own belt in `fixtures_corpus.rs`.
@@ -27,9 +27,9 @@ use kurbo::{Point, Size};
 /// runs and turn the drift gate into noise.
 const SEED: u64 = 0x0BAD_C0FF_EE0D_D00D;
 
-/// The `document_id` the header carries. Pinned rather than minted: a UUID v7 is
-/// time-ordered and partly random, so `Uuid::new()` here would defeat the byte
-/// comparison before the payload was even reached (I1's third entropy source).
+/// The `document_id` the header carries. Pinned rather than minted. A UUID v7 is
+/// time-ordered and partly random (I1's third entropy source). `Uuid::new()`
+/// here would defeat the byte comparison before the payload was even reached.
 /// The seed-derived form lives in `ambre_core::fixtures::seeded_document_id`,
 /// which is fixture code and belted there.
 fn doc_id() -> Uuid {
@@ -47,7 +47,7 @@ fn doc_id() -> Uuid {
 // sequence, an `export_ambre_plaintext` at the end.
 
 /// A workbook with literals, a formula chain over them, a second sheet and a
-/// merge -- enough that a lost op shows up in the bytes.
+/// merge. Enough that a lost op shows up in the bytes.
 fn build_trame(seed: u64, doc_id: Uuid) -> Vec<u8> {
     let mut state = TrameState::with_peer(seed);
     state.handle_command(TrameCommand::SetCellText {
@@ -102,9 +102,9 @@ fn build_toile(seed: u64, doc_id: Uuid) -> Vec<u8> {
 
 #[test]
 fn a_generator_rebuilt_in_the_same_process_is_byte_identical() {
-    // The plainest half of I1, and the one the seam exists for: without a pinned
-    // `PeerID` these two already differ, because `LoroDoc::new()` mints a fresh
-    // random one per document and identical command sequences then produce ops
+    // The plainest half of I1, and the one the seam exists for. Without a pinned
+    // `PeerID` these two already differ. `LoroDoc::new()` mints a fresh random
+    // one per document, and identical command sequences then produce ops
     // attributed to different peers.
     assert_eq!(build_trame(SEED, doc_id()), build_trame(SEED, doc_id()));
     assert_eq!(build_toile(SEED, doc_id()), build_toile(SEED, doc_id()));
@@ -114,8 +114,8 @@ fn a_generator_rebuilt_in_the_same_process_is_byte_identical() {
 fn a_generator_that_ignores_its_seed_is_caught() {
     // 's "test-only pair": two builds sharing one body and differing only in
     // their seed must produce different bytes. Without this half, the test above
-    // passes vacuously on a generator that hardcodes its content -- a fixture
-    // whose `seed` field would then be a lie in every manifest.
+    // passes vacuously on a generator that hardcodes its content. Such a
+    // fixture's `seed` field would be a lie in every manifest.
     assert_ne!(build_trame(SEED, doc_id()), build_trame(SEED ^ 1, doc_id()));
     assert_ne!(build_toile(SEED, doc_id()), build_toile(SEED ^ 1, doc_id()));
 }
@@ -123,8 +123,8 @@ fn a_generator_that_ignores_its_seed_is_caught() {
 #[test]
 fn the_document_id_is_part_of_what_the_digest_covers() {
     // The header is inside the artifact, so a different `document_id` is a
-    // different fixture even at identical payload (C8: the digest covers the
-    // whole file, header included).
+    // different fixture even at identical payload. C8: the digest covers the
+    // whole file, header included.
     let other = Uuid::from_bytes([0x22; 16]);
     assert_ne!(build_trame(SEED, doc_id()), build_trame(SEED, other));
     assert_eq!(
@@ -156,9 +156,9 @@ const CHILD_MARKER: &str = "AMBRE_FIXTURES_DETERMINISM_CHILD";
 
 #[test]
 fn a_generator_is_byte_identical_across_processes() {
-    // **The half that matters.** Rust reseeds `HashMap` state per process, so an
+    // **The half that matters.** Rust reseeds `HashMap` state per process. An
     // encoder iterating a hash map would be stable within a run and unstable
-    // between runs -- exactly the failure an in-process rebuild cannot see. The
+    // between runs, exactly the failure an in-process rebuild cannot see. The
     // spike measured this; the belt keeps it measured.
     //
     // Mechanism: the test re-execs its own binary with `--exact` on this test
@@ -220,10 +220,10 @@ fn the_commit_clock_is_not_recorded() {
 
 #[test]
 fn a_two_peer_merge_is_deterministic() {
-    // One of the two cases the spike left open. Two pinned peers edit
-    // disjoint cells, exchange full snapshots, and the merged document is
-    // exported: the result must be reproducible, or no post-convergence fixture
-    // (`FIXTURES P1`) can ever be committed.
+    // One of the two cases the spike left open. Two pinned peers edit disjoint
+    // cells, exchange full snapshots, and the merged document is exported. The
+    // result must be reproducible, or no post-convergence fixture (`FIXTURES
+    // P1`) can ever be committed.
     let merged = |()| {
         let mut alice = TrameState::with_peer(SEED);
         let mut bob = TrameState::with_peer(SEED ^ 0xFFFF_FFFF);
@@ -253,23 +253,23 @@ fn a_two_peer_merge_is_deterministic() {
     );
     assert_eq!(bob_1, bob_2);
     // Convergence itself is `convergence_tests.rs`'s subject and is not restated
-    // here: what this asserts is only that a *merged* document is
-    // reproducible, which is what a post-convergence fixture needs.
+    // here. What this asserts is only that a *merged* document is reproducible,
+    // which is what a post-convergence fixture needs.
 }
 
 #[test]
 fn a_large_document_is_deterministic() {
-    // The other case the spike left open: scale. An encoder iterating a hash
-    // map would stay stable at four cells and drift at a few thousand, so the
-    // invariant is asserted on a document wide enough for the encoder to take its
-    // wide paths -- 5 000 cells over 250 rows and 20 columns, which also
+    // The other case the spike left open: scale. An encoder iterating a hash map
+    // would stay stable at four cells and drift at a few thousand. The invariant
+    // is therefore asserted on a document wide enough for the encoder to take its
+    // wide paths. That is 5 000 cells over 250 rows and 20 columns, which also
     // exercises the column axis rather than one very long strip.
     //
-    // Not the spec's 100k: this belt runs on every `cargo test --workspace` and a
-    // 100k-cell build is tens of seconds in a debug profile, which is exactly the
-    // "corpus developers stop regenerating" failure warns about. The 100k case
-    // is `FIXTURES P2`'s benchmark corpus, which builds it under `criterion` in
-    // release and can afford it.
+    // Not the spec's 100k. This belt runs on every `cargo test --workspace`, and
+    // a 100k-cell build is tens of seconds in a debug profile. That is exactly
+    // the "corpus developers stop regenerating" failure warns about. The 100k
+    // case is `FIXTURES P2`'s benchmark corpus, which builds it under `criterion`
+    // in release and can afford it.
     let build = |()| {
         let mut state = TrameState::with_peer(SEED);
         state.handle_command(TrameCommand::SetCellsBatch {
@@ -291,11 +291,11 @@ fn a_large_document_is_deterministic() {
 /// `export_snapshot -> import_snapshot -> export_snapshot` is **stable** on one
 /// variant.
 ///
-/// Stability, not byte equality with the source: a fresh state commits its own
-/// scaffolding under its own peer *before* the import, and both engines
-/// materialize their derived containers lazily on the first read of a restored
-/// document -- so the first restore legitimately carries ops and containers the
-/// source snapshot never had. Neither is a lost round trip. What must hold is the
+/// Stability, not byte equality with the source. A fresh state commits its own
+/// scaffolding under its own peer *before* the import. Both engines materialize
+/// their derived containers lazily on the first read of a restored document. The
+/// first restore therefore legitimately carries ops and containers the source
+/// snapshot never had; neither is a lost round trip. What must hold is the
 /// **fixed point**: once a document has been through the cycle, going through it
 /// again changes nothing. That is the property a fixture corpus depends on, and
 /// the one a regression would break.
@@ -320,8 +320,8 @@ fn assert_round_trip(source: &DocState, doc_type: DocType) {
     );
 
     // The fixed point. Re-importing a document's own bytes into the state that
-    // produced them is a no-op merge, so the next export must be identical --
-    // this is what fails if an import path starts mutating the document it reads.
+    // produced them is a no-op merge, so the next export must be identical. This
+    // is what fails if an import path starts mutating the document it reads.
     restored
         .import_snapshot(&second)
         .expect("the document's own bytes read back");
@@ -341,8 +341,8 @@ fn assert_round_trip(source: &DocState, doc_type: DocType) {
 
 #[test]
 fn the_round_trip_is_stable_on_every_doc_state_variant() {
-    // "Every variant" is the point: `DocState::export_snapshot` had to be lifted
-    // to the enum for this belt to be writable at all (B5), and
+    // "Every variant" is the point. `DocState::export_snapshot` had to be lifted
+    // to the enum for this belt to be writable at all (B5).
     // `ToileState::import_snapshot` had to exist for the Toile arm.
     let mut trame = TrameState::with_peer(SEED);
     trame.handle_command(TrameCommand::SetCellText {
@@ -366,7 +366,7 @@ fn the_round_trip_is_stable_on_every_doc_state_variant() {
 #[test]
 fn every_variant_reports_its_own_doc_type() {
     // `DocState::doc_type` is the inverse of `DocState::new`, and what the driver
-    // writes into a manifest; a variant that misreported it would produce an
+    // writes into a manifest. A variant that misreported it would produce an
     // artifact no importer could route.
     for doc_type in [DocType::Trame, DocType::Toile] {
         let state = DocState::new(doc_type).expect("an engine");

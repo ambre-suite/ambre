@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-008` | `INV` | Stroke smoothing MUST NOT be persisted: the document stores the raw sampled points only. | this spec section 3 | structural -- the commit serializes the sample vector and writes no outline field, and the smoothing pass runs only at derivation, so a smoothed vector has no field to land in. Nothing executable would catch one written in the samples' place: `ambre_toile::logic::convergence_tests::commit_stroke_creates_drawing` reads the box back and never the samples | none | verified |
 | `TOILE-038` | `INV` | A stroke MUST NOT be mutated after it is committed, so two strokes MUST NOT conflict. | this spec section 3 | structural -- no command names a stroke's sample vector, so a stroke is an insert and nothing else; `ambre_toile::logic::convergence_tests::two_peers_converge` -- it drives concurrent stroke commits | none | verified |
-| `TOILE-039` | `INV` | The smoothed outline MUST pass through every sample. | this spec section 3 | none | unheld -- `ambre_toile::logic::stroke::tests::passes_through_samples_and_is_denser` reads back the first and the last output point only, so a pass that cut the corner at every interior sample would satisfy it | unverified |
+| `TOILE-039` | `INV` | The smoothed outline MUST pass through every sample. | this spec section 3 | none | unheld -- `ambre_toile::logic::stroke::tests::passes_through_samples_and_is_denser` reads back the first and the last output point only, so a pass that cut the corner at every interior sample would satisfy it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-103` | `INV` | The smoothed outline MUST be denser than the samples. | this spec section 3 | `ambre_toile::logic::stroke::tests::passes_through_samples_and_is_denser` -- it reads the output length, and this is the half the row above was carrying | none | verified |
 | `TOILE-104` | `INV` | Smoothing MUST survive a stroke too short to curve: no sample MUST give nothing, and one sample MUST give exactly that point. | this spec section 3 | `ambre_toile::logic::stroke::tests::empty_and_single_point` -- the only thing that drives either degenerate input, and it was cited as though it held the density rule | none | verified |
 
@@ -31,28 +31,24 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-040` | `POST` | Releasing the pointer MUST send one commit carrying every sample of the gesture. | this spec section 4 | `ambre_toile::ui::tool::tests::draw_stream_emits_commit_stroke` -- it walks a press, two moves and a release and reads the one command back, with a sample per event | none | verified |
-| `TOILE-105` | `FRAME` | An in-flight stroke MUST NOT enter the document before release. | this spec section 4 | none | unheld -- sampling appends to view state and the move returns no command, so a create per sample is unreachable by construction, but the pen test discards what each move returned and nothing executable holds it | unverified |
-| `TOILE-106` | `POST` | While a user draws, each new sample MUST reach the other users as presence. | this spec section 4; `TOILE-016` | none | fails -- nothing in the workspace sends a presence payload for a board: the in-flight sample field is written by tests only, and the presence command has no sender at all. `ambre_toile::ui::presence::tests::live_stroke_draws_a_polyline` paints a frame that arrives and `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` drives the command with no stroke in it, so both hold the receiving half, section 6. Answered by the `A stroke in flight reaches the other users` Story (`ambre-roadmap.md` E7) | unverified |
-| `TOILE-041` | `POST` | A stroke's box MUST span its samples. | this spec section 3 | none | unheld -- `ambre_toile::logic::convergence_tests::commit_stroke_creates_drawing` asserts a box exists for a two-sample stroke and never compares it to the samples, so a box of the wrong extent would pass | unverified |
-| `TOILE-107` | `POST` | A stroke's box MUST have area, so a single dot stays cullable and pickable. | this spec section 3 | none | unheld -- it is the half `TOILE-041` was carrying. The widening is a one-unit floor on each side, and nothing drives a one-sample stroke through the engine, which is where the floor applies | unverified |
-| `TOILE-108` | `FAIL` | A stroke abandoned by `Escape` or a tool change MUST commit nothing. | this spec section 4 | none | unheld -- nothing drives the pen. `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` cancels a Shape draft and `::escape_reverts_an_armed_creation_tool_to_select` an armed Sticky, and a stroke is the gesture that carries the most work to lose | unverified |
+| `TOILE-105` | `FRAME` | An in-flight stroke MUST NOT enter the document before release. | this spec section 4 | none | unheld -- sampling appends to view state and the move returns no command, so a create per sample is unreachable by construction, but the pen test drops what each move returned and nothing executable holds it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-106` | `POST` | While a user draws, each new sample MUST reach the other users as presence. | this spec section 4; `TOILE-016` | none | fails -- nothing in the workspace sends a presence payload for a board: the in-flight sample field is written by tests only, and the presence command has no sender at all. `ambre_toile::ui::presence::tests::live_stroke_draws_a_polyline` paints a frame that arrives and `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` drives the command with no stroke in it, so both hold the receiving half, section 6; lands with the `A stroke in flight reaches the other users` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-041` | `POST` | A stroke's box MUST span its samples. | this spec section 3 | none | unheld -- `ambre_toile::logic::convergence_tests::commit_stroke_creates_drawing` asserts a box exists for a two-sample stroke and never compares it to the samples, so a box of the wrong extent would pass; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-107` | `POST` | A stroke's box MUST have area, so a single dot stays cullable and pickable. | this spec section 3 | none | unheld -- it is the half `TOILE-041` was carrying. The widening is a one-unit floor on each side, and nothing drives a one-sample stroke through the engine, which is where the floor applies; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-108` | `FAIL` | A stroke abandoned by `Escape` or a tool change MUST commit nothing. | this spec section 4 | none | unheld -- nothing drives the pen. `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` cancels a Shape draft and `::escape_reverts_an_armed_creation_tool_to_select` an armed Sticky, and a stroke is the gesture that carries the most work to lose; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** the stroke commit under 1 ms, the transform-command row of
   `ambre-spec-budgets.md section 1`. Smoothing runs
-  again at every derivation, so its real budget is the frame: it is inside the visible-set walk of
+  again at every derivation, so its real budget is the frame. It is inside the visible-set walk of
   `features/ambre-spec-toile-board-rendering.md`, and no bench measures either.
 * **Boundary.** none of its own: the samples enter the document and leave as bytes the Sync worker
   seals (`ZK-001`). What streams during the gesture is an ephemeral frame, sealed the same way
   (`ZK-005`).
-* **Verification.** 5 `verified`, 6 `unverified`. Five rows become eleven, and the feature does not
-  hold the way the old bullet said. `TOILE-040` was two rules, and the one it hid is false: nothing
-  in the workspace sends a board presence payload, so an in-flight stroke reaches nobody
-  (`TOILE-106`). `TOILE-039` claimed the outline passes through every sample and its test reads the
-  two endpoints (`TOILE-039`, `TOILE-103`). `TOILE-041` was the span and the minimum area under one
-  verdict, and neither half is driven (`TOILE-041`, `TOILE-107`). `TOILE-008` cited two smoothing
-  tests that never touch the document; what holds it is the construction, and the row now says so.
-  The abandoned gesture (`TOILE-108`) and the degenerate smoothing input (`TOILE-104`) were
-  unwritten, the second by a test cited for a rule it does not hold.
+* **Verification.** 5 `verified`, 1 `failing`, 5 `untested`. What holds is the committed stroke: the
+  samples it carries and the element it becomes. The smoothing is a property of the construction
+  rather than a test. What is loose is the span, the minimum area, the abandoned
+  gesture and the degenerate smoothing input. The failure is the in-flight stroke, which reaches
+  nobody: nothing in the workspace sends a board presence payload (`TOILE-106`).
 
 ---
 
@@ -98,8 +94,8 @@ command for a stroke and no edit command: the commit is the whole lifecycle
 4. commit once, then record the box in the bounds cache and the spatial index.
 
 **Steps, when a stroke is painted:** the deriver reads the samples back and runs a Catmull-Rom pass
-through them, duplicating the endpoints so the first and last spans have a tangent, and hands the
-result out as a flattened outline (`TOILE-039`, `TOILE-103`, `TOILE-104`). The density comes from the
+through them. It duplicates the endpoints so the first and last spans have a tangent. The result is
+handed out as a flattened outline (`TOILE-039`, `TOILE-103`, `TOILE-104`). The density comes from the
 zoom, so the same samples give a coarse curve far out and a fine one close in.
 
 **Code:**
@@ -126,9 +122,9 @@ zoom, so the same samples give a coarse curve far out and a fine one close in.
 taken, so it never waits for a round trip. On release the same line is repainted from the document,
 smoothed the same way, so there is no visible change at the seam.
 
-**What the others see.** Nothing, today. The receiving half is built -- a polyline in the drawer's
-presence colour, rebuilt from every frame that arrives and replaced by the real stroke when the
-commit lands -- and no surface sends the frame (`TOILE-106`,
+**What the others see.** Nothing, today. The receiving half is built: a polyline in the drawer's
+presence colour. It is rebuilt from every frame that arrives, and replaced by the real stroke when
+the commit lands. No surface sends the frame (`TOILE-106`,
 `features/ambre-spec-toile-presence.md`).
 
 ---
@@ -148,19 +144,19 @@ commit lands -- and no surface sends the frame (`TOILE-106`,
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing sends a stroke while it is drawn** (`TOILE-106`). The payload carries an in-flight
-  sample field, the presence painter draws it, and no code in the workspace ever fills it: the
+  sample field, the presence painter draws it, and no code in the workspace ever fills it. The
   presence command has no sender at all, for a stroke or for a cursor. The watching half of the
   feature is written, tested and unreachable, and the spec read as though it shipped.
 * **Pressure is recorded and never read.** Every sample is written at full pressure by the tool,
-  which never reads a pointer pressure value, and no paint path varies the width by it. The field is
+  which never reads a pointer pressure value. No paint path varies the width by it. The field is
   four bytes per sample carrying nothing, and a pressure-sensitive pen would change nothing on
   screen.
 * **An eraser does not exist.** A stroke is removed by selecting it and deleting it, whole. There is
-  no partial erase, and none is designed: a partial erase would have to split one stroke into two,
+  no partial erase, and none is designed. A partial erase would have to split one stroke into two,
   which contradicts the insert-only rule above.
 * **The width does not follow the zoom.** The stroke is drawn at the width its style register
-  holds, in world units, so zooming out makes a thick stroke thin like any other outline. Whether a
+  holds, in world units. Zooming out makes a thick stroke thin like any other outline. Whether a
   stroke should keep a screen-space width is not ruled.
 * **Nothing bounds the sample count.** A long slow drag records a sample per input event for as long
-  as the user holds the pointer, and no rule caps the vector or thins it. What that costs a board of
+  as the user holds the pointer. No rule caps the vector or thins it. What that costs a board of
   a thousand strokes is unmeasured (`ambre-roadmap.md`, "Engine and render optimization").

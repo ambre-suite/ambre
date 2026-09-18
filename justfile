@@ -187,57 +187,53 @@ contracts:
 contracts-write:
     python3 scripts/contracts.py --write
 
-# Rewrite the two per-document ceilings after a deliberate change: `unverified`
-# rows, and rows stating a second rule after an `and`. Both lower only, so this
-# cannot make a red check green: a rising ceiling is shipped code losing its
-# last mechanism, or a statement quietly binding twice. A document that
-# legitimately grows needs the target below, and a reviewed diff.
-contracts-ceilings:
-    python3 scripts/contracts.py --ceilings
-
-# A deliberate growth of the coverage debt, recorded rather than silent.
-contracts-ceilings-raise:
-    python3 scripts/contracts.py --ceilings --raise
-
-# How a spec is built, not what it quotes: prose share (a migrated document is
-# capped, every other spec carries a ceiling it may only fall below), production
-# markers in a feature document, the schema document's budgets, and every
-# container built in the code present in the schema table.
+# How a spec is built, not what it quotes: prose share and line length, both
+# capped for every spec, production markers in a feature document, the schema
+# document's budgets, and every container built in the code present in the
+# schema table.
 
 # spec shape: prose share (words), line length, feature-document markers, schema
 # budgets, containers.
 spec-shape:
     python3 scripts/spec_shape.py --check
 
-# Rewrite the per-spec ceilings, prose words and long lines, after a deliberate
-# change. It lowers only, so it cannot make a red check green: a rising ceiling
-# is a spec getting worse. A spec that legitimately grows needs
-# `python3 scripts/spec_shape.py --update --raise` and a reviewed diff.
-spec-shape-update:
-    python3 scripts/spec_shape.py --update
+# The three answers under a contract table are one paragraph to a reader, and the
+# corpus let them run to 463 words of which most was the document's own history:
+# which conjunction came apart, what the pass added, which row carried which
+# half. That is a commit message. The cap is 150 words, six sentences under the
+# 25-word cap, and every document is under it.
+
+# the answers under a contract table: how many words they spend, and whether any
+# line writes the document's own history.
+spec-answers:
+    python3 scripts/spec_answers.py --check
+
+# Every breach, with its line, so a red check says what to rewrite.
+spec-answers-detail:
+    python3 scripts/spec_answers.py
 
 # `ai/ambre-writing-style.md` ended on "No script checks this file [...] It is a
 # review rule, and review rules drift." It drifted: a Rust comment reached the
 # tree with a metaphor, a passive and a 33-word sentence, and no check saw any of
-# it. This holds the half a script can hold -- printable ASCII, Latin
-# abbreviations, sentence and paragraph length, the passive -- as a per-file
-# ceiling that only falls. A file the table does not name has a ceiling of zero,
-# so a new file and a new comment start clean. Metaphor, ambiguous pronoun and
-# "why, never what" stay a human read.
+# it. This holds the half a script can hold: printable ASCII, Latin
+# abbreviations, sentence and paragraph length, the banned terms and the empty
+# openers. Every one is a hard error, so a new file and a new comment start
+# clean. Metaphor, ambiguous pronoun and "why, never what" stay a human read.
 
 # writing style: the mechanical half of `ai/ambre-writing-style.md`.
 prose:
     python3 scripts/prose.py --check
 
-# Every breach, with its line, so a red check says what to rewrite.
-prose-detail:
-    python3 scripts/prose.py --verbose
+# The checks in `scripts/` guard every Rust comment, every document and every
+# contract row, and nothing guarded the checks. Three defects shipped in the
+# prose one, and the worst produced no symptom: a table row left the reader's
+# result, so the hard rules never read it. A check that reads nothing and a
+# check that is satisfied look alike from outside, which is what these hold,
+# one test file per script.
 
-# Rewrite the per-file ceilings after a deliberate change. It lowers only, so it
-# cannot make a red check green. A file that legitimately grows needs
-# `python3 scripts/prose.py --ceilings --raise` and a reviewed diff.
-prose-ceilings:
-    python3 scripts/prose.py --ceilings
+# what each check in `scripts/` reads, and what it refuses.
+test-scripts:
+    python3 -m unittest discover -s scripts
 
 # The corpus cites a document by its name and, half the time, by a section of it.
 # Nothing resolved either, so splitting a spec left every stale citation silent:

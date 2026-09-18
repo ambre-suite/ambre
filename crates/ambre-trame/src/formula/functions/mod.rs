@@ -23,10 +23,10 @@ use builtins_c::*;
 
 /// Ambient evaluation context threaded into every built-in call.
 ///
-/// `now_serial` is the recomputation clock (shared so `TODAY()`/`NOW()` are
-/// stable within a pass); `cell_row`/`cell_col` are the 1-based grid position of
-/// the cell being evaluated, consumed by the no-argument `ROW()`/`COLUMN()`.
-/// A position of `0` means "unknown".
+/// `now_serial` is the recomputation clock, shared so `TODAY()`/`NOW()` are
+/// stable within a pass. `cell_row`/`cell_col` are the 1-based grid position of
+/// the cell being evaluated, consumed by the no-argument `ROW()`/`COLUMN()`. A
+/// position of `0` means "unknown".
 #[derive(Clone, Copy)]
 pub struct FnCtx {
     pub now_serial: f64,

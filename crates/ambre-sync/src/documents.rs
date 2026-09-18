@@ -150,7 +150,7 @@ impl SyncState {
             wasm_bindgen_futures::spawn_local(async move {
                 // E2EE: the server only ever stores ciphertext. Generate a fresh
                 // DocumentKey, seal the name with it, and wrap the key for the
-                // owner (ourselves) via X25519 so we can recover it on open.
+                // owner (ourselves) via X25519. We can then recover it on open.
                 let Some(exchange_key) = exchange_key else {
                     let _ = tx.send(SyncEvent::HttpError {
                         id,
@@ -272,7 +272,7 @@ impl SyncState {
                 // leaves the client. The server only ever stores ciphertext.
                 //
                 // The doc is usually open (inline rename from its header), but the
-                // launcher renames a closed doc: fall back to fetching the member
+                // launcher renames a closed doc. Fall back to fetching the member
                 // list and ECDH-unwrapping our wrapped key, exactly as on open.
                 let doc_key = match cached_doc_key {
                     Some(k) => k,

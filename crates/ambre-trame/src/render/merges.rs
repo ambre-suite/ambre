@@ -14,8 +14,8 @@ use super::*;
 /// Draw the merge masters over the base cell + grid-line layer.
 ///
 /// `merges` yields `(row, col, col_span, row_span, content)` for the visible
-/// merge masters (a covered cell is *not* a master and must not appear here --
-/// it renders blank under the master's span). For each master:
+/// merge masters. A covered cell is *not* a master and must not appear here:
+/// it renders blank under the master's span. For each master:
 ///
 ///   1. the full span gets an opaque `content_bg` fill, painting over the
 ///      interior grid separators drawn through the covered cells;
@@ -63,8 +63,8 @@ where
             // scale via `cell_rect`/`merge_rect`).
             let font_size =
                 content.size.map(|s| s as f32).unwrap_or(BODY_SIZE) * layout.zoom as f32;
-            // Wrap constrains the layout to the span width (breaking long tokens
-            // within the word); otherwise the line lays out unbounded and is
+            // Wrap constrains the layout to the span width, breaking long tokens
+            // within the word. Otherwise the line lays out unbounded, and is
             // clipped to the span rect below (`trame-cell-rendering`).
             let max_w = if content.wrap { avail as f32 } else { f32::MAX };
             let layout_text: &Layout<ParleyBrush> = text_cache.get_or_build_font(

@@ -32,7 +32,7 @@ pub use deck::DeckPanel;
 pub use crate::ui::deck::{DeckIntent, DeckSignals, Move as DeckMove};
 
 // What the board reads from the file system is pure and host-tested in
-// `ui::interop`: the shell asks the board rather than holding a format list of
+// `ui::interop`. The shell asks the board rather than holding a format list of
 // its own (`toile-import-export`).
 pub use crate::ui::embed::{AddressError, EmbedTarget, PlacedEmbed, normalize_web_address};
 pub use crate::ui::interop::{DroppedFile, IMPORT_ACCEPT, accepts as accepts_file};
@@ -52,7 +52,7 @@ pub use presenter::{PresenterIntent, PresenterPanel};
 pub use status::StatusBar;
 
 // The presenter panel's pure model (counter + notes diff) is host-tested in
-// `ui::presenter` (like `ui::find`); re-export it so the launcher and tests
+// `ui::presenter`, like `ui::find`. Re-export it so the launcher and tests
 // name it through `toile_chrome`.
 pub use crate::ui::presenter::{notes_delta, slide_counter_label};
 pub use style::StyleInspector;
@@ -70,9 +70,9 @@ pub use crate::ui::status::SelStats;
 // launcher names them through `toile_chrome`.
 pub use crate::ui::floatbar::{FloatBar, StyleEdit};
 
-// The tool palette's command surface is pure and host-tested in `ui::palette`
-// (like `ui::find` / `ui::menu`); the launcher consumes it through these
-// re-exports, so it only ever imports from `toile_chrome`.
+// The tool palette's command surface is pure and host-tested in
+// `ui::palette`, like `ui::find` / `ui::menu`. The launcher consumes it
+// through these re-exports, so it only ever imports from `toile_chrome`.
 pub use crate::ui::palette::{
     TOOL_COMMANDS, TOOL_CONNECTOR, TOOL_DRAW, TOOL_HAND, TOOL_PEN, TOOL_SELECT, TOOL_SHAPE,
     TOOL_STICKY, TOOL_TEXT, tool_for_command,
@@ -96,13 +96,13 @@ pub fn new_doc_label() -> &'static str {
 }
 
 /// Bind the Toile command chords into the launcher keymap. Ctrl+F opens Find and
-/// the bare-key tool chords (V/P/R/... -> `SetTool`,) switch tools;
-/// the remaining board shortcuts (undo/redo, clipboard, nudge, ...) are decoded
+/// the bare-key tool chords (V/P/R/... -> `SetTool`,) switch tools; the
+/// remaining board shortcuts (undo/redo, clipboard, nudge, ...) are decoded
 /// canvas-side in `ToileView::handle_key` (toile-tools), not here.
 ///
 /// Every chord comes from the registry, which declares what each affordance
-/// announces. Only these two families are routed through the keymap: binding
-/// the board chords here too would decode them twice, once here and once on the
+/// announces. Only these two families are routed through the keymap. Binding the
+/// board chords here too would decode them twice, once here and once on the
 /// canvas (`ambre-spec-commands.md` section 5).
 pub fn bind_keys(keymap: &mut Keymap) {
     for id in [FIND, crate::ui::commands::PALETTE] {

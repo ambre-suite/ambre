@@ -83,3 +83,6 @@ leptos       = { workspace = true }
 ambre-bus    = { path = "../ambre-bus" }
 ambre-chrome = { path = "../ambre-chrome" }
 ambre-canvas = { path = "../ambre-canvas" }
+
+[lints]
+workspace = true

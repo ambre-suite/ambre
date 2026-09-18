@@ -1,13 +1,27 @@
 // ambre-app/src/host/run.rs
 // ============================================================================
-// `run_with`: wire the canvas element, the transparent textarea input pipe, the
-// resize / input / clipboard listeners, and the route-independent rAF loop that
-// runs the per-frame relay + dispatcher. Returns the `DocSwitcher` handle the
-// route poll uses to swap the active document in place.
+// `run_with` wires the canvas element, the transparent textarea input pipe, and
+// the resize / input / clipboard listeners. It also wires the route-independent
+// rAF loop that runs the per-frame relay + dispatcher. Returns the `DocSwitcher`
+// handle the route poll uses to swap the active document in place.
 // ============================================================================
 
 use super::*;
 
+/// Run the UI thread: build the application view and drive it through a
+/// [`FrameHost`] on the requestAnimationFrame loop. DOM input and resize events
+/// are forwarded to it.
+///
+/// `make_view` receives the canvas size in physical pixels plus the transparent
+/// [`TextInput`] pipe, so the view can focus it and follow it to the caret. It
+/// returns the [`AppView`] to drive. It runs on this (UI) thread before the GPU
+/// is ready.
+///
+/// `pre_frame` runs once per animation frame immediately before the view's
+/// update. The launcher pumps its route-independent relay there: the Logic<->Sync
+/// relay, the dispatcher, the SPA route poll. So this driver knows nothing about
+/// commands or Leptos. `raf` gates only the render (a modal / landing overlay
+/// freezes the canvas), never the relay.
 #[allow(clippy::too_many_arguments)]
 pub fn run_with<F, C, P>(
     canvas_id: &str,
@@ -61,9 +75,9 @@ where
         text_input.clone(),
     );
     // Wrap the launcher's child factory with the shared text pipe, so `FrameHost`
-    // can build a child view (`toile-embeds`) knowing nothing about the
-    // pipe: the child reuses the one transparent textarea, but is constructed in
-    // embedded mode so it does not steal focus from the top-level document.
+    // can build a child view (`toile-embeds`) knowing nothing about the pipe. The
+    // child reuses the one transparent textarea, but is constructed in embedded
+    // mode so it does not steal focus from the top-level document.
     let make_child: MakeChild = {
         let child_pipe = text_input.clone();
         Rc::new(move |id, doc_type, size| make_child_fn(id, doc_type, size, child_pipe.clone()))
@@ -75,14 +89,15 @@ where
         let host_c = Rc::clone(&host);
         let canvas_c = canvas.clone();
         let raf_c = raf.clone();
-        // Start the rAF loop only after the GPU is ready so Firefox sees active
-        // GPU frames from frame 1 (empty early frames make it lock to 60 Hz).
+        // Start the rAF loop only after the GPU is ready, so Firefox sees
+        // active GPU frames from frame 1. Empty early frames make it lock to 60
+        // Hz.
         wasm_bindgen_futures::spawn_local(async move {
             if let Some(gpu) = bootstrap_gpu(canvas_c).await {
                 host_c.borrow_mut().install_gpu(gpu);
             }
-            // `pre_frame` is the route-independent relay (Logic<->Sync, the
-            // dispatcher, the SPA route poll); it must run EVERY frame, even when
+            // `pre_frame` is the route-independent relay: Logic<->Sync, the
+            // dispatcher, the SPA route poll. It must run EVERY frame, even when
             // the canvas is frozen behind a modal or the landing overlay. So the
             // outer loop is always-on and only the render is gated by `raf_c`.
             start_raf_loop(
@@ -101,16 +116,16 @@ where
     {
         let host_c = Rc::clone(&host);
         // The canvas text pipe: the one editable element whose keydowns the grid
-        // owns (navigation/edit keys ride the document listener even while it is
-        // focused, since text itself arrives via the textarea `input` event).
+        // owns. Navigation/edit keys ride the document listener even while it is
+        // focused, since text itself arrives via the textarea `input` event.
         let pipe = text_input.element().clone();
         let cb = Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(
             move |event: web_sys::KeyboardEvent| {
                 // Ignore keys aimed at any OTHER editable DOM element -- the HTML
-                // formula bar input, dialog fields, etc. Those handle their own
+                // formula bar input and the dialog fields. Those handle their own
                 // keyboard; forwarding them to the grid would double-process the
-                // event (e.g. a formula-bar Enter committing the cell, then the
-                // grid committing again and navigating off it).
+                // event. A formula-bar Enter would commit the cell, then the grid
+                // would commit again and navigate off it.
                 if event.target().is_some_and(|t| is_other_editable(&t, &pipe)) {
                     return;
                 }
@@ -231,10 +246,11 @@ where
                 let Some(data) = event.clipboard_data() else {
                     return;
                 };
-                // Decode the shared transport blob: the opaque Ambre bytes under
-                // the private type (app-specific, internal round-trip) plus the
-                // `text/plain` mirror (cross-app, or a browser that dropped the
-                // custom type). The view decides which to honor.
+                // Decode the shared transport blob. That is the opaque Ambre
+                // bytes under the private type: app-specific, an internal
+                // round-trip. It also carries the `text/plain` mirror, for
+                // cross-app use or a browser that dropped the custom type. The
+                // view decides which to honor.
                 let ambre = data
                     .get_data(AMBRE_CLIPBOARD_TYPE)
                     .ok()
@@ -242,7 +258,7 @@ where
                     .and_then(|b64| base64_decode(&b64));
                 let text = data.get_data("text/plain").unwrap_or_default();
                 // Same-tab ownership: the synchronous token survives even when the
-                // async payload write failed (Firefox), so a match means paste our
+                // async payload write failed (Firefox). So a match means paste our
                 // own in-memory copy at full fidelity.
                 let own_copy = data
                     .get_data(AMBRE_CLIPBOARD_TOKEN_TYPE)

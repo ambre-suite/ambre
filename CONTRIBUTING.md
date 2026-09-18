@@ -41,7 +41,7 @@ The maintainer reads every issue. State:
 
 **An automated audit is not a bug report.** The maintainer closes, without discussion, an issue
 that lists the findings of a scanner or of an assistant and carries no reproduction. The project
-runs its own audits, and [`specs/security-audit.md`](specs/security-audit.md) holds the findings.
+runs its own audits, and [`specs/audits/security-audit.md`](specs/audits/security-audit.md) holds the findings.
 
 A problem you found yourself, and can demonstrate, is a bug report. The tool that helped you find it
 does not matter.

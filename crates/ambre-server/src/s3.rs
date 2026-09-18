@@ -1,4 +1,4 @@
-//! S3 utilities — presigned URLs, object keys, delta flusher.
+//! S3 utilities -- presigned URLs, object keys, delta flusher.
 //!
 //! ## S3 Lifecycle Policies
 //!
@@ -79,11 +79,11 @@ pub fn is_valid_content_hash(content_hash: &str) -> bool {
 }
 
 /// Validates that a client-supplied snapshot `s3_key` actually belongs to the
-/// document the caller is authorized on, before it is persisted and later handed
-/// back as a presigned download URL.
+/// document the caller is authorized on. The check runs before the key is
+/// persisted and later handed back as a presigned download URL.
 ///
 /// Without this, a writer could register a snapshot row whose `s3_key` points at
-/// another document's object (`.../documents/{other}/snapshots/...`); any member
+/// another document's object (`.../documents/{other}/snapshots/...`). Any member
 /// of THIS document could then obtain a presigned URL for that foreign blob
 /// (cross-document IDOR). We require the exact per-document snapshot prefix and a
 /// single, slash-free object id (which also rejects `../` traversal).
@@ -113,10 +113,10 @@ pub fn format_s3_media_key(
 ///
 /// The client uploads the encrypted blob directly to S3; the server never sees
 /// the plaintext body. Setting `content_length` puts `Content-Length` into the
-/// SigV4 signed headers, so S3 rejects any upload whose body length differs from
-/// the size the caller declared (and the caller validated against its cap). This
-/// stops a member from writing an arbitrarily large object to the bucket through
-/// an otherwise key-only presigned URL.
+/// SigV4 signed headers. S3 then rejects any upload whose body length differs
+/// from the size the caller declared (and the caller validated against its cap).
+/// This stops a member from writing an arbitrarily large object to the bucket
+/// through an otherwise key-only presigned URL.
 pub async fn generate_presigned_upload_url(
     s3: &S3Client,
     bucket: &str,
@@ -158,9 +158,9 @@ pub async fn generate_presigned_download_url(
 
 /// Fetches an object's raw bytes from S3 (used to replay a persisted delta).
 ///
-/// Returns `Ok(None)` when the key does not exist yet (e.g. a freshly written
-/// delta still pending in Redis, not yet flushed), so the caller can fall back
-/// to the pending list rather than treating it as a hard error.
+/// Returns `Ok(None)` when the key does not exist yet, for example a freshly written
+/// delta still pending in Redis, not yet flushed. The caller can then fall back to
+/// the pending list, rather than treating it as a hard error.
 pub async fn fetch_object(
     s3: &S3Client,
     bucket: &str,
@@ -195,12 +195,12 @@ pub async fn fetch_object(
 /// Background task that periodically flushes pending deltas from Redis to S3.
 ///
 /// Runs once per Axum instance, every 15 seconds. The work list is the
-/// `flush:dirty` SET (documents that actually have unflushed deltas, maintained
-/// by `append_pending_delta`), so the common path is O(dirty docs) instead of an
-/// O(keyspace) `SCAN doc:*:pending` every cycle. A full SCAN reconciliation runs
-/// only occasionally (and on the first cycle, seeding the set on upgrade) to
-/// re-mark any pending key missing from the set, so no acknowledged delta can be
-/// stranded by a lost marker.
+/// `flush:dirty` SET, the documents that actually have unflushed deltas,
+/// maintained by `append_pending_delta`. The common path is therefore O(dirty
+/// docs), instead of an O(keyspace) `SCAN doc:*:pending` every cycle. A full
+/// SCAN reconciliation runs only occasionally, and on the first cycle, seeding
+/// the set on upgrade. It re-marks any pending key missing from the set, so no
+/// acknowledged delta can be stranded by a lost marker.
 pub async fn global_s3_flusher(state: crate::state::AppState) -> ! {
     // One full-keyspace reconciliation every RECONCILE_EVERY cycles (~5 min at a
     // 15 s cycle). Cycle 0 reconciles first, seeding the dirty set from any
@@ -236,10 +236,10 @@ pub async fn global_s3_flusher(state: crate::state::AppState) -> ! {
 }
 
 /// Re-marks every existing `doc:*:pending` key in the dirty set via a single
-/// keyspace SCAN. Bounds the SCAN to a low frequency while guaranteeing that a
-/// pending list which somehow missed its `SADD` (an upgrade from before the
-/// dirty-set existed, or a crash between RPUSH and SADD) is still eventually
-/// flushed rather than stranded.
+/// keyspace SCAN. Bounds the SCAN to a low frequency. A pending list which
+/// somehow missed its `SADD` is still eventually flushed, rather than
+/// stranded. That covers an upgrade from before the dirty-set existed, or a
+/// crash between RPUSH and SADD.
 async fn reconcile_dirty_set(state: &crate::state::AppState) {
     let mut cursor = 0u64;
     loop {
@@ -268,11 +268,11 @@ async fn reconcile_dirty_set(state: &crate::state::AppState) {
 
 /// Drains the pending list of a single document and uploads entries to S3.
 ///
-/// The whole drain is serialized per document by a Redis lock: the flusher runs
-/// once per server instance, and without the lock two instances could `LRANGE`
-/// the same list, both upload, then both `LTRIM` the front by their own count --
-/// trimming away deltas a client `RPUSH`ed during the window (durable loss of an
-/// already-sequenced, acknowledged delta). A losing instance simply skips this
+/// The whole drain is serialized per document by a Redis lock. The flusher runs
+/// once per server instance. Without the lock two instances could `LRANGE` the
+/// same list, both upload, then both `LTRIM` the front by their own count. That
+/// trims away deltas a client `RPUSH`ed during the window, a durable loss of an
+/// already-sequenced, acknowledged delta. A losing instance simply skips this
 /// document; the next 15 s cycle picks it up. The client write path never takes
 /// this lock, so collaboration latency is unaffected.
 async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &str) {
@@ -335,11 +335,11 @@ async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &
     // Count of contiguous FRONT entries we have finished with -- either
     // uploaded to S3 or dead-lettered as poison. This is the exact `ltrim`
     // start index. It must track BOTH outcomes: the old code trimmed by the
-    // upload count alone, so a `continue`d poison entry ahead of a good one
-    // desynced the index (re-uploading the good entry every cycle) and a
-    // trailing poison entry was retried forever. We only advance the front and
-    // stop on the first TRANSIENT (retryable) failure, so the trim never skips
-    // an entry we still need to retry.
+    // upload count alone. A `continue`d poison entry ahead of a good one then
+    // desynced the index, re-uploading the good entry every cycle. A trailing
+    // poison entry was retried forever. We only advance the front and stop on
+    // the first TRANSIENT (retryable) failure, so the trim never skips an
+    // entry we still need to retry.
     let mut processed: isize = 0;
     for blob_str in &blobs {
         // Never log `blob_str`: it carries `update_b64`, the E2EE ciphertext.
@@ -356,8 +356,8 @@ async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &
             );
         };
 
-        // Resolve the routing fields; any structural defect is a permanent
-        // poison entry (it will never parse), so dead-letter it and advance
+        // Resolve the routing fields. Any structural defect is a permanent
+        // poison entry that will never parse, so dead-letter it and advance
         // past it rather than blocking the queue forever.
         let fields = parsed.as_ref().and_then(|p| {
             let s3_key = p["s3_key"].as_str()?;
@@ -509,9 +509,9 @@ mod tests {
         aws_sdk_s3::Client::from_conf(conf)
     }
 
-    /// The presigned upload URL must bind `Content-Length`: S3 then rejects any
-    /// body whose length differs from the declared (and cap-validated) size, so
-    /// the key-scoped URL cannot be used to write an arbitrarily large object.
+    /// The presigned upload URL must bind `Content-Length`. S3 then rejects any
+    /// body whose length differs from the declared (and cap-validated) size.
+    /// The key-scoped URL cannot be used to write an arbitrarily large object.
     #[tokio::test]
     async fn presigned_upload_url_signs_content_length() {
         let s3 = test_s3_client();

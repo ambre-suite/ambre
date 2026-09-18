@@ -12,9 +12,9 @@ use super::*;
 // -----------------------------------------------------------------------------
 
 /// Width (physical px) of the consecutive *empty* neighbour columns a non-wrapped
-/// overflowing cell may spill its text over, walking from `col` in `step` (`+1`
-/// right, `-1` left). The walk stops at the first non-empty neighbour, the grid
-/// edge, or once `need` pixels of spill are covered -- whichever comes first
+/// overflowing cell may spill its text over. The walk starts at `col` and steps
+/// by `step` (`+1` right, `-1` left). It stops at whichever comes first: the
+/// first non-empty neighbour, the grid edge, or `need` pixels of spill covered
 /// (Excel/Sheets overflow, `trame-cell-rendering`). The result never exceeds
 /// `need`.
 pub(super) fn spill_width<E: Fn(u32, u32) -> bool>(
@@ -39,21 +39,21 @@ pub(super) fn spill_width<E: Fn(u32, u32) -> bool>(
 
 /// Draw the background fill and body text for each supplied cell.
 ///
-/// `cells` yields `(row, col, content)` for the cells that exist (on screen:
-/// the cells received from the Logic thread; for PDF: every used cell). Each
-/// gets an opaque `palette.content_bg` fill -- on screen this is what lifts a
-/// cell out of the "pending" grey -- followed by its text when `text_enabled`.
+/// `cells` yields `(row, col, content)` for the cells that exist (on screen: the
+/// cells received from the Logic thread; for PDF: every used cell). Each gets an
+/// opaque `palette.content_bg` fill, followed by its text when `text_enabled`. On
+/// screen that fill is what lifts a cell out of the "pending" grey.
 ///
 /// `is_empty(row, col)` reports whether a neighbour cell carries no visible text,
-/// i.e. a non-wrapped overflowing line may spill over it. Overflow direction
-/// follows the resolved alignment (left text spills right, right text spills
-/// left, centred text both ways); the spill stops at the first non-empty
-/// neighbour and the text is clipped there (no ellipsis in the MVP,
+/// so a non-wrapped overflowing line may spill over it. Overflow direction
+/// follows the resolved alignment: left text spills right, right text spills
+/// left, centred text both ways. The spill stops at the first non-empty neighbour
+/// and the text is clipped there (no ellipsis in the MVP,
 /// `trame-cell-rendering`).
 ///
-/// Grid lines are *not* drawn here: call [`draw_grid_lines_on`] afterwards so
-/// the separators sit on top of the fills. Returns the number of cells that
-/// actually had non-empty text drawn (font-independent tally for stats/tests).
+/// Grid lines are *not* drawn here: call [`draw_grid_lines_on`] afterwards so the
+/// separators sit on top of the fills. Returns the number of cells that actually
+/// had non-empty text drawn (font-independent tally for stats/tests).
 #[allow(clippy::too_many_arguments)]
 pub fn draw_cells_on<'a, S, I, E>(
     surface: &mut S,
@@ -92,7 +92,7 @@ where
 
         // Wrap constrains the layout to the cell width so parley breaks lines;
         // otherwise the text lays out unbounded (Excel-style overflow). We always
-        // shape left-aligned and position the run horizontally ourselves: parley's
+        // shape left-aligned and position the run horizontally ourselves. Parley's
         // own alignment needs a finite advance, and an unbounded (non-wrap) layout
         // would push centred/right text off-screen.
         let max_w = if content.wrap {

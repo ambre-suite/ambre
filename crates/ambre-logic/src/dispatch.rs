@@ -3,18 +3,19 @@
 // The two inbound dispatchers:
 //   - `handle_logic_command`: UI Thread -> Logic (content, control, service).
 //   - `handle_logic_event`:  Sync -> Logic (real-time push, service responses).
-// Both are pure Rust (no wasm glue), so the whole routing layer is exercised on
-// the host by the `tests` module at the bottom with mock flume channels.
+// Both are pure Rust (no wasm glue). The whole routing layer is therefore
+// exercised on the host by the `tests` module at the bottom, with mock flume
+// channels.
 // ============================================================================
 
 use super::*;
 
 impl LogicState {
-    // -- Inbound: UI Thread → Logic --------------------------------------------
+    // -- Inbound: UI Thread -> Logic --------------------------------------------
 
     pub(crate) fn handle_logic_command(&mut self, command: LogicCommand) {
         match command {
-            // -- P2 — Content plane --------------------------------------------
+            // -- P2 -- Content plane --------------------------------------------
             LogicCommand::App {
                 document_id,
                 command,
@@ -34,7 +35,7 @@ impl LogicState {
                 // Order-independent: the boot-time local restore and the route
                 // poll's `OpenDocument` race on startup. If the restore arrives
                 // first, materialise the live document here so the snapshot is
-                // never dropped; a later `OpenDocument` finds the slot occupied
+                // never dropped. A later `OpenDocument` finds the slot occupied
                 // and reuses it.
                 if let std::collections::hash_map::Entry::Vacant(slot) =
                     self.docs.entry(document_id)
@@ -55,11 +56,11 @@ impl LogicState {
                     return;
                 };
                 // A snapshot import is the same operation whichever engine owns
-                // the document, and it is a full-state read: the schema gate runs
+                // the document, and it is a full-state read. The schema gate runs
                 // inside `DocState::import_snapshot` before any container is used
                 // (`SCHEMA-006`). A refused document leaves the state alone
                 // (`SCHEMA-012`) and reaches the user as the owning app's own
-                // refusal event -- a restore that silently does nothing is
+                // refusal event. A restore that silently does nothing is
                 // indistinguishable from a document that never existed.
                 let events: Vec<AppEvent> = match doc.import_snapshot(&snapshot) {
                     Ok(events) => events,
@@ -73,7 +74,7 @@ impl LogicState {
                 }
             }
 
-            // -- P3 — Service plane: forward verbatim, with state hooks --------
+            // -- P3 -- Service plane: forward verbatim, with state hooks --------
             //
             // The whole relayed request/response family collapses to one arm.
             // A few ops also mutate Logic state before forwarding; those are the
@@ -97,7 +98,7 @@ impl LogicState {
                 self.send_to_sync(SyncCommand::Rest { id, cmd });
             }
 
-            // -- P3 — Control plane: explicit (no correlatable response) -------
+            // -- P3 -- Control plane: explicit (no correlatable response) -------
             LogicCommand::OpenDocument {
                 document_id,
                 doc_type,
@@ -126,9 +127,9 @@ impl LogicState {
             }
             LogicCommand::CloseDocument { document_id } => {
                 self.docs.remove(&document_id);
-                // Drop any in-flight service routes for this document: a response
-                // arriving after close has no engine to feed and must not forward
-                // to the UI as a stray API event (`toile-media`).
+                // Drop any in-flight service routes for this document. A response
+                // arriving after close has no engine to feed, and must not
+                // forward to the UI as a stray API event (`toile-media`).
                 self.rest_routes.retain(|_, d| *d != document_id);
                 self.forget_pending_seals(Some(document_id));
                 self.send_to_sync(SyncCommand::CloseDocument { document_id });
@@ -168,7 +169,7 @@ impl LogicState {
         }
     }
 
-    // -- Inbound: Sync → Logic -------------------------------------------------
+    // -- Inbound: Sync -> Logic -------------------------------------------------
 
     pub(crate) fn handle_logic_event(&mut self, event: LogicEvent) {
         match event {
@@ -186,15 +187,15 @@ impl LogicState {
                     return;
                 }
                 // A response to a request this Logic thread issued on behalf of a
-                // document (`toile-media`) is fed back into the owning engine
-                // instead of forwarded to the UI. UI-issued requests are absent
-                // from `rest_routes` and fall through to the verbatim forward.
+                // document (`toile-media`) is fed back into the owning engine. It
+                // is not forwarded to the UI. UI-issued requests are absent from
+                // `rest_routes` and fall through to the verbatim forward.
                 if let Some(document_id) = self.rest_routes.remove(&id) {
                     self.route_service_event(document_id, id, evt);
                     return;
                 }
-                // `SessionReady` also seeds the canonical `UserId`: capture
-                // it for later opens and push it into every already-open document
+                // `SessionReady` also seeds the canonical `UserId`. Capture it
+                // for later opens and push it into every already-open document,
                 // before forwarding the event verbatim to the UI.
                 if let RestEvent::SessionReady {
                     user_id,
@@ -404,7 +405,7 @@ impl LogicState {
 }
 
 // -----------------------------------------------------------------------------
-// Tests — the dispatcher is 100% pure Rust (no wasm glue), so the whole routing
+// Tests -- the dispatcher is 100% pure Rust (no wasm glue), so the whole routing
 // layer is exercisable on the host with mock flume channels. These pin the
 // command/event mapping that is otherwise hand-written boilerplate (see the
 // service plane of ambre-spec-message-bus.md).
@@ -436,7 +437,7 @@ mod tests {
     /// the bytes the UI would download.
     ///
     /// Goes through the real dispatcher rather than calling the engine, because
-    /// the rule under test is exactly what the dispatcher adds: the header's
+    /// the rule under test is exactly what the dispatcher adds. The header's
     /// identity comes from the registry that keyed the document, and an engine
     /// has no way to supply it.
     fn exported_file(doc_type: DocType, document_id: DocumentId) -> Vec<u8> {
@@ -510,12 +511,12 @@ mod tests {
 
     /// `DOCFILE-001` over the whole gesture: what the user saves is what opens,
     /// down the path the launcher actually takes. The file's payload is fed
-    /// through `RestoreLocalSnapshot` -- the same leg the open gesture reaches
-    /// by way of the local snapshot store -- so this covers the hand-off the
-    /// picker cannot test in a browser-free tier.
+    /// through `RestoreLocalSnapshot`, the same leg the open gesture reaches by
+    /// way of the local snapshot store. This covers the hand-off the picker
+    /// cannot test in a browser-free tier.
     ///
-    /// The document is edited before saving, so a round trip that silently
-    /// returned an empty document would fail here rather than pass on two
+    /// The document is edited before saving. A round trip that silently
+    /// returned an empty document fails here rather than passing on two
     /// identical fresh states.
     #[test]
     fn a_saved_file_opens_back_as_the_document_that_was_saved() {
@@ -536,7 +537,7 @@ mod tests {
         let saved = exported_file_from(&state, document_id);
         let header = ambre_core::docfile::read_ambre_plaintext(&saved).expect("valid container");
 
-        // A second session, as a page load after the open gesture: nothing is
+        // A second session, as a page load after the open gesture. Nothing is
         // live, and the file's payload arrives the way the store hands it over.
         let (mut reopened, ui, _sync) = harness();
         reopened.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
@@ -1030,11 +1031,11 @@ mod tests {
 
     // -- Composition: the registry is flat ------------------------------
     //
-    // A `doc_embed` child is an ordinary entry in `docs`, keyed by its own id, so
-    // a command for it is addressed straight to it and never travels through the
+    // A `doc_embed` child is an ordinary entry in `docs`, keyed by its own id. A
+    // command for it is addressed straight to it and never travels through the
     // parent board. What that buys is the property below: role is resolved per
-    // document. These tests seed a parent and a child side by side and pin that
-    // the parent's role has no say over the child's -- both directions.
+    // document. These tests seed a parent and a child side by side. They pin that
+    // the parent's role has no say over the child's, in both directions.
 
     /// Seed a live Toile already carrying `role`, skipping the open handshake.
     fn live_toile(state: &mut LogicState, role: Role) -> DocumentId {
@@ -1072,7 +1073,7 @@ mod tests {
         });
 
         // Exactly one delta, keyed on the child. Gating this on the board's role
-        // would deny a viewer an edit to a document they own inside it.
+        // would refuse a viewer an edit to a document they own inside it.
         assert_eq!(updated_docs(&sync_rx), vec![child]);
     }
 
@@ -1100,7 +1101,7 @@ mod tests {
             command: set_cell("42"),
         });
 
-        // Never synthesise the document: an embed may point at one this client
+        // Never synthesise the document. An embed may point at one this client
         // cannot open at all, and an empty state would paint as if it were the
         // real one.
         assert!(updated_docs(&sync_rx).is_empty());
@@ -1126,9 +1127,9 @@ mod tests {
 
     // -- Service-plane routing: interop media uploads (`toile-media`) ------
     //
-    // A Toile media import issues `UploadMedia` requests the dispatcher lowers to
-    // `RestCommand`s and whose answering `RestEvent`s it feeds back into the
-    // owning engine instead of forwarding to the UI. These pin that round trip.
+    // A Toile media import issues `UploadMedia` requests, which the dispatcher
+    // lowers to `RestCommand`s. The answering `RestEvent`s are fed back into the
+    // owning engine instead of forwarded to the UI. These pin that round trip.
 
     /// A minimal solid-color PNG, decoded by the Toile image converter into one
     /// media blob (hence one `UploadMedia` request).
@@ -1314,7 +1315,7 @@ mod tests {
         ));
     }
 
-    /// `LoadFonts` seeds the export `FontContext` once and is local-only: it
+    /// `LoadFonts` seeds the export `FontContext` once and is local-only. It
     /// touches neither the UI nor the Sync plane, and a second seeding is a
     /// no-op (`toile-media`).
     #[test]
@@ -1384,9 +1385,9 @@ mod tests {
         doc_id
     }
 
-    /// Nothing is ever silent: a build without the export compiled in, and a
-    /// session whose fonts have not landed, both answer by name rather than
-    /// leaving the user waiting on a file.
+    /// Nothing is ever silent. A build without the export compiled in
+    /// answers by name, as does a session whose fonts have not landed.
+    /// Neither leaves the user waiting on a file.
     #[test]
     fn a_deck_export_without_fonts_answers_with_a_reason() {
         let (mut state, ui_rx, _sync) = harness();

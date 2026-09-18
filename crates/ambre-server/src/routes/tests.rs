@@ -194,9 +194,10 @@ mod handler_tests {
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn list_documents_carries_summary_fields(pool: sqlx::PgPool) {
-        // After creation, the list must carry the fields the launcher needs:
-        // the encrypted name, the caller's wrapped doc key, member_count (1 for a
-        // solo owner), and a timestamp. Validates the new LEFT JOIN + COUNT query.
+        // After creation, the list must carry the fields the launcher needs. That
+        // is the encrypted name, the caller's wrapped doc key, member_count (1 for
+        // a solo owner), and a timestamp. Validates the new LEFT JOIN + COUNT
+        // query.
         let state = test_app_state(pool).await;
         let app = build_test_router(state.clone());
         let auth = setup_and_get_auth(&app).await;
@@ -270,7 +271,7 @@ mod handler_tests {
     }
 
     // H2 regression: a non-member (here an anonymous caller who only holds the
-    // UUID) must not receive `owner_id` / `doc_type` metadata -- the route
+    // UUID) must not receive `owner_id` / `doc_type` metadata. The route
     // returns 404 instead of leaking the document's existence.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
@@ -708,8 +709,8 @@ mod handler_tests {
 
     /// `store_master_keys` is the one-shot first-time upload path (an OIDC/dev
     /// account is created with a NULL `master_key_enc`, then fills it here). The
-    /// first call must succeed; a second call must be rejected with 409 instead of
-    /// overwriting `signing_pubkey`/`exchange_pubkey` -- an unconditional overwrite
+    /// first call must succeed. A second call must be rejected with 409, instead of
+    /// overwriting `signing_pubkey`/`exchange_pubkey`. An unconditional overwrite
     /// would strand every `doc_key_enc` wrapped to the previous exchange key,
     /// silently locking the caller out of its own shared documents.
     #[sqlx::test]
@@ -771,7 +772,7 @@ mod handler_tests {
 
     /// Setup a second account under an explicit email and signing key, returning
     /// a ready `Authorization: Bearer <jwt>` header. Used to act as a non-owner
-    /// (e.g. a `viewer`) in role-gated route tests.
+    /// (for example a `viewer`) in role-gated route tests.
     async fn setup_named(app: &Router, email: &str, spk_byte: u8) -> String {
         let body = serde_json::json!({
             "email": email,
@@ -817,7 +818,7 @@ mod handler_tests {
     }
 
     /// A `viewer` cannot obtain a media upload URL, so it must not be able to
-    /// register a `media` row either: `media_confirm_upload` is gated to
+    /// register a `media` row either. `media_confirm_upload` is gated to
     /// owner/editor exactly like `media_upload_url`.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
@@ -865,10 +866,10 @@ mod handler_tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
-    /// Confirming the same media twice is idempotent: `insert_media` uses
-    /// `ON CONFLICT (id) DO NOTHING`, so a retried confirm (or a second client
-    /// registering the same content-addressed blob) returns 200 both times
-    /// instead of surfacing the PK unique violation as a 500.
+    /// Confirming the same media twice is idempotent. `insert_media` uses `ON
+    /// CONFLICT (id) DO NOTHING`. A retried confirm returns 200 both times,
+    /// instead of surfacing the PK unique violation as a 500. So does a
+    /// second client registering the same content-addressed blob.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn media_confirm_upload_is_idempotent(pool: sqlx::PgPool) {
@@ -900,7 +901,7 @@ mod handler_tests {
     }
 
     /// A snapshot's `author_pubkey` is bound to the session identity (the token's
-    /// `spk` claim), like the WS `Update` author-key check: a member may only
+    /// `spk` claim), like the WS `Update` author-key check. A member may only
     /// create a snapshot under their own key, never attribute one to another.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
@@ -1028,8 +1029,8 @@ mod handler_tests {
             .to_string()
     }
 
-    /// D1: an `editor` holds the document key, so the invite upsert (which is
-    /// also the role-change path) must not let it demote an existing `owner` and
+    /// D1: an `editor` holds the document key. The invite upsert (which is also
+    /// the role-change path) must not let it demote an existing `owner` and
     /// overwrite the owner's key entry. The N2 target-rank clamp applied to the
     /// document share route.
     #[sqlx::test]
@@ -1046,7 +1047,7 @@ mod handler_tests {
         let editor = setup_named(&app, editor_email, 5).await;
         invite(&app, &owner, &doc_id, editor_email, "editor").await;
 
-        // The editor tries to re-invite the owner as `editor`: the granted role is
+        // The editor tries to re-invite the owner as `editor`. The granted role is
         // within its rank, but the target is an owner (rank above it) -> 403.
         assert_eq!(
             invite_status(&app, &editor, &doc_id, "user@ambre.app", "editor").await,
@@ -1152,9 +1153,9 @@ mod handler_tests {
     }
 
     /// #1 regression: document-key rotation is owner-only. An editor holds the
-    /// document key but must not be able to rotate it -- that is membership
-    /// management (it rewraps every member and could lock others out), gated to
-    /// the owner exactly like revoke.
+    /// document key but must not be able to rotate it. That is membership
+    /// management: it rewraps every member and could lock others out, so it is
+    /// gated to the owner exactly like revoke.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn rotate_key_denied_to_editor(pool: sqlx::PgPool) {

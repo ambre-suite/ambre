@@ -1,7 +1,7 @@
 //! Generic seal/open over the encrypted envelope.
 //!
 //! All three wire messages (Update, Snapshot, Ephemeral) share one cryptographic
-//! envelope; they differ only by their associated data (`aad` = the serialized
+//! envelope. They differ only by their associated data (`aad` = the serialized
 //! public metadata, supplied by the caller). This module composes AEAD, the HMAC
 //! commitment tag and the Ed25519 signature into a single [`Sealed`] value.
 //!
@@ -31,6 +31,11 @@ pub struct Sealed {
 
 /// Encrypts and authenticates `plaintext` under `doc_key`, binding it to `aad`
 /// and signing with `signing_key`.
+///
+/// # Errors
+///
+/// [`CryptoError::EncryptionFailed`] from the AEAD. The commitment tag and the
+/// signature are infallible.
 pub fn seal(
     plaintext: &[u8],
     aad: &[u8],
@@ -51,6 +56,15 @@ pub fn seal(
 /// Verifies and decrypts a [`Sealed`] envelope in the spec order: signature,
 /// then commitment tag, then AEAD. Any failure yields a typed error; the caller
 /// (Sync) drops the message and raises a `SyncWarning`.
+///
+/// # Errors
+///
+/// The order below is the order of the checks.
+///
+/// * [`CryptoError::InvalidSignature`] when `author_pub` did not sign it.
+/// * [`CryptoError::CommitmentMismatch`] when `doc_key` is not the key the
+///   sender committed to.
+/// * [`CryptoError::AeadFailed`] when the ciphertext does not verify.
 pub fn open(
     sealed: &Sealed,
     aad: &[u8],

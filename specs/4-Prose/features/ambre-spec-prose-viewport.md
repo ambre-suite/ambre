@@ -8,7 +8,7 @@
 > frame as a one-page one.
 
 The scroll offset and the zoom are local view state: they write nothing to the document and reach
-no collaborator, so there is no two-peer table below.
+no collaborator. There is no two-peer table below.
 
 ---
 
@@ -59,19 +59,17 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-131` | `POST` | A layout that arrives MUST rebuild the column: the page count, the page box and the total height MUST come from that layout. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-132` | `FRAME` | Rebuilding the column MUST NOT change the zoom and MUST NOT write to the document. | derived | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** the scroll of one page, a row of `ambre-spec-budgets.md section 1`. The
-  culling itself costs nothing worth a row: the visible range is arithmetic over a uniform page
-  height, not a search.
+* **Budget.** the scroll of one page, a row of `ambre-spec-budgets.md section 1`. The culling costs
+  nothing worth a row: the visible range is arithmetic over a uniform page height, not a search.
 * **Boundary.** none: the scroll offset and the zoom are view state on the UI thread, where
-  `UI-THREAD-004` bans a network, crypto or persistence path, and `PROSE-UI-010`
+  `UI-THREAD-004` bans a network, crypto or persistence path. `PROSE-UI-010`
   (`features/ambre-spec-prose-engine.md section 1`) keeps both out of the document.
-* **Verification.** 17 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. Six of
-  the state rows are the degenerate cases -- an empty layout, a position in a gutter, a scroll past
-  the end, a zoom out of range, an inverted range, a page wider than the window -- and each names a
-  shape a property test reaches directly, because all six are pure arithmetic over three numbers.
-  `PROSE-UI-023` and `PROSE-UI-128` are round trips over generated points, which is the same
-  mechanism at a stronger setting. The frame conditions are the weak half: nothing but a review
-  holds them until the view state is one struct a test can compare before and after.
+* **Verification.** 17 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. Six state
+  rows are the degenerate cases, and a property test reaches each directly, being arithmetic over
+  three numbers. They are an empty layout, a gutter, a scroll past the end, a zoom out of range,
+  an inverted range and an oversized page. `PROSE-UI-023` and
+  `PROSE-UI-128` are round trips over generated points. The frame conditions are the weak half:
+  nothing but a review holds them.
 
 ---
 
@@ -142,28 +140,28 @@ pub enum DocPos {
 }
 ```
 
-`DocPos::Empty` is what a caller answers a click on an empty document with, and it is a distinct
-answer from a click that lands in a page margin: the first has no page, the second has a page and
+`DocPos::Empty` is what a caller answers a click on an empty document with. It is a distinct
+answer from a click that lands in a page margin. The first has no page, the second has a page and
 no block (`features/ambre-spec-prose-page-rendering.md`).
 
 **Culling.** A block is built for a frame when the page it starts on is in the visible range, plus
 one page on each side (`PROSE-UI-007`). A block outside that range is neither shaped nor
 rasterized; its runs stay cached and unbuilt.
 
-**Zoom.** A zoom multiplies the factor, clamps it (`PROSE-UI-024`), recomputes the column's left
-margin so the column stays centred (`PROSE-UI-026`), and solves the scroll offset that keeps the
-anchor -- the caret, or the focus of a pinch -- under the same screen point (`PROSE-UI-023`). It
-writes nothing to the document.
+**Zoom.** A zoom multiplies the factor and clamps it (`PROSE-UI-024`). It recomputes the column's
+left margin so the column stays centred (`PROSE-UI-026`). It solves the scroll offset that keeps
+the anchor -- the caret, or the focus of a pinch -- under the same screen point (`PROSE-UI-023`).
+It writes nothing to the document.
 
 ```rust
 /// Zoom by a factor about a screen point.
 pub fn apply_zoom(state: &mut ProseUiState, factor: f32, focus_screen: Vec2);
 ```
 
-**Scroll.** Every path that moves the scroll offset -- the wheel, a drag past the viewport edge, a
-caret the keyboard has to reveal, a relayout that shortened the document -- clamps it to the
-column's own range afterwards (`PROSE-UI-025`). A relayout is the case that matters: deleting the
-last twenty pages of a document leaves an offset past the end of a column that no longer has one.
+**Scroll.** Every path that moves the scroll offset clamps it to the column's own range afterwards
+(`PROSE-UI-025`). Those paths are the wheel, a drag past the viewport edge, a caret the keyboard
+has to reveal, and a relayout that shortened the document. A relayout is the case that matters.
+Deleting the last twenty pages leaves an offset past the end of a column that no longer has one.
 
 **Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
 
@@ -204,19 +202,19 @@ The zoom control itself is chrome, not canvas, and lives with the rest of the ap
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **The zoom is Prose's own, and the shared model is a Story.** The clamp, the anchor and the
-  centring are specified here; the "One zoom model" Story (`ambre-roadmap.md` E8) exists to make them
-  one implementation across the applications, and until it lands the spreadsheet has no keyboard
+  centring are specified here. The "One zoom model" Story (`ambre-roadmap.md` E8) exists to make
+  them one implementation across the applications. Until it lands, the spreadsheet has no keyboard
   zoom at all.
-* **Nothing rules on inertial scroll.** A momentum term is carried in the view state and no rule
+* **Nothing rules on inertial scroll.** A momentum term is carried in the view state. No rule
   says how it decays, whether it survives a relayout, or what stops it at the ends of the column.
-* **The zoom does not survive a reload.** It is view state and nothing writes it anywhere, so a
+* **The zoom does not survive a reload.** It is view state and nothing writes it anywhere. A
   reader who zooms to a hundred and fifty per cent does it again on the next visit.
 * **A page wider than the viewport has no horizontal scroll.** The column pins to the left edge
   and the right side of the page is unreachable at a zoom the rules allow.
 * **Nothing rules on a device pixel ratio that changes.** The ratio is carried in the view state
-  and a conversion multiplies by it, so moving the window to a second screen changes every mapping
+  and a conversion multiplies by it. Moving the window to a second screen changes every mapping
   `PROSE-UI-023` governs. Section 3 lists a canvas resize and not this, and `PROSE-UI-130` says
   what a resize leaves alone without saying whether a ratio change is one.
 * **A pageless mode would replace this column.** `meta/pageless` is a container the schema carries
-  as deferred; with it set, the layout is linear, the gutters go and the width follows the
-  viewport -- which is a different geometry, not a variant of this one.
+  as deferred. With it set, the layout is linear, the gutters go and the width follows the
+  viewport. That is a different geometry, not a variant of this one.

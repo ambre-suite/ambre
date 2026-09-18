@@ -5,8 +5,8 @@
 // `TrameState` owns everything the Logic thread needs for one open Trame
 // document: CRDT, formula engine, formatting. The Logic dispatcher
 // (`ambre-logic`) holds it inside `DocState::Trame` and calls the handlers
-// below with **typed** `TrameCommand`s, getting back typed `TrameEvent`s --
-// no trait object, no postcard, no `Vec<u8>` on this path.
+// below with **typed** `TrameCommand`s, getting back typed `TrameEvent`s.
+// No trait object, no postcard, no `Vec<u8>` on this path.
 //
 // The shared IPC types (TrameCommand, TrameEvent, DisplayCell) live in
 // `ambre-bus`; the grid dimensions shared with the UI live in the crate root
@@ -34,9 +34,9 @@ use ambre_bus::{
 
 /// Resolution context handed to the formula engine: maps a sheet *display name*
 /// to its local engine index and a defined name to its target. Borrows the
-/// derived caches on [`TrameState`] so it can be built at a call site without
-/// borrowing the whole state (the engine, a sibling field, is mutated in the
-/// same call).
+/// derived caches on [`TrameState`], so it can be built at a call site without
+/// borrowing the whole state. The engine, a sibling field, is mutated in the
+/// same call.
 struct TrameCtx<'a> {
     sheet_name_to_u16: &'a HashMap<String, u16>,
     sheet_id_to_u16: &'a HashMap<String, u16>,
@@ -208,21 +208,21 @@ pub struct TrameState {
     /// element's value.
     uid_counter: u32,
     /// Set once the first [`TrameCommand::ScrollViewport`] has been served. The
-    /// UI thread has no dedicated "fetch sheet list" command, so the first
-    /// viewport request (sent on load) rides a [`TrameEvent::SheetList`] back to
-    /// hydrate the tab strip. Subsequent scrolls do not repeat it.
+    /// UI thread has no dedicated "fetch sheet list" command. The first viewport
+    /// request (sent on load) therefore rides a [`TrameEvent::SheetList`] back,
+    /// to hydrate the tab strip. Subsequent scrolls do not repeat it.
     sheet_list_sent: bool,
     /// A register was met that this build cannot decode (`SCHEMA-003`). Set by
     /// the style reseed, drained at every import; a `Cell` because the reseed
     /// reads through a shared borrow of the document.
     ///
-    /// A flag rather than a tally: the same unreadable register is met again on
+    /// A flag rather than a tally. The same unreadable register is met again on
     /// every later reseed, so a count would measure how often the grid was
     /// rebuilt.
     ///
-    /// Drained at an import, never at a repaint, so a register first met by a
-    /// display-only read is reported at the next import rather than at once.
-    /// Late, and never wrong: the register is still unreadable.
+    /// Drained at an import, never at a repaint. A register first met by a
+    /// display-only read is therefore reported at the next import rather than
+    /// at once. Late, and never wrong: the register is still unreadable.
     undecodable: std::cell::Cell<bool>,
 }
 
@@ -240,8 +240,8 @@ impl TrameState {
     ///
     /// * **`PeerID`** -- `LoroDoc::new()` draws one at random, and Trame builds
     ///   sheet ids from it (`format!("{:016x}_{:08x}", doc.peer_id(), counter)`
-    ///   in `sheets.rs` / `interop.rs`), so an unpinned peer changes
-    ///   the document's *content*, not merely its encoding. That is also why a
+    ///   in `sheets.rs` / `interop.rs`). An unpinned peer therefore changes the
+    ///   document's *content*, not merely its encoding. That is also why a
     ///   semantic digest is no escape hatch for it.
     /// * **Commit timestamps** -- Loro records one per commit unless told not to.
     ///
@@ -249,9 +249,14 @@ impl TrameState {
     /// sheet's own op is attributed to `peer` like every op after it.
     ///
     /// **Never for a live document.** Two concurrent writers sharing a `PeerID`
-    /// mint conflicting `OpID`s and corrupt the history; this exists for
+    /// mint conflicting `OpID`s and corrupt the history. This exists for
     /// single-owner, offline, host-side reproduction (a fixture generator, a
     /// deterministic test). The client path is [`new`](Self::new).
+    ///
+    /// # Panics
+    ///
+    /// When a fresh `LoroDoc` refuses `peer`, which it does only after an op is
+    /// recorded. No op precedes this call.
     pub fn with_peer(peer: u64) -> Self {
         let doc = LoroDoc::new();
         // `set_peer_id` before any op: it is the peer the scaffolding commit is
@@ -276,7 +281,7 @@ impl TrameState {
         // (`SCHEMA-004`).
         schema::stamp(&doc);
         doc.commit();
-        // Create the undo manager AFTER the initial commit: the implicit-sheet
+        // Create the undo manager AFTER the initial commit. The implicit-sheet
         // registration is document scaffolding, not a user edit, so it must not
         // sit on the undo stack.
         let mut undo_manager = UndoManager::new(&doc);

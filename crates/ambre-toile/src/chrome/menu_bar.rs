@@ -1,22 +1,22 @@
 // ambre-toile/src/chrome/menu_bar.rs
 // ============================================================================
 // The top menu bar and zoom control (`toile-menus`), wasm-only. A
-// horizontal `.ambre-commandbar` docked top-center with one title per top-level
-// menu (File / Edit / View / Object / Present) and a zoom cluster (zoom out / %
-// readout / zoom in / Fit / Zoom-to-selection).
+// horizontal `.ambre-commandbar` docked top-center, with one title per top-level
+// menu (File / Edit / View / Object / Present). It also carries a zoom cluster:
+// zoom out, a % readout, zoom in, Fit and Zoom-to-selection.
 //
-// Styling is SHARED with the tool palette and the Trame command bar: the two
-// containers carry `.ambre-commandbar` (so buttons, hover, the active fill and
-// tooltips all come from the launcher CSS) plus `.ambre-toile-menubar` /
+// Styling is SHARED with the tool palette and the Trame command bar. The two
+// containers carry `.ambre-commandbar`, so buttons, hover, the active fill and
+// tooltips all come from the launcher CSS. They add `.ambre-toile-menubar` /
 // `.ambre-toile-zoom` modifiers that only re-dock them.
 //
 // The dropdowns REUSE `ambre_chrome::ContextMenu`: a title click opens it at the
 // title's screen position with that menu's rows (`ui::menu_bar::menu_layout`
-// mapped to `MenuEntry`s, keybinding chips included). Every selection -- menu
-// entry or zoom button -- routes through the same `on_command` callback the
-// context menu and shortcuts use, so a menu-bar "Group" and a right-click "Group"
-// are one command (`toile-menus`). The zoom `%` readout mirrors the shared `zoom`
-// signal the canvas view publishes each frame.
+// mapped to `MenuEntry`s, keybinding chips included). Every selection, menu
+// entry or zoom button, routes through the same `on_command` callback the
+// context menu and shortcuts use. So a menu-bar "Group" and a right-click
+// "Group" are one command (`toile-menus`). The zoom `%` readout mirrors the
+// shared `zoom` signal the canvas view publishes each frame.
 // ============================================================================
 
 use ambre_chrome::commands::{CommandId, Locale};
@@ -73,8 +73,8 @@ fn zoom_button(on_command: Callback<CommandId>, command: CommandId) -> impl Into
 }
 
 /// The Toile top menu bar + zoom control. `zoom` is the shared live zoom factor
-/// (`1.0` = 100%) the canvas view publishes; `on_command` is the shared command
-/// sink (the same `Callback` the context menu uses).
+/// (`1.0` = 100%) the canvas view publishes. `on_command` is the shared command
+/// sink, the same `Callback` the context menu uses.
 #[component]
 pub fn TopMenuBar(zoom: RwSignal<f64>, on_command: Callback<CommandId>) -> impl IntoView {
     // Which menu is open (drives the pressed title) and where its dropdown sits.

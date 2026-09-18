@@ -6,10 +6,11 @@
 //! without a second traversal.
 //!
 //! Compilation is also where the positional AST references (`A1`, `A1:B10`) are
-//! resolved against the current per-sheet [`SheetIndex`] into the uid-anchored
-//! engine forms ([`CellId`] / [`RangeId`]): a position inside the used range
-//! binds to the row/column `Uid` (so it follows the data), a position beyond it
-//! stays a [`AxisId::Virtual`] grid coordinate (`trame-formula-engine`).
+//! resolved. They resolve against the current per-sheet [`SheetIndex`], into
+//! the uid-anchored engine forms ([`CellId`] / [`RangeId`]). A position inside
+//! the used range binds to the row/column `Uid`, so it follows the data. A
+//! position beyond it stays a [`AxisId::Virtual`] grid coordinate
+//! (`trame-formula-engine`).
 
 use std::collections::HashMap;
 
@@ -51,8 +52,8 @@ fn resolve_cell(r: &CellRef, indices: &SheetIndices) -> CellId {
 /// Compile a positional range into a uid-anchored [`RangeId`]. **Range endpoints
 /// stay positional** (`AxisId::Virtual`), so a range denotes a rectangular
 /// *region* (a block of positions), not a set of specific rows/columns. This is
-/// the only well-defined choice under a sort: the two endpoints can otherwise
-/// scatter and invert, collapsing the range -- and it matches Excel/Sheets, where
+/// the only well-defined choice under a sort. The two endpoints can otherwise
+/// scatter and invert, collapsing the range. It also matches Excel/Sheets, where
 /// sorting the rows inside `SUM(A1:A3)` leaves the block (and its total) intact.
 /// Single-cell references, by contrast, bind to their row/column `Uid` and follow
 /// the data (see [`resolve_cell`] and `trame-formula-engine`).
@@ -97,7 +98,7 @@ fn compile_into(
                     ops.push(Op::PushEmpty);
                 }
                 super::types::CellValue::Error(e) => {
-                    // Error literals come from `resolve_refs` (e.g. a deleted
+                    // Error literals come from `resolve_refs` (for example a deleted
                     // cross-sheet target -> `#REF!`); push the error so it
                     // propagates through any surrounding operators.
                     ops.push(Op::PushError(e.clone()));

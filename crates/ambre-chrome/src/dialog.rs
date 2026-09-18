@@ -3,10 +3,11 @@
 // Native <dialog> modal (ambre-spec-chrome.md, CHROME-011 / CHROME-012).
 //
 // `showModal()` gives focus trap, inertness of the rest of the page, Escape to
-// close and a `::backdrop` for free -- no need to reimplement any of it. The
-// component only bridges that native element to a Leptos `open` signal and
-// fires `on_open`/`on_close` so the launcher can suspend/resume the canvas rAF
-// (a fullscreen modal freezes the canvas: battery saving + free backdrop blur).
+// close and a `::backdrop` for free. None of it needs reimplementing. The
+// component only bridges that native element to a Leptos `open` signal, and
+// fires `on_open`/`on_close` so the launcher can suspend/resume the canvas rAF.
+// A fullscreen modal freezes the canvas: battery saving, plus a free backdrop
+// blur.
 // ============================================================================
 
 use leptos::html;
@@ -23,10 +24,10 @@ pub fn Dialog(
     /// Visibility. Set `false` to close; the component flips it back on Escape
     /// and backdrop click so it always reflects the true state.
     open: RwSignal<bool>,
-    /// Fired after the modal opens (e.g. to pause the canvas rAF).
+    /// Fired after the modal opens (for example to pause the canvas rAF).
     #[prop(optional, into)]
     on_open: Option<Callback<()>>,
-    /// Fired after the modal closes (e.g. to resume the canvas rAF).
+    /// Fired after the modal closes (for example to resume the canvas rAF).
     #[prop(optional, into)]
     on_close: Option<Callback<()>>,
     /// Extra class on the `<dialog>` element, for per-dialog styling.

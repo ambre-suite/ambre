@@ -70,6 +70,10 @@ impl Limits {
 
     /// Fail the import if adding one more element would exceed [`max_elements`].
     /// `current` is the count already accumulated.
+    ///
+    /// # Errors
+    ///
+    /// [`ImportError::TooManyElements`], carrying the limit it holds.
     pub fn check_element_count(&self, current: usize) -> Result<(), ImportError> {
         if current >= self.max_elements {
             Err(ImportError::TooManyElements {
@@ -81,6 +85,10 @@ impl Limits {
     }
 
     /// Fail the import if `depth` exceeds [`max_depth`].
+    ///
+    /// # Errors
+    ///
+    /// [`ImportError::TooDeep`], carrying the limit it holds.
     pub fn check_depth(&self, depth: usize) -> Result<(), ImportError> {
         if depth > self.max_depth {
             Err(ImportError::TooDeep {
@@ -92,6 +100,10 @@ impl Limits {
     }
 
     /// Fail the import if a decoded image exceeds [`max_image_dim`] on either axis.
+    ///
+    /// # Errors
+    ///
+    /// [`ImportError::ImageTooLarge`], carrying both dimensions and the limit.
     pub fn check_image_dims(&self, width: u32, height: u32) -> Result<(), ImportError> {
         if width > self.max_image_dim || height > self.max_image_dim {
             Err(ImportError::ImageTooLarge {

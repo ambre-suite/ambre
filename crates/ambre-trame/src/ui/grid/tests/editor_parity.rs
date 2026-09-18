@@ -1,9 +1,9 @@
 // Delegation regression for the `CellEditor` wrapper over the shared
 // `ambre_canvas::TextEditor` core (axis 1). Each wrapper method is a shim that
-// queues one `EditIntent`; this replays an op corpus through the wrapper AND
-// through the core driven with the intent directly, flushes both, and asserts the
-// buffer text + selected text match after EVERY step -- so a wrong shim->intent
-// mapping (e.g. Home wired to the wrong intent) is caught.
+// queues one `EditIntent`. This replays an op corpus through the wrapper AND
+// through the core driven with the intent directly. It flushes both, and asserts
+// the buffer text + selected text match after EVERY step. A wrong shim->intent
+// mapping (for example Home wired to the wrong intent) is therefore caught.
 //
 // The corpus is single-line ASCII: that is what a spreadsheet cell holds today,
 // and where the wrapper's Home/End (visual line) coincide with whole-buffer. The

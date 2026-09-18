@@ -30,25 +30,23 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-099` | `POST` | Adding elements to a frame MUST make each one a member. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_adds_and_removes_membership` -- the membership is read back after an add of two | none | verified |
 | `TOILE-237` | `POST` | Removing elements from a frame MUST take each one out. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_adds_and_removes_membership` -- its remove step: one of the two members leaves and the membership is read back without it | none | verified |
-| `TOILE-100` | `POST` | An element removed and added again in one gesture MUST end up last in the frame. | this spec section 3 | none | unheld -- it is the half `TOILE-099` was carrying. The handler removes before it adds for exactly this, and the membership test does its add and its remove in two separate commands | unverified |
-| `TOILE-048` | `POST` | A membership change MUST be one undo item, the clamping of the paint order included. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_is_one_undo_item` -- it creates the frame before the child, so the child already paints above it and the clamp never fires | fails -- when the clamp does fire, the two commits leave in one broadcast and split into two undo items, so the first undo reverts the reordering alone, section 6 | unverified |
-| `TOILE-101` | `FRAME` | An element the frame cannot take MUST NOT stop the rest: the frame itself, an id the board does not hold and a current member are skipped, and the other elements of the same gesture still join. | this spec section 3 | none | unheld -- each of the three is a `continue` in the add loop, and no test mixes an eligible id with an ineligible one | unverified |
-| `TOILE-102` | `FRAME` | A membership change that changes nothing MUST write nothing and broadcast nothing. | this spec section 3 | none | unheld -- the handler returns before any commit when neither list moved, and no test sends a gesture with no effect | unverified |
-| `TOILE-050` | `FAIL` | A membership change aimed at an element that is not a frame MUST be refused, and MUST write nothing. | this spec section 3 | none | unheld -- the handler returns silently, with no event at all, where a frame the board does not hold returns an unknown-element error, so a surface cannot tell the refusal from a no-op. Neither path is tested | unverified |
+| `TOILE-100` | `POST` | An element removed and added again in one gesture MUST end up last in the frame. | this spec section 3 | none | unheld -- it is the half `TOILE-099` was carrying. The handler removes before it adds for exactly this, and the membership test does its add and its remove in two separate commands; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-048` | `POST` | A membership change MUST be one undo item, the clamping of the paint order included. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_is_one_undo_item` -- it creates the frame before the child, so the child already paints above it and the clamp never fires | fails -- when the clamp does fire, the two commits leave in one broadcast and split into two undo items, so the first undo reverts the reordering alone, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TOILE-101` | `FRAME` | An element the frame cannot take MUST NOT stop the rest: the frame itself, an id the board does not hold and a current member are skipped, and the other elements of the same gesture still join. | this spec section 3 | none | unheld -- each of the three is a `continue` in the add loop, and no test mixes an eligible id with an ineligible one; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-102` | `FRAME` | A membership change that changes nothing MUST write nothing and broadcast nothing. | this spec section 3 | none | unheld -- the handler returns before any commit when neither list moved, and no test sends a gesture with no effect; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-050` | `FAIL` | A membership change aimed at an element that is not a frame MUST be refused, and MUST write nothing. | this spec section 3 | none | unheld -- the handler returns silently, with no event at all, where a frame the board does not hold returns an unknown-element error, so a surface cannot tell the refusal from a no-op. Neither path is tested; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** the membership change under 1 ms, the transform-command row of
-  `ambre-spec-budgets.md section 1`. The clamp is a loop that re-materializes the whole paint
-  order per moved child, so the figure is per child out of order and no bench measures it.
+  `ambre-spec-budgets.md section 1`. The clamp re-materializes the whole paint order per moved
+  child, so the figure is per child out of order and no bench measures it.
 * **Boundary.** none of its own: a frame and its membership live in the Logic thread's document and
   leave as bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 5 `verified`, 5 `unverified`. `TOILE-011` cited three tests and only one reads a
-  paint order; the other two read memberships, which is what `TOILE-099` now says and they now hold.
-  `TOILE-048` said `none` while a test of it exists -- it creates the frame before the child, so the
-  clamp it is about never fires, and the row is now honest about what it covers. `TOILE-050` was four
-  refusals under one verdict, and they are not one behaviour: a non-frame stops the gesture, while an
-  id the board does not hold is skipped and the rest of the gesture proceeds (`TOILE-101`). The
-  re-append the removal order exists for (`TOILE-100`) and the empty change (`TOILE-102`) were
-  unwritten.
+* **Verification.** 5 `verified`, 1 `failing`, 4 `untested`. What holds is membership as data: an
+  element joins one frame, leaves it, detaches from its group, paints after it, and the notes
+  converge. What is loose is everything the gesture refuses or skips: the re-append, the ineligible
+  id that must not stop the rest. The empty change that writes nothing and the non-frame nobody can
+  tell from a no-op are loose too. The failure is the two undo items a fired clamp produces
+  (`TOILE-048`).
 
 ---
 
@@ -89,7 +87,7 @@ commands (`features/ambre-spec-toile-elements.md`).
 5. stop and write nothing when neither list changed (`TOILE-102`);
 6. prune a group the move emptied;
 7. commit;
-8. clamp every child that sits below the frame in the paint order to just above it, and commit again
+8. clamp every child that sits below the frame in the paint order to just above it. Commit again
    if anything moved (`TOILE-011`, and the reason `TOILE-048` fails).
 
 **Why the containers are seeded at birth.** The notes text and the membership list are created in the
@@ -141,15 +139,17 @@ implied by position.
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **A membership change can take two undos** (`TOILE-048`). The handler commits the membership write,
-  then clamps the paint order and commits again, so a frame given a child that painted below it
-  produces two undo items: the first `Ctrl+Z` reverts the reordering and the child is still a member.
-  The two tests are exactly complementary -- the undo test creates the frame before the child, so no
-  clamp fires, and the ordering test creates the child first, so the clamp fires and nothing counts
-  the items. The split is invisible to the network: both commits leave in the one delta the handler
+  then clamps the paint order and commits again. A frame given a child that painted below it
+  produces two undo items. The first `Ctrl+Z` reverts the reordering, and the child is still a
+  member.
+
+  The two tests are exactly complementary. The undo test creates the frame before the child, so no
+  clamp fires. The ordering test creates the child first, so the clamp fires and nothing counts the
+  items. The split is invisible to the network. Both commits leave in the one delta the handler
   exports, so only the author of the change sees it.
 * **A refusal and a no-op are the same event** (`TOILE-050`, `TOILE-102`). A gesture aimed at an
-  element that is not a frame and a gesture that changes nothing both return with no event at all,
-  where a frame the board does not hold returns an unknown-element error. A surface that wanted to
+  element that is not a frame and a gesture that changes nothing both return with no event at all.
+  A frame the board does not hold returns an unknown-element error. A surface that wanted to
   tell the user why nothing happened has nothing to read.
 * **Nothing puts an element into a frame by dragging it.** The only trigger is a context-menu entry
   that requires the selection to already sit inside the frame's box, and nothing takes an element out
@@ -163,5 +163,5 @@ implied by position.
   a frame leaves them outside it and nothing says whether they are still members. They are.
 * **Nesting a frame in a frame is neither allowed nor refused.** The handler refuses only the frame
   joining itself, so a frame may be added to another frame's membership, and the clamp then orders
-  them; what that means for the presentation deck is not ruled
+  them. What that means for the presentation deck is not ruled
   (`features/ambre-spec-toile-presentation.md`).

@@ -19,11 +19,11 @@ impl SyncState {
                 let url = format!("{url_scheme}://{api_base}/api/keys/master");
                 match http::get_json_auth::<http::MasterKeyResponse>(&url, auth.clone()).await {
                     Ok(resp) => {
-                        // User-facing AuthError messages are deliberately generic:
-                        // they never carry crypto detail (algorithm names, key/salt
+                        // User-facing AuthError messages are deliberately generic.
+                        // They never carry crypto detail (algorithm names, key/salt
                         // lengths, decrypt-failure specifics) that would leak the
-                        // account's cryptographic shape to whatever renders the
-                        // error. The concrete cause is logged locally instead.
+                        // account's cryptographic shape to whatever renders it. The
+                        // concrete cause is logged locally instead.
                         const CORRUPT: &str = "Unlock failed: account data is corrupted";
                         const BAD_PASS: &str =
                             "Unlock failed: incorrect passphrase or corrupted account data";
@@ -333,7 +333,7 @@ impl SyncState {
     ) {
         tracing::info!("Sync: ChangePassphrase");
         // Placeholder until the passphrase-rotation flow lands. The secrets are
-        // wiped when they leave scope here: `SecretBytes` zeroizes its bytes on
+        // wiped when they leave scope here. `SecretBytes` zeroizes its bytes on
         // drop, so binding-and-dropping no longer leaves passphrase material in
         // freed memory (H4).
         drop((current_passphrase, new_passphrase));
@@ -352,7 +352,7 @@ impl SyncState {
     }
 
     /// Tear down the session (WebSocket, document sessions, keys). The
-    /// `LoggedOut` response — when there is a request to answer — is sent by the
+    /// `LoggedOut` response -- when there is a request to answer -- is sent by the
     /// caller (`Shutdown` performs the teardown without replying).
     pub(crate) fn handle_logout(&mut self) {
         if let Some(ws) = self.ws.take() {

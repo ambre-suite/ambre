@@ -5,9 +5,9 @@ use super::*;
 
 /// Draw the cells layer (white bg + pending fill + cell text + grid lines).
 ///
-/// `strip_rect == None`: full-canvas repaint. The caller must have started
-/// the cells pass with LoadOp::Clear(WHITE) so the background is already
-/// white; this function only adds the pending grey + cell fills + lines + text.
+/// `strip_rect == None`: full-canvas repaint. The caller must have started the
+/// cells pass with LoadOp::Clear(WHITE), so the background is already white.
+/// This function only adds the pending grey + cell fills + lines + text.
 ///
 /// `strip_rect == Some(r)`: only the area inside `r` is repainted, on top of
 /// existing (shifted) pixels. Pending grey covers the strip first, then cells
@@ -36,7 +36,7 @@ pub fn draw_cells<S: DrawSurface>(
     //  - Scroll (strip_rect == Some): the band entering the viewport sits on top
     //    of the shifted pixels. Fill it with the blank content background, NOT
     //    grey. The prefetch margin is meant to have these cells cached before
-    //    they scroll in, but it can never win the async Logic round-trip every
+    //    they scroll in. But it can never win the async Logic round-trip every
     //    time (fast wheel, held arrow, a full-viewport Page Up jump). When it
     //    loses the race a grey block flashes for a frame -- the flicker. White is
     //    the graceful fallback: a not-yet-received cell reads as empty (which it
@@ -71,7 +71,7 @@ pub fn draw_cells<S: DrawSurface>(
             (span.col_start..span.col_end).filter_map(move |col| {
                 state.cell_cache.get(&(row, col)).map(|c| {
                     // A merge master's text is laid out by the merge pass over the
-                    // full span; drawing it here too would double it (single-cell
+                    // full span. Drawing it here too would double it (single-cell
                     // baseline + span baseline). Pass empty text so only its bg fill
                     // lands here. Covered cells already carry empty text.
                     let text = if c.merge_span.is_some() {
@@ -83,8 +83,8 @@ pub fn draw_cells<S: DrawSurface>(
                 })
             })
         });
-    // A neighbour is "empty" -- so an overflowing non-wrapped line may spill over
-    // it -- when the cache has no entry for it or its text is blank. A merge
+    // A neighbour is "empty" when the cache has no entry for it or its text is
+    // blank. An overflowing non-wrapped line may then spill over it. A merge
     // master keeps its (non-empty) text, so overflow stops at a merged block.
     let is_empty = |row: u32, col: u32| {
         state
@@ -196,8 +196,8 @@ pub(crate) fn draw_ui_cell_layers<S: DrawSurface>(
     }
 
     // Error marker: a filled right-triangle in the cell's top-right corner,
-    // assembled from 1px horizontal lines so it renders on the GPU surface
-    // (WgpuSurface does not implement fill_path).
+    // assembled from 1px horizontal lines. It then renders on the GPU
+    // surface, since `WgpuSurface` does not implement fill_path.
     let err = palette.cell_error;
     for &(row, col) in state.formula_errors.keys() {
         if !span.contains(row, col) || state.is_row_hidden(row) {

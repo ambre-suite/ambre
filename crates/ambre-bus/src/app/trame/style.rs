@@ -4,9 +4,9 @@
 
 use serde::{Deserialize, Serialize};
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared filter — definition (UI → Logic)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Shared filter -- definition (UI -> Logic)
+// -----------------------------------------------------------------------------
 
 /// How a shared filter decides whether a row's value in the filtered column is
 /// kept (visible) or hidden (`trame-shared-filter`). MVP covers
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 pub enum FilterKind {
     /// Keep only rows whose filtered-column display text is one of these values
     /// (Google Sheets "filter by values": the listed values are the *checked*,
-    /// i.e. visible, ones).
+    /// visible ones).
     Values(Vec<String>),
     /// Keep only rows whose filtered-column value satisfies the condition.
     Condition {
@@ -44,15 +44,15 @@ pub enum FilterOp {
     IsNotEmpty,
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Manual cell formatting (`trame-cell-styles`)
+// ----------------------------------------------------------------------------- Manual cell
+// formatting (`trame-cell-styles`)
 //
-// The toolbar's typed style vocabulary. `CellStyle` is the resolved formatting of
-// a single cell (the toolbar reflects the active cell's); `StylePatch` is the
-// sparse delta a control emits over the selection (`SetCellStyle`). Both travel
-// by move inside `AppCommand::Trame` / `AppEvent::Trame` -- no `serde`, like the
-// rest of the data plane. Colours are packed `0xRRGGBB`.
-// ─────────────────────────────────────────────────────────────────────────────
+// The toolbar's typed style vocabulary. `CellStyle` is the resolved formatting of a single
+// cell, the one the toolbar reflects for the active cell. `StylePatch` is the sparse delta
+// a control emits over the selection (`SetCellStyle`). Both travel by move inside
+// `AppCommand::Trame` / `AppEvent::Trame` -- no `serde`, like the rest of the data plane.
+// Colours are packed `0xRRGGBB`.
+// -----------------------------------------------------------------------------
 
 /// Horizontal text alignment of a cell (`trame-cell-styles`). [`Auto`](Self::Auto)
 /// is the spreadsheet default: numbers align right, everything else left.
@@ -98,7 +98,7 @@ pub enum CellFormat {
 }
 
 impl CellFormat {
-    /// Whether this format honours a decimal-places count (i.e. the
+    /// Whether this format honours a decimal-places count (that is, the
     /// Increase/Decrease-decimals controls are meaningful). Only the numeric
     /// families render with [`CellStyle::decimals`]; `General`, `Fraction`,
     /// `Date`, `Time`, `Text` and `Custom` ignore it (see `format_number`).
@@ -139,9 +139,9 @@ pub enum BorderPreset {
 }
 
 /// Border edge bits for [`CellStyle::border_edges`] / [`DisplayCell::border_edges`]
-/// (`trame-cell-styles`). A [`BorderPreset`] applied over a selection is resolved by
-/// the Logic thread into the per-cell set of edges these bits represent, so a
-/// selection-level "Outline" lands only on the perimeter cells, not the interior.
+/// (`trame-cell-styles`). A [`BorderPreset`] applied over a selection is resolved by the
+/// Logic thread into the per-cell set of edges these bits represent. A selection-level
+/// "Outline" therefore lands only on the perimeter cells, not the interior.
 pub const BORDER_EDGE_TOP: u8 = 1 << 0;
 pub const BORDER_EDGE_RIGHT: u8 = 1 << 1;
 pub const BORDER_EDGE_BOTTOM: u8 = 1 << 2;
@@ -180,7 +180,7 @@ pub struct CellBorder {
 }
 
 /// The four independent edges of a cell border (`trame-cell-styles`). Each edge
-/// carries its own stroke style and colour, so a cell can mix, e.g., a thick
+/// carries its own stroke style and colour, so a cell can mix, for example, a thick
 /// red top with a dotted blue left. `None` on an edge means no border there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Borders {
@@ -243,10 +243,10 @@ pub struct StylePatch {
     pub border: Option<BorderEdit>,
 }
 
-/// A border edit emitted by the toolbar's borders popover: apply the chosen
-/// stroke `style` and `color` to the edges named by `preset` (or, for
-/// [`BorderPreset::None`], clear every edge). Resolved per cell, merge-aware,
-/// by the Logic thread (`trame-cell-styles`).
+/// A border edit emitted by the toolbar's borders popover. It applies the chosen stroke
+/// `style` and `color` to the edges named by `preset`, or clears every edge for
+/// [`BorderPreset::None`]. Resolved per cell, merge-aware, by the Logic thread
+/// (`trame-cell-styles`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct BorderEdit {
     pub preset: BorderPreset,

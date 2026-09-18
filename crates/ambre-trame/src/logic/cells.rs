@@ -8,14 +8,14 @@
 use super::*;
 
 impl TrameState {
-    /// Display text for a cell: the formula evaluation result if it's a formula
+    /// Display text for a cell. The formula evaluation result if it's a formula
     /// cell, otherwise the edited value from the CRDT if present, otherwise
-    /// empty (a virtual or cleared cell renders blank).
+    /// empty. A virtual or cleared cell renders blank.
     pub(super) fn cell_text(&self, row: u32, col: u32) -> String {
         let cell = self.active_cell_id(row, col);
         // Formula cells: return cached evaluation result. Plain cells also have
-        // a cached literal value now (so formula references resolve), but we
-        // render their raw CRDT string verbatim to avoid normalizing user input.
+        // a cached literal value now, so formula references resolve. Their raw
+        // CRDT string is rendered verbatim, to avoid normalizing user input.
         if self.engine.is_formula_cell(cell)
             && let Some(text) = self.engine.evaluated_text(cell)
         {
@@ -50,10 +50,10 @@ impl TrameState {
     }
 
     /// Rewrite user-entered formula text into its canonical CRDT form: each
-    /// cross-sheet qualifier is bound to the stable `sheet_id`
-    /// (`Sheet2!A1` -> `#s0!A1`), so a later rename/reorder never invalidates the
-    /// reference (`trame-sheets`). Plain text, formulas without a qualifier, and
-    /// formulas that fail to parse are stored verbatim (the user's exact input).
+    /// cross-sheet qualifier is bound to the stable `sheet_id` (`Sheet2!A1` ->
+    /// `#s0!A1`). A later rename/reorder then never invalidates the reference
+    /// (`trame-sheets`). Plain text, formulas without a qualifier, and formulas
+    /// that fail to parse are stored verbatim (the user's exact input).
     pub(super) fn canonicalize_input(&self, text: &str) -> String {
         let Some(body) = text.strip_prefix('=') else {
             return text.to_string();
@@ -79,9 +79,10 @@ impl TrameState {
 
     /// Reconstruct the formula-bar text for a stored CRDT value: canonical `#id`
     /// qualifiers are rendered through the current `sheet_id -> name` map
-    /// (`#s0!A1` -> `Data!A1`), so a rename is reflected immediately with no CRDT
-    /// mutation. A deleted target stays in `#id` form, signalling the dangling
-    /// reference. Plain text and formulas without an id qualifier pass through.
+    /// (`#s0!A1` -> `Data!A1`). A rename is then reflected immediately, with no
+    /// CRDT mutation. A deleted target stays in `#id` form, signalling the
+    /// dangling reference. Plain text and formulas without an id qualifier pass
+    /// through.
     pub(super) fn formula_display(&self, stored: &str) -> String {
         let Some(body) = stored.strip_prefix('=') else {
             return stored.to_string();
@@ -152,11 +153,11 @@ impl TrameState {
         }
         // Commit the implicit scaffolding under the excluded origin so it stays
         // OUT of the undo stack (see [`MATERIALIZE_ORIGIN`]). A cell edit's intent
-        // is the value, not the row/column placeholders it forced into existence;
-        // keeping those off the stack means undo reverts only the value and, on
-        // redo, the cell's key still resolves to the same (never-removed) list
-        // element ids -- without this split, Loro would recreate those elements
-        // with fresh ids on redo and orphan the cell. A no-op when nothing grew.
+        // is the value, not the row/column placeholders it forced into existence.
+        // Keeping those off the stack means undo reverts only the value. On redo,
+        // the cell's key then still resolves to the same (never-removed) list
+        // element ids. Without this split, Loro would recreate those elements with
+        // fresh ids on redo and orphan the cell. A no-op when nothing grew.
         if grew {
             self.doc.set_next_commit_origin(MATERIALIZE_ORIGIN);
             self.doc.commit();
@@ -195,7 +196,7 @@ impl TrameState {
     }
 
     /// Engine [`CellId`] for grid `(row, col)` on the active sheet (local index
-    /// 0): each axis binds to its row/column `Uid` when materialized, else stays
+    /// 0). Each axis binds to its row/column `Uid` when materialized, else stays
     /// a virtual grid position.
     pub(super) fn active_cell_id(&self, row: u32, col: u32) -> CellId {
         let r = match self.index.row_id(row as usize) {
@@ -217,12 +218,12 @@ impl TrameState {
     /// committing, recomputing, or touching the undo group. Shared by the
     /// single-cell [`SetCellText`](TrameCommand::SetCellText) path and the
     /// multi-cell [`SetCellsBatch`](TrameCommand::SetCellsBatch) path so a batch
-    /// can wrap many writes in one undo group. An empty `text` clears the cell;
-    /// a write beyond the materialization cap is silently dropped.
+    /// can wrap many writes in one undo group. An empty `text` clears the cell; a
+    /// write beyond the materialization cap is silently dropped.
     ///
     /// Does not commit -- the caller commits once after the write(s). The batch
-    /// path must pre-materialize every cell first (see the `SetCellsBatch` arm):
-    /// a `materialize` commit carries the excluded [`MATERIALIZE_ORIGIN`], and an
+    /// path must pre-materialize every cell first (see the `SetCellsBatch` arm).
+    /// A `materialize` commit carries the excluded [`MATERIALIZE_ORIGIN`]. An
     /// excluded commit interleaved between two value commits splits them into
     /// separate undo items. Materializing up front keeps all value writes in one
     /// final commit, hence one undo item.
@@ -267,9 +268,9 @@ impl TrameState {
     }
 
     /// Commit the pending cell write(s), recompute the dirty formula closure and
-    /// the active filter, and return the standard write outcome (a `DataReset`
-    /// so the UI re-fetches its viewport plus the CRDT delta). Shared tail of the
-    /// single-cell and batch write paths.
+    /// the active filter, then return the standard write outcome. That outcome is
+    /// a `DataReset`, so the UI re-fetches its viewport, plus the CRDT delta.
+    /// Shared tail of the single-cell and batch write paths.
     pub(super) fn finish_cell_writes(&mut self) -> TrameOutcome {
         self.doc.commit();
         let indices = self.engine_indices();
@@ -279,10 +280,10 @@ impl TrameState {
         // (`trame-shared-filter`).
         self.recompute_active_filter();
         let update = self.flush_delta();
-        // Ask the UI to re-fetch its viewport so the edit (and any formula it
-        // feeds) renders its computed result immediately, without waiting for the
-        // network echo. The optimistic UI-side update covers plain literals;
-        // formulas need this round-trip.
+        // Ask the UI to re-fetch its viewport. The edit, and any formula it
+        // feeds, then renders its computed result immediately, without waiting
+        // for the network echo. The optimistic UI-side update covers plain
+        // literals; formulas need this round-trip.
         TrameOutcome {
             display: vec![TrameEvent::DataReset],
             update,

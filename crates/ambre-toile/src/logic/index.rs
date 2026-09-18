@@ -11,9 +11,9 @@ use rstar::{AABB, RTree, RTreeObject};
 
 use crate::logic::model::ElementId;
 
-/// The camera / viewport type lives in the `ambre-bus` IPC contract (it is
-/// carried by `ToileCommand::SetViewport`); re-exported here so the index keeps
-/// its `crate::logic::index::Viewport` path and its culling helpers.
+/// The camera / viewport type lives in the `ambre-bus` IPC contract, carried by
+/// `ToileCommand::SetViewport`. It is re-exported here so the index keeps its
+/// `crate::logic::index::Viewport` path and its culling helpers.
 pub use ambre_bus::app::toile::Viewport;
 
 /// R-tree leaf: an element's world-space, rotation-expanded AABB plus its id.
@@ -70,7 +70,7 @@ impl SpatialIndex {
     /// (rotation, path fill, stroke width) is refined in `toile-selection`.
     pub fn query_point<'a>(&'a self, p: Point) -> impl Iterator<Item = ElementId> + 'a {
         // Our leaves are rectangles, not points, so `locate_all_at_point` (which
-        // needs a `Point` object) does not apply; a degenerate point-envelope
+        // needs a `Point` object) does not apply. A degenerate point-envelope
         // intersection query gives every leaf whose AABB contains `p`.
         self.tree
             .locate_in_envelope_intersecting(&AABB::from_corners([p.x, p.y], [p.x, p.y]))
@@ -83,9 +83,9 @@ impl SpatialIndex {
 
     /// Remove the leaf carrying `id`, if present.
     pub fn remove(&mut self, id: &ElementId) {
-        // rstar removes by geometric match; we cannot locate by id alone, so we
-        // find the leaf whose id matches (a linear scan is acceptable -- remove
-        // is rare relative to culling and the tree stores only current elements).
+        // rstar removes by geometric match, and we cannot locate by id alone. So
+        // we find the leaf whose id matches. A linear scan is acceptable: remove
+        // is rare relative to culling, and the tree stores only current elements.
         let found = self.tree.iter().find(|e| &e.id == id).cloned();
         if let Some(found) = found {
             self.tree.remove(&found);

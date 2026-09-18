@@ -3,10 +3,10 @@
 //! selected shape / path elements, producing one new `shape:path` element.
 //!
 //! The geometry math is the pure [`boolean_op`](crate::logic::boolean::boolean_op)
-//! solver; this handler only resolves the selection to world-space paths, writes
-//! the result element, and (unless the caller keeps them) deletes the sources --
-//! all in a **single commit**, so the whole operation is one undo item.
-//! A boolean is an ordinary geometry edit: the result is a plain element, no
+//! solver. This handler only resolves the selection to world-space paths, writes
+//! the result element, and deletes the sources unless the caller keeps them. It
+//! does all of that in a **single commit**, so the whole operation is one undo
+//! item. A boolean is an ordinary geometry edit: the result is a plain element, no
 //! special CRDT state (`toile-elements`).
 
 use kurbo::{Affine, BezPath, Ellipse, Rect, Shape};
@@ -100,9 +100,9 @@ impl ToileState {
 }
 
 /// Build the world-space outline of a shape / path element as a [`BezPath`], or
-/// `None` if the element is not a shape kind (accepts only shape / path
-/// elements). The local outline per [`ShapeKind`] is transformed by the same
-/// rotation-about-center affine the renderer uses (`derive::display_element`).
+/// `None` when the element is not a shape kind. The local outline per
+/// [`ShapeKind`] is transformed by the same rotation-about-center affine the
+/// renderer uses (`derive::display_element`).
 fn element_world_path(em: &LoroMap) -> Option<BezPath> {
     if str_of(em, "type") != "shape" {
         return None;

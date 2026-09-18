@@ -4,16 +4,16 @@
 
 * **SURGICAL FOCUS.** Only solve the requested problem. Given a UI or cache bug, do not rewrite the
   Web Workers architecture, the GPU lifecycle or the network handshake unless explicitly asked.
-* **NO OVER-ANALYSIS.** If a bug looks like a simple algorithmic or data update issue, such as a
-  cache that is never cleared, propose the simple sequential solution first. Stop looking for async
+* **NO OVER-ANALYSIS.** A bug may look like a simple algorithmic or data update issue, such as a
+  cache that is never cleared. Propose the simple sequential solution first. Stop looking for async
   race conditions everywhere.
 * **ABSOLUTE CONCISENESS.** Skip walls of theoretical explanation. The user knows the architecture.
   Produce the Rust code or the diff directly.
 * **RESPECT THE SPECS.** The specification is the only source of truth. If the current code diverges
   but works for the requested case, do not refactor everything at once.
 * **NEVER COPY A SPEC INTO AGENT MEMORY.** Whatever an agent carries across sessions, a memory
-  store, a rules file, a persona, holds only what the repository does not: user preferences,
-  working habits, external pointers. A design fact copied there is a duplicate that goes stale and
+  store, a rules file, a persona, holds only what the repository does not. That is user
+  preferences, working habits and external pointers. A design fact copied there is a duplicate that goes stale and
   then contradicts the spec. Put the durable fact in the spec and read it again next session.
 * **OUTPUT FORMAT.** Prefer a targeted implementation block or a diff over rewriting a 500-line
   `.rs` file.

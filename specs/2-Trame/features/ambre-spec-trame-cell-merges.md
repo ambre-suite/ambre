@@ -18,7 +18,7 @@ eight kinds and the status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-125` | `INV` | Every merge MUST designate the top-left cell of its rectangle as the master. | `ambre-spec-trame-schema.md` section 3 | `ambre_trame::logic::tests::group2::merge_marks_master_span_and_blanks_covered` | none | verified |
-| `TRAME-128` | `INV` | Every merge MUST span at least two cells. | this spec section 4 | `ambre_trame::logic::tests::group3::merge_selection_single_cell_is_noop` -- the local path, which writes no entry | partial -- nothing refuses an entry of one cell arriving from a peer | unverified |
+| `TRAME-128` | `INV` | Every merge MUST span at least two cells. | this spec section 4 | `ambre_trame::logic::tests::group3::merge_selection_single_cell_is_noop` -- the local path, which writes no entry | partial -- nothing refuses an entry of one cell arriving from a peer; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-020` | `INV` | A merge-masked cell MUST NOT participate in any computation, on any sheet, whichever tab is active. | this spec section 4 | `ambre_trame::logic::tests::group3::masked_cell_excluded_across_sheets_regardless_of_active_tab` | none | verified |
 | `TRAME-029` | `CONC` | Every peer MUST hide the same set of cells, computed from the merges and the cell contents alone. | this spec section 2, row 1 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest whose op stream draws merges and unmerges, over an asserted grid carrying each cell's displayed text, so two peers hiding different cells fail the case | none | verified |
 | `TRAME-126` | `CONC` | Two overlapping merges MUST resolve to the same single merge on every peer. | this spec section 5 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest whose op stream draws 2x2 merges at arbitrary anchors, so overlapping pairs occur, over a compared window carrying each cell's merge span | none | verified |
@@ -36,10 +36,10 @@ The user joins the selected rectangle into one block.
 |---|---|---|---|---|---|---|
 | `TRAME-130` | `POST` | The rectangle MUST carry exactly one merge entry, keyed by its top-left cell. | this spec section 3 | `ambre_trame::logic::tests::group2::merge_marks_master_span_and_blanks_covered` | none | verified |
 | `TRAME-027` | `FRAME` | A merge MUST NOT remove or change the text of a cell it covers. | this spec section 2, row 1 | `ambre_trame::logic::tests::group3::concurrent_value_under_merge_is_masked_then_restored` | none | verified |
-| `TRAME-131` | `FRAME` | A merge MUST NOT change a cell outside its rectangle. | derived | none | unheld -- every merge test reads the rectangle alone, so a write landing on a neighbouring cell would pass | unverified |
+| `TRAME-131` | `FRAME` | A merge MUST NOT change a cell outside its rectangle. | derived | none | unheld -- every merge test reads the rectangle alone, so a write landing on a neighbouring cell would pass; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-019` | `FAIL` | A merge over a non-empty covered cell MUST NOT reach the document. | this spec section 5 | `ambre_trame::logic::tests::group2::merge_rejected_when_covered_cell_non_empty` | none | verified |
 | `TRAME-132` | `FAIL` | A refused merge MUST tell the local user it was refused. | this spec section 4 | `ambre_trame::logic::tests::group2::merge_rejected_when_covered_cell_non_empty` | none | verified |
-| `TRAME-148` | `FAIL` | A merge whose corner cell cannot resolve MUST write no entry. | this spec section 6 | none | unheld -- the write gives up before the map insert, and no test drives an unresolvable corner | unverified |
+| `TRAME-148` | `FAIL` | A merge whose corner cell cannot resolve MUST write no entry. | this spec section 6 | none | unheld -- the write gives up before the map insert, and no test drives an unresolvable corner; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-133` | `FAIL` | A single-cell selection MUST leave the document unchanged. | this spec section 4 | `ambre_trame::logic::tests::group3::merge_selection_single_cell_is_noop` | none | verified |
 
 ### 1.3 Unmerge the selection
@@ -52,10 +52,10 @@ thread resolves it against the selection it tracks, so the active cell may sit o
 | `TRAME-145` | `POST` | Every merge the selection crosses MUST be split, including one the selection only clips. | this spec section 4 | `ambre_trame::logic::tests::group3::unmerge_active_splits_every_merge_in_selection`; `::unmerge_selection_grows_to_cover_straddling_merge` | none | verified |
 | `TRAME-135` | `POST` | The merge entry MUST be gone from the document. | this spec section 3 | `ambre_trame::logic::tests::group2::unmerge_restores_covered_cells` | none | verified |
 | `TRAME-030` | `POST` | Removing a merge MUST make every value it hid readable again, with no further edit. | this spec section 2, row 2 | `ambre_trame::logic::tests::group3::concurrent_value_under_merge_is_masked_then_restored`; `ambre_trame::logic::tests::group2::unmerge_restores_covered_cells` | none | verified |
-| `TRAME-146` | `POST` | A value the merge hid MUST take part in computation again. | this spec section 2, row 2 | none | unheld -- no unmerge test carries a formula over the freed cell, so only the displayed text is read back | unverified |
+| `TRAME-146` | `POST` | A value the merge hid MUST take part in computation again. | this spec section 2, row 2 | none | unheld -- no unmerge test carries a formula over the freed cell, so only the displayed text is read back; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-113` | `POST` | The selection after the split MUST cover every cell the split freed. | this spec section 4 | `ambre_trame::logic::tests::group3::unmerge_selection_grows_to_cover_straddling_merge`; `::unmerge_two_vertical_merges_selected_by_masters` | none | verified |
 | `TRAME-136` | `FRAME` | An unmerge MUST NOT change the text of any cell. | this spec section 5 | `ambre_trame::logic::tests::group3::concurrent_value_under_merge_is_masked_then_restored` | none | verified |
-| `TRAME-137` | `FAIL` | A selection crossing no merge MUST leave the document unchanged. | this spec section 4 | none | unheld -- the guard returns early with no event, and no test asserts the absence of the write | unverified |
+| `TRAME-137` | `FAIL` | A selection crossing no merge MUST leave the document unchanged. | this spec section 4 | none | unheld -- the guard returns early with no event, and no test asserts the absence of the write; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 Conflict detection
 
@@ -64,7 +64,7 @@ The Logic thread observes a covered cell that carries a value, on the local path
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-138` | `POST` | A merge covering a cell that carries a value MUST emit one conflict notice naming that cell. | this spec section 2, row 1 | `ambre_trame::logic::tests::group3::concurrent_value_under_merge_is_masked_then_restored` | none | verified |
-| `TRAME-031` | `FRAME` | Detecting a merge conflict MUST NOT write to the document. | this spec section 5 | none | unheld -- the detection path only fills an in-memory set. The convergence proptest would catch a corrective write that diverged, and nothing asserts the absence of the write itself | unverified |
+| `TRAME-031` | `FRAME` | Detecting a merge conflict MUST NOT write to the document. | this spec section 5 | none | unheld -- the detection path only fills an in-memory set. The convergence proptest would catch a corrective write that diverged, and nothing asserts the absence of the write itself; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.5 Fill from a merged source
 
@@ -74,12 +74,12 @@ The user drags the fill handle from a source tiled by equal merged blocks.
 |---|---|---|---|---|---|---|
 | `TRAME-140` | `POST` | The filled region MUST be tiled by merged blocks the size of the source block. | this spec section 2, row 6 | `ambre_trame::logic::tests::group6::fill_merged_source_tiles_and_remerges_blocks`; `::fill_multi_merged_source_continues_pattern` | none | verified |
 | `TRAME-141` | `POST` | A numeric series MUST progress once per block, never once per cell. | this spec section 4 | `ambre_trame::logic::tests::group6::fill_merged_series_increments_per_block` | none | verified |
-| `TRAME-147` | `POST` | A fill MUST clear every covered cell of each destination tile. | this spec section 4 | none | unheld -- both fill tests read a covered cell that was already empty, so a value surviving under a tile would pass | unverified |
-| `TRAME-149` | `POST` | Each tile master MUST take the style of the source block master. | this spec section 4 | none | unheld -- every fill test reads the text and the span of a tile, never its style | unverified |
-| `TRAME-150` | `POST` | A formula copied into a tile MUST reindex by the tile offset. | this spec section 4 | none | unheld -- no fill test drives a formula through a merged source, so nothing exercises the shift | unverified |
-| `TRAME-UI-116` | `POST` | The drag preview MUST extend by whole blocks along the drag axis. | this spec section 4 | none | unheld -- `fill_source_block` and `fill_dest` carry the snapping and no test calls either | unverified |
-| `TRAME-142` | `FRAME` | A fill MUST NOT change the source blocks. | derived | none | unheld -- both fill tests read the destination blocks alone, so a write landing back on the source would pass | unverified |
-| `TRAME-143` | `FAIL` | A source mixing block sizes MUST fall back to the cell-by-cell fill. | this spec section 4 | none | unheld -- no test drives a source of unequal blocks | unverified |
+| `TRAME-147` | `POST` | A fill MUST clear every covered cell of each destination tile. | this spec section 4 | none | unheld -- both fill tests read a covered cell that was already empty, so a value surviving under a tile would pass; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-149` | `POST` | Each tile master MUST take the style of the source block master. | this spec section 4 | none | unheld -- every fill test reads the text and the span of a tile, never its style; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-150` | `POST` | A formula copied into a tile MUST reindex by the tile offset. | this spec section 4 | none | unheld -- no fill test drives a formula through a merged source, so nothing exercises the shift; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-116` | `POST` | The drag preview MUST extend by whole blocks along the drag axis. | this spec section 4 | none | unheld -- `fill_source_block` and `fill_dest` carry the snapping and no test calls either; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-142` | `FRAME` | A fill MUST NOT change the source blocks. | derived | none | unheld -- both fill tests read the destination blocks alone, so a write landing back on the source would pass; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-143` | `FAIL` | A source mixing block sizes MUST fall back to the cell-by-cell fill. | this spec section 4 | none | unheld -- no test drives a source of unequal blocks; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.6 Move the selection over a block
 
@@ -91,7 +91,7 @@ one cell to both.
 | `TRAME-UI-009` | `POST` | A selection touching a merged block MUST grow to the whole block. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::drag_selection_expands_to_whole_merge`; `::merge_block_selects_as_a_whole_and_nav_steps_over_it` | none | verified |
 | `TRAME-UI-111` | `POST` | An arrow step MUST land past a merged block, never inside it. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::merge_block_selects_as_a_whole_and_nav_steps_over_it` -- its navigation half, which asserts the landing cell beyond the block | none | verified |
 | `TRAME-UI-114` | `POST` | The active cell MUST rehome to the master of the block it lands on. | this spec section 4 | `ambre_trame::ui::grid::tests::group2::snap_active_to_master_rehomes_after_merge` | none | verified |
-| `TRAME-UI-115` | `FRAME` | Moving the selection MUST NOT change the document. | derived | none | unheld -- the grid tests read the selection state alone, so a write reaching the CRDT from a selection move would pass | unverified |
+| `TRAME-UI-115` | `FRAME` | Moving the selection MUST NOT change the document. | derived | none | unheld -- the grid tests read the selection state alone, so a write reaching the CRDT from a selection move would pass; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ---
 
@@ -99,7 +99,7 @@ one cell to both.
   `ambre-spec-budgets.md` budgets no merge operation.
 * **Boundary.** none of its own: the merge is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 24 `verified`, 13 `unverified`, 1 `unimplemented`. The split into operations
+* **Verification.** 24 `verified`, 13 `untested`, 1 `unimplemented`. The split into operations
   exposed eleven of the thirteen loose rows. Three are frame conditions no test isolates
   (`TRAME-131`, `TRAME-142`, `TRAME-UI-115`), and three are guards no test refuses (`TRAME-137`,
   `TRAME-143`, `TRAME-148`). Four are rules the fill states and asserts nothing about
@@ -188,7 +188,7 @@ Everything the user touches. The grid machinery modified here is specified elsew
 | context menu, "Unmerge cells" | `CommandId::UnmergeActive` | over the selection the Logic thread tracks: every merge it crosses is split, and the selection grows over every freed cell. A selection crossing no merge is a no-op |
 | toolbar, the merge button | `CommandId::MergeSelection` | the same path: the `ToolbarAction::Merge` control reuses `merge_selection` |
 
-Both carry no geometry: the DOM context menu dispatches a bare `CommandId`, and the Logic thread
+Both carry no geometry. The DOM context menu dispatches a bare `CommandId`, and the Logic thread
 resolves it against the active cell and selection it already tracks.
 
 **Selection, navigation and rendering** (`TRAME-UI-009`):
@@ -199,7 +199,7 @@ resolves it against the active cell and selection it already tracks.
 * the fill handle sits on the block's bottom-right corner;
 * arrow-key navigation steps over a block rather than into it;
 * the master draws over its whole span, and `draw_cell` skips a covered cell before it fills any
-  background -- a covered cell paints nothing, neither text nor fill.
+  background. A covered cell paints nothing, neither text nor fill.
 
 **Fill from a merged source (Excel behaviour).** When the source is tiled by equal merged blocks --
 one block, or a uniform grid of identically sized ones -- the fill is block-aware:
@@ -207,16 +207,16 @@ one block, or a uniform grid of identically sized ones -- the fill is block-awar
 1. the UI captures the merge-expanded source and its block size (`fill_source_block`, which checks
    the whole rectangle is a uniform tiling);
 2. the drag preview snaps the extension to a whole number of blocks along the locked axis
-   (`fill_dest`: a 2x1 block fills two rows at a time);
+   (`fill_dest`: a 2x1 block fills two rows);
 3. on release the Logic thread tiles the blocks (`logic::fill::merged_source_block`,
    `fill_merged`). Each lane perpendicular to the drag axis extrapolates from its own stack of
-   source blocks: a numeric `Series` progresses across blocks, otherwise the source blocks are
+   source blocks. A numeric `Series` progresses across blocks, otherwise the source blocks are
    copied cyclically and a copied formula reindexes by the tile offset;
-4. each tile master takes the value and its source block's style, the tile's covered cells are
-   cleared, and a merge entry is recorded per tile -- so the filled region is re-merged into blocks
-   the size of the source.
+4. each tile master takes the value and its source block's style. The tile's covered cells are
+   cleared, and a merge entry is recorded per tile. The filled region is re-merged into blocks the
+   size of the source.
 
-The `Ctrl` single-against-multi test counts **blocks**, not raw cells, along the drag axis: one
+The `Ctrl` single-against-multi test counts **blocks**, not raw cells, along the drag axis. One
 block is one value (`Ctrl` gives `Series` +1), several blocks are several values (`Ctrl` gives
 `Copy`). A plain source, or a mix of block sizes, keeps the per-cell fill unchanged.
 
@@ -235,7 +235,7 @@ canvas ignores them, the chrome relay turns each into a notice (`trame-engine`).
 | The hidden set is derived, never stored | a `masked` flag written into the document beside each cell | a stored set is a second source of truth that two peers can compute apart. |
 | Detecting a conflict writes nothing back | emitting a delete or a move for the covered value | a corrective write is itself an operation, so it can conflict and start a second round. |
 | An overlap resolves by ascending master key | asking the user | an overlap is discovered on merge, on every peer independently, so a prompt fires once per peer for one conflict and each answer is a new write. |
-| An overlap resolves by ascending master key | refusing both merges | it discards two intents to resolve one collision, and leaves the document in a state neither user asked for. The master key is stable and every peer derives the order from the document alone, so no coordination is needed: one function, `resolved_merges`, is read by the display caches and by the formula feed alike, where a second copy would let a masked cell differ from the block the grid draws. |
+| An overlap resolves by ascending master key | refusing both merges | it drops two intents to resolve one collision, and leaves the document in a state neither user asked for. The master key is stable and every peer derives the order from the document alone, so no coordination is needed: one function, `resolved_merges`, is read by the display caches and by the formula feed alike, where a second copy would let a masked cell differ from the block the grid draws. |
 | A fill from a uniform merged source tiles whole blocks | filling cell by cell and leaving the destination unmerged | a per-cell fill from a merged source produces blocks the user did not ask for. |
 
 ---
@@ -243,14 +243,14 @@ canvas ignores them, the chrome relay turns each into a notice (`trame-engine`).
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **The file round trip** (`TRAME-IO-016`): xlsx import and export carry no merge yet.
-* **A merge that resolves no corner says nothing** (`TRAME-148`): the write returns before the map
+* **A merge that resolves no corner says nothing** (`TRAME-148`). The write returns before the map
   insert and emits no event, so the user sees a gesture that did nothing. `TRAME-132` requires a
   notice for the refused merge and no rule covers this path.
 * **No test asserts isolation** (`TRAME-131`, `TRAME-142`, `TRAME-UI-115`): each one reads the
   rectangle it wrote. A write landing on a neighbouring cell, back on a fill source, or reaching
   the document from a selection move, passes today.
-* **Two guards have no refusal test** (`TRAME-137`, `TRAME-143`): the unmerge over a selection
-  crossing no block and the fill from a source of unequal blocks both return early, and nothing
+* **Two guards have no refusal test** (`TRAME-137`, `TRAME-143`). The unmerge over a selection
+  crossing no block and the fill from a source of unequal blocks both return early. Nothing
   exercises either path.
 * **A merge over a filtered or hidden row** is unspecified: no rule says whether the block spans the
   hidden row or closes over it.

@@ -1,33 +1,32 @@
-//! Reactions / votes for [`ToileState`](super::ToileState)
-//! (`toile-reactions`). Placing an emoji reaction or a vote on an element or
-//! frame is shared, persisted state, keyed by target + canonical `UserId`: one
-//! user has exactly one entry per target (a re-vote is LWW on their own key) and
-//! tallies are convergent.
+//! Reactions / votes for [`ToileState`](super::ToileState) (`toile-reactions`).
+//! Placing an emoji reaction or a vote on an element or frame is shared,
+//! persisted state, keyed by target + canonical `UserId`. One user has exactly
+//! one entry per target (a re-vote is LWW on their own key), and tallies are
+//! convergent.
 //!
 //! **Physical layout.** A single `reactions` root `LoroMap`, keyed by the
 //! composite `"{target_id}/{user_id}"` and holding `Binary(postcard(Reaction))`:
 //!
 //! ```text
-//! reactions (LoroMap)
-//! └── "{target_id}/{user_id}" : Binary(postcard(Reaction))
+//! reactions (LoroMap) +-- "{target_id}/{user_id}" : Binary(postcard(Reaction))
 //! ```
 //!
 //! This is a flat map, not a sub-`LoroMap` per target, on purpose: a per-target
-//! nested container would be **created lazily on first reaction**, so two peers
+//! nested container would be **created lazily on first reaction**. Two peers
 //! reacting on the same fresh target would concurrently create two rival
-//! containers and Loro's map register would keep only one -- silently dropping
-//! the loser's reactions. The root `reactions` map, by contrast, is a
-//! deterministic root container that always exists, so concurrent inserts under
-//! distinct composite keys all survive (verified). `ElementId`s are hex + `_`
-//! and `UserId`s are hyphenated UUIDs, so neither contains `/`: the composite key
-//! is unambiguous and `target` is recovered by splitting on the first `/`.
+//! containers. Loro's map register would keep only one, silently dropping the
+//! loser's reactions. The root `reactions` map, by contrast, is a deterministic
+//! root container that always exists, so concurrent inserts under distinct
+//! composite keys all survive (verified). `ElementId`s are hex + `_` and
+//! `UserId`s are hyphenated UUIDs, so neither contains `/`. The composite key is
+//! unambiguous, and `target` is recovered by splitting on the first `/`.
 //!
-//! Keyed by `UserId`, never `PeerID`: a reaction is a per-user
-//! decision that must survive reload and multi-device use. The tally (count per
-//! emoji, vote totals) is **derived on read**
-//! ([`reaction_tally`](ToileState::reaction_tally)), never stored, so it can
-//! never drift from the entry set. A reaction on a concurrently-deleted target is
-//! skipped at derivation, never destroyed (data-never-destroyed).
+//! Keyed by `UserId`, never `PeerID`: a reaction is a per-user decision that must
+//! survive reload and multi-device use. The tally (count per emoji, vote totals)
+//! is **derived on read** ([`reaction_tally`](ToileState::reaction_tally)), never
+//! stored, so it can never drift from the entry set. A reaction on a
+//! concurrently-deleted target is skipped at derivation, never destroyed
+//! (data-never-destroyed).
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -139,12 +138,12 @@ impl ToileState {
     }
 
     /// Derive the reaction tallies of every `visible`, still-existing target in
-    /// one scan of the `reactions` map, for the display viewport. Keyed
-    /// only by targets that carry at least one reaction; a target absent from
-    /// `visible` (culled or deleted) is skipped, so its orphan entries never
-    /// render. This is O(reactions), not O(elements x reactions): the whole map
-    /// is walked once, each entry routed to its target by splitting the composite
-    /// key on the first `/`.
+    /// one scan of the `reactions` map, for the display viewport. Keyed only by
+    /// targets that carry at least one reaction. A target absent from `visible`
+    /// (culled or deleted) is skipped, so its orphan entries never render. This
+    /// is O(reactions), not O(elements x reactions). The whole map is walked
+    /// once, each entry routed to its target by splitting the composite key on
+    /// the first `/`.
     pub(super) fn reaction_tallies(
         &self,
         visible: &HashSet<ElementId>,

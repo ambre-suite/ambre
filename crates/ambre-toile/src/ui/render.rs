@@ -1,15 +1,15 @@
 // ambre-toile/src/ui/render.rs
 // ============================================================================
-// The Toile content walk (toile-board-rendering). Toile owns only "what to draw": it walks
-// the culled, z-ordered `DisplayViewport` and emits ABSTRACT `DrawSurface` calls;
-// tessellation, the glyph atlas and GPU submission are `ambre-canvas`'s job. So
-// the walk is host-testable against `RecordingSurface` (a mock `DrawSurface`):
-// assert the ordered `DrawOp` sequence with no GPU.
+// The Toile content walk (toile-board-rendering). Toile owns only "what to draw":
+// it walks the culled, z-ordered `DisplayViewport` and emits ABSTRACT
+// `DrawSurface` calls. Tessellation, the glyph atlas and GPU submission are
+// `ambre-canvas`'s job. So the walk is host-testable against `RecordingSurface`
+// (a mock `DrawSurface`): assert the ordered `DrawOp` sequence with no GPU.
 //
 // Two passes:
-//   paint_content -- board bg + adaptive grid, then one z-ordered walk of the
-//                    nodes (shapes / paths / strokes / connectors) under the
-//                    camera transform, then a screen-space text pass.
+//   paint_content -- board bg + adaptive grid, then one z-ordered walk of
+//                    the nodes under the camera transform (shapes, paths,
+//                    strokes, connectors). Then a screen-space text pass.
 //   paint_overlay -- selection bounding box + transform handles (screen space).
 // ============================================================================
 
@@ -35,24 +35,11 @@ use super::tool::{
 };
 use super::viewport::ViewportTransform;
 
-/// A decoded raster image ready to paint: non-premultiplied RGBA8 pixels
-/// (row-major, `width * height * 4` bytes) plus native dimensions.
-///
-/// Keyed by the element's blake2b media hash (`DisplayGeom::Image`). A hash
-/// absent from the map means the pixels have not arrived, so the element paints
-/// a placeholder box instead until a later frame carries them.
-///
-/// **Only the PDF export fills this today**, from the thumbnail each entry
-/// carries in the `media` LoroMap (`toile-media`). The screen path builds it in
-/// `AppView::new` and never inserts, so every picture on every board paints the
-/// placeholder -- and `WgpuSurface` implements no `draw_image` either, so a
-/// resident entry would paint nothing at all. Both halves land together
-/// (`ambre-roadmap.md` E6).
 /// The media addresses a display list names and the view cannot paint: not in
 /// the store, not already asked for, each listed once.
 ///
 /// It is the culled list that is walked, so only what survived the viewport
-/// query is asked for -- a board of two hundred photographs transfers the ones
+/// query is asked for. A board of two hundred photographs transfers the ones
 /// on screen (`toile-media`).
 pub fn missing_media(
     nodes: &[DisplayNode],
@@ -75,6 +62,19 @@ pub fn missing_media(
     out
 }
 
+/// A decoded raster image ready to paint: non-premultiplied RGBA8 pixels
+/// (row-major, `width * height * 4` bytes) plus native dimensions.
+///
+/// Keyed by the element's blake2b media hash (`DisplayGeom::Image`). A hash
+/// absent from the map means the pixels have not arrived. The element paints a
+/// placeholder box instead until a later frame carries them.
+///
+/// **Only the PDF export fills this today**, from the thumbnail each entry
+/// carries in the `media` LoroMap (`toile-media`). The screen path builds it in
+/// `AppView::new` and never inserts, so every picture on every board paints the
+/// placeholder. `WgpuSurface` implements no `draw_image` either, so a resident
+/// entry would paint nothing at all. Both halves land together
+/// (`ambre-roadmap.md` E6).
 pub struct DecodedImage {
     pub pixels: Vec<u8>,
     pub width: u32,
@@ -86,7 +86,7 @@ pub struct DecodedImage {
 pub type ImageStore = HashMap<String, DecodedImage>;
 
 /// Fixed ink (ARGB) for a sticky-note body: a near-black that stays readable on
-/// any pastel card colour, so the body is legible regardless of the card fill
+/// any pastel card colour. The body is legible regardless of the card fill
 /// (`toile-styles`). Independent of the theme (the card is not). Shared with
 /// the inline editor so an in-edit sticky uses the same ink (`edit.rs`).
 pub(crate) const STICKY_INK: u32 = 0xFF1A_1A1A;
@@ -97,7 +97,7 @@ const STICKY_SHADOW: u32 = 0x3300_0000;
 /// Drop-shadow offset in world units (bottom-right).
 const STICKY_SHADOW_OFFSET: f64 = 4.0;
 
-/// The body font size (world units) for a sticky of the given bounds: it scales
+/// The body font size (world units) for a sticky of the given bounds. It scales
 /// with the note so the text "adapts to the size of the note" (feedback). A
 /// fraction of the shorter side, clamped to a legible range. Shared with the
 /// inline editor so the in-edit size matches the committed one (`edit.rs`).
@@ -106,10 +106,10 @@ pub(crate) fn sticky_font_size(bounds: Rect) -> f32 {
     (shorter * 0.16).clamp(8.0, 48.0)
 }
 
-/// The effective body font size (world units) for a sticky / text element: a
-/// sticky auto-sizes from its bounds while `style.font.size` is the auto sentinel
-/// (`STICKY_AUTO_FONT_SIZE`, i.e. not positive), but a positive size set from the
-/// style inspector overrides it; a text element always uses its style size.
+/// The effective body font size (world units) for a sticky / text element. A sticky
+/// auto-sizes from its bounds while `style.font.size` is the auto sentinel
+/// (`STICKY_AUTO_FONT_SIZE`, that is, not positive). A positive size set from the
+/// style inspector overrides it. A text element always uses its style size.
 pub(crate) fn sticky_or_style_font_size(
     is_sticky: bool,
     style: &ElementStyle,
@@ -123,11 +123,11 @@ pub(crate) fn sticky_or_style_font_size(
 }
 
 /// Resolve a sticky / text body's ink (ARGB), or `None` to fall back to the theme
-/// text colour. An explicit `text_color` always wins; otherwise a sticky
-/// uses its fixed ink (its `fill` is the card background, not the text), and a free
-/// text element falls back to its `fill` (legacy: a text element's fill was its
-/// glyph colour) then, if unset, the theme colour. Pure and host-tested; shared
-/// with the inline editor via the same precedence in `edit.rs`.
+/// text colour. An explicit `text_color` always wins. Otherwise a sticky uses its
+/// fixed ink (its `fill` is the card background, not the text). A free text element
+/// falls back to its `fill` (legacy: a text element's fill was its glyph colour)
+/// then, if unset, the theme colour. Pure and host-tested; shared with the inline
+/// editor via the same precedence in `edit.rs`.
 pub(crate) fn resolved_text_ink(
     is_sticky: bool,
     text_color: Option<u32>,
@@ -233,10 +233,10 @@ pub fn paint_content<S: DrawSurface>(
     // absent paints a placeholder box (`toile-media`). Empty on a board
     // with no images or whose media has not yet been decoded.
     images: &ImageStore,
-    // Smart Animate overrides for an in-flight slide transition: keyed by
-    // element id, each replaces the element's transform / bounds / opacity / fill
-    // for this frame. Empty when no transition is active. Fade-only ids (a new /
-    // gone element) still appear here so their opacity ramp is honored.
+    // Smart Animate overrides for an in-flight slide transition. Keyed by element
+    // id, each replaces the element's transform / bounds / opacity / fill for
+    // this frame. Empty when no transition is active. Fade-only ids (a new / gone
+    // element) still appear here so their opacity ramp is honored.
     anim: &HashMap<ElementId, AnimatedElement>,
     // Presentation focus mode: the UI hides the board grid so the audience
     // sees only the slide content.
@@ -260,8 +260,8 @@ pub fn paint_content<S: DrawSurface>(
     surface.pop_transform();
 
     // 3. Text pass in screen space (crisp glyphs; font size scales with zoom).
-    // Both sticky notes and free text carry a body string here; a sticky draws
-    // its body in a fixed readable ink (its `fill` is the card colour), a text
+    // Both sticky notes and free text carry a body string here. A sticky draws
+    // its body in a fixed readable ink (its `fill` is the card colour); a text
     // element draws in its `fill`.
     for node in &vp.nodes {
         let DisplayNode::Element(e) = node else {
@@ -315,8 +315,8 @@ pub(crate) fn paint_label_plate<S: DrawSurface>(surface: &mut S, plate: Rect, pa
 }
 
 /// Draw a connector's caption in screen space, centred on the arrow's mid-arc
-/// point, over a plate in the board colour so the words are readable where they
-/// cross the line they belong to (`toile-connectors`).
+/// point. A plate in the board colour keeps the words readable where they cross
+/// the line they belong to (`toile-connectors`).
 fn paint_label<S: DrawSurface>(
     surface: &mut S,
     c: &DisplayConnector,
@@ -366,8 +366,9 @@ fn paint_label<S: DrawSurface>(
 }
 
 /// The world transform of an element whose geometry an animation override
-/// replaces: rotation about the (interpolated) AABB center, mirroring
-/// [`display_element`](crate::logic::state) so the tween matches the static pass.
+/// replaces: rotation about the (interpolated) AABB center. This mirrors
+/// [`display_element`](crate::logic::state), so the tween matches the static
+/// pass.
 fn anim_transform(a: &AnimatedElement) -> Affine {
     let c = a.bounds.center();
     Affine::translate(c.to_vec2()) * Affine::rotate(a.rotation) * Affine::translate(-c.to_vec2())
@@ -375,8 +376,8 @@ fn anim_transform(a: &AnimatedElement) -> Affine {
 
 /// A rotation of `theta` radians about `center` (screen space). The camera carries
 /// no rotation (pan + zoom only), so an element's world rotation is also its
-/// screen rotation, and the text / overlay passes -- which run in screen space --
-/// rotate about the element's screen-space center with this affine.
+/// screen rotation. The text / overlay passes, which run in screen space, rotate
+/// about the element's screen-space center with this affine.
 pub(crate) fn rotate_about(center: Point, theta: f64) -> Affine {
     Affine::translate(center.to_vec2())
         * Affine::rotate(theta)
@@ -385,7 +386,8 @@ pub(crate) fn rotate_about(center: Point, theta: f64) -> Affine {
 
 /// The screen-space rotation (radians) of an element's text: the live gesture /
 /// animation angle when overridden, else the angle baked into its display
-/// transform (a pure rotation about the AABB center, so `atan2(b, a)` recovers it).
+/// transform. That transform is a pure rotation about the AABB center, so `atan2(b,
+/// a)` recovers it.
 fn text_rotation(e: &DisplayElement, anim: Option<&AnimatedElement>) -> f64 {
     match anim {
         Some(a) => a.rotation,
@@ -397,9 +399,9 @@ fn text_rotation(e: &DisplayElement, anim: Option<&AnimatedElement>) -> f64 {
 }
 
 /// The screen-space rotation (radians) to apply to the selection box + handles of
-/// a single selected element: its live gesture angle when a resize / rotate / move
-/// is in flight, else the angle baked into its display transform. `0.0` when the
-/// id is not in the culled set.
+/// a single selected element. That is its live gesture angle when a resize /
+/// rotate / move is in flight, else the angle baked into its display transform.
+/// `0.0` when the id is not in the culled set.
 fn selection_rotation(
     id: &ElementId,
     vp: &DisplayViewport,
@@ -421,8 +423,8 @@ fn selection_rotation(
 }
 
 /// The style an element paints with this frame: its own, or the base overlaid
-/// with the animation override's opacity / fill (interpolates only those
-/// visual attributes; the rest of the register is held).
+/// with the animation override's opacity / fill. Only those visual attributes
+/// interpolate; the rest of the register is held.
 fn anim_style(base: &ElementStyle, a: Option<&AnimatedElement>) -> ElementStyle {
     match a {
         None => base.clone(),
@@ -437,7 +439,7 @@ fn anim_style(base: &ElementStyle, a: Option<&AnimatedElement>) -> ElementStyle 
 /// Paint one element under the (already pushed) camera transform. Rotation is
 /// applied by pushing the element's own transform, so geometry is expressed in
 /// the unrotated world frame (matching hit-testing, `hit.rs`). When `anim` is
-/// `Some`, the element is mid-transition: its transform, bounds and opacity /
+/// `Some`, the element is mid-transition. Its transform, bounds and opacity /
 /// fill come from the Smart Animate override instead of the static display.
 fn paint_element<S: DrawSurface>(
     surface: &mut S,
@@ -467,8 +469,8 @@ fn paint_element<S: DrawSurface>(
             }
         }
         // An image paints its decoded pixels when they have arrived, scaled to
-        // the element AABB (the rect is stored at the imported aspect,); a
-        // hash not yet in the store paints a placeholder box until a later frame
+        // the element AABB (the rect is stored at the imported aspect). A hash
+        // not yet in the store paints a placeholder box until a later frame
         // carries the media. `draw_image` maps through the active element
         // transform, so a rotated image rotates with its box.
         DisplayGeom::Image(hash) => match images.get(hash) {
@@ -552,8 +554,8 @@ fn paint_text<S: DrawSurface>(
     let base_size = sticky_or_style_font_size(is_sticky, &e.style, bounds);
     let font_size = (base_size as f64 * cam.zoom) as f32;
     // Body inset: the same padding the inline editor applies, so the static text
-    // and the in-edit text share one origin + wrap width and the body does not
-    // jump / re-wrap when entering or leaving edit. Single source of truth.
+    // and the in-edit text share one origin + wrap width. The body does not jump
+    // / re-wrap when entering or leaving edit. Single source of truth.
     let pad = super::edit::InlineEditor::pad(cam.zoom);
     let wrap_w = (sb.width() - 2.0 * pad).max(1.0) as f32;
     // Text (foreground) colour, (see `resolved_text_ink`): `None` means "use
@@ -577,7 +579,7 @@ fn paint_text<S: DrawSurface>(
     let strikethrough = e.style.font.strikethrough;
     // A rotated element rotates its body too: the glyph run origins and the
     // decoration endpoints are mapped through a rotation about the note's
-    // screen-space center, so the text follows the card instead of staying
+    // screen-space center. The text follows the card instead of staying
     // axis-aligned (toile-board-rendering). `None` (no rotation) keeps the fast
     // pure-translation path.
     let rot = text_rotation(e, anim);
@@ -593,9 +595,10 @@ fn paint_text<S: DrawSurface>(
             let glyph_tf = rot_tf.map_or(base, |r| r * base);
             surface.draw_glyphs(&run, &brush, glyph_tf);
             // Per-run text decorations, drawn in the glyph ink (matches Trame's
-            // cell decorations): a 1px underline just below the baseline and a 1px
-            // strikethrough through the x-height (~0.3em above the baseline). The
-            // endpoints ride the same rotation so the rules stay glued to the text.
+            // cell decorations). A 1px underline sits just below the baseline and a
+            // 1px strikethrough through the x-height (~0.3em above the baseline).
+            // The endpoints ride the same rotation so the rules stay glued to the
+            // text.
             if underline || strikethrough {
                 let adv = run.advance() as f64;
                 let mut line = |ay: f64| {
@@ -632,9 +635,9 @@ pub fn paint_overlay<S: DrawSurface>(
     preview: Option<&Preview>,
     find_hits: &[ElementId],
     find_focus: Option<&ElementId>,
-    // Live transform overrides for an in-flight resize / rotate / move: when
-    // an entry exists for a selected id, the selection box + handles follow its
-    // preview bounds instead of the committed geometry, so they stay glued to the
+    // Live transform overrides for an in-flight resize / rotate / move. When an
+    // entry exists for a selected id, the selection box + handles follow its
+    // preview bounds instead of the committed geometry. They stay glued to the
     // object during the drag. Empty at rest.
     gesture: &HashMap<ElementId, AnimatedElement>,
     // The selected arrow, if one is (`toile-connectors`). Exclusive with
@@ -653,8 +656,8 @@ pub fn paint_overlay<S: DrawSurface>(
     }
 
     // Link badges (`toile-links`): one per linked element, in screen space so
-    // they keep their size through the zoom, and always painted rather than
-    // shown on hover -- a link nobody can see is a link nobody follows.
+    // they keep their size through the zoom. They are always painted rather
+    // than shown on hover: a link nobody can see is a link nobody follows.
     paint_link_badges(surface, vp, cam, palette);
 
     // Find highlights: outline every matching element visible in the
@@ -672,13 +675,13 @@ pub fn paint_overlay<S: DrawSurface>(
     // angle.
     //
     // The rotation is applied by mapping each corner / handle point through a
-    // screen-space rotation about `b`'s center, NOT via `push_transform`: the
+    // screen-space rotation about `b`'s center, NOT via `push_transform`. The
     // WgpuSurface's `stroke_rect` / `fill_rect` degrade a rotated rect to its
-    // axis-aligned bounding box (they only carry an AABB), so a pushed rotation
+    // axis-aligned bounding box, since they only carry an AABB. A pushed rotation
     // would paint a bigger upright box instead. `stroke_line` maps its endpoints
-    // through the transform faithfully, so the box is drawn as four rotated edges,
-    // and each handle square is drawn axis-aligned (screen-aligned, Miro-style) at
-    // its rotated center.
+    // through the transform faithfully, so the box is drawn as four rotated edges.
+    // Each handle square is drawn axis-aligned (screen-aligned, Miro-style) at its
+    // rotated center.
     let single = selection.len() == 1;
     let theta = if single {
         selection_rotation(&selection[0], vp, gesture)
@@ -733,10 +736,10 @@ pub fn paint_overlay<S: DrawSurface>(
     }
 }
 
-/// Paint an in-flight gesture preview. Marquee is a thin screen-space
-/// outline; the shape / connector / pen / stroke previews are drawn in world
-/// space under the camera transform with a zoom-compensated 1.5 px line so they
-/// track the geometry they will commit to.
+/// Paint an in-flight gesture preview. Marquee is a thin screen-space outline.
+/// The shape / connector / pen / stroke previews are drawn in world space under
+/// the camera transform with a zoom-compensated 1.5 px line. They track the
+/// geometry they will commit to.
 fn paint_preview<S: DrawSurface>(
     surface: &mut S,
     preview: &Preview,
@@ -788,7 +791,7 @@ fn element_bounds(vp: &DisplayViewport, id: &ElementId) -> Option<Rect> {
 }
 
 /// World union AABB of the selection for the overlay box, honoring any in-flight
-/// gesture override: a selected id present in `gesture` contributes its live
+/// gesture override. A selected id present in `gesture` contributes its live
 /// preview bounds, otherwise its committed display bounds. `None` when nothing
 /// selected is in the culled set.
 fn selection_preview_bounds(
@@ -843,10 +846,9 @@ fn paint_find_highlights<S: DrawSurface>(
     }
 }
 
-/// A small filled square handle centered on `p`.
-/// Trace a selected arrow and put a handle on each end. The arrow has no box:
-/// a rectangle around a diagonal line would cover half the diagram and say
-/// nothing about which end a drag would move, so the line itself is the
+/// Trace a selected arrow and put a handle on each end. The arrow has no box.
+/// A rectangle around a diagonal line would cover half the diagram and say
+/// nothing about which end a drag would move. The line itself is the
 /// selection feedback (`toile-connectors`).
 fn paint_arrow_selection<S: DrawSurface>(
     surface: &mut S,
@@ -873,10 +875,10 @@ fn paint_arrow_selection<S: DrawSurface>(
     draw_handle(surface, w2s * to, palette);
 }
 
-/// Draw the badge of every linked element in the culled frame: a small filled
-/// square outside the top-right corner, with a chain-link notch cut as two
-/// short strokes so it reads as a link and not as a resize handle
-/// (`toile-links`).
+/// Draw the badge of every linked element in the culled frame. Each is a
+/// small filled square outside the top-right corner, with a chain-link notch
+/// cut as two short strokes. The notch makes it read as a link and not as a
+/// resize handle (`toile-links`).
 fn paint_link_badges<S: DrawSurface>(
     surface: &mut S,
     vp: &DisplayViewport,
@@ -909,6 +911,7 @@ fn paint_link_badges<S: DrawSurface>(
     }
 }
 
+/// A small filled square handle centered on `p`.
 fn draw_handle<S: DrawSurface>(surface: &mut S, p: Point, palette: &Palette) {
     let h = HANDLE_SIZE_PX / 2.0;
     surface.fill_rect(
@@ -987,10 +990,10 @@ mod tests {
         assert_eq!(fills, 2);
     }
 
-    // The "camera pass" test, host-run against the mock surface: with a Smart
+    // The "camera pass" test, host-run against the mock surface. With a Smart
     // Animate override in the map, the animated element paints with the tweened
-    // opacity / fill instead of its static style, while an un-overridden element
-    // keeps its own. Exercises the render side of the playback -> camera wiring.
+    // opacity / fill instead of its static style. An un-overridden element keeps
+    // its own. Exercises the render side of the playback -> camera wiring.
     #[test]
     fn content_walk_applies_animation_override() {
         let vp = DisplayViewport {
@@ -1044,8 +1047,8 @@ mod tests {
     }
 
     /// Build an element with an explicit kind + geom + fill, for the sticky/text
-    /// card tests (the render path keys the card off the geom, the ink off the
-    /// `is_sticky` flag derived from it).
+    /// card tests. The render path keys the card off the geom, the ink off the
+    /// `is_sticky` flag derived from it.
     fn styled_elem(
         id: &str,
         kind: ElementKind,
@@ -1090,7 +1093,7 @@ mod tests {
     }
 
     // A sticky note paints a coloured card in the geometry pass: exactly the bug
-    // behind "clicking Sticky does nothing" -- an empty sticky used to derive as
+    // behind "clicking Sticky does nothing". An empty sticky used to derive as
     // Text and paint no background, so it was invisible (toile-styles).
     #[test]
     fn sticky_paints_a_colored_card() {
@@ -1197,7 +1200,7 @@ mod tests {
         assert!((8.0..=48.0).contains(&default));
     }
 
-    // A free `Text` element has no card: the geometry pass paints nothing for it,
+    // A free `Text` element has no card. The geometry pass paints nothing for it,
     // so it emits no FillPath (only its glyphs, in the text pass). This is what
     // keeps Sticky and Text visually distinct (toile-styles).
     #[test]
@@ -1249,9 +1252,9 @@ mod tests {
         assert_eq!(asked, vec!["h2".to_owned()]);
     }
 
-    /// A picture already asked for is not asked for again, which is what stops
-    /// a request going out on every frame that fails to paint it -- including
-    /// for an address the document cannot resolve and never answers.
+    /// A picture already asked for is not asked for again. That stops a
+    /// request going out on every frame that fails to paint it. That includes
+    /// an address the document cannot resolve and never answers.
     #[test]
     fn a_pending_request_is_not_repeated() {
         let b = Rect::new(0.0, 0.0, 10.0, 10.0);
@@ -1271,7 +1274,7 @@ mod tests {
     }
 
     // An `Image` element whose hash is in the store paints real pixels
-    // (`DrawImage`), scaled to its AABB; one whose hash is absent falls back to
+    // (`DrawImage`), scaled to its AABB. One whose hash is absent falls back to
     // a placeholder box (a path fill), per toile-media.
     #[test]
     fn image_paints_pixels_when_resolved_else_placeholder() {
@@ -1415,9 +1418,8 @@ mod tests {
         assert!(has_box, "selection box must follow the live preview bounds");
     }
 
-    /// A selected arrow is traced and gets exactly two handles -- one per end --
-    /// and no selection box: an arrow has no rectangle to draw
-    /// (`toile-connectors`).
+    /// A selected arrow is traced and gets exactly two handles, one per end, and
+    /// no selection box. An arrow has no rectangle to draw (`toile-connectors`).
     #[test]
     fn a_selected_arrow_gets_two_handles_and_no_box() {
         let mut path = ambre_draw::BezPath::new();
@@ -1672,7 +1674,7 @@ mod tests {
             )],
         };
         let surface = paint(&vp);
-        // Font-availability agnostic: if the headless host shapes no glyphs this
+        // Font-availability agnostic. If the headless host shapes no glyphs this
         // holds vacuously; when it does, every run carries the element rotation
         // rather than a pure translation.
         for op in surface.ops() {

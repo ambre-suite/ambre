@@ -5,9 +5,9 @@
 use super::*;
 
 /// Formula references follow the data through a sort (the `trame-formula-engine`
-/// guarantee). Each `=A{n}*10` binds to its row's `Uid` at edit time; the sort
-/// reorders rows by `mov` and the uid-anchored bytecode is preserved (no
-/// reseed/re-parse), so every formula keeps reading the *same physical* A cell
+/// guarantee). Each `=A{n}*10` binds to its row's `Uid` at edit time. The sort
+/// reorders rows by `mov`, and the uid-anchored bytecode is preserved (no
+/// reseed/re-parse). So every formula keeps reading the *same physical* A cell
 /// it referenced -- now at a new grid position.
 #[test]
 fn sort_range_formulas_follow_data() {
@@ -38,16 +38,16 @@ fn sort_range_formulas_follow_data() {
     });
     // Data sorts ascending: A = [1, 2].
     assert_eq!(read_col(&mut state, 0, 1, 1), vec!["1", "2"]);
-    // References follow the data: the `=A2*10` cell (bound to the row whose
-    // A was 1) is now at pos0 and still reads 1 -> 10; the `=A1*10` cell
-    // (bound to the row whose A was 2) is now at pos1 and reads 2 -> 20.
+    // References follow the data. The `=A2*10` cell, bound to the row whose
+    // A was 1, is now at pos0 and still reads 1 -> 10. The `=A1*10` cell,
+    // bound to the row whose A was 2, is now at pos1 and reads 2 -> 20.
     assert_eq!(read_col(&mut state, 1, 1, 2), vec!["10", "20"]);
 }
 
-/// A range is a positional *block*, not a set of specific rows: sorting the
+/// A range is a positional *block*, not a set of specific rows. Sorting the
 /// rows inside `SUM(A1:A3)` reorders the same three values, so the block (and
-/// its total) is unchanged -- the Excel/Sheets behavior, and the only
-/// well-defined one (uid-bound endpoints would scatter and invert the range).
+/// its total) is unchanged. That is the Excel/Sheets behavior, and the only
+/// well-defined one: uid-bound endpoints would scatter and invert the range.
 /// Contrast `sort_range_formulas_follow_data`, where single-cell refs *do*
 /// follow their row.
 #[test]
@@ -179,8 +179,8 @@ fn sort_selection_resolves_against_tracked_selection() {
 }
 
 /// The whole-sheet `SortSheetAsc` intent (whole-column selection, `trame-sort`)
-/// sorts the full used range by the active cell's column, keeping every row's
-/// other columns aligned -- even rows below the values reported by a partial
+/// sorts the full used range by the active cell's column. Every row's other
+/// columns stay aligned, even the rows below the values reported by a partial
 /// selection.
 #[test]
 fn sort_sheet_sorts_used_range_by_active_column() {

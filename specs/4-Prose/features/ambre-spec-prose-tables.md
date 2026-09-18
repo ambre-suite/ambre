@@ -4,7 +4,7 @@
 **Implementation:** design-only
 
 > A grid of cells inside the document. Cells hold ordinary text and ordinary paragraphs, and a
-> merged region is described by its two corners, so a row inserted at the same moment widens the
+> merged region is described by its two corners. A row inserted at the same moment widens the
 > region instead of tearing it.
 
 ---
@@ -18,7 +18,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-009` | `INV` | A merged region MUST be held as its two corner cells alone: no row count, no column count and no grid position may be stored, and the span MUST be worked out from the grid the table has now. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-009` | `INV` | A merged region MUST be held as its two corner cells alone: a row count, a column count and a grid position MUST NOT be stored, and the span MUST be worked out from the grid the table has now. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-227` | `INV` | Every row of a table MUST hold one cell per column. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-044` | `INV` | The stored column widths MUST hold exactly one entry per column. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-228` | `INV` | A table of no columns MUST NOT exist. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -111,18 +111,17 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-040` | `FAIL` | An insert or a move whose result breaks the nesting rules of the document MUST be refused, and the refusal MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** none of its own: a table is measured with the rest of the page, and the figure is the
-  pagination row of `ambre-spec-budgets.md section 1`. Resolving a merged region to a
-  rectangle is part of that measurement, and `features/ambre-spec-prose-pagination.md section 3`
-  owns it.
+* **Budget.** none of its own: a table is measured with the rest of the page, the pagination row of
+  `ambre-spec-budgets.md section 1`. Resolving a merged region to a rectangle is part of that
+  measurement, and `features/ambre-spec-prose-pagination.md section 3` owns it.
 * **Boundary.** none of its own: a cell is a block like any other, and `ZK-001` seals every payload
   before it leaves the client.
 * **Verification.** 42 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-009` is the row a reviewer can hold without a test, because a stored span would be a key
-  in the schema table and the schema table has none. `PROSE-FEAT-017`, `-050` and `-230` are the
-  three that need two peers rather than one, and the rest a single writer can reach. The eight
-  frame conditions are what a grid costs: a width list, a merge map and a text per cell, each of
-  which most of the gestures must leave exactly as they found it.
+  `PROSE-009` is what a reviewer holds without a test: a stored span would be a key in the
+  schema table, and it has none. `PROSE-FEAT-017`, `-050` and `-230` need two peers
+  rather than one, and the rest a single writer reaches. The eight frame conditions are what a grid
+  costs. They are a width list, a merge map and a text per cell, which most gestures must leave
+  untouched.
 
 ---
 
@@ -145,14 +144,14 @@ Two peers in one table. No test resolves yet: the last column names the row each
 ## 3. MODEL
 
 **Containers.** None of its own. A table, a row and a cell are three block types of the movable
-tree, and their attributes are the node's own; the column widths and the merge map are the table
+tree, and their attributes are the node's own. The column widths and the merge map are the table
 node's attributes. All four are declared in `ambre-spec-prose-schema.md section 3`, and what may
 nest under what is `section 4` of that document.
 
 **A merged region is two corners.** The merge map holds one entry per region: the top-left cell's
 block id, and the bottom-right cell's. It holds no row count, no column count and no grid position.
-The number of rows and columns a region spans is worked out at layout time, by finding the two
-corners in the grid the table has now (`PROSE-009`). A cell inside the rectangle the two corners
+The number of rows and columns a region spans is worked out at layout time. The two
+corners are found in the grid the table has now (`PROSE-009`). A cell inside the rectangle the two corners
 describe is **covered**: it is not painted, it is not measured, and it keeps its text
 (`PROSE-FEAT-048`).
 
@@ -182,7 +181,7 @@ positional.
    column takes the document's default width when the command carries none, and the table grows
    wider rather than taking width from its neighbours.
 4. on a delete, drop every region whose top-left or bottom-right cell sat in that column
-   (`PROSE-FEAT-049`); a region merely crossed by the column keeps both corners and narrows by one.
+   (`PROSE-FEAT-049`). A region merely crossed by the column keeps both corners and narrows by one.
 5. on a delete of the last column, delete the table node itself (`PROSE-FEAT-045`).
 
 A row insert and a row delete follow the same five steps, without the width list.
@@ -208,14 +207,14 @@ no-op too, so unmerging twice costs nothing.
    (`PROSE-FEAT-050`).
 3. rebuild the covered set from what survives.
 
-The pass reads the merge map and the liveness of the cells, and nothing else, which is what makes
+The pass reads the merge map and the liveness of the cells, and nothing else. That is what makes
 every peer land on the same table (`PROSE-FEAT-017`). A cell found covered while it still holds
 text is reported to the view as a hint, and it blocks nothing.
 
 **What refuses a shape.** The nesting rules of `ambre-spec-prose-schema.md section 4` are the shape;
-this feature is the guard. A command whose result would put a table inside a cell, or a block under
-a parent that does not accept it, is refused before the document is touched, and the refusal is
-reported (`PROSE-040`). The import path reuses the same predicate rather than a second one, and
+this feature is the guard. A command whose result would put a table inside a cell is refused
+before the document is touched, and the refusal is reported (`PROSE-040`). So is a block under a
+parent that does not accept it. The import path reuses the same predicate rather than a second one, and
 lifts an illegal node instead of refusing the whole file
 (`features/ambre-spec-prose-images.md section 3`).
 
@@ -284,7 +283,7 @@ traversal lands on the anchor and skips the cells it covers.
 * **Nothing rules on the selection inside a table.** Every gesture above needs a rectangle of
   cells, and `features/ambre-spec-prose-selection.md` describes a selection as two positions in the
   text. What a drag across two cells selects is undecided.
-* **A repeated header row is deferred**, and a table taller than a page is clipped: both are gaps
+* **A repeated header row is deferred**, and a table taller than a page is clipped. Both are gaps
   of `features/ambre-spec-prose-pagination.md section 5`, and both are visible in a table before
   they are visible anywhere else.
 * **Nothing bounds a table.** No rule caps the column count, the row count or the smallest column

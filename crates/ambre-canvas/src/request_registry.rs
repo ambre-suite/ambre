@@ -6,7 +6,7 @@
 // It wraps an outgoing `RestCommand` in a `LogicCommand::Rest` envelope,
 // registers a pending entry with a deadline, and later resolves the matching
 // `UiEvent::Rest` by id. Expired entries (whose deadline has passed) are
-// silently dropped — the caller should reissue.
+// silently dropped -- the caller should reissue.
 //
 // Generic over `RequestTag` for future type-safety: each tag maps a
 // `RestCommand` variant to its expected `RestEvent` variant. No tag is
@@ -21,7 +21,7 @@ use std::marker::PhantomData;
 ///
 /// Each implementation fixes the default timeout and the expected event type.
 /// The actual matching is done by the caller after `try_recv` confirms the
-/// `RequestId` — the tag only provides compile-time documentation of the
+/// `RequestId` -- the tag only provides compile-time documentation of the
 /// expected variant.
 pub trait RequestTag {
     /// The `RestEvent` variant expected in response, for documentation only.
@@ -40,13 +40,13 @@ struct PendingEntry {
 ///
 /// # Lifecycle
 ///
-/// 1. **Send** — `registry.prepare(cmd, now_ms)` allocates a fresh `RequestId`,
+/// 1. **Send** -- `registry.prepare(cmd, now_ms)` allocates a fresh `RequestId`,
 ///    records a `PendingEntry`, and returns a `LogicCommand::Rest` envelope
 ///    ready to forward to the Logic thread.
-/// 2. **Receive** — when a `UiEvent::Rest { id, evt }` arrives, call
+/// 2. **Receive** -- when a `UiEvent::Rest { id, evt }` arrives, call
 ///    `registry.try_recv(id)` to check whether the id was pending. If so, the
 ///    caller should extract the expected variant from `evt`.
-/// 3. **Expire** — call `registry.expire(now_ms)` once per frame to drop entries
+/// 3. **Expire** -- call `registry.expire(now_ms)` once per frame to drop entries
 ///    whose deadline has passed.
 pub struct RequestRegistry<T: RequestTag> {
     pending: FxHashMap<RequestId, PendingEntry>,
@@ -125,7 +125,7 @@ impl<T: RequestTag> Default for RequestRegistry<T> {
 mod tests {
     use super::*;
 
-    /// Minimal tag for testing — maps nothing, provides a default timeout.
+    /// Minimal tag for testing -- maps nothing, provides a default timeout.
     enum TestTag {}
     impl RequestTag for TestTag {
         type Event = ();
@@ -178,11 +178,11 @@ mod tests {
         };
         assert_eq!(reg.pending_count(), 1);
 
-        // Just before timeout — still alive.
+        // Just before timeout -- still alive.
         reg.expire(999.9);
         assert_eq!(reg.pending_count(), 1);
 
-        // Past deadline — removed.
+        // Past deadline -- removed.
         reg.expire(1000.0);
         assert_eq!(reg.pending_count(), 0);
         assert!(!reg.try_recv(id));

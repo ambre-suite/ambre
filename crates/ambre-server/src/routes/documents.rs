@@ -163,7 +163,7 @@ pub async fn logout(
     Json(req): Json<LogoutRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     if let Some(token) = req.refresh_token.as_deref() {
-        // Only revoke a token that actually belongs to the caller: without this an
+        // Only revoke a token that actually belongs to the caller. Without this an
         // authenticated user could delete another user's refresh token (session
         // revocation of a third party) by presenting it here. The token is an
         // unguessable UUID so this is defense-in-depth, but logout must act on the
@@ -297,7 +297,7 @@ pub async fn create_document(
     let owner_uuid =
         ambre_core::UserId::from_uuid(ambre_core::Uuid::from_bytes(*doc.owner_id.as_bytes()));
     // A foreign caller who supplied an id that already exists and belongs to
-    // someone else must not learn it exists (nor its `doc_type`): answer 404 as if
+    // someone else must not learn it exists, nor its `doc_type`. Answer 404 as if
     // the id were free-but-unowned-by-them, instead of echoing back the row. The
     // legitimate owner's idempotent retry still succeeds below.
     if !created && owner_uuid != s.user_id {
@@ -471,8 +471,8 @@ pub async fn search_users(
 ) -> Result<impl IntoResponse, AppError> {
     let _s = auth;
     let q = params.get("query").map(|s| s.as_str()).unwrap_or("").trim();
-    // Require a minimum query length: a 1-char (or empty) `ILIKE '%q%'` returns an
-    // near-arbitrary slice of the whole user table (email + pubkeys) and turns the
+    // Require a minimum query length. A 1-char (or empty) `ILIKE '%q%'` returns a
+    // near-arbitrary slice of the whole user table, email + pubkeys. It turns the
     // sharing lookup into a directory-enumeration primitive.
     if q.chars().count() < 2 {
         return Ok(axum::Json(UserSearchResult { users: Vec::new() }));

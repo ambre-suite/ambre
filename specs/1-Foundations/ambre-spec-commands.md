@@ -2,13 +2,13 @@
 
 **Type:** Horizontal (framework)
 **Implementation:** implemented -- the identity, the description every view derives from, the chord
-resolution and the state store all ship, in both applications.
+resolution and the state store all ship. Both applications carry the four.
 
 > Everything the user can ask for has one name. A menu entry, a toolbar button, a keyboard chord
-> and a context menu are four ways of asking for the same thing, and they agree because they name
-> it the same way.
+> and a context menu are four ways of asking for the same thing. They agree because they name it
+> the same way.
 
-The name is a string, it lives in a crate that depends on nothing, and it is what every view, every
+The name is a string, and it lives in a crate that depends on nothing. It is what every view, every
 chord table and every mapping to the Logic thread agrees on.
 
 ---
@@ -25,10 +25,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 |---|---|---|---|---|---|---|
 | `UI-THREAD-011` | `INV` | Copy, cut and paste MUST resolve through shared identities, in every application. | this spec section 2 | `ambre_trame::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity`; `ambre_toile::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity` -- each reads the shared identity off its own application's table; `ambre_commands::tests::the_keymap_binds_no_browser_serviced_chord`; `ambre_trame::ui::commands::tests::the_keymap_binds_no_clipboard_chord` -- the other half, that no chord table decodes them a second time | none | verified |
 | `UI-THREAD-035` | `INV` | The legacy copy, cut and paste chords MUST name the same identities as the modern ones. | this spec section 2; section 4, row 5 | `ambre_trame::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity`; `ambre_toile::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity` -- each asserts both chord families of the three intents against the one shared identity, so a legacy chord naming a second command fails | none | verified |
-| `UI-THREAD-019` | `INV` | A command MUST carry one description of its label, its icon, its chord and its grouping. | this spec section 2 | `ambre_trame::ui::commands::tests::every_command_has_a_label`; `ambre_toile::ui::commands::tests::every_exposed_identity_is_described` -- each walks its application's table and fails on a command whose label is empty | partial -- the other three quarters of the description are unread. No test asserts that a command carries an icon, a chord or a grouping, so a table entry declaring none passes both | unverified |
-| `UI-THREAD-036` | `INV` | Every view of a command MUST take what it shows from that description, and never declare a label of its own. | this spec section 2 | `chrome_ui::the_toolbar_announces_the_registry_labels` -- the DOM belt queries the rendered `aria-label` of eleven identities against the registry title, so a literal written into Trame's format bar fails | partial -- nothing covers any other surface. `ambre_trame::ui::commands::tests::every_layout_row_resolves_in_the_registry` and `ambre_toile::ui::menu_bar::tests::every_dropdown_row_is_described` assert only that a laid-out identity resolves, which a view rendering its own label still satisfies | unverified |
+| `UI-THREAD-019` | `INV` | A command MUST carry one description of its label, its icon, its chord and its grouping. | this spec section 2 | `ambre_trame::ui::commands::tests::every_command_has_a_label`; `ambre_toile::ui::commands::tests::every_exposed_identity_is_described` -- each walks its application's table and fails on a command whose label is empty | partial -- the other three quarters of the description are unread. No test asserts that a command carries an icon, a chord or a grouping, so a table entry declaring none passes both; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
+| `UI-THREAD-036` | `INV` | Every view of a command MUST take what it shows from that description, and never declare a label of its own. | this spec section 2 | `chrome_ui::the_toolbar_announces_the_registry_labels` -- the DOM belt queries the rendered `aria-label` of eleven identities against the registry title, so a literal written into Trame's format bar fails | partial -- nothing covers any other surface. `ambre_trame::ui::commands::tests::every_layout_row_resolves_in_the_registry` and `ambre_toile::ui::menu_bar::tests::every_dropdown_row_is_described` assert only that a laid-out identity resolves, which a view rendering its own label still satisfies; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-026` | `INV` | A chord MUST resolve to at most one command. | this spec section 2 | type-level -- the chord table is a map keyed by the chord, so a second command bound to a chord replaces the first rather than joining it, and a table holding two commands on one chord does not exist | none | verified |
-| `UI-THREAD-037` | `INV` | Two commands MUST NOT declare the same default chord. | this spec section 2; derived | `ambre_toile::ui::palette::tests::tool_chords_are_distinct` -- the eight tool chords of one application | partial -- seeding keeps the last command seen and reports nothing, so a collision silently drops one from the keyboard, and every other declared table is unread | unverified |
+| `UI-THREAD-037` | `INV` | Two commands MUST NOT declare the same default chord. | this spec section 2; derived | `ambre_toile::ui::palette::tests::tool_chords_are_distinct` -- the eight tool chords of one application | partial -- seeding keeps the last command seen and reports nothing, so a collision silently drops one from the keyboard, and every other declared table is unread; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-027` | `INV` | The crate that owns command identity MUST depend on no user-interface framework. | this spec section 2 | crate-graph -- its dependency table is empty, so a framework type has no path into it and the crate builds and tests on the host | none | verified |
 | `UI-THREAD-028` | `INV` | One chord table MUST serve every platform: the primary accelerator MUST fold the control and the command modifiers. | this spec section 2 | type-level -- a chord's modifier set carries one accelerator bit and no way to name the control and the command keys apart, so no table can declare one platform's chord; `ambre_commands::keybinding::tests::the_control_key_and_the_command_key_fold_into_one_chord` -- the fold itself, which is the one function that still reads the two bits | none | verified |
 
@@ -49,29 +49,24 @@ The chord table accepts a new binding for a chord that may already carry one.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UI-THREAD-041` | `POST` | A rebinding MUST report the command it displaced. | this spec section 2 | `ambre_commands::tests::rebinding_reports_the_displaced_command` -- its first assertion reads back the displaced identity, which is what a conflict notice would show | none | verified |
-| `UI-THREAD-042` | `FRAME` | A rebinding MUST NOT change the command any other chord resolves to. | derived | none | unheld -- the rebinding test reads the rebound chord alone, so an insert reaching a neighbouring entry would pass | unverified |
+| `UI-THREAD-042` | `FRAME` | A rebinding MUST NOT change the command any other chord resolves to. | derived | none | unheld -- the rebinding test reads the rebound chord alone, so an insert reaching a neighbouring entry would pass; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 
-* **Budget.** none: resolving a chord is one hash lookup and building a menu is a walk over a table
-  of tens of entries, and `ambre-spec-budgets.md` budgets neither. What a command
-  costs once it is invoked is charged to the operation it produces.
+* **Budget.** none: resolving a chord is one hash lookup and building a menu walks a table of tens
+  of entries, neither of which `ambre-spec-budgets.md` budgets. What a command costs once invoked is
+  charged to the operation it produces.
 * **Boundary.** none: an identity is a string in memory. It reaches no relay, holds no key and
   opens no socket, and the payload it produces is sealed by the thread that sends it
   (`ambre-spec-zero-knowledge.md`).
-* **Verification.** 9 `verified`, 4 `unverified`, 0 `unimplemented`. The host tier holds every rule
-  that is pure data -- resolution, refusal, displacement, isolation, the fold, the browser's own
-  chords. Four rows stay loose, in two pairs. `UI-THREAD-037` is the collision nobody refuses:
-  seeding keeps the last command and reports nothing. `UI-THREAD-042` is the frame condition of a
-  rebinding, and its test reads the rebound chord alone. `UI-THREAD-019` and `UI-THREAD-036` are the
-  description, and their tests claim more than they assert: both applications walk a command's
-  label, nothing walks its icon, its chord or its grouping, and one belt reads a rendered label back
-  over eleven identities of one toolbar. `keymap_resolves_default_bindings` backs two rows on two of
-  its own assertions, and `just contracts` reports the leaning.
+* **Verification.** 9 `verified`, 4 `untested`, 0 `unimplemented`. The host tier holds every rule
+  that is pure data: resolution, refusal, displacement, isolation, the fold and the browser's own
+  chords. What is loose is the collision nobody refuses, the frame condition of a rebinding, and the
+  description. Its tests walk a label and never an icon, a chord or a grouping.
 
 ---
 
 ## 2. MODEL
 
-**CRDT containers.** none. A command is an affordance of the interface; what it produces is a
+**CRDT containers.** none. A command is an affordance of the interface. What it produces is a
 document operation, and that operation is the only thing the document ever sees.
 
 **The two layers, and why they are two.**
@@ -118,17 +113,17 @@ between them -- 26 and 42.
 
 **Both applications describe their commands, and every view derives.** A table holds a `Command`
 per affordance -- label, icon, default chord, category. Trame's context menu, its format toolbar and
-its chord defaults read it; Toile's context menu, menu bar, zoom cluster, tool palette and floating
-selection bar read it. Nine of Toile's labels had been written twice, once for the menu bar and once
-for the right-click menu, and Trame's toolbar repeated eleven more.
+its chord defaults read it. Toile's context menu, menu bar, zoom cluster, tool palette and floating
+selection bar read the same table. Nine of Toile's labels had been written twice, once for the menu
+bar and once for the right-click menu. Trame's toolbar repeated eleven more.
 
-**A control that backs no command keeps its own words**, having no description to read: underline,
+**A control that backs no command keeps its own words**, having no description to read. Underline,
 strikethrough, wrap and the decimal steppers emit a `StylePatch` and name no identity.
 `CommandSource` is constructed nowhere: the palette is its first reader.
 
 **The chord.** A chord is a modifier set plus a logical key, normalized so a letter is compared in
 one case. The table is a map from chord to identity, seeded from the declared defaults and
-rebindable, and it reports what a rebinding displaced so a conflict can be shown to the user
+rebindable. It reports what a rebinding displaced, so a conflict can be shown to the user
 (`UI-THREAD-041`). A chord carries at most one command because the table is keyed by it
 (`UI-THREAD-026`), and nothing refuses two commands declaring the same default (`UI-THREAD-037`).
 
@@ -141,16 +136,16 @@ key answers the control key as well.
 **A command may answer several chords.** A description carries a list, the announced chord first.
 Redo answers `Ctrl+Shift+Z` and `Ctrl+Y`; each clipboard intent answers a modern chord and a legacy
 one. The lists the applications share -- undo, redo, cut, copy, paste -- are declared in the
-identity crate, so the pair is decided once and no application binds an alias beside its table.
+identity crate. The pair is decided once, and no application binds an alias beside its table.
 
 **The clipboard is described here and decoded by the browser.** Cut, copy and paste carry one
 identity each, shared by every application and prefixed by none, because the intent belongs to no
 application. Their chords are declared so a surface announces them, and the seeding leaves them out
-of the table: the browser raises the three events itself, on the modern and the legacy chords alike
-(`UI-THREAD-011`, and `ambre-spec-text-input.md` `CHROME-021`).
+of the table (`UI-THREAD-011`). The browser raises the three events itself, on the modern and the
+legacy chords alike (`ambre-spec-text-input.md`, `CHROME-021`).
 
-**One direction only.** A trigger names an identity, the identity produces a message, the message
-mutates the document, the event comes back, and the chrome reads the state the Logic thread
+**One direction only.** A trigger names an identity, the identity produces a message, and the
+message mutates the document. The event comes back, and the chrome reads the state the Logic thread
 reported. No view sets its own toggle from the click that raised it (`ambre-spec-chrome.md`,
 `CHROME-010`).
 
@@ -174,10 +169,10 @@ flowchart TD
 * `crates/ambre-trame/src/ui/commands.rs` -- Trame's descriptions and its context-menu layouts,
   host-compiled so a test reaches a label without a browser;
 * `crates/ambre-trame/src/chrome/commands.rs` -- the menu rows built from them, the chord bindings
-  and the inbound event mirrors; `crates/ambre-trame/src/chrome/icons.rs` -- `IconId` to the icon
+  and the inbound event mirrors. `crates/ambre-trame/src/chrome/icons.rs` -- `IconId` to the icon
   asset, which keeps one application's icon set out of the shared crate;
 * `crates/ambre-toile/src/ui/commands.rs` -- Toile's descriptions, over the identities that stay
-  beside the resolver of each surface (`ui::menu`, `ui::menu_bar`, `ui::palette`, `ui::find`);
+  beside the resolver of each surface (`ui::menu`, `ui::menu_bar`, `ui::palette`, `ui::find`).
   `crates/ambre-toile/src/chrome/icons.rs` -- the same handle-to-asset map as Trame's.
 
 ---
@@ -228,11 +223,11 @@ changes nothing does not refresh them.
 * **Nothing supplies the active language.** A description carries `title: fn(&Locale) -> String`,
   and no document says who holds the locale a view passes. Trame's table answers both variants with
   the English label it shows today, so the function is a shape with one language behind it.
-* **Nothing rules on a user rebinding.** The table accepts one and reports the displacement, and no
+* **Nothing rules on a user rebinding.** The table accepts one and reports the displacement. No
   document says where a rebinding is stored, whether it survives a reload, or how a conflict is
   shown.
 * **A command declared by no menu is unreachable.** The palette lists what the application
-  declares, so an identity in the list with no entry anywhere is reachable; an identity that is in
+  declares, so an identity in the list with no entry anywhere is reachable. An identity that is in
   neither is invisible, and nothing detects it.
 * **Nothing rules on a chord while an edit session is open.** The inline editor consumes keys and
   the chord path also sees them, and which one wins is decided per application.

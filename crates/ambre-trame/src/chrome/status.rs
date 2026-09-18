@@ -3,14 +3,14 @@
 // The status bar (`trame-status-bar`): a thin band above the sheet-tab strip.
 //
 // Left  : selection aggregates (Sum / Average / Count / Min / Max), Excel/Sheets
-//         style. A lone cell shows nothing; the Logic thread computes the totals
-//         for a multi-cell selection (the UI holds only the viewport,
-//         `trame-status-bar`) and
-//         they arrive as `SelectionStats`.
+//         style. A lone cell shows nothing. The Logic thread computes the totals
+//         for a multi-cell selection, since the UI holds only the viewport
+//         (`trame-status-bar`). They arrive as `SelectionStats`.
+//
 // Right : a live perf chip (`<fps> fps`) that is clickable to expand a small
 //         panel with the full frame timings. The perf HUD migrated here out of
-//         the wgpu overlay -- shaping debug glyphs on the GPU every frame was
-//         pure waste for a developer read-out.
+//         the wgpu overlay. Shaping debug glyphs on the GPU every frame was pure
+//         waste for a developer read-out.
 //
 // DOM Leptos, like every other E3 chrome surface (context menu, filter popover,
 // FormatBar, Find&Replace) -- not a canvas `DrawSurface` band.

@@ -3,16 +3,16 @@
 //!
 //! **Why here.** Implementors live next to the engine whose commands they drive
 //! (`ambre-trame/src/fixtures/`, `ambre-toile/src/fixtures/`), so a schema change
-//! and its generator move in one commit. Rust's orphan rule then forbids
-//! defining [`FixtureGen`] anywhere downstream of them: `ambre-logic` depends on
-//! the apps, never the reverse. `ambre-core` is upstream of everything, already
-//! owns [`DocType`], and already carries `serde` and `hex` -- so the trait and
-//! the artifact types go here and the *behaviour* (loader, driver) stays in
+//! and its generator move in one commit. Rust's orphan rule then forbids defining
+//! [`FixtureGen`] anywhere downstream of them: `ambre-logic` depends on the apps,
+//! never the reverse. `ambre-core` is upstream of everything, already owns
+//! [`DocType`], and already carries `serde` and `hex`. So the trait and the
+//! artifact types go here, and the *behaviour* (loader, driver) stays in
 //! `ambre-logic`.
 //!
-//! Everything in this module is fixture code (I4) and sits behind the
-//! non-default `fixtures` feature: no client build names it, so none of it can
-//! reach a wasm artifact.
+//! Everything in this module is fixture code (I4) and sits behind the non-default
+//! `fixtures` feature. No client build names it, so none of it can reach a wasm
+//! artifact.
 
 use serde::{Deserialize, Serialize};
 
@@ -26,11 +26,11 @@ use crate::{DocType, Uuid};
 /// its seed.
 ///
 /// The third entropy source of I1: `export_ambre_plaintext` takes a UUID v7,
-/// which is time-ordered and partly random, so a generator that minted one would
+/// which is time-ordered and partly random. A generator that minted one would
 /// produce different bytes on every run. This derives all sixteen bytes from
-/// `seed` instead and then stamps the version / variant nibbles, so the result is
-/// still a well-formed v7 that the container and the registry accept -- its
-/// timestamp field simply carries seed material rather than a clock.
+/// `seed` instead, then stamps the version / variant nibbles. The result is still
+/// a well-formed v7 that the container and the registry accept. Its timestamp
+/// field simply carries seed material rather than a clock.
 ///
 /// Crypto-free by design: the mixer is SplitMix64, a finalizer chosen for being
 /// short and dependency-free. It is **not** a hash and nothing here relies on it
@@ -48,7 +48,7 @@ pub fn seeded_document_id(seed: u64) -> Uuid {
         chunk.copy_from_slice(&z.to_be_bytes());
     }
     // Version 7 in the high nibble of byte 6, RFC 4122 variant in the top two
-    // bits of byte 8 -- the two fields a reader may check.
+    // bits of byte 8. Those are the two fields a reader may check.
     bytes[6] = (bytes[6] & 0x0F) | 0x70;
     bytes[8] = (bytes[8] & 0x3F) | 0x80;
     Uuid::from_bytes(bytes)
@@ -90,10 +90,10 @@ pub fn fixture_peer_count(peers: impl IntoIterator<Item = u64>) -> u8 {
 
 /// One parametric document generator.
 ///
-/// Method-based rather than all-associated-item: the driver iterates a
-/// `&[&dyn FixtureGen]` registry, and a trait of bare consts and free functions
-/// is not object-safe -- it would force a hand-maintained table of function
-/// pointers, one more place to forget a generator.
+/// Method-based rather than all-associated-item. The driver iterates a `&[&dyn
+/// FixtureGen]` registry, and a trait of bare consts and free functions is not
+/// object-safe. It would force a hand-maintained table of function pointers,
+/// one more place to forget a generator.
 pub trait FixtureGen {
     /// Stable identity: the manifest's [`FixtureManifest::generator`] and the
     /// artifact **stem** -- the whole filename in `current/`, the part before the
@@ -113,12 +113,12 @@ pub trait FixtureGen {
 
     /// Bumped by the author when the produced document changes on purpose; the
     /// driver copies it into the manifest, having no other source for it. No
-    /// recipe reads it -- it exists for the reviewer looking at the manifest diff
-    /// and for the frozen belt, which retires its semantic comparison when
-    /// this no longer matches.
+    /// recipe reads it. It exists for the reviewer reading the manifest diff, and
+    /// for the frozen belt, which retires its semantic comparison when this no
+    /// longer matches.
     fn generator_version(&self) -> u32;
 
-    /// Build the document and return the plaintext `.ambre` bytes, i.e. the
+    /// Build the document and return the plaintext `.ambre` bytes, that is, the
     /// output of the app's `export_ambre_plaintext()`. Not a raw snapshot: the
     /// header makes the artifact self-describing and loadable through the
     /// production importer.
@@ -140,13 +140,13 @@ pub trait FixtureGen {
 /// Provenance for one committed artifact, written next to it as JSON.
 ///
 /// The `.ambre` header carries `doc_type` and `document_id` but no provenance,
-/// which a drift gate needs. JSON rather than a binary encoding because the
-/// manifest exists *because* an opaque binary has no reviewable diff: it lets CI
+/// which a drift gate needs. JSON rather than a binary encoding, because the
+/// manifest exists *because* an opaque binary has no reviewable diff. It lets CI
 /// and a human reviewer tell "regenerated, identical meaning" apart from "the
 /// schema drifted".
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct FixtureManifest {
-    /// Generator identity, e.g. `"trame/formula_dag_deep"`. Also the artifact
+    /// Generator identity, for example `"trame/formula_dag_deep"`. Also the artifact
     /// **stem**: the whole filename in `current/`, the part before the `@` in
     /// `frozen/`. `String` because `fixtures-check` reads manifests back
     /// off disk, and owned deserialization cannot borrow `'static`.
@@ -171,7 +171,7 @@ pub struct FixtureManifest {
     /// [`generator_version`](Self::generator_version), which tracks authorial
     /// intent rather than format. Read back from the generated document rather
     /// than declared, so a manifest cannot name a version its artefact does not
-    /// hold; `0` is what a document written before the register existed reads as
+    /// hold. `0` is what a document written before the register existed reads as
     /// (`SCHEMA-005`).
     pub schema_version: u32,
 
@@ -187,8 +187,8 @@ pub struct FixtureManifest {
     pub shape: FixtureShape,
 }
 
-/// Coarse size/complexity summary: when the bytes move, this says whether the
-/// document grew, lost a sheet, or is unchanged in shape, and checks it
+/// Coarse size/complexity summary. When the bytes move, this says whether the
+/// document grew, lost a sheet, or is unchanged in shape. It is checked
 /// against `shape_of` to catch a manifest committed out of sync with its
 /// artifact. **Not** a selection index -- lookup is by name.
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
@@ -198,9 +198,9 @@ pub struct FixtureShape {
     pub body: ShapeBody,
 }
 
-/// Per-app rather than a union of nullable counters: the apps that join later
-/// (`ambre-prose`, `ambre-murmure` -- `FIXTURES P2`) add a variant instead of
-/// widening every existing row with a field that means nothing to them.
+/// Per-app rather than a union of nullable counters. The apps that join later
+/// (`ambre-prose`, `ambre-murmure` -- `FIXTURES P2`) add a variant. They do
+/// not widen every existing row with a field that means nothing to them.
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub enum ShapeBody {
     Trame {

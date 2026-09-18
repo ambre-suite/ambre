@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-036` | `IO` | A size a user set MUST still be there after a reload. | this spec section 3 | `ambre_trame::logic::tests::group7::resize_survives_snapshot_roundtrip` -- a width exported and reimported, the height sharing the same write path | none | verified |
-| `TRAME-UI-037` | `INV` | A size MUST stay with its own column: inserting, deleting or moving a column MUST NOT transfer it to another. | this spec section 3 | none | unheld -- the entry is keyed by the column's stable id rather than by its position, which is what would make the rule true, and no test moves a sized column | unverified |
+| `TRAME-UI-037` | `INV` | A size MUST stay with its own column: inserting, deleting or moving a column MUST NOT transfer it to another. | this spec section 3 | none | unheld -- the entry is keyed by the column's stable id rather than by its position, which is what would make the rule true, and no test moves a sized column; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-038` | `CONC` | When two users size one column at the same moment, every peer MUST end on one size. | this spec section 2, row 1 | `ambre_trame::logic::tests::group7::concurrent_resize_of_same_col_converges_lww` | none | verified |
 
 ### 1.2 Drag a boundary
@@ -27,31 +27,29 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-039` | `POST` | A row MUST NOT be sized below its minimum height, wherever the pointer goes. | this spec section 2, row 4 | `ambre_trame::logic::tests::group7::resize_row_round_trips_and_clamps_to_minimum` -- it reads back the clamped height, and the drag guide is clamped on the same minimum before the release | none | verified |
-| `TRAME-UI-126` | `POST` | A column MUST NOT be sized below its minimum width, wherever the pointer goes. | this spec section 2, row 4 | none | unheld -- `resize_col` clamps on `MIN_COL_WIDTH` in `logic/metrics.rs` and no test reads a width back below it: it is the half `TRAME-UI-039` was carrying, and the two clamps are separate lines of code | unverified |
-| `TRAME-UI-040` | `POST` | A stored size MUST NOT depend on the zoom the user was viewing at. | this spec section 3 | none | unheld -- the release divides the on-screen extent back out by the zoom, and no test drives a resize at any zoom but one | unverified |
-| `TRAME-UI-041` | `POST` | A resize MUST reflow the grid before its confirmation arrives. | this spec section 3 | none | unheld -- the local size map is written before the command is sent, and nothing asserts the grid reflowed without the answer | unverified |
-| `TRAME-UI-127` | `FRAME` | A resize whose command did not reach the document MUST NOT stay in the grid. | this spec section 5; derived | none | fails -- `send_resize_col` writes the local map, then sends on the lossy class, and `send_command_lossy` returns nothing: a full channel logs a warning the caller never sees, so the grid keeps a width the document never took. It is the shape `BUS-018` bans, and the paste path at least learns of the drop. Answered by the `A dropped lossy request does not leave a stale screen` Story (`ambre-roadmap.md` E7) | unverified |
+| `TRAME-UI-126` | `POST` | A column MUST NOT be sized below its minimum width, wherever the pointer goes. | this spec section 2, row 4 | none | unheld -- `resize_col` clamps on `MIN_COL_WIDTH` in `logic/metrics.rs` and no test reads a width back below it: it is the half `TRAME-UI-039` was carrying, and the two clamps are separate lines of code; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-040` | `POST` | A stored size MUST NOT depend on the zoom the user was viewing at. | this spec section 3 | none | unheld -- the release divides the on-screen extent back out by the zoom, and no test drives a resize at any zoom but one; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-041` | `POST` | A resize MUST reflow the grid before its confirmation arrives. | this spec section 3 | none | unheld -- the local size map is written before the command is sent, and nothing asserts the grid reflowed without the answer; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-127` | `FRAME` | A resize whose command did not reach the document MUST NOT stay in the grid. | this spec section 5; derived | none | fails -- `send_resize_col` writes the local map, then sends on the lossy class, and `send_command_lossy` returns nothing: a full channel logs a warning the caller never sees, so the grid keeps a width the document never took. It is the shape `BUS-018` bans, and the paste path at least learns of the drop; lands with the `A dropped lossy request does not leave a stale screen` Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.3 Fit a boundary to its content
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-042` | `POST` | A double-click on a boundary MUST size the column to its content. | this spec section 4 | none | partial -- the measurement reads the cells the viewport holds, so the rule holds for what is on screen and no more (section 6) | unverified |
-| `TRAME-UI-128` | `FRAME` | An auto-fit MUST NOT shrink a column whose content it could not measure. | this spec section 4; derived | none | fails -- `resolve_autofit` walks the viewport cache, and a column whose cells are all outside it measures zero and is set to the default width. A double-click below the loaded window narrows a full column to the width of an empty one | unverified |
+| `TRAME-UI-042` | `POST` | A double-click on a boundary MUST size the column to its content. | this spec section 4 | none | partial -- the measurement reads the cells the viewport holds, so the rule holds for what is on screen and no more (section 6); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-128` | `FRAME` | An auto-fit MUST NOT shrink a column whose content it could not measure. | this spec section 4; derived | none | fails -- `resolve_autofit` walks the viewport cache, and a column whose cells are all outside it measures zero and is set to the default width. A double-click below the loaded window narrows a full column to the width of an empty one; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 
 * **Budget.** none: a resize writes one entry in the size register and repaints, and
   `ambre-spec-budgets.md` budgets no resize. The repaint sits in the frame phases of
   `ambre-spec-budgets.md section 2`.
 * **Boundary.** none of its own: a size is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 3 `verified`, 7 `unverified`. The document plane is held: the write, the
-  reload and the concurrent race all have tests. The minimum was counted for both axes and only
-  the row is read back, so the column clamp is now its own row. Every other gap is on the UI
-  thread, where the pointer meets the zoom and the cache, and reading the send path found two
-  the document did not rule: a resize is sent on the droppable class through a call that returns
-  nothing, so a dropped command leaves a width on screen that no peer has; and an auto-fit
-  measures the viewport cache, so a double-click on a column loaded nowhere near the pointer
-  shrinks it to the default instead of leaving it alone.
+* **Verification.** 3 `verified`, 2 `failing`, 5 `untested`. What holds is the document plane: the
+  write, the reload and the concurrent race each have a test. What is loose is the UI thread, where
+  the pointer meets the zoom and the cache, and the column clamp nothing reads back. A resize goes
+  out through a call that returns nothing, so a dropped command leaves a width no peer has. An
+  auto-fit measures the viewport cache, so a distant double-click shrinks a column to the default;
+  both failures are on the send path.
 
 ---
 
@@ -77,7 +75,7 @@ status values are normative in `ambre-spec-template.md`.
 | `col_widths_{sheet}` | the column's stable id | width in px (`f64`) | the column (`TRAME-UI-038`) |
 | `row_heights_{sheet}` | the row's stable id | height in px (`f64`) | the row |
 
-A column with no entry takes the default width, so a column reset to the default drops its entry
+A column with no entry takes the default width. A column reset to the default drops its entry
 rather than storing the default (`ambre-spec-trame-schema.md section 4`, "absence is a value").
 
 **Commands and events** (`ambre-bus`):
@@ -103,12 +101,12 @@ resize_preview: Option<ResizePreview>,    // Col(x) or Row(y), in physical px
 2. each move draws a guide at the prospective edge, clamped at the minimum (`TRAME-UI-039`,
    `TRAME-UI-126`);
 3. the release divides the on-screen extent by the zoom, then clamps again (`TRAME-UI-040`);
-4. the local size map takes the value first, so the grid reflows at once (`TRAME-UI-041`), and
-   nothing puts it back when the send that follows is dropped (`TRAME-UI-127`);
+4. the local size map takes the value first, so the grid reflows at once (`TRAME-UI-041`), and a
+   dropped send puts nothing back (`TRAME-UI-127`);
 5. one command per column goes out -- every column of the band when a whole-axis selection covers
    the dragged one;
 6. the Logic thread mints or resolves the column's stable id, writes the size against it, and
-   answers with a repaint; the next viewport answer carries the sizes back
+   answers with a repaint. The next viewport answer carries the sizes back
    (`features/ambre-spec-trame-grid-viewport.md section 2`).
 
 **What the Logic thread refuses.** A command naming a sheet other than the active one is dropped.
@@ -141,7 +139,7 @@ affordance instead (`features/ambre-spec-trame-headers.md section 3`). While a r
 pointer shows the axis it will move, and a hit anywhere else in the strip keeps its own cursor.
 
 **Auto-fit measurement.** The widths are measured with the text layout the renderer uses, over the
-cached cells of that column, and the widest one plus the cell padding becomes the width. The
+cached cells of that column. The widest one plus the cell padding becomes the width. The
 measurement needs the font context, which only the paint owns, so a double-click is recorded and
 resolved on the next frame.
 
@@ -169,21 +167,21 @@ resolved on the next frame.
   alone, so content further down the column does not count and the column comes out too narrow.
   The Logic thread holds the whole column and has no text measurement; nothing states which side
   should own it. Its worst case is `TRAME-UI-128`: measuring nothing is not read as "measure
-  later" but as "there is nothing", and the column is set to the default width.
+  later" but as "there is nothing". The column is set to the default width.
 * **A resize is sent on the droppable class, and the sender cannot tell** (`TRAME-UI-127`).
   `send_command_lossy` returns nothing, so a full channel is a log line and the local map has
   already taken the width. Every other document mutation of this crate goes out lossless, and the
   paste path reads the error back. `BUS-018` is the shared rule and it is `unimplemented`.
 * **A band resize is not one write.** One drag emits one command per column, each on its own, so a
-  full channel can land some of the band and drop the rest: the screen shows one width and the
+  full channel can land some of the band and drop the rest. The screen shows one width and the
   document holds two. Nothing rules whether a band is one gesture or several.
 * **Nothing drives a sized column through a structural change** (`TRAME-UI-037`). The keying makes
   the rule true by construction, which is exactly the claim a test is cheapest to make.
-* **Nothing drives a resize at a zoom other than one** (`TRAME-UI-040`), and the zoom is the one
+* **Nothing drives a resize at a zoom other than one** (`TRAME-UI-040`). The zoom is the one
   factor that turns a local preference into a shared value.
 * **A resize made on a sheet the user has just left is dropped silently.** No event tells the user,
   and no rule says whether the command should have been retargeted or refused.
-* **A band resize has no test** (section 2, row 5): one drag emits one command per column, and
+* **A band resize has no test** (section 2, row 5). One drag emits one command per column, and
   nothing asserts the count or that a mixed selection is left alone.
 * **A row that wraps its text has no automatic height.** The height is whatever a user set, so a
   wrapped or multi-line cell is clipped until it is resized by hand

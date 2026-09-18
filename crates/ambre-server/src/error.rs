@@ -89,8 +89,8 @@ impl IntoResponse for AppError {
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR"),
         };
 
-        // Log by severity: a 5xx is a genuine server fault (Redis/DB/S3/...) and
-        // must be loud; a 4xx is client-caused (bad auth, not found, conflict)
+        // Log by severity. A 5xx is a genuine server fault (Redis/DB/S3/...) and
+        // must be loud. A 4xx is client-caused (bad auth, not found, conflict)
         // and is routine, so it stays at debug to keep `error` meaningful.
         if status.is_server_error() {
             tracing::error!(error = %self, code = code);

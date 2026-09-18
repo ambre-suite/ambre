@@ -13,13 +13,13 @@ use std::fmt;
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DocType {
-    /// Prose – rich‑text collaborative editor.
+    /// Prose - rich-text collaborative editor.
     Prose = 0,
-    /// Trame – spreadsheet with formulas and real‑time collaboration.
+    /// Trame - spreadsheet with formulas and real-time collaboration.
     Trame = 1,
-    /// Toile – infinite canvas whiteboard and presentations.
+    /// Toile - infinite canvas whiteboard and presentations.
     Toile = 2,
-    /// Murmure – end‑to‑end encrypted messaging channels.
+    /// Murmure - end-to-end encrypted messaging channels.
     Murmure = 3,
 }
 
@@ -40,7 +40,7 @@ impl DocType {
         self as u8
     }
 
-    /// Returns a human‑readable name (English) for the document type.
+    /// Returns a human-readable name (English) for the document type.
     pub const fn name(self) -> &'static str {
         match self {
             Self::Prose => "Prose",
@@ -81,9 +81,9 @@ impl DocType {
     /// hardcodes a type.
     ///
     /// Only types whose Logic state can actually be instantiated
-    /// (`ambre_logic::DocState::new`) are listed: `Prose` and `Murmure` return
-    /// `None` there (no engine yet -- `Prose` lands in Epic `E5`), so creating
-    /// one would yield a document that never renders. `Prose` joins this list the
+    /// (`ambre_logic::DocState::new`) are listed. `Prose` and `Murmure` return
+    /// `None` there (no engine yet -- `Prose` lands in Epic `E5`). Creating one
+    /// would yield a document that never renders. `Prose` joins this list the
     /// moment its Logic state exists -- a one-entry change, no picker rework.
     pub const fn creatable() -> &'static [DocType] {
         &[Self::Trame, Self::Toile]
@@ -92,10 +92,10 @@ impl DocType {
     /// Returns a short description of the document type.
     pub const fn description(self) -> &'static str {
         match self {
-            Self::Prose => "Rich‑text collaborative editor",
-            Self::Trame => "Spreadsheet with formulas and real‑time collaboration",
+            Self::Prose => "Rich-text collaborative editor",
+            Self::Trame => "Spreadsheet with formulas and real-time collaboration",
             Self::Toile => "Infinite canvas whiteboard and presentations",
-            Self::Murmure => "End‑to‑end encrypted messaging channels",
+            Self::Murmure => "End-to-end encrypted messaging channels",
         }
     }
 }

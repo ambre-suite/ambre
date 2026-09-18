@@ -1,9 +1,10 @@
 //! Integration tests for the interop converters against golden fixtures
 //! (`toile-import-export`). Host tier only: pure functions, no network / MinIO.
 //!
-//! Covers each mapped SVG node type -> expected command batch, an SVG round-trip
-//! (import -> export -> import stability), every safety-limit reject path aborting
-//! atomically, embedded raster import, and the report of dropped constructs.
+//! Covers each mapped SVG node type -> expected command batch, and an SVG
+//! round-trip (import -> export -> import stability). It also covers every
+//! safety-limit reject path aborting atomically, embedded raster import, and the
+//! report of dropped constructs.
 
 use std::io::Cursor;
 

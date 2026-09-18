@@ -103,9 +103,9 @@ pub async fn create_snapshot(
         detail: e.to_string(),
     })?;
     // Bind the snapshot author to the session identity, like the WS `Update`
-    // author-key check. Each user has one signing key (the token's `spk` claim),
-    // so a member may only create a snapshot under their own key -- never
-    // attribute one to another member.
+    // author-key check. Each user has one signing key (the token's `spk` claim).
+    // A member may only create a snapshot under their own key, never attribute
+    // one to another member.
     if apk != s.signing_pubkey.as_slice() {
         return Err(AppError::Forbidden);
     }
@@ -152,7 +152,7 @@ pub async fn create_snapshot(
 }
 
 /// Request for a presigned snapshot upload URL. `size_bytes` is the size of the
-/// encrypted snapshot blob; it is validated against `snapshot_max_bytes` and
+/// encrypted snapshot blob. It is validated against `snapshot_max_bytes`, and
 /// bound into the presigned PUT URL so the upload cannot exceed it.
 #[derive(serde::Deserialize)]
 pub struct SnapshotUploadUrlRequest {
@@ -180,8 +180,9 @@ pub async fn snapshot_upload_url(
     if !["owner", "editor"].contains(&m.role.as_str()) {
         return Err(AppError::Forbidden);
     }
-    // Reject an oversized snapshot before handing out an upload URL, and bind the
-    // declared size into the presigned PUT so the actual upload cannot exceed it.
+    // Reject an oversized snapshot before handing out an upload URL. Bind the
+    // declared size into the presigned PUT, so the actual upload cannot exceed
+    // it.
     if req.size_bytes == 0 || req.size_bytes > state.config.snapshot_max_bytes {
         return Err(AppError::PayloadTooLarge(format!(
             "snapshot size {} bytes outside 1..={}",
@@ -227,7 +228,7 @@ pub async fn snapshot_download_url(
         .await?
         .ok_or(AppError::Forbidden)?;
     let snap_id = parse_snap_id(&req.snapshot_id)?;
-    // Resolve the snapshot scoped to the path document: a member of doc A must
+    // Resolve the snapshot scoped to the path document. A member of doc A must
     // never obtain a download URL for a snapshot of doc B (cross-document IDOR).
     let snap = db::get_snapshot(&state.db, &doc_id, &snap_id)
         .await?

@@ -7,7 +7,7 @@
 > coordinates. The name is stored with the document, so every collaborator reads the same one.
 
 One container, two commands and one resolution step. It is small, and it is where five rules the
-formula engine holds elsewhere stop holding: the same name resolves differently per reader, and a
+formula engine holds elsewhere stop holding. The same name resolves differently per reader, and a
 rename breaks what a formula would have survived.
 
 ---
@@ -21,35 +21,35 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-062` | `INV` | A name MUST resolve to the same cells for every reader. | this spec section 2, row 3 | none | fails -- an unqualified definition binds to engine sheet 0, which is whichever sheet the reader is looking at. The same `=SUM(TOTAL)` therefore totals a different sheet per open tab | unverified |
+| `TRAME-062` | `INV` | A name MUST resolve to the same cells for every reader. | this spec section 2, row 3 | none | fails -- an unqualified definition binds to engine sheet 0, which is whichever sheet the reader is looking at. The same `=SUM(TOTAL)` therefore totals a different sheet per open tab; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-066` | `INV` | A name MUST NOT be defined in terms of another name. | this spec section 3 | type-level -- the rebuild resolves every stored reference against an empty name table, and a bareword absent from it is a hard error, so the definition is dropped | none | verified |
 | `TRAME-064` | `INV` | A formula using a name MUST read the cells the name covers now, not the values they held when it was defined. | this spec section 3 | `ambre_trame::logic::tests::group1::named_range_defines_resolves_and_deletes` -- it edits a covered cell and reads the new total | none | verified |
-| `TRAME-067` | `INV` | A name reaching another sheet MUST survive that sheet being renamed. | this spec section 5 | none | fails -- the definition is stored as the user typed it, so a display-name qualifier is never rewritten to a stable id the way a formula's is (`TRAME-034`), and a rename leaves the name unresolvable | unverified |
+| `TRAME-067` | `INV` | A name reaching another sheet MUST survive that sheet being renamed. | this spec section 5 | none | fails -- the definition is stored as the user typed it, so a display-name qualifier is never rewritten to a stable id the way a formula's is (`TRAME-034`), and a rename leaves the name unresolvable; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-063` | `IO` | A name MUST survive closing and reopening the document. | this spec section 3 | `ambre_trame::logic::tests::group1::named_range_defines_resolves_and_deletes` -- it runs over a snapshot export and import | none | verified |
-| `TRAME-065` | `OBS` | A formula reading a name that no longer exists MUST show an error. | this spec section 5 | none | fails -- the cell falls back to displaying its own source, so a reader sees `=SUM(TOTAL)` where a number stood, and the test asserts that fallback | unverified |
-| `TRAME-068` | `CONC` | Two users defining the same name at once MUST converge on one definition. | this spec section 2, row 1 | none | unheld -- the container elects the whole name by last write, and no property drives a definition: the convergence op set carries no name command | unverified |
+| `TRAME-065` | `OBS` | A formula reading a name that no longer exists MUST show an error. | this spec section 5 | none | fails -- the cell falls back to displaying its own source, so a reader sees `=SUM(TOTAL)` where a number stood, and the test asserts that fallback; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-068` | `CONC` | Two users defining the same name at once MUST converge on one definition. | this spec section 2, row 1 | none | unheld -- the container elects the whole name by last write, and no property drives a definition: the convergence op set carries no name command; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Give a range a name
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-069` | `FAIL` | A definition that is not a reference MUST be refused when it is made. | this spec section 5 | none | fails -- an unparseable reference is stored, then silently dropped at each rebuild, so the name exists in the document and resolves nowhere | unverified |
-| `TRAME-155` | `FAIL` | A definition whose name no formula can read MUST be refused when it is made. | this spec section 4 | none | fails -- the command writes whatever key it is given, so `A1` or `1TOTAL` becomes a name the grammar of section 4 can never reach, and nothing checks the key against it | unverified |
+| `TRAME-069` | `FAIL` | A definition that is not a reference MUST be refused when it is made. | this spec section 5 | none | fails -- an unparseable reference is stored, then silently dropped at each rebuild, so the name exists in the document and resolves nowhere; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-155` | `FAIL` | A definition whose name no formula can read MUST be refused when it is made. | this spec section 4 | none | fails -- the command writes whatever key it is given, so `A1` or `1TOTAL` becomes a name the grammar of section 4 can never reach, and nothing checks the key against it; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 
 ### 1.3 Remove a name
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-156` | `FRAME` | Removing a name that was never defined MUST change nothing. | this spec section 3 | none | unheld -- the command returns before the write when the key is absent, emitting no event and no delta, and no test drives an unknown name | unverified |
+| `TRAME-156` | `FRAME` | Removing a name that was never defined MUST change nothing. | this spec section 3 | none | unheld -- the command returns before the write when the key is absent, emitting no event and no delta, and no test drives an unknown name; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** none: a name resolves through one map lookup while a formula compiles, and
   `ambre-spec-budgets.md` budgets no name resolution.
 * **Boundary.** none of its own: a name is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 3 `verified`, 7 `unverified`, 0 `unimplemented`. Five of the seven gaps are
-  rules the code contradicts rather than rules nothing exercises, and `TRAME-062` is the one that
-  matters: it breaks the engine's promise that a result does not depend on what the reader is
-  looking at (`TRAME-021`). The two that are merely untested guard the two commands: a concurrent
+* **Verification.** 3 `verified`, 5 `failing`, 2 `untested`, 0 `unimplemented`. Five of the seven gaps are
+  rules the code contradicts rather than rules nothing exercises. `TRAME-062` is the one that
+  matters: it breaks the engine's promise that a result does not depend on where the reader is
+  looking (`TRAME-021`). The two that are merely untested guard the two commands: a concurrent
   definition, and a removal of a name that was never there.
 
 ---
@@ -68,7 +68,7 @@ status values are normative in `ambre-spec-template.md`.
 ## 3. MODEL
 
 **Container.** `named_ranges`, a workbook-level map declared in
-`ambre-spec-trame-schema.md section 3`: the key is the name, the value is the reference in A1 text,
+`ambre-spec-trame-schema.md section 3`. The key is the name, the value is the reference in A1 text,
 and the name is the unit two concurrent writers race for.
 
 **Commands** (`ambre-bus`):
@@ -86,7 +86,7 @@ and the name is the unit two concurrent writers race for.
 3. A reference that fails to parse or to resolve is dropped, and the name is left absent
    (`TRAME-069`).
 4. Compilation expands a bareword in a formula into the target the table holds, before any binding
-   happens -- so a name is not a reference kind, it is a rewrite.
+   happens. A name is not a reference kind, it is a rewrite.
 
 **Defining, in steps.** Both commands follow one shape:
 
@@ -139,7 +139,7 @@ and the name is the unit two concurrent writers race for.
   error set, so an unresolvable name has nothing to display and the cell shows its own source.
 * **Nothing refuses a bad definition** (`TRAME-069`, `TRAME-155`). `DefineName` writes whatever key
   and whatever text it is given. A bad reference is checked at every rebuild afterwards, where the
-  only outcome is silence; a bad key is never checked at all, because the grammar that would reject
+  only outcome is silence. A bad key is never checked at all, because the grammar that would reject
   it runs on formulas and not on definitions. Both leave a name in the document that resolves
   nowhere, and the second one cannot even be typed to find out.
 * **No user can define a name.** The commands exist and the resolution works; the surface does not.

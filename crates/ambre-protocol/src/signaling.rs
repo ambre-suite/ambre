@@ -1,13 +1,13 @@
-//! WebSocket signaling messages for WebRTC meetings (Rendez‑Vous).
+//! WebSocket signaling messages for WebRTC meetings (Rendez-Vous).
 //!
-//! These messages are used to establish peer‑to‑peer connections between
+//! These messages are used to establish peer-to-peer connections between
 //! participants in a meeting. The server relays signaling messages but does
 //! not have access to the encrypted media streams (E2EE via SFrame).
 
 use ambre_core::UserId;
 use serde::{Deserialize, Serialize};
 
-/// Client‑to‑server signaling messages.
+/// Client-to-server signaling messages.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SignalingClientMsg {
     /// Send an SDP offer to a specific user.
@@ -21,7 +21,7 @@ pub enum SignalingClientMsg {
     },
 }
 
-/// Server‑to‑client signaling messages.
+/// Server-to-client signaling messages.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SignalingServerMsg {
     /// Forward an SDP offer from another participant.

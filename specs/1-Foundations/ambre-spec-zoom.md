@@ -8,8 +8,8 @@ shared chip is the "One zoom model" Story (`ambre-roadmap.md` E8).
 > factor from one chip. What zooms is the view alone: no collaborator sees it, and the document does
 > not carry it.
 
-Three editors zoom three spaces -- a grid, an endless board, a column of pages -- behind one model:
-a factor, a clamp, a fixed point, one ladder of presets. This document owns the model; each
+Three editors zoom three spaces: a grid, an endless board, a column of pages. One model carries
+them all -- a factor, a clamp, a fixed point, one ladder of presets. This document owns the model; each
 application maps it onto its own space, and `ambre-spec-chrome.md` owns the chip.
 
 ---
@@ -53,15 +53,16 @@ The user asks for the selection to fill the view. The target may be empty.
   cost the application's viewport already carries in `ambre-spec-budgets.md`. This document adds no
   operation of its own.
 * **Boundary.** none: a zoom is local view state. It writes no document, so nothing here reaches the
-  relay, holds a key or opens a socket, and `ambre-spec-zero-knowledge.md` seals every payload that
-  does leave the client.
-* **Verification.** 0 `verified`, 0 `unverified`, 10 `unimplemented`. The one engine is unbuilt:
-  Toile clamps and maps its own zoom today, Trame zooms its render without keys or pinch, and Prose
-  has no zoom at all -- the three per-application states are named in section 5. Writing the rules
-  before the code is what makes the three added ones cheap: `ZOOM-008`, because reaching no
-  collaborator is not the same rule as emitting no delta once presence exists; `ZOOM-009`, because
-  an empty target has a failure of its own; and `ZOOM-010`, the frame condition that keeps the
-  gesture repeatable.
+  relay, holds a key or opens a socket. `ambre-spec-zero-knowledge.md` seals every payload that does
+  leave the client.
+* **Verification.** 0 `verified`, 10 `unimplemented`. The one engine is unbuilt. Toile
+  clamps and maps its own zoom today, Trame zooms its render without keys or pinch, and Prose has no
+  zoom at all. Section 5 names the three per-application states.
+
+  Writing the rules before the code is what makes the three added ones cheap. `ZOOM-008`, because
+  reaching no collaborator is not the same rule as emitting no delta once presence exists.
+  `ZOOM-009`, because an empty target has a failure of its own. `ZOOM-010`, the frame condition that
+  keeps the gesture repeatable.
 
 ---
 
@@ -79,8 +80,9 @@ maps it onto its own space -- a grid cell, a world unit, a page point.
 pub struct Zoom { pub factor: f64, pub min: f64, pub max: f64 }
 ```
 
-**The preset ladder.** One ordered set of stops -- 50 %, 75 %, 100 %, 125 %, and up -- shared by
-every application and by the chip that lists them (`ambre-spec-chrome.md`, `CHROME-014`). An
+**The preset ladder.** One ordered set of stops: 50 %, 75 %, 100 %, 125 %, and up. Every
+application shares it, and so does the chip that lists them (`ambre-spec-chrome.md`,
+`CHROME-014`). An
 application clamps the ladder to its own range; it does not invent a ladder of its own (`ZOOM-006`).
 
 **A zoom, in steps.** The same four steps everywhere; only the mapping in step 3 is the
@@ -127,7 +129,7 @@ every editor.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The one engine is unbuilt.** Each application zooms in its own viewport today, so the shared
+* **The one engine is unbuilt.** Each application zooms in its own viewport today. The shared
   factor, the shared ladder and the shared commands are a design bound to the
   "One zoom model" Story (`ambre-roadmap.md` E8), not code.
 * **Toile zooms, without the shared model.** Toile clamps its camera and maps it

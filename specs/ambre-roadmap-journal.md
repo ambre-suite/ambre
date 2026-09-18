@@ -113,9 +113,9 @@ The MVP shipped functional and under-tested. This epic settled that debt before 
 Documents in known states, and the file they travel in. One epic because a fixture **is** an `.ambre`
 file and the fixture loader **is** the production importer.
 
-> **Gates.** `DOCFILE P1` follows `ARCH P8`: a file on a user's disk has unbounded age and is beyond
-> our reach to migrate, so it must not ship before payload migration has a mechanism. `EF` does not
-> block `E4`.
+> **Gates.** `DOCFILE P1` follows `ARCH P8`. A file on a user's disk has unbounded age and is
+> beyond our reach to migrate. It must not ship before payload migration has a mechanism. `EF` does
+> not block `E4`.
 >
 > **`FIXTURES P2` is the one story exempt from "green in CI".** Its benches read git-ignored corpora
 > no CI job builds, so the condition is unreachable by construction. It ships `[x]` when

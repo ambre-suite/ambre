@@ -16,10 +16,10 @@ const MARCHING_PERIOD: f64 = MARCHING_DASH + MARCHING_GAP;
 /// Radius of the inline insert pill (`trame-headers`).
 const BADGE_RADIUS: f64 = 7.5;
 
-/// Fill a disc of radius `r` centred on `(cx, cy)` with solid `color`, painted as
-/// 1px-tall horizontal `fill_rect` spans (the GPU surface only fills axis-aligned
-/// quads, so the circle is reproduced scanline by scanline). The half-pixel span
-/// height keeps the rim from looking ragged at small radii.
+/// Fill a disc of radius `r` centred on `(cx, cy)` with solid `color`. It is
+/// painted as 1px-tall horizontal `fill_rect` spans, since the GPU surface only
+/// fills axis-aligned quads, so the circle is reproduced scanline by scanline.
+/// The half-pixel span height keeps the rim from looking ragged at small radii.
 pub(crate) fn fill_disc<S: DrawSurface>(s: &mut S, cx: f64, cy: f64, r: f64, color: Color) {
     if r <= 0.0 {
         return;
@@ -49,7 +49,8 @@ pub(crate) fn draw_insert_badge<S: DrawSurface>(
 ) {
     let r = BADGE_RADIUS;
     // Halo: a slightly larger disc in the glyph colour gives the pill a crisp
-    // outline against the header so it floats rather than smearing into it.
+    // outline against the header. The pill then floats rather than smearing
+    // into it.
     fill_disc(s, cx, cy, r + 1.0, glyph);
     fill_disc(s, cx, cy, r, fill);
     // The "+" sign, in the contrasting glyph colour.
@@ -62,14 +63,14 @@ pub(crate) fn draw_insert_badge<S: DrawSurface>(
 /// The Material Design `MdiFilter` funnel path (`viewBox 0 0 24 24`), the exact
 /// `d` of `icondata::MdiFilter` used by the DOM chrome (`chrome/commands.rs`).
 /// Embedded as a const because `icondata` is a wasm-only dependency, whereas the
-/// renderer also compiles on the host for tests; this keeps the canvas glyph and
+/// renderer also compiles on the host for tests. This keeps the canvas glyph and
 /// the DOM icon a single, identical silhouette.
 const MDI_FILTER_PATH: &str = "M14,12V19.88C14.04,20.18 13.94,20.5 13.71,20.71C13.32,21.1 12.69,21.1 12.3,20.71L10.29,18.7C10.06,18.47 9.96,18.16 10,17.87V12H9.97L4.21,4.62C3.87,4.19 3.95,3.56 4.38,3.22C4.57,3.08 4.78,3 5,3V3H19V3C19.22,3 19.43,3.08 19.62,3.22C20.05,3.56 20.13,4.19 19.79,4.62L14.03,12H14Z";
 
-/// The `MdiFilter` outline, flattened to polylines and normalized into the unit
-/// box `[0,1]^2` (aspect-preserving, centred), computed once. Each inner `Vec`
-/// is one closed contour as `(x, y)` points; the GPU surface has no `fill_path`,
-/// so the glyph is reproduced by scanline-filling these contours (`trame-shared-filter`).
+/// The `MdiFilter` outline, flattened to polylines and normalized into the unit box
+/// `[0,1]^2` (aspect-preserving, centred), computed once. Each inner `Vec` is one closed
+/// contour as `(x, y)` points. The GPU surface has no `fill_path`, so the glyph is
+/// reproduced by scanline-filling these contours (`trame-shared-filter`).
 pub(crate) fn mdi_filter_polygon() -> &'static Vec<Vec<(f64, f64)>> {
     static POLY: std::sync::OnceLock<Vec<Vec<(f64, f64)>>> = std::sync::OnceLock::new();
     POLY.get_or_init(|| {
@@ -379,9 +380,9 @@ pub fn draw_overlay<S: DrawSurface>(
         }
     }
     // The active-cell 2px border is drawn only for a lone single-cell selection
-    // (Excel behaviour): in a multi-cell / disjoint selection the range fill +
-    // outline already mark the selection as one block, so a separate border on
-    // the active cell would read as a spurious second selection following the
+    // (Excel behaviour). In a multi-cell / disjoint selection the range fill +
+    // outline already mark the selection as one block. A separate border on the
+    // active cell would then read as a spurious second selection following the
     // cursor. When the active cell sits in a merged block the border wraps the
     // whole block, so the merge reads as one selected cell.
     if sel.kind == grid::SelKind::Cells
@@ -467,7 +468,7 @@ pub fn draw_overlay<S: DrawSurface>(
 
     // -- 2e. Inline insert "+" badge on the hovered header boundary (`trame-headers`).
     match state.insert_hint {
-        // ColInsert(i) inserts left of column i, i.e. at column i's left edge.
+        // ColInsert(i) inserts left of column i, that is, at column i's left edge.
         Some(grid::HeaderHit::ColInsert(i)) => {
             let bx = state.col_x(i);
             // At the top of the column separator: the pill hugs the header's top
@@ -486,9 +487,9 @@ pub fn draw_overlay<S: DrawSurface>(
     }
     let t_after_hdrs = clock.now_ms();
 
-    // The perf HUD no longer paints here: fps + frame timings are published to
-    // the DOM status bar (`ambre_canvas::PerfPublisher`) and rendered as plain
-    // text, so we never shape debug glyphs on the GPU. Only the timing the view
-    // feeds the snapshot is recorded.
+    // The perf HUD no longer paints here. Fps and frame timings are published
+    // to the DOM status bar (`ambre_canvas::PerfPublisher`) and rendered as
+    // plain text. We never shape debug glyphs on the GPU. Only the timing the
+    // view feeds the snapshot is recorded.
     stats.hdrs_ms = (t_after_hdrs - t0) as f32;
 }

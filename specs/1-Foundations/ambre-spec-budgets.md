@@ -6,8 +6,8 @@
 > budget cites the row here instead of restating the figure.
 
 * **Every budget of the workspace is a row here.** A budget a reader cannot compare to its
-  neighbour is a number, not a target, so no component spec carries one of its own: a rule that must
-  hold a budget cites the row instead (`CANVAS-005`, `FIXTURE-007`). `Method` names the mechanism
+  neighbour is a number, not a target. No component spec carries one of its own, and a rule that
+  must hold a budget cites the row instead (`CANVAS-005`, `FIXTURE-007`). `Method` names the mechanism
   that measures the row, and "**none exists**" is the honest value.
 * **This file is a register, not a specification.** It states no rule of its own, so it declares no
   contract table: `ambre-spec-template.md section 4` holds what a file of this class owes.
@@ -86,14 +86,14 @@
 
 * **The transport is not the cost.** UI <-> Logic stays zero-cost (`flume` by move, shared heap). The
   Logic <-> Sync `postMessage` hop adds a postcard encode plus a structured clone, or a zero-copy
-  `ArrayBuffer` transfer for a large payload -- bounded by the relay's per-frame cadence, well under
+  `ArrayBuffer` transfer for a large payload. The relay's per-frame cadence bounds it, well under
   the < 300 ms inter-user budget, because network latency dominates that path. The crypto bottleneck
   is Ed25519, 80 to 250 us.
 * **p99 over peak.** A stable 45 FPS reads as smoother than 60 FPS with stutters, so the target is
   regularity. A guaranteed 60 FPS on every mobile device is not a goal.
 * **The `.ambre` container has no budget, and that is a result.** It adds a 22-byte write and a
-  22-byte parse: an export is `export_snapshot()` plus a header, an import is a header parse plus
-  `import_snapshot`, and both of those legs are legs 2 to 4 of section 4. Its binary contribution is
+  22-byte parse. An export is `export_snapshot()` plus a header; an import is a header parse plus
+  `import_snapshot`. Both are legs 2 to 4 of section 4. Its binary contribution is
   negligible for the same reason -- a few dozen bytes in `ambre-core`, shared rather than duplicated
   per app (`ambre-spec-docfile.md section 3`).
 
@@ -122,19 +122,19 @@
 | **Total target** | **< 5 ms typical** | UI | 11 ms of margin for a complex case |
 | `TextCache`, 100 distinct layouts, cold cache | < 1 ms | UI | Not a frame phase: the shape budget of the cache itself, off the critical path once warm |
 
-* **The scroll round-trip holds because the frame is a fifth of it.** The P1 scroll round-trip is
-  budgeted at < 15 ms in section 1; rendering consumes < 5 ms and `flume` transport is negligible
-  (< 1 us per hop, no serialization, no boundary memcpy), which leaves most of the budget to the
-  Logic thread.
+* **The scroll round-trip holds because the frame is a fifth of it.** Section 1 budgets the P1 scroll
+  round-trip at < 15 ms. Rendering consumes < 5 ms. `flume` transport is negligible: < 1 us per
+  hop, no serialization, no boundary memcpy. Most of the budget is left to the Logic thread.
 * **Threats to the frame, and the countermeasure each takes.**
   1. **Parley has no incremental layout** -> atomicity at the **paragraph**, one `Layout` per
      paragraph. For Prose this shaping runs in the Logic thread, and a monster paragraph is split
      internally and deferred through the P1-P4 priority scheduler
-     (`4-Prose/features/ambre-spec-prose-pagination.md`) -- **not** `requestIdleCallback`, which
-     does not exist in the `wasm_thread` Logic worker. It stays available for opportunistic
+     (`4-Prose/features/ambre-spec-prose-pagination.md`). That scheduler is **not**
+     `requestIdleCallback`, which does not exist in the `wasm_thread` Logic worker. It stays
+     available for opportunistic
      UI-thread work.
   2. **Glyph atlas overflow** -> an LRU per 256^2 / 512^2 slot, one cache per size. UI thread.
-  3. **Scrolling a long document** -> per-paragraph virtualization: render the visible range plus a
+  3. **Scrolling a long document** -> per-paragraph virtualization. Render the visible range plus a
      buffer, cache the pre-shaped runs in the UI `RunCache`, and cull by page for Prose
      (`features/ambre-spec-prose-viewport.md`).
   4. **A multi-paragraph selection** -> reuse the cached `Layout` to extract the rectangles.
@@ -172,18 +172,18 @@
 | 5. First painted frame | the frame budget of section 2, GPU-bound |
 
 > **This section sets the missing figure, once it can be measured.** Legs 2 to 5 are pure functions
-> of a snapshot, so they are measurable on host with no network and no browser as soon as a large
-> document exists; leg 1 needs the db tier. `ambre-spec-fixtures.md` (`FIXTURES P2`) builds the
+> of a snapshot, so a large document makes them measurable on host, with no network and no browser.
+> Leg 1 needs the db tier. `ambre-spec-fixtures.md` (`FIXTURES P2`) builds the
 > corpus and runs those benches. Inventing an "open in < X ms" target before then would produce a
-> number with no basis, so this is recorded as a **known gap with an owner**, not as a budget.
+> number with no basis. This is recorded as a **known gap with an owner**, not as a budget.
 
 ---
 
 ## 5. BINARY SIZE
 
-* **Two binaries.** `ambre-app` carries UI plus Logic (wgpu, loro, leptos -- the heavy one) and
-  `ambre-sync` carries crypto plus protocol plus gloo-net (small, ~6.8 MB unoptimized, no wgpu, no
-  loro, no leptos). Only crypto, protocol and serde are duplicated across the two; the heavy
+* **Two binaries.** `ambre-app` carries UI plus Logic: wgpu, loro, leptos, the heavy one.
+  `ambre-sync` carries crypto plus protocol plus gloo-net, small at ~6.8 MB unoptimized, with no
+  wgpu, no loro and no leptos. Only crypto, protocol and serde are duplicated across the two; the heavy
   dependencies live once, in `ambre-app`. The two wasm fetches are parallelizable. **Total Main
   budget < 2 MB gzip**, and Prose interop stays **lazy-loaded**.
 

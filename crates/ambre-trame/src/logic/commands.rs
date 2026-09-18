@@ -26,13 +26,13 @@ impl TrameState {
     /// Execute one command and return its raw outcome, before the central
     /// [`UndoState`](TrameEvent::UndoState) refresh applied by [`handle_command`].
     pub(super) fn dispatch_command(&mut self, cmd: TrameCommand) -> TrameOutcome {
-        // Seal any still-open interactive edit group before handling the next
-        // command. An edit is grouped across all its commits (cell write plus
-        // derived side-effects such as a filtered-column recompute) and normally
-        // closed by `CommitEdit` on cell exit; this is the fallback boundary when
-        // the UI omits it (e.g. a non-edit command intervenes), so one cell edit
-        // is always exactly one undo item (`trame-cell-editing`, `trame-undo`).
-        // `group_end` is a no-op when no group is open.
+        // Seal any still-open interactive edit group before handling the next command.
+        // An edit is grouped across all its commits: the cell write plus derived
+        // side-effects such as a filtered-column recompute. It is normally closed by
+        // `CommitEdit` on cell exit. This is the fallback boundary when the UI omits it
+        // (for example a non-edit command intervenes). One cell edit is then always
+        // exactly one undo item (`trame-cell-editing`, `trame-undo`). `group_end` is a
+        // no-op when no group is open.
         self.undo_manager.group_end();
         match cmd {
             TrameCommand::SetActiveCell {
@@ -69,8 +69,8 @@ impl TrameState {
                     text,
                 );
                 // Open the edit group: the cell write below and any derived
-                // commit (filter recompute) merge into a single undo item, sealed
-                // by the next `CommitEdit` (or the fallback seal above).
+                // commit (filter recompute) merge into a single undo item. The
+                // next `CommitEdit` seals it, or the fallback seal above.
                 let _ = self.undo_manager.group_start();
                 self.write_cell(row, col, &text);
                 self.finish_cell_writes()
@@ -78,14 +78,14 @@ impl TrameState {
             TrameCommand::SetCellsBatch { cells } => {
                 tracing::info!("[Logic] SetCellsBatch {} cells", cells.len());
                 // A multi-cell fill / clear (Ctrl+Enter, Delete over a range).
-                // All writes share ONE undo group so the whole batch is a single
-                // undo item -- the group spans the loop and is sealed by the next
+                // All writes share ONE undo group, so the whole batch is a single
+                // undo item. The group spans the loop and is sealed by the next
                 // command's fallback `group_end` (or an explicit `CommitEdit`).
                 let _ = self.undo_manager.group_start();
                 // Pre-materialize every written cell so all the excluded-origin
                 // `materialize` commits happen up front. Interleaving them between
                 // the value commits would split the batch into one undo item per
-                // cell (see `write_cell`); doing them first leaves the value writes
+                // cell (see `write_cell`). Doing them first leaves the value writes
                 // in a single trailing commit -> one undo item for the batch.
                 for (row, col, text) in &cells {
                     if !text.is_empty() {
@@ -364,7 +364,7 @@ impl TrameState {
             // document's identity, which a workbook does not know
             // (`ambre-spec-docfile.md`). Its dispatcher intercepts the command
             // before the document lookup, so this arm is reached only by a
-            // caller driving `TrameState` directly -- and it answers rather than
+            // caller driving `TrameState` directly. It answers rather than
             // falling silent.
             TrameCommand::ExportAmbreFile | TrameCommand::ExportAmbreFileSealed { .. } => {
                 TrameOutcome::display_only(vec![TrameEvent::Error {
@@ -381,12 +381,12 @@ impl TrameState {
                 in_formulas,
             } => self.replace_one(query, replacement, match_case, whole_cell, in_formulas),
 
-            // Deferred feature surface (`trame-engine`): the
-            // command vocabulary is complete and typed, but these handlers land
-            // in later phases (personal views / multi-sort -> Phase 2,
-            // conditional formatting & validation -> Phase 2/3, protection ->
-            // Post-MVP). Until then each is an explicit no-op: no CRDT delta, no
-            // display event, so an early UI build can issue them harmlessly.
+            // Deferred feature surface (`trame-engine`): the command vocabulary
+            // is complete and typed. These handlers land in later phases
+            // (personal views / multi-sort -> Phase 2, conditional formatting &
+            // validation -> Phase 2/3, protection -> Post-MVP). Until then each
+            // is an explicit no-op: no CRDT delta, no display event, so an early
+            // UI build can issue them harmlessly.
             TrameCommand::SaveFilterView { .. }
             | TrameCommand::ActivateFilterView { .. }
             | TrameCommand::AddCondFormat { .. }
@@ -399,17 +399,17 @@ impl TrameState {
         }
     }
 
-    /// Apply one undo (`undo = true`) or redo step from Loro's `UndoManager`,
-    /// then rebuild every derived cache from the resulting CRDT state and
+    /// Apply one undo (`undo = true`) or redo step from Loro's `UndoManager`.
+    /// Then rebuild every derived cache from the resulting CRDT state and
     /// broadcast the inverse ops it produced (`trame-undo`).
     ///
     /// `undo()` / `redo()` commit the inverse of a past local commit as fresh
-    /// ops, so the rebuild path is identical to a structural op or import: the
-    /// index, merge cache, formula engine and formatting are all reseeded from
-    /// the new document state. Returns the same `DataReset` + active-cell state
-    /// the UI needs to repaint, plus an [`UndoState`] reporting the new stack
-    /// availability. When the requested stack is empty the call is a no-op and
-    /// only the (unchanged) availability is reported.
+    /// ops. The rebuild path is therefore identical to a structural op or
+    /// import. The index, merge cache, formula engine and formatting are all
+    /// reseeded from the new document state. Returns the same `DataReset` +
+    /// active-cell state the UI needs to repaint, plus an [`UndoState`]
+    /// reporting the new stack availability. When the requested stack is empty
+    /// the call is a no-op and only the (unchanged) availability is reported.
     ///
     /// [`UndoState`]: ambre_bus::TrameEvent::UndoState
     pub(super) fn apply_history(&mut self, undo: bool) -> TrameOutcome {

@@ -1,12 +1,11 @@
-// ambre-trame/src/logic/fill.rs
-// Autofill / fill handle (`trame-autofill`).
+// ambre-trame/src/logic/fill.rs Autofill / fill handle (`trame-autofill`).
 //
 // The UI drags the fill handle from the selection's bottom-right corner and
-// emits `FillRange { src, dest, mode }`; `dest` contains `src` and extends it
+// emits `FillRange { src, dest, mode }`. `dest` contains `src` and extends it
 // along a single axis (the handle locks to one direction). The Logic thread is
-// the only holder of document data, so the fill -- including numeric series
-// extrapolation, source tiling, relative-formula reindexing and style carry --
-// happens here. Submodule of `logic`, so it reaches the parent's private
+// the only holder of document data, so the fill happens here. That covers
+// numeric series extrapolation, source tiling, relative-formula reindexing and
+// style carry. Submodule of `logic`, so it reaches the parent's private
 // fields/helpers through `use super::*`.
 
 use super::*;
@@ -14,14 +13,15 @@ use crate::formula::shift::shift_formula;
 use ambre_bus::{FillMode, GridRange};
 
 impl TrameState {
-    /// Autofill `src` into `dest` (`trame-autofill`). `dest` contains `src`; the
-    /// cells of `dest \ src` are filled by extrapolating a numeric series or by
-    /// tiling/copying the source values per fill line (a column for a vertical
-    /// fill, a row for a horizontal one). A copied formula's relative references
-    /// reindex by its tile offset (every reference is relative -- AMBRE has no `$`
-    /// syntax), and each source cell's style is carried verbatim. The whole fill
-    /// is a single undo group. Returns a `DataReset` so the UI re-fetches the
-    /// filled region, plus the CRDT delta.
+    /// Autofill `src` into `dest` (`trame-autofill`). `dest` contains `src`. The
+    /// cells of `dest \ src` are filled by extrapolating a numeric series, or by
+    /// tiling/copying the source values per fill line. A fill line is a column
+    /// for a vertical fill, a row for a horizontal one.
+    ///
+    /// A copied formula's relative references reindex by its tile offset; every
+    /// reference is relative, as AMBRE has no `$` syntax. Each source cell's
+    /// style is carried verbatim. The whole fill is a single undo group. Returns
+    /// a `DataReset` so the UI re-fetches the filled region, plus the CRDT delta.
     pub(super) fn fill_range(
         &mut self,
         sheet_id: &str,
@@ -51,8 +51,8 @@ impl TrameState {
         let _ = self.undo_manager.group_start();
 
         // A source tiled by equal merged blocks (one block or a uniform grid of
-        // them) fills block by block and re-merges every tile (Excel behaviour,
-        // `trame-autofill`) instead of cell by cell.
+        // them) fills block by block, not cell by cell. Every tile is re-merged
+        // (Excel behaviour, `trame-autofill`).
         if let Some((bh, bw)) = self.merged_source_block(sr1, sc1, sr2, sc2) {
             return self.fill_merged(sr1, sc1, sr2, sc2, dr1, dc1, dr2, dc2, mode, bh, bw);
         }
@@ -69,10 +69,10 @@ impl TrameState {
     }
 
     /// Return the block size `(rows, cols)` when the source rect
-    /// `(sr1,sc1)-(sr2,sc2)` is exactly tiled by equal merged blocks -- one merge
-    /// or a uniform grid of identically sized merges, each with its master at the
-    /// tile corner (`trame-autofill`). `None` for a plain selection or a mix of
-    /// sizes, which then falls back to the per-cell fill.
+    /// `(sr1,sc1)-(sr2,sc2)` is exactly tiled by equal merged blocks
+    /// (`trame-autofill`). That means one merge, or a uniform grid of identically
+    /// sized merges, each with its master at the tile corner. `None` for a plain
+    /// selection or a mix of sizes, which then falls back to the per-cell fill.
     fn merged_source_block(&self, sr1: u32, sc1: u32, sr2: u32, sc2: u32) -> Option<(u32, u32)> {
         let (bb, rb) = self.merges.get(&(sr1, sc1)).copied()?;
         let bh = bb - sr1 + 1;
@@ -94,12 +94,12 @@ impl TrameState {
         Some((bh, bw))
     }
 
-    /// Autofill a merged source (one block or a uniform grid of `bh` x `bw`
-    /// blocks) over `dest` (`trame-autofill`): tile the blocks along the drag axis
-    /// and re-merge every tile to the block span. Each lane perpendicular to the
-    /// drag extrapolates independently from its own source blocks: a numeric series
-    /// progresses, otherwise the source blocks are copied cyclically (a copied
-    /// formula's relative refs reindex by the tile offset). The UI snaps `dest` to
+    /// Autofill a merged source (one block or a uniform grid of `bh` x `bw` blocks)
+    /// over `dest` (`trame-autofill`). Tiles the blocks along the drag axis and
+    /// re-merges every tile to the block span. Each lane perpendicular to the drag
+    /// extrapolates independently from its own source blocks: a numeric series
+    /// progresses, otherwise the source blocks are copied cyclically. A copied
+    /// formula's relative refs reindex by the tile offset. The UI snaps `dest` to
     /// whole blocks, so the tiles align; source tiles are skipped.
     #[allow(clippy::too_many_arguments)]
     fn fill_merged(
@@ -176,7 +176,7 @@ impl TrameState {
     /// source along the drag axis (`0` = first source block). `src_raw` /
     /// `(src_row, src_col)` are the source block this tile copies (cyclic for a
     /// multi-block source). The covered cells are cleared so the merge is
-    /// accepted, the master gets the series/copied value and the source block's
+    /// accepted. The master gets the series/copied value and the source block's
     /// style, and a merge entry is recorded for the tile.
     #[allow(clippy::too_many_arguments)]
     fn fill_merged_tile(
@@ -281,10 +281,10 @@ impl TrameState {
     }
 
     /// Write one filled cell at `(row, col)`. `idx` is its signed position along
-    /// the fill axis relative to the source origin (`0` = first source cell);
-    /// `span` is the source line length; `sources` are the source line's raw
-    /// strings. With a detected `series` the cell gets the extrapolated number;
-    /// otherwise the source value at the tiled position is copied (formulas
+    /// the fill axis relative to the source origin (`0` = first source cell).
+    /// `span` is the source line length, and `sources` are the source line's raw
+    /// strings. With a detected `series` the cell gets the extrapolated number.
+    /// Otherwise the source value at the tiled position is copied (formulas
     /// reindexed by the tile offset). The tiled source cell -- at `(src_row,
     /// src_col)` resolved below -- supplies the carried style in both cases.
     #[allow(clippy::too_many_arguments)]

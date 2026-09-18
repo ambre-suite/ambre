@@ -5,8 +5,8 @@ use rustis::commands::{
 };
 use rustis::resp::RefBulkString;
 
-/// Atomic Lua script that validates a client clock and assigns a
-/// global monotonic sequence number.
+/// Atomic Lua script that validates a client clock and assigns a global
+/// monotonic sequence number.
 ///
 /// - `KEYS[1]` = `doc:{id}:clocks` (hash: pub_key_hex -> last_clock)
 /// - `KEYS[2]` = `doc:{id}:seq`   (counter)
@@ -17,16 +17,16 @@ use rustis::resp::RefBulkString;
 ///
 /// # Why the clock hash is intentionally not pruned
 ///
-/// `doc:{id}:clocks` grows one field per distinct authoring signing key, which
-/// is bounded by the document's active device set (each member device signs
-/// with one identity key). It is deliberately never expired or trimmed:
+/// `doc:{id}:clocks` grows one field per distinct authoring signing key. That is
+/// bounded by the document's active device set: each member device signs with
+/// one identity key. It is deliberately never expired or trimmed:
 ///
 /// - A TTL that dropped the hash on a cold document would reset `current` to 0.
 ///   A legitimate author returning with its persisted monotonic clock at N > 1
-///   would then fail `N == 0 + 1` forever -- the strict-clock invariant would
-///   lock them out of their own document.
-/// - Per-author pruning on member revoke is not possible here either: the
-///   server only ever sees the signing key inside an update envelope and has no
+///   would then fail `N == 0 + 1` forever. The strict-clock invariant would lock
+///   them out of their own document.
+/// - Per-author pruning on member revoke is not possible here either. The server
+///   only ever sees the signing key inside an update envelope, and has no
 ///   `user_id -> signing_key` mapping to target.
 ///
 /// Removing an entry would also reopen the replay window this hash exists to
@@ -69,7 +69,7 @@ pub async fn verify_clock_and_assign_seq(
 }
 
 /// Reseeds a cold Redis clock/seq state to the durable high-water marks, using
-/// `MAX` semantics so it can never lower a value a concurrent live update already
+/// `MAX` semantics. It can never lower a value a concurrent live update already
 /// raised.
 ///
 /// - `KEYS[1]` = `doc:{id}:clocks` (hash: pub_key_hex -> last_clock)
@@ -90,10 +90,10 @@ end
 return 1
 "#;
 
-/// Whether the document's clock-validation state is absent from Redis. True after
-/// a Redis reset while Postgres kept the history: the per-author clock hash was
-/// the durable authority and is now gone, so it must be rehydrated before any
-/// update is validated (else `CLOCK_MISMATCH`, since clients hold advanced clocks).
+/// Whether the document's clock-validation state is absent from Redis. True after a
+/// Redis reset while Postgres kept the history. The per-author clock hash was the
+/// durable authority and is now gone, so it must be rehydrated before any update is
+/// validated. Otherwise `CLOCK_MISMATCH`, since clients hold advanced clocks.
 pub async fn clock_state_is_cold(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
@@ -139,8 +139,8 @@ pub async fn seed_clock_state(
 /// Appends a delta entry to the pending list for this document.
 ///
 /// The entry is a JSON blob `{ seq, s3_key, update_b64 }` carrying the full
-/// sealed Update wire, which the global S3 flusher picks up every 15 seconds
-/// and uploads to S3. The same bytes are replayed verbatim on reconnect.
+/// sealed Update wire. The global S3 flusher picks it up every 15 seconds
+/// and uploads it to S3. The same bytes are replayed verbatim on reconnect.
 pub async fn append_pending_delta(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
@@ -151,8 +151,8 @@ pub async fn append_pending_delta(
     use base64::Engine;
     let key = format!("doc:{document_id}:pending");
     // Store the FULL sealed Update wire (ciphertext + nonce + public_data +
-    // commitment + signature), not just the ciphertext: a reconnecting or
-    // cross-device client replays these verbatim and needs every field to
+    // commitment + signature), not just the ciphertext. A reconnecting or
+    // cross-device client replays these verbatim, and needs every field to
     // decrypt and verify. The flusher persists the same bytes to S3.
     let update_b64 = base64::engine::general_purpose::URL_SAFE.encode(update_wire);
     let blob = serde_json::json!({
@@ -165,18 +165,18 @@ pub async fn append_pending_delta(
         .rpush(&key, [&blob])
         .await
         .map_err(|e| AppError::Redis(format!("pending push failed: {e}")))?;
-    // Mark this document's pending list dirty AFTER the RPUSH so the flusher can
-    // iterate only documents that actually have pending deltas (SMEMBERS) instead
-    // of SCANning the whole keyspace every cycle. The RPUSH-then-SADD order is
-    // load-bearing: `clear_pending_dirty_if_empty` relies on the entry being
-    // visible in the list before the marker exists, so an append concurrent with a
-    // drain can never leave the list non-empty while the marker is cleared.
+    // Mark this document's pending list dirty AFTER the RPUSH. The flusher can
+    // then iterate only documents that actually have pending deltas (SMEMBERS),
+    // instead of SCANning the whole keyspace every cycle. The RPUSH-then-SADD
+    // order is load-bearing. `clear_pending_dirty_if_empty` relies on the entry
+    // being visible in the list before the marker exists. So an append concurrent
+    // with a drain can never leave the list non-empty while the marker is cleared.
     //
-    // The mark is a best-effort hint, NOT a durability guard: the delta is already
+    // The mark is a best-effort hint, NOT a durability guard. The delta is already
     // safely RPUSHed, and the flusher's periodic SCAN reconciliation re-marks any
-    // pending key that missed its SADD. So a failed mark is logged, not
-    // propagated -- returning an error here would make `handle_update` dead-letter
-    // a delta that is in fact safely queued.
+    // pending key that missed its SADD. So a failed mark is logged, not propagated
+    // -- returning an error here would make `handle_update` dead-letter a delta
+    // that is in fact safely queued.
     if let Err(e) = mark_pending_dirty(redis, &key).await {
         tracing::warn!(key = %key, error = %e, "pending dirty mark failed (reconcile will recover)");
     }
@@ -207,9 +207,9 @@ pub async fn dirty_pending_keys(redis: &Client) -> Result<Vec<String>, AppError>
 }
 
 /// Atomically clears `pending_key` from the dirty set, but ONLY if its pending
-/// list is now empty. Run after a drain: an entry appended concurrently (RPUSH
+/// list is now empty. Run after a drain. An entry appended concurrently (RPUSH
 /// before its SADD, see `append_pending_delta`) is already visible in the list
-/// here, so `LLEN > 0` keeps the marker and the delta is retried next cycle --
+/// here. So `LLEN > 0` keeps the marker, and the delta is retried next cycle:
 /// an acknowledged delta is never stranded.
 pub async fn clear_pending_dirty_if_empty(
     redis: &Client,
@@ -224,14 +224,14 @@ pub async fn clear_pending_dirty_if_empty(
 }
 
 /// Pushes a delta that could not be enqueued for S3 flushing onto a durable
-/// dead-letter list (`doc:{id}:deadletter`) so an operator can inspect and
+/// dead-letter list (`doc:{id}:deadletter`). An operator can then inspect and
 /// replay it (H1).
 ///
-/// This is the fallback when `append_pending_delta` fails: the pending list is
-/// the only path a sequenced delta takes to S3, so without a dead-letter the
-/// seq is silently lost from the durable index after it has already been
-/// assigned and acknowledged. The list is never trimmed automatically; it is an
-/// operator signal, not a hot path.
+/// This is the fallback when `append_pending_delta` fails. The pending list is
+/// the only path a sequenced delta takes to S3. Without a dead-letter the seq
+/// is silently lost from the durable index, after it has already been assigned
+/// and acknowledged. The list is never trimmed automatically; it is an operator
+/// signal, not a hot path.
 pub async fn push_dead_letter(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
@@ -264,9 +264,9 @@ pub async fn push_dead_letter(
 ///
 /// Replay resolves each missed seq from S3 first and falls back to a still-
 /// pending delta. Doing that fallback with a per-seq lookup issued one full
-/// `LRANGE` (plus a JSON re-parse of the entire list) for EACH missed seq inside
-/// the concurrent fan-out -- O(N^2) on the pre-flush window. Loading the list
-/// once turns every fallback into a map lookup.
+/// `LRANGE` for EACH missed seq, inside the concurrent fan-out. Each one
+/// re-parsed the entire list as JSON. That is O(N^2) on the pre-flush window.
+/// Loading the list once turns every fallback into a map lookup.
 pub async fn get_pending_deltas_map(
     redis: &Client,
     document_id: &ambre_core::DocumentId,
@@ -295,13 +295,13 @@ pub async fn get_pending_deltas_map(
 /// Tries to acquire the per-document flush lock (`SET lock_key token NX EX ttl`).
 ///
 /// Returns `true` if this caller now holds the lock. The background S3 flusher
-/// runs once per server instance; without this lock two instances can `LRANGE`
+/// runs once per server instance. Without this lock two instances can `LRANGE`
 /// the same pending list, both upload, then both `LTRIM` the front by their own
 /// processed count. Deltas `RPUSH`ed by clients during the flush window sit at
-/// the tail and get trimmed away by the second, stale `LTRIM` -- a durable loss
-/// of an already-sequenced, already-acknowledged delta. Serializing the flush
-/// per document closes that race. The write path (`RPUSH` in `handle_update`)
-/// never touches this lock, so collaborators are unaffected.
+/// the tail, and get trimmed away by the second, stale `LTRIM`. That is a durable
+/// loss of an already-sequenced, already-acknowledged delta; serializing the
+/// flush per document closes that race. The write path (`RPUSH` in
+/// `handle_update`) never touches this lock, so collaborators are unaffected.
 pub async fn try_acquire_flush_lock(
     redis: &Client,
     lock_key: &str,
@@ -318,7 +318,7 @@ pub async fn try_acquire_flush_lock(
 }
 
 /// Releases the per-document flush lock, but only if `token` still matches
-/// (check-and-del) so an expired-then-reacquired lock owned by another instance
+/// (check-and-del). An expired-then-reacquired lock owned by another instance
 /// is never dropped by a slow predecessor.
 pub async fn release_flush_lock(
     redis: &Client,
@@ -428,7 +428,7 @@ pub async fn refresh_claim(redis: &Client, token: &str) -> Result<bool, AppError
 ///
 /// A `refresh_get` followed by an unchecked `refresh_delete` is not sufficient
 /// for rotation. Two concurrent requests presenting the same token both observe
-/// the record before either deletes it, so both mint a fresh session and the
+/// the record before either deletes it. Both then mint a fresh session, and the
 /// replay goes undetected. Gating on the [`refresh_claim`] result closes that.
 pub async fn refresh_consume(redis: &Client, token: &str) -> Result<Option<RefreshData>, AppError> {
     let Some(data) = refresh_get(redis, token).await? else {
@@ -450,7 +450,7 @@ pub async fn doc_broadcast(
 ) -> Result<(), AppError> {
     let channel = format!("doc:{document_id}");
     // The payload is binary (encrypted ciphertext). rustis serializes a raw
-    // `&[u8]` as a sequence of integers (a serde limitation) and panics; wrap it
+    // `&[u8]` as a sequence of integers (a serde limitation) and panics. Wrap it
     // in `RefBulkString` so it is sent as a single RESP bulk string.
     redis
         .publish(&channel, RefBulkString::new(payload))
@@ -512,8 +512,8 @@ pub async fn doc_presence_update(
     // so a member who leaves without a clean unsubscribe self-prunes from the
     // hash. Without a per-field TTL the presence hash grew one dead field per
     // distinct author forever. `HEXPIRE key ttl FIELDS 1 field` returns an array
-    // of per-field status codes; the outcome is advisory here (a missing field or
-    // unsupported server is non-fatal for a fire-and-forget presence write).
+    // of per-field status codes. The outcome is advisory here: a missing field or
+    // unsupported server is non-fatal for a fire-and-forget presence write.
     const HEXPIRE_LUA: &str =
         "return redis.call('HEXPIRE', KEYS[1], ARGV[1], 'FIELDS', 1, ARGV[2])";
     let ttl = ttl_secs.to_string();
@@ -594,10 +594,10 @@ pub async fn oidc_state_take(
     csrf_state: &str,
 ) -> Result<(String, String), AppError> {
     let key = format!("oidc:state:{csrf_state}");
-    // Read into a `HashMap`, NOT a `Vec<String>`: under RESP3 rustis returns a
-    // hash reply as a map, and deserializing that into a flat `Vec<String>` fails
-    // with "invalid type: sequence, expected a string" -- which surfaced here as a
-    // spurious `SessionExpired` on EVERY OIDC callback (login fully broken). Mirror
+    // Read into a `HashMap`, NOT a `Vec<String>`. Under RESP3 rustis returns a hash
+    // reply as a map, and deserializing that into a flat `Vec<String>` fails with
+    // "invalid type: sequence, expected a string". That surfaced here as a spurious
+    // `SessionExpired` on EVERY OIDC callback (login fully broken). Mirror
     // `refresh_get`, which reads the same shape correctly.
     let fields: std::collections::HashMap<String, String> = redis
         .hgetall(&key)
@@ -971,10 +971,10 @@ mod redis_integration_tests {
         let _ = redis.del([key.as_str()]).await;
     }
 
-    // Reproduces the CLOCK_MISMATCH bug after a Redis reset: with a cold clock
+    // Reproduces the CLOCK_MISMATCH bug after a Redis reset. With a cold clock
     // state, reseeding it to the durable per-author high-water mark N must let the
-    // author's next update at clock N+1 validate, instead of being rejected against
-    // a phantom current=0.
+    // author's next update at clock N+1 validate. It must not be rejected against a
+    // phantom current=0.
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn seed_clock_state_unblocks_the_next_update_after_a_redis_reset() {

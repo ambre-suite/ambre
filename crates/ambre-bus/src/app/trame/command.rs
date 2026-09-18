@@ -7,9 +7,9 @@
 use super::*;
 use crate::UserId;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Trame (spreadsheet) — commands (UI → Logic)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Trame (spreadsheet) -- commands (UI -> Logic)
+// -----------------------------------------------------------------------------
 
 /// Commands sent from the UI Thread to the Trame logic for an open document.
 #[derive(Debug, Clone)]
@@ -19,9 +19,9 @@ pub enum TrameCommand {
     /// The UI Thread computes the visible range (plus padding) from its scroll
     /// position and grid dimensions; the Logic thread replies with a
     /// [`TrameEvent::ViewportData`](super::TrameEvent::ViewportData) covering
-    /// `[row_start..=row_end] × [col_start..=col_end]`.
+    /// `[row_start..=row_end] x [col_start..=col_end]`.
     ///
-    /// `version` is a monotonic counter: the UI Thread discards any response
+    /// `version` is a monotonic counter: the UI Thread drops any response
     /// whose version is older than the last accepted one.
     ScrollViewport {
         version: u64,
@@ -61,36 +61,36 @@ pub enum TrameCommand {
     /// optimistically, so no echo event is required.
     SetCellText { row: u32, col: u32, text: String },
 
-    /// Set the plaintext content of many cells in one shot, as `(row, col,
-    /// text)` triples. Emitted for a multi-cell fill (Ctrl+Enter) or a clear over
-    /// a range (Delete on a selection). The Logic thread applies every write
-    /// inside a single `UndoManager` group, so the whole batch is one undo item
-    /// (unlike a stream of `SetCellText`, each of which is its own item). An
-    /// empty `text` clears that cell.
+    /// Set the plaintext content of many cells in one shot, as `(row, col, text)`
+    /// triples. Emitted for a multi-cell fill (Ctrl+Enter) or a clear over a
+    /// range (Delete on a selection). The Logic thread applies every write inside
+    /// a single `UndoManager` group, so the whole batch is one undo item. A
+    /// stream of `SetCellText` differs: each write is its own item. An empty
+    /// `text` clears that cell.
     SetCellsBatch { cells: Vec<(u32, u32, String)> },
 
-    /// Close the undo group opened by the cell edit, on cell exit
-    /// (`trame-cell-editing`, `trame-undo`). An interactive edit can
-    /// mutate the `LoroDoc` more than once -- the cell write plus derived
-    /// side-effects such as a filtered-column recompute -- and Loro records one
-    /// `UndoManager` item per commit. The Logic thread groups every mutation of
-    /// the edit into a single undo item and seals that group when this command
-    /// arrives, so the whole cell edit is exactly one undo step (1 cell edit = 1
-    /// undo item). Emitted by the UI right after the committing
-    /// [`SetCellText`](TrameCommand::SetCellText) when leaving the inline editor;
-    /// produces no CRDT delta of its own. A no-op if no edit group is open.
+    /// Close the undo group opened by the cell edit, on cell exit (`trame-cell-editing`,
+    /// `trame-undo`). An interactive edit can mutate the `LoroDoc` more than once: the cell
+    /// write, plus derived side-effects such as a filtered-column recompute. Loro records one
+    /// `UndoManager` item per commit. The Logic thread groups every mutation of the edit into a
+    /// single undo item, and seals that group when this command arrives. The whole cell edit is
+    /// then exactly one undo step (1 cell edit = 1 undo item).
+    ///
+    /// Emitted by the UI right after the committing [`SetCellText`](TrameCommand::SetCellText)
+    /// when leaving the inline editor; produces no CRDT delta of its own. A no-op if no edit
+    /// group is open.
     CommitEdit,
 
     /// Apply a sparse formatting [`StylePatch`] to every cell of the tracked
     /// selection (`trame-cell-styles`). The Logic thread resolves the geometry from
-    /// the selection it keeps via [`SetActiveCell`](TrameCommand::SetActiveCell)
-    /// -- the same parameterless-geometry contract as the structural intents --
-    /// merges the patch into each cell's stored style, persists the result in the
-    /// per-sheet style containers (a synchronised CRDT mutation, hence undoable),
-    /// reformats display text for any number-format change, and replies with a
-    /// [`TrameEvent::StyleApplied`](super::TrameEvent::StyleApplied) carrying
-    /// the active cell's resulting style plus a [`DataReset`] so the UI re-fetches
-    /// the restyled viewport.
+    /// the selection it keeps via [`SetActiveCell`](TrameCommand::SetActiveCell),
+    /// the same parameterless-geometry contract as the structural intents. It
+    /// merges the patch into each cell's stored style. The result is persisted in
+    /// the per-sheet style containers, a synchronised CRDT mutation, hence
+    /// undoable. It reformats display text for any number-format change. It replies
+    /// with a [`TrameEvent::StyleApplied`](super::TrameEvent::StyleApplied)
+    /// carrying the active cell's resulting style, plus a [`DataReset`] so the UI
+    /// re-fetches the restyled viewport.
     ///
     /// [`DataReset`]: super::TrameEvent::DataReset
     SetCellStyle { patch: StylePatch },
@@ -119,9 +119,9 @@ pub enum TrameCommand {
 
     /// Move the row at grid position `from` to grid position `to` (Excel-style
     /// drag reorder), shifting the rows in between to fill the gap. Realized as a
-    /// single `LoroMovableList::mov` on `rows_{sheet}`: cells keyed by the
-    /// move-invariant `(row_uid, col_uid)` pair travel with their row and no
-    /// reference is rewritten -- every `A1` resolves to its row's new position
+    /// single `LoroMovableList::mov` on `rows_{sheet}`. Cells keyed by the
+    /// move-invariant `(row_uid, col_uid)` pair travel with their row, and no
+    /// reference is rewritten. Every `A1` resolves to its row's new position
     /// (`trame-formula-engine`, the same guarantee as sort). Concurrent moves
     /// converge by LWW on the list order. A no-op if `from == to` or either index
     /// is outside the materialized used range.
@@ -152,16 +152,16 @@ pub enum TrameCommand {
     /// inside a merge.
     UnmergeCells { row: u32, col: u32 },
 
-    /// Set the width (physical px) of column `col` on `sheet_id`
-    /// (`trame-resize`, `trame-engine`). The Logic thread writes the value
-    /// into the per-sheet `col_widths_{sheet}` LWW map keyed by the column's
-    /// stable `Uid`, clamped to a minimum, and replies with a [`DataReset`] so the
-    /// UI re-fetches the viewport (whose [`ViewportData`] now carries the new
-    /// per-column widths). A synchronised CRDT mutation, hence undoable; two peers
-    /// resizing the same column converge by LWW, like any cell write.
+    /// Set the width (physical px) of column `col` on `sheet_id` (`trame-resize`,
+    /// `trame-engine`). The Logic thread writes the value into the per-sheet
+    /// `col_widths_{sheet}` LWW map keyed by the column's stable `Uid`, clamped to
+    /// a minimum. It then replies with a [`DataReset`], so the UI re-fetches the
+    /// viewport (whose [`ViewportData`] now carries the new per-column widths). A
+    /// synchronised CRDT mutation, hence undoable; two peers resizing the same
+    /// column converge by LWW, like any cell write.
     ///
-    /// [`DataReset`]: super::TrameEvent::DataReset
-    /// [`ViewportData`]: super::TrameEvent::ViewportData
+    /// [`DataReset`]: super::TrameEvent::DataReset [`ViewportData`]:
+    /// super::TrameEvent::ViewportData
     ResizeCol {
         version: u64,
         sheet_id: String,
@@ -227,13 +227,13 @@ pub enum TrameCommand {
     /// Sort the whole sheet descending on the active cell's column
     /// (see [`SortSheetAsc`](TrameCommand::SortSheetAsc)).
     SortSheetDesc,
-    /// Multi-column sort of the current selection rectangle (`trame-sort`,
-    /// the "Sort range..." dialog). Parameterless sibling of
-    /// [`SortRangeMulti`](TrameCommand::SortRangeMulti): the Logic thread resolves
-    /// the range and the active sheet from the tracked selection, then sorts the
-    /// rows lexicographically by `sort_keys` (decreasing priority; each `col` is
-    /// an index within the selection, `0` = the selection's left column). Replies
-    /// with [`TrameEvent::SortComplete`](super::TrameEvent::SortComplete).
+    /// Multi-column sort of the current selection rectangle (`trame-sort`, the "Sort
+    /// range..." dialog). Parameterless sibling of
+    /// [`SortRangeMulti`](TrameCommand::SortRangeMulti). The Logic thread resolves the
+    /// range and the active sheet from the tracked selection, then sorts the rows
+    /// lexicographically by `sort_keys`. Priority decreases along that list, and each `col`
+    /// is an index within the selection (`0` = the selection's left column). Replies with
+    /// [`TrameEvent::SortComplete`](super::TrameEvent::SortComplete).
     SortSelectionMulti {
         sort_keys: Vec<SortKey>,
         has_header: bool,
@@ -246,23 +246,23 @@ pub enum TrameCommand {
     /// [`TrameEvent::ColumnValues`](super::TrameEvent::ColumnValues)
     /// (deduplicated, sorted). A read-only query: no CRDT delta.
     RequestActiveColumnValues,
-    /// Request the aggregates (Sum / Average / Count / Min / Max) of the tracked
-    /// selection, for the status bar (`trame-status-bar`). The selection can
-    /// exceed the viewport, so only the Logic thread (which holds every cell) can
-    /// compute them. Parameterless: the Logic thread resolves the active sheet and
-    /// the tracked selection rectangle itself -- the same convention as the sort /
-    /// filter / [`RequestActiveColumnValues`] siblings (the spec sketch passed
-    /// `sheet_id`/`range`, but this codebase resolves geometry Logic-side). Replies
-    /// with [`TrameEvent::SelectionStats`](super::TrameEvent::SelectionStats).
-    /// A read-only query: no CRDT delta. The UI sends it only on a multi-cell
-    /// selection; a lone cell shows no aggregates.
+    /// Request the aggregates (Sum / Average / Count / Min / Max) of the tracked selection,
+    /// for the status bar (`trame-status-bar`). The selection can exceed the viewport, so
+    /// only the Logic thread (which holds every cell) can compute them. Parameterless: the
+    /// Logic thread resolves the active sheet and the tracked selection rectangle, the same
+    /// convention as the sort / filter / [`RequestActiveColumnValues`] siblings. The spec
+    /// sketch passed `sheet_id`/`range`, but this codebase resolves geometry Logic-side.
+    ///
+    /// Replies with [`TrameEvent::SelectionStats`](super::TrameEvent::SelectionStats). A
+    /// read-only query: no CRDT delta. The UI sends it only on a multi-cell selection; a
+    /// lone cell shows no aggregates.
     ///
     /// [`RequestActiveColumnValues`]: TrameCommand::RequestActiveColumnValues
     RequestSelectionStats,
-    /// Build the clipboard payload for the tracked selection (`trame-clipboard`).
-    /// The parameterless-geometry sibling of copy: the Logic thread is the only
-    /// holder of document data, so it serializes the selected cells (never culled
-    /// to a viewport) into a [`ClipboardPayload`] and replies with
+    /// Build the clipboard payload for the tracked selection (`trame-clipboard`). The
+    /// parameterless-geometry sibling of copy. The Logic thread is the only holder of
+    /// document data, so it serializes the selected cells (never culled to a viewport) into
+    /// a [`ClipboardPayload`]. It replies with
     /// [`TrameEvent::Clipboard`](super::TrameEvent::Clipboard). Non-mutating.
     CopyRange,
     /// Apply a shared filter to the active cell's column (`trame-shared-filter`).
@@ -281,16 +281,15 @@ pub enum TrameCommand {
     /// [`ClearFilter`]: TrameCommand::ClearFilter
     ClearActiveFilter,
 
-    /// Paste a clipboard [`ClipboardPayload`] with its top-left landing on
-    /// `(target_row, target_col)` (`trame-clipboard`). The Logic thread is the
-    /// only holder of document data, so the paste -- including relative-formula
-    /// reindexing and style application -- happens here: every pasted cell lands
-    /// at `(target_row + dr, target_col + dc)`, a formula's relative references
-    /// shift by `(target_row - src_row, target_col - src_col)`, and the carried
-    /// [`CellStyle`] (plus bold/italic) is written verbatim. The whole paste is a
-    /// single undo group. Replies with a [`DataReset`] so the UI re-fetches the
-    /// pasted region; a paste blocked by a protected range (Post-MVP) replies
-    /// [`TrameEvent::PasteRejected`](super::TrameEvent::PasteRejected).
+    /// Paste a clipboard [`ClipboardPayload`] with its top-left landing on `(target_row,
+    /// target_col)` (`trame-clipboard`). The Logic thread is the only holder of document
+    /// data, so the paste happens here, relative-formula reindexing and style application
+    /// included. Every pasted cell lands at `(target_row + dr, target_col + dc)`, a
+    /// formula's relative references shift by `(target_row - src_row, target_col -
+    /// src_col)`, and the carried [`CellStyle`] (plus bold/italic) is written verbatim. The
+    /// whole paste is a single undo group. Replies with a [`DataReset`] so the UI
+    /// re-fetches the pasted region; a paste blocked by a protected range (Post-MVP)
+    /// replies [`TrameEvent::PasteRejected`](super::TrameEvent::PasteRejected).
     ///
     /// [`DataReset`]: super::TrameEvent::DataReset
     PasteRange {
@@ -299,38 +298,37 @@ pub enum TrameCommand {
         payload: ClipboardPayload,
     },
 
-    /// Paste plain tab-separated `text` at the tracked active cell
-    /// (`trame-clipboard`). The parameterless-geometry sibling of
-    /// [`PasteRange`](TrameCommand::PasteRange): the Logic thread resolves the
-    /// target from the active cell it keeps via
-    /// [`SetActiveCell`](TrameCommand::SetActiveCell), so a toolbar/menu Paste
-    /// button -- which reads the OS clipboard asynchronously and has no view
-    /// state -- can paste without knowing the cursor. Each field becomes a
-    /// literal cell (no relative-formula reindexing, the source is external).
-    /// Replies with a [`DataReset`](super::TrameEvent::DataReset).
+    /// Paste plain tab-separated `text` at the tracked active cell (`trame-clipboard`). The
+    /// parameterless-geometry sibling of [`PasteRange`](TrameCommand::PasteRange). The
+    /// Logic thread resolves the target from the active cell it keeps via
+    /// [`SetActiveCell`](TrameCommand::SetActiveCell). A toolbar/menu Paste button reads
+    /// the OS clipboard asynchronously and has no view state, so it pastes without knowing
+    /// the cursor. Each field becomes a literal cell (no relative-formula reindexing, the
+    /// source is external). Replies with a [`DataReset`](super::TrameEvent::DataReset).
     PasteText { text: String },
 
-    /// Paste a typed [`ClipboardPayload`] at the tracked active cell
-    /// (`trame-clipboard`). The parameterless-geometry sibling of
-    /// [`PasteRange`](TrameCommand::PasteRange): the Logic thread resolves the
-    /// target from the active cell it keeps, so the toolbar/menu Paste button --
-    /// which reads the OS clipboard asynchronously via the Clipboard API and has
-    /// no view state -- gets the same styled, formula-reindexed paste as a native
-    /// Ctrl+V. The reindex offset is `active - payload.src`.
+    /// Paste a typed [`ClipboardPayload`] at the tracked active cell (`trame-clipboard`).
+    /// The parameterless-geometry sibling of [`PasteRange`](TrameCommand::PasteRange). The
+    /// Logic thread resolves the target from the active cell it keeps. The toolbar/menu
+    /// Paste button reads the OS clipboard asynchronously via the Clipboard API and has no
+    /// view state. It gets the same styled, formula-reindexed paste as a native Ctrl+V. The
+    /// reindex offset is `active - payload.src`.
     PasteClipboardAtActive { payload: ClipboardPayload },
 
-    /// Autofill the `src` rectangle into `dest` (`trame-autofill`). `dest`
-    /// contains `src` and extends it along a single axis (the fill handle locks to
-    /// one direction); the cells of `dest \ src` are the fill region. The Logic
-    /// thread reads the source cells from its document model and, per fill line,
+    /// Autofill the `src` rectangle into `dest` (`trame-autofill`). `dest` contains `src`
+    /// and extends it along a single axis (the fill handle locks to one direction); the
+    /// cells of `dest \ src` are the fill region.
+    ///
+    /// The Logic thread reads the source cells from its document model. Per fill line, it
     /// either extrapolates a numeric arithmetic [`Series`](FillMode::Series) or
-    /// tiles/[`Copy`](FillMode::Copy)s the source values, reindexing a copied
-    /// formula's relative references by its tile offset (`formula::shift`, as in
-    /// [`PasteRange`](TrameCommand::PasteRange)) and carrying each source cell's
-    /// style. The whole fill is a single undo group. With [`FillMode::Auto`] the
-    /// thread picks Series when a line's source values form an arithmetic numeric
-    /// progression, Copy otherwise. Replies with a
-    /// [`DataReset`](super::TrameEvent::DataReset). A no-op when `dest == src`.
+    /// tiles/[`Copy`](FillMode::Copy)s the source values. A copied formula's relative
+    /// references are reindexed by its tile offset (`formula::shift`, as in
+    /// [`PasteRange`](TrameCommand::PasteRange)), and each source cell's style is carried.
+    ///
+    /// The whole fill is a single undo group. With [`FillMode::Auto`] the thread picks
+    /// Series when a line's source values form an arithmetic numeric progression, Copy
+    /// otherwise. Replies with a [`DataReset`](super::TrameEvent::DataReset). A no-op when
+    /// `dest == src`.
     FillRange {
         sheet_id: String,
         src: GridRange,
@@ -338,15 +336,14 @@ pub enum TrameCommand {
         mode: FillMode,
     },
 
-    /// Find the next cell whose displayed value matches `query`, starting from
-    /// the tracked active cell and wrapping around the active sheet
-    /// (`trame-find-replace`). Read-only: the Logic thread scans the
-    /// materialized extent comparing each cell's *displayed* value (formula
-    /// results included), case-folded unless `match_case`, by exact equality when
-    /// `whole_cell` else by substring. Produces a
-    /// [`FindResult`](crate::TrameEvent::FindResult) with every match on the sheet
-    /// plus the index of the one to focus; no CRDT delta is emitted. The UI moves
-    /// the active cell onto the focused match, so a repeated `FindNext` advances.
+    /// Find the next cell whose displayed value matches `query`, starting from the tracked
+    /// active cell and wrapping around the active sheet (`trame-find-replace`). Read-only:
+    /// the Logic thread scans the materialized extent, comparing each cell's *displayed*
+    /// value (formula results included). The comparison is case-folded unless `match_case`,
+    /// by exact equality when `whole_cell`, else by substring. Produces a
+    /// [`FindResult`](crate::TrameEvent::FindResult) with every match on the sheet plus the
+    /// index of the one to focus; no CRDT delta is emitted. The UI moves the active cell
+    /// onto the focused match, so a repeated `FindNext` advances.
     FindNext {
         query: String,
         match_case: bool,
@@ -370,14 +367,14 @@ pub enum TrameCommand {
         all_sheets: bool,
     },
 
-    /// Replace the single match at the tracked active cell, then advance to the
-    /// next match (`trame-find-replace`). If the active cell matches
-    /// `query` it is rewritten (same raw-text rules as
-    /// [`ReplaceAll`](TrameCommand::ReplaceAll), `in_formulas` gating included) in
-    /// one undo group; whether or not it matched, the reply carries a fresh
-    /// [`FindResult`](crate::TrameEvent::FindResult) so the UI moves to and
-    /// highlights the following match. Replies with
-    /// [`ReplaceDone`](crate::TrameEvent::ReplaceDone) (`0` or `1`).
+    /// Replace the single match at the tracked active cell, then advance to the next match
+    /// (`trame-find-replace`). If the active cell matches `query` it is rewritten in one
+    /// undo group, under the same raw-text rules as
+    /// [`ReplaceAll`](TrameCommand::ReplaceAll), `in_formulas` gating included. Whether or
+    /// not it matched, the reply carries a fresh
+    /// [`FindResult`](crate::TrameEvent::FindResult), so the UI moves to and highlights the
+    /// following match. Replies with [`ReplaceDone`](crate::TrameEvent::ReplaceDone) (`0`
+    /// or `1`).
     ReplaceOne {
         query: String,
         replacement: String,
@@ -386,11 +383,10 @@ pub enum TrameCommand {
         in_formulas: bool,
     },
 
-    /// Undo the last local edit (`trame-undo`). Backed by Loro's
-    /// `UndoManager`: it replays the inverse of this session's most recent commit
-    /// as fresh CRDT ops (1 `TrameCommand` == 1 commit == 1 undo item). The
-    /// inverse ops broadcast to peers like any other edit, so undo converges. A
-    /// no-op when the undo stack is empty.
+    /// Undo the last local edit (`trame-undo`). Backed by Loro's `UndoManager`. It replays
+    /// the inverse of this session's most recent commit as fresh CRDT ops (1 `TrameCommand`
+    /// == 1 commit == 1 undo item). The inverse ops broadcast to peers like any other edit,
+    /// so undo converges. A no-op when the undo stack is empty.
     Undo,
 
     /// Redo the edit most recently undone by [`Undo`](TrameCommand::Undo). A no-op
@@ -412,20 +408,19 @@ pub enum TrameCommand {
     /// name does not exist.
     DeleteName { name: String },
 
-    /// Switch the sheet the UI is looking at to `sheet_id`. The Logic thread
-    /// rebuilds its active-sheet derived caches (index, merges, formatting,
-    /// formula engine) and replies with a [`DataReset`] so the UI re-fetches the
-    /// new sheet's viewport (`trame-sheets`). A no-op if the id
-    /// is unknown.
+    /// Switch the sheet the UI is looking at to `sheet_id`. The Logic thread rebuilds its
+    /// active-sheet derived caches (index, merges, formatting, formula engine). It then
+    /// replies with a [`DataReset`], so the UI re-fetches the new sheet's viewport
+    /// (`trame-sheets`). A no-op if the id is unknown.
     ///
     /// [`DataReset`]: super::TrameEvent::DataReset
     ActivateSheet { sheet_id: String },
 
     /// Add a new sheet named `name`. Mints a peer-scoped stable `sheet_id`
-    /// (`{peer:016x}_{counter:08x}`) so concurrent creates on two peers never
-    /// collide, registers it in `sheets`, appends it to `sheet_order`, and
-    /// replies with a refreshed [`SheetList`](super::TrameEvent::SheetList)
-    /// (`trame-sheets`). Cells are created lazily on first write.
+    /// (`{peer:016x}_{counter:08x}`), so concurrent creates on two peers never collide. The
+    /// new sheet is registered in `sheets` and appended to `sheet_order`, and the reply is
+    /// a refreshed [`SheetList`](super::TrameEvent::SheetList) (`trame-sheets`). Cells are
+    /// created lazily on first write.
     CreateSheet { name: String },
 
     /// Rename `sheet_id`'s display label (LWW on the name field). The stable id
@@ -440,15 +435,15 @@ pub enum TrameCommand {
 
     /// Sort the rows of the rectangular range `[row_start..=row_end] x
     /// [col_start..=col_end]` by the values in the column `col_start + sort_col`
-    /// (`trame-sort`, single-column sort). Whole rows are
-    /// reordered, so cells outside `[col_start..=col_end]` move with their row --
-    /// matching Google Sheets "sort range". `has_header` keeps the first range row
-    /// pinned in place. Realized as `LoroMovableList` move ops on
-    /// `rows_{sheet_id}`: cells keyed by stable id pairs follow their row, so no
-    /// cell key is rewritten and references are preserved
-    /// (`trame-formula-engine`). LWW on the row
-    /// list resolves concurrent sorts deterministically. A no-op when the range is
-    /// empty/virtual. Replies with [`TrameEvent::SortComplete`].
+    /// (`trame-sort`, single-column sort). Whole rows are reordered, so cells outside
+    /// `[col_start..=col_end]` move with their row -- matching Google Sheets "sort range".
+    /// `has_header` keeps the first range row pinned in place.
+    ///
+    /// Realized as `LoroMovableList` move ops on `rows_{sheet_id}`. Cells keyed by stable
+    /// id pairs follow their row, so no cell key is rewritten and references are preserved
+    /// (`trame-formula-engine`). LWW on the row list resolves concurrent sorts
+    /// deterministically. A no-op when the range is empty/virtual. Replies with
+    /// [`TrameEvent::SortComplete`].
     ///
     /// [`TrameEvent::SortComplete`]: super::TrameEvent::SortComplete
     SortRange {
@@ -471,19 +466,21 @@ pub enum TrameCommand {
     /// targeting the gone id resolve to `#REF!`.
     DeleteSheet { sheet_id: String },
 
-    /// Apply a shared filter to column `col` of `sheet_id`
-    /// (`trame-shared-filter`). The filter is stored in the document
-    /// CRDT (`filters_{sheet}` + `filter_hidden_{sheet}`), so every collaborator
-    /// sees the same hidden rows. The Logic thread evaluates the column through
-    /// the formula cache, writes the failing rows' stable ids into
-    /// `filter_hidden_{sheet}` (keyed by `row_uid`, so the hidden set follows the
-    /// data across a sort or insert), and broadcasts the resulting delta. Rows
-    /// hidden by a filter are excluded from the viewport (flagged
-    /// [`DisplayCell::is_filtered`](super::DisplayCell::is_filtered)) but stay
-    /// in calculations (`=SUM` still totals them). A filter is a plain CRDT
-    /// mutation, hence undoable. Replies with
-    /// [`TrameEvent::FilterApplied`](super::TrameEvent::FilterApplied). A no-op
-    /// for a non-active sheet or a virtual (never-materialized) column.
+    /// Apply a shared filter to column `col` of `sheet_id` (`trame-shared-filter`). The
+    /// filter is stored in the document CRDT (`filters_{sheet}` + `filter_hidden_{sheet}`),
+    /// so every collaborator sees the same hidden rows.
+    ///
+    /// The Logic thread evaluates the column through the formula cache. It writes the
+    /// failing rows' stable ids into `filter_hidden_{sheet}`, keyed by `row_uid`, so the
+    /// hidden set follows the data across a sort or insert. The resulting delta is
+    /// broadcast.
+    ///
+    /// Rows hidden by a filter are excluded from the viewport (flagged
+    /// [`DisplayCell::is_filtered`](super::DisplayCell::is_filtered)) but stay in
+    /// calculations (`=SUM` still totals them). A filter is a plain CRDT mutation, hence
+    /// undoable. Replies with
+    /// [`TrameEvent::FilterApplied`](super::TrameEvent::FilterApplied). A no-op for a
+    /// non-active sheet or a virtual (never-materialized) column.
     ApplyFilter {
         sheet_id: String,
         /// Grid column the filter is applied to (0-based).
@@ -498,17 +495,17 @@ pub enum TrameCommand {
     /// when no filter is active.
     ClearFilter { sheet_id: String },
 
-    /// Import CSV bytes into the workbook (`trame-import-export`). All
-    /// conversion happens in the Logic thread (Zero-Knowledge):
-    /// the bytes never leave the client. When `target_sheet_id` is `None` the
-    /// Logic thread creates a fresh sheet; otherwise it writes into the named
-    /// sheet starting at `(start_row, start_col)`, extending the used range as
-    /// needed. `delimiter` is auto-detected (comma vs semicolon) when `None`.
-    /// Each field becomes a literal cell (no formula reindexing -- the source is
-    /// external). Replies with
-    /// [`TrameEvent::ImportComplete`](super::TrameEvent::ImportComplete) plus
-    /// a [`DataReset`](super::TrameEvent::DataReset); the whole import is a
-    /// single undo group.
+    /// Import CSV bytes into the workbook (`trame-import-export`). All conversion happens
+    /// in the Logic thread (Zero-Knowledge): the bytes never leave the client. When
+    /// `target_sheet_id` is `None` the Logic thread creates a fresh sheet. Otherwise it
+    /// writes into the named sheet starting at `(start_row, start_col)`, extending the used
+    /// range as needed.
+    ///
+    /// `delimiter` is auto-detected (comma vs semicolon) when `None`. Each field becomes a
+    /// literal cell (no formula reindexing -- the source is external). Replies with
+    /// [`TrameEvent::ImportComplete`](super::TrameEvent::ImportComplete) plus a
+    /// [`DataReset`](super::TrameEvent::DataReset); the whole import is a single undo
+    /// group.
     ImportCsv {
         data: Vec<u8>,
         /// Field separator; `None` auto-detects comma vs semicolon.
@@ -521,11 +518,11 @@ pub enum TrameCommand {
         start_col: u32,
     },
 
-    /// Export the **active** sheet to CSV (`trame-import-export`).
-    /// Parameterless sibling of [`ExportCsv`](TrameCommand::ExportCsv): the Logic
-    /// thread resolves the active sheet itself -- the same convention as the sort
-    /// / filter / selection-stats intents -- so a toolbar/menu "Export CSV" button
-    /// needs no view state. Comma delimiter, whole used range. Replies with
+    /// Export the **active** sheet to CSV (`trame-import-export`). Parameterless sibling of
+    /// [`ExportCsv`](TrameCommand::ExportCsv). The Logic thread resolves the active sheet
+    /// itself, the same convention as the sort / filter / selection-stats intents. A
+    /// toolbar/menu "Export CSV" button therefore needs no view state. Comma delimiter,
+    /// whole used range. Replies with
     /// [`TrameEvent::ExportComplete`](super::TrameEvent::ExportComplete).
     ExportActiveSheetCsv,
 
@@ -542,16 +539,15 @@ pub enum TrameCommand {
         range: Option<GridRange>,
     },
 
-    /// Write the whole workbook to a native `.ambre` file and hand the bytes
-    /// back (`ambre-spec-docfile.md`). Read-only, and served by the Logic thread
-    /// rather than by the workbook: the container's header carries the
-    /// document's identity, which the workbook does not know -- only the
-    /// registry that keyed it does. Answered by
+    /// Write the whole workbook to a native `.ambre` file and hand the bytes back
+    /// (`ambre-spec-docfile.md`). Read-only, and served by the Logic thread rather than by
+    /// the workbook. The container's header carries the document's identity, which the
+    /// workbook does not know: only the registry that keyed it does. Answered by
     /// [`ExportComplete`](super::TrameEvent::ExportComplete).
     ///
-    /// Unlike the CSV export, this one drops nothing: the payload **is** the
-    /// document (`DOCFILE-001`). It is also plaintext, which the surface that
-    /// offers it must say (`DOCFILE-009`).
+    /// Unlike the CSV export, this one drops nothing: the payload **is** the document
+    /// (`DOCFILE-001`). It is also plaintext, which the surface that offers it must say
+    /// (`DOCFILE-009`).
     ExportAmbreFile,
     /// Write the whole workbook to a native `.ambre` file **sealed under
     /// `passphrase`**, and hand the sealed bytes back
@@ -572,17 +568,17 @@ pub enum TrameCommand {
         passphrase: crate::rest::SecretBytes,
     },
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     // Deferred feature surface (Phase 2+)
     //
-    // The variants below complete the `TrameCommand` surface mandated by
-    // `trame-engine` ("all feature variants are in the
-    // enums"). They are part of the typed data plane now so the UI Thread and
-    // the Logic dispatcher compile against a stable command vocabulary; their
-    // Logic-thread handlers are no-op stubs until the corresponding phase lands
-    // (personal filter views / multi-column sort -> Phase 2, conditional
-    // formatting & validation -> Phase 2/3, range protection -> Post-MVP).
-    // ─────────────────────────────────────────────────────────────────────────
+    // The variants below complete the `TrameCommand` surface mandated by `trame-engine`
+    // ("all feature variants are in the enums"). They are part of the typed data plane
+    // now, so the UI Thread and the Logic dispatcher compile against a stable command
+    // vocabulary. Their Logic-thread handlers are no-op stubs until the corresponding
+    // phase lands. Personal filter views and multi-column sort land in Phase 2,
+    // conditional formatting and validation in Phase 2/3, range protection Post-MVP.
+    // -------------------------------------------------------------------------
+    //
     /// Persist a personal (non-shared) filter view in local storage only
     /// (`trame-shared-filter`). Never touches the `LoroDoc`, so it
     /// emits no CRDT delta. Replies with
@@ -595,11 +591,10 @@ pub enum TrameCommand {
         kind: FilterKind,
     },
 
-    /// Activate a previously saved personal filter view
-    /// (`trame-shared-filter`). Loads it from
-    /// local storage, recomputes its hidden rows against the current doc state,
-    /// and re-sends the viewport without them -- a purely local view change, no
-    /// CRDT delta. A no-op if `view_id` is unknown.
+    /// Activate a previously saved personal filter view (`trame-shared-filter`). Loads it
+    /// from local storage, recomputes its hidden rows against the current doc state, and
+    /// re-sends the viewport without them. A purely local view change, no CRDT delta. A
+    /// no-op if `view_id` is unknown.
     ActivateFilterView { view_id: String },
 
     /// Sort the rows of a range by several keys in decreasing priority
@@ -650,11 +645,10 @@ pub enum TrameCommand {
     /// (`trame-cell-styles`). A no-op if it does not exist.
     RemoveCondFormat { sheet_id: String, id: String },
 
-    /// Attach a data-validation rule to `range` of `sheet_id`
-    /// (`trame-cell-editing`). Stored in `validations_{sheet}`,
-    /// checked before a local edit commits: `Reject` blocks the mutation,
-    /// `Warn` lets it through with a warning, `Info` is a visual indicator only.
-    /// Validations are an input aid, not a CRDT integrity barrier (a remote
+    /// Attach a data-validation rule to `range` of `sheet_id` (`trame-cell-editing`).
+    /// Stored in `validations_{sheet}`, and checked before a local edit commits. `Reject`
+    /// blocks the mutation, `Warn` lets it through with a warning, `Info` is a visual
+    /// indicator only. Validations are an input aid, not a CRDT integrity barrier (a remote
     /// delta can still violate them).
     AddValidation {
         sheet_id: String,
@@ -688,14 +682,12 @@ pub enum TrameCommand {
 }
 
 impl TrameCommand {
-    /// Whether this command can change the sheet's shared CRDT state
-    /// (`architecture`).
+    /// Whether this command can change the sheet's shared CRDT state (`architecture`).
     ///
-    /// Only the commands documented above as local-only or read-only are listed
-    /// here; everything else is treated as mutating. That is the safe direction
-    /// for a UX gate -- a new variant left unclassified is withheld from a
-    /// viewer rather than wrongly offered, and the server rejects the write
-    /// regardless.
+    /// Only the commands documented above as local-only or read-only are listed here;
+    /// everything else is treated as mutating. That is the safe direction for a UX gate. A
+    /// new variant left unclassified is withheld from a viewer rather than wrongly offered,
+    /// and the server rejects the write regardless.
     pub fn is_mutating(&self) -> bool {
         !matches!(
             self,

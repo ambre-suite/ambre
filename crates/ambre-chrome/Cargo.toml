@@ -23,3 +23,6 @@ wasm-bindgen   = { workspace = true }
 # native tier runs only the pure `#[test]`s in `src/`.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
+
+[lints]
+workspace = true

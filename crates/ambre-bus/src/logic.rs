@@ -1,53 +1,53 @@
-//! Logic-bound protocol — messages addressed to the Logic thread from the UI.
+//! Logic-bound protocol -- messages addressed to the Logic thread from the UI.
 //!
-//! Holds the [`LogicCommand`] envelope (UI Thread → Logic thread) plus
+//! Holds the [`LogicCommand`] envelope (UI Thread -> Logic thread) plus
 //! [`AppCommand`], the closed sum over the document types it carries. Each
 //! per-app command enum lives with that app's whole data plane under
-//! [`crate::app`] (e.g. `crate::app::trame::TrameCommand`); `AppCommand` is a
+//! [`crate::app`] (for example `crate::app::trame::TrameCommand`); `AppCommand` is a
 //! thin dispatch enum referencing them.
 //!
-//! Carried over a `flume` channel in shared memory — typed Rust values by move,
-//! no serialization. The symmetric Logic → UI direction (events) lives in
+//! Carried over a `flume` channel in shared memory -- typed Rust values by move,
+//! no serialization. The symmetric Logic -> UI direction (events) lives in
 //! [`crate::ui`].
 //!
 //! # Three planes, one envelope
 //! - **Content** ([`LogicCommand::App`]): document edits / viewport requests,
 //!   routed by `DocumentId` inside the Logic thread. [`AppCommand`] is a closed
-//!   sum — adding a document type = adding a variant (no trait object, no `Any`,
-//!   no crate cycle; this module depends only on `ambre-core`).
+//!   sum: adding a document type is adding a variant. No trait object, no `Any`,
+//!   no crate cycle -- this module depends only on `ambre-core`.
 //! - **Service** ([`LogicCommand::Rest`]): the correlatable request/response
 //!   family, defined once in [`crate::rest`] and forwarded verbatim to Sync.
 //! - **Control** (`OpenDocument`, `CloseDocument`, `OpenChannel`, `CloseChannel`,
 //!   `SendChannelMessage`): fire-and-forget session/content-send commands with
-//!   no single response to correlate — kept explicit.
+//!   no single response to correlate -- kept explicit.
 
 use crate::{ChannelId, DocType, DocumentId, RequestId, RestCommand};
 
-// The typed application data plane carried by `LogicCommand::App` lives per-app
-// under `crate::app` (command + event + value types grouped by document type);
-// this envelope module only holds the `LogicCommand` sum and the `AppCommand`
-// dispatch enum that references those app modules.
+// The typed application data plane carried by `LogicCommand::App` lives per-app under
+// `crate::app`, command + event + value types grouped by document type. This envelope
+// module only holds the `LogicCommand` sum and the `AppCommand` dispatch enum that
+// references those app modules.
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LogicCommand — UI Thread → Logic thread
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// LogicCommand -- UI Thread -> Logic thread
+// -----------------------------------------------------------------------------
 
 /// Message sent from the UI Thread to the Logic thread.
 ///
 /// - [`App`](LogicCommand::App) (**P2**): user edits / viewport requests, < 50 ms
 ///   budget (scroll requests < 10 ms). Routed to the document's state.
 /// - [`Rest`](LogicCommand::Rest) (**P3**): a [`RestCommand`] service operation,
-///   forwarded to the Sync thread as [`SyncCommand::Rest`] (with a small Logic
-///   hook for the few ops that also mutate Logic state, e.g. `Logout`).
+///   forwarded to the Sync thread as [`SyncCommand::Rest`]. A small Logic hook
+///   covers the few ops that also mutate Logic state, for example `Logout`.
 /// - Control variants (**P3**): forwarded to the Sync thread as their explicit
 ///   `SyncCommand` counterparts.
 ///
 /// [`SyncCommand::Rest`]: crate::SyncCommand::Rest
 #[derive(Debug, Clone)]
 pub enum LogicCommand {
-    // ── P2 — Content plane ────────────────────────────────────────────────────
+    // -- P2 -- Content plane ----------------------------------------------------
     /// Application-specific command for an open document (cell edit, viewport
-    /// scroll in Trame; text insertion in Prose; element move in Toile; …).
+    /// scroll in Trame; text insertion in Prose; element move in Toile; ...).
     ///
     /// The Logic dispatcher routes [`command`](AppCommand) to the state owning
     /// `document_id` and replies with [`crate::ui::UiEvent::Viewport`] /
@@ -73,15 +73,15 @@ pub enum LogicCommand {
         snapshot: Vec<u8>,
     },
 
-    // ── P3 — Service plane (relayed request/response) ─────────────────────────
+    // -- P3 -- Service plane (relayed request/response) -------------------------
     /// A [`RestCommand`] service operation. The Logic dispatcher applies any
-    /// state hook (e.g. `Logout` clears the document registry) and forwards it
+    /// state hook (for example `Logout` clears the document registry) and forwards it
     /// to the Sync thread as [`SyncCommand::Rest`], echoing `id` on the response.
     ///
     /// [`SyncCommand::Rest`]: crate::SyncCommand::Rest
     Rest { id: RequestId, cmd: RestCommand },
 
-    // ── P3 — Control plane (fire-and-forget, no correlatable response) ─────────
+    // -- P3 -- Control plane (fire-and-forget, no correlatable response) ---------
     /// Open a real-time sync session for a document.
     ///
     /// The Sync thread fetches members + `doc_key_enc`, decrypts the DocumentKey,
@@ -110,7 +110,7 @@ pub enum LogicCommand {
     /// `payload` is an opaque application byte blob (schema owned by
     /// `ambre-murmure`); the Sync thread routes it into the active segment.
     ///
-    /// TODO: migrate the Murmure channel surface to a typed `AppCommand::Murmure(…)`
+    /// TODO: migrate the Murmure channel surface to a typed `AppCommand::Murmure(...)`
     /// like the document surface (Murmure is currently a stub).
     SendChannelMessage {
         channel_id: ChannelId,
@@ -118,7 +118,7 @@ pub enum LogicCommand {
         payload: Vec<u8>,
     },
 
-    // ── Local — Logic-thread resource seeding (no Sync involvement) ────────────
+    // -- Local -- Logic-thread resource seeding (no Sync involvement) ------------
     /// Seed the Logic thread's PDF-export `FontContext` with base font faces
     /// (`toile-pdf-export`). Fetched by the Main thread at boot and
     /// delivered here because the Logic worker cannot fetch: it blocks on its
@@ -128,11 +128,11 @@ pub enum LogicCommand {
     LoadFonts { faces: Vec<Vec<u8>> },
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AppCommand — typed application command family (content plane)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// AppCommand -- typed application command family (content plane)
+// -----------------------------------------------------------------------------
 
-/// Application-specific command, UI Thread → Logic thread.
+/// Application-specific command, UI Thread -> Logic thread.
 ///
 /// Carried inside [`LogicCommand::App`]. The Logic dispatcher matches the
 /// variant, routes it to the `DocumentId`'s document state, and produces zero or
@@ -144,7 +144,7 @@ pub enum AppCommand {
     /// Command for a Toile (whiteboard) document.
     Toile(crate::app::toile::ToileCommand),
     // Future document types: Prose(ProseCommand), Murmure(MurmureCommand),
-    // Rendezvous(RendezvousCommand), …
+    // Rendezvous(RendezvousCommand), ...
     // Future plugin surface: Plugin(Box<dyn Plugin>).
 }
 

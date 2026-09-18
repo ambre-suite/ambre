@@ -36,8 +36,9 @@ const BORDER_BUTTONS: &[(BorderPreset, icondata::Icon, &str)] = &[
 ];
 
 /// The border stroke styles offered by the line-style picker (line pattern +
-/// weight), each paired with its label and the CSS modifier class that renders a
-/// visual preview of the stroke (see `.line-preview.*` in `styles.css`).
+/// weight). Each is paired with its label and the CSS modifier class that
+/// renders a visual preview of the stroke (see `.line-preview.*` in
+/// `styles.css`).
 const BORDER_STYLES: &[(BorderStyle, &str, &str)] = &[
     (BorderStyle::Solid, "Solid", "solid"),
     (BorderStyle::Medium, "Medium", "medium"),
@@ -47,11 +48,12 @@ const BORDER_STYLES: &[(BorderStyle, &str, &str)] = &[
     (BorderStyle::Double, "Double", "double"),
 ];
 
-/// The composed borders control (`trame-cell-styles`): a single toolbar button
-/// that toggles a popover holding the "pen" (stroke style + colour) and a grid
-/// of preset icon buttons. A preset click applies the current pen to its edges
-/// via [`StylePatch::border`] (a [`BorderEdit`]); the per-edge model lets a cell
-/// carry a different style/colour on each side, accumulated across clicks.
+/// The composed borders control (`trame-cell-styles`) is a single toolbar button
+/// that toggles a popover. The popover holds the "pen" (stroke style + colour)
+/// and a grid of preset icon buttons. A preset click applies the current pen to
+/// its edges via [`StylePatch::border`] (a [`BorderEdit`]). The per-edge model
+/// lets a cell carry a different style/colour on each side, accumulated across
+/// clicks.
 #[component]
 pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) -> impl IntoView {
     let open = RwSignal::new(false);
@@ -209,10 +211,11 @@ const NUMBER_FORMATS: &[(CellFormat, &str)] = &[
     (CellFormat::Text, "Text"),
 ];
 
-/// The composed number-format control (`trame-number-formats`): a single toolbar
-/// button (the "123" icon) toggling a context-menu-style popover that lists the
-/// [`CellFormat`] families, with a check next to the active one. Picking a format
-/// emits a [`StylePatch`] through `on_style` and closes the menu.
+/// The composed number-format control (`trame-number-formats`) is a single
+/// toolbar button, the "123" icon. It toggles a context-menu-style popover that
+/// lists the [`CellFormat`] families, with a check next to the active one.
+/// Picking a format emits a [`StylePatch`] through `on_style` and closes the
+/// menu.
 #[component]
 pub(crate) fn NumberFormatPopover(
     style: StyleState,
@@ -320,9 +323,10 @@ const V_ALIGNS: &[(VAlign, icondata::Icon, &str)] = &[
     ),
 ];
 
-/// The composed horizontal-alignment control: a single toolbar button showing the
-/// active alignment's icon, toggling a context-menu popover that lists the three
-/// alignments with a check on the active one. Picking emits a [`StylePatch`].
+/// The composed horizontal-alignment control is a single toolbar button showing
+/// the active alignment's icon. It toggles a context-menu popover that lists the
+/// three alignments, with a check on the active one. Picking emits a
+/// [`StylePatch`].
 #[component]
 pub(crate) fn HAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -> impl IntoView {
     let open = RwSignal::new(false);
@@ -410,9 +414,10 @@ pub(crate) fn HAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
     }
 }
 
-/// The composed vertical-alignment control: a single toolbar button showing the
-/// active alignment's icon, toggling a context-menu popover that lists the three
-/// alignments with a check on the active one. Picking emits a [`StylePatch`].
+/// The composed vertical-alignment control is a single toolbar button showing
+/// the active alignment's icon. It toggles a context-menu popover that lists the
+/// three alignments, with a check on the active one. Picking emits a
+/// [`StylePatch`].
 #[component]
 pub(crate) fn VAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -> impl IntoView {
     let open = RwSignal::new(false);

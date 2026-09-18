@@ -4,9 +4,9 @@
 //! document -- the inverse of [`super::svg_import`]. Output is **deterministic**
 //! ("export is deterministic"): fixed attribute order and a single float
 //! formatter, so the same board yields byte-identical SVG. Shapes map to SVG
-//! primitives, `Shape(Path)` to `<path d=...>` (reusing `BezPath::to_svg`, the
-//! same encoding the CRDT payload stores), text to `<text>`, and an image to an
-//! `<image>` referencing its content hash (blob bytes stay on MinIO,).
+//! primitives and `Shape(Path)` to `<path d=...>`, reusing `BezPath::to_svg`, the
+//! same encoding the CRDT payload stores. Text maps to `<text>`, and an image to
+//! an `<image>` referencing its content hash; the blob bytes stay on MinIO.
 
 use std::fmt::Write as _;
 
@@ -20,7 +20,7 @@ use crate::logic::model::{ElementKind, ShapeKind};
 pub fn export_svg(elements: &[ExportElement]) -> String {
     let bounds = union_bounds(elements).unwrap_or(Rect::new(0.0, 0.0, 1.0, 1.0));
     // The viewBox is anchored at the origin (0 0 W H), never at the content's
-    // min corner: a non-zero viewBox origin makes an SVG reader translate the
+    // min corner. A non-zero viewBox origin makes an SVG reader translate the
     // whole document, which would shift every element on re-import and break the
     // round-trip. W/H span to the content's far corner (min 1 to stay valid).
     let w = bounds.x1.max(1.0);

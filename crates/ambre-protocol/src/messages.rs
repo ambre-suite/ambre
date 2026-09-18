@@ -9,33 +9,33 @@ use serde::{Deserialize, Serialize};
 use serde_bytes;
 use std::collections::HashSet;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Newtype wrappers for binary buffers
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
-/// 24‑byte nonce used for XChaCha20‑Poly1305 encryption.
+/// 24-byte nonce used for XChaCha20-Poly1305 encryption.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Nonce(#[serde(with = "serde_bytes")] pub [u8; 24]);
 
-/// 32‑byte HMAC‑SHA256 commitment tag.
+/// 32-byte HMAC-SHA256 commitment tag.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CommitmentTag(#[serde(with = "serde_bytes")] pub [u8; 32]);
 
-/// 64‑byte Ed25519 signature.
+/// 64-byte Ed25519 signature.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Signature(#[serde(with = "serde_bytes")] pub [u8; 64]);
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Core wire messages
-/// Server‑assigned monotonic sequence number.
+/// Server-assigned monotonic sequence number.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Seq(pub u64);
 
-/// Lamport logical clock (client‑side).
+/// Lamport logical clock (client-side).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Clock(pub u64);
 
-/// Ephemeral counter (client‑side).
+/// Ephemeral counter (client-side).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Counter(pub u64);
 
@@ -43,23 +43,23 @@ pub struct Counter(pub u64);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ciphertext(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /// An encrypted, signed update carrying a CRDT delta.
 ///
 /// The update is encrypted with the document's symmetric key (`DocumentKey`).
-/// The `commitment_tag` is an HMAC‑SHA256 over the ciphertext and public data,
-/// binding the message to a specific key (key‑commitment).
+/// The `commitment_tag` is an HMAC-SHA256 over the ciphertext and public data,
+/// binding the message to a specific key (key-commitment).
 /// The signature is Ed25519 over the nonce, ciphertext, public data, and commitment tag.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Update {
-    /// AEAD ciphertext (XChaCha20‑Poly1305).
+    /// AEAD ciphertext (XChaCha20-Poly1305).
     pub ciphertext: Ciphertext,
-    /// 24‑byte nonce used for encryption.
+    /// 24-byte nonce used for encryption.
     pub nonce: Nonce,
     /// Public metadata visible to the Blind Relay.
     pub public_data: UpdatePublicData,
-    /// HMAC‑SHA256(document_key, nonce || ciphertext || public_data_bytes)
+    /// HMAC-SHA256(document_key, nonce || ciphertext || public_data_bytes)
     pub commitment_tag: CommitmentTag,
     /// Ed25519 signature of (nonce || ciphertext || public_data_bytes || commitment_tag)
     pub signature: Signature,
@@ -71,6 +71,11 @@ impl Update {
     /// (nonce, tags, keys) are already length-checked by postcard. Called on the
     /// relay's decode path before a delta is signed-checked, sequenced, and
     /// persisted, so a structurally valid but meaningless delta is refused early.
+    ///
+    /// # Errors
+    ///
+    /// [`ValidationError::EmptyCiphertext`] on an empty ciphertext, and
+    /// [`ValidationError::ZeroClock`] on a clock of 0, which no author writes.
     pub fn validate(&self) -> Result<(), ValidationError> {
         if self.ciphertext.0.is_empty() {
             return Err(ValidationError::EmptyCiphertext);
@@ -88,27 +93,33 @@ impl Update {
 /// The same cryptographic envelope as `Update` is used.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Snapshot {
-    /// AEAD ciphertext (XChaCha20‑Poly1305).
+    /// AEAD ciphertext (XChaCha20-Poly1305).
     pub ciphertext: Ciphertext,
-    /// 24‑byte nonce used for encryption.
+    /// 24-byte nonce used for encryption.
     pub nonce: Nonce,
     /// Public metadata visible to the Blind Relay.
     pub public_data: SnapshotPublicData,
-    /// HMAC‑SHA256(document_key, nonce || ciphertext || public_data_bytes)
+    /// HMAC-SHA256(document_key, nonce || ciphertext || public_data_bytes)
     pub commitment_tag: CommitmentTag,
     /// Ed25519 signature of (nonce || ciphertext || public_data_bytes || commitment_tag)
     pub signature: Signature,
 }
 
 impl Snapshot {
-    /// Checks the semantic invariants of a decoded snapshot: a non-empty
-    /// ciphertext and no author appearing twice in `parent_snapshot_update_clocks`.
-    /// Called by the client before upload (snapshots travel client-to-S3 directly,
-    /// so the Blind Relay never sees this struct to enforce it).
+    /// Checks the semantic invariants of a decoded snapshot: a non-empty ciphertext
+    /// and no author appearing twice in `parent_snapshot_update_clocks`. Called by
+    /// the client before upload (snapshots travel client-to-S3 directly, so the
+    /// Blind Relay never sees this struct to enforce it).
     ///
     /// The parent proof is deliberately NOT required to be non-empty: the first
-    /// snapshot of a document has the genesis base as its parent and carries no
-    /// proof (see [`ambre_core::SnapshotId::genesis`]).
+    /// snapshot of a document has the genesis base as its parent. That first
+    /// snapshot carries no proof (see [`ambre_core::SnapshotId::genesis`]).
+    ///
+    /// # Errors
+    ///
+    /// [`ValidationError::EmptyCiphertext`] on an empty ciphertext, and
+    /// [`ValidationError::DuplicatePublicKey`] when an author appears twice in
+    /// `parent_snapshot_update_clocks`.
     pub fn validate(&self) -> Result<(), ValidationError> {
         if self.ciphertext.0.is_empty() {
             return Err(ValidationError::EmptyCiphertext);
@@ -123,19 +134,19 @@ impl Snapshot {
     }
 }
 
-/// An encrypted, signed ephemeral message (cursors, presence, etc.).
+/// An encrypted, signed ephemeral message, such as a cursor or a presence beat.
 ///
 /// Ephemerals are not stored permanently; they are broadcast to collaborators
-/// in real‑time and then discarded.
+/// in real-time and then dropped.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ephemeral {
-    /// AEAD ciphertext (XChaCha20‑Poly1305).
+    /// AEAD ciphertext (XChaCha20-Poly1305).
     pub ciphertext: Ciphertext,
-    /// 24‑byte nonce used for encryption.
+    /// 24-byte nonce used for encryption.
     pub nonce: Nonce,
     /// Public metadata visible to the Blind Relay.
     pub public_data: EphemeralPublicData,
-    /// HMAC‑SHA256(document_key, nonce || ciphertext || public_data_bytes)
+    /// HMAC-SHA256(document_key, nonce || ciphertext || public_data_bytes)
     pub commitment_tag: CommitmentTag,
     /// Ed25519 signature of (nonce || ciphertext || public_data_bytes || commitment_tag)
     pub signature: Signature,
@@ -146,6 +157,11 @@ impl Ephemeral {
     /// a non-empty ciphertext and a counter that started at 1. Called on the
     /// relay's decode path before the presence blob is broadcast and written to
     /// the presence hash.
+    ///
+    /// # Errors
+    ///
+    /// [`ValidationError::EmptyCiphertext`] on an empty ciphertext, and
+    /// [`ValidationError::ZeroCounter`] on a counter of 0.
     pub fn validate(&self) -> Result<(), ValidationError> {
         if self.ciphertext.0.is_empty() {
             return Err(ValidationError::EmptyCiphertext);
@@ -157,7 +173,7 @@ impl Ephemeral {
     }
 }
 
-/// An update paired with its server‑assigned sequence number.
+/// An update paired with its server-assigned sequence number.
 ///
 /// Used in `MissingUpdates` responses to allow clients to catch up.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

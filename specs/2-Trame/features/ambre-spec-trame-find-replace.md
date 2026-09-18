@@ -13,7 +13,7 @@
 
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`. The shared rules are `ambre-spec-find.md`,
-`FIND-001` through `FIND-007`: the search writes nothing, covers the whole scope, wraps, reveals its
+`FIND-001` through `FIND-007`. The search writes nothing, covers the whole scope, wraps, reveals its
 match, and the replace-all is one undo item. Trame's own turn is what a cell match is.
 
 ### 1.1 What counts as a match
@@ -21,7 +21,7 @@ match, and the replace-all is one undo item. Trame's own turn is what a cell mat
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-077` | `INV` | Case sensitivity and whole-cell matching MUST apply to a search as to a replace. | this spec section 4 | `ambre_trame::logic::tests::group6::find_next_honors_case_and_whole_cell` -- both options reach both gestures through one predicate | none | verified |
-| `TRAME-UI-078` | `INV` | A plain cell MUST be matched on its displayed value. | this spec section 3 | none | fails -- the scan reads the **computed** value, not the formatted one: a cell shown as `50.0%` is matched by `0.5` and not by what the user reads (`TRAME-108`). The tests carry no format, so they never separate the two | unverified |
+| `TRAME-UI-078` | `INV` | A plain cell MUST be matched on its displayed value. | this spec section 3 | none | fails -- the scan reads the **computed** value, not the formatted one: a cell shown as `50.0%` is matched by `0.5` and not by what the user reads (`TRAME-108`). The tests carry no format, so they never separate the two; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-UI-079` | `INV` | A formula cell MUST be matched on its source text, and only when the user asks for it. | this spec section 3 | `ambre_trame::logic::tests::group6::replace_all_gates_formula_cells` -- it runs over both settings of the option, and the option is a replace option: a find has none, so it matches a formula on its value (section 6) | none | verified |
 
 ### 1.2 Replace every match in the workbook
@@ -33,20 +33,17 @@ workbook scope reaches and what it leaves alone.
 |---|---|---|---|---|---|---|
 | `TRAME-UI-083` | `POST` | A workbook-scoped replace MUST reach every sheet, whichever tab is active. | this spec section 4 | `ambre_trame::logic::tests::group6::replace_all_spans_sheets` -- it rewrites a match on an inactive sheet and reads it back | none | verified |
 | `TRAME-UI-080` | `POST` | A case-insensitive replace MUST leave the rest of the cell byte for byte. | this spec section 3 | `ambre_trame::logic::find::tests::case_insensitive_replace_survives_a_non_length_preserving_lowercase`; `::case_insensitive_replace_handles_the_ordinary_cases`; `::whole_cell_rewrite_swaps_the_entire_content` -- one rewrite serves both gestures | none | verified |
-| `TRAME-UI-138` | `FRAME` | A workbook-scoped replace MUST NOT change which sheet the user is looking at. | this spec section 4 | none | unheld -- the other sheets are rewritten by id, through their cells map, and the active sheet is never switched, and no test reads the active tab after the replace | unverified |
+| `TRAME-UI-138` | `FRAME` | A workbook-scoped replace MUST NOT change which sheet the user is looking at. | this spec section 4 | none | unheld -- the other sheets are rewritten by id, through their cells map, and the active sheet is never switched, and no test reads the active tab after the replace; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** none: a search is one walk over the cells a sheet holds, and `ambre-spec-budgets.md`
   budgets no search. A replace lands under the batch row of `ambre-spec-budgets.md section 1`.
 * **Boundary.** none of its own: a replace is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 4 `verified`, 2 `unverified`, 0 `unimplemented`. What a Trame match is -- both
-  options reaching both gestures, a formula read only on request, a byte-preserving rewrite -- is
-  held cell by cell, in the Logic thread, which is why this stays the best-held corner of the area:
-  the panel above it only carries fields. The shared rules and their coverage are
-  `ambre-spec-find.md`. Two rows are loose. `TRAME-UI-078` reads the computed value, so a formatted
-  cell is matched on a text no one sees, which `TRAME-108` states from the other side.
-  `TRAME-UI-138` is the frame condition of the workbook scope, and no test reads the active tab
-  back.
+* **Verification.** 4 `verified`, 1 `failing`, 1 `untested`; the shared rules and their coverage are
+  `ambre-spec-find.md`. What holds is what a Trame match is. Both options reach both gestures, a
+  formula is read only on request, and a rewrite preserves the bytes around the match. What is loose
+  is the workbook scope, whose frame condition nothing reads back. The failure is the computed value
+  `TRAME-UI-078` matches on, so a formatted cell is found on a text no one sees.
 
 ---
 
@@ -115,8 +112,8 @@ The shared chords and the reveal are `ambre-spec-find.md section 4`. Trame's own
 | `in_formulas` | replace only | admits formula cells, matched on their source text (`TRAME-UI-079`) |
 | `all_sheets` | replace only | widens the scope from the active sheet to the workbook (`TRAME-UI-083`) |
 
-* **Rendering** -- the panel is a DOM component pinned to the top-right of the grid, the same chrome
-  pattern as the filter popover and the format bar. It shows the position of the active match in the
+* **Rendering** -- the panel is a DOM component pinned to the top-right of the grid. It is the same
+  chrome pattern as the filter popover and the format bar. It shows the position of the active match in the
   total. The matches themselves are local view state and reach no collaborator.
 
 ---
@@ -142,11 +139,11 @@ The shared gaps -- the live shared session, the stale highlight, the undebounced
   engine computed, and the grid shows the value a format rendered. A cell displaying `50.0%` is
   found by `0.5` and missed by `50`, and a replace rewrites the raw text under a display no one
   matched. `features/ambre-spec-trame-number-formats.md section 5` states it from the format's side.
-* **A find cannot reach into formulas.** `in_formulas` is a replace option; `FindNext` does not
-  carry it, so `Ctrl+F` matches a formula cell on its result and there is no way to look for the
-  text a user typed. Nothing rules whether the find panel should offer the toggle the replace panel
+* **A find cannot reach into formulas.** `in_formulas` is a replace option. `FindNext` does not
+  carry it, so `Ctrl+F` matches a formula cell on its result. There is no way to look for the text a
+  user typed. Nothing rules whether the find panel should offer the toggle the replace panel
   already has.
 * **No test drives the panel.** The rules are held in the Logic thread and none of them covers the
-  fields above it: the option toggles, the mode switch and the `Escape` clear are asserted nowhere.
+  fields above it. The option toggles, the mode switch and the `Escape` clear are asserted nowhere.
 * **A replace inside a filtered sheet.** The scan walks the used range, so it rewrites rows the
   filter hides. No rule says whether a hidden row is in scope.

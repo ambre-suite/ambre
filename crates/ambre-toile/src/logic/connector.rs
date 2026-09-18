@@ -1,8 +1,8 @@
-//! Connector geometry. A connector references a source and target
-//! [`ElementId`] plus an [`Anchor`] on each; its path is **pure client compute**
-//! -- recomputed at derivation from the current element bounds, never a CRDT
-//! mutation on element move. This keeps drags to a single register write and
-//! makes connectors free of merge conflicts.
+//! Connector geometry. A connector references a source and target [`ElementId`]
+//! plus an [`Anchor`] on each. Its path is **pure client compute**, recomputed
+//! at derivation from the current element bounds, never a CRDT mutation on
+//! element move. This keeps drags to a single register write and makes
+//! connectors free of merge conflicts.
 
 use std::collections::HashMap;
 
@@ -78,8 +78,9 @@ fn elbow(a: Point, from: Anchor, b: Point, _to: Anchor) -> BezPath {
     p
 }
 
-/// Cubic Bezier routing: control points pushed out along each anchor's outward
-/// normal by a third of the endpoint distance, giving a smooth S / C curve.
+/// Cubic Bezier routing. Control points are pushed out along each anchor's
+/// outward normal by a third of the endpoint distance, giving a smooth S / C
+/// curve.
 fn curved(a: Point, from: Anchor, b: Point, to: Anchor) -> BezPath {
     let dist = (b - a).hypot();
     let reach = (dist / 3.0).max(1.0);
@@ -95,8 +96,8 @@ fn anchor_is_horizontal(a: Anchor) -> bool {
     matches!(a, Anchor::Left | Anchor::Right)
 }
 
-/// Outward unit normal for an anchor. `Center` / `Free` have no natural normal;
-/// they fall back to no push (zero vector), which degrades `Curved` to a mild
+/// Outward unit normal for an anchor. `Center` / `Free` have no natural normal.
+/// They fall back to no push (zero vector), which degrades `Curved` to a mild
 /// bow driven only by the opposite anchor.
 fn anchor_normal(a: Anchor) -> kurbo::Vec2 {
     match a {

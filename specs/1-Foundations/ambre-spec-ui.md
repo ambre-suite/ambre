@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE UI THREAD
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the boundary, the crate graph and the state split are built; the six
+**Implementation:** partial -- the boundary, the crate graph and the state split are built. The six
 behaviours every editor should share are arbitrated and unbuilt.
 
 > The page's own thread. It draws the content on a graphics surface, builds the rest of the
@@ -27,15 +27,15 @@ application.
 |---|---|---|---|---|---|---|
 | `UI-THREAD-049` | `INV` | The UI thread MUST NOT open a cryptography path. | `ambre-spec-zero-knowledge.md` (`ZK-002`); `ambre-spec-architecture.md`, `ARCH-004` | cargo-deny -- `deny.toml` grants `ambre-crypto` to `ambre-sync` and, for one host-only fixture hash, to `ambre-logic`. Every interface crate fails the job on the line that would add it, and the cipher, the passphrase derivation and the key agreement each carry a ban of their own | none | verified |
 | `UI-THREAD-021` | `INV` | A document snapshot the launcher carries to the local store MUST stay opaque bytes: the launcher MUST NOT decode one. | this spec section 2; `SYNC-011` | cargo-deny -- `deny.toml` allows `loro` in the four application crates alone, so `ambre-app`, which is the crate that carries a snapshot to the browser database, has no way to read it | none | verified |
-| `UI-THREAD-001` | `INV` | The drawing surface MUST own the content, the caret, the selections and content hit-testing. | this spec section 2 | none | unheld -- the split holds by construction, the only page element over the surface being the transparent input, and nothing refuses an interface component that draws content | unverified |
-| `UI-THREAD-048` | `INV` | The page elements MUST own everything the surface does not: their own focus, and their own accessibility. | this spec section 2; `ambre-spec-accessibility.md` | none | fails -- what is drawn has no accessibility of its own, so a state that exists only on the surface reaches no assistive technology (`CHROME-029`) | unverified |
-| `UI-THREAD-002` | `INV` | The UI thread MUST NOT block on a channel, inbound or outbound. | this spec section 2; `ambre-spec-architecture.md section 2` | type-level -- each application holds and types the rule for itself (`TRAME-UI-003`, `TOILE-UI-100`) | partial -- nothing holds it for a view added later: the blocking receive compiles on this thread and freezes the page | unverified |
+| `UI-THREAD-001` | `INV` | The drawing surface MUST own the content, the caret, the selections and content hit-testing. | this spec section 2 | none | unheld -- the split holds by construction, the only page element over the surface being the transparent input, and nothing refuses an interface component that draws content; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `UI-THREAD-048` | `INV` | The page elements MUST own everything the surface does not: their own focus, and their own accessibility. | this spec section 2; `ambre-spec-accessibility.md` | none | fails -- what is drawn has no accessibility of its own, so a state that exists only on the surface reaches no assistive technology (`CHROME-029`); lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | failing |
+| `UI-THREAD-002` | `INV` | The UI thread MUST NOT block on a channel, inbound or outbound. | this spec section 2; `ambre-spec-architecture.md section 2` | type-level -- each application holds and types the rule for itself (`TRAME-UI-003`, `TOILE-UI-100`) | partial -- nothing holds it for a view added later: the blocking receive compiles on this thread and freezes the page; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-003` | `INV` | A piece of interface state MUST NOT be held twice: a value the dispatcher pushes into a signal MUST NOT also live in a view's own state. | this spec section 2 | human-review -- the reviewer reads each diff for a value the dispatcher pushes into a signal that a view also holds in its own state | unheld -- a diff shows a duplicate and no test does: the two copies agree until one frame updates only one of them | human-review |
-| `UI-THREAD-004` | `INV` | The UI thread MUST NOT open a network or persistence path. The exceptions are same-origin font loading, the pre-session sign-in configuration read, and the local store. | `ambre-spec-zero-knowledge.md` (`ZK-001`) | none | unheld -- neither the drawing crate nor the interface toolkit declares a transport dependency, and the launcher holds the two reads plus the browser database (`ambre-spec-launcher.md`). No ban refuses the next one, and unlike the cryptography half there is no crate to name: a fetch is in the browser's own interface | unverified |
-| `UI-THREAD-005` | `INV` | Content rendering MUST stay inside the subset both graphics back ends share: no compute pass, no storage buffer. | `ambre-spec-frame.md` | none | unheld -- on the older back end a compute pass fails at device creation, so a regression is a blank surface at run time rather than a red job | unverified |
-| `UI-THREAD-020` | `INV` | The UI thread MUST hold no document data: only view state and the display payload the Logic thread pushed. | this spec section 2 | none | unheld -- each application types the rule for itself (`TRAME-UI-001`, `TOILE-UI-099`, the Prose row being unbuilt), and each is held by a grep no job runs; nothing holds it for a view added later | unverified |
-| `UI-THREAD-050` | `INV` | The UI thread MUST hold no path by which a mutation reaches the document other than a command. | this spec section 2; `ambre-spec-message-bus.md`, `BUS-002` | none | unheld -- the display payload the thread holds is not the document, so there is nothing to mutate in place today; nothing refuses a view handed a writable handle, which is what `UI-THREAD-020` failing would produce | unverified |
-| `UI-THREAD-051` | `INV` | An application's view code MUST NOT decode a document snapshot. | this spec section 2; `SYNC-011` | none | unheld -- the `loro` ban is granted to the whole application crate, and a crate's `ui/` module is inside it, so the engine is reachable from every view of Trame, Toile, Prose and Murmure. What holds it is a grep for `loro::` under each `ui/`, run by a reader rather than a job | unverified |
+| `UI-THREAD-004` | `INV` | The UI thread MUST NOT open a network or persistence path. The exceptions are same-origin font loading, the pre-session sign-in configuration read, and the local store. | `ambre-spec-zero-knowledge.md` (`ZK-001`) | none | unheld -- neither the drawing crate nor the interface toolkit declares a transport dependency, and the launcher holds the two reads plus the browser database (`ambre-spec-launcher.md`). No ban refuses the next one, and unlike the cryptography half there is no crate to name: a fetch is in the browser's own interface; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `UI-THREAD-005` | `INV` | Content rendering MUST stay inside the subset both graphics back ends share: no compute pass, no storage buffer. | `ambre-spec-frame.md` | none | unheld -- on the older back end a compute pass fails at device creation, so a regression is a blank surface at run time rather than a red job; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `UI-THREAD-020` | `INV` | The UI thread MUST hold no document data: only view state and the display payload the Logic thread pushed. | this spec section 2 | none | unheld -- each application types the rule for itself (`TRAME-UI-001`, `TOILE-UI-099`, the Prose row being unbuilt), and each is held by a grep no job runs; nothing holds it for a view added later; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `UI-THREAD-050` | `INV` | The UI thread MUST hold no path by which a mutation reaches the document other than a command. | this spec section 2; `ambre-spec-message-bus.md`, `BUS-002` | none | unheld -- the display payload the thread holds is not the document, so there is nothing to mutate in place today; nothing refuses a view handed a writable handle, which is what `UI-THREAD-020` failing would produce; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `UI-THREAD-051` | `INV` | An application's view code MUST NOT decode a document snapshot. | this spec section 2; `SYNC-011` | none | unheld -- the `loro` ban is granted to the whole application crate, and a crate's `ui/` module is inside it, so the engine is reachable from every view of Trame, Toile, Prose and Murmure. What holds it is a grep for `loro::` under each `ui/`, run by a reader rather than a job; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-012` | `INV` | Every application that zooms MUST zoom through one engine -- one factor, one transform -- behind the shared status-bar control. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
 | `UI-THREAD-013` | `INV` | Every application that zooms MUST accept a two-finger pinch as a zoom. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
 | `UI-THREAD-015` | `INV` | A row or column resize MUST go through one command, whichever table model asks for it. | this spec section 2 | not built | unbuilt -- lands with the `One resize command` Story (`ambre-roadmap.md` E8) | unimplemented |
@@ -43,33 +43,24 @@ application.
 | `UI-THREAD-017` | `INV` | Following a link MUST go through one host affordance. | this spec section 2 | not built | unbuilt -- lands with the `Links in Trame` Story (`ambre-roadmap.md` E8) | unimplemented |
 | `UI-THREAD-052` | `INV` | An application MUST NOT open an address by a path of its own. | this spec section 2; `ambre-spec-zero-knowledge.md` | not built | unbuilt -- lands with the `Links in Trame` Story (`ambre-roadmap.md` E8). The ban outlives the affordance: an address opened outside it leaks the document's content to whoever answers, and no host affordance existing is why nothing refuses one today | unimplemented |
 
-* **Budget.** the UI-thread rows of `ambre-spec-budgets.md section 1` -- the keystroke to a
-  draft, the viewport send, the render of a viewport event, the autocompletion -- plus the memory
-  total of `ambre-spec-budgets.md section 6`. Every one of those rows reads that no measurement exists.
+* **Budget.** the UI-thread rows of `ambre-spec-budgets.md section 1`: the keystroke to a draft,
+  the viewport send, the render of a viewport event, the autocompletion. The memory total of
+  `ambre-spec-budgets.md section 6` is the fifth. Every one reads **none exists**.
 * **Boundary.** `UI-THREAD-004` and `UI-THREAD-049` are the boundary on this side, and the first
   names its three exceptions. The operating system clipboard is the other outbound surface and
-  `ambre-spec-clipboard.md` fixes what it may carry. Everything else leaves through the Sync thread,
+  `ambre-spec-clipboard.md` fixes what it may carry; everything else leaves through the Sync thread,
   sealed (`ambre-spec-zero-knowledge.md`).
-* **Verification.** 2 `verified`, 8 `unverified`, 1 `human-review`, 6 `unimplemented`. Every row is
-  an `INV` and the column's answer is that confirmation: this thread is a place, not a gesture, so
-  it declares no `PRE`, no `POST`, no `FRAME` and no `FAIL`, and what it hosts is owned by
-  `ambre-spec-frame.md`, by `ambre-spec-chrome.md` and by each application. Both held rules are held
-  by a capability ban rather than a test, which is the strongest form available here: it refuses the
-  dependency instead of catching its use. Four conjunctions came apart, and two of them were hiding
-  the state of what they claimed. `UI-THREAD-004` banned network, cryptography and persistence in
-  one row marked `unverified`; the cryptography third is refused by four separate `cargo deny`
-  entries and is the only rule on this thread with real teeth, while the other two thirds have no
-  crate to ban at all. `UI-THREAD-021` read as a ban on the whole thread and was `verified` by a ban
-  that reaches the launcher alone: an application's own view code sits inside the crate the engine
-  is granted to, so `UI-THREAD-051` is the half nothing refuses. `UI-THREAD-001` bundled what the
-  surface owns with what the page owns, and the second half is where accessibility is lost today.
-  `UI-THREAD-017` bundled an affordance with a ban, and the ban outlives whatever is built for it.
+* **Verification.** 2 `verified`, 1 `failing`, 7 `untested`, 1 `human-review`, 6 `unimplemented`.
+  Both held rules rest on a capability ban rather than a test, the strongest form available here.
+  It refuses the dependency instead of catching its use. What is loose is the rest of the ban: two
+  thirds of it have no crate to refuse. The engine grant misses an application's own view code.
 ---
 
 ## 2. MODEL
 
 **CRDT containers.** none, and that is `UI-THREAD-020`. The thread holds view state and the display
-payload the Logic thread pushed; the document is one mental model and it lives on the other thread.
+payload the Logic thread pushed. The document is one mental model, and it lives on the other
+thread.
 
 **The boundary.** Two zones, two technologies, and two channels between them.
 
@@ -80,7 +71,7 @@ payload the Logic thread pushed; the document is one mental model and it lives o
 
 The interface is composed **around** the surface, which costs one layout pass; the browser then
 recomposes already rasterized layers at no per-frame cost. The one sensitive case is a floating
-element anchored to content that pans and zooms, and that element is synchronized to the content's
+element anchored to content that pans and zooms. That element is synchronized to the content's
 transform on every frame.
 
 | Direction | Carries |
@@ -106,12 +97,12 @@ of every application.
     controls (`ambre-spec-chrome.md`).
 * one crate per application, each holding its own Logic state and handlers, its own view, its own
   interface components and its own command table.
-* the launcher, downstream of every application: it mounts the shell, creates the channels, spawns
-  the Logic and Sync threads, boots the surface and injects the active view
+* the launcher, downstream of every application: it mounts the shell, creates the channels and
+  spawns the Logic and Sync threads. It then boots the surface and injects the active view
   (`ambre-spec-launcher.md`).
 
-Two of the shared crates are deliberately pure -- one graphics, one page framework -- so the
-renderer never depends on the framework the interface is written in.
+Two of the shared crates are deliberately pure: one graphics, one page framework. The renderer
+therefore never depends on the framework the interface is written in.
 
 **Where a state lives.** A state can exist in several layers. One layer owns it and every other is
 a projection.
@@ -125,7 +116,7 @@ a projection.
 | derived state | a formula cache, a dirty set, a spatial index, a culled viewport | the Logic thread, rebuilt from the document | no |
 | local history | the undo stack | the Logic thread, for this session | no |
 
-The consequence is `UI-THREAD-020`, and the local store is its one crossing: the launcher carries
+The consequence is `UI-THREAD-020`, and the local store is its one crossing. The launcher carries
 snapshot bytes to the browser database and back, and cannot read them (`UI-THREAD-021`).
 
 **The six behaviours every editor shares.** Each was arbitrated in the 2026-08 review, where three
@@ -178,18 +169,18 @@ The user touches nothing here. What they see is whether the interface stays resp
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **Four of the six shared behaviours have no code at all.** One zoom engine, one resize command,
-  one undo bound and one way to open an address are arbitrated and unbuilt, so each application
-  still answers its own way (`UI-THREAD-012` to `UI-THREAD-017`).
+  one undo bound and one way to open an address are arbitrated and unbuilt. Each application still
+  answers its own way (`UI-THREAD-012` to `UI-THREAD-017`).
 * **Nothing refuses the next exception to `UI-THREAD-004`.** The rule is written against what the
   launcher does, and no lint bans a fourth path. The first three were found by reading the crate,
   which is how a fifth will be found.
 * **Nothing refuses an interface component that draws content.** `UI-THREAD-001` holds because
-  nobody has written one, and the graph does not stop it: the toolkit can reach a canvas element as
+  nobody has written one, and the graph does not stop it. The toolkit can reach a canvas element as
   easily as any other.
 * **The blocking receive still compiles on this thread.** Each application types the rule for its
   own view and a view added tomorrow inherits nothing.
-* **No rule covers what the local store may hold.** The snapshot is opaque to this thread, and
-  nothing states how long it lives, what clears it, or what a second document does to it
+* **No rule covers what the local store may hold.** The snapshot is opaque to this thread.
+  Nothing states how long it lives, what clears it, or what a second document does to it
   (`ambre-spec-launcher.md`).
 * **The subset rule has no check.** Nothing in the build refuses a compute pass, and the failure
   mode is a blank surface on the machines least likely to be tested on.

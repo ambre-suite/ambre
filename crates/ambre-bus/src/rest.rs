@@ -1,8 +1,8 @@
 //! Relayed service plane -- the correlatable request/response family.
 //!
-//! Most P3 traffic is a pure relay: the UI asks for an operation, the Logic
-//! thread forwards it verbatim to the Sync thread (which performs REST / crypto
-//! / WebSocket work), and the response travels back the same way. Modelling
+//! Most P3 traffic is a pure relay. The UI asks for an operation, and the Logic
+//! thread forwards it verbatim to the Sync thread, which performs the REST,
+//! crypto and WebSocket work. The response travels back the same way. Modelling
 //! each step as its own enum variant produced four near-identical enums linked
 //! by ~300 lines of hand-written 1:1 mapping (the "P3 triplication").
 //!
@@ -15,9 +15,9 @@
 //! UiEvent     ::Rest { id, evt: RestEvent }     // Logic -> UI
 //! ```
 //!
-//! The Logic dispatcher collapses to a single forwarding arm (plus a tiny hook
-//! for the few service ops that also mutate Logic state, e.g. `Logout` clears
-//! the document registry). Adding a service op = one `RestCommand` variant +
+//! The Logic dispatcher collapses to a single forwarding arm, plus a tiny hook
+//! for the few service ops that also mutate Logic state. `Logout` is one: it
+//! clears the document registry. Adding a service op = one `RestCommand` variant +
 //! one `RestEvent` variant, edited in one place.
 //!
 //! # What is *not* here
@@ -46,18 +46,17 @@ use crate::{ChannelId, DocType, DocumentId, MeetingId, Role, UserId};
 // Secret-carrying IPC fields (H5)
 // -----------------------------------------------------------------------------
 
-/// Secret byte material crossing the UI -> Logic -> Sync boundary: a
-/// passphrase, or a document's plaintext on its way to or from a seal.
+/// Secret byte material crossing the UI -> Logic -> Sync boundary: a passphrase, or a
+/// document's plaintext on its way to or from a seal.
 ///
-/// The second use is deliberate. A `Vec<u8>` would relay the same bytes, and
-/// also render them in a `Debug` line and leave its copy in the heap after the
-/// hop. In a feature about a document at rest, that is the wrong default.
+/// The second use is deliberate. A `Vec<u8>` would relay the same bytes, and also render
+/// them in a `Debug` line and leave its copy in the heap after the hop. In a feature about
+/// a document at rest, that is the wrong default.
 ///
-/// Wraps [`Zeroizing<Vec<u8>>`], so the bytes are wiped when the value is
-/// dropped anywhere along the relay -- including the placeholder handlers that
-/// merely bind-and-drop. `Debug` is redacted so the secret can never leak into
-/// a log line, and the byte contents are exposed only through [`Deref`] to
-/// `[u8]` (which the crypto call sites already consume).
+/// Wraps [`Zeroizing<Vec<u8>>`], so the bytes are wiped when the value is dropped anywhere
+/// along the relay -- including the placeholder handlers that merely bind-and-drop. `Debug`
+/// is redacted, so the secret can never leak into a log line. The byte contents are exposed
+/// only through [`Deref`] to `[u8]`, which the crypto call sites already consume.
 #[derive(Clone, Default)]
 pub struct SecretBytes(Zeroizing<Vec<u8>>);
 
@@ -147,14 +146,12 @@ impl<'de> Deserialize<'de> for SecretString {
 // RequestId -- request/response correlation token
 // -----------------------------------------------------------------------------
 
-/// Correlation token tying a [`RestCommand`] to the [`RestEvent`] that answers
-/// it.
+/// Correlation token tying a [`RestCommand`] to the [`RestEvent`] that answers it.
 ///
-/// Allocated by the **originator** (the UI Thread) via [`RequestId::next`] and
-/// echoed unchanged by the Logic and Sync threads. Lets a UI with several P3
-/// operations in flight route each response to its call-site and apply
-/// per-request timeout / retry -- impossible with the previous fire-and-forget,
-/// stringly-correlated model.
+/// Allocated by the **originator** (the UI Thread) via [`RequestId::next`] and echoed
+/// unchanged by the Logic and Sync threads. Lets a UI with several P3 operations in flight
+/// route each response to its call-site, and apply per-request timeout / retry. The
+/// previous fire-and-forget, stringly-correlated model could do neither.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RequestId(pub u64);
 
@@ -293,11 +290,11 @@ pub enum RestCommand {
         document_id: DocumentId,
         invitee_email: String,
     },
-    /// Phase 2 of the invite. `expect_exchange_pub_key` is the key the user
-    /// confirmed (pinned) in phase 1: Sync re-fetches the invitee's key and
-    /// wraps the Document Key **only if it still matches**, closing the TOCTOU
-    /// hole a compromised server could exploit between the two phases. On
-    /// mismatch the invite fails with an explicit error. -> `InviteSent`.
+    /// Phase 2 of the invite. `expect_exchange_pub_key` is the key the user confirmed
+    /// (pinned) in phase 1. Sync re-fetches the invitee's key and wraps the Document Key
+    /// **only if it still matches**. That closes the TOCTOU hole a compromised server holds
+    /// between the two phases. On mismatch the invite fails with an explicit error. ->
+    /// `InviteSent`.
     InviteToDocument {
         document_id: DocumentId,
         invitee_email: String,
@@ -338,13 +335,13 @@ pub enum RestCommand {
 
     // -- The native file (`.ambre`) ----------------------------------------------
     //
-    // Neither of these reaches the relay, and they are the only service requests
-    // that do not: they are here because the *hops* are what they need. Sealing
-    // is cryptography, so it runs in the Sync worker and nowhere else
-    // (`ARCH-004`). This plane is how the interface asks that worker for
-    // something and gets a correlated answer back. Nothing about them touches a
-    // session: a signed-out user, or an offline one, still seals and opens
-    // their own files (`ambre-spec-docfile.md section 5`).
+    // Neither of these reaches the relay, and they are the only service requests that do
+    // not. They are here because the *hops* are what they need. Sealing is cryptography, so
+    // it runs in the Sync worker and nowhere else (`ARCH-004`). This plane is how the
+    // interface asks that worker for something and gets a correlated answer back. Nothing
+    // about them touches a session: a signed-out user, or an offline one, still seals and
+    // opens their own files (`ambre-spec-docfile.md section 5`).
+    //
     /// Seal a plaintext `.ambre` under `passphrase`. -> `DocFileSealed`
     /// / `DocFileSealFailed`.
     SealDocFile {

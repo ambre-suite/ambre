@@ -26,3 +26,6 @@ thiserror = { workspace = true }
 # send discipline of that hop is this crate's contract (`BUS-011`), so the type
 # that holds it belongs here rather than copied into each application view.
 flume = { workspace = true }
+
+[lints]
+workspace = true

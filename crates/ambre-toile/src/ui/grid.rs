@@ -1,10 +1,11 @@
 // ambre-toile/src/ui/grid.rs
 // ============================================================================
-// Adaptive magnetic grid (toile-viewport). The grid step is chosen so the on-screen
-// spacing stays in a comfortable pixel band as `zoom` changes (powers of the
-// board `grid_size`); `snap_world` quantizes a world point to the current step
-// for drag / resize snapping. Step selection is pure and host-tested; the paint
-// helper emits screen-space `stroke_line` calls through the abstract DrawSurface.
+// Adaptive magnetic grid (toile-viewport). The grid step is chosen so the
+// on-screen spacing stays in a comfortable pixel band as `zoom` changes (powers
+// of the board `grid_size`). `snap_world` quantizes a world point to the current
+// step for drag / resize snapping. Step selection is pure and host-tested; the
+// paint helper emits screen-space `stroke_line` calls through the abstract
+// DrawSurface.
 // ============================================================================
 
 use ambre_canvas::Palette;
@@ -24,8 +25,9 @@ const MAX_SPACING_PX: f64 = 96.0;
 
 /// Choose the grid step (world units) for `zoom`: the smallest power-of-two
 /// multiple of `base` whose screen spacing (`step * zoom`) is at least
-/// `MIN_SPACING_PX`, then halved back down while it stays above `MAX_SPACING_PX`
-/// (never below `base`, so the grid stays magnetic to the board unit).
+/// `MIN_SPACING_PX`. That step is then halved back down while it stays above
+/// `MAX_SPACING_PX`, never below `base`, so the grid stays magnetic to the board
+/// unit.
 pub fn grid_step(zoom: f64, base: f64) -> f64 {
     debug_assert!(base > 0.0 && zoom > 0.0);
     let mut step = base;

@@ -5,10 +5,10 @@ use super::*;
 
 impl TrameView {
     /// Swap the active document in place (SPA route change). Drop every
-    /// document-scoped field back to its `new()` value while preserving the
-    /// shared, route-independent plumbing (channels, text pipe, anchor, theme)
-    /// and the current canvas size, then force a full repaint and a fresh
-    /// initial viewport fetch for the new document. No-op if already current.
+    /// document-scoped field back to its `new()` value, preserving the shared,
+    /// route-independent plumbing (channels, text pipe, anchor, theme) and the
+    /// current canvas size. Then force a full repaint and a fresh initial
+    /// viewport fetch for the new document. No-op if already current.
     pub fn set_document(&mut self, document_id: DocumentId) {
         if self.document_id == document_id {
             return;
@@ -30,12 +30,12 @@ impl TrameView {
         self.anchor.publish(None);
     }
 
-    /// Canvas-side reaction to a single [`TrameEvent`] (`trame-engine`,
-    /// the update from the Logic thread). Exhaustive on purpose: a new variant
-    /// must fail the build here rather than be dropped silently. Variants that
-    /// only affect the
-    /// DOM chrome (toasts, formatting toolbar, undo/redo enablement) are explicit
-    /// no-ops -- they are handled in the per-frame relay (`ambre-app`), not here.
+    /// Canvas-side reaction to a single [`TrameEvent`] (`trame-engine`, the
+    /// update from the Logic thread). Exhaustive on purpose: a new variant must
+    /// fail the build here rather than be dropped silently. Variants that only
+    /// affect the DOM chrome (toasts, formatting toolbar, undo/redo enablement)
+    /// are explicit no-ops. They are handled in the per-frame relay
+    /// (`ambre-app`), not here.
     pub(crate) fn dispatch_trame(&mut self, te: TrameEvent) {
         match te {
             // Cell content batch: merge into the cache and flag data dirty. If a
@@ -45,7 +45,7 @@ impl TrameView {
                 self.state.on_viewport_data(te);
                 self.data_dirty = true;
                 // A batch may carry a newly-created merge whose span now covers
-                // the active cell (e.g. the drag-end corner after a merge). Re-home
+                // the active cell (for example the drag-end corner after a merge). Re-home
                 // the cursor on the master so typing targets the top-left, not a
                 // covered cell (which would reject the write as a conflict). Skip
                 // while dragging/editing so an in-progress gesture is not disturbed.
@@ -65,13 +65,13 @@ impl TrameView {
                 self.state.active_sheet = active;
                 self.needs_full = true;
             }
-            // A rejected lifecycle op (e.g. deleting the last sheet). The chrome
+            // A rejected lifecycle op (for example deleting the last sheet). The chrome
             // toasts it; here we log it and announce it for a11y.
             TrameEvent::Error { message } => {
                 tracing::warn!("[UI] Trame rejected: {message}");
                 self.text_input.announce(&message);
             }
-            // Both schema notices are the chrome's to toast; announcing them here
+            // Both schema notices are the chrome's to toast. Announcing them here
             // too puts them on the a11y channel, which is the only surface a
             // screen-reader user has for either (`SCHEMA-003`, `SCHEMA-008`).
             TrameEvent::DocumentRefused { reason } => {
@@ -94,9 +94,9 @@ impl TrameView {
                 self.needs_full = true;
             }
             // Find & Replace (`trame-find-replace`): highlight the match set and jump the
-            // active cell onto the focused match (reusing the navigation path, so
-            // an off-screen match scrolls into view). An empty set clears the
-            // highlight without moving the cursor.
+            // active cell onto the focused match. That reuses the navigation path, so an
+            // off-screen match scrolls into view. An empty set clears the highlight
+            // without moving the cursor.
             TrameEvent::FindResult { matches, active } => {
                 self.state.find_matches = matches.clone();
                 self.needs_full = true;
@@ -116,9 +116,9 @@ impl TrameView {
                 let cmd = self.state.scroll_viewport_cmd();
                 self.send_command_lossy(cmd);
             }
-            // Logic asks the canvas to adopt a selection it cannot derive locally
-            // (e.g. after an unmerge, the freed cells stay selected though the
-            // span-defining merge is gone). Active cell collapses to the top-left
+            // Logic asks the canvas to adopt a selection it cannot derive locally.
+            // An unmerge is the case: the freed cells stay selected, though the
+            // span-defining merge is gone. Active cell collapses to the top-left
             // corner; the anchor sits at the bottom-right so the rectangle renders
             // whole. Mirror the active cell back to Logic and the input pipe.
             TrameEvent::SelectRange { r1, c1, r2, c2 } => {
@@ -138,12 +138,11 @@ impl TrameView {
                 trigger_download(&filename, &data);
             }
             // Authoritative copy reply (`trame-clipboard`): the Logic thread
-            // serialized the
-            // whole tracked selection from the document (no viewport limit). Build
-            // the transport blob -- TSV for cross-app `text/plain`, postcard of the
-            // typed payload for the private Ambre type -- stash it in memory for a
-            // full-fidelity same-tab paste, and mark it pending so the host mirrors
-            // it to the OS clipboard next frame.
+            // serialized the whole tracked selection from the document (no viewport
+            // limit). Build the transport blob: TSV for cross-app `text/plain`,
+            // postcard of the typed payload for the private Ambre type. Stash it in
+            // memory for a full-fidelity same-tab paste. Mark it pending so the
+            // host mirrors it to the OS clipboard next frame.
             TrameEvent::Clipboard(payload) => {
                 let blob = ambre_bus::ClipboardBlob {
                     text: payload.to_tsv(),
@@ -183,7 +182,7 @@ impl TrameView {
         // command waits (`BUS-011`, `BUS-016`).
         self.flush_outbox();
         // Drain every queued UiEvent without blocking. A `Disconnected` error
-        // means the Logic thread is gone (panic=abort or shutdown) — there is
+        // means the Logic thread is gone (panic=abort or shutdown). There is
         // no recovery, so flip to the fatal state instead of silently looping.
         loop {
             match self.from_logic.try_recv() {
@@ -196,7 +195,7 @@ impl TrameView {
                     ..
                 }) => self.dispatch_trame(te),
                 Ok(UiEvent::FatalError { message }) => self.signal_fatal(&message),
-                // Other UiEvent variants (session, CRUD, channels…) are not yet
+                // Other UiEvent variants (session, CRUD, channels...) are not yet
                 // consumed by the Trame view; ignore them for now.
                 Ok(_) => {}
                 Err(flume::TryRecvError::Empty) => break,
@@ -268,7 +267,7 @@ impl TrameView {
         {
             self.formula_ref.set(self.active_cell_ref());
 
-            // While the formula input is focused it OWNS the text: the user is
+            // While the formula input is focused it OWNS the text. The user is
             // typing there, so the view must not overwrite `formula_text` (that
             // would fight the caret). A divergence from the active cell's value
             // means an edit is in progress -- open / drive an edit session from
@@ -325,10 +324,11 @@ impl TrameView {
                         }
                         // Return focus to the grid and reset the formula text to
                         // the cell we landed on. Without this reset `formula_text`
-                        // still holds the just-committed value: if the input keeps
+                        // still holds the just-committed value. If the input keeps
                         // DOM focus for even one frame, the focused branch above
-                        // would see `text != seed` on the NEW cell and re-open an
-                        // edit there, writing the value into the cell below too.
+                        // would see `text != seed` on the NEW cell. It would then
+                        // re-open an edit there, writing the value into the cell
+                        // below too.
                         self.text_input.focus();
                         self.formula_text
                             .set(self.cell_seed(self.state.active_row(), self.state.active_col()));
@@ -518,8 +518,8 @@ impl TrameView {
 
         // The in-cell edit field sits above everything (after the active border).
         // draw_edit flushes the editor's queued intents (a FontContext is live
-        // here), so the buffer is final afterwards -- which is why a deferred
-        // commit is resolved below, not in the key handler.
+        // here), so the buffer is final afterwards. That is why a deferred commit
+        // is resolved below, not in the key handler.
         if let Some(editor) = &mut self.editor {
             renderer::draw_edit(
                 surface,

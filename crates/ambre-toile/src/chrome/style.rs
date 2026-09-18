@@ -1,19 +1,19 @@
 // ambre-toile/src/chrome/style.rs
 // ============================================================================
 // The style / property inspector (`toile-styles`), wasm-only. A DOM side
-// panel shown only when the selection is non-empty; it edits the selected
+// panel shown only when the selection is non-empty. It edits the selected
 // elements' `ElementStyle` -- fill, stroke, stroke width, opacity -- plus the
 // z-order and Lock / Unlock actions.
 //
 // Style edits are DEBOUNCED and emitted as ONE `RestyleElements` over the whole
-// selection (the style register is written whole, `TOILE-018`): the panel keeps a local
-// working `ElementStyle` seeded from the published common style, mutates it on
-// each control, and (after a quiet interval) writes it to the shared `restyle`
-// signal the canvas view drains. Selection is UI-only state the view owns, so the
-// view supplies the ids -- the inspector never names them.
+// selection, the style register being written whole (`TOILE-018`). The panel
+// keeps a local working `ElementStyle` seeded from the published common style
+// and mutates it on each control. After a quiet interval it writes that style to
+// the shared `restyle` signal the canvas view drains. Selection is UI-only state
+// the view owns, so the view supplies the ids -- the inspector never names them.
 //
 // The z-order / lock buttons are pure `CommandId`s already resolved by the view
-// against its selection (`ui::menu`), so they reuse the shared `on_command`
+// against its selection (`ui::menu`). So they reuse the shared `on_command`
 // channel verbatim -- identical to the context menu and top menu bar. Values that
 // differ across the selection show a "Mixed" hint (the mask from `ui::style`).
 //
@@ -31,8 +31,8 @@ use ambre_chrome::{ColorPopover, Debouncer, FontPicker, FontSizeSelect, FormatTo
 use leptos::prelude::*;
 
 /// Map a stored `FontSpec.family` string to the picker's family label (`None` =
-/// Default): only the offered labels round-trip; anything else (e.g. the raw
-/// default "sans-serif") reads as Default.
+/// Default): only the offered labels round-trip. Anything else reads as
+/// Default, the raw "sans-serif" included.
 fn family_label(family: &str) -> Option<String> {
     matches!(family, "Sans" | "Serif" | "Monospace").then(|| family.to_owned())
 }
@@ -47,9 +47,9 @@ use crate::ui::style::StyleModel;
 const RESTYLE_DEBOUNCE: Duration = Duration::from_millis(120);
 
 /// The style / property inspector. `model` is the published common style (`None`
-/// hides the panel); `scope` gates the lock/unlock buttons; `on_command` is the
-/// shared command sink (z-order / lock); `restyle` is the whole-style channel the
-/// view turns into `RestyleElements` against the live selection.
+/// hides the panel), and `scope` gates the lock/unlock buttons. `on_command` is
+/// the shared command sink (z-order / lock). `restyle` is the whole-style channel
+/// the view turns into `RestyleElements` against the live selection.
 #[component]
 pub fn StyleInspector(
     model: RwSignal<Option<StyleModel>>,
@@ -170,7 +170,7 @@ pub fn StyleInspector(
         differs.then(|| view! { <span class="ambre-inspector-mixed">"Mixed"</span> })
     };
 
-    // Reactive per-field mixed flags (default when no model, i.e. panel hidden).
+    // Reactive per-field mixed flags (default when no model, that is, panel hidden).
     let mixed = move || model.get().map(|m| m.mixed).unwrap_or_default();
 
     // A z-order / lock command button routing through the shared sink.

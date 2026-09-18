@@ -21,7 +21,7 @@ use crate::ui::status::{SelStats, bounds_label, count_label};
 
 /// The Toile status bar component: app label + selection aggregates on the left,
 /// interactive zoom + fps chips on the right. `stats` is `None` while no
-/// selection reply has arrived; `zoom` is the shared board-zoom factor the canvas
+/// selection reply has arrived. `zoom` is the shared board-zoom factor the canvas
 /// view publishes each frame; `perf` is the live render snapshot.
 #[component]
 pub fn StatusBar(

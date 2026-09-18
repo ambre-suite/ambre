@@ -1,8 +1,8 @@
 //! `ToileState` <-> `.ambre` container (`ambre-spec-docfile.md`).
 //!
-//! The state-side half of the pair: the container functions themselves live in
-//! [`crate::logic::interop::docfile`] (they need only a `LoroDoc`), and these two
-//! methods bind them to a live board -- the snapshot on the way out, the cache
+//! The state-side half of the pair. The container functions themselves live in
+//! [`crate::logic::interop::docfile`], since they need only a `LoroDoc`. These
+//! two methods bind them to a live board: the snapshot on the way out, the cache
 //! rebuild on the way in.
 
 use ambre_core::{Uuid, docfile::DocFileError, schema::SchemaError};
@@ -15,7 +15,7 @@ impl ToileState {
     /// Export this board as plaintext `.ambre` bytes.
     ///
     /// `doc_id` is supplied by the caller because the engine does not hold the
-    /// document's identity -- the registry does (`ambre-logic`), and a fixture
+    /// document's identity. The registry does (`ambre-logic`), and a fixture
     /// generator pins it from its seed (`ambre-spec-fixtures.md`).
     pub fn export_ambre_plaintext(&self, doc_id: Uuid) -> Vec<u8> {
         export_ambre_plaintext(&self.doc, doc_id)
@@ -25,10 +25,15 @@ impl ToileState {
     /// carried and the display events the UI needs to repaint.
     ///
     /// Nothing is applied until the header and the schema register have both
-    /// validated, and a payload the CRDT
-    /// engine refuses leaves the board as it was: the two failure modes are
-    /// distinct, and [`DocFileError::PayloadRejected`] is the only one this layer
-    /// adds to the container taxonomy.
+    /// validated. A payload the CRDT engine refuses leaves the board as it was.
+    /// The two failure modes are distinct, and [`DocFileError::PayloadRejected`]
+    /// is the only one this layer adds to the container taxonomy.
+    ///
+    /// # Errors
+    ///
+    /// Every error of the free [`import_ambre_plaintext`], plus
+    /// [`DocFileError::PayloadRejected`] when the schema register or the CRDT
+    /// engine refuses the payload. The board is unchanged in either case.
     pub fn import_ambre_plaintext(
         &mut self,
         data: &[u8],
@@ -106,10 +111,10 @@ mod tests {
     #[test]
     fn round_trip_is_byte_identical_on_a_bare_document() {
         // I1 at its strictest: the same ops re-exported from a document that
-        // received nothing but this payload reproduce the file exactly. Asserted
-        // on a bare `LoroDoc` rather than a `ToileState`, because `ToileState::new`
-        // commits its own board scaffolding under a fresh random peer id -- that
-        // op is a second peer's history, not a lost round trip.
+        // received nothing but this payload reproduce the file exactly. Asserted on
+        // a bare `LoroDoc` rather than a `ToileState`, because `ToileState::new`
+        // commits its own board scaffolding under a fresh random peer id. That op
+        // is a second peer's history, not a lost round trip.
         let bytes = populated().export_ambre_plaintext(doc_id());
         let header = import_ambre_plaintext(&bytes).expect("a Toile container");
         let reloaded = LoroDoc::new();

@@ -1,10 +1,10 @@
 # AMBRE -- FEATURE: PRESENTATION
 
 **Type:** Vertical (feature)
-**Implementation:** implemented -- the deck panel, playback, the transition and the notes all ship;
-the deck's configuration is written and read by nobody.
+**Implementation:** implemented -- the deck panel, playback, the transition and the notes all ship. The
+deck's configuration is written and read by nobody.
 
-> A user orders a few frames into a deck and presents them: the board walks the audience from one
+> A user orders a few frames into a deck and presents them. The board walks the audience from one
 > frame to the next, animating what two neighbouring slides share.
 
 A presentation is not a second application. A slide is a frame, and the deck is an order over
@@ -24,19 +24,20 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-001` | `INV` | The slide order and the speaker notes MUST be document data: shared by the CRDT, and undoable. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_slide_order_produces_delta_and_is_undoable`; `ambre_toile::logic::convergence_tests::edit_notes_produces_delta_and_is_undoable` | none | verified |
-| `TOILE-FEAT-075` | `INV` | Playback -- the active slide, the mode, the broadcast role and the follow role -- MUST stay local to one viewer and MUST NOT be synced. | this spec section 3 | `ambre_toile::logic::convergence_tests::present_mode_toggle_is_local`; `ambre_toile::logic::convergence_tests::playback_is_not_synced`; `ambre_toile::logic::convergence_tests::follow_state_is_not_synced`; `ambre_toile::logic::convergence_tests::present_broadcast_toggle_is_local` | none | verified |
+| `TOILE-FEAT-075` | `INV` | Playback -- the active slide, the mode, the broadcast role and the follow role -- MUST stay local to one viewer, never synced. | this spec section 3 | `ambre_toile::logic::convergence_tests::present_mode_toggle_is_local`; `ambre_toile::logic::convergence_tests::playback_is_not_synced`; `ambre_toile::logic::convergence_tests::follow_state_is_not_synced`; `ambre_toile::logic::convergence_tests::present_broadcast_toggle_is_local` | none | verified |
 | `TOILE-FEAT-002` | `INV` | The deck MUST hold a frame at most once. | this spec section 3 | `ambre_toile::logic::convergence_tests::slide_order_dedups_repeated_frames` | none | verified |
 | `TOILE-FEAT-076` | `INV` | The active index MUST name a slide of the deck, whatever asked for it. | this spec section 3 | `ambre_toile::logic::convergence_tests::playback_bounds`; `ambre_toile::logic::convergence_tests::adopted_slide_is_clamped_to_deck` | none | verified |
 | `TOILE-FEAT-008` | `CONC` | Concurrent speaker-notes edits MUST converge character by character, with no sentence lost. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` | none | verified |
 | `TOILE-FEAT-027` | `INV` | The deck MUST hold only slides whose frame still exists. | this spec section 3 | `ambre_toile::logic::convergence_tests::deleting_a_frame_drops_its_slide`; `ambre_toile::logic::convergence_tests::deleting_an_element_seeds_no_deck` | none | verified |
-| `TOILE-UI-342` | `OBS` | The deck panel MUST show the deck in playback order, and MUST name a frame the user has not titled by its rank. | this spec section 4 | `ambre_toile::ui::deck::tests::an_unnamed_frame_reads_by_rank`; `ambre_toile::ui::deck::tests::a_named_frame_reads_by_name`; `ambre_toile::tests::chrome_ui::deck_panel_lists_the_slides_in_order`; `ambre_toile::tests::chrome_ui::deck_panel_empty_deck_invites_a_first_slide` | none | verified |
-| `TOILE-FEAT-098` | `OBS` | A deck that changed under this viewer -- by a peer, a history step or a deleted frame -- MUST reach the open panel. | this spec section 3 | none | unheld -- the engine emits `DeckChanged` on each of the four paths and the view re-reads on it, and no test drives that round trip, section 6 | unverified |
+| `TOILE-UI-342` | `OBS` | The deck panel MUST show the deck in playback order. | this spec section 4 | `ambre_toile::tests::chrome_ui::deck_panel_lists_the_slides_in_order`; `ambre_toile::tests::chrome_ui::deck_panel_empty_deck_invites_a_first_slide` | none | verified |
+| `TOILE-UI-368` | `OBS` | The deck panel MUST name a frame the user has not titled by its rank. | this spec section 4 | `ambre_toile::ui::deck::tests::an_unnamed_frame_reads_by_rank`; `ambre_toile::ui::deck::tests::a_named_frame_reads_by_name` | none | verified |
+| `TOILE-FEAT-098` | `OBS` | A deck that changed under this viewer -- by a peer, a history step or a deleted frame -- MUST reach the open panel. | this spec section 3 | none | unheld -- the engine emits `DeckChanged` on each of the four paths and the view re-reads on it, and no test drives that round trip, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-086` | `OBS` | The presenter panel MUST show the active slide's rank, the deck's length and that slide's notes. | this spec section 4 | `ambre_toile::ui::presenter::tests::counter_label_is_one_based`; `ambre_toile::ui::presenter::tests::counter_label_empty_deck`; `ambre_toile::tests::chrome_ui::presenter_panel_counter_is_one_based`; `ambre_toile::tests::chrome_ui::presenter_panel_hidden_when_closed` | none | verified |
-| `TOILE-UI-089` | `OBS` | The panel MUST show the follow affordance when the presenter signal names a peer, and MUST NOT show it when it names none. | this spec section 4 | `ambre_toile::tests::chrome_ui::presenter_follow_button_hidden_without_presenter` -- the signal naming no peer; `ambre_toile::tests::chrome_ui::presenter_follow_button_fires_with_peer` -- the signal naming one (both mount the panel with that signal set by hand, so they hold the component and never the relay that feeds it, which is `TOILE-UI-315`) | none | verified |
-| `TOILE-UI-315` | `OBS` | The presenter signal MUST name a peer only while that peer is broadcasting a slide. | this spec section 4 | none | fails -- the shell arms the signal on the first presence sample carrying a slide index and never clears it, so the follow affordance survives the presenter stopping, leaving and disconnecting. No test drives the relay, section 6. Answered by the `Presentation mode holds the screen it promises` Story (`ambre-roadmap.md` E7) | unverified |
-| `TOILE-UI-316` | `OBS` | The notes area MUST show a peer's edit to the note on screen. | this spec section 4 | none | fails -- the editor is seeded from the slide event and no event reports a remote note edit, so a co-author's writing stays invisible until the slide changes, section 6. Answered by the `Presentation mode holds the screen it promises` Story (`ambre-roadmap.md` E7) | unverified |
-| `TOILE-UI-083` | `OBS` | Presentation mode MUST hide every editing surface. | this spec section 4 | none | fails -- the content pass swaps the grid for a plain background and does nothing else, and the overlay pass is never told the mode at all, so the selection box, the handles, the find hits and the presence cursors keep painting over the slide. The chrome stays mounted and the board stays live, section 6. Answered by the `Presentation mode holds the screen it promises` Story (`ambre-roadmap.md` E7) | unverified |
-| `TOILE-UI-085` | `OBS` | An element the next slide drops MUST fade out over the whole transition. | this spec section 4 | none | fails -- the paint pass reads an override only for an element the visible set holds, so an element the gliding camera leaves stops mid-fade, section 6. Answered by the `Presentation mode holds the screen it promises` Story (`ambre-roadmap.md` E7) | unverified |
+| `TOILE-UI-089` | `OBS` | The panel MUST show the follow affordance exactly when the presenter signal names a peer. | this spec section 4 | `ambre_toile::tests::chrome_ui::presenter_follow_button_hidden_without_presenter` -- the signal naming no peer; `ambre_toile::tests::chrome_ui::presenter_follow_button_fires_with_peer` -- the signal naming one (both mount the panel with that signal set by hand, so they hold the component and never the relay that feeds it, which is `TOILE-UI-315`) | none | verified |
+| `TOILE-UI-315` | `OBS` | The presenter signal MUST name a peer only while that peer is broadcasting a slide. | this spec section 4 | none | fails -- the shell arms the signal on the first presence sample carrying a slide index and never clears it, so the follow affordance survives the presenter stopping, leaving and disconnecting. No test drives the relay, section 6; lands with the `Presentation mode holds the screen it promises` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-316` | `OBS` | The notes area MUST show a peer's edit to the note on screen. | this spec section 4 | none | fails -- the editor is seeded from the slide event and no event reports a remote note edit, so a co-author's writing stays invisible until the slide changes, section 6; lands with the `Presentation mode holds the screen it promises` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-083` | `OBS` | Presentation mode MUST hide every editing surface. | this spec section 4 | none | fails -- the content pass swaps the grid for a plain background and does nothing else, and the overlay pass is never told the mode at all, so the selection box, the handles, the find hits and the presence cursors keep painting over the slide. The chrome stays mounted and the board stays live, section 6; lands with the `Presentation mode holds the screen it promises` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-085` | `OBS` | An element the next slide drops MUST fade out over the whole transition. | this spec section 4 | none | fails -- the paint pass reads an override only for an element the visible set holds, so an element the gliding camera leaves stops mid-fade, section 6; lands with the `Presentation mode holds the screen it promises` Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.2 Order the deck
 
@@ -77,10 +78,10 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-088` | `POST` | A note edit MUST reach the document as the one smallest splice that explains it. | this spec section 4 | `ambre_toile::ui::presenter::tests::delta_none_on_no_change`; `ambre_toile::ui::presenter::tests::delta_pure_append`; `ambre_toile::ui::presenter::tests::delta_pure_prefix_insert`; `ambre_toile::ui::presenter::tests::delta_pure_delete`; `ambre_toile::ui::presenter::tests::delta_mid_string_replace`; `ambre_toile::ui::presenter::tests::delta_from_empty`; `ambre_toile::ui::presenter::tests::delta_to_empty`; `ambre_toile::ui::presenter::tests::delta_multibyte_indices_are_codepoints`; `ambre_toile::ui::presenter::tests::delta_multibyte_mid_replace`; `ambre_toile::ui::presenter::tests::delta_repeated_char_prefers_prefix`; `ambre_toile::tests::chrome_ui::presenter_notes_edit_fires_minimal_delta` | none | verified |
-| `TOILE-FEAT-088` | `PRE` | The caller MUST offer a splice measured against the note the document holds now. | this spec section 4 | none | fails -- nothing checks the precondition and the panel does not honour it, because `ui::presenter::notes_delta` diffs the typed value against a mirror the slide event alone refreshes, so a peer's edit between two keystrokes puts the offsets in the wrong place. `TOILE-FEAT-008` holds the merge, never the offsets, section 6 | unverified |
+| `TOILE-FEAT-088` | `PRE` | The caller MUST offer a splice measured against the note the document holds now. | this spec section 4 | none | fails -- nothing checks the precondition and the panel does not honour it, because `ui::presenter::notes_delta` diffs the typed value against a mirror the slide event alone refreshes, so a peer's edit between two keystrokes puts the offsets in the wrong place. `TOILE-FEAT-008` holds the merge, never the offsets, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TOILE-FEAT-089` | `FAIL` | A splice reaching past the end of the note MUST be clamped, not dropped. | this spec section 3 | `ambre_toile::logic::convergence_tests::edit_notes_clamps_out_of_range_splice` | none | verified |
 | `TOILE-FEAT-090` | `FAIL` | A note edit naming an element that is not a frame MUST be refused. | this spec section 3 | `ambre_toile::logic::convergence_tests::edit_notes_rejects_non_frame` | none | verified |
-| `TOILE-FEAT-091` | `FAIL` | A note edit made with no frame on screen MUST be refused before it reaches the document. | this spec section 4 | none | unheld -- the shell drops the intent when the panel names no frame, which is every keystroke on an empty deck, and nothing drives that path, section 6 | unverified |
+| `TOILE-FEAT-091` | `FAIL` | A note edit made with no frame on screen MUST be refused before it reaches the document. | this spec section 4 | none | unheld -- the shell drops the intent when the panel names no frame, which is every keystroke on an empty deck, and nothing drives that path, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-FEAT-092` | `FRAME` | A note edit MUST touch that frame's notes and nothing else. | this spec section 3 | structural -- `edit_notes` resolves the named frame's notes container and splices it, and it reaches no other element and no other container | none | verified |
 
 ### 1.7 Draw one frame of a transition
@@ -91,7 +92,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 | `TOILE-FEAT-093` | `POST` | A transition MUST reproduce each slide exactly at its own end. | this spec section 3 | `ambre_toile::logic::animate::tests::endpoints_reproduce_source_and_target` | none | verified |
 | `TOILE-UI-084` | `POST` | The camera MUST reach the active frame at the end of a transition. | this spec section 4 | `ambre_toile::ui::present::tests::end_frame_lands_on_target_camera_and_content`; `ambre_toile::ui::present::tests::zero_duration_snaps_immediately` | none | verified |
 | `TOILE-UI-317` | `POST` | The camera MUST hold the previous slide at the start of a transition, and move between the two ends only. | this spec section 4 | `ambre_toile::ui::present::tests::start_frame_holds_source_camera_and_content`; `ambre_toile::ui::present::tests::midpoint_tweens_between_endpoints` | none | verified |
-| `TOILE-FEAT-028` | `POST` | A transition MUST last the time the deck's own configuration carries. | this spec section 3 | none | fails -- the render thread eases over a fixed 300 ms constant, and nothing reads the three configuration fields the deck writes at birth, section 6. Answered by the `Presentation mode holds the screen it promises` Story (`ambre-roadmap.md` E7) | unverified |
+| `TOILE-FEAT-028` | `POST` | A transition MUST last the time the deck's own configuration carries. | this spec section 3 | none | fails -- the render thread eases over a fixed 300 ms constant, and nothing reads the three configuration fields the deck writes at birth, section 6; lands with the `Presentation mode holds the screen it promises` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-UI-318` | `FRAME` | Drawing a transition frame MUST NOT write to the document. | this spec section 4 | structural -- `ui::present::Transition` holds two snapshots and a clock, and its `advance` has no document handle and no command sink, so a played frame cannot be written back | none | verified |
 
 ### 1.8 Enter and leave the presentation
@@ -100,22 +101,19 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 |---|---|---|---|---|---|---|
 | `TOILE-UI-087` | `POST` | The Present menu entry MUST enter presentation mode on the first slide. | this spec section 4 | `ambre_toile::ui::menu_bar::tests::present_entry_emits_enter_present` | none | verified |
 | `TOILE-UI-319` | `POST` | Every panel control MUST resolve to the local command it names. | this spec section 4 | `ambre_toile::tests::chrome_ui::presenter_nav_buttons_fire_intents`; `ambre_toile::tests::chrome_ui::presenter_broadcast_button_fires_toggle`; `ambre_toile::tests::chrome_ui::presenter_follow_button_fires_with_peer` | none | verified |
-| `TOILE-FEAT-094` | `POST` | Leaving presentation mode MUST stop this viewer's broadcast. | this spec section 3 | none | unheld -- `exit_present` clears the broadcast flag, and `ambre_toile::logic::convergence_tests::present_mode_toggle_is_local` reads that the mode is local, never that the role is dropped with it | unverified |
+| `TOILE-FEAT-094` | `POST` | Leaving presentation mode MUST stop this viewer's broadcast. | this spec section 3 | none | unheld -- `exit_present` clears the broadcast flag, and `ambre_toile::logic::convergence_tests::present_mode_toggle_is_local` reads that the mode is local, never that the role is dropped with it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-FEAT-095` | `FRAME` | Entering or leaving presentation mode MUST NOT write to the document. | this spec section 3 | `ambre_toile::logic::convergence_tests::present_mode_toggle_is_local`; `ambre_toile::logic::convergence_tests::present_broadcast_toggle_is_local` | none | verified |
 
 * **Budget.** the transition frame under 4 ms at 500 elements, the slide-transition row of
-  `ambre-spec-budgets.md section 1`. A transition frame is a full repaint and a fresh cull, so
-  it costs a frame of the board plus one pass over the two slides.
+  `ambre-spec-budgets.md section 1`. A transition frame is a full repaint and a fresh cull. It costs a frame
+  of the board plus one pass over the two slides.
 * **Boundary.** one outbound flow, and only while the presenter broadcasts: the slide index rides an
   ephemeral presence frame, which `ZK-005` seals with the `DocumentKey`. The deck and the notes are
   document data like any other, sealed by `ZK-001`.
-* **Verification.** 35 `verified`, 9 `unverified`, 0 `unimplemented`. The last hole of the subject
-  is closed: a deck is built from a panel, and the four rows that waited on it -- the two engine
-  behaviours nothing drove, the deletion that left a dead slide, and the surface itself -- are now
-  held by tests of their own. The machinery remains the best-covered subject of the application:
-  convergence, playback, follow, the solver endpoints, the camera and both panels are each held.
-  The nine gaps are three kinds: six rules the board answers with something else, two the code holds
-  and no test drives, and one the panel owes its own splice and does not honour.
+* **Verification.** 36 `verified`, 6 `failing`, 3 `untested`. What holds is the machinery, the best-covered
+  subject of the application: convergence, playback, follow, the solver endpoints, the camera and both panels.
+  What is loose is two rules the code holds and no test drives, and one splice the panel owes itself. The six
+  failures are rules the board answers with something else.
 
 ---
 
@@ -132,12 +130,12 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 | types a note on the front slide | types on the same note | both sentences, interleaved | one text, no sentence lost (`TOILE-FEAT-008`) | `logic::convergence_tests::concurrent_notes_edits_converge` |
 | deletes a frame the deck names | presents | the order, without that frame | one slide fewer, and one undo brings the frame and its slide back together (`TOILE-FEAT-027`) | `logic::convergence_tests::deleting_a_frame_drops_its_slide` |
 
-**What this table cannot see.** Every row is one peer's document beside another's, and three of the
-subject's rules are neither: the panel tests mount the component with the presenter signal set by
-hand, so nothing here drives the relay that arms it (`TOILE-UI-315`); no event tells the editor that
-a peer wrote in the note on screen (`TOILE-UI-316`); and the splice a keystroke sends is measured
-against a mirror only a slide change refreshes (`TOILE-FEAT-088`), which the convergence row above
-cannot show because both writers there splice against the text they hold.
+**What this table cannot see.** Every row is one peer's document beside another's, and three of the subject's
+rules are neither. The panel tests mount the component with the presenter signal set by hand, so nothing here
+drives the relay that arms it (`TOILE-UI-315`). No event tells the editor that a peer wrote in the note on
+screen (`TOILE-UI-316`). The splice a keystroke sends is measured against a mirror only a slide change
+refreshes (`TOILE-FEAT-088`). The convergence row above cannot show it, because both writers there splice
+against the text they hold.
 
 ---
 
@@ -152,10 +150,10 @@ the deck. Two peers ordering the deck at the same moment race for the container 
 **Playback is a field, not a container.** The active index and the focus flag live on the engine's
 own state and reach no peer (`TOILE-FEAT-001`).
 
-**Commands** (`ambre-bus`): `SetSlideOrder { order }` writes the deck; `NextSlide`, `PrevSlide` and
-`GotoSlide(index)` move this viewer; `EnterPresent { focus }` and `ExitPresent` toggle the mode;
-`SetPresentBroadcast(on)` and `FollowPresenter(who)` set the two roles; `EditNotes { frame, delta }`
-splices one frame's notes.
+**Commands** (`ambre-bus`): `SetSlideOrder { order }` writes the deck. `NextSlide`, `PrevSlide` and
+`GotoSlide(index)` move this viewer; `EnterPresent { focus }` and `ExitPresent` toggle the mode.
+`SetPresentBroadcast(on)` and `FollowPresenter(who)` set the two roles; `EditNotes { frame, delta }` splices
+one frame's notes.
 
 **Events** (`ambre-bus`): `SlideChanged(SlideChange)`, `PresentModeChanged(bool)`,
 `PresentBroadcastChanged(bool)` and `FollowingChanged(Option<UserId>)`. The engine owns the board and
@@ -187,10 +185,10 @@ pub struct SnapElement {
 2. stop when the result equals the current order, so an unchanged deck is not an undo item;
 3. rewrite the list whole, commit once, and clamp this viewer's index to the new length.
 
-**Steps, when a frame is deleted:** the deck is pruned inside the same write, so the deletion and
-the slides it drops are one undo item and can never be seen apart (`TOILE-FEAT-027`). A board with
-no deck writes nothing: deleting a note must not seed a presentation. A deck the panel is showing is
-then re-read, because the panel holds no order of its own (`TOILE-FEAT-098`, `TOILE-UI-343`).
+**Steps, when a frame is deleted:** the deck is pruned inside the same write. The deletion and the slides it
+drops are one undo item, and can never be seen apart (`TOILE-FEAT-027`). A board with no deck writes nothing:
+deleting a note must not seed a presentation. A deck the panel is showing is then re-read, because the panel
+holds no order of its own (`TOILE-FEAT-098`, `TOILE-UI-343`).
 
 **Steps, when this viewer moves to a slide:**
 
@@ -203,8 +201,8 @@ then re-read, because the panel holds no order of its own (`TOILE-FEAT-098`, `TO
 
 1. read the phase from the frame clock, and ease it once for the camera and the content alike;
 2. glide the camera from the frame it started on toward the fitted target (`TOILE-UI-084`);
-3. tween each element the two slides share by id, fade in what only the new slide holds, fade out
-   what only the old one holds (`TOILE-FEAT-004`);
+3. tween each element the two slides share by id. Fade in what only the new slide holds, and fade out what
+   only the old one holds (`TOILE-FEAT-004`);
 4. stop at the raw phase, so the transition ends exactly on its length.
 
 **Membership is declared, never spatial.** A slide's elements are the frame's own children, not
@@ -239,32 +237,30 @@ whatever overlaps its box. An element in no frame never animates.
 | typing in the panel's notes area | splices that slide's notes (`TOILE-UI-088`) |
 | a slide change | glides the camera and animates the content until the transition ends |
 
-**The panel** is chrome, not a painted overlay: it is a floating Leptos component, like the find
-panel (`features/ambre-spec-toile-find.md section 4`). It opens with presentation mode and shows the
-slide counter, the five controls and the notes editor. The follow button is shown while the
-presenter signal names a peer -- and the shell arms that signal on the first slide any peer
-broadcasts, then never clears it (`TOILE-UI-315`).
+**The panel** is chrome, not a painted overlay: it is a floating Leptos component, like the find panel
+(`features/ambre-spec-toile-find.md section 4`). It opens with presentation mode and shows the slide counter,
+the five controls and the notes editor. The follow button is shown while the presenter signal names a peer.
+The shell arms that signal on the first slide any peer broadcasts, then never clears it (`TOILE-UI-315`).
 
-**The notes editor sends a splice, never a body.** A text area only reports its whole value, so the
-panel trims the common head and tail and sends what is left as one insert and one delete
-(`TOILE-UI-088`). That is what a keystroke and a paste each produce, and it is what makes two authors
-converge instead of overwriting each other (`TOILE-FEAT-008`).
+**The notes editor sends a splice, never a body.** A text area only reports its whole value. So the panel
+trims the common head and tail, and sends what is left as one insert and one delete (`TOILE-UI-088`). That is
+what a keystroke and a paste each produce, and it is what makes two authors converge instead of overwriting
+each other (`TOILE-FEAT-008`).
 
-**The deck panel** is the second floating component of the subject, opened from the Present menu and
-independent of presentation mode: a user builds the deck before presenting it. It lists the deck in
-playback order, each row carrying its rank, its two reorder steps and its removal, then the board's
-other frames, each addable at the end. A frame the user never titled reads by its rank, so a deck of
-unnamed frames is still navigable (`TOILE-UI-342`).
+**The deck panel** is the second floating component of the subject, opened from the Present menu. It is
+independent of presentation mode: a user builds the deck before presenting it. It lists the deck in playback
+order, each row carrying its rank, its two reorder steps and its removal. Then the board's other frames, each
+addable at the end. A frame the user never titled reads by its rank, so a deck of unnamed frames is still
+navigable (`TOILE-UI-342`).
 
-**The panel answers with an order, never with a patch.** Each edit is computed over the order the
-view last read back and sent whole, which is the only shape `SetSlideOrder` takes; an edit the model
-refuses -- a frame the deck already names, a rank past its end -- sends nothing and costs no undo
-item (`TOILE-UI-343`).
+**The panel answers with an order, never with a patch.** Each edit is computed over the order the view last
+read back and sent whole, which is the only shape `SetSlideOrder` takes. An edit the model refuses -- a frame
+the deck names, a rank past its end -- sends nothing and costs no undo item (`TOILE-UI-343`).
 
-**Focus mode drops the grid and nothing else** (`TOILE-UI-083`). The content pass swaps the grid for
-a plain background; the overlay pass is never told the mode at all, so the selection box, the
-handles, the find hits and the presence cursors keep painting over the slide. The editing chrome
-stays mounted and the board stays live under the presentation: a key that deletes still deletes.
+**Focus mode drops the grid and nothing else** (`TOILE-UI-083`). The content pass swaps the grid for a plain
+background. The overlay pass is never told the mode at all. So the selection box, the handles, the find hits
+and the presence cursors keep painting over the slide. The editing chrome stays mounted and the board stays
+live under the presentation: a key that deletes still deletes.
 
 ---
 
@@ -284,11 +280,11 @@ stays mounted and the board stays live under the presentation: a key that delete
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing drives the panel's re-read** (`TOILE-FEAT-098`). The engine says `DeckChanged` on the
-  four paths that move the deck without naming it -- a local write, a history step, a remote delta
-  and a deleted frame -- and the view re-reads the deck when the panel is open. Both halves are one
-  line each and neither is asserted: the panel tests mount the component over a `DeckView` set by
-  hand, and the engine tests read the deck through the test accessor rather than through the event.
+* **Nothing drives the panel's re-read** (`TOILE-FEAT-098`). The engine says `DeckChanged` on the four paths
+  that move the deck without naming it. Those are a local write, a history step, a remote delta and a deleted
+  frame. The view re-reads the deck when the panel is open. Both halves are one line each and neither is
+  asserted: the panel tests mount the component over a `DeckView` set by hand. The engine tests read the deck
+  through the test accessor rather than through the event.
 * **The deck's configuration is written once and read by nobody** (`TOILE-FEAT-028`). The three
   fields -- the transition length, autoplay and loop -- are seeded with the deck and no code reads
   them. The transition uses a constant, and neither autoplay nor loop has any code at all.
@@ -308,23 +304,23 @@ stays mounted and the board stays live under the presentation: a key that delete
   carries every element of both slides; the paint pass applies an override only to an element the
   visible set holds. The camera glides away from the old slide, so its elements are culled part-way
   through their own fade.
-* **The follow affordance never goes away** (`TOILE-UI-315`). The shell names a presenter the first
-  time a presence sample carries a slide index, and no path writes that name back to none: not the
-  presenter stopping the broadcast, not leaving the presentation, not leaving the document. The
-  button therefore offers to follow a peer who is no longer presenting, and following one sends this
-  viewer to whatever slide that peer was last seen on. The two panel tests set the signal by hand,
-  so neither the arming nor the clearing is exercised anywhere.
+* **The follow affordance never goes away** (`TOILE-UI-315`). The shell names a presenter the first time a
+  presence sample carries a slide index. No path writes that name back to none: not the presenter stopping the
+  broadcast, not leaving the presentation, not leaving the document. The button therefore offers to follow a
+  peer who is no longer presenting. Following one sends this viewer to whatever slide that peer was last seen
+  on. The two panel tests set the signal by hand, so neither the arming nor the clearing is exercised
+  anywhere.
 * **A peer's note edit is invisible until the slide changes** (`TOILE-UI-316`). The editor is seeded
   from the slide event and refreshed by nothing else; no display event reports a remote splice. Two
   authors on one slide converge in the document (`TOILE-FEAT-008`) and each keeps reading their own
   last keystroke.
-* **The splice is measured against a mirror, not against the note** (`TOILE-FEAT-088`). The panel
-  diffs the value the text area reports against the string it last received, and that string is
-  refreshed only by a slide change. A peer writing at the same moment moves the text under the diff,
-  so the insert and the delete land at offsets that no longer mean what they meant. Convergence
-  survives -- the CRDT merges whatever it is given -- and the sentence does not.
+* **The splice is measured against a mirror, not against the note** (`TOILE-FEAT-088`). The panel diffs the
+  value the text area reports against the string it last received, and that string is refreshed only by a
+  slide change. A peer writing at the same moment moves the text under the diff. So the insert and the delete
+  land at offsets that no longer mean what they meant. Convergence survives -- the CRDT merges whatever it is
+  given -- and the sentence does not.
 * **A keystroke with no frame is dropped in silence** (`TOILE-FEAT-091`). On an empty deck the panel
-  names no frame, so the shell discards the edit intent before it reaches the engine. Nothing tells
+  names no frame, so the shell drops the edit intent before it reaches the engine. Nothing tells
   the user that what they typed went nowhere, which is the same hole as entering an empty deck at
   all.
 * **One behaviour the code holds and nothing drives** (`TOILE-FEAT-094`). Leaving the presentation

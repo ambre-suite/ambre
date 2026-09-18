@@ -57,7 +57,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-050` | `POST` | An export MUST read from the last exported version vector and MUST advance it. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-050` | `POST` | An export MUST read from the last exported version vector. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-098` | `POST` | An export MUST advance the last exported version vector. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-051` | `POST` | A second export from the same version vector MUST yield the same bytes: an extra call MUST NOT truncate the stream. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-052` | `FRAME` | Exporting MUST NOT write to the document. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -106,25 +107,16 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-063` | `FRAME` | Fanning an outcome out MUST NOT let a connection change, a sharing change or a revoked member reach the document state. | this spec section 3; `ambre-spec-membership.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1` -- the local text insert with its
-  exported delta under 2 ms, the snapshot export of a hundred pages under 10 ms, the page-layout
-  handoff under 1 ms, and the shared `doc.import()` row every application spends. None of the four
-  has a benchmark, and the crate that would run one does not exist.
-* **Boundary.** none of its own: `PROSE-025` bans a network call from `ambre-prose` and refuses it a
-  dependency on `ambre-crypto` or `ambre-sync`, so this crate holds no key and opens no socket. What
-  the document sends leaves as bytes the Sync worker seals (`ZK-001`), and `UI-THREAD-004` bans a
-  network, crypto or persistence path on the other side of the seam. Prose's one outbound flow of
-  user content that is not the document itself is the picture blob, audited in
-  `features/ambre-spec-prose-images.md section 1`.
-* **Verification.** 38 `unimplemented`, nothing else -- the honest shape for a document whose crate
-  is a `lib.rs`. Two of the thirty-eight are compiler-held the day the crate exists, `PROSE-026` and
-  `PROSE-043`; the pair a host test reaches with no browser is `PROSE-004` and
-  `PROSE-023`, both properties over a generated command stream. The nine frame conditions are rows
-  this document did not state before: nothing said what each entry point leaves alone.
-  `PROSE-FEAT-006` is the one gap that is not absence but disagreement: it and the plane of
-  section 3.B state two different units for one
-  offset, so whichever is built the other row goes red. `PROSE-002`, `-007`, `-008` and `-027` are
-  the format's and live in `ambre-spec-prose-schema.md section 1`; `PROSE-020`, `PROSE-021`,
-  `PROSE-UI-011` and `PROSE-UI-012` are **retired, not moved** (the register is `contracts.py`).
+  exported delta, the snapshot export, the page-layout handoff, and the shared `doc.import()` row.
+  None has a benchmark, and the crate that would run one does not exist.
+* **Boundary.** none of its own. `PROSE-025` bans a network call from `ambre-prose` and refuses it
+  a dependency on `ambre-crypto` or `ambre-sync`. This crate holds no key and opens no
+  socket. Its one outbound flow that is not the sealed document is the picture blob
+  (`features/ambre-spec-prose-images.md`).
+* **Verification.** 39 `unimplemented`, nothing else -- the honest shape for a crate that is a
+  `lib.rs`. Two are compiler-held the day it exists; two more are properties over a
+  generated command stream. One gap is disagreement, not absence: with section 3.B,
+  `PROSE-FEAT-006` states two units for one offset, so whichever is built the other row goes red.
 
 ---
 
@@ -142,8 +134,8 @@ on rather than a test.
 | moves her caret | reads | nothing: a caret is never written | Bob's screen shows Alice's caret, and the history does not | none -- `PRESENCE-011`, `PROSE-058` |
 | scrolls to page 40 | stays on page 1 | nothing: a scroll is never written | each reader where they were | none -- `PROSE-UI-010` |
 
-Convergence rests on rules the format owns: a block is named by a minted `TreeID` and never by a
-slot (`PROSE-085`), a body is a sequence CRDT and not a register (`PROSE-002`, `PROSE-089`), and an
+Convergence rests on rules the format owns. A block is named by a minted `TreeID` and never by a
+slot (`PROSE-085`). A body is a sequence CRDT and not a register (`PROSE-002`, `PROSE-089`). An
 empty tree deterministically re-grows one root block (`PROSE-094`). Two peers holding the same
 operations hold the same document, and `ambre-spec-prose-schema.md section 1` is where each rule
 sits.
@@ -154,9 +146,9 @@ sits.
 
 **Containers.** Declared in `ambre-spec-prose-schema.md section 3` and cited from there by name.
 This document restates no part of the format. Three functions are the whole of the engine's access
-to it: one opens a leaf block's body, one counts a list item's ancestors because a depth is never
-stored (`PROSE-005`), and one answers the expansion policy of a mark key (`PROSE-007`) and is total
-over every key (`PROSE-090`).
+to it. One opens a leaf block's body, and one counts a list item's ancestors because a depth is
+never stored (`PROSE-005`). The third answers the expansion policy of a mark key (`PROSE-007`) and
+is total over every key (`PROSE-090`).
 
 ```rust
 // ambre-prose/src/doc.rs
@@ -250,12 +242,12 @@ impl ProseState {
 ```
 
 **The delta is a cursor, not a drain.** The export reads from the last exported version vector and
-then advances it, so exporting twice from the same vector yields the same bytes and the stream cannot
+then advances it. Exporting twice from the same vector yields the same bytes, and the stream cannot
 be truncated by an extra call. It is the mechanism `features/ambre-spec-trame-engine.md` already
 uses, so both applications have one delta model on the shared engine.
 
 **The state never sees a channel.** `ProseState` names no sender, no `SyncCommand` and no incoming
-event type: the generic dispatcher in `ambre-logic` routes what arrives to the four content methods
+event type. The generic dispatcher in `ambre-logic` routes what arrives to the four content methods
 above and fans the outcome back out (`PROSE-024`). A connection change, a sharing change or a
 revoked member is not document content and never reaches this state at all.
 
@@ -264,8 +256,8 @@ revoked member is not document content and never reaches this state at all.
 The plane the UI thread writes on. Values move by `flume`, so no shape below derives `serde`.
 
 > **The offset unit.** Every `pos`, every `range` and every `(TreeID, u32)` endpoint below is an
-> offset into the target block's body text -- the unit Loro indexes a text container and a cursor
-> with. The plane declares it a **Unicode code point**; `PROSE-FEAT-006` requires a **grapheme**,
+> offset into the target block's body text. That is the unit Loro indexes a text container and a
+> cursor with. The plane declares it a **Unicode code point**; `PROSE-FEAT-006` requires a **grapheme**,
 > and the view's own hit-test answers **UTF-8 bytes**. The three do not agree, and section 6 carries
 > the gap: nothing in the corpus states the conversion the ten editing documents each perform.
 
@@ -444,9 +436,9 @@ pub enum BlockInit {
 
 ### C. What the answer carries
 
-One enum, and every Logic-to-UI event is a variant of it: a second enum would put a document fact in
-two places and leave the dispatch with a hole (`PROSE-UI-001` bans the second model on the other
-side).
+One enum, and every Logic-to-UI event is a variant of it. A second enum would put a document fact in
+two places and leave the dispatch with a hole. `PROSE-UI-001` bans the second model on the other
+side.
 
 ```rust
 // ambre-prose/src/events.rs -- the content plane, in `ambre-bus`. Move on `flume`, no serde.
@@ -492,8 +484,8 @@ pub enum ProseEvent {
 }
 ```
 
-> **The conversion report carries no `serde`**, like every other payload above: it is a plain owned
-> value that moves to the UI thread, and an import or an export is a local Logic-thread operation
+> **The conversion report carries no `serde`**, like every other payload above. It is a plain owned
+> value that moves to the UI thread. An import or an export is a local Logic-thread operation
 > whose bytes cross the wire as the document, never as the report. Persisting one later is a mirror
 > type in the interop module, not a derive on this plane.
 
@@ -533,8 +525,8 @@ pub struct RemoteCursor {
 ```
 
 A remote position naming a block this peer has not received yet, or one already tombstoned, resolves
-to nothing and the cursor is silently dropped; it reappears when the delta lands. That is presence's
-best-effort rule (`PRESENCE-008`), and the anchor above is the whole of what Prose keeps of it: it
+to nothing and the cursor is silently dropped. It reappears when the delta lands. That is presence's
+best-effort rule (`PRESENCE-008`), and the anchor above is the whole of what Prose keeps of it. It
 names identities and never positions, which is `PRESENCE-007`.
 
 ### E. The data flow
@@ -560,7 +552,7 @@ sequenceDiagram
 
 A snapshot is the CRDT's own bytes and nothing else: no layout, no cache, no session state. It is
 compressed and encrypted by `ambre-sync` on the way out (`ZK-001`) and re-imported whole on the way
-in, so the format the disk holds is the format `ambre-spec-prose-schema.md` declares and the file
+in. The format the disk holds is the one `ambre-spec-prose-schema.md` declares, and the file
 container is `ambre-spec-docfile.md section 3`.
 
 ### G. What the UI thread holds
@@ -621,8 +613,8 @@ pub struct ProseUiState {
 | derived state | the layout, the run cache, the table of contents, the word count | the Logic thread, recomputed from the CRDT | no |
 | local history | the undo stack | the Logic thread, for this session | no |
 
-Two consequences are worth stating because a reader expects the opposite: two collaborators scroll
-independently and see the same document (`PROSE-UI-010`), and the draft echo is transient UI state
+Two consequences are worth stating because a reader expects the opposite. Two collaborators scroll
+independently and see the same document (`PROSE-UI-010`). The draft echo is transient UI state
 that dies with the tab and never reaches the wire.
 
 **Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
@@ -635,10 +627,10 @@ The user touches no part of this document directly. What it exposes is the seam:
 the host, and what the view does with each answer.
 
 **How input reaches the view.** Through the frame host, as a typed input event from the shared
-transparent `<textarea>` and the DOM pointer listeners -- there is **no `winit`**
+transparent `<textarea>` and the DOM pointer listeners. There is **no `winit`**
 (`ambre-spec-ui.md section 4`, `ambre-spec-text-input.md`, `ambre-spec-frame.md section 2`).
-Pointer coordinates are CSS pixels relative to the canvas, a click count separates the single, the
-double and the triple click, and the dispatcher answers whether the host must swallow the event. The
+Pointer coordinates are CSS pixels relative to the canvas, and a click count separates the single,
+the double and the triple click. The dispatcher answers whether the host must swallow the event. The
 Prose view is an arm of the frame host's application enum, like Trame's.
 
 | Event | What the view does |
@@ -680,19 +672,18 @@ Prose view is an arm of the frame host's application enum, like Trame's.
 * **Nothing exists.** `crates/ambre-prose/src/lib.rs` is seven lines, so the state, the two planes and
   the seam are a design, and all fourteen rows above are `unimplemented`.
 * **A position is counted three ways, and one of the three is a rule of this document.** The plane of
-  section 3.B declares every offset a Unicode code point; `PROSE-FEAT-006` requires a grapheme and
-  names a Rust `char` -- a code point -- as what it must never be; and the view's hit-test answers
+  section 3.B declares every offset a Unicode code point. `PROSE-FEAT-006` requires a grapheme, and
+  names a Rust `char`, a code point, as what it must never be. The view's hit-test answers
   UTF-8 byte ranges, because that is what the shaped run joins glyphs to
   (`features/ambre-spec-prose-page-rendering.md section 2`). Every editing document converts between
-  a view unit and a command unit, and not one of them can say what the conversion is
+  a view unit and a command unit, and none can say what the conversion is
   (`features/ambre-spec-prose-text-editing.md section 6`). Two of the three claims are normative and
-  they contradict each other inside this document, so the migration records it rather than picking a
-  unit: choosing one is a design decision, and it lands with `ARCH P2`.
+  contradict each other, so choosing a unit is a design decision that lands with `ARCH P2`.
 * **The typed engine error is declared nowhere, and the event that carries it is untyped.** The
   dependency table asks `thiserror` for a `ProseError`, one signature returns it, and no document
-  writes its variants; the event plane offers a numeric code and a message, which names neither the
-  command that failed nor a reason. Five features -- the styles, the lists, the tables, the bands and
-  the comments -- each record the same absence, and each was written against a refusal event this
+  writes its variants. The event plane offers a numeric code and a message, which names neither the
+  command that failed nor a reason. Five features record the same absence: the styles, the lists,
+  the tables, the bands and the comments. Each was written against a refusal event this
   plane does not declare. It lands with the
   `A refused command names what it refused` Story (`ambre-roadmap.md` E5).
 * **Three commands were declared by a feature and by no plane.** The spell checker's language,
@@ -701,27 +692,28 @@ Prose view is an arm of the frame host's application enum, like Trame's.
   refused one is the gap above.
 * **Nothing states what the engine does with a command it cannot honour.** A malformed range, a
   block id that resolves to nothing, a nesting rule broken by a move (`PROSE-040`): each feature
-  states its own refusal, and no rule of this document says whether a refused command leaves the
-  document untouched, whether it produces an outcome at all, or whether the undo stack sees it.
+  states its own refusal. No rule of this document says whether a refused command leaves the
+  document untouched, or whether it produces an outcome at all. Nothing says whether the undo stack
+  sees it.
 * **Nothing rules on the export cursor when an export fails.** The cursor is advanced after every
-  export, and no rule of this document says whether a failed export advances it too, so the
-  operations of that range would never be offered again.
-* **A dropped command leaves no trace.** A full Logic channel discards the mutation, and nothing
-  says whether the drop is logged, surfaced or counted, so an edit the user made is lost silently.
+  export, and no rule of this document says whether a failed export advances it too. The
+  operations of that range would then never be offered again.
+* **A dropped command leaves no trace.** A full Logic channel drops the mutation, and nothing
+  says whether the drop is logged, surfaced or counted. An edit the user made is lost silently.
 * **The remote path has no batch.** A run of deltas arriving together is applied one at a time, so
   the layout is rebuilt once per delta. Trame and Toile each carry a row for the amortized path,
   and this document declares no batch entry point to hold one.
 * **The priority scheduler that defers a long shaping pass is named and never designed.**
   `ambre-spec-budgets.md section 2` sends a monster paragraph's shaping through a P1-P4
-  scheduler in the Logic thread, and no document declares what those four levels are, what preempts
+  scheduler in the Logic thread. No document declares what those four levels are, what preempts
   what, or how a deferred pass reports back. Pagination assumes the split
   (`features/ambre-spec-prose-pagination.md`) and cannot state its cost without it.
 * **No budget is measured.** Not one of the Prose rows of `ambre-spec-budgets.md` has
-  a benchmark, so every figure the four bullets above rest on is a claim about a number nothing
+  a benchmark. Every figure the four bullets above rest on is a claim about a number nothing
   weighs. Giving the budgets a mechanism is its own Story
   (`ambre-roadmap.md`, "The performance budgets given a mechanism").
 * **The engine has no test seam yet, and the shape of one is already decided.** Trame drives its
-  Logic-to-Sync boundary through a mock sink; Toile asserts on the returned outcome instead, which
-  is stronger, because the value is the contract and a test that reads it cannot miss a send. Prose
-  returns an outcome by the same design and will be tested the same way, so the mock seam three
+  Logic-to-Sync boundary through a mock sink, and Toile asserts on the returned outcome instead.
+  That is stronger, because the value is the contract and a test that reads it cannot miss a send.
+  Prose returns an outcome by the same design and will be tested the same way. The mock seam three
   dying specs named for this application is not what it needs.

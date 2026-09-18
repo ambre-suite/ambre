@@ -4,7 +4,7 @@
 //
 // A KeyBinding is a normalized, hashable chord: a set of modifiers plus a
 // logical key. DOM `KeyboardEvent.key` strings are translated into `Key` at
-// the chrome boundary (ambre-chrome); this module stays free of web-sys so it
+// the chrome boundary (ambre-chrome). This module stays free of web-sys, so it
 // builds and tests on the host.
 // ============================================================================
 
@@ -12,8 +12,8 @@
 /// constructible in `const` command tables.
 ///
 /// One accelerator modifier, `primary`, carries both the control key and the
-/// command key: the two fold into it where a browser event becomes a chord
-/// (`ambre-chrome`), which is the only place they are still apart. A table
+/// command key. The two fold into it where a browser event becomes a chord
+/// (`ambre-chrome`). That is the only place they are still apart. A table
 /// therefore cannot name one machine's accelerator, so one table serves every
 /// platform (`ambre-spec-commands.md`, `UI-THREAD-028`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -113,7 +113,7 @@ impl Key {
     }
 }
 
-/// A fully-specified keyboard chord, e.g. Ctrl+Shift+B.
+/// A fully-specified keyboard chord, for example Ctrl+Shift+B.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct KeyBinding {
     pub mods: Modifiers,
@@ -150,11 +150,11 @@ impl KeyBinding {
     }
 }
 
-/// Human-readable rendering, e.g. "Ctrl+Shift+B". Order is fixed
+/// Human-readable rendering, for example "Ctrl+Shift+B". Order is fixed
 /// (Primary, Alt, Shift) so equal chords format identically.
 ///
 /// The primary accelerator is written "Ctrl", which the fold makes true on
-/// every platform: a machine whose accelerator is the command key answers the
+/// every platform. A machine whose accelerator is the command key answers the
 /// control key as well. Writing the macOS glyph instead is a chrome concern
 /// layered on top, and no surface asks for it today.
 impl core::fmt::Display for KeyBinding {

@@ -5,8 +5,9 @@ use super::*;
 
 /// After a merge, the active cell may sit on the block's bottom-right
 /// (covered) sub-cell -- the drag-end corner. `snap_active_to_master`
-/// re-homes the selection on the master so the editor targets the top-left,
-/// not a covered cell (which would reject the write as a merge conflict).
+/// re-homes the selection on the master, so the editor targets the top-left
+/// rather than a covered cell. A covered cell would reject the write as a
+/// merge conflict.
 #[test]
 fn snap_active_to_master_rehomes_after_merge() {
     let mut state = TrameUiState::new(800.0, 600.0);
@@ -25,11 +26,11 @@ fn snap_active_to_master_rehomes_after_merge() {
     assert!(!state.snap_active_to_master());
 }
 
-/// Autofill bug: dragging the fill handle from a merged source produces a
-/// grid of merges, leaving the selection spanning every filled block with the
-/// active corner on the last block's covered sub-cell. `snap_active_to_master`
-/// must keep the full multi-block selection (only re-homing the active corner
-/// onto its block master), not collapse it down to the last block.
+/// Autofill bug: dragging the fill handle from a merged source produces a grid
+/// of merges. The selection then spans every filled block, with the active
+/// corner on the last block's covered sub-cell. `snap_active_to_master` must
+/// keep the full multi-block selection (only re-homing the active corner onto
+/// its block master), not collapse it down to the last block.
 #[test]
 fn snap_keeps_multi_block_fill_selection() {
     let mut state = TrameUiState::new(800.0, 600.0);
@@ -81,8 +82,8 @@ fn snap_keeps_multi_block_fill_selection() {
 }
 
 /// Feed a single column of cells, flagging `filtered` rows as collapsed
-/// (`trame-shared-filter`), then assert the row axis collapses over them: the
-/// hidden set, vertical offsets, hit-testing, and navigation all skip them.
+/// (`trame-shared-filter`), then assert the row axis collapses over them. The
+/// hidden set, vertical offsets, hit-testing and navigation all skip them.
 #[test]
 fn filtered_rows_collapse_geometry_and_nav() {
     let mut state = TrameUiState::new(800.0, 600.0);
@@ -146,7 +147,7 @@ fn filtered_rows_collapse_geometry_and_nav() {
 }
 
 // The CellEditor caret / selection / word / IME internals are now the shared
-// `ambre_canvas::TextEditor` core: those semantics are covered by the core's own
+// `ambre_canvas::TextEditor` core. Those semantics are covered by the core's own
 // tests and by `editor_parity` (shim -> intent delegation).
 
 /// Absolute moves clamp to the grid and report the new active cell; a move
@@ -224,8 +225,9 @@ fn move_to_and_content_scans() {
 }
 
 /// A formula cell arriving in a viewport batch keeps its computed result in
-/// `text` for rendering while preserving the formula source in `raw` -- the
-/// value `cell_seed` hands the editor so editing a formula shows the formula.
+/// `text` for rendering, while preserving the formula source in `raw`. That
+/// is the value `cell_seed` hands the editor, so editing a formula shows the
+/// formula.
 #[test]
 fn viewport_data_preserves_formula_raw_for_editing() {
     let mut state = TrameUiState::new(800.0, 600.0);
@@ -255,7 +257,7 @@ fn viewport_data_preserves_formula_raw_for_editing() {
 }
 
 /// Optimistic commit of a formula must not display the formula source as its
-/// own result: `text` stays blank (pending the authoritative ViewportData)
+/// own result. `text` stays blank, pending the authoritative ViewportData,
 /// while `raw` retains the formula for re-editing. A plain literal shows
 /// immediately.
 #[test]

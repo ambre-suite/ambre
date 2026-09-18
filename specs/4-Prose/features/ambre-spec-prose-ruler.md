@@ -3,7 +3,7 @@
 **Type:** Vertical (feature)
 **Implementation:** design-only
 
-> A horizontal scale above the page, carrying three handles: where the first line starts, where the
+> A horizontal scale above the page, carrying three handles. Where the first line starts, where the
 > rest of the paragraph starts, and where every line ends. Drag one and the paragraph moves with it.
 
 The three values it writes are the paragraph's, and they belong to
@@ -32,20 +32,17 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-063` | `POST` | Releasing a handle MUST write the paragraph once, whatever the length of the drag. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-076` | `FRAME` | A handle in motion MUST NOT touch the document: the paint follows the pointer and nothing is written until the release. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** none of its own. A drag paints the handle and nothing else until release, which is
-  the point of `PROSE-UI-063`: the frame it sits inside is the row of
-  `ambre-spec-budgets.md section 2`, and no document write happens during the gesture.
+* **Budget.** none of its own. A drag paints the handle and nothing else until release, the point
+  of `PROSE-UI-063`. The frame it sits inside is the row of `ambre-spec-budgets.md section 2`, and
+  no document write happens during the gesture.
 * **Boundary.** none: the ruler reads view state and emits one command on release. It holds no key
   and opens no socket (`PROSE-UI-002`).
-* **Verification.** 5 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line
-  `lib.rs`. `PROSE-UI-063` stated the write and its frame condition in one row, and the frame
-  condition is the half that matters here: an implementation writing on every pointer move
-  satisfies "one write on release" for the last of them. `PROSE-UI-075` is the rule section 5
-  decides and no row carried -- the handles read the cascade, not the block's keys, and a paragraph
-  taking its indents from a style has no keys to read. `PROSE-UI-063` and `PROSE-UI-076` are the
-  two with an oracle a host test can hold: a drag of any length produces one command, and counting
-  them needs no browser. The three `OBS` rows are placement under a live zoom and land in the wasm
-  tier of `ambre-spec-testing.md section 6`.
+* **Verification.** 5 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line `lib.rs`.
+  Two rows have an oracle a host test can hold: a drag of any length produces one command
+  (`PROSE-UI-063`, `PROSE-UI-076`). Counting them needs no browser. The frame condition matters
+  most: an implementation writing on every pointer move satisfies "one write on
+  release" for the last of them. The three `OBS` rows are placement under a live zoom and land in
+  the wasm tier (`ambre-spec-testing.md section 6`).
 
 ---
 
@@ -70,8 +67,8 @@ names the row each scenario rests on.
 the command of `features/ambre-spec-prose-inline-styles.md`.
 
 **The state the view publishes.** The ruler is a DOM element fixed to the editor chrome, so it does
-not scroll with the page; the canvas view is what knows where the page column sits and how wide it
-is, and it publishes that (`ambre-spec-ui.md section 2`).
+not scroll with the page. The canvas view is what knows where the page column sits and how wide it
+is. It publishes that (`ambre-spec-ui.md section 2`).
 
 ```rust
 // ambre-prose/src/ui/ruler.rs -- published to the chrome component, never drawn on the canvas
@@ -106,11 +103,11 @@ pub enum RulerHandle { IndentFirst, IndentLeft, IndentRight }
 undo step (`features/ambre-spec-prose-undo.md`).
 
 **The handles follow the caret** (`PROSE-UI-064`), and read the block's effective settings through
-the cascade rather than its stored keys, so a paragraph inheriting its indents from a style shows
+the cascade rather than its stored keys. A paragraph inheriting its indents from a style shows
 the values it is laid out with (`PROSE-FEAT-020`, `PROSE-UI-075`).
 
 **The scale is the page's.** Zero is the page's left margin and the length is the content width,
-both from the layout, so a zoom moves the ruler with the page (`PROSE-UI-065`,
+both from the layout. A zoom moves the ruler with the page (`PROSE-UI-065`,
 `features/ambre-spec-prose-viewport.md`).
 
 **Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
@@ -147,7 +144,7 @@ are not respecified here (`ambre-spec-chrome.md`).
 * **Nothing exists.** `crates/ambre-prose/src/lib.rs` is seven lines, so the ruler, its handles and
   its scale are a design, and every row above is `unimplemented`.
 * **Nothing bounds a handle.** No rule says that the left indent cannot pass the right one, or that
-  either may leave the content column, so a drag can produce a paragraph whose content width is
+  either may leave the content column. A drag can produce a paragraph whose content width is
   zero or negative. Pagination has no rule for that block either
   (`features/ambre-spec-prose-pagination.md`).
 * **The drag over a multi-block selection is unruled.** The handles show the caret's block, and a
@@ -155,9 +152,9 @@ are not respecified here (`ambre-spec-chrome.md`).
   paragraphs indents ten paragraphs or one is undecided, and it is what an author expects to
   differ.
 * **The ruler carries no tab stops and no margin handles.** It writes three of the nine paragraph
-  properties; the page margins, which the same scale displays in every comparable editor, are
+  properties. The page margins, which the same scale displays in every comparable editor, are
   `meta/page` and reach no gesture at all (`ambre-spec-prose-schema.md section 3`).
-* **The unit is not chosen.** The stored values are points, the page format is millimetres, and no
-  document says what the scale is graduated in or what an author's locale changes about it.
+* **The unit is not chosen.** The stored values are points, the page format is millimetres. No
+  document says what the scale is graduated in, or what an author's locale changes about it.
 * **No gesture shows or hides it.** `RulerState` carries a `visible` flag and nothing sets it: the
   application declares no view menu.

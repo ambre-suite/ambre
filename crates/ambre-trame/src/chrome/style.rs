@@ -1,9 +1,9 @@
 // ambre-trame/src/chrome/style.rs
 // ============================================================================
-// The reactive chrome state the toolbars subscribe to: `Toggles` (history
-// enabled state, resolved from the command store) and `StyleState` (the active
-// cell's resolved rich style), plus the inbound `StyleApplied` mirror. Both are
-// `Copy` signal bundles that may live inside the `<Router>` subtree.
+// The reactive chrome state the toolbars subscribe to. `Toggles` is the history
+// enabled state, resolved from the command store, and `StyleState` is the active
+// cell's resolved rich style. The inbound `StyleApplied` mirror rides along. Both
+// are `Copy` signal bundles that may live inside the `<Router>` subtree.
 // ============================================================================
 
 use ambre_bus::{AppEvent, BorderStyle, CellFormat, HAlign, TrameEvent, UiEvent, VAlign};
@@ -14,8 +14,8 @@ use super::commands::{REDO, UNDO};
 
 /// The Send toggle signals the Trame chrome components subscribe to, resolved
 /// once from the launcher's `CommandStates` store. Plain `RwSignal`s, so this is
-/// `Copy` and `Send` and may live inside the `<Router>` subtree (unlike the
-/// `!Send` store itself, which the launcher keeps outside the reactive tree).
+/// `Copy` and `Send` and may live inside the `<Router>` subtree. The `!Send`
+/// store itself, by contrast, is kept outside the reactive tree by the launcher.
 #[derive(Clone, Copy)]
 pub struct Toggles {
     /// Undo/Redo availability (Loro `UndoManager` stacks), driving the matching

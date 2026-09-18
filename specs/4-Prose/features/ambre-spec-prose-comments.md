@@ -4,7 +4,7 @@
 **Implementation:** design-only
 
 > A discussion attached to a passage of the text. The thread follows the passage through every
-> edit, and when the passage is deleted the thread is kept and listed rather than destroyed with
+> edit. When the passage is deleted the thread is kept and listed rather than destroyed with
 > the sentence that carried it.
 
 ---
@@ -87,7 +87,8 @@ Two of the four match, and the two that do not are section 6.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-200` | `POST` | Deleting a thread MUST remove its entry and its mark, and MUST leave the text the mark covered. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-200` | `POST` | Deleting a thread MUST remove its entry and its mark. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-279` | `POST` | Deleting a thread MUST leave the text its mark covered. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-201` | `FRAME` | Deleting a thread MUST NOT rewrite the span of any other thread over the same characters. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.8 Edit the text a thread is anchored to
@@ -99,19 +100,18 @@ Two of the four match, and the two that do not are section 6.
 | `PROSE-FEAT-203` | `POST` | An edit that takes the mark away MUST leave the stored anchor on the last position the mark held. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-204` | `FRAME` | An edit over an annotated range MUST NOT change the thread's `resolved` flag, its replies, or the entry of another thread. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** none of its own: a comment is an annotation entry and a mark, both written on the
-  ordinary command path, and the highlight is painted in the page pass
+* **Budget.** none of its own. A comment is an annotation entry and a mark, both written on the
+  ordinary command path. The highlight is painted in the page pass
   `features/ambre-spec-prose-page-rendering.md` charges.
 * **Boundary.** none of its own: a thread is content in the document, and `ZK-001` seals every
-  payload before it leaves the client. The author field is stamped locally, which is a rule of this
-  document and not a boundary the relay sees.
-* **Verification.** 32 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-FEAT-009` is the row a property test reaches without a screen: any interleaving of edits
-  over an annotated range leaves the thread on that range or leaves it orphaned, and never on
-  another range. `PROSE-FEAT-078` is the row two peers are needed for, because a single writer can
-  never make two spans race. The eight frame conditions are the rows a single assertion cannot
-  reach: each names a field the operation is not allowed to touch, and a test has to read it
-  before and after.
+  payload before it leaves the client. The author field is stamped locally, a rule of this document
+  rather than a boundary the relay sees.
+* **Verification.** 33 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+  `PROSE-FEAT-009` is the row a property test reaches without a screen. Any interleaving of edits
+  over an annotated range leaves the thread on that range or orphaned, never on another.
+  `PROSE-FEAT-078` needs two peers: a single writer cannot make two spans race. The eight
+  frame conditions are the rows one assertion cannot reach: each names a field the operation may
+  not touch, read before and after.
 
 ---
 
@@ -140,9 +140,9 @@ mints (`section 2` of that document).
 
 **Two positional records, and only one of them is authoritative.** The mark on the text moves with
 every insertion and deletion, because that is what a mark does. The `anchor_block`, `anchor_start`
-and `anchor_end` fields of the entry are a **cache**, and they exist for two cases alone: rendering
-the thread before the block's runs are shaped, and holding the last known position of a thread whose
-mark is gone. The mark wins every disagreement (`PROSE-FEAT-075`), and every edit touching an
+and `anchor_end` fields of the entry are a **cache**, and they exist for two cases alone. Those are
+rendering the thread before the block's runs are shaped, and holding the last known position of a
+thread whose mark is gone. The mark wins every disagreement (`PROSE-FEAT-075`), and every edit touching an
 annotated block rewrites the cache from the mark's current span (`PROSE-FEAT-076`). Nothing renders
 from the cache while a live mark exists.
 
@@ -152,16 +152,18 @@ position, and the view lists the thread as orphaned. Only the delete command rem
 footnotes feature applies the same policy to a note whose call is deleted.
 
 **Overlap, and why it works.** A mark of one key is single-valued, so two threads over the same
-characters cannot both be that one mark's value. They are **layered** instead: each thread owns its
-own span, the newer value wins a raw read of the shared characters, and both entries stay live and
+characters cannot both be that one mark's value. They are **layered** instead. Each thread owns its
+own span, and the newer value wins a raw read of the shared characters. Both entries stay live, and
 both highlights are painted. Resolving or deleting one thread rewrites its own span and no other
 (`PROSE-FEAT-078`).
 
 **The identity, and where the author comes from.** The commands carry the text alone. The
 dispatcher fills the author name and the peer from the **current session identity**, never from the
-payload (`PROSE-FEAT-077`). It is **not** the rule presence applies to a caret: presence resolves the
-author from the key that signed the frame and puts nothing in the payload
-(`1-Foundations/ambre-spec-presence.md`, `PRESENCE-002`, `PRESENCE-003`), while a comment stores a
+payload (`PROSE-FEAT-077`).
+
+It is **not** the rule presence applies to a caret
+(`1-Foundations/ambre-spec-presence.md`, `PRESENCE-002`, `PRESENCE-003`). Presence resolves the
+author from the key that signed the frame and puts nothing in the payload. A comment stores a
 name and a peer in the document, stamped locally. Both refuse a forged author; only one of them
 writes an author down. Section 6 records the divergence.
 
@@ -211,7 +213,7 @@ document.
 The feature is painted in two places, and the split is the canvas and DOM boundary
 `ambre-spec-ui.md section 2` draws. The **highlight** is canvas content: a tinted rectangle under
 the annotated range, painted in the page pass (`PROSE-UI-049`). The **panel** is a DOM Leptos
-element to the right of the page, scrolled by the browser, each thread aligned to the vertical
+element to the right of the page, scrolled by the browser. Each thread is aligned to the vertical
 position the view publishes for its anchor (`PROSE-UI-050`).
 
 ---
@@ -248,17 +250,17 @@ position the view publishes for its anchor (`PROSE-UI-050`).
   refused` Story (`ambre-roadmap.md` E5).
 * **The panel's own state is named and never declared.**
   `features/ambre-spec-prose-engine.md section 3` gives the view a `CommentPanelState` field, and no
-  document says what it holds -- which thread is open, where the panel is scrolled, whether the
-  orphaned list is shown.
+  document says what it holds. The open thread, the panel's scroll position and the orphaned
+  list's visibility are all undeclared.
 * **Nothing rules on a comment inside a header, a footer or a table cell.** A footnote is refused
-  in the two bands (`PROSE-FEAT-071`) for a reason that does not apply here, and no rule allows or
+  in the two bands (`PROSE-FEAT-071`) for a reason that does not apply here. No rule allows or
   refuses the three cases.
 * **Nothing rules on a comment's page.** A thread whose panel entry names a page number rests on
   two peers breaking pages at the same place, which no rule states
   (`features/ambre-spec-prose-pagination.md section 5`). The `Two peers read the same page number`
   Story settles it (`ambre-roadmap.md` E5).
 * **Two applications stamp a comment's author two ways.** `TOILE-FEAT-014` requires the canonical
-  `UserId` resolved by `ambre-sync` and refuses a peer identifier; this document stores a display
+  `UserId` resolved by `ambre-sync` and refuses a peer identifier. This document stores a display
   name and the document peer, and no `UserId` at all (`ambre-spec-prose-schema.md section 3`). Both
   refuse a forged author, and only one of the two survives a user renaming themselves. Nothing in
   the corpus rules on which is right.

@@ -5,6 +5,10 @@ use super::*;
 
 impl TrameView {
     #[allow(clippy::too_many_arguments)]
+    /// # Panics
+    ///
+    /// When the browser exposes no `window` or no Performance API. The view
+    /// measures every frame against a budget, so neither has a fallback.
     pub fn new(
         document_id: DocumentId,
         to_logic: flume::Sender<LogicCommand>,
@@ -12,11 +16,10 @@ impl TrameView {
         canvas_width: f64,
         canvas_height: f64,
         text_input: TextInput,
-        // When embedded as a `doc_embed` child (`toile-embeds`), the
-        // child view must not grab the shared text pipe on construction: the
-        // top-level document owns
-        // the caret until the user clicks into the embed. A top-level view passes
-        // `false` and focuses immediately, as before.
+        // When embedded as a `doc_embed` child (`toile-embeds`), the child view
+        // must not grab the shared text pipe on construction. The top-level
+        // document owns the caret until the user clicks into the embed. A
+        // top-level view passes `false` and focuses immediately, as before.
         embedded: bool,
         anchor: AnchorPublisher,
         perf_pub: PerfPublisher,
@@ -36,7 +39,7 @@ impl TrameView {
         let dpr = window.device_pixel_ratio();
         let theme = theme_ctl.get();
 
-        // Focus the pipe up front so the keyboard works without a click; park it
+        // Focus the pipe up front so the keyboard works without a click. Park it
         // on the active cell so a first keystroke or IME opens there. Skipped for
         // an embedded child, which must not steal the caret from its host board.
         if !embedded {
@@ -131,7 +134,7 @@ impl TrameView {
                 tracing::warn!("Trame: UI->Logic channel full, dropping lossy command");
             }
             Err(flume::TrySendError::Disconnected(_)) => {
-                tracing::error!("Trame: UI→Logic channel disconnected");
+                tracing::error!("Trame: UI->Logic channel disconnected");
             }
         }
     }
@@ -196,7 +199,7 @@ impl TrameView {
             return;
         }
         self.fatal = true;
-        tracing::error!("Trame: fatal — {reason}; the UI is now inert");
+        tracing::error!("Trame: fatal -- {reason}; the UI is now inert");
         // Latch the canvas terminal screen. A Sync-worker death is a SEPARATE
         // wasm instance, so it reaches us only as this channel disconnect; the
         // panic-hook latch never fires for it. Forward it to the host here.
@@ -204,7 +207,7 @@ impl TrameView {
     }
 
     /// Announce the active cell to screen readers via the live region (content
-    /// a11y, 2.F): the cell reference plus its value, e.g. `"B2, 42"`. Called on
+    /// a11y, 2.F): the cell reference plus its value, for example `"B2, 42"`. Called on
     /// every selection change so navigating the grid is audible, like a native
     /// spreadsheet.
     pub(crate) fn announce_active(&self) {
@@ -221,10 +224,10 @@ impl TrameView {
 
     /// Refresh the status-bar selection aggregates (`trame-status-bar`) after a
     /// selection change. A lone cell shows nothing, so we clear the signal
-    /// locally; any multi-cell selection asks the Logic thread (which holds every
-    /// cell, not just the viewport) for the aggregates, replied as
-    /// [`TrameEvent::SelectionStats`] and mirrored into the signal by the
-    /// launcher's event loop.
+    /// locally. Any multi-cell selection asks the Logic thread (which holds every
+    /// cell, not just the viewport) for the aggregates. The reply is a
+    /// [`TrameEvent::SelectionStats`], mirrored into the signal by the launcher's
+    /// event loop.
     pub(crate) fn refresh_selection_stats(&self) {
         if self.state.selection.is_multi() {
             self.send_command_lossy(TrameCommand::RequestSelectionStats);
@@ -238,7 +241,7 @@ impl TrameView {
         self.sel_bounds.set(Some(self.state.selection.bounds()));
     }
 
-    /// The active cell's spreadsheet reference (e.g. `"B2"`), shown in the
+    /// The active cell's spreadsheet reference (for example `"B2"`), shown in the
     /// formula bar's name box (`trame-cell-editing`).
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn active_cell_ref(&self) -> String {
@@ -250,10 +253,10 @@ impl TrameView {
     }
 
     /// Recompute the active cell's on-screen anchor and publish it for the
-    /// floating selection toolbar -- the centre of the cell's top edge in CSS
-    /// px, or `None` when the cell is scrolled out of the grid area. Cheap;
-    /// called every frame so the toolbar tracks pans, but only forwarded to the
-    /// chrome on change.
+    /// floating selection toolbar. The anchor is the centre of the cell's top
+    /// edge in CSS px. It is `None` when the cell is scrolled out of the grid
+    /// area. Cheap; called every frame so the toolbar tracks pans, but only
+    /// forwarded to the chrome on change.
     pub(crate) fn publish_anchor(&mut self) {
         let next = self
             .state
@@ -269,8 +272,9 @@ impl TrameView {
     }
 
     /// Show the caret solid and restart its blink clock. Called on every edit
-    /// interaction (typing, IME, caret motion) -- the one chokepoint where user
-    /// input mutates the editor, so it also arms the input->caret latency probe.
+    /// interaction (typing, IME, caret motion). That is the one chokepoint where
+    /// user input mutates the editor, so it also arms the input->caret latency
+    /// probe.
     pub(crate) fn reset_blink(&mut self) {
         self.caret_on = true;
         self.last_blink_ms = self.perf.now();
@@ -316,8 +320,8 @@ impl TrameView {
 
     /// Open an edit session on the active cell WITHOUT touching focus or the
     /// formula bar text. Used when an edit originates from the HTML formula bar
-    /// input (which keeps DOM focus and owns the buffer): the in-cell editor is
-    /// only the rendering/commit vehicle, so stealing focus to the textarea pipe
+    /// input, which keeps DOM focus and owns the buffer. The in-cell editor is
+    /// only the rendering/commit vehicle. Stealing focus to the textarea pipe
     /// (as [`begin_edit`](Self::begin_edit) does) would abort the user's typing.
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn begin_edit_external(&mut self) {
@@ -336,7 +340,7 @@ impl TrameView {
         };
         let text = editor.text();
         tracing::info!(
-            "[UI] commit_edit → sending SetCellText row={} col={} text='{:.80}'",
+            "[UI] commit_edit -> sending SetCellText row={} col={} text='{:.80}'",
             editor.row,
             editor.col,
             text,
@@ -355,7 +359,7 @@ impl TrameView {
                 .is_err()
         {
             // A dropped boundary leaves the group open, so the next edit joins
-            // it and one undo takes both. It must not be discarded in silence
+            // it and one undo takes both. It must not be dropped in silence
             // (`TRAME-UI-142`).
             tracing::error!("Trame: the undo group boundary was refused, the group stays open");
         }
@@ -384,8 +388,8 @@ impl TrameView {
     /// to [`commit_edit`](Self::commit_edit) but without the cursor advance.
     ///
     /// Note: the raw text is copied verbatim, so a filled *formula* keeps its
-    /// references as typed (no per-cell relative reindexing -- that lives in the
-    /// Logic thread's paste/fill path, not the UI).
+    /// references as typed. There is no per-cell relative reindexing; that lives
+    /// in the Logic thread's paste/fill path, not the UI.
     pub(crate) fn commit_edit_filled(&mut self) {
         let Some(editor) = self.editor.take() else {
             return;
@@ -421,8 +425,8 @@ impl TrameView {
         if self.editor.take().is_some() {
             // Content is untouched; only the overlay field must be cleared. The
             // formula bar reverts to the (unchanged) active cell's stored value,
-            // not blank -- blanking it would read as "user typed empty" next
-            // frame and could re-open an edit that clears the cell.
+            // not blank. Blanking it would read as "user typed empty" next frame
+            // and could re-open an edit that clears the cell.
             self.edit_dirty = true;
             self.text_input.clear();
             #[cfg(target_arch = "wasm32")]

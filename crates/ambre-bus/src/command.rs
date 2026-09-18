@@ -1,13 +1,13 @@
-//! `SyncCommand` – commands sent from the Logic thread to the Sync thread.
+//! `SyncCommand` - commands sent from the Logic thread to the Sync thread.
 //!
 //! Three groups:
-//! - [`SyncCommand::Rest`] — the correlatable service family ([`RestCommand`]),
+//! - [`SyncCommand::Rest`] -- the correlatable service family ([`RestCommand`]),
 //!   forwarded verbatim from [`LogicCommand::Rest`]. The Sync thread performs the
 //!   REST / crypto work and answers with [`LogicEvent::Rest`].
-//! - **Control & content-send** — document/channel session control and CRDT /
+//! - **Control & content-send** -- document/channel session control and CRDT /
 //!   ephemeral byte payloads (`Vec<u8>` = genuine network bytes the Sync thread
 //!   encrypts/compresses/transmits).
-//! - **Lifecycle** — `Shutdown`.
+//! - **Lifecycle** -- `Shutdown`.
 //!
 //! Crosses a `postMessage` boundary from the Main instance to the separate Sync
 //! worker, so it is postcard-serialized on that hop (hence `Serialize`/
@@ -24,7 +24,7 @@ use crate::{ChannelId, DocType, DocumentId, RequestId, RestCommand};
 /// Command sent from the Logic thread to the Sync thread.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SyncCommand {
-    // ── Service plane (relayed request/response) ──────────────────────────────
+    // -- Service plane (relayed request/response) ------------------------------
     /// A [`RestCommand`] service operation forwarded from the Logic thread. The
     /// Sync thread answers with [`crate::LogicEvent::Rest`] echoing `id`.
     Rest {
@@ -32,7 +32,7 @@ pub enum SyncCommand {
         cmd: RestCommand,
     },
 
-    // ── Document sync session (control) ───────────────────────────────────────
+    // -- Document sync session (control) ---------------------------------------
     /// Open a sync session for a document.
     ///
     /// The Sync thread fetches members + `doc_key_enc`, decrypts the DocumentKey,
@@ -55,7 +55,7 @@ pub enum SyncCommand {
         payload: Vec<u8>,
     },
 
-    /// Full CRDT state for compaction (presigned URL → S3).
+    /// Full CRDT state for compaction (presigned URL -> S3).
     SendSnapshot {
         document_id: DocumentId,
         payload: Vec<u8>,
@@ -72,7 +72,7 @@ pub enum SyncCommand {
         document_id: DocumentId,
     },
 
-    // ── Channel sync session (control) ────────────────────────────────────────
+    // -- Channel sync session (control) ----------------------------------------
     OpenChannel {
         channel_id: ChannelId,
     },
@@ -90,6 +90,6 @@ pub enum SyncCommand {
         payload: Vec<u8>,
     },
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    // -- Lifecycle -------------------------------------------------------------
     Shutdown,
 }

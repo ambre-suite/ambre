@@ -25,11 +25,11 @@ prefix is `SCHEMA`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SCHEMA-001` | `INV` | A styled unit's whole style MUST be one binary register keyed by that unit's identity; a register per attribute is forbidden. | this spec section 2; `features/ambre-spec-trame-cell-styles.md` | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`; `::subset_style_edit_does_not_tear_a_whole_cell_rewrite` | partial -- Toile stores one register per element and no test drives two concurrent restyles of it | unverified |
-| `SCHEMA-002` | `INV` | A shared formatting control MUST emit one changed field. | this spec section 2; `ambre-spec-chrome.md` | none | unheld -- the four shared controls each emit one field, and nothing refuses a fifth that emits a whole style | unverified |
-| `SCHEMA-011` | `INV` | A view MUST fold that field into a whole-register write. | this spec section 2; `ambre-spec-chrome.md` | none | unheld -- it is the half that decides whether `SCHEMA-001` survives contact with the chrome: a view writing the field straight into a register of its own is the per-attribute layout the first rule forbids, arrived at from the other end. Nothing refuses one | unverified |
+| `SCHEMA-001` | `INV` | A styled unit's whole style MUST be one binary register keyed by that unit's identity; a register per attribute is forbidden. | this spec section 2; `features/ambre-spec-trame-cell-styles.md` | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`; `::subset_style_edit_does_not_tear_a_whole_cell_rewrite` | partial -- Toile stores one register per element and no test drives two concurrent restyles of it; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SCHEMA-002` | `INV` | A shared formatting control MUST emit one changed field. | this spec section 2; `ambre-spec-chrome.md` | none | unheld -- the four shared controls each emit one field, and nothing refuses a fifth that emits a whole style; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SCHEMA-011` | `INV` | A view MUST fold that field into a whole-register write. | this spec section 2; `ambre-spec-chrome.md` | none | unheld -- it is the half that decides whether `SCHEMA-001` survives contact with the chrome: a view writing the field straight into a register of its own is the per-attribute layout the first rule forbids, arrived at from the other end. Nothing refuses one; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SCHEMA-004` | `INV` | Every document MUST carry its schema version in a root register, written when the document is created. | this spec section 2 | `ambre_toile::logic::schema::tests::a_new_board_carries_the_current_version`; `ambre_trame::logic::schema::tests::a_new_workbook_carries_the_current_version` -- written inside the scaffolding commit of each engine's `from_doc`, so no document reaches persistence without it | none | verified |
-| `SCHEMA-009` | `INV` | A change to the layout of a persisted record MUST raise the schema version. | this spec section 2 | none | unheld -- the rule binds a code change to a constant, and nothing compares this build's record layouts against the previous release's, so it is a human review named as such. `FIXTURES P1` narrows it rather than closing it: a layout change moves every fixture digest, so the corpus gate turns a silent layout drift into a red build that a reviewer must explain | unverified |
+| `SCHEMA-009` | `INV` | A change to the layout of a persisted record MUST raise the schema version. | this spec section 2 | none | unheld -- the rule binds a code change to a constant, and nothing compares this build's record layouts against the previous release's, so it is a human review named as such. `FIXTURES P1` narrows it rather than closing it: a layout change moves every fixture digest, so the corpus gate turns a silent layout drift into a red build that a reviewer must explain; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SCHEMA-010` | `INV` | A migration MUST live in the application crate that owns the schema it migrates. | this spec section 2 | crate-graph -- `ambre_core::schema::SchemaMigration<D>` is generic over the document, and `ambre-core` depends on no CRDT: it is linked by `ambre-server`, which may never decode a document (`ZK-001`), so a migration written in the foundation has no type to write against and does not compile | none | verified |
 
 ### 1.2 Read a document's full state
@@ -49,24 +49,14 @@ container, which is the only moment a wrong reading can still be caught.
 
 * **Budget.** none of its own, and one cost worth naming. A full-state read imports the payload
   twice: once into a scratch document to read the register, once into the live one. Leg 3 of
-  `ambre-spec-budgets.md section 4` carries that cost, and it carries no figure. The second
-  import buys `SCHEMA-012`: a version read off the live document is a refused document already
-  merged into what the user is looking at.
+  `ambre-spec-budgets.md section 4` carries that cost, and carries no figure.
 * **Boundary.** none. The version register is ordinary document state, so it travels sealed like
   every other container and the relay sees a blob (`ZK-001`). The protocol half lives in
-  `ambre-core`, which the relay links, and that is why nothing in it knows what a CRDT is.
-* **Verification.** 9 `verified`, 4 `unverified`, 0 `unimplemented`. A test now holds everything the
-  version register promises: each document carries the number from creation, and every full-state
-  entry point compares it. A named case drives each of the three verdicts, the refusal included.
-  That refusal case compares the whole snapshot before and after, rather than a count. What is
-  *not* held is the older half of this document.
-  * `SCHEMA-001` holds for one application out of two: Toile stores one register per element and no
-    test drives two concurrent restyles of it.
-  * `SCHEMA-002` and `SCHEMA-011` are the two ends of one conjunction, and neither has a mechanism.
-    A view writing one field into a register of its own reaches the forbidden per-attribute layout
-    from the other end, and nothing refuses it.
-  * `SCHEMA-009` binds a code change to a constant, which no test can see. It is human review, and
-    `FIXTURES P1` will at least make a silent layout drift turn the corpus gate red.
+  `ambre-core`, which the relay links, and nothing in it knows what a CRDT is.
+* **Verification.** 9 `verified`, 4 `untested`. A test holds everything the register promises: the
+  number carried from creation, the comparison at every full-state entry point, and a named case per
+  verdict. What is loose is the per-element register in one application, the two ends of the
+  forbidden per-attribute layout, and the constant no test can see.
 
 ---
 
@@ -183,7 +173,7 @@ The user never sees the version. What they meet is what it protects them from.
 | A newer document is refused whole | reading a newer document on a best-effort basis and dropping what is unknown | a best-effort read of a schema the binary does not know is the silent-loss case the register exists to remove. Refusing costs the user an update; reading costs them the document |
 | Migrations live in the application crate | a shared migration registry in the foundation | what a container meant in version 2 and means in version 3 is the application's own semantics, and the foundation owns the protocol instead -- where the number is, when it is read, what each comparison means |
 | Mixed-version live collaboration is stated, not solved | a schema version on every delta, checked before it is applied | it needs a relay-side gate, and paying for that buys nothing while the skew is still bounded: one deployment serves every client, so the window is an open tab |
-| The register is read in a scratch document, at the cost of a second import | importing into the live document and reading the register there, which is one map lookup and no second import | it reads the version off a document that is, by then, already merged into the one the user is looking at. The only way back out of a refusal is to discard their session, so the cheap read buys a refusal that destroys exactly what `SCHEMA-012` exists to protect. The cost lands on leg 3 of `ambre-spec-budgets.md section 4`, which carries no figure |
+| The register is read in a scratch document, at the cost of a second import | importing into the live document and reading the register there, which is one map lookup and no second import | it reads the version off a document that is, by then, already merged into the one the user is looking at. The only way back out of a refusal is to drop their session, so the cheap read buys a refusal that destroys exactly what `SCHEMA-012` exists to protect. The cost lands on leg 3 of `ambre-spec-budgets.md section 4`, which carries no figure |
 | A register holding something other than a `u32` is refused | reading it as absent, which is version 0, which migrates and opens | it is indistinguishable from a *newer* document whose register this build cannot parse, and opening one of those is the silent loss the register exists to remove. Refusing costs a reader of a genuinely corrupt document an error message; reading costs a reader of a newer one their document |
 | An unreadable register raises one notice per import | a count of unreadable records, reported per document | the same register is met again on every later read, so the number measures repaints, not records. A count that drifts with the frame rate is worse than the plain fact, because a reader believes it |
 | The walk is generic over the document type | `ambre-core` takes a `loro` dependency and owns whole migrations | `ambre-server` links `ambre-core`, and a relay that can decode a document is the one thing the zero-knowledge posture forbids (`ZK-001`). Generic over `D` costs one type parameter and keeps the CRDT out of the foundation -- which is also what holds `SCHEMA-010` with no test |
@@ -198,7 +188,7 @@ The user never sees the version. What they meet is what it protects them from.
   happen to take that shape, and a third would inherit no check.
 * **No rule covers what a migration may do to a document it cannot fully read.** Both registries
   hold one step and it cannot fail, so nothing has forced the question yet. A step that *can* fail
-  reports the hop it broke on (`SchemaError::MigrationFailed`), and the caller discards the scratch
+  reports the hop it broke on (`SchemaError::MigrationFailed`), and the caller drops the scratch
   document. The reader therefore refuses the document whole rather than half-migrating it. That is
   the behaviour, and no rule states it.
 * **A second unreadable register says nothing new.** The import drains the notice, so a document

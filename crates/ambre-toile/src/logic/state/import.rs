@@ -1,10 +1,10 @@
 //! Atomic foreign-file import into [`ToileState`](super::ToileState)
 //! (`toile-import-export`). An [`ImportBatch`](crate::logic::interop::ImportBatch)
-//! produced by a pure converter is applied here as ONE undo group: every
+//! produced by a pure converter is applied here as ONE undo group. Every
 //! `CreateElement`, style, group, connector and media seed shares a single
-//! `doc.commit()` via the commit-free `*_inner` helpers. The pass order
-//! (creates -> styles -> groups -> connectors -> media -> one commit ->
-//! `rebuild_caches`) resolves every slot / group reference before it is used.
+//! `doc.commit()` via the commit-free `*_inner` helpers. The pass order resolves
+//! every slot / group reference before it is used. It is creates -> styles ->
+//! groups -> connectors -> media -> one commit -> `rebuild_caches`.
 
 use std::collections::HashMap;
 
@@ -45,8 +45,8 @@ fn rewrite_hash(batch: &mut ImportBatch, slot: usize, hash: &str) {
 }
 
 /// An import applied only once every embedded media blob has a real content hash
-/// back from Sync (`toile-media`). Holds the fully converted batch and the
-/// set of upload `RequestId`s still outstanding, each mapped to the `media` slot
+/// back from Sync (`toile-media`). Holds the fully converted batch and the set
+/// of upload `RequestId`s still outstanding. Each id maps to the `media` slot
 /// (and the `pending:{slot}` placeholder) it will resolve.
 pub(super) struct PendingImport {
     batch: ImportBatch,
@@ -67,9 +67,9 @@ impl ToileState {
         self.begin_import(import_raster(bytes, &Limits::default()), at)
     }
 
-    /// Route a converted batch: a parse / limit failure aborts with `ImportFailed`
-    /// (nothing applied,); a media-free batch takes the FAST PATH and lands
-    /// now in one undo group; a media-bearing batch is stashed as a
+    /// Route a converted batch. A parse / limit failure aborts with `ImportFailed`
+    /// and nothing is applied. A media-free batch takes the FAST PATH and lands
+    /// now in one undo group. A media-bearing batch is stashed as a
     /// [`PendingImport`] and issues one `UploadMedia` request per blob, applying
     /// nothing until every real hash returns (`toile-media`).
     fn begin_import(
@@ -84,7 +84,7 @@ impl ToileState {
             }
         };
         // The file lands where the user put it, before anything is applied
-        // (`TOILE-IO-023`): the media round trip may hold the batch for a while,
+        // (`TOILE-IO-023`). The media round trip may hold the batch for a while,
         // and the drop point is a fact of the gesture, not of the answer.
         place_batch_at(&mut batch, at);
         if batch.media.is_empty() {
@@ -128,6 +128,11 @@ impl ToileState {
     /// pending import with its real hash. When the last blob resolves, the batch
     /// lands atomically. An id matching no pending import is a stale response
     /// (the import was undone / the doc reopened) and is dropped.
+    ///
+    /// # Panics
+    ///
+    /// When the outstanding upload it just matched is absent from the pending
+    /// import. The position lookup above establishes it.
     pub fn handle_service_event(&mut self, id: RequestId, evt: RestEvent) -> ToileOutcome {
         let RestEvent::MediaUploaded { content_hash, .. } = evt else {
             // Only upload confirmations concern an import; ignore anything else.
@@ -178,8 +183,8 @@ impl ToileState {
     }
 
     /// Apply a converted [`ImportBatch`] as ONE atomic undo group
-    /// (`toile-import-export`). The pass is strictly ordered so every slot /
-    /// group reference resolves before it is used:
+    /// (`toile-import-export`). The pass is strictly ordered so every slot / group
+    /// reference resolves before it is used:
     ///
     /// 1. **creates** -> `create_element_inner`, minting an [`ElementId`] per slot;
     /// 2. **styles** -> `restyle_inner` on the slot's fresh element (style is an
@@ -190,11 +195,12 @@ impl ToileState {
     /// 5. **media** -> `seed_media` (dedup);
     /// 6. a single `doc.commit()` + one `rebuild_caches`.
     ///
-    /// Returns the finalized [`ImportReport`] (its `imported` count is the number
-    /// of elements actually created) and a [`ToileOutcome`] carrying the one CRDT
-    /// delta plus the repaint viewport. A create that unexpectedly fails (a
-    /// trusted converter should never emit one) is recorded in the report and its
-    /// slot left unresolved, so any group / connector referencing it is skipped.
+    /// Returns the finalized [`ImportReport`] and a [`ToileOutcome`]. The report's
+    /// `imported` count is the number of elements actually created; the outcome
+    /// carries the one CRDT delta plus the repaint viewport. A create that
+    /// unexpectedly fails is recorded in the report and its slot left unresolved,
+    /// so any group / connector referencing it is skipped. A trusted converter
+    /// should never emit one.
     pub(super) fn apply_import(&mut self, batch: ImportBatch) -> (ImportReport, ToileOutcome) {
         let ImportBatch {
             commands,

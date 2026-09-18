@@ -27,6 +27,7 @@ This file is a directory, not a manual. Each row says what a file holds and when
 | :--- | :--- |
 | [`specs/ambre-roadmap.md`](specs/ambre-roadmap.md) | Deciding what to build next, or citing the Story that an `unimplemented` row is bound to. One row per story, and the only place anything is scheduled: no spec carries a backlog. |
 | [`specs/ambre-roadmap-journal.md`](specs/ambre-roadmap-journal.md) | Only to answer "did that ship, and under which epic". Never to plan. |
+| [`specs/ambre-glossary.md`](specs/ambre-glossary.md) | Before naming anything, and when a term is unfamiliar. One row per term: a short gloss, the synonyms it forbids, and the document that defines it. The gloss never restates the rule; the reference does. |
 | [`specs/ambre-spec-template.md`](specs/ambre-spec-template.md) | Writing or restructuring a spec. Two templates -- a feature document and a schema document -- the contract both obey, and the check that holds each pillar. |
 | [`specs/1-Foundations/ambre-spec-architecture.md`](specs/1-Foundations/ambre-spec-architecture.md) | The three-thread stack: the two instances, the channels, the boot order, the failure model and the crate graph that carries the separation. |
 | [`specs/1-Foundations/ambre-spec-message-bus.md`](specs/1-Foundations/ambre-spec-message-bus.md) | What travels between the three threads: the three planes, the four envelopes, the service plane, the role gate, and what a full channel means. |

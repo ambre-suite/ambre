@@ -6,10 +6,10 @@
 // subset a menu happens to show. That distinction is the whole rule: a menu is
 // a layout, and a command outside every layout is reachable only here.
 //
-// The palette is the first view that can borrow no label from a menu, so it
-// reads the description a command carries (`ambre-spec-commands.md`,
-// UI-THREAD-019) and nothing else. It is app-agnostic: it takes a command
-// table and a state store, and names no application.
+// The palette is the first view that can borrow no label from a menu. It reads
+// the description a command carries (`ambre-spec-commands.md`, UI-THREAD-019),
+// and nothing else. It is app-agnostic: it takes a command table and a state
+// store, and names no application.
 //
 // The filter is a pure function, tested on the host; the component around it is
 // the DOM half, tested under wasm.
@@ -38,8 +38,8 @@ pub fn matches(label: &str, query: &str) -> bool {
 
 /// The commands of `table` whose label answers `query`, in declaration order.
 ///
-/// Declaration order, never a relevance rank: the table is written in the order
-/// an application groups its commands, and a rank that reorders rows under the
+/// Declaration order, never a relevance rank. The table is written in the order
+/// an application groups its commands. A rank that reorders rows under the
 /// user's fingers as they type costs more than it buys.
 pub fn filter<'a>(table: &'a [Command], query: &str, locale: &Locale) -> Vec<&'a Command> {
     table
@@ -54,10 +54,10 @@ pub fn filter<'a>(table: &'a [Command], query: &str, locale: &Locale) -> Vec<&'a
 /// invokes it through `on_command`, the same sink every other trigger uses, and
 /// closes the overlay.
 ///
-/// Every row reads enabled: the command store is `Rc` and stays in the mount
+/// Every row reads enabled. The command store is `Rc` and stays in the mount
 /// owner, out of the `Send` router subtree, so this view cannot subscribe to it.
-/// The palette therefore offers Undo on an empty history
-/// (`ambre-spec-chrome.md` section 5).
+/// The palette therefore offers Undo on an empty history (`ambre-spec-chrome.md`
+/// section 5).
 #[component]
 pub fn CommandPalette(
     /// Visibility, driven by the launcher when the palette command is invoked.
@@ -71,7 +71,7 @@ pub fn CommandPalette(
     let input_ref = NodeRef::<html::Input>::new();
 
     // Each open starts from a blank query on the first row, and takes the
-    // caret: a palette that reopens on the last search is a palette that runs
+    // caret. A palette that reopens on the last search is a palette that runs
     // the wrong command on the next Enter.
     Effect::new(move |_| {
         if open.get() {

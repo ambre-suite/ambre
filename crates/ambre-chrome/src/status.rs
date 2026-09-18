@@ -3,9 +3,9 @@
 // Shared status-bar building blocks (app-agnostic, ambre-spec-chrome.md,
 // CHROME-014).
 //
-// The status bar itself is app-specific (its left side shows Trame's cell
-// aggregates or Toile's selection count/bounds), but three pieces are identical
-// across the canvas apps and live here so the two read and behave the same:
+// The status bar itself is app-specific: its left side shows Trame's cell
+// aggregates or Toile's selection count/bounds. Three pieces are identical
+// across the canvas apps and live here, so the two read and behave the same:
 //   - `StatusLabel` -- the app-name caption pinned to the left edge.
 //   - `ZoomChip`    -- the interactive zoom readout + preset menu (right side).
 //   - `PerfChip`    -- the interactive fps readout + an app-supplied detail
@@ -21,7 +21,7 @@ use leptos::prelude::*;
 /// reads identically.
 pub const ZOOM_PRESETS: [f64; 6] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
-/// The app-name caption pinned to the left of a status bar (e.g. "Trame",
+/// The app-name caption pinned to the left of a status bar (for example "Trame",
 /// "Toile"): a dim, small label, styled by the shared `statusbar-label` class.
 #[component]
 pub fn StatusLabel(#[prop(into)] label: String) -> impl IntoView {

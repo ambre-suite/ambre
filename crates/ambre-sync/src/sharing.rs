@@ -4,9 +4,9 @@
 //
 // These hold the crypto-glue logic -- hex/base64 decoding, X25519 ECDH key
 // wrapping, and server-response mapping -- with NO IO. The surrounding handlers
-// in `lib.rs` only do `fetch` (wasm-only) plus channel plumbing, so pulling the
-// decisions out here makes them unit-testable natively (`cargo test`), without a
-// browser or a live server. ECDH primitive correctness itself is covered by
+// in `lib.rs` only do `fetch` (wasm-only) plus channel plumbing. Pulling the
+// decisions out here makes them unit-testable natively (`cargo test`), without
+// a browser or a live server. ECDH primitive correctness itself is covered by
 // `ambre-crypto` (`wrap_unwrap_roundtrip`); here we test the GLUE: peer-key
 // selection, the `nonce || ciphertext` wire format, and best-effort rotation.
 // ============================================================================
@@ -84,17 +84,17 @@ pub(crate) fn rotate_entries_for(
 }
 
 /// Builds the presence directory (Ed25519 signing key -> canonical `UserId`)
-/// from any members response, given each entry's `(user_id, signing_pub_key)`
-/// as raw strings (`ambre-spec-membership.md`). Both the open
-/// path and the member-list path feed it, hence the string-pair input rather
-/// than one of the two entry structs.
+/// from any members response, given each entry's `(user_id, signing_pub_key)` as
+/// raw strings (`ambre-spec-membership.md`). Both the open path and the
+/// member-list path feed it, hence the string-pair input rather than one of the
+/// two entry structs.
 ///
 /// An entry whose id or key does not parse is skipped rather than failing the
-/// whole response: a member we cannot key on costs that one peer's cursor, while
+/// whole response. A member we cannot key on costs that one peer's cursor, while
 /// refusing everything would cost the document its presence entirely. Unlike
-/// [`map_members`], nothing is invented for a bad row -- a fabricated id here
-/// would attribute a cursor to the wrong person, which is exactly what keying
-/// presence on the canonical `UserId` exists to prevent.
+/// [`map_members`], nothing is invented for a bad row. A fabricated id here
+/// would attribute a cursor to the wrong person, which is what keying presence
+/// on the canonical `UserId` prevents.
 pub(crate) fn presence_directory<'a>(
     entries: impl IntoIterator<Item = (&'a str, &'a str)>,
 ) -> Vec<([u8; 32], UserId)> {
@@ -113,7 +113,7 @@ pub(crate) fn presence_directory<'a>(
 ///
 /// Every failure path -- no session id, no row for us, an unparsable id, an
 /// unknown role string -- yields `Role::Viewer`. That is the safe direction for
-/// a UX gate: it hides affordances we may in fact have, whereas guessing
+/// a UX gate. It hides affordances we may in fact have, whereas guessing
 /// `Owner` would offer edits the server then rejects. A document we genuinely
 /// own always has a well-formed row saying so.
 pub(crate) fn own_role<'a>(
@@ -150,13 +150,13 @@ pub(crate) fn map_members(entries: Vec<http::DocumentMemberEntry>) -> Vec<Member
 // Transport boundary + orchestration tasks.
 //
 // The three sharing handlers in `lib.rs` used to inline their `fetch` calls and
-// their channel plumbing inside a `spawn_local`, which made the orchestration
-// (which call fires when, which error maps to which event) reachable only from a
-// real browser. Abstracting the HTTP surface behind `ShareHttp` lets the tasks
-// below run on `tokio` in native tests against a `FakeHttp`, so every error
-// branch is asserted without a browser or a live server. Production wires the
-// real `GlooHttp` (fetch + Bearer/refresh via `AuthContext`); the handlers keep
-// only their synchronous preconditions and the `spawn_local`.
+// their channel plumbing inside a `spawn_local`. That made the orchestration --
+// which call fires when, which error maps to which event -- reachable only from
+// a real browser. Abstracting the HTTP surface behind `ShareHttp` lets the tasks
+// below run on `tokio` in native tests against a `FakeHttp`. Every error branch
+// is asserted without a browser or a live server. Production wires the real
+// `GlooHttp` (fetch + Bearer/refresh via `AuthContext`); the handlers keep only
+// their synchronous preconditions and the `spawn_local`.
 // ============================================================================
 
 /// The HTTP operations the sharing tasks need, abstracted over the transport.
@@ -225,11 +225,11 @@ pub(crate) struct InviteParams {
 /// for them, POST the share. Success -> `SyncEvent::InviteSent`; every failure ->
 /// `LogicEvent::ApiError` with the leg-specific code.
 ///
-/// The re-fetched exchange key is compared against `expect_exchange_pub_key`
-/// (the value pinned in phase 1) **before** wrapping: this closes the TOCTOU
-/// hole where a compromised server serves an honest key to the fingerprint
-/// check and a substituted one to the wrap. A mismatch fails the invite; nothing
-/// is ever wrapped to an unconfirmed key.
+/// The re-fetched exchange key is compared against `expect_exchange_pub_key` (the
+/// value pinned in phase 1) **before** wrapping. This closes the TOCTOU hole
+/// where a compromised server serves an honest key to the fingerprint check and a
+/// substituted one to the wrap. A mismatch fails the invite; nothing is ever
+/// wrapped to an unconfirmed key.
 pub(crate) async fn invite_task<H: ShareHttp>(
     http: &H,
     p: InviteParams,
@@ -458,9 +458,9 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
     match http.get_json::<http::DocumentMembersResponse>(&url).await {
         Ok(resp) => {
             // Refresh the presence directory off the same response
-            // (`ambre-spec-membership.md`): membership just changed often enough to ask
-            // for the list, so this is where a new member becomes resolvable and
-            // a revoked one stops resolving -- no extra round-trip.
+            // (`ambre-spec-membership.md`). Membership just changed often enough to ask
+            // for the list. This is where a new member becomes resolvable and a revoked
+            // one stops resolving, with no extra round-trip.
             let signing_keys = presence_directory(
                 resp.members
                     .iter()
@@ -622,8 +622,8 @@ mod tests {
         Delete(String),
     }
 
-    /// A scripted [`ShareHttp`]: returns the queued responses in order and
-    /// records every call so a test can assert what the task did (and did NOT)
+    /// A scripted [`ShareHttp`]. It returns the queued responses in order and
+    /// records every call, so a test can assert what the task did (and did NOT)
     /// fire. A response is `Ok(json)` (deserialized into the requested type) or
     /// `Err(message)` (the transport-level failure the real fetch would yield).
     struct FakeHttp {
@@ -982,7 +982,7 @@ mod tests {
     #[test]
     fn presence_directory_skips_unparsable_rows_without_inventing_ids() {
         // Unlike `map_members` (display-only, degrades with a fresh id), a bad row
-        // here must vanish: a fabricated id would attribute a cursor to the wrong
+        // here must vanish. A fabricated id would attribute a cursor to the wrong
         // person, which is what keying presence on the canonical UserId prevents.
         let good_uid = "11111111-1111-1111-1111-111111111111";
         let good_key = "bb".repeat(32);

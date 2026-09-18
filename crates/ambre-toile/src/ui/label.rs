@@ -5,7 +5,7 @@
 //
 // A caption is not stored with a position. It rides the arrow's mid-arc point,
 // recomputed from the routed path like the path itself is recomputed from the
-// endpoints, so moving either shape carries the caption along and writes
+// endpoints. So moving either shape carries the caption along and writes
 // nothing (`TOILE-006`).
 //
 // Pure geometry -- host-tested, no `cfg(wasm32)`, no GPU.
@@ -20,8 +20,8 @@ use kurbo::{ParamCurve, ParamCurveArclen, PathSeg};
 const ARCLEN_ACCURACY: f64 = 0.1;
 
 /// The caption box, in world units. Fixed rather than text-derived: the box is
-/// the wrap width and the click target, and both must be knowable before the
-/// font context exists (the editor opens outside the paint pass).
+/// the wrap width and the click target. Both must be knowable before the font
+/// context exists (the editor opens outside the paint pass).
 pub const LABEL_W: f64 = 160.0;
 pub const LABEL_H: f64 = 24.0;
 
@@ -148,7 +148,7 @@ mod tests {
         assert_eq!(connector_at(&nodes, Point::new(50.0, 40.0)), None);
     }
 
-    /// A caption is part of its arrow's click target: a click on the words picks
+    /// A caption is part of its arrow's click target. A click on the words picks
     /// the arrow, which is how the caption is re-opened for editing.
     #[test]
     fn a_click_on_the_caption_picks_the_arrow() {

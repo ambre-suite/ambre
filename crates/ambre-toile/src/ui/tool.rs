@@ -1,10 +1,10 @@
 // ambre-toile/src/ui/tool.rs
 // ============================================================================
 // Tool state machine (toile-tools). `SelectTool` implements the Select tool
-// fully (move / resize / rotate / marquee); `ToolMachine` wraps it and the
-// creation tools (Shape / Connector / Draw / Pen / Sticky / Text), dispatching
-// each pointer event to the active tool and emitting exactly one `ToileCommand`
-// on gesture end (or a local selection change for a marquee).
+// fully (move / resize / rotate / marquee). `ToolMachine` wraps it and the
+// creation tools (Shape / Connector / Draw / Pen / Sticky / Text). It
+// dispatches each pointer event to the active tool and emits exactly one
+// `ToileCommand` on gesture end (or a local selection change for a marquee).
 //
 // The machine is pure: it maps (pointer event, current selection, DisplayViewport,
 // ViewportTransform) to an outcome, holding only in-flight draft state. Selection
@@ -41,7 +41,7 @@ pub enum Tool {
     Text,
     /// Drop a comment thread where it clicks, on an element or on empty board
     /// (`TOILE-UI-042`, `toile-comments`). The click opens a composer rather
-    /// than a thread: a thread is born with its first message, so nothing is
+    /// than a thread. A thread is born with its first message, so nothing is
     /// written until the user posts (`TOILE-UI-307`).
     Comment,
     /// The highlighter (`TOILE-UI-074`, `toile-presence`): a drag streams a
@@ -53,7 +53,7 @@ pub enum Tool {
 
 /// Screen-space pick radius (physical px) around a corner / rotate handle.
 const HANDLE_PICK_PX: f64 = 9.0;
-/// Screen-space grab band (physical px) around a selection edge: the whole side
+/// Screen-space grab band (physical px) around a selection edge. The whole side
 /// resizes (with a directional cursor), even though only the corners draw a
 /// visual square (toile-tools).
 const EDGE_GRAB_PX: f64 = 6.0;
@@ -170,7 +170,7 @@ impl SelectTool {
         {
             let screen_b = world_rect_to_screen(sb, cam);
             let rot = element_rotation(display, &selection[0]);
-            // The drawn box is `screen_b` rotated by `rot` about its center, so a
+            // The drawn box is `screen_b` rotated by `rot` about its center. A
             // point hits a handle iff its de-rotated image hits the axis-aligned
             // box (toile-selection). Press and hover share this de-rotation so they
             // always agree.
@@ -204,8 +204,9 @@ impl SelectTool {
         }
 
         // No handle: hit-test the board, then resolve the raw hit up its group
-        // chain to the selection target (the top-most enclosing group, unless a
-        // scope has been entered), so a grouped element selects as its group.
+        // chain to the selection target. That is the top-most enclosing group,
+        // unless a scope has been entered, so a grouped element selects as its
+        // group.
         match hit_topmost(&display.nodes, world) {
             Some(hit) => {
                 let id = resolve_group_target(hit, display, scope);
@@ -309,7 +310,7 @@ impl SelectTool {
     }
 
     /// The live marquee rectangle (world space) if a rubber-band drag is in
-    /// flight, so the machine can surface it as an overlay preview without an
+    /// flight. The machine can surface it as an overlay preview without an
     /// outcome round-trip.
     pub fn marquee(&self) -> Option<Rect> {
         match &self.drag {
@@ -318,8 +319,8 @@ impl SelectTool {
         }
     }
 
-    /// The handle a resting hover targets, for the directional cursor.
-    /// Same hit-test as `pointer_down`, but pure (no drag started): returns `None`
+    /// The handle a resting hover targets, for the directional cursor. Same
+    /// hit-test as `pointer_down`, but pure: no drag is started. Returns `None`
     /// unless the selection is exactly one element and the pointer is on its edge /
     /// corner / rotate handle. Never called while a drag is in flight.
     pub fn hover_handle(
@@ -351,9 +352,9 @@ impl SelectTool {
     }
 
     /// Per-element live transform for the in-flight gesture: `(id, bounds,
-    /// rotation)` in world space, so the view can paint the real object being
-    /// resized / rotated / moved before the command commits on release. Empty when
-    /// no gesture (or a marquee) is in flight.
+    /// rotation)` in world space. The view can paint the real object being resized
+    /// / rotated / moved before the command commits on release. Empty when no
+    /// gesture (or a marquee) is in flight.
     pub fn gesture_overrides(&self, display: &DisplayViewport) -> Vec<(ElementId, Rect, f64)> {
         match &self.drag {
             Some(Drag::Resize {
@@ -392,11 +393,12 @@ impl SelectTool {
 }
 
 // =============================================================================
-// Tool machine: the canvas-side consumer of the active tool. Owns the
-// Select gesture machine plus the in-flight state of the creation tools (Shape /
-// Connector / Draw / Pen / Sticky / Text) and maps a pointer sequence to exactly
-// one `ToileCommand` on gesture end. Pure: it holds only in-flight draft state,
-// never document data. Host-tested with synthetic pointer sequences.
+// Tool machine: the canvas-side consumer of the active tool. Owns the Select
+// gesture machine plus the in-flight state of the creation tools (Shape /
+// Connector / Draw / Pen / Sticky / Text). It maps a pointer sequence to
+// exactly one `ToileCommand` on gesture end. Pure: it holds only in-flight
+// draft state, never document data. Host-tested with synthetic pointer
+// sequences.
 // =============================================================================
 
 /// Default sizes for click-placed (not drag-sized) elements, world units.
@@ -421,7 +423,7 @@ pub enum ToolOutcome {
     SelectionChanged(Vec<ElementId>),
     /// A committed document mutation to forward to Logic.
     Command(ToileCommand),
-    /// The comment tool dropped a thread here (`TOILE-UI-042`): the view opens
+    /// The comment tool dropped a thread here (`TOILE-UI-042`). The view opens
     /// the composer at the click, and the thread is created only once the first
     /// message is posted (`TOILE-UI-307`).
     Comment(CommentAnchor),
@@ -493,7 +495,7 @@ enum Draft {
 }
 
 /// The active-tool state machine. Replaces the bare `SelectTool` the view drove
-/// in Phase 0: it dispatches each pointer event to the active tool and exposes a
+/// in Phase 0. It dispatches each pointer event to the active tool and exposes a
 /// single `ToolOutcome` plus a queryable `preview`.
 pub struct ToolMachine {
     tool: Tool,
@@ -576,8 +578,8 @@ impl ToolMachine {
         self.laser = None;
     }
 
-    /// Handle Escape at the tool layer: cancel any in-flight gesture and, if
-    /// a creation tool is armed, revert to Select so it stops silently placing
+    /// Handle Escape at the tool layer: cancel any in-flight gesture and, if a
+    /// creation tool is armed, revert to Select. It then stops silently placing
     /// elements on the next click. Returns `true` when the active tool changed, so
     /// the caller can republish the shared active-tool signal.
     pub fn escape(&mut self) -> bool {
@@ -682,7 +684,7 @@ impl ToolMachine {
             Some(Draft::Place { .. }) | Some(Draft::Comment { .. }) => ToolOutcome::None,
             None => {
                 // The highlighter streams while it is held down and writes
-                // nothing (`TOILE-UI-074`): the point rides the next presence
+                // nothing (`TOILE-UI-074`). The point rides the next presence
                 // sample, and the board never hears about it.
                 if self.laser.is_some() {
                     self.laser = Some(world);
@@ -867,8 +869,8 @@ impl ToolMachine {
         self.select.marquee().map(Preview::Marquee)
     }
 
-    /// The handle a resting hover targets, for the directional resize cursor
-    /// `None` unless the Select tool is armed, no gesture is in
+    /// The handle a resting hover targets, for the directional resize
+    /// cursor. `None` unless the Select tool is armed, no gesture is in
     /// flight, and the pointer is on a single selection's edge / corner.
     pub fn hover_handle(
         &self,
@@ -956,9 +958,9 @@ pub(crate) fn is_group(id: &ElementId, display: &DisplayViewport) -> bool {
 /// `scope`. Walk the enclosing-group chain from the hit upward:
 /// - no scope -> the top-most enclosing group (the whole group selects/transforms
 ///   as one), or the element itself if it is ungrouped.
-/// - inside a scope `s` -> the chain member one level below `s` (so a scoped click
-///   selects a member or an immediate sub-group); a click outside the scope falls
-///   back to the top-most group.
+/// - inside a scope `s` -> the chain member one level below `s`, so a scoped
+///   click selects a member or an immediate sub-group. A click outside the
+///   scope falls back to the top-most group.
 pub(crate) fn resolve_group_target(
     hit: ElementId,
     display: &DisplayViewport,
@@ -1069,12 +1071,14 @@ pub fn rotate_handle_point(b: Rect) -> Point {
 }
 
 /// Which handle (if any) a screen point targets on a selection's screen bounds.
-/// The whole edge is grabbable (Miro): the rotate knob and the 4 corners test by
-/// proximity to their point (`HANDLE_PICK_PX`), while the 4 sides test by a grab
-/// band (`EDGE_GRAB_PX`) along the full length of the side -- so a side resizes
-/// (with a directional cursor) even though only the corners draw a visual square
-/// (toile-selection). Corners win over sides (tested first), so a corner press always
-/// resizes diagonally. Used by both `pointer_down` (start a resize/rotate) and
+/// The whole edge is grabbable (Miro). The rotate knob and the 4 corners test by
+/// proximity to their point (`HANDLE_PICK_PX`). The 4 sides test by a grab band
+/// (`EDGE_GRAB_PX`) along the full length of the side. So a side resizes (with a
+/// directional cursor) even though only the corners draw a visual square
+/// (toile-selection).
+///
+/// Corners win over sides (tested first), so a corner press always resizes
+/// diagonally. Used by both `pointer_down` (start a resize/rotate) and
 /// `hover_handle` (pick the cursor), so press and hover always agree.
 fn edge_handle_at(screen_b: Rect, screen: Point) -> Option<Handle> {
     if rotate_handle_point(screen_b).distance(screen) <= HANDLE_PICK_PX {
@@ -1093,7 +1097,7 @@ fn edge_handle_at(screen_b: Rect, screen: Point) -> Option<Handle> {
         }
     }
     // Sides: within the grab band of the edge line AND projecting inside the
-    // side's own extent (so the band does not stick out past the corners).
+    // side's own extent. The band must not stick out past the corners.
     let in_x = screen.x >= screen_b.x0 - EDGE_GRAB_PX && screen.x <= screen_b.x1 + EDGE_GRAB_PX;
     let in_y = screen.y >= screen_b.y0 - EDGE_GRAB_PX && screen.y <= screen_b.y1 + EDGE_GRAB_PX;
     if in_x && (screen.y - screen_b.y0).abs() <= EDGE_GRAB_PX {
@@ -1150,7 +1154,7 @@ fn rotate_about(center: Point, theta: f64) -> Affine {
 }
 
 /// De-rotate a screen point into a rotated selection box's local (axis-aligned)
-/// frame: the box is `screen_b` rotated by `theta` about its center, so a point
+/// frame. The box is `screen_b` rotated by `theta` about its center, so a point
 /// hits a handle iff `unrotate_point(p, center, theta)` hits the axis-aligned box.
 fn unrotate_point(p: Point, center: Point, theta: f64) -> Point {
     if theta == 0.0 {
@@ -1159,9 +1163,9 @@ fn unrotate_point(p: Point, center: Point, theta: f64) -> Point {
     rotate_about(center, -theta) * p
 }
 
-/// The point that stays fixed while `handle` resizes `base`: the opposite corner
-/// for a corner handle, the midpoint of the opposite edge for a side handle. Used
-/// to pin the anchor in world space when resizing a rotated element.
+/// The point that stays fixed while `handle` resizes `base`. That is the opposite
+/// corner for a corner handle, the midpoint of the opposite edge for a side
+/// handle. Used to pin the anchor in world space when resizing a rotated element.
 fn resize_anchor(base: Rect, handle: Handle) -> Point {
     let (cx, cy) = (base.center().x, base.center().y);
     match handle {
@@ -1179,15 +1183,15 @@ fn resize_anchor(base: Rect, handle: Handle) -> Point {
 
 /// Resize a rotated element, keeping the anchor (opposite corner / edge) fixed in
 /// world space. `base` is the element's unrotated local AABB and `rot` its angle
-/// (about `base.center()`). The result is the new unrotated AABB; the caller then
+/// (about `base.center()`). The result is the new unrotated AABB. The caller then
 /// re-applies `rot` about the NEW center (Logic derive), so we translate the rect
 /// to compensate the center shift and pin the anchor. `rot == 0` degenerates to
 /// the plain axis-aligned `resize_rect`.
 ///
 /// Rotation about a point is translation-equivariant, so pinning the anchor is a
-/// single closed-form shift despite the new center depending on that shift:
-/// `shift = R_rot(c0) * anchor - R_rot(c1) * anchor`, with `c0`/`c1` the old / new
-/// centers and `anchor` invariant under the resize.
+/// single closed-form shift despite the new center depending on that shift. The
+/// shift is `shift = R_rot(c0) * anchor - R_rot(c1) * anchor`, with `c0`/`c1` the
+/// old / new centers and `anchor` invariant under the resize.
 fn resize_rect_rotated(base: Rect, handle: Handle, to: Point, rot: f64) -> Rect {
     if rot == 0.0 {
         return resize_rect(base, handle, to);
@@ -1660,11 +1664,11 @@ mod tests {
         }
     }
 
-    /// The comment tool drops a thread where it clicks (`TOILE-UI-042`): on the
-    /// element under the click, so the pin follows it (`TOILE-024`), and on a
-    /// free world point when the board is empty there. It writes nothing: the
-    /// view opens the composer, and the thread is born with its first message
-    /// (`TOILE-UI-307`).
+    /// The comment tool drops a thread where it clicks (`TOILE-UI-042`). It
+    /// lands on the element under the click, so the pin follows it
+    /// (`TOILE-024`). A free world point serves when the board is empty there.
+    /// It writes nothing: the view opens the composer, and the thread is born
+    /// with its first message (`TOILE-UI-307`).
     #[test]
     fn the_comment_tool_drops_a_thread_where_it_clicks() {
         let mut m = ToolMachine::new();
@@ -1695,7 +1699,7 @@ mod tests {
     }
 
     /// The highlighter is a tool a user picks, and it writes nothing
-    /// (`TOILE-UI-074`): the point rides the next presence sample, the release
+    /// (`TOILE-UI-074`). The point rides the next presence sample, the release
     /// clears it, and the board hears about none of it.
     #[test]
     fn the_highlighter_streams_a_point_and_writes_nothing() {

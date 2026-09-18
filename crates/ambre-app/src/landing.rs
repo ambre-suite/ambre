@@ -2,25 +2,25 @@
 // ============================================================================
 // Landing page (UI thread): the overlay shown on the `/` route.
 //
-// A plain Leptos DOM view (consistent with the chrome, which is also Leptos),
-// rendered as a full-bleed overlay ON TOP of the persistent canvas -- the canvas
+// A plain Leptos DOM view, consistent with the chrome, which is also Leptos. It
+// is rendered as a full-bleed overlay ON TOP of the persistent canvas. The canvas
 // is never unmounted, only covered (and its rAF paused) while on the landing.
 // It has two faces, driven by the `username` signal:
 //
 //   - Signed out (`username == None`): a sign-in panel. In dev (`dev_mode`),
-//     a username field that dispatches `DevLogin` directly to the (already
-//     running) Logic thread -- no page reload, the Sync worker keeps its keys.
+//     a username field that dispatches `DevLogin` directly to the already
+//     running Logic thread. No page reload, and the Sync worker keeps its keys.
 //     Otherwise an OIDC button. The panel carries the Ambre wordmark + tagline.
 //   - Signed in (`username == Some(..)`): the user's document list plus a
 //     "new document" action. Opening or creating a document is a client
 //     pushState to `/trame/<id>`; the persistent canvas swaps to it in place.
 //
-// Document cards (`ambre-spec-launcher.md`) show the type icon, the DECRYPTED
-// name (or a dimmed "Untitled" placeholder), the relative last-modified time,
-// and a discreet shared badge (member count > 1). Per-card inline rename and
-// delete (behind an irreversible-action confirmation `<dialog>`) wire the
-// existing `RenameDocument` / `DeleteDocument` REST flow. Listing requires a
-// session, so the signed-out panel gates access.
+// Document cards (`ambre-spec-launcher.md`) show the type icon and the DECRYPTED
+// name (or a dimmed "Untitled" placeholder). They also show the relative
+// last-modified time and a discreet shared badge (member count > 1). Per-card
+// inline rename and delete (behind an irreversible-action confirmation
+// `<dialog>`) wire the existing `RenameDocument` / `DeleteDocument` REST flow.
+// Listing requires a session, so the signed-out panel gates access.
 // ============================================================================
 
 use ambre_bus::{DocType, DocumentId, LogicCommand, RequestId, RestCommand, SecretBytes};
@@ -47,8 +47,8 @@ pub struct DocItem {
 }
 
 /// Reactive handles the launcher fills as auth state and the document list
-/// resolve; shared with the per-frame relay (session, document list) and the
-/// config fetch (`dev_mode`).
+/// resolve. They are shared with the per-frame relay (session, document
+/// list) and the config fetch (`dev_mode`).
 #[derive(Clone, Copy)]
 pub struct LandingSignals {
     /// Documents to list (only meaningful once signed in).
@@ -82,10 +82,10 @@ pub fn landing_view(
         toasts,
     } = signals;
 
-    // New document (`ambre-spec-launcher.md`): the app-agnostic type picker
-    // hands us the chosen `DocType`. Generate the id client-side (UUID v7); the
-    // server row is created lazily on the first edit, so no request here and no
-    // name prompt (the clean default is unnamed). Same-kind creates swap in place
+    // New document (`ambre-spec-launcher.md`): the app-agnostic type picker hands
+    // us the chosen `DocType`. Generate the id client-side (UUID v7). The server
+    // row is created lazily on the first edit, so no request here and no name
+    // prompt (the clean default is unnamed). Same-kind creates swap in place
     // (keeping the Sync worker), a cross-kind create hard-reloads to re-boot the
     // right `AppView` -- both handled by `open_document`/`route::needs_reload`.
     let on_pick = {
@@ -250,12 +250,12 @@ pub fn landing_view(
     }
 }
 
-/// Navigate to a document, choosing between an in-place router swap and a full
-/// page reload (`ambre-spec-launcher.md`, CHROME-039). The booted `AppView` is fixed
-/// per page load, so a target whose render kind differs from the booted kind
+/// Navigate to a document, choosing between an in-place router swap and a full page
+/// reload (`ambre-spec-launcher.md`, CHROME-039). The booted `AppView` is fixed per
+/// page load. A target whose render kind differs from the booted kind
 /// (`route::needs_reload`) must hard-navigate (`location.set_href`) to re-boot the
-/// right view; a same-kind target uses the router pushState `navigate`, which
-/// swaps the document in place and keeps the Sync worker/session alive.
+/// right view. A same-kind target uses the router pushState `navigate`, which swaps
+/// the document in place and keeps the Sync worker/session alive.
 fn open_document(
     navigate: &impl Fn(&str, leptos_router::NavigateOptions),
     doc_type: DocType,
@@ -331,8 +331,8 @@ pub fn NewDocPicker(
 }
 
 /// One document card: type-icon tile + name (or "Untitled") + relative time +
-/// shared badge, with inline rename and a delete that routes through the
-/// confirmation dialog.
+/// shared badge. It carries inline rename and a delete that routes through
+/// the confirmation dialog.
 fn doc_card(
     d: DocItem,
     docs: RwSignal<Vec<DocItem>>,
@@ -578,7 +578,7 @@ fn sign_in_panel(
     }
 }
 
-// ── Tests (wasm tier) ───────────────────────────────────────────────────────
+// -- Tests (wasm tier) -------------------------------------------------------
 // The crate is `#![cfg(target_arch = "wasm32")]`, so the launcher chrome is only
 // reachable on the wasm target. These mount the type picker into a real headless
 // Chrome document and drive it through `web-sys`, run via `wasm-pack test
@@ -596,9 +596,9 @@ mod tests {
         web_sys::window().unwrap().document().unwrap()
     }
 
-    /// Mount a view into its own container appended to the body (mirrors the
-    /// Trame chrome tests: a per-test container keeps the runner's own harness
-    /// DOM nodes untouched, and `.forget()` keeps the view alive for assertions).
+    /// Mount a view into its own container appended to the body, mirroring the
+    /// Trame chrome tests. A per-test container keeps the runner's own harness
+    /// DOM nodes untouched, and `.forget()` keeps the view alive for assertions.
     fn mount_in_container<F, N>(f: F) -> web_sys::Element
     where
         F: FnOnce() -> N + 'static,
@@ -616,8 +616,8 @@ mod tests {
     }
 
     /// Yield to the event loop so leptos flushes the reactive DOM update a click
-    /// scheduled (CSR render effects run on a microtask, not synchronously in the
-    /// click handler).
+    /// scheduled. CSR render effects run on a microtask, not synchronously in the
+    /// click handler.
     async fn tick() {
         let promise = js_sys::Promise::new(&mut |resolve, _| {
             web_sys::window()
@@ -695,7 +695,7 @@ mod tests {
     }
 
     /// Every creatable type maps to a path that round-trips back to a matching
-    /// document route -- so a picked type boots the right engine on the hard nav.
+    /// document route. So a picked type boots the right engine on the hard nav.
     #[wasm_bindgen_test]
     fn creatable_types_round_trip_through_doc_path() {
         for &doc_type in DocType::creatable() {

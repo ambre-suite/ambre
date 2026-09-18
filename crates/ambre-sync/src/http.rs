@@ -68,8 +68,8 @@ const REQUEST_TIMEOUT_MS: u32 = 30_000;
 /// signal starts counting down the moment it is created.
 ///
 /// gloo-net copies the signal into the request's `RequestInit` (a JS object) as
-/// soon as `abort_signal` is called, so the returned value may be dropped on the
-/// Rust side while `fetch` still holds it alive.
+/// soon as `abort_signal` is called. The returned value may then be dropped on
+/// the Rust side while `fetch` still holds it alive.
 fn timeout_signal() -> web_sys::AbortSignal {
     web_sys::AbortSignal::timeout_with_u32(REQUEST_TIMEOUT_MS)
 }
@@ -285,7 +285,7 @@ pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
 }
 
 /// Account-setup payload. Zero-Knowledge invariant (N4): the passphrase NEVER
-/// leaves the client; the server only receives the wrapped master key and the
+/// leaves the client. The server only receives the wrapped master key and the
 /// Argon2 salt needed to re-derive the unwrap key locally on future unlocks.
 #[derive(Serialize)]
 #[allow(dead_code)]

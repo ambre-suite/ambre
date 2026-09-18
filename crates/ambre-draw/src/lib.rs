@@ -6,8 +6,8 @@
 // application-level rendering code (Trame grid, Prose page, Toile canvas, ...).
 //
 // Implementations:
-//   - `WgpuSurface`   in `ambre-canvas` (lyon tessellation + wgpu, on-screen) — live.
-//   - `KrillaSurface` in `ambre-pdf` (krilla, PDF export, Logic thread, lazy-loaded) — live.
+//   - `WgpuSurface`   in `ambre-canvas` (lyon tessellation + wgpu, on-screen) -- live.
+//   - `KrillaSurface` in `ambre-pdf` (krilla, PDF export, Logic thread, lazy-loaded) -- live.
 //
 // Dependency rule: ambre-draw depends only on kurbo + peniko + parley.
 // No GPU code, no WASM glue, no wgpu, no lyon, no krilla. This keeps the core
@@ -24,21 +24,21 @@ pub use peer::peer_color;
 pub mod testing;
 
 /// A borrowed view over already-decoded raster pixels, passed to
-/// [`DrawSurface::draw_image`]. RGBA8, row-major, no stride padding: `pixels`
-/// is exactly `width * height * 4` bytes.
+/// [`DrawSurface::draw_image`]. RGBA8, row-major, no stride padding: `pixels` is
+/// exactly `width * height * 4` bytes.
 ///
-/// It never owns or decodes pixels -- decoding is the caller's job (Toile
-/// interop decodes on import; the screen renderer decodes from its media cache),
-/// which keeps `ambre-draw` codec-free (kurbo / peniko / parley only).
+/// It never owns or decodes pixels. Decoding is the caller's job: Toile interop
+/// decodes on import, and the screen renderer decodes from its media cache. That
+/// keeps `ambre-draw` codec-free (kurbo / peniko / parley only).
 #[derive(Clone, Copy, Debug)]
 pub struct ImageSource<'a> {
-    /// A stable identity for *these* pixels, so a back end that uploads them can
-    /// recognise the same image on a later frame instead of hashing the buffer
-    /// every time it is drawn.
+    /// A stable identity for *these* pixels. A back end that uploads them can
+    /// recognise the same image on a later frame rather than hashing the buffer
+    /// on every draw.
     ///
     /// The caller mints it from whatever already identifies the image -- Toile
     /// folds the leading bytes of the blake2b address it stores in the document.
-    /// Two sources sharing a key MUST carry the same pixels: a back end is free
+    /// Two sources sharing a key MUST carry the same pixels. A back end is free
     /// to serve the first upload for both, and a key reused for different
     /// content shows the wrong picture. Distinct content that happens to share a
     /// key is the caller's bug, not the surface's.
@@ -163,26 +163,26 @@ pub trait DrawSurface {
     // Raster images (default no-op until a surface supports raster)
     // -------------------------------------------------------------------------
 
-    /// Paint a decoded raster image into the world-space `dest` rect (the
-    /// element AABB after the active transform). The image is scaled to fill
-    /// `dest`; preserving aspect ratio is the caller's responsibility (Toile
-    /// stores the element rect at the imported aspect).
+    /// Paint a decoded raster image into the world-space `dest` rect (the element
+    /// AABB after the active transform). The image is scaled to fill `dest`;
+    /// preserving aspect ratio is the caller's responsibility (Toile stores the
+    /// element rect at the imported aspect).
     ///
-    /// Default no-op: a surface without raster support (e.g. a base
+    /// Default no-op: a surface without raster support (for example a base
     /// `KrillaSurface` built without the raster feature) still renders text and
     /// vector geometry. `KrillaSurface` hands the pixels to krilla as a raster
     /// image.
     ///
     /// **`WgpuSurface` does not implement this method.** The screen back end has
-    /// no texture pipeline, so on the GPU this call is the default no-op above
-    /// and a picture never reaches a frame -- design, not oversight, and it
-    /// lands with the screen media cache (`ambre-spec-drawing-surface.md`
-    /// section 2, `ambre-spec-render-assets.md`).
+    /// no texture pipeline. On the GPU this call is the default no-op above, and
+    /// a picture never reaches a frame. That is design, not oversight, and it
+    /// lands with the screen media cache (`ambre-spec-drawing-surface.md` section
+    /// 2, `ambre-spec-render-assets.md`).
     ///
-    /// Per `toile-media`, a Toile image whose pixels have not yet
-    /// arrived from the media cache is painted as a placeholder rect by the
-    /// caller (via `fill_rect`) and repainted through this method once the pixels
-    /// are known; the trait carries no placeholder logic itself.
+    /// Per `toile-media`, the caller paints a Toile image as a placeholder rect
+    /// (via `fill_rect`) until its pixels arrive from the media cache. It is
+    /// repainted through this method once the pixels are known. The trait carries
+    /// no placeholder logic itself.
     #[allow(unused_variables)]
     fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {}
 

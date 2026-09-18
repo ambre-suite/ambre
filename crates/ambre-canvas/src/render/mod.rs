@@ -13,10 +13,10 @@
 //
 // Dirty-rect rendering:
 //   The persistent CELLS layer (scrollable cell area + grid lines + cell text)
-//   is rendered to a ping-pong pair of offscreen textures. Each frame can
-//   either repaint everything (Full), shift the previous frame via
-//   `copy_texture_to_texture` and redraw only the entering strip (Scroll), or
-//   skip the cells layer entirely (None) and just re-blit. The OVERLAY layer
+//   is rendered to a ping-pong pair of offscreen textures. Each frame picks one
+//   of three plans. Full repaints everything. Scroll shifts the previous frame
+//   via `copy_texture_to_texture` and redraws only the entering strip. None
+//   skips the cells layer entirely and just re-blits. The OVERLAY layer
 //   (headers, active border, HUD) is transient and re-rendered to the
 //   swapchain every dirty frame.
 //
@@ -84,11 +84,11 @@ const IMAGE_VERTEX_SIZE: usize = std::mem::size_of::<ImageVertex>();
 
 /// A stretch of the image index buffer drawn with one texture bound.
 ///
-/// Images cannot collapse into a single draw the way quads and glyphs do: each
+/// Images cannot collapse into a single draw the way quads and glyphs do. Each
 /// picture is its own texture, so each needs its own bind group. What a run buys
-/// instead is *order*. The batch is filled in the order the walk drew, and
-/// consecutive quads sharing a texture extend the run they are already in, so a
-/// board of ten copies of one picture costs one draw and two overlapping
+/// instead is *order*. The batch is filled in the order the walk drew.
+/// Consecutive quads sharing a texture extend the run they are already in. A
+/// board of ten copies of one picture costs one draw, and two overlapping
 /// pictures keep the walk's own order between them.
 struct ImageRun {
     key: ImageKey,
@@ -112,9 +112,9 @@ pub enum Layer {
 
 /// Per-layer CPU batches + GPU buffers. Each layer owns its own VB/IB so the
 /// two passes can be encoded into the same command encoder without overwriting
-/// each other. The `drawn_*` fields record the last uploaded counts so idle
-/// frames can re-encode draw calls using the previously uploaded GPU buffers
-/// without rebuilding the CPU side.
+/// each other. The `drawn_*` fields record the last uploaded counts. An idle
+/// frame can then re-encode draw calls using the previously uploaded GPU
+/// buffers, without rebuilding the CPU side.
 struct LayerBatches {
     quad_vertices: Vec<QuadVertex>,
     quad_indices: Vec<u32>,
@@ -142,7 +142,7 @@ struct LayerBatches {
     drawn_quad_indices: u32,
     drawn_glyph_indices: u32,
     drawn_color_glyph_indices: u32,
-    /// The runs of the last upload, kept whole: an idle frame re-encodes the
+    /// The runs of the last upload, kept whole. An idle frame re-encodes the
     /// same draws against the same buffer, as the `drawn_*` counts do for the
     /// other three batches.
     drawn_image_runs: Vec<(ImageKey, u32, u32)>,
@@ -418,7 +418,7 @@ fn make_blit_bg(
 
 /// Encode a `copy_texture_to_texture` that shifts `src` by `(dx_px, dy_px)`
 /// pixels into `dst`. Negative deltas shift content left/up; positive shift
-/// right/down. The strip exposed by the shift is *not* cleared — the caller
+/// right/down. The strip exposed by the shift is *not* cleared -- the caller
 /// must render fresh geometry over it in the subsequent cells pass.
 ///
 /// WebGL2 forbids same-texture src/dst, hence the ping-pong pair: `src` and

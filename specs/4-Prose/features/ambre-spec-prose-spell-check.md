@@ -6,10 +6,10 @@
 > Misspelled words underlined as the document is written, with suggestions, checked on the reader's
 > own machine. No word of the document is sent anywhere to be checked.
 
-Almost nothing here is shared state: the errors are derived locally and written back nowhere
-(`PROSE-FEAT-106`), and a word added to the dictionary belongs to the reader, not to the document
-(`PROSE-FEAT-108`). One gesture does reach a peer -- accepting a suggestion replaces a word
-(`PROSE-FEAT-109`) -- and it is an ordinary text edit, whose convergence
+Almost nothing here is shared state. The errors are derived locally and written back nowhere
+(`PROSE-FEAT-106`). A word added to the dictionary belongs to the reader, not to the document
+(`PROSE-FEAT-108`). One gesture does reach a peer: accepting a suggestion replaces a word
+(`PROSE-FEAT-109`). It is an ordinary text edit, whose convergence
 `features/ambre-spec-prose-text-editing.md` owns. There is no two-peer table below.
 
 ---
@@ -56,30 +56,15 @@ status values are normative in `ambre-spec-template.md`.
 
 * **Budget.** the spell check, a row of `ambre-spec-budgets.md section 1`. It is the one
   operation of this application that is allowed to be slow, which is what the priority rule buys.
-* **Boundary.** the added word leaves the document and is written to the reader's settings store,
-  under the reader's own key. Nothing new crosses the relay: `PROSE-FEAT-102` bans sending the
-  text, `PROSE-FEAT-108` keeps the personal dictionary out of the shared document, and `ZK-001`
-  seals what the settings store writes. The one thing that does reach a peer is the replacement of
-  `PROSE-FEAT-109`, which travels as any other text edit does.
+* **Boundary.** the added word leaves the document for the reader's settings store, under the
+  reader's own key. Nothing new crosses the relay. `PROSE-FEAT-102` bans sending the text,
+  `PROSE-FEAT-108` keeps the personal dictionary out of the shared document, and `ZK-001` seals
+  what the settings store writes.
 * **Verification.** 15 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line
-  `lib.rs`, `ambre-bus` carries no Prose command, and `zspell` is in no `Cargo.toml`. Nothing holds
-  `PROSE-FEAT-019` or `PROSE-FEAT-102`: `crates/ambre-prose/Cargo.toml` names no network crate,
-  but the crate is empty, `PROSE-025` is itself `unimplemented`, and `deny.toml` bans
-  `ambre-crypto` and `loro` by wrapper list while naming no network crate at all, so nothing
-  refuses this one the path -- see section 5. Three rows stated
-  two rules each, and in each pair the second half is the one a mechanism could reach:
-  `PROSE-FEAT-104` is what a size check on the built bundle weighs, `PROSE-FEAT-102` is what a
-  `deny.toml` entry would hold, and `PROSE-FEAT-103` is the difference between running last and
-  yielding -- a pass that starts behind everything and then walks a hundred pages without giving
-  the thread back delays the next keystroke while satisfying `PROSE-FEAT-041` whole.
-  `PROSE-FEAT-105` is the cap section 5 records as living in the type and in no rule, and
-  `PROSE-FEAT-106` is the ban the opening paragraph rests on. The three commands carried one row
-  between them, the settings write: nothing said what accepting a suggestion leaves behind or may
-  not touch, nothing said what setting a language rechecks, and nothing said that the added word
-  stops being underlined, which is the whole of what the gesture is for. `PROSE-FEAT-105`,
-  `PROSE-FEAT-107`, `PROSE-FEAT-109`, `PROSE-FEAT-110` and `PROSE-FEAT-112` are what a host test
-  holds the day the checker exists; `PROSE-FEAT-103` needs a running thread and lands in the wasm
-  tier of `ambre-spec-testing.md section 6`.
+  `lib.rs`, `ambre-bus` carries no Prose command, and `zspell` is in no `Cargo.toml`. Not even the
+  network ban holds, because `deny.toml` bans by wrapper list and names no network crate -- section
+  5. Five rows are what a host test holds the day the checker exists. The priority rule needs a
+  running thread and lands in the wasm tier.
 
 ---
 
@@ -109,7 +94,7 @@ layout and every synchronization (`PROSE-FEAT-041`). A document being typed into
 it, and a slow pass costs a late underline rather than a late character.
 
 **How the dictionary arrives.** As its own asset, fetched when a language is first checked, never
-compiled into the binary (`PROSE-FEAT-042`): the binary is capped at two megabytes compressed
+compiled into the binary (`PROSE-FEAT-042`). The binary is capped at two megabytes compressed
 (`README.md`, initial load), which one dictionary would spend on readers who never see it.
 
 **The three commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
@@ -160,17 +145,18 @@ renderer (`features/ambre-spec-prose-page-rendering.md`).
 * **The personal dictionary does not follow the reader.** It is local to the browser for now, and
   syncing it through the settings channel is named as later work with no rule behind it.
 * **Nothing rules on what is checked.** Whether a code block, a link target, a word inside a
-  suggestion or the text of a header is checked is undecided, and each answer changes what the
+  suggestion or the text of a header is checked is undecided. Each answer changes what the
   reader sees underlined.
 * **Nothing rules on the cost of a first check.** Loading a dictionary and checking a long
   document is the one unbounded pass in the application, and only its priority is stated.
 * **Nothing bans the network from this crate.** `deny.toml` holds capability bans as a crate name
-  and the list of crates allowed to depend on it, and uses it for `ambre-crypto` and for `loro`.
+  and the list of crates allowed to depend on it. It uses that form for `ambre-crypto` and for
+  `loro`.
   The client's network path is `gloo-net`, which `crates/ambre-sync/Cargo.toml` takes and no ban
   names. `PROSE-FEAT-102` is the half of `PROSE-025` such an entry would hold before
   `ambre-prose` has a line of code, and it is not written.
 * **The Logic thread has no priorities.** `PROSE-FEAT-041` names the lowest of them, and no
-  document declares any: `ambre-spec-message-bus.md` gives commands a class -- lossy or lossless --
+  document declares any. `ambre-spec-message-bus.md` gives commands a class -- lossy or lossless --
   and no rank, and `ambre-bus` carries nothing of the sort. The rule is written against a
-  mechanism that would have to be built first, and it is the only rule in the corpus that asks for
+  mechanism that would have to be built first. It is the only rule in the corpus that asks for
   one.

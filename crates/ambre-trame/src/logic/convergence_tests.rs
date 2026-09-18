@@ -4,20 +4,20 @@
 // CRDT state: `ambre-spec-testing.md`.
 //
 // `proptest` generates interleaved sequences of the document-mutating
-// `TrameCommand`s (`SetCellText` / insert-delete row-column / `SortRange` /
-// merge / `FillRange`), routes each op to one of two peers, then exchanges the
-// full CRDT history both ways. The invariant: after the exchange the two peers
+// `TrameCommand`s: `SetCellText`, insert-delete row-column, `SortRange`, merge,
+// `FillRange`. It routes each op to one of two peers, then exchanges the full
+// CRDT history both ways. The invariant: after the exchange the two peers
 // observe an *identical* materialized grid -- same text, same formula results
 // (recompute determinism), same merge geometry. This exercises the own-uid cell
-// model (`trame-rows-and-columns`, `trame-formula-engine`): references must
-// follow data across a concurrent sort, and
-// structural ops on both peers must reconcile to one converged order.
+// model (`trame-rows-and-columns`, `trame-formula-engine`). References must
+// follow data across a concurrent sort, and structural ops on both peers must
+// reconcile to one converged order.
 //
-// The exchange uses full snapshots rather than incremental `SendUpdate` deltas:
-// each peer mints an implicit-`s0` op in `new()` under a local origin, so an
-// incremental delta would carry a dangling dependency on the other peer's
-// private op (the same reason `cross_sheet_reference_converges_across_peers_on_
-// rename` merges snapshots). A snapshot carries the full history, so importing
+// The exchange uses full snapshots rather than incremental `SendUpdate` deltas.
+// Each peer mints an implicit-`s0` op in `new()` under a local origin. An
+// incremental delta would then carry a dangling dependency on the other peer's
+// private op, the same reason `cross_sheet_reference_converges_across_peers_on_
+// rename` merges snapshots. A snapshot carries the full history, so importing
 // it yields the union -- the CRDT convergence guarantee.
 // ============================================================================
 
@@ -84,7 +84,7 @@ enum Op {
     },
     Fill,
     /// Apply a shared filter on column 0 (a plain CRDT mutation). Concurrent
-    /// filters on the two peers resolve by Loro LWW -- this folds the explicit
+    /// filters on the two peers resolve by Loro LWW. That folds the explicit
     /// `concurrent_filters_converge_lww` case into the property test: the
     /// converged `is_filtered` set is part of the asserted snapshot.
     Filter {
@@ -159,9 +159,9 @@ impl Op {
 }
 
 /// Cell contents the generator picks from: plain numbers, short strings, and a
-/// few formulas that reference other window cells (so a concurrent sort can
-/// move the data out from under them -- the `trame-formula-engine` guarantee
-/// under test).
+/// few formulas that reference other window cells. A concurrent sort can then
+/// move the data out from under them, the `trame-formula-engine` guarantee
+/// under test.
 fn text_strategy() -> impl Strategy<Value = String> {
     prop_oneof![
         (0i64..20).prop_map(|n| n.to_string()),
@@ -320,16 +320,16 @@ proptest! {
 // A cell's whole style is one atomic LWW register in `cellstyle_{sheet}`, keyed
 // by the cell's stable id pair. An earlier schema scattered it over up to 11
 // per-attribute maps, where two peers restyling the same cell raced once per
-// container and nothing forced one writer to win every register.
+// container. Nothing forced one writer to win every register.
 //
-// The invariant under test is the atomicity that replaced it: the converged
-// cell must carry a style one of the two peers actually wrote -- never a
+// The invariant under test is the atomicity that replaced it. The converged
+// cell must carry a style one of the two peers actually wrote, never a
 // per-attribute blend of both.
 // ============================================================================
 
 /// The observable style of a cell, as a peer renders it. Number format and
-/// decimals are absent on purpose: `DisplayCell` does not surface them (the
-/// Logic thread folds them into `text`), so they cannot be asserted here even
+/// decimals are absent on purpose: `DisplayCell` does not surface them, since
+/// the Logic thread folds them into `text`. They cannot be asserted here even
 /// though the register carries them.
 type StyleView = (
     bool,
@@ -396,8 +396,8 @@ fn apply_style(state: &mut TrameState, patch: StylePatch) {
 
 /// The style the shared base pins on A1 before the peers diverge. Touches every
 /// style container, so both concurrent edits below emit real ops in each of
-/// them (a `clear` over an unstyled cell would delete absent keys -- a no-op --
-/// and the race would never happen).
+/// them. A `clear` over an unstyled cell would delete absent keys, a no-op, and
+/// the race would never happen.
 fn base_style() -> StylePatch {
     StylePatch {
         bold: Some(true),
@@ -468,8 +468,8 @@ fn other_style() -> StylePatch {
 }
 
 /// Peer A clears A1's style while peer B rewrites it, concurrently. After a
-/// full history exchange both peers must agree (CRDT convergence) *and* the
-/// style they agree on must be one of the two written styles -- not a
+/// full history exchange both peers must agree (CRDT convergence). The
+/// style they agree on must also be one of the two written styles, not a
 /// per-container blend of A's and B's registers.
 #[test]
 fn concurrent_whole_cell_style_edits_do_not_blend_across_containers() {
@@ -519,10 +519,11 @@ fn concurrent_whole_cell_style_edits_do_not_blend_across_containers() {
 /// already converge atomically (each cell's `format` and rich-`style` commits sit
 /// at adjacent Lamports, so the same writer wins every register). The gap the old
 /// multi-container schema left open is asymmetric edits: a colour-only patch does
-/// not carry bold, so `set_cell_style` skips the bold container entirely. Peer A
-/// recolours A1 (text colour only); peer B, concurrently, rewrites A1's whole
-/// style (bold + both colours). The bold container is written by B alone, while
-/// the text-colour container races -- and if A wins its colour, the cell
+/// not carry bold, so `set_cell_style` skips the bold container entirely.
+///
+/// Peer A recolours A1 (text colour only); peer B, concurrently, rewrites A1's
+/// whole style (bold + both colours). The bold container is written by B alone,
+/// while the text-colour container races. If A wins its colour, the cell
 /// converges on B's bold plus A's colour, a style neither peer ever wrote. A
 /// single `cellstyle_` register makes the edit atomic: one race, one winner,
 /// always a style one peer actually wrote.
@@ -541,8 +542,8 @@ fn subset_style_edit_does_not_tear_a_whole_cell_rewrite() {
         .expect("a snapshot this build wrote reads back at the current schema");
 
     // Peer A runs several unrelated edits first, so its recolour op carries a
-    // strictly higher Lamport than peer B's write and wins the text-colour
-    // register outright -- the exact ordering that tore the cell under the old
+    // strictly higher Lamport than peer B's write. It wins the text-colour
+    // register outright, the exact ordering that tore the cell under the old
     // schema. The patch carries no bold, so it never touches the bold container.
     for i in 0..5 {
         a.handle_command(TrameCommand::SetCellText {

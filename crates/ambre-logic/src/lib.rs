@@ -1,6 +1,6 @@
 // ambre-logic/src/lib.rs
 // ============================================================================
-// Logic thread entry point — runs in a dedicated wasm_thread, shares the heap
+// Logic thread entry point -- runs in a dedicated wasm_thread, shares the heap
 // with the UI Thread and the Sync thread.
 //
 // Responsibilities:
@@ -11,21 +11,21 @@
 //   - Compute viewport display events (P1 < 15 ms, P2 < 50 ms).
 //
 // Out of scope:
-//   - Cryptography, compression, network — handled exclusively by ambre-sync.
-//   - Rendering — handled by the UI Thread (wgpu + QuadRenderer + GlyphAtlas).
+//   - Cryptography, compression, network -- handled exclusively by ambre-sync.
+//   - Rendering -- handled by the UI Thread (wgpu + QuadRenderer + GlyphAtlas).
 //
 // Transport: UI <-> Logic uses `flume` channels in the shared memory of the
 // Main instance, carrying typed Rust values by move (no postcard, no `Any`).
 // Logic-bound `SyncCommand`s are sent to a `flume` channel whose receiver is on
 // the Main thread, which relays them to the separate Sync worker via
-// `postMessage`; `LogicEvent`s arrive the same way in reverse.
+// `postMessage`. `LogicEvent`s arrive the same way in reverse.
 // ============================================================================
 
 use std::collections::HashMap;
 
-/// IndexedDB-backed local snapshot store. Compiled only for wasm: its callbacks
-/// need a live event loop, so the store itself is driven by the Main thread (see
-/// `ambre-app`), not by this blocking Logic loop.
+/// IndexedDB-backed local snapshot store. Compiled only for wasm, since its
+/// callbacks need a live event loop. The store itself is driven by the Main
+/// thread (see `ambre-app`), not by this blocking Logic loop.
 #[cfg(target_arch = "wasm32")]
 pub mod persistence;
 
@@ -54,30 +54,30 @@ use ambre_toile::{ToileRequest, ToileState};
 use ambre_trame::TrameState;
 
 // -----------------------------------------------------------------------------
-// DocState — typed per-document state
+// DocState -- typed per-document state
 // -----------------------------------------------------------------------------
 
 /// Per-document state, one variant per application document type.
 ///
-/// A closed sum mirroring [`AppCommand`] / [`AppEvent`]: the dispatcher matches
+/// A closed sum mirroring [`AppCommand`] / [`AppEvent`]. The dispatcher matches
 /// the `(DocState, AppCommand)` pair to route a typed command to the right
-/// document model — no trait object, no downcast.
+/// document model: no trait object, no downcast.
 ///
-/// `pub` since `ambre-spec-fixtures.md`: the fixture loader hands one back
-/// and the round-trip belt of quantifies over its variants, neither of which
-/// a crate-private enum allows.
+/// `pub` since `ambre-spec-fixtures.md`: the fixture loader hands one back and
+/// the round-trip belt of quantifies over its variants, neither of which a
+/// crate-private enum allows.
 pub enum DocState {
-    // Boxed: the per-document states differ widely in size (a `TrameState` is
-    // several KB, a `ToileState` far smaller), so a bare enum would size every
-    // slot to the largest variant. One heap indirection per open document is
-    // negligible and keeps the registry entry pointer-sized.
+    // Boxed, because the per-document states differ widely in size (a
+    // `TrameState` is several KB, a `ToileState` far smaller). A bare enum
+    // would size every slot to the largest variant. One heap indirection per
+    // open document is negligible and keeps the registry entry pointer-sized.
     Trame(Box<TrameState>),
     Toile(Box<ToileState>),
-    // Future: Prose(ProseState), Murmure(MurmureState), …
+    // Future: Prose(ProseState), Murmure(MurmureState), ...
 }
 
 /// The variant, never the contents. Neither `TrameState` nor `ToileState` is
-/// `Debug` — both hold a whole `LoroDoc` and printing one would dump a document
+/// `Debug`. Both hold a whole `LoroDoc`, and printing one would dump a document
 /// into a log line, which the zero-knowledge posture rules out. What a caller
 /// actually wants here is which engine it is holding, which is what an error
 /// message (`FixtureError`, the dispatcher's mismatch warning) needs.
@@ -117,22 +117,22 @@ impl DocState {
     /// Load a full Loro snapshot into this state, returning the display events
     /// the app emits.
     ///
-    /// **Production code, ungated** (`FIXTURE-007`): `ambre-logic` ships to
-    /// wasm, and this is the enum-level entry point a local restore goes through.
-    /// Its Toile arm is why `ToileState::import_snapshot` is ungated too --
-    /// gating that would make an ordinary client build fail to compile here.
+    /// **Production code, ungated** (`FIXTURE-007`): `ambre-logic` ships to wasm,
+    /// and this is the enum-level entry point a local restore goes through. Its
+    /// Toile arm is why `ToileState::import_snapshot` is ungated too -- gating
+    /// that would make an ordinary client build fail to compile here.
     ///
     /// Lifted to the enum because a loader cannot address two engines that spell
     /// the same operation differently (`TrameState::import_snapshot` versus, up
     /// to this phase, `ToileState::apply_remote`).
     ///
     /// # Errors
-    /// The schema gate's verdict, unchanged (`ambre-spec-schema-version.md`): a
-    /// document written by a newer client, a migration the owning application
-    /// cannot run, or bytes the CRDT engine refuses. On any of them the state is
-    /// untouched (`SCHEMA-012`), which is why this is a `Result` and not an
-    /// event: a caller that ignored it would carry on with a document it never
-    /// loaded.
+    /// The schema gate's verdict, unchanged (`ambre-spec-schema-version.md`). It
+    /// is a document written by a newer client, a migration the owning
+    /// application cannot run, or bytes the CRDT engine refuses. On any of them
+    /// the state is untouched (`SCHEMA-012`). That is why this is a `Result` and
+    /// not an event. A caller that ignored it would carry on with a document it
+    /// never loaded.
     pub fn import_snapshot(&mut self, payload: &[u8]) -> Result<Vec<AppEvent>, SchemaError> {
         match self {
             DocState::Trame(state) => Ok(state
@@ -176,14 +176,14 @@ impl DocState {
     /// The whole document as a native `.ambre` file, as the display event the
     /// owning application surfaces (`DOCFILE-001`, `DOCFILE-007`).
     ///
-    /// Minted here for the same reason as [`refusal_event`](Self::refusal_event):
-    /// the container is one for every application, and the event that carries
-    /// its bytes to the browser is each application's own. `document_id` comes
-    /// from the registry that keyed this state -- the engine does not know its
-    /// own identity, and the header needs it.
+    /// Minted here for the same reason as [`refusal_event`](Self::refusal_event).
+    /// The container is one for every application, and the event that carries its
+    /// bytes to the browser is each application's own. `document_id` comes from
+    /// the registry that keyed this state -- the engine does not know its own
+    /// identity, and the header needs it.
     ///
     /// The file name is a constant per application, like every other export in
-    /// the suite (`board.svg`, `deck.pdf`): the document's own name is encrypted
+    /// the suite (`board.svg`, `deck.pdf`). The document's own name is encrypted
     /// and lives on the Sync thread, which this one cannot read (`ZK-001`).
     fn ambre_file_event(&self, document_id: DocumentId) -> AppEvent {
         let (filename, data) = self.ambre_file_bytes(document_id);
@@ -264,8 +264,8 @@ impl DocState {
     }
 
     /// Seed the session's display name beside the `UserId`, from the same
-    /// `SessionReady`. Toile stamps it on every outbound presence sample so a
-    /// collaborator reads a name rather than a hex prefix (`TOILE-UI-076`); it
+    /// `SessionReady`. Toile stamps it on every outbound presence sample, so a
+    /// collaborator reads a name rather than a hex prefix (`TOILE-UI-076`). It
     /// is cosmetic and decides nothing (`PRESENCE-004`).
     fn set_display_name(&mut self, name: &str) {
         match self {
@@ -276,7 +276,7 @@ impl DocState {
 }
 
 // -----------------------------------------------------------------------------
-// LiveDoc — an open document and the caller's role on it
+// LiveDoc -- an open document and the caller's role on it
 // -----------------------------------------------------------------------------
 
 /// One open document: its typed state plus this client's role on **that**
@@ -288,7 +288,7 @@ impl DocState {
 struct LiveDoc {
     state: DocState,
     /// Starts `Role::Owner` because a document is materialised optimistically at
-    /// `OpenDocument`, before Sync has fetched the members response: edits route
+    /// `OpenDocument`, before Sync has fetched the members response. Edits route
     /// immediately, exactly as they did before this gate existed. The real role
     /// arrives on `DocumentReady` and supersedes it. A downgrade landing a beat
     /// late is harmless -- the server rejects any write we should not have made.
@@ -310,15 +310,15 @@ impl LiveDoc {
 
 /// All mutable state owned by the Logic thread.
 struct LogicState {
-    /// Outbound channel: Logic → UI Thread.
+    /// Outbound channel: Logic -> UI Thread.
     to_ui: flume::Sender<UiEvent>,
-    /// Outbound channel: Logic → Sync (drained by the Main thread, relayed to
+    /// Outbound channel: Logic -> Sync (drained by the Main thread, relayed to
     /// the Sync worker via postMessage).
     to_sync: flume::Sender<SyncCommand>,
-    /// Outbound channel: Logic → Main, carrying full document snapshots for
-    /// local persistence. The Main thread owns the IndexedDB store (its
-    /// callbacks need a live event loop, which this blocking loop cannot offer);
-    /// here we only export the bytes and hand them over.
+    /// Outbound channel: Logic -> Main, carrying full document snapshots for
+    /// local persistence. The Main thread owns the IndexedDB store, whose
+    /// callbacks need a live event loop this blocking loop cannot offer. Here we
+    /// only export the bytes and hand them over.
     to_persist: flume::Sender<(DocumentId, Vec<u8>)>,
     /// Live document state, keyed by `document_id`.
     ///
@@ -328,7 +328,7 @@ struct LogicState {
     docs: HashMap<DocumentId, LiveDoc>,
     /// Canonical per-user identifier, captured from `LogicEvent::SessionReady`
     /// `None` until the session is authenticated. Seeded into every open
-    /// `DocState` on arrival and into any document opened afterwards, so an app
+    /// `DocState` on arrival, and into any document opened afterwards. An app
     /// that keys per-user state (Toile reactions, presence identity) always has
     /// it before the first edit.
     my_user_id: Option<UserId>,
@@ -337,11 +337,11 @@ struct LogicState {
     /// peer's cursor (`TOILE-UI-076`).
     my_display_name: Option<String>,
     /// P3 responses this Logic thread issued on behalf of a document
-    /// (`toile-media`): a `RequestId` present here routes its answering
-    /// `RestEvent` (or correlated `ApiError`) back into the owning engine instead
-    /// of forwarding it to the UI. UI-issued requests are absent from this map
-    /// and forward verbatim, exactly as before. An entry is inserted when a
-    /// `ToileRequest` is lowered and removed when its response arrives.
+    /// (`toile-media`). A `RequestId` present here routes its answering
+    /// `RestEvent` (or correlated `ApiError`) back into the owning engine,
+    /// instead of forwarding it to the UI. UI-issued requests are absent from
+    /// this map and forward verbatim, exactly as before. An entry is inserted
+    /// when a `ToileRequest` is lowered and removed when its response arrives.
     rest_routes: HashMap<RequestId, DocumentId>,
     /// Sealed `.ambre` exports awaiting the Sync worker's answer
     /// (`DOCFILE-014`): the document whose file the worker holds, and the name
@@ -389,7 +389,7 @@ impl LogicState {
     fn send_to_ui(&self, event: UiEvent) {
         if let Err(flume::SendError(event)) = self.to_ui.send(event) {
             tracing::warn!(
-                "[Logic→UI] UI receiver dropped, discarding {:?}",
+                "[Logic->UI] UI receiver dropped, discarding {:?}",
                 std::mem::discriminant(&event),
             );
         }
@@ -398,7 +398,7 @@ impl LogicState {
     fn send_to_sync(&self, cmd: SyncCommand) {
         if let Err(flume::SendError(cmd)) = self.to_sync.send(cmd) {
             tracing::warn!(
-                "[Logic→Sync] receiver dropped, discarding {:?}",
+                "[Logic->Sync] receiver dropped, discarding {:?}",
                 std::mem::discriminant(&cmd),
             );
         }
@@ -409,7 +409,7 @@ impl LogicState {
     /// regenerated on the next edit), so it is non-fatal.
     fn send_to_persist(&self, document_id: DocumentId, snapshot: Vec<u8>) {
         if self.to_persist.send((document_id, snapshot)).is_err() {
-            tracing::warn!("[Logic→Persist] receiver dropped, snapshot not saved");
+            tracing::warn!("[Logic->Persist] receiver dropped, snapshot not saved");
         }
     }
 }
@@ -425,9 +425,9 @@ impl LogicState {
 /// channels disconnect (the UI Thread and the Sync relay both gone).
 ///
 /// `Selector::wait` parks the worker via flume's Atomics-backed blocking path,
-/// which wakes correctly across the UI/Logic worker boundary (only flume's
-/// *async* waker failed to cross workers — that path is gone, the Sync worker is
-/// now a separate wasm instance reached over postMessage). Legal off the main
+/// which wakes correctly across the UI/Logic worker boundary. Only flume's
+/// *async* waker failed to cross workers, and that path is gone. The Sync worker
+/// is now a separate wasm instance reached over postMessage. Legal off the main
 /// thread; the Logic worker has no browser callbacks to keep alive.
 pub fn run(
     from_ui: flume::Receiver<LogicCommand>,

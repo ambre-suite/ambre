@@ -15,8 +15,8 @@ use super::*;
 /// Maps absolute grid indices to pixel rectangles on a target surface.
 ///
 /// `origin_row` / `origin_col` are the absolute grid indices pinned to the
-/// top-left corner of the content area (i.e. the scroll position, cell-aligned
-/// for the MVP). For PDF export the origin is `(0, 0)`.
+/// top-left corner of the content area: the scroll position, cell-aligned for
+/// the MVP. For PDF export the origin is `(0, 0)`.
 ///
 /// MVP: uniform `col_width` / `row_height`. The fields are deliberately shaped
 /// so a future variable-size layout can add per-index offset slices without
@@ -35,9 +35,9 @@ pub struct GridLayout<'a> {
     pub header_width: f64,
     /// Height of the fixed column-letter strip on the top.
     pub header_height: f64,
-    /// Vertical offset (physical px) of the whole grid from the surface top:
-    /// the height of any band reserved above the column-header strip (the
-    /// formula bar on screen, `0.0` for PDF export).
+    /// Vertical offset (physical px) of the whole grid from the surface top.
+    /// This is the height of any band reserved above the column-header
+    /// strip: the formula bar on screen, `0.0` for PDF export.
     pub top: f64,
     /// Default column width (content area), used for any column without an
     /// explicit entry in [`col_widths`](Self::col_widths).
@@ -129,8 +129,8 @@ impl GridLayout<'_> {
     }
 
     /// Y of row `row`'s top edge relative to the surface, summing the variable
-    /// heights of the *visible* rows from [`origin_row`](Self::origin_row) (the
-    /// row axis collapses over filtered rows, `trame-shared-filter`).
+    /// heights of the *visible* rows from [`origin_row`](Self::origin_row). The
+    /// row axis collapses over filtered rows (`trame-shared-filter`).
     pub fn row_top(&self, row: u32) -> f64 {
         let mut y = self.top + self.header_height;
         if row >= self.origin_row {
@@ -193,8 +193,8 @@ impl GridLayout<'_> {
     }
 
     /// Signed number of *visible* row slots between [`origin_row`](Self::origin_row)
-    /// and `row`: the vertical offset (in `row_height` units) at which `row` is
-    /// drawn, with the collapsed rows removed. Equals `row - origin_row` when no
+    /// and `row`. This is the vertical offset (in `row_height` units) at which `row`
+    /// is drawn, with the collapsed rows removed. Equals `row - origin_row` when no
     /// row in between is hidden.
     pub fn visible_offset(&self, row: u32) -> i64 {
         if self.hidden_rows.is_empty() {

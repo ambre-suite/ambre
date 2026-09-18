@@ -11,23 +11,24 @@
 
 * **Shipped** counts a row whose code exists. **Unbuilt** counts `unimplemented`, and the
   split is the whole point: one number is a debt, the other is a plan.
-* **Loose** counts a shipped row that nothing would fail on: `unverified`, `human-review`,
-  `qa-manual`. That number is the coverage debt of the product.
-* **`unverified` may only fall.** Each document's count is a ceiling in
-  `scripts/contract_ceilings.json`, and `contracts.py` fails when one grows. A
-  deliberate growth is `just contracts-ceilings-raise`, one line of reviewed diff.
-  `human-review` and `qa-manual` carry no ceiling: they are decisions, not debt.
+* **Loose** counts a shipped row that nothing would fail on: `failing`, `untested`,
+  `human-review`, `qa-manual`. That number is the coverage debt of the product.
+* **Every gap that can close names its Story.** A `failing`, `untested` or
+  `unimplemented` row lands with an open Story of `ambre-roadmap.md`, and
+  `contracts.py` fails when that Story does not resolve. The roadmap is the debt
+  register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2407 rows: 1697 shipped, of which 836 loose. 710 unbuilt.**
+**2445 rows: 1719 shipped, of which 841 loose. 726 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 206 | 208 | 447 |  | 861 |
-| `unverified` | 311 | 201 | 310 |  | 822 |
-| `human-review` | 6 |  |  |  | 6 |
+| `verified` | 208 | 209 | 461 |  | 878 |
+| `failing` | 44 | 56 | 80 |  | 180 |
+| `untested` | 269 | 145 | 232 |  | 646 |
+| `human-review` | 7 |  |  |  | 7 |
 | `qa-manual` | 3 | 3 | 2 |  | 8 |
-| `unimplemented` | 41 | 54 | 22 | 593 | 710 |
+| `unimplemented` | 41 | 55 | 22 | 608 | 726 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -37,9 +38,9 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 13 | 3 | 10 | 2 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 0 | 7 | 1 |
-| `ambre-spec-architecture.md` | 15 | 15 | 3 | 12 |  |
+| `ambre-spec-architecture.md` | 16 | 16 | 3 | 13 |  |
 | `ambre-spec-broadcast.md` | 18 | 15 | 5 | 10 | 3 |
-| `ambre-spec-chrome.md` | 20 | 19 | 9 | 10 | 1 |
+| `ambre-spec-chrome.md` | 21 | 20 | 9 | 11 | 1 |
 | `ambre-spec-clipboard.md` | 14 | 14 | 0 | 14 |  |
 | `ambre-spec-commands.md` | 13 | 13 | 9 | 4 |  |
 | `ambre-spec-delta-order.md` | 18 | 18 | 6 | 12 |  |
@@ -47,7 +48,7 @@
 | `ambre-spec-docfile.md` | 16 | 16 | 14 | 2 |  |
 | `ambre-spec-drawing-surface.md` | 15 | 11 | 7 | 4 | 4 |
 | `ambre-spec-find.md` | 10 | 10 | 4 | 6 |  |
-| `ambre-spec-fixtures.md` | 31 | 31 | 27 | 4 |  |
+| `ambre-spec-fixtures.md` | 34 | 34 | 29 | 5 |  |
 | `ambre-spec-frame.md` | 17 | 16 | 3 | 13 | 1 |
 | `ambre-spec-high-density.md` | 9 | 5 | 0 | 5 | 4 |
 | `ambre-spec-key-rotation.md` | 12 | 11 | 2 | 9 | 1 |
@@ -74,7 +75,7 @@
 | `ambre-spec-zero-knowledge.md` | 14 | 14 | 6 | 8 |  |
 | `ambre-spec-trame-schema.md` | 7 | 7 | 5 | 2 |  |
 | `ambre-spec-trame-autofill.md` | 10 | 10 | 3 | 7 |  |
-| `ambre-spec-trame-cell-editing.md` | 39 | 28 | 6 | 22 | 11 |
+| `ambre-spec-trame-cell-editing.md` | 40 | 28 | 6 | 22 | 12 |
 | `ambre-spec-trame-cell-merges.md` | 38 | 37 | 24 | 13 | 1 |
 | `ambre-spec-trame-cell-rendering.md` | 12 | 9 | 1 | 8 | 3 |
 | `ambre-spec-trame-cell-styles.md` | 22 | 18 | 6 | 12 | 4 |
@@ -88,7 +89,7 @@
 | `ambre-spec-trame-headers.md` | 9 | 9 | 4 | 5 |  |
 | `ambre-spec-trame-import-export.md` | 39 | 27 | 15 | 12 | 12 |
 | `ambre-spec-trame-named-ranges.md` | 10 | 10 | 3 | 7 |  |
-| `ambre-spec-trame-number-formats.md` | 11 | 10 | 4 | 6 | 1 |
+| `ambre-spec-trame-number-formats.md` | 12 | 11 | 5 | 6 | 1 |
 | `ambre-spec-trame-pdf-export.md` | 4 | 1 | 1 |  | 3 |
 | `ambre-spec-trame-resize.md` | 10 | 10 | 3 | 7 |  |
 | `ambre-spec-trame-rows-and-columns.md` | 20 | 20 | 13 | 7 |  |
@@ -99,31 +100,31 @@
 | `ambre-spec-trame-status-bar.md` | 11 | 11 | 4 | 7 |  |
 | `ambre-spec-trame-undo.md` | 8 | 4 | 4 |  | 4 |
 | `ambre-spec-toile-schema.md` | 11 | 11 | 7 | 4 |  |
-| `ambre-spec-toile-auto-layout.md` | 24 | 24 | 18 | 6 |  |
-| `ambre-spec-toile-board-rendering.md` | 29 | 29 | 11 | 18 |  |
+| `ambre-spec-toile-auto-layout.md` | 26 | 26 | 20 | 6 |  |
+| `ambre-spec-toile-board-rendering.md` | 30 | 30 | 12 | 18 |  |
 | `ambre-spec-toile-clipboard.md` | 17 | 17 | 11 | 6 |  |
 | `ambre-spec-toile-comments.md` | 29 | 29 | 24 | 5 |  |
-| `ambre-spec-toile-connectors.md` | 39 | 39 | 18 | 21 |  |
-| `ambre-spec-toile-elements.md` | 30 | 30 | 23 | 7 |  |
+| `ambre-spec-toile-connectors.md` | 41 | 41 | 18 | 23 |  |
+| `ambre-spec-toile-elements.md` | 31 | 31 | 24 | 7 |  |
 | `ambre-spec-toile-embeds.md` | 44 | 44 | 31 | 13 |  |
-| `ambre-spec-toile-engine.md` | 37 | 37 | 26 | 11 |  |
+| `ambre-spec-toile-engine.md` | 38 | 38 | 27 | 11 |  |
 | `ambre-spec-toile-find.md` | 15 | 15 | 7 | 8 |  |
 | `ambre-spec-toile-frames.md` | 10 | 10 | 5 | 5 |  |
 | `ambre-spec-toile-freehand.md` | 11 | 11 | 5 | 6 |  |
 | `ambre-spec-toile-groups.md` | 23 | 23 | 8 | 15 |  |
 | `ambre-spec-toile-import-export.md` | 53 | 41 | 25 | 16 | 12 |
 | `ambre-spec-toile-links.md` | 12 | 12 | 5 | 7 |  |
-| `ambre-spec-toile-media.md` | 28 | 28 | 23 | 5 |  |
-| `ambre-spec-toile-menus.md` | 48 | 48 | 30 | 18 |  |
+| `ambre-spec-toile-media.md` | 29 | 29 | 24 | 5 |  |
+| `ambre-spec-toile-menus.md` | 51 | 51 | 33 | 18 |  |
 | `ambre-spec-toile-pdf-export.md` | 16 | 14 | 10 | 4 | 2 |
-| `ambre-spec-toile-presence.md` | 24 | 24 | 18 | 6 |  |
-| `ambre-spec-toile-presentation.md` | 44 | 44 | 35 | 9 |  |
+| `ambre-spec-toile-presence.md` | 26 | 26 | 20 | 6 |  |
+| `ambre-spec-toile-presentation.md` | 45 | 45 | 36 | 9 |  |
 | `ambre-spec-toile-reactions.md` | 34 | 29 | 19 | 10 | 5 |
 | `ambre-spec-toile-selection.md` | 29 | 29 | 16 | 13 |  |
 | `ambre-spec-toile-status-bar.md` | 13 | 13 | 7 | 6 |  |
 | `ambre-spec-toile-styles.md` | 30 | 30 | 17 | 13 |  |
 | `ambre-spec-toile-text-editing.md` | 36 | 35 | 4 | 31 | 1 |
-| `ambre-spec-toile-tools.md` | 28 | 28 | 20 | 8 |  |
+| `ambre-spec-toile-tools.md` | 30 | 30 | 22 | 8 |  |
 | `ambre-spec-toile-undo.md` | 6 | 6 | 1 | 5 |  |
 | `ambre-spec-toile-vector-paths.md` | 13 | 13 | 4 | 9 |  |
 | `ambre-spec-toile-viewport.md` | 32 | 30 | 15 | 15 | 2 |

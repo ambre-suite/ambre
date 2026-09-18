@@ -3,7 +3,7 @@
 **Type:** Vertical (feature)
 **Implementation:** design-only
 
-> A picture in the document. The document holds the picture's address and its display size; the
+> A picture in the document. The document holds the picture's address and its display size. The
 > pixels travel apart, through the shared media flow, and the server that stores them never sees
 > them.
 
@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-205` | `INV` | The document MUST hold a picture as an address, never as its pixels. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-206` | `INV` | The address of a picture MUST be the content hash of the plaintext blob, so two copies of one picture resolve to one address. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-052` | `INV` | A picture MUST be a child of the document root: neither a table cell nor a list item may hold one. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-052` | `INV` | A picture MUST be a child of the document root: neither a table cell nor a list item MAY hold one. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-054` | `INV` | The decoded pictures MUST be held under a cap measured in decoded bytes, not in entries. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-207` | `INV` | A picture's resolution state MUST NOT be written into the document: it is a fact of the session alone. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-057` | `INV` | A picture that is absent, undecryptable or undecodable MUST NOT be fetched again without a reader's gesture. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -78,7 +78,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-223` | `POST` | Eviction MUST take the least recently painted entries first, and MUST stop as soon as the total fits the cap. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-223` | `POST` | Eviction MUST take the least recently painted entries first. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-286` | `POST` | Eviction MUST stop as soon as the total fits the cap. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-224` | `POST` | Eviction MUST leave one entry standing, even when that entry alone is over the cap. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-055` | `FRAME` | A picture whose transfer is in flight MUST NOT be evicted. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-056` | `FRAME` | Eviction MUST NOT touch the document: the address MUST stay on the block. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -100,21 +101,17 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-225` | `POST` | The conversion report MUST carry every picture the import lifted. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-226` | `FRAME` | Lifting a picture MUST NOT change its address, its display size, its alternative text or its caption. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** the PDF export of a hundred pages with pictures, one row of
-  `ambre-spec-budgets.md section 1`, whose second figure is the blob fetches this document
-  owns; and the decoded cache, one row of `ambre-spec-budgets.md section 6`, which is the cap
-  `PROSE-FEAT-054` states.
-* **Boundary.** this document owns Prose's only outbound flow of user content that is not the
-  document itself: the picture blobs. The Logic thread makes no network call and holds no key
-  (`PROSE-025`), the Sync worker seals every blob before it leaves, and the document carries an
-  address rather than pixels, so nothing here reaches a service that could read one.
-* **Verification.** 37 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-FEAT-056` is the row a reviewer can hold without a test, because eviction touching the
-  document would be a write in a cache the crate keeps per session. `PROSE-FEAT-054`, `-055`,
-  `-223` and `-224` are the four a test reaches with no network, from the cache alone, and Toile
-  holds the same pair with `TOILE-IO-007`. The eleven frame conditions are what a resize and an
-  eviction cost: each names a field the gesture is not allowed to reach, and no single assertion
-  covers one.
+* **Budget.** two rows. The PDF export of a hundred pages with pictures
+  (`ambre-spec-budgets.md section 1`) counts the blob fetches as its second figure. The decoded
+  cache of section 6 is the cap `PROSE-FEAT-054` sets.
+* **Boundary.** the picture blobs are Prose's only outbound flow of user content that is not the
+  document. The Logic thread makes no network call and holds no key (`PROSE-025`). The Sync worker
+  seals every blob, and the document holds an address, not pixels.
+* **Verification.** 38 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. A
+  reviewer holds `PROSE-FEAT-056`: eviction touching the document would be a write in a per-session
+  cache. `PROSE-FEAT-054`, `-055`, `-223` and `-224` are reached from the cache alone, and Toile
+  holds the same pair (`TOILE-IO-007`). The eleven frame conditions each name a field a resize or
+  an eviction may not reach, and no assertion covers one.
 
 ---
 
@@ -136,11 +133,11 @@ the last column names the row each row rests on.
 
 ## 3. MODEL
 
-**Containers.** None of its own. A picture is one block type of the movable tree, and its address,
+**Containers.** None of its own. A picture is one block type of the movable tree. Its address,
 its alternative text, its display size, its alignment and its caption are that node's attributes,
-declared in `ambre-spec-prose-schema.md section 3`. There is no media register: the address is the
-content hash of the plaintext blob, and it is also the key into the media flow, which is why no
-second table joins the two (`ambre-spec-prose-schema.md section 6`).
+declared in `ambre-spec-prose-schema.md section 3`. There is no media register. The address is the
+content hash of the plaintext blob and the key into the media flow, so no second table joins the two
+(`ambre-spec-prose-schema.md section 6`).
 
 **The alignments:**
 
@@ -158,7 +155,7 @@ pub enum ImageAlign {
 }
 ```
 
-`Left` and `Right` are accepted, kept through a round trip and laid out as `Block`, because text
+`Left` and `Right` are accepted, kept through a round trip and laid out as `Block`. Text
 wrapping needs line breaking with exclusion zones, which the shaper does not offer
 (`features/ambre-spec-prose-pagination.md section 5`).
 
@@ -193,11 +190,11 @@ pub enum MediaFailure {
 
 The first three are terminal on the first answer, because asking again cannot change them. The
 fourth is what the Sync worker's own bounded retry ends on. A reader who asks again puts the entry
-back to `Pending` and the download is issued once more; coming back online re-drives the entries
+back to `Pending`, and the download is issued once more. Coming back online re-drives the entries
 that never resolved, and never a terminal one (`PROSE-FEAT-057`).
 
 **The cache.** Decoded pictures are held in the Logic thread under a cap measured in decoded bytes,
-not in entries, because it is the bytes that spend the client-memory pillar. On each insert, the
+not in entries. It is the bytes that spend the client-memory pillar. On each insert, the
 least recently *painted* entries leave until the total fits (`PROSE-FEAT-054`). An entry whose
 transfer is in flight is never chosen (`PROSE-FEAT-055`). A single picture larger than the whole
 cap is kept, because it is the only way to show it at all.
@@ -223,14 +220,14 @@ picture scrolled back into view is simply `Pending` again. The cap is a row of
 2. clamp each dimension to the maximum, and store what the clamp produced (`PROSE-FEAT-059`). Past
    it the layout cost is unbounded and no page can show the picture at that size.
 3. when the aspect is locked, take the dimension that moved most against the stored size as the
-   driver, and derive the other from the decoded picture's own ratio. When the blob has not been
+   driver. Derive the other from the decoded picture's own ratio. When the blob has not been
    decoded yet, derive it from the stored size instead.
 
 **Where a picture may sit.** The root, and only the root: not in a table cell, not in a list item
 (`PROSE-FEAT-052`). The rule is the nesting table of `ambre-spec-prose-schema.md section 4`, and
 the guard is the one `features/ambre-spec-prose-tables.md section 3` states, shared by both paths.
 The import path uses the same predicate and lifts an illegal picture to the nearest legal ancestor
-rather than refusing the file, and the conversion report carries the lift
+rather than refusing the file. The conversion report carries the lift
 (`PROSE-FEAT-053`).
 
 **What an export does.** An export reads the bytes from the cache, never from the network
@@ -260,7 +257,7 @@ caption.
 | a click on the retry affordance | asks for the blob again |
 
 A picture not yet resolved paints a neutral placeholder carrying its alternative text. A picture
-that failed for good paints a distinct broken mark and the retry affordance, so no picture stays on
+that failed for good paints a distinct broken mark and the retry affordance. No picture stays on
 the loading placeholder for ever (`PROSE-UI-046`).
 
 ---
@@ -292,33 +289,33 @@ the loading placeholder for ever (`PROSE-UI-046`).
 * **Nothing puts a picture into the document in the first place.** Every command above takes an
   address that already exists, and no command carries a file the reader chose, computes its hash or
   uploads it. `features/ambre-spec-prose-import-export.md section 3` reads the local cache and
-  nothing fills it, and no Prose rule says who uploads a blob or what the reader sees while it
+  nothing fills it. No Prose rule says who uploads a blob or what the reader sees while it
   runs.
 * **Nothing says whether a paste follows the refusal or the lift.** Section 2 pastes a picture
   into a table cell and expects it beside the table. `PROSE-FEAT-053` rules on an import and
   `PROSE-FEAT-211` refuses an insertion; a paste is named by neither, and the two answers differ.
 * **Two blocks holding one address are not ruled on.** The resolution state is the address's and
-  `RetryImageLoad` names a block, so nothing says whether one retry, one failure mark and one
+  `RetryImageLoad` names a block. Nothing says whether one retry, one failure mark and one
   eviction reach the second block or leave it as it was.
 * **The retry has no answer for the reader.** `RetryImageLoad` asks again and nothing says what the
   view shows while it runs, nor what it shows when the second attempt fails the same way.
 * **Nothing bounds the source picture.** The display size is clamped and the decoded cache is
-  capped; the blob itself is not, so a picture too large to decode fails as
+  capped. The blob itself is not, so a picture too large to decode fails as
   `CorruptImage` rather than being refused when it is chosen. Toile refuses one at import
   (`TOILE-IO-009`) and Prose states no equivalent.
 * **The maximum display dimension is a figure with no home.** It is stated here as a constant of
   this feature and it is not a row of `ambre-spec-budgets.md`, unlike the cache cap
   beside it.
-* **Text wrapping has no design**, and the two alignments that need it are accepted and stored, so
-  a document imported with wrapped pictures keeps an intent nothing honours.
+* **Text wrapping has no design**, and the two alignments that need it are accepted and stored. A
+  document imported with wrapped pictures keeps an intent nothing honours.
 * **An equation is the second block whose content is not text, and it has no home.** The deferred
-  design stores a formula as a mark on a range and as a block type, both holding a source string,
-  and renders it on the Logic thread into a drawing the page paints the way it paints a picture.
+  design stores a formula as a mark on a range and as a block type, both holding a source string.
+  It is rendered on the Logic thread into a drawing the page paints the way it paints a picture.
   Neither the mark nor the block type is in `ambre-spec-prose-schema.md section 3`, no event
-  carries the rendering, and the renderer itself is named as a choice nobody has made. It is placed
-  here because the path from a Logic-thread product to a painted block is this feature's, and the
+  carries the rendering, and the renderer is a choice nobody has made. It is placed
+  here because the path from a Logic-thread product to a painted block is this feature's. The
   Story is "The later writing set" (`ambre-roadmap.md` POST-V1).
 * **A Word table holding a picture loses the cell it was in.** The pipeline lifts it beside the
   table and reports the lift (`PROSE-IO-026`, `PROSE-FEAT-053`), which is settled. What is not
-  settled is the way back: an export writes the lifted picture where the document now holds it, so
-  a round trip through Prose moves the picture out of the cell permanently.
+  settled is the way back. An export writes the lifted picture where the document now holds it. A
+  round trip through Prose then moves the picture out of the cell permanently.

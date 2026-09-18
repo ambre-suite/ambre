@@ -401,7 +401,7 @@ fn mount_presenter(
     mount_presenter_follow(open, index, count, notes, false, None, None)
 }
 
-/// Mount a `PresenterPanel` with full "Follow presenter" state: the
+/// Mount a `PresenterPanel` with full "Follow presenter" state. That is the
 /// broadcast toggle, the active follow target, and the latest broadcasting peer
 /// (which drives whether the Follow button renders).
 fn mount_presenter_follow(
@@ -569,8 +569,8 @@ fn presenter_follow_button_fires_with_peer() {
 
 // Note: the "slide change re-seeds the textarea" path is a deferred `Effect` in
 // `PresenterPanel`. Asserting it needs the reactive executor to flush a post-mount
-// signal update, which the bare wasm-bindgen-test harness does not drive (no async
-// spawner installed by `mount_to`), so it is covered by the pure `notes_delta`
+// signal update. The bare wasm-bindgen-test harness does not drive that, since
+// `mount_to` installs no async spawner. So it is covered by the pure `notes_delta`
 // model + the app-level wiring rather than a flaky async DOM assertion here.
 
 // -- The deck panel (`toile-presentation`) ------------------------------------

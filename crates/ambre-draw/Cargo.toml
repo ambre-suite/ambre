@@ -18,3 +18,6 @@ ambre-core = { path = "../ambre-core" }
 kurbo = { workspace = true }
 peniko = { workspace = true }
 parley = { workspace = true }
+
+[lints]
+workspace = true

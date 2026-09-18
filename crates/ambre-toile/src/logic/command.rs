@@ -1,16 +1,16 @@
 //! Toile IPC contract and the data-oriented display structures.
 //!
 //! The command / event / display types themselves live in `ambre-bus`
-//! (`ambre_bus::app::toile`) so the `ambre-logic` dispatcher can match on
-//! `(DocState, AppCommand::Toile)` without a dependency cycle. This module
-//! re-exports them (keeping the engine's `crate::logic::command::...` paths) and adds
-//! the one engine-local type: [`ToileOutcome`].
+//! (`ambre_bus::app::toile`) so the `ambre-logic` dispatcher can match on `(DocState,
+//! AppCommand::Toile)` without a dependency cycle. This module re-exports them
+//! (keeping the engine's `crate::logic::command::...` paths) and adds the one
+//! engine-local type: [`ToileOutcome`].
 //!
-//! **Outcome shape.** [`ToileOutcome`] mirrors `TrameOutcome` (which likewise
-//! stays in `ambre-trame`, not `ambre-bus`): it returns raw CRDT / ephemeral
-//! bytes, and the `ambre-logic` dispatcher wraps them into `SyncCommand`s with
-//! the owning `document_id` (which the standalone engine does not hold). Same
-//! division of labour as Trame.
+//! **Outcome shape.** [`ToileOutcome`] mirrors `TrameOutcome`, which likewise stays
+//! in `ambre-trame`, not `ambre-bus`. It returns raw CRDT / ephemeral bytes. The
+//! `ambre-logic` dispatcher wraps them into `SyncCommand`s with the owning
+//! `document_id`, which the standalone engine does not hold. Same division of labour
+//! as Trame.
 
 pub use ambre_bus::app::toile::{
     BoolOp, ClipConnector, ClipElement, ClipMembership, ClipValue, ClipboardPayload, CommentAnchor,
@@ -27,11 +27,11 @@ pub use ambre_bus::rest::RequestId;
 // -----------------------------------------------------------------------------
 
 /// A Logic->Sync service-plane request a Toile command needs to make
-/// (`toile-media`). Toile allocates the [`RequestId`] (it owns the
-/// correlation, so it can match the answering `RestEvent` back to a pending
-/// import); the `ambre-logic` dispatcher supplies the `document_id` and lowers
-/// this to a `RestCommand`. Toile never constructs a `RestCommand` nor knows its
-/// own `DocumentId`, the same division of labour as the CRDT delta in
+/// (`toile-media`). Toile allocates the [`RequestId`], owning the correlation so
+/// it can match the answering `RestEvent` back to a pending import. The
+/// `ambre-logic` dispatcher supplies the `document_id` and lowers this to a
+/// `RestCommand`. Toile never constructs a `RestCommand` nor knows its own
+/// `DocumentId`, the same division of labour as the CRDT delta in
 /// [`ToileOutcome::update`].
 #[derive(Debug)]
 pub enum ToileRequest {
@@ -83,8 +83,8 @@ impl ToileOutcome {
 
     /// An outcome with local display events plus an optional ephemeral frame and
     /// no CRDT delta. Used by the playback commands when "Follow presenter"
-    /// broadcasting is on: the local `SlideChanged` repaints this viewer
-    /// while the ephemeral frame carries the active index to followers.
+    /// broadcasting is on. The local `SlideChanged` repaints this viewer, while
+    /// the ephemeral frame carries the active index to followers.
     pub fn display_and_ephemeral(display: Vec<ToileEvent>, ephemeral: Option<Vec<u8>>) -> Self {
         Self {
             display,

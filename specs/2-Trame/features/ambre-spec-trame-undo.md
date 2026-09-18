@@ -36,13 +36,11 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
   `ambre-spec-budgets.md section 6`, and the cap is `UI-THREAD-016`.
 * **Boundary.** none of its own: an undo emits the reverting operations into the document, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 4 `verified`, 0 `unverified`, 4 `unimplemented`. The granularity rule is held
-  four ways, and only for gestures that write cells: `TRAME-017` claimed every mutating handler, and
-  `TRAME-088` says in so many words that the line delete contradicts it, so the row was counted
-  `verified` for a span it does not hold. The three chords are read back off the seeded keymap, and
-  `Ctrl+Z` was in no row at all before this pass. Version history is unbuilt, and the conjunction it
-  was written as hid two rules on opposite sides of the grammar: what a restore owes the history is
-  a `POST`, what two peers reach around it is a `CONC`. The shared rules and their coverage are in
+* **Verification.** 4 `verified`, 4 `unimplemented`. What holds is the granularity rule, four ways,
+  for gestures that write cells alone: the line delete contradicts it and `TRAME-088` carries
+  that failure. The three chords are read back off the seeded keymap, and version history is
+  unbuilt on both sides of the grammar. What a restore owes the snapshot list is open, and so is
+  what two peers reach when one restores while the other edits. The shared rules and their coverage are
   `ambre-spec-undo.md`.
 
 ---
@@ -114,6 +112,6 @@ The shared gaps are in `ambre-spec-undo.md section 6`. Trame's own:
 * **Version history does not exist** (`TRAME-123`, `TRAME-124`, `TRAME-153`, `TRAME-154`). No
   container, no command, no surface. A user who closes a document loses every step of it, and the
   roadmap's answer is a named snapshot rather than a longer stack. Prose carries a design for the
-  same feature and Trame carries none (`features/ambre-spec-prose-undo.md section 4`), so the shape
-  is open: whether the snapshot list is per document or per application, and whether restoring one
-  is a write or a fork.
+  same feature and Trame carries none (`features/ambre-spec-prose-undo.md section 4`). The shape is
+  open: whether the snapshot list is per document or per application, and whether restoring one is
+  a write or a fork.

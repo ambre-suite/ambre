@@ -1,19 +1,18 @@
 //! Auto-layout constraint solver (`toile-auto-layout`).
 //!
 //! A **frame** can carry an [`AutoLayout`] spec so its children are positioned by
-//! this solver rather than by absolute coordinates (the Figma model). The **spec
-//! is CRDT** (shared design intent, a single LWW register under the frame element
-//! map's `autolayout` key -- see `state::autolayout`); the **solved positions are
-//! derived, never persisted** -- like connector geometry
-//! (`toile-connectors`). Persisting solved positions is the rejected alternative
-//! redundant derived state that could desync from the spec.
+//! this solver rather than by absolute coordinates (the Figma model). The **spec is
+//! CRDT**: a single LWW register under the frame element map's `autolayout` key,
+//! shared design intent (see `state::autolayout`). The **solved positions are
+//! derived, never persisted**, like connector geometry (`toile-connectors`).
+//! Persisting solved positions is the rejected alternative: redundant derived state
+//! that could desync from the spec.
 //!
-//! This module is **pure and deterministic**: given the frame rect, the layout
-//! spec and the children sizes (in `children` LoroMovableList order) it returns
-//! one [`kurbo::Rect`] per child. Determinism is mandatory -- every peer derives
-//! identical positions from identical CRDT state. It runs at derivation on
-//! every child edit, so it stays allocation-light for the < 1 ms / 200-child
-//! budget.
+//! This module is **pure and deterministic**. Given the frame rect, the layout spec
+//! and the children sizes (in `children` LoroMovableList order), it returns one
+//! [`kurbo::Rect`] per child. Determinism is mandatory: every peer derives
+//! identical positions from identical CRDT state. It runs at derivation on every
+//! child edit, so it stays allocation-light for the < 1 ms / 200-child budget.
 //!
 //! ## Semantics (pinned; the spec leaves the fine details to the solver)
 //!
@@ -23,22 +22,24 @@
 //!   Y for [`Direction::Vertical`]. The **cross axis** is the other one.
 //! - **`gap`** = space between consecutive children on the main axis (and between
 //!   rows for `Wrap`).
-//! - **[`Align`]** distributes children along the **main axis** in the free space:
-//!   `Start` packs at the start, `Center` centers the packed block, `End` packs at
-//!   the end, `SpaceBetween` pins first/last to the edges and splits the remaining
-//!   space evenly between them (falls back to `Start` for a run of `< 2` children).
-//! - **[`Sizing`]** governs the **main-axis** child extent: `Fixed` / `Hug` keep
-//!   each child's own size (from the solver's view Hug == Fixed, since the frame
-//!   rect is an input, not something the solver grows); `Fill` grows children
-//!   equally to consume the leftover main-axis space (and stretches them to the
-//!   content-box extent on the cross axis). `Fill` supersedes `SpaceBetween` when
-//!   both are set (no leftover space remains to distribute).
-//! - **Cross axis**: children keep their own cross size and are **start-aligned**
-//!   (the single [`Align`] knob is spent on the main axis); `Fill` also stretches
-//!   the cross size to the content box.
-//! - **Edge cases**: empty `children` -> empty `Vec`; when children overflow the
-//!   box, distribution never produces negative spacing (clamped to `>= 0`), the
-//!   children simply extend past the box.
+//! - **[`Align`]** distributes children along the **main axis** in the free
+//!   space. `Start` packs at the start, `Center` centers the packed block and
+//!   `End` packs at the end. `SpaceBetween` pins first/last to the edges and
+//!   splits the remaining space evenly between them (falls back to `Start` for
+//!   a run of `< 2` children).
+//! - **[`Sizing`]** governs the **main-axis** child extent. `Fixed` / `Hug`
+//!   keep each child's own size. From the solver's view Hug == Fixed, since
+//!   the frame rect is an input, not something the solver grows. `Fill` grows
+//!   children equally to consume the leftover main-axis space, and stretches
+//!   them to the content-box extent on the cross axis. `Fill` supersedes
+//!   `SpaceBetween` when both are set (no leftover space remains to
+//!   distribute).
+//! - **Cross axis**: children keep their own cross size and are
+//!   **start-aligned**, the single [`Align`] knob being spent on the main axis.
+//!   `Fill` also stretches the cross size to the content box.
+//! - **Edge cases**: empty `children` -> empty `Vec`. When children overflow
+//!   the box, distribution never produces negative spacing (clamped to `>= 0`),
+//!   and the children simply extend past the box.
 
 use kurbo::{Rect, Size};
 

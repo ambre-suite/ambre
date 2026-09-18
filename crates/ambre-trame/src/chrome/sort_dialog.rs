@@ -2,15 +2,15 @@
 // ============================================================================
 // The multi-column Sort dialog (`trame-sort`, "Sort range..."). A small DOM
 // dialog listing ordered sort levels (primary, secondary, ...), each a column
-// picker + ascending/descending direction, plus a "data has header row" toggle
-// and add/remove level. Applying emits a `SortApply` the launcher forwards as
-// [`ambre_bus::TrameCommand::SortRangeMulti`] over the snapshotted selection
-// rectangle; the Logic thread sorts the rows lexicographically by the keys
-// (`trame-sort`) and replies `SortComplete`.
+// picker + ascending/descending direction. It also carries a "data has header
+// row" toggle and add/remove level. Applying emits a `SortApply` the launcher
+// forwards as [`ambre_bus::TrameCommand::SortRangeMulti`], over the snapshotted
+// selection rectangle. The Logic thread sorts the rows lexicographically by the
+// keys (`trame-sort`) and replies `SortComplete`.
 //
-// The dialog is opened over a snapshot of the current selection bounds
-// (published by the canvas view): the columns it offers are exactly the
-// selection's columns, and each `SortKey::col` it emits is range-relative
+// The dialog is opened over a snapshot of the current selection bounds,
+// published by the canvas view. The columns it offers are exactly the
+// selection's columns. Each `SortKey::col` it emits is range-relative
 // (`0` = the selection's left column), matching the `SortRangeMulti` contract.
 // ============================================================================
 

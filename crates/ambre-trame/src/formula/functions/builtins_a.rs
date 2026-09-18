@@ -33,7 +33,8 @@ pub(crate) fn flatten_numeric_inner(value: &CellValue, out: &mut Vec<f64>) {
     }
 }
 
-/// Flatten all arguments into a flat list of values (for COUNTA etc.).
+/// Flatten all arguments into a flat list of values, for the counting functions
+/// such as COUNTA.
 pub(crate) fn flatten_all(args: &[CellValue]) -> Vec<CellValue> {
     let mut out = Vec::new();
     for arg in args {
@@ -363,9 +364,9 @@ pub(crate) fn concat_fn(args: &[CellValue]) -> CellValue {
 }
 
 /// Resolve the optional character-count argument shared by `LEFT`/`RIGHT`.
-/// Returns the count as `usize`, or `#NUM!` for a negative value (a bare
-/// `as usize` cast wraps a negative `f64` to a gigantic length -- Excel returns
-/// an error here rather than silently taking the whole string).
+/// Returns the count as `usize`, or `#NUM!` for a negative value. A bare `as
+/// usize` cast wraps a negative `f64` to a gigantic length. Excel returns an
+/// error here rather than silently taking the whole string.
 fn str_count_arg(args: &[CellValue], default: usize) -> Result<usize, FormulaError> {
     if args.len() < 2 {
         return Ok(default);

@@ -4,8 +4,8 @@
 // with two modes (find / replace), pinned top-right. Ctrl+F opens find mode,
 // Ctrl+H opens/expands replace mode (the launcher sets `state` accordingly);
 // Escape closes. The panel holds the query, replacement and the search options
-// (match_case / whole_cell / in_formulas / all_sheets) as its own state, and
-// emits two intents: `on_find` (-> TrameCommand::FindNext) and `on_replace_all`
+// (match_case / whole_cell / in_formulas / all_sheets) as its own state. It emits
+// two intents: `on_find` (-> TrameCommand::FindNext) and `on_replace_all`
 // (-> TrameCommand::ReplaceAll). The launcher resolves the search origin from
 // the tracked active cell, so the panel never carries the cursor.
 // ============================================================================

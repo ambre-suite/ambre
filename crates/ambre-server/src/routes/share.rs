@@ -59,7 +59,7 @@ pub struct InviteResponse {
     pub display_name: String,
     /// Whether the invitee's email was provider-verified (OIDC) rather than
     /// self-asserted at `/auth/setup` (#3). The document key is wrapped to the
-    /// invitee's exchange key here; an unverified recipient is a squat candidate,
+    /// invitee's exchange key here. An unverified recipient is a squat candidate,
     /// so the client should surface the TOFU out-of-band key check before trusting
     /// the wrap. Additive field; older clients ignore it.
     pub email_verified: bool,
@@ -100,9 +100,9 @@ pub async fn invite_to_document(
     // `add_document_member` upserts (ON CONFLICT DO UPDATE), so invite is also
     // the role-change path for an EXISTING member. Clamp the target too: a caller
     // may only touch a member currently at or below their own rank. Without this
-    // an `editor` could re-invite an existing `owner` as `editor` and, since an
-    // editor holds the document key, supply a valid wrap -- demoting an owner and
-    // overwriting their key entry despite never being an owner.
+    // an `editor` could re-invite an existing `owner` as `editor`. An editor
+    // holds the document key, so it could supply a valid wrap. That demotes an
+    // owner and overwrites their key entry, despite never being an owner.
     if let Some(existing) = db::get_document_member(&state.db, &doc_id, &invitee_id).await? {
         let target_rank = doc_role_rank(&existing.role).ok_or(AppError::Forbidden)?;
         if target_rank > caller_rank {
@@ -204,9 +204,9 @@ pub async fn rotate_document_key(
         .await?
         .ok_or(AppError::Forbidden)?;
     // Owner-only, symmetric with `revoke_from_document`. Rotating the document key
-    // rewraps EVERY member's `doc_key_enc` and makes the caller the wrapper of
-    // record, so an editor allowed here could omit members from the payload
-    // (leaving their key stale after rotation -> lockout) or re-key the document
+    // rewraps EVERY member's `doc_key_enc`, and makes the caller the wrapper of
+    // record. An editor allowed here could omit members from the payload, leaving
+    // their key stale after rotation -> lockout. It could also re-key the document
     // out from under the owner. Key rotation is membership management; it belongs
     // to the owner exactly like revoke.
     if m.role != "owner" {
@@ -225,9 +225,9 @@ pub async fn rotate_document_key(
     }
     db::rotate_document_keys(&state.db, &doc_id, &s.user_id, &keys).await?;
     tracing::info!(document_id = %doc_id, by = %s.user_id, members = keys.len(), "document key rotated");
-    // Tell every REMAINING member to re-fetch its freshly wrapped key. No user id:
-    // this is a re-key signal, not a revocation, so the rotator (an owner) never
-    // appears as "revoked" and cannot kick itself out of its own document.
+    // Tell every REMAINING member to re-fetch its freshly wrapped key. No user id.
+    // This is a re-key signal, not a revocation. The rotator (an owner) never
+    // appears as "revoked", and cannot kick itself out of its own document.
     let msg = ambre_protocol::ws::encode_server_msg(
         &ambre_protocol::ws::WsServerMsg::KeyRotationRequired {
             document_id: doc_id,

@@ -11,14 +11,15 @@
 //     once the PDF pipeline lands (see `trame-pdf-export`).
 //
 // Everything here is geometry-driven through `GridLayout` and plain cell data
-// (`CellContent`), with no knowledge of scroll state, dirty rects, the HUD, or
+// (`CellContent`). It knows nothing of scroll state, dirty rects, the HUD, or
 // any other screen-only concern. Those live in `ui::renderer`, which composes
 // these primitives in the right z-order.
 //
-// `GridLayout` is uniform-metrics for the MVP (one column width, one row
-// height) so it stays O(1) over the virtual 100k grid -- never materializing a
-// per-index offset vector. Variable column widths / row heights (resize) will
-// extend `GridLayout` later without changing these primitive signatures.
+// `GridLayout` is uniform-metrics for the MVP: one column width, one row
+// height. It therefore stays O(1) over the virtual 100k grid, never
+// materializing a per-index offset vector. Variable column widths / row heights
+// (resize) will extend `GridLayout` later without changing these primitive
+// signatures.
 // ============================================================================
 
 use ambre_canvas::{Palette, TextCache};
@@ -73,9 +74,9 @@ pub enum CommitDirection {
     Stay,
 }
 
-/// Action emitted by the HTML formula bar input: commit the edit with the
-/// cursor-navigation direction, fill the whole selection with the value
-/// (Ctrl/Cmd+Enter), or cancel it without writing.
+/// Action emitted by the HTML formula bar input. It commits the edit with
+/// the cursor-navigation direction, fills the whole selection with the
+/// value (Ctrl/Cmd+Enter), or cancels it without writing.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum FormulaAction {
     Commit(CommitDirection),

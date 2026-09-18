@@ -15,8 +15,8 @@
 //   2. The fetch resolves on this same thread (spawn_local) and drops the bytes
 //      into a shared inbox.
 //   3. Each frame `drain_into(font_cx)` registers any arrived faces into the
-//      shared `FontContext` and reports whether coverage changed, so the caller
-//      can drop the stale (tofu) layouts and force a repaint.
+//      shared `FontContext` and reports whether coverage changed. The caller
+//      can then drop the stale (tofu) layouts and force a repaint.
 //
 // A script is fetched at most once regardless of the outcome (success, HTTP
 // failure, or still in flight): `requested` latches on the first sighting.
@@ -31,13 +31,14 @@ use rustc_hash::FxHashSet;
 // Base fonts (fetched eagerly at boot)
 // -----------------------------------------------------------------------------
 
-/// The base font faces registered at startup: Noto Sans (regular / bold /
-/// italic / bold-italic, real faces selected by `FontWeight` / `FontStyle`) plus
-/// the alternate DejaVu serif and monospace families for the formatting toolbar
-/// picker (`trame-cell-styles`). Together they cover Latin, Latin-Extended,
-/// Cyrillic, and Greek; scripts outside that are fetched on demand by
-/// [`LazyFontLoader`]. Same-origin URLs (no CDN, `UI-THREAD-004`); a missing file
-/// logs a warning and leaves that face absent rather than failing boot.
+/// The base font faces registered at startup. Noto Sans covers regular, bold,
+/// italic and bold-italic, with real faces selected by `FontWeight` /
+/// `FontStyle`. The alternate DejaVu serif and monospace families serve the
+/// formatting toolbar picker (`trame-cell-styles`). Together they cover Latin,
+/// Latin-Extended, Cyrillic, and Greek; scripts outside that are fetched on
+/// demand by [`LazyFontLoader`]. Same-origin URLs (no CDN, `UI-THREAD-004`); a
+/// missing file logs a warning and leaves that face absent rather than failing
+/// boot.
 #[cfg(target_arch = "wasm32")]
 const BASE_FONTS: [(&str, &str); 6] = [
     ("/fonts/NotoSans-Regular.ttf", "NotoSans-Regular.ttf"),
@@ -50,8 +51,8 @@ const BASE_FONTS: [(&str, &str); 6] = [
 
 /// Fetch the [`BASE_FONTS`] same-origin and register every face that resolves
 /// into `font_cx`. Shared by the UI-thread GPU bootstrap and any other consumer
-/// that needs a text-capable `FontContext` (e.g. the PDF export pass, whose
-/// fresh context would otherwise have zero faces and emit no glyphs). Fetch runs
+/// that needs a text-capable `FontContext`. The PDF export pass is one: its
+/// fresh context would otherwise have zero faces and emit no glyphs. Fetch runs
 /// where a browser event loop exists; a face that fails to fetch is skipped.
 #[cfg(target_arch = "wasm32")]
 pub async fn load_base_fonts(font_cx: &mut parley::FontContext) {
@@ -68,8 +69,8 @@ pub async fn load_base_fonts(font_cx: &mut parley::FontContext) {
 
 /// Fetch the [`BASE_FONTS`] same-origin and return each face's bytes that
 /// resolved. Used by the Main thread to seed the Logic thread's PDF-export
-/// `FontContext` (`LogicCommand::LoadFonts`): the Logic worker cannot fetch, so
-/// the Main thread -- which has a browser event loop -- fetches on its behalf
+/// `FontContext` (`LogicCommand::LoadFonts`). The Logic worker cannot fetch.
+/// The Main thread -- which has a browser event loop -- fetches on its behalf
 /// and ships the bytes across. A face that fails to fetch is simply omitted.
 #[cfg(target_arch = "wasm32")]
 pub async fn fetch_base_font_faces() -> Vec<Vec<u8>> {
@@ -91,9 +92,9 @@ pub async fn font_context_from() -> parley::FontContext {
 }
 
 /// Build a [`parley::FontContext`] by registering each already-fetched face in
-/// `faces`. Cross-platform and fetch-free, unlike [`font_context_from`]: the
-/// Logic thread cannot fetch (it blocks on its inbound selector and has no
-/// browser event loop), so it builds its PDF-export context from the base-font
+/// `faces`. Cross-platform and fetch-free, unlike [`font_context_from`]. The
+/// Logic thread cannot fetch: it blocks on its inbound selector and has no
+/// browser event loop. It builds its PDF-export context from the base-font
 /// bytes the Main thread fetched and delivered (`LogicCommand::LoadFonts`).
 pub fn font_context_from_bytes(faces: impl IntoIterator<Item = Vec<u8>>) -> parley::FontContext {
     let mut font_cx = parley::FontContext::new();
@@ -124,10 +125,10 @@ impl LazyFont {
     /// the base fonts already cover it (Latin, Cyrillic, Greek, punctuation,
     /// symbols...). Only a `Some` codepoint can ever trigger a fetch.
     ///
-    /// Ranges follow the Unicode blocks; they intentionally err on the side of
-    /// the common blocks per script rather than exhaustively (a rare unassigned
-    /// codepoint in a covered block simply maps to that script's face, which is
-    /// harmless -- it still renders tofu, but from the right family).
+    /// Ranges follow the Unicode blocks. They intentionally err on the side of
+    /// the common blocks per script rather than exhaustively. A rare unassigned
+    /// codepoint in a covered block simply maps to that script's face. That is
+    /// harmless: it still renders tofu, but from the right family.
     pub fn for_char(c: char) -> Option<LazyFont> {
         match c as u32 {
             // Arabic, Arabic Supplement, Arabic Extended-A, and the two
@@ -155,7 +156,7 @@ impl LazyFont {
             // BMP Miscellaneous Symbols + Dingbats (0x2600..=0x27BF) and the
             // Misc Symbols and Arrows subset that is emoji (0x2B00..=0x2BFF).
             // The BMP text-arrows block (0x2190..=0x21FF) is deliberately left
-            // to the base fonts: those glyphs render as monochrome symbols, not
+            // to the base fonts. Those glyphs render as monochrome symbols, not
             // color emoji, so claiming them here would fetch the emoji face and
             // still tofu. ZWJ sequences and skin-tone modifiers are handled by
             // font shaping once the face is loaded.
@@ -225,8 +226,8 @@ impl LazyFontLoader {
     }
 
     /// Register any fetched faces into `font_cx`. Returns `true` when at least
-    /// one new face was registered, signalling the caller to drop stale layouts
-    /// (which shaped as tofu) and force a repaint so they re-shape with glyphs.
+    /// one new face was registered. The caller then drops stale layouts, which
+    /// shaped as tofu, and forces a repaint so they re-shape with glyphs.
     pub fn drain_into(&mut self, font_cx: &mut parley::FontContext) -> bool {
         let pending = std::mem::take(&mut self.inbox.borrow_mut().pending);
         if pending.is_empty() {

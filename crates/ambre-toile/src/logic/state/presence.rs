@@ -1,25 +1,25 @@
 //! Ephemeral presence for [`ToileState`](super::ToileState).
 //!
-//! Presence (cursors, in-flight strokes, laser points, selections) is relayed
-//! as **ephemeral** Sync payloads: it never enters the CRDT, never persists, and
-//! is not an undo item. Outbound, a local `Presence` sample is postcard-encoded
+//! Presence (cursors, in-flight strokes, laser points, selections) is relayed as
+//! **ephemeral** Sync payloads. It never enters the CRDT, never persists, and is
+//! not an undo item. Outbound, a local `Presence` sample is postcard-encoded
 //! into an ephemeral frame. Inbound, a frame is keyed by the sender's canonical
-//! `UserId` -- resolved from the authenticated `pub_key` in `ambre-sync` before
-//! it reaches this thread, so a peer cannot spoof another user's cursor. The
-//! render side is `toile-presence`'s overlay pass.
+//! `UserId`. That id is resolved from the authenticated `pub_key` in
+//! `ambre-sync` before it reaches this thread, so a peer cannot spoof another
+//! user's cursor. The render side is `toile-presence`'s overlay pass.
 //!
 //! **Why the event carries the whole set.** A departure is the absence of an
-//! entry (`PRESENCE-009`), so no departure signal is needed anywhere: this
+//! entry (`PRESENCE-009`), so no departure signal is needed anywhere. This
 //! thread ages its peers and hands the view the set that is still live, which
 //! the view adopts whole (`TOILE-185`, `TOILE-UI-075`). One event per inbound
 //! frame with a receiver-side accumulation is what this used to do, and it
 //! painted a peer who left for ever.
 //!
-//! **Why the clock rides the command.** This thread has none. Every local
-//! sample carries the UI's wall clock, and the UI sends one on each gesture and
-//! a heartbeat while idle, so the clock advances even on a still board. The
-//! clock is local: a sender's own clock never reaches this decision, so a wrong
-//! or hostile one ages nobody.
+//! **Why the clock rides the command.** This thread has none. Every local sample
+//! carries the UI's wall clock. The UI sends one on each gesture and a heartbeat
+//! while idle, so the clock advances even on a still board. The clock is local:
+//! a sender's own clock never reaches this decision, so a wrong or hostile one
+//! ages nobody.
 
 use ambre_bus::UserId;
 
@@ -28,9 +28,9 @@ use crate::logic::command::{PresencePayload, PresenceUpdate, ToileEvent, ToileOu
 use super::ToileState;
 
 /// How long a peer stays live after their last sample. Chosen against the UI's
-/// heartbeat (`ambre_toile::ui::view::PRESENCE_HEARTBEAT_MS`): a peer survives
+/// heartbeat (`ambre_toile::ui::view::PRESENCE_HEARTBEAT_MS`). A peer survives
 /// several missed samples, so a stalled frame or a slow relay does not blink a
-/// cursor out, and a peer who closed the board leaves within a few seconds.
+/// cursor out. A peer who closed the board still leaves within a few seconds.
 pub const PRESENCE_TTL_MS: i64 = 10_000;
 
 impl ToileState {
@@ -38,11 +38,11 @@ impl ToileState {
     /// broadcast, and age the peers this client knows about against `now_ms`.
     ///
     /// The local display name is stamped on the outbound payload here rather
-    /// than by the UI: the name arrives with the session (`SessionReady`) and
+    /// than by the UI. The name arrives with the session (`SessionReady`) and
     /// this thread already holds it. It is cosmetic (`PRESENCE-004`).
     ///
-    /// A failed encode still ages the set -- presence is best-effort and a
-    /// dropped sample is corrected by the next one, but a peer must not outlive
+    /// A failed encode still ages the set. Presence is best-effort and a
+    /// dropped sample is corrected by the next one. But a peer must not outlive
     /// its TTL because our own encode failed.
     pub(super) fn broadcast_presence(
         &mut self,
@@ -109,7 +109,7 @@ impl ToileState {
     /// unsubscribe or their connection close, and `ambre-sync` resolved the key
     /// it named. Drop them and hand the view the set that remains.
     ///
-    /// A peer nobody was painting yields nothing: a departure the client never
+    /// A peer nobody was painting yields nothing. A departure the client never
     /// saw arrive is not a change, and an empty event would repaint the overlay
     /// for nothing. The TTL still covers the case where this message is lost.
     pub fn peer_left(&mut self, user_id: UserId) -> Vec<ToileEvent> {
@@ -123,7 +123,7 @@ impl ToileState {
     /// than [`PRESENCE_TTL_MS`]. `true` when the set changed, which is what
     /// makes a departure observable without a departure signal (`TOILE-185`).
     ///
-    /// The clock only moves forward: a machine whose wall clock steps backwards
+    /// The clock only moves forward. A machine whose wall clock steps backwards
     /// (an NTP correction, a suspended tab) must not age every peer out at once.
     fn expire_peers(&mut self, now_ms: i64) -> bool {
         self.now_ms = self.now_ms.max(now_ms);

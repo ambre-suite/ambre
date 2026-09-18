@@ -1,10 +1,10 @@
-// ambre-trame/src/logic/fixtures.rs
-// Trame's half of the fixture loader surface (`ambre-spec-fixtures.md`).
+// ambre-trame/src/logic/fixtures.rs Trame's half of the fixture loader surface
+// (`ambre-spec-fixtures.md`).
 //
-// `shape_of` and `canonical_dump` are declared in `ambre-logic` over `DocState`;
-// their per-app bodies live here, next to the schema they read, for the same
-// reason puts generators next to their engine: a schema change and the code
-// that decodes it move in one commit. `ambre-logic` only dispatches.
+// `shape_of` and `canonical_dump` are declared in `ambre-logic` over `DocState`.
+// Their per-app bodies live here, next to the schema they read, for the same
+// reason that puts generators next to their engine. A schema change and the code
+// that decodes it then move in one commit. `ambre-logic` only dispatches.
 //
 // Fixture code (I4): the whole module sits behind the non-default `fixtures`
 // feature and is unreachable from any client build. The determinism seam
@@ -24,12 +24,12 @@ use super::*;
 impl TrameState {
     /// The coarse shape of this workbook, as the manifest records it.
     ///
-    /// Counted from the CRDT rather than declared by the generator: checks
-    /// the manifest against a recomputed shape, and a generator declaring its own
+    /// Counted from the CRDT rather than declared by the generator. This checks
+    /// the manifest against a recomputed shape; a generator declaring its own
     /// would assert only that it agrees with itself.
     ///
     /// `formulas` counts *stored* formula sources (a leading `=`), not the
-    /// engine's bytecode cache: the cache is a derived, local structure, and the
+    /// engine's bytecode cache. The cache is a derived, local structure, and the
     /// manifest describes the document.
     pub fn fixture_shape(&self) -> FixtureShape {
         let mut cells = 0u32;
@@ -58,11 +58,11 @@ impl TrameState {
     /// The canonical semantic form of this workbook: every user-visible value, in
     /// a deterministic order, as text.
     ///
-    /// **Not** the CRDT -- two workbooks agreeing on content still differ in op
-    /// history, peer ids and commit timestamps, so no byte or state comparison
-    /// can express "same document by a different route". This is what the
-    /// frozen belt of compares, and text means a failure prints a readable
-    /// diff rather than a length mismatch.
+    /// **Not** the CRDT: two workbooks agreeing on content still differ in op
+    /// history, peer ids and commit timestamps. No byte or state comparison can
+    /// therefore express "same document by a different route". This is what the
+    /// frozen belt compares, and text means a failure prints a readable diff
+    /// rather than a length mismatch.
     ///
     /// **Formula cells carry both representations** -- the stored source and the
     /// evaluated result. Dumping only the source would let an evaluation
@@ -84,8 +84,8 @@ impl TrameState {
                 &self.doc.get_movable_list(cols_list_name(&sheet)),
             );
             let sheet_u16 = self.sheet_id_to_u16.get(&sheet).copied();
-            // Keyed by grid position, not by stored key: the key carries peer ids
-            // and mint counters, which are exactly what two documents "agreeing by
+            // Keyed by grid position, not by stored key. The stored key carries
+            // peer ids and mint counters, exactly what two documents "agreeing by
             // a different route" are allowed to differ in. `BTreeMap` sorts the
             // rows/columns for free, making the order deterministic.
             let mut by_pos: BTreeMap<(usize, usize), String> = BTreeMap::new();
@@ -136,7 +136,7 @@ impl TrameState {
     /// the order list does not mention, sorted by id.
     ///
     /// Not `sheet_order_ids()`: that one is a *view* concern and pins the active
-    /// sheet first, so the same workbook would dump differently depending on
+    /// sheet first. The same workbook would then dump differently depending on
     /// which tab happened to be open.
     fn fixture_sheet_ids(&self) -> Vec<String> {
         let mut listed: Vec<String> = match self.doc.get_movable_list(SHEET_ORDER).get_value() {

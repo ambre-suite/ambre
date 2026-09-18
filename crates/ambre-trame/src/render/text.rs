@@ -36,9 +36,11 @@ pub fn draw_text<S: DrawSurface>(
 
 /// Emit every glyph run of an already-built `layout` at `(origin_x, origin_y)`
 /// (the layout's top-left) in a single `brush`. This is the one place the
-/// `lines() -> items() -> GlyphRun` walk lives; the headers, the inline editor
+/// `lines() -> items() -> GlyphRun` walk lives. The headers, the inline editor
 /// and any decoration-free label all delegate here instead of re-inlining the
-/// same nested loop.
+/// same nested loop. `lines() -> items() -> GlyphRun` walk lives; the headers,
+/// the inline editor and any decoration-free label all delegate here instead
+/// of re-inlining the same nested loop.
 pub fn draw_layout_runs<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,
@@ -60,8 +62,9 @@ pub fn draw_layout_runs<S: DrawSurface>(
 
 /// Like [`draw_layout_runs`] but also paints per-run underline / strikethrough
 /// decorations in `deco_color`. Shared by the plain-cell and merged-cell text
-/// paths, which both draw a 1px underline just below the baseline and a 1px
-/// strikethrough at ~0.3em above it.
+/// paths. Both draw a 1px underline just below the baseline, and a 1px
+/// strikethrough at ~0.3em above it. draw a 1px underline just below the
+/// baseline and a 1px strikethrough at ~0.3em above it.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_layout_runs_decorated<S: DrawSurface>(
     surface: &mut S,

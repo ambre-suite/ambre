@@ -18,8 +18,8 @@ use lyon::tessellation::{
 };
 
 // Flattening tolerance in *screen* pixels. Divided by the active transform's
-// scale before tessellation so a zoomed-in Toile path stays smooth (we
-// tessellate in model space, then map vertices to screen space).
+// scale before tessellation, so a zoomed-in Toile path stays smooth. We
+// tessellate in model space, then map vertices to screen space.
 const PATH_TOLERANCE_PX: f64 = 0.15;
 
 // ============================================================================
@@ -94,8 +94,8 @@ impl<'r> WgpuSurface<'r> {
     }
 
     /// As `path_outside_clip`, but inflates the path bbox by `pad` model units
-    /// (half the stroke width) before the transform so a thick stroke is not
-    /// culled when its centerline sits just outside the clip.
+    /// (half the stroke width) before the transform. A thick stroke is then
+    /// not culled when its centerline sits just outside the clip.
     fn path_outside_clip_padded(&self, path: &BezPath, t: Affine, pad: f64) -> bool {
         let Some(clip) = self.active_clip() else {
             return false;
@@ -115,11 +115,11 @@ impl DrawSurface for WgpuSurface<'_> {
 
     fn stroke_rect(&mut self, rect: Rect, color: Color, width: f64) {
         let hw = width * 0.5;
-        // Picture-frame decomposition: two full-width horizontal bars (which
-        // own the four corners) plus two verticals INSET to sit strictly
-        // between them. The quads share only zero-area edges, so no pixel is
-        // painted twice -- a translucent stroke keeps a uniform alpha instead of
-        // the doubled corners a naive 4-overlapping-quad frame produces.
+        // Picture-frame decomposition: two full-width horizontal bars (which own
+        // the four corners) plus two verticals INSET to sit strictly between
+        // them. The quads share only zero-area edges, so no pixel is painted
+        // twice. A translucent stroke keeps a uniform alpha instead of the
+        // doubled corners a naive 4-overlapping-quad frame produces.
         self.fill_rect(
             Rect::new(rect.x0 - hw, rect.y0 - hw, rect.x1 + hw, rect.y0 + hw),
             color,
@@ -128,9 +128,9 @@ impl DrawSurface for WgpuSurface<'_> {
             Rect::new(rect.x0 - hw, rect.y1 - hw, rect.x1 + hw, rect.y1 + hw),
             color,
         );
-        // Skip the inset verticals when the rect is shorter than the stroke:
-        // the two horizontal bars already overlap and cover the whole span, and
-        // an inverted `y0 + hw > y1 - hw` rect would otherwise produce garbage.
+        // Skip the inset verticals when the rect is shorter than the stroke.
+        // The two horizontal bars already overlap and cover the whole span. An
+        // inverted `y0 + hw > y1 - hw` rect would otherwise produce garbage.
         if rect.y1 - rect.y0 > width {
             self.fill_rect(
                 Rect::new(rect.x0 - hw, rect.y0 + hw, rect.x0 + hw, rect.y1 - hw),
@@ -195,7 +195,7 @@ impl DrawSurface for WgpuSurface<'_> {
         let clip = self.active_clip();
 
         // A rotated run (Toile: a rotated sticky / text) rotates each glyph bitmap,
-        // not just the baseline. The quad path is otherwise axis-aligned, so for a
+        // not just the baseline. The quad path is otherwise axis-aligned. For a
         // rotation we map the four glyph-quad corners through the transform's linear
         // part and emit a rotated quad. Detected from a non-zero off-diagonal.
         // Rotated board text carries no cell clip, so the axis-aligned clip-trim
@@ -256,7 +256,7 @@ impl DrawSurface for WgpuSurface<'_> {
 
             // Clip the glyph quad to the active clip rect. A glyph straddling an
             // edge must be *trimmed* (with its UVs remapped proportionally), not
-            // drawn whole -- otherwise an overflowing cell's last glyph spills a
+            // drawn whole. Otherwise an overflowing cell's last glyph spills a
             // full character into its neighbour (`trame-cell-rendering`).
             let (x0, y0, x1, y1) = (sx, sy, sx + sw, sy + sh);
             if let Some(clip) = clip {
@@ -326,8 +326,8 @@ impl DrawSurface for WgpuSurface<'_> {
             .iter()
             .map(|(x, y)| t * Point::new(*x, *y))
             .collect();
-        // Clip is a bounding-box reject here, as it is for a path: the quad is
-        // textured and trimming it would need the uv range trimmed with it
+        // Clip is a bounding-box reject here, as it is for a path. The quad is
+        // textured, and trimming it would need the uv range trimmed with it
         // (`ambre-spec-drawing-surface.md section 5`).
         if let Some(c) = self.active_clip() {
             let (xs, ys): (Vec<f64>, Vec<f64>) = mapped.iter().map(|p| (p.x, p.y)).unzip();
@@ -383,7 +383,7 @@ impl DrawSurface for WgpuSurface<'_> {
             _ => return, // gradients: Phase 3
         };
         let t = self.transform();
-        // The stroke widens the fill bbox by half the line width; grow the test
+        // The stroke widens the fill bbox by half the line width. Grow the test
         // box so a thick stroke straddling the clip edge is not wrongly culled.
         if self.path_outside_clip_padded(path, t, stroke.width * 0.5) {
             return;
@@ -391,9 +391,9 @@ impl DrawSurface for WgpuSurface<'_> {
         let tol = (PATH_TOLERANCE_PX / affine_scale(t).max(1e-6)) as f32;
         let lpath = build_lyon_path(path);
         let mut mesh: VertexBuffers<[f32; 2], u32> = VertexBuffers::new();
-        // Tessellate in model space: the line width is in model units and so
-        // scales with the transform when we map vertices to screen space, which
-        // is what a Toile zoom expects.
+        // Tessellate in model space: the line width is in model units. It
+        // therefore scales with the transform when we map vertices to screen
+        // space, which is what a Toile zoom expects.
         let opts = StrokeOptions::tolerance(tol)
             .with_line_width(stroke.width as f32)
             .with_line_cap(line_cap(stroke.start_cap))
@@ -415,11 +415,11 @@ impl DrawSurface for WgpuSurface<'_> {
     }
 
     fn push_clip(&mut self, rect: Rect) {
-        // Transform the clip into screen space at push time so the stored clip
-        // stack stays screen-space and the fast axis-aligned trimming in the
-        // draw methods needs no per-call transform. (Toile pan/zoom and Prose
-        // margins are translate+scale, so an axis-aligned rect stays so; a
-        // rotated transform would degrade to the transformed bounding box.)
+        // Transform the clip into screen space at push time, so the stored
+        // clip stack stays screen-space. The fast axis-aligned trimming in the
+        // draw methods then needs no per-call transform. (Toile pan/zoom and
+        // Prose margins are translate+scale, so an axis-aligned rect stays so;
+        // a rotated transform would degrade to the transformed bounding box.)
         let rect = self.transform().transform_rect_bbox(rect);
         let clipped = match self.active_clip() {
             Some(p) => p.intersect(rect),
@@ -434,7 +434,7 @@ impl DrawSurface for WgpuSurface<'_> {
 
     fn push_transform(&mut self, transform: Affine) {
         // Compose onto the current transform so nested pushes accumulate
-        // (e.g. a Toile pan/zoom outer transform with a per-shape inner one).
+        // (for example a Toile pan/zoom outer transform with a per-shape inner one).
         self.transform_stack.push(self.transform() * transform);
     }
 

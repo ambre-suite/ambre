@@ -15,7 +15,7 @@ synchronous half, and they vanish; a thread must not.
 
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`. One rule of this feature lives with the
-machine it belongs to and is not restated: the comment tool drops a thread where it clicks
+machine it belongs to and is not restated. The comment tool drops a thread where it clicks
 (`TOILE-UI-042`, `features/ambre-spec-toile-tools.md section 1`).
 
 ### 1.1 The state
@@ -34,16 +34,16 @@ machine it belongs to and is not restated: the comment tool drops a thread where
 | `TOILE-026` | `OBS` | The board MUST carry, for each pin it shows, where it sits, how many messages it holds and whether it is resolved. | this spec section 3; `features/ambre-spec-toile-engine.md section 3` | `ambre_toile::logic::convergence_tests::a_pin_carries_its_place_its_count_and_its_state` -- it reads the three fields of an element pin and of a point pin out of the derived viewport | none | verified |
 | `TOILE-205` | `INV` | The board MUST NOT carry message bodies: a thread is read when it is opened. | this spec section 3; `features/ambre-spec-toile-engine.md section 3` | `ambre_toile::logic::convergence_tests::the_board_carries_no_body_and_a_read_carries_them_all` -- the read half; type-level -- the pin type declares no body field, so the compiler holds the other half | none | verified |
 | `TOILE-UI-022` | `OBS` | A pin MUST keep one screen size through the whole zoom range. | this spec section 4; `features/ambre-spec-toile-engine.md section 3` | `ambre_toile::ui::comments::tests::a_pin_keeps_one_screen_size_through_the_zoom_range` -- it measures the marker at the two ends of the zoom range and at two points inside it | none | verified |
-| `TOILE-UI-306` | `OBS` | No board content MUST hide a pin, whatever the z-order puts on top. | this spec section 4 | none | unheld -- the pins paint last of the overlay passes, and that order lives in `ToileView::paint_overlay`, which needs a `WgpuSurface`: no host test drives it, so a reordered call breaks nothing red | unverified |
+| `TOILE-UI-306` | `OBS` | No board content MUST hide a pin, whatever the z-order puts on top. | this spec section 4 | none | unheld -- the pins paint last of the overlay passes, and that order lives in `ToileView::paint_overlay`, which needs a `WgpuSurface`: no host test drives it, so a reordered call breaks nothing red; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-024` | `INV` | A pin's badge MUST be readable from the board alone, without opening the thread or the panel. | this spec section 4 | `ambre_toile::ui::comments::tests::the_badge_reads_the_count_and_the_resolved_state` -- it reads the badge of an open thread, of a resolved one, and of one past the room a marker has | none | verified |
-| `TOILE-UI-023` | `INV` | The panel MUST hold no answer of its own: everything it shows is read back from the board. | this spec section 4 | none | unheld -- `ambre_toile::logic::convergence_tests::the_board_carries_no_body_and_a_read_carries_them_all` holds the read the panel lives on, but the component is wasm-only Leptos: no test mounts it, so an answer cached inside it breaks nothing red | unverified |
+| `TOILE-UI-023` | `INV` | The panel MUST hold no answer of its own: everything it shows is read back from the board. | this spec section 4 | none | unheld -- `ambre_toile::logic::convergence_tests::the_board_carries_no_body_and_a_read_carries_them_all` holds the read the panel lives on, but the component is wasm-only Leptos: no test mounts it, so an answer cached inside it breaks nothing red; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Drop a comment on the board
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-070` | `POST` | Dropping a comment MUST leave a thread that is open, anchored where it was dropped, and carrying its first message. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_fresh_thread_is_open_anchored_and_carries_its_first_message` -- it reads the three clauses (the open flag, the anchor and the first body) off a freshly dropped thread | none | verified |
-| `TOILE-UI-307` | `POST` | Dropping a comment MUST open its composer, so the user types where they clicked. | this spec section 4 | none | unheld -- `ambre_toile::ui::tool::tests::the_comment_tool_drops_a_thread_where_it_clicks` holds that the drop writes nothing and hands the view an anchor, but the composer itself, the field that opens at the click, is wasm-only Leptos mounted by no test | unverified |
+| `TOILE-UI-307` | `POST` | Dropping a comment MUST open its composer, so the user types where they clicked. | this spec section 4 | none | unheld -- `ambre_toile::ui::tool::tests::the_comment_tool_drops_a_thread_where_it_clicks` holds that the drop writes nothing and hands the view an anchor, but the composer itself, the field that opens at the click, is wasm-only Leptos mounted by no test; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-FEAT-017` | `FRAME` | A comment MUST NOT enter the history: undo on the board MUST NOT retract a message a teammate has read. | this spec section 3; `features/ambre-spec-toile-undo.md section 1` | `ambre_toile::logic::convergence_tests::undo_reverts_the_drawing_and_never_the_comment` -- it undoes after a message and reads the drawing reverted and the message still there | none | verified |
 
 ### 1.3 Write in a thread
@@ -68,23 +68,20 @@ machine it belongs to and is not restated: the comment tool drops a thread where
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-082` | `POST` | Clicking a pin MUST open that pin's thread. | this spec section 4; `features/ambre-spec-toile-selection.md section 3` | `ambre_toile::ui::comments::tests::a_click_on_a_pin_names_its_thread_and_a_miss_names_none` -- it names the thread a press on the marker resolves to, and none for a press beside it | none | verified |
-| `TOILE-UI-309` | `POST` | Clicking a thread in the board-wide list MUST bring the camera to that thread's anchor. | this spec section 4 | none | unheld -- the recentre is `ToileView::focus_thread`, which needs the wasm-only panel signals to be reached at all: no host test drives it, and it is the seam a point anchor and an element anchor take differently | unverified |
-| `TOILE-UI-310` | `POST` | The panel MUST re-read a thread whenever the board says that thread changed. | this spec section 4 | none | unheld -- `ToileView::reread_comments` answers `CommentsUpdated` with a fresh read, and it is wasm-only: a dropped re-read leaves a stale thread on screen and nothing red | unverified |
+| `TOILE-UI-309` | `POST` | Clicking a thread in the board-wide list MUST bring the camera to that thread's anchor. | this spec section 4 | none | unheld -- the recentre is `ToileView::focus_thread`, which needs the wasm-only panel signals to be reached at all: no host test drives it, and it is the seam a point anchor and an element anchor take differently; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-310` | `POST` | The panel MUST re-read a thread whenever the board says that thread changed. | this spec section 4 | none | unheld -- `ToileView::reread_comments` answers `CommentsUpdated` with a fresh read, and it is wasm-only: a dropped re-read leaves a stale thread on screen and nothing red; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-308` | `FRAME` | Clicking a pin MUST NOT select the element under it. | this spec section 4; `features/ambre-spec-toile-selection.md section 3` | `ambre_toile::ui::comments::tests::a_pin_takes_the_press_before_the_board_does` -- it resolves a press on a pin over an element to the thread, and a press beside it, on another button, or under a creation tool to the board | none | verified |
 * **Budget.** none of its own yet. A pin is one more node the viewport carries, so it lands under the
-  visible-set row of `ambre-spec-budgets.md section 1`; the panel reads a thread on demand, so
-  no figure covers the board-wide list.
-* **Boundary.** none of its own: a thread is written to the document, and `ZK-001` seals every payload
-  before it leaves the client. A message body is document content like any other, so the relay reads
-  none of it.
-* **Verification.** 24 `verified`, 5 `unverified`, 0 `unimplemented`. The whole feature ships, and
-  what is loose is one shape: five rules whose failure is only visible on a screen. `TOILE-UI-306` is
-  a pass order inside `paint_overlay`, which needs a GPU surface; `TOILE-UI-023`, `TOILE-UI-307`,
-  `TOILE-UI-309` and `TOILE-UI-310` live in the wasm-only panel and in the view code that only the
-  panel's signals reach, and no test mounts a Leptos component of this application. Everything the
-  pins, the pick, the badge and the panel's filter rest on is pure and host-tested, and everything a
-  thread owes -- the drop, the reply order, the correction, the resolve, the seeding at birth and
-  the two dangling-anchor halves -- is driven by an engine test.
+  visible-set row of `ambre-spec-budgets.md section 1`. The panel reads a thread on demand, so no
+  figure covers the board-wide list.
+* **Boundary.** none of its own: a thread is written to the document, and `ZK-001` seals every
+  payload before it leaves the client. A message body is document content, so the relay reads none
+  of it.
+* **Verification.** 24 `verified`, 5 `untested`. What holds is everything a thread owes: the drop,
+  the reply order, the correction, the resolve, the seeding at birth, the dangling anchor.
+  The pins and the badge rest on it too, pure and host-tested. What is loose is one
+  shape: five rules whose failure shows only on a screen. They are a pass order inside
+  `paint_overlay` and four in the wasm-only panel, which no test mounts.
 
 ---
 
@@ -106,8 +103,8 @@ The rows describe what the design owes, and each names the rule and the test tha
 
 ## 3. MODEL
 
-**Containers.** The `comments` map, one entry per thread under a minted thread id, each holding its
-anchor, its resolved flag and its ordered messages, every message body a text container
+**Containers.** The `comments` map, one entry per thread under a minted thread id. Each entry holds
+its anchor, its resolved flag and its ordered messages, every message body a text container
 (`ambre-spec-toile-schema.md section 3`). The engine seeds the whole thread in one write, so no
 reply mints a rival container (`TOILE-029`).
 
@@ -128,22 +125,22 @@ nothing.
 
 **Events** (`ambre-bus`): `CommentsUpdated(thread)` and `CommentThreadOpened(thread)`, and the two
 answers to a read -- `CommentList(rows)` and `CommentThreadData(thread)`. A list row carries the
-anchor, the resolved flag, the message count and the opening line, so a reader recognises a thread
+anchor, the resolved flag, the message count and the opening line. A reader recognises a thread
 before opening it; every other body arrives on `CommentThreadData` alone (`TOILE-205`).
 
 **Steps, when a thread is created:**
 
 1. mint a thread id, so two peers on the same spot cannot collide (`TOILE-FEAT-011`);
-2. write the anchor, the resolved flag and the first message under that id, seeding the message list
-   and the body container in the same write, so no container is created lazily and two peers
-   answering first cannot each mint their own (`TOILE-029`, `TOILE-FEAT-068`);
+2. write the anchor, the resolved flag and the first message under that id, seeding the message
+   list and the body container at once. No container is created lazily, and two peers answering
+   first cannot each mint their own (`TOILE-029`, `TOILE-FEAT-068`);
 3. commit outside the history scope, and emit the two events.
 
 **Steps, when the viewport is derived:**
 
 1. take each thread whose anchor resolves: an element in the visible set, or a point inside the
    camera;
-2. carry its pin position -- the anchored element's top-right corner, or the point itself -- its
+2. carry its pin position: the anchored element's top-right corner, or the point itself. Carry its
    message count and its resolved flag, and no body (`TOILE-026`, `TOILE-205`);
 3. skip a thread whose anchor element is gone, without touching it (`TOILE-025`).
 
@@ -156,9 +153,9 @@ open on machines nobody controls. The list order is the order the CRDT converges
 timestamp is shown to the reader and used for nothing else (`TOILE-FEAT-012`).
 
 **Code:** `ambre_toile::logic::state::comments` and the five comment commands of
-`ambre_bus::app::toile::ToileCommand`, the pins on `DisplayViewport`, the pin painter and the pick
-in `ambre_toile::ui::comments`, the comment tool in `ambre_toile::ui::tool`, and the panel and the
-composer in `ambre_toile::chrome::comments`.
+`ambre_bus::app::toile::ToileCommand`. The pins on `DisplayViewport`, the pin painter and the pick
+in `ambre_toile::ui::comments`, the comment tool in `ambre_toile::ui::tool`. The panel and the
+composer are in `ambre_toile::chrome::comments`.
 
 ---
 
@@ -175,21 +172,21 @@ What the board offers, stated so the rows above have a section to cite:
 | the resolve toggle of an open thread | resolves it, or reopens it (`TOILE-FEAT-015`) |
 
 **The pins.** A pin paints in screen space above all content, so it keeps one size through the zoom
-(`TOILE-UI-022`) and no element hides it, whatever the z-order puts on top (`TOILE-UI-306`). It
+(`TOILE-UI-022`). No element hides it, whatever the z-order puts on top (`TOILE-UI-306`). It
 carries its message count and its resolved state, both read from the derived viewport and never from
-the panel (`TOILE-UI-024`). The pick tests the pins before the elements, so a pin over a note takes
-the click and the note under it stays unselected (`TOILE-UI-082`, `TOILE-UI-308`,
+the panel (`TOILE-UI-024`). The pick tests the pins before the elements. A pin over a note takes the
+click, and the note under it stays unselected (`TOILE-UI-082`, `TOILE-UI-308`,
 `features/ambre-spec-toile-selection.md section 3`).
 
 **The panel** is a chrome side panel over the command channel, the same plumbing as the find panel
 (`features/ambre-spec-toile-find.md section 4`). It holds no authoritative state (`TOILE-UI-023`):
-the list and the open thread are what a `ReadComments` answered, and it re-reads a thread when the
+the list and the open thread are what a `ReadComments` answered. It re-reads a thread when the
 board says the thread changed (`TOILE-UI-310`). Every action it offers leaves as one intent the
 canvas view carries out, because the panel names no camera and holds no command channel.
 
 **The composer** is the field the comment tool opens at the click (`TOILE-UI-307`). A thread is born
-with its first message, so nothing is written until the user posts, and abandoning the composer
-leaves the board as it was.
+with its first message, so nothing is written until the user posts. Abandoning the composer leaves
+the board as it was.
 
 ---
 
@@ -211,12 +208,12 @@ leaves the board as it was.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No test mounts the panel.** Four of the five loose rows are the wasm-only surface -- the panel,
-  the composer, the recentre and the re-read -- and this application mounts no Leptos component in
-  any test. The fifth is the overlay pass order, which needs a GPU surface. They land with
+* **No test mounts the panel.** Four of the five loose rows are the wasm-only surface: the panel,
+  the composer, the recentre and the re-read. This application mounts no Leptos component in any
+  test. The fifth is the overlay pass order, which needs a GPU surface. They land with
   `The UI-thread belts` and `The Toile belts` (`ambre-roadmap.md` E9).
 * **A thread carries no reader state.** Nothing marks a thread read, so the panel cannot say what is
-  new since the last visit, and a board of open threads offers no unread count.
+  new since the last visit. A board of open threads offers no unread count.
 * **The precedent the body rule cites does not exist** (`TOILE-FEAT-013`). A sticky body is a
   whole-string register today, not a text container, so a comment body is the first one of the
   application (`TOILE-030`, `ambre-spec-toile-text-editing.md`).

@@ -34,14 +34,14 @@ pub type MakeChild = Rc<dyn Fn(DocumentId, DocType, Size) -> AppView>;
 
 /// Rewrite an input event for the focused child ("Input focus"). Pointer
 /// coordinates are mapped from the canvas into the child's pixel space through
-/// the camera and the embed's transform; every other event forwards unchanged
-/// (a wheel delta and a keystroke are frame-agnostic -- a child pixel is a screen
-/// pixel at the same zoom).
+/// the camera and the embed's transform. Every other event forwards unchanged: a
+/// wheel delta and a keystroke are frame-agnostic, since a child pixel is a
+/// screen pixel at the same zoom.
 ///
 /// `None` when a positional event cannot be mapped -- the focused embed left the
-/// culled frame between the event and this call. The event is then dropped
-/// rather than handed over with a coordinate from the board's own space
-/// (`TOILE-UI-328`), which would land a click at whatever the raw screen point
+/// culled frame between the event and this call. The event is then dropped rather
+/// than handed over with a coordinate from the board's own space
+/// (`TOILE-UI-328`). That would land a click at whatever the raw screen point
 /// happens to address inside the child.
 fn remap_for_child(view: &AppView, ev: &InputEvent) -> Option<InputEvent> {
     let map = |x: f64, y: f64| {
@@ -98,14 +98,14 @@ pub struct FrameHost {
     /// embed enters the cull set and is dropped when it leaves. Empty unless the
     /// top-level view embeds.
     ///
-    /// By element, not by document (`TOILE-UI-097`): the session is one per
-    /// document -- that is the board's own registry, and it stays that way -- but
-    /// the paint is one per embed. Keyed by document, two boxes of different
-    /// sizes resized one view against each other every frame, and only one of
-    /// them was ever the right size for it.
+    /// By element, not by document (`TOILE-UI-097`). The session is one per
+    /// document, which is the board's own registry and stays that way. But the
+    /// paint is one per embed. Keyed by document, two boxes of different sizes
+    /// resized one view against each other every frame. Only one of them was ever
+    /// the right size for it.
     children: HashMap<ElementId, AppView>,
-    /// The last physical canvas size each child was resized to, so a moved /
-    /// zoomed embed only triggers a child `resize` when its box actually changes.
+    /// The last physical canvas size each child was resized to. A moved or zoomed
+    /// embed only triggers a child `resize` when its box actually changes.
     child_sizes: HashMap<ElementId, (u32, u32)>,
     /// The launcher's child-view factory (see [`MakeChild`]). `None` for a host
     /// that never embeds (or before the launcher installs it).
@@ -169,8 +169,8 @@ impl FrameHost {
         // whether this event belongs to a focused child ("Input focus").
         let consumed = self.view.handle_input(ev);
         // If it does, forward the event into that child's own view, with pointer
-        // coordinates remapped into the child's pixel space (a wheel/keystroke
-        // forwards verbatim -- a child pixel is a screen pixel at the same zoom).
+        // coordinates remapped into the child's pixel space. A wheel or keystroke
+        // forwards verbatim: a child pixel is a screen pixel at the same zoom.
         if let Some(child_id) = self.view.child_route()
             && let Some(child) = self.children.get_mut(&child_id)
         {
@@ -184,12 +184,12 @@ impl FrameHost {
     }
 
     /// Reconcile the child views against the top-level view's visible `doc_embed`s
-    /// and pump each one. Creates a child when its embed enters the cull
-    /// set, resizes it when its box changes, and drops it when it leaves (dropping
-    /// the child also drops its demultiplexed Logic->UI channel, so the relay
-    /// reclaims the route on its next send). Returns whether any child needs the
-    /// board recomposited this frame (a fresh child, a resize, or a self-driven
-    /// content change). A no-op when the launcher installed no child factory.
+    /// and pump each one. Creates a child when its embed enters the cull set,
+    /// resizes it when its box changes, and drops it when it leaves. Dropping the
+    /// child also drops its demultiplexed Logic->UI channel, so the relay reclaims
+    /// the route on its next send. Returns whether any child needs the board
+    /// recomposited this frame (a fresh child, a resize, or a self-driven content
+    /// change). A no-op when the launcher installed no child factory.
     fn sync_children(&mut self, now_ms: f64) -> bool {
         let Some(make_child) = self.make_child.clone() else {
             return false;
@@ -309,10 +309,10 @@ impl FrameHost {
     }
 
     /// Recover after the WebGL/WebGPU context was lost and restored. The GL
-    /// drawable and every GPU-side allocation were dropped, so we reconfigure
+    /// drawable and every GPU-side allocation were dropped. So we reconfigure
     /// the surface and rebuild the ping-pong offscreens at the current size,
-    /// then force a full repaint through the view (a plain `resize` to the same
-    /// dimensions early-returns and would leave a blank canvas).
+    /// then force a full repaint through the view. A plain `resize` to the same
+    /// dimensions early-returns and would leave a blank canvas.
     pub fn notify_context_restored(&mut self, width: u32, height: u32) {
         let Some(gpu) = self.gpu.as_mut() else { return };
         tracing::info!("GPU context restored, reconfiguring {width}x{height}");
@@ -366,10 +366,10 @@ impl FrameHost {
         self.view.update();
         let t_after_drain = self.perf.now();
 
-        // A `Deferred` copy earlier this frame (or the previous one) had its
-        // authoritative payload built on the Logic thread and drained into the
-        // view by `update()` above. Mirror it to the OS clipboard now: this runs
-        // ~one frame (~16ms) after the keypress, still inside the transient
+        // A `Deferred` copy earlier this frame, or the previous one, had its
+        // authoritative payload built on the Logic thread. `update()` above
+        // drained it into the view. Mirror it to the OS clipboard now: this runs
+        // ~one frame (~16 ms) after the keypress, still inside the transient
         // user-activation window `navigator.clipboard.write` requires. `text` is
         // the cross-app `text/plain` mirror; the private `web ` type carries the
         // opaque Ambre bytes for a full-fidelity internal round-trip.
@@ -380,7 +380,7 @@ impl FrameHost {
 
         // Deliver any lazily-fetched font faces (CJK/Arabic/Devanagari) that
         // arrived since the last frame. If coverage changed, the cached GPU
-        // layers still hold tofu pixels for the affected strings, so force a
+        // layers still hold tofu pixels for the affected strings. Force a
         // full view repaint to re-shape and redraw them. Scoped so the short
         // GPU borrow ends before we touch `self.view`.
         let fonts_changed = {
@@ -403,16 +403,16 @@ impl FrameHost {
 
         let mut plan = self.view.plan_repaint(raf_timestamp, hud_tick);
         // Reconcile + pump the nested child views AFTER the parent's plan_repaint
-        // has issued `OpenDocument` for any newly visible embed, so a
-        // child's first viewport request never reaches Logic before its document
-        // is open. A dirty child forces the content layer: children paint over the
-        // board, so the board must recomposite even when otherwise idle.
+        // has issued `OpenDocument` for any newly visible embed. A child's first
+        // viewport request then never reaches Logic before its document is open. A
+        // dirty child forces the content layer: children paint over the board, so
+        // the board must recomposite even when otherwise idle.
         if self.sync_children(raf_timestamp) {
             plan.content = ContentRepaint::Full;
         }
 
         // And the sandboxed frames behind the board's web embeds (`TOILE-088`).
-        // Every frame, not only a dirty one: a frame is DOM sitting over the
+        // Every frame, not only a dirty one. A frame is DOM sitting over the
         // canvas, so it follows the camera even when nothing the board paints
         // has changed.
         self.sync_web_embeds();
@@ -452,10 +452,10 @@ impl FrameHost {
                     );
                     // Paint each visible child over the board's placeholder,
                     // clipped to its embed rect ("Render"). The child draws in
-                    // its own pixel space -- one child pixel per screen pixel at
-                    // the current zoom -- through the embed's own transform, so a
-                    // rotated embed paints its child rotated (`TOILE-UI-096`).
-                    // The clip stays the AABB: `push_clip` is rect-only
+                    // its own pixel space, through the embed's own transform, so
+                    // a rotated embed paints its child rotated (`TOILE-UI-096`).
+                    // That is one child pixel per screen pixel at the current
+                    // zoom. The clip stays the AABB: `push_clip` is rect-only
                     // ("Clip limitation").
                     for e in self.view.visible_embeds() {
                         let Some(child) = self.children.get_mut(&e.element) else {
@@ -485,11 +485,11 @@ impl FrameHost {
                         &mut gpu.text_cache,
                         &stats,
                     );
-                    // And each child's own overlay over it (`TOILE-UI-320`).
-                    // A selection, a caret and a set of handles are overlay
-                    // content in every app, so a child painted for its content
-                    // alone showed an embedded document with no visible cursor:
-                    // a user typing into it could not see where they were
+                    // And each child's own overlay over it (`TOILE-UI-320`). A
+                    // selection, a caret and a set of handles are overlay
+                    // content in every app. A child painted for its content
+                    // alone showed an embedded document with no visible cursor.
+                    // A user typing into it could not see where they were
                     // typing. Same clip and same transform as the content pass,
                     // so the two halves of one child land in one place.
                     for e in self.view.visible_embeds() {
@@ -578,9 +578,9 @@ impl FrameHost {
     /// over the content layer; the caller paints it once (see `render`).
     ///
     /// This is the canvas counterpart of the `window.ambreFatal` DOM overlay
-    /// (index.html). It runs when the UI/render thread is still alive -- a Logic
-    /// panic or a Sync-worker death -- so the canvas shows a deliberate end state
-    /// instead of freezing on the last good frame.
+    /// (index.html). It runs when the UI/render thread is still alive, after a
+    /// Logic panic or a Sync-worker death. The canvas then shows a deliberate end
+    /// state instead of freezing on the last good frame.
     fn render_fatal(&mut self, message: &str) {
         let Some(gpu) = self.gpu.as_mut() else { return };
 

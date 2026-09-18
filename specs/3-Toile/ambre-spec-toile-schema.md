@@ -10,7 +10,7 @@
 
 ## 0. SCOPE, AND THE MENTION RULE
 
-A schema decision is often justified by an action: an element identity survives a move, a reorder
+A schema decision is often justified by an action. An element identity survives a move, a reorder
 and a regroup, and its `{peer}_{counter}` shape answers concurrent minting. So an action appears
 here as a **cause**, never as a **rule**.
 
@@ -33,7 +33,7 @@ here as a **cause**, never as a **rule**.
 
 Prefix `TOILE`, shared with the feature documents: one prefix, one numbering, no renumbering.
 `TOILE-003` and `TOILE-018` sit here because each states a property of the format, not of the
-engine; `TOILE-227` and `TOILE-228` are the halves those two hid. `TOILE-229`, `TOILE-230` and
+engine. `TOILE-227` and `TOILE-228` are the halves those two hid. `TOILE-229`, `TOILE-230` and
 `TOILE-231` state format rules sections 2, 3 and 7 already lean on and no row carried. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
@@ -42,30 +42,24 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-003` | `INV` | Element identity MUST be a minted `ElementId` carried as a value; a positional or slot key MUST NOT be used. | this spec section 2 | structural -- `ElementId::mint` renders the document `PeerID` and a per-session counter (`crates/ambre-bus/src/app/toile.rs`), and every reference (a connector endpoint, a `children` entry, a `layers` entry, a reaction key) carries that string as a value, so no position is a key; `ambre_toile::logic::convergence_tests::copy_does_not_mutate_and_paste_remints_offset` -- a pasted element draws a fresh id; `ambre_toile::logic::convergence_tests::paste_reproduces_selection_on_a_separate_board` -- the minting carried across boards (neither walks a move, which is `TOILE-227`) | none | verified |
 | `TOILE-227` | `INV` | A reference to an element MUST still resolve after a move, a reorder and a regroup. | this spec section 2; this spec section 6 | `ambre_toile::logic::convergence_tests::move_translates_bounds` -- it resolves the id after a translate; `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` -- it reads the `layers` order back after a `mov`, which is the call section 6 rejects the Loro slot id for; `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- it resolves the members after they are regrouped | none | verified |
 | `TOILE-229` | `INV` | A composite key MUST re-read as the pair it joins: a `layers` entry as tag and id, a reaction key as target and user. | this spec section 2 | structural -- an id is hex and `_`, a `UserId` is a hyphenated UUID, so no half can carry the `:` or the `/` the key splits on; `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` -- it walks the `NodeId` codec both ways; `ambre_toile::logic::convergence_tests::two_peers_converge` -- it compares the reaction tally of two peers, which is read by splitting the composite key | none | verified |
-| `TOILE-231` | `INV` | Every id in the document MUST render at the fixed width `mint` produces: 25 characters for an id, 27 for a `layers` entry. | this spec section 2; this spec section 7 | none | claim -- the width is a habit of the minting path, not a property of the type, because `ElementId` is a public tuple over `String` and `NodeId::decode` rebuilds one from whatever follows `E:`, so any string entering as an id is an id. Nothing reads either number (`crates/ambre-bus/src/app/toile.rs` carries no test at all) and the size line of section 7 counts on both | unverified |
+| `TOILE-231` | `INV` | Every id in the document MUST render at the fixed width `mint` produces: 25 characters for an id, 27 for a `layers` entry. | this spec section 2; this spec section 7 | none | claim -- the width is a habit of the minting path, not a property of the type, because `ElementId` is a public tuple over `String` and `NodeId::decode` rebuilds one from whatever follows `E:`, so any string entering as an id is an id. Nothing reads either number (`crates/ambre-bus/src/app/toile.rs` carries no test at all) and the size line of section 7 counts on both; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-018` | `INV` | An element's whole style MUST be a single LWW register. | this spec section 3; architecture section 2.D | structural -- one `LoroValue::Binary` under the `style` key per element map (`logic/state/elements.rs`), decoded whole by `ElementStyle::from_bytes`, so no attribute has a register to be elected on its own | none | verified |
 | `TOILE-228` | `CONC` | Two concurrent restyles of one element MUST converge on the whole style one of the two wrote, never a per-attribute blend. | this spec section 3; architecture section 2.D | proptest -- `ambre_toile::logic::convergence_tests::two_peers_converge` draws 48 interleavings of restyles of the same element across two peers and compares the full rendered viewport, so a blend of two writers' attributes diverges (Trame's dedicated no-blend tests have no counterpart here) | none | verified |
 | `TOILE-230` | `INV` | An unset property MUST be the absence of its key; a container MUST NOT carry a "cleared" marker. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` -- it clears a frame's auto-layout and reads back `None` with the key gone, and the clear of an already-absent key broadcasting nothing, both of which a marker would break | none | verified |
 | `TOILE-027` | `INV` | A Toile document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7 | `ambre_toile::logic::schema::tests::a_new_board_carries_the_current_version` -- the stamp `schema::stamp` writes inside the scaffolding commit of `from_doc`, alongside the board defaults, so a board carries it before any user edit (the protocol it obeys is `ambre-spec-schema-version.md`) | none | verified |
-| `TOILE-028` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | none | unheld -- none is possible today, this being the Toile half of `SCHEMA-009`, because the rule binds a code change to a constant and nothing compares this build's layouts against the previous release's. It is human review, named as such, and the registry it obliges exists now (`logic/schema.rs`), so the reviewer has somewhere to put the step | unverified |
-| `TOILE-029` | `INV` | A container under a fixed key MUST be created once, with its parent; it MUST NOT be created by the first peer that writes into it. | this spec section 5 | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` -- the half that obeys, a frame's `notes` being seeded at frame birth (`logic/state/elements.rs`) so two concurrent first edits both survive | fails -- for `presentation/order` and `presentation/config`, `order_list_or_seed` creates both on the first `SetSlideOrder`, so two peers building the deck at the same moment mint rival lists and Loro keeps one. A container under a minted key (`elements/{id}`, `comments/{id}`) is out of reach of the race, and a `media/{hash}` entry loses nothing to it, the two rival maps carrying the same bytes. Answered by the `The deck is one list for every peer` Story (`ambre-roadmap.md` E7) | unverified |
-| `TOILE-030` | `CONC` | A sticky or text body MUST converge character by character; it MUST NOT be a register two authors race for whole. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 3` | none | fails -- for a sticky and a text element, the body is a flat String under the element's `text` key, so one of two authors typing in the same note loses their sentence. The two `LoroText` bodies of `ambre-toile` are a frame's `notes` and a comment message. It lands with the `Rich text on the board` Story (`ambre-roadmap.md` E6) | unverified |
+| `TOILE-028` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | none | unheld -- none is possible today, this being the Toile half of `SCHEMA-009`, because the rule binds a code change to a constant and nothing compares this build's layouts against the previous release's. It is human review, named as such, and the registry it obliges exists now (`logic/schema.rs`), so the reviewer has somewhere to put the step; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-029` | `INV` | A container under a fixed key MUST be created once, with its parent; it MUST NOT be created by the first peer that writes into it. | this spec section 5 | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` -- the half that obeys, a frame's `notes` being seeded at frame birth (`logic/state/elements.rs`) so two concurrent first edits both survive | fails -- for `presentation/order` and `presentation/config`, `order_list_or_seed` creates both on the first `SetSlideOrder`, so two peers building the deck at the same moment mint rival lists and Loro keeps one. A container under a minted key (`elements/{id}`, `comments/{id}`) is out of reach of the race, and a `media/{hash}` entry loses nothing to it, the two rival maps carrying the same bytes; lands with the `The deck is one list for every peer` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-030` | `CONC` | A sticky or text body MUST converge character by character; it MUST NOT be a register two authors race for whole. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 3` | none | fails -- for a sticky and a text element, the body is a flat String under the element's `text` key, so one of two authors typing in the same note loses their sentence. The two `LoroText` bodies of `ambre-toile` are a frame's `notes` and a comment message. It lands with the `Rich text on the board` Story (`ambre-roadmap.md` E6) | failing |
 * **Budget.** none: a format has no operation to budget. What loading a board costs is the remote
   change row of `ambre-spec-budgets.md section 1`, and leg 4 of `ambre-spec-budgets.md section 4`.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and the media entry holds a content hash, never the pixels
   (`features/ambre-spec-toile-media.md section 3`).
-* **Verification.** 7 `verified`, 4 `unverified`, 0 `unimplemented`. Two carried-over cells said
-  something the tests do not: `TOILE-003` credited two paste tests with move-invariance, which they
-  never walk, and `TOILE-029` claimed no test drives the concurrent seed when one holds the half
-  that is seeded eagerly. Three rules were already load-bearing and unwritten -- a composite key
-  re-reads as its pair, an absent key is the value, an id is fixed width -- and the last of them is
-  the one gap this pass opened: section 7 counts 25 bytes an id that no type constrains.
-  `TOILE-029` and `TOILE-030` remain defects rather than blind spots: each names the code that
-  breaks it. `ARCH P8` closed the two unbuilt rows: the register ships and `TOILE-027` is held by a
-  test, while `TOILE-028` moves from unbuilt to unverifiable -- it binds a code change to a
-  constant, and only a reviewer sees both. That is the one row this document's ceiling was raised
-  for, deliberately: a rule that is built and unverified counts, where an unbuilt one was exempt.
+* **Verification.** 7 `verified`, 2 `failing`, 2 `untested`. What holds is the table's shape: the
+  container per subject, the composite key re-read as its pair, the absent key that is the value.
+  What is loose is the move-invariance two paste tests never walk and the fixed-width id no type
+  constrains. Section 7 counts 25 bytes of it. The version register `ARCH P8` shipped; the two
+  failures each name the code that breaks them (`TOILE-029`, `TOILE-030`).
 
 ---
 
@@ -122,9 +116,9 @@ code uses.
 | `vote_session` | Map | `open`, `budget` | `bool`, `u8` | the key | reactions | design |
 
 **The element map, field by field.** `Kinds` names the element types that carry the field. A frame is
-an ordinary element and carries the whole geometry block; a **group carries no coordinates at all**,
+an ordinary element and carries the whole geometry block. A **group carries no coordinates at all**,
 because its box is the derived union of its members (`TOILE-009`,
-`features/ambre-spec-toile-groups.md`), so a reader of a group's map finds the type, the rotation, the
+`features/ambre-spec-toile-groups.md`). A reader of a group's map finds the type, the rotation, the
 lock and the style, and reads the box from the derived cache.
 
 | Field | Type | Holds | Kinds | State |
@@ -158,7 +152,7 @@ lock and the style, and reads the box from the derived cache.
 | `style` | Binary | `postcard(ElementStyle)`, seeded at birth | built |
 
 **Absence is a value** (`TOILE-230`). No `link` key means no hyperlink; no `autolayout` key means
-free positioning; an empty `presentation` map means no deck; no `reactions` key under a target
+free positioning. An empty `presentation` map means no deck; no `reactions` key under a target
 prefix means no reaction. No container carries a "cleared" marker.
 
 ---
@@ -196,7 +190,7 @@ Only where a schema decision needs a reason. 40 words each.
 * **`elements`.** One flat map holds every kind, frames and groups included. A parallel `frames`
   map would need its own move, resize, delete and reorder commands, and would split paint order
   over two structures.
-* **`elements/{id}/notes`.** Seeded empty at frame birth, not on the first edit: a container
+* **`elements/{id}/notes`.** Seeded empty at frame birth, not on the first edit. A container
   broadcast in the creation delta lets two concurrent first edits target the same text. A lazy seed
   mints rival containers and drops one side.
 * **`elements/{id}` payload.** The fields sit flat in the element map. The `payload` sub-map of the
@@ -210,7 +204,7 @@ Only where a schema decision needs a reason. 40 words each.
 * **`presentation`.** The root map is deterministic; `order` and `config` under it are not. Both
   are created by the first peer to build a deck, which is the race `TOILE-029` states.
 * **`reactions`.** A flat composite key, not a sub-map per target. A per-target sub-map is created
-  on the first reaction to that target, so two peers reacting at once mint rival containers and one
+  on the first reaction to that target. Two peers reacting at once mint rival containers, and one
   set of reactions is dropped.
 * **`comments`.** Each thread is its own entry under a deterministic root, so two peers commenting
   on one spot mint distinct threads. Message order is the list order; `ts` is display only, because

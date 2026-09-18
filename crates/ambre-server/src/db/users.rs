@@ -161,18 +161,18 @@ pub async fn create_user(
 ///
 /// Uses `ON CONFLICT (oidc_provider, oidc_subject)` to handle returning users.
 /// New users are inserted with placeholder (zero-filled) key columns because
-/// the master key, signing key, and exchange key are only set later via
-/// `PUT /keys/master`. The `ON CONFLICT DO UPDATE` refreshes `email` and
+/// the master key, signing key, and exchange key are only set later via `PUT
+/// /keys/master`. The `ON CONFLICT DO UPDATE` refreshes `email` and
 /// `display_name` on each login but preserves existing key material. The email
 /// is provider-verified, so the row is marked `email_verified = true`.
 ///
 /// Collision policy (#3, supersedes the earlier "always 409" note for the
 /// verified-vs-unverified case): a provider-verified email wins over a
 /// self-asserted one. Before upserting, this RECLAIMS the email from any
-/// UNVERIFIED account currently holding it (that account is a `/auth/setup`
-/// squatter; its email is unbound to a unique, non-resolvable sentinel). A
+/// UNVERIFIED account currently holding it. That account is a `/auth/setup`
+/// squatter, and its email is unbound to a unique, non-resolvable sentinel. A
 /// collision with another VERIFIED identity is left intact, so the upsert then
-/// violates `users_email_lower_unique` and the login fails with 409 -- verified
+/// violates `users_email_lower_unique` and the login fails with 409. Verified
 /// identities never silently steal each other's email. Reclaim + upsert run in
 /// one transaction so a concurrent login cannot observe a half-freed email.
 pub async fn upsert_user_from_oidc(
@@ -185,10 +185,10 @@ pub async fn upsert_user_from_oidc(
     let mut tx = pool.begin().await?;
 
     // Reclaim the email from any UNVERIFIED holder that is not this same OIDC
-    // identity. The sentinel keeps the NOT NULL + unique invariants while making
-    // the squatter's address non-resolvable for sharing (`get_user_by_email`
-    // will no longer return it) and re-settable by that account later. A verified
-    // holder is deliberately NOT touched, so the upsert below surfaces 409.
+    // identity. The sentinel keeps the NOT NULL + unique invariants. It makes the
+    // squatter's address non-resolvable for sharing (`get_user_by_email` will no
+    // longer return it), and re-settable by that account later. A verified holder
+    // is deliberately NOT touched, so the upsert below surfaces 409.
     sqlx::query(
         "UPDATE users \
          SET email = 'reclaimed-' || id::text || '@invalid.local', email_verified = false \

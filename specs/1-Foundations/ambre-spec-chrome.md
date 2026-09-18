@@ -2,14 +2,14 @@
 
 **Type:** Horizontal (framework)
 **Implementation:** partial -- the layout, the menu, the modal, the toasts, the command palette and
-the shared controls ship; the one floating shell does not.
+the shared controls ship. The one floating shell does not.
 
-> Everything around the document: the frame the canvas sits in, the menus, the modals, the toasts,
-> the status bar and the controls a formatting toolbar is built from. It is DOM, it is written once,
-> and every application dresses the same toolkit.
+> Everything around the document: the frame the canvas sits in, the menus, the modals and the
+> toasts. The status bar and the controls a formatting toolbar is built from are here too. It is
+> DOM. It is written once, and every application dresses the same toolkit.
 
 The chrome draws nothing and knows no application. It invokes a command and it shows what the Logic
-thread reported, which is what keeps one toolkit serving a spreadsheet, a board and a page.
+thread reported. That is what keeps one toolkit serving a spreadsheet, a board and a page.
 
 ---
 
@@ -29,7 +29,7 @@ the DOM side produces.
 | `CHROME-002` | `INV` | The shared toolkit MUST NOT depend on an application crate. | this spec section 2 | crate-graph -- the manifest names `ambre-commands`, `leptos`, the two icon crates and the DOM bindings, and no application | none | verified |
 | `CHROME-009` | `INV` | The content surface MUST be a cell of the chrome layout, so it is sized by the layout and never by the viewport. | this spec section 2 | `ambre_chrome::chrome_ui::app_shell_owns_the_named_canvas_cell` -- wasm tier, real `document` | none | verified |
 | `CHROME-004` | `INV` | Every popover and floating bar MUST take its placement, flip and keyboard model from one shell. | this spec section 2 | not built | unbuilt -- lands with the `One floating-menu shell` Story (`ambre-roadmap.md` E8). Four shells exist: the shared menu, Trame's filter popover, Trame's find panel and Toile's selection toolbar | unimplemented |
-| `CHROME-008` | `INV` | The command palette MUST search every command the active application declares, not the subset some menu happens to show. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::palette::tests::an_empty_query_lists_every_declared_command`; `::a_query_matches_any_case_and_any_position`; `::a_query_that_answers_nothing_lists_nothing`; `::rows_keep_the_declaration_order`; `ambre_chrome::chrome_ui::palette_lists_every_declared_command` -- the DOM belt, all five over a table the test declares | partial -- the filter is held and the feed is not: `crates/ambre-app/src/shell/app_root.rs` passes the application's whole table today, and passing a menu's subset instead would leave every one of those assertions green | unverified |
+| `CHROME-008` | `INV` | The command palette MUST search every command the active application declares, not the subset some menu happens to show. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::palette::tests::an_empty_query_lists_every_declared_command`; `::a_query_matches_any_case_and_any_position`; `::a_query_that_answers_nothing_lists_nothing`; `::rows_keep_the_declaration_order`; `ambre_chrome::chrome_ui::palette_lists_every_declared_command` -- the DOM belt, all five over a table the test declares | partial -- the filter is held and the feed is not: `crates/ambre-app/src/shell/app_root.rs` passes the application's whole table today, and passing a menu's subset instead would leave every one of those assertions green; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 A floating menu is placed
 
@@ -51,46 +51,36 @@ the DOM side produces.
 | `CHROME-010` | `POST` | A control MUST show the state the Logic thread reported. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::chrome_ui::command_states_defaults`; `::command_states_single_writer_propagates`; `::command_states_unknown_id_is_noop` -- one writer reaches the right signal and leaves its neighbours alone | none | verified |
 | `CHROME-013` | `POST` | A shared formatting control MUST report a change. | this spec section 2 | `ambre_chrome::chrome_ui::format_toggle_reflects_pressed_and_reports_clicks` -- a real click is dispatched and the callback fires once; `::font_size_select_lists_presets_plus_auto_entry` -- the same shape for a select | none | verified |
 | `CHROME-014` | `POST` | A status-bar chip MUST start collapsed. | this spec section 2 | `ambre_chrome::chrome_ui::zoom_chip_renders_readout_from_signal_and_starts_collapsed`; `::perf_chip_renders_fps_from_signal_and_starts_collapsed` -- the menu element is absent on mount | none | verified |
-| `CHROME-086` | `POST` | A control MUST follow its signal when the value changes, not only when it mounts. | this spec section 2 | none | unheld -- both chip tests read the value off the first synchronous render and say so in their own comments: a re-render lands on a later microtask, so a post-change query would race and none is written. What is asserted is the mount, and the live half is the one a stale readout breaks | unverified |
-| `CHROME-087` | `FRAME` | A control MUST NOT change the state it displays: the click leaves as a report and the value comes back from the Logic thread. | this spec section 2; `ambre-spec-commands.md` | none | unheld -- the toggle test sets the pressed signal itself before dispatching the click, so nothing would notice a control that also wrote it, and the store has one writer by construction with no test driving a second. This is the row that keeps a toolbar from showing a change the document refused | unverified |
+| `CHROME-086` | `POST` | A control MUST follow its signal when the value changes, not only when it mounts. | this spec section 2 | none | unheld -- both chip tests read the value off the first synchronous render and say so in their own comments: a re-render lands on a later microtask, so a post-change query would race and none is written. What is asserted is the mount, and the live half is the one a stale readout breaks; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-087` | `FRAME` | A control MUST NOT change the state it displays: the click leaves as a report and the value comes back from the Logic thread. | this spec section 2; `ambre-spec-commands.md` | none | unheld -- the toggle test sets the pressed signal itself before dispatching the click, so nothing would notice a control that also wrote it, and the store has one writer by construction with no test driving a second. This is the row that keeps a toolbar from showing a change the document refused; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.5 A modal opens, and closes
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-011` | `POST` | A modal MUST suspend the frame loop while it is open. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none | unheld -- three modals pass a pause callback and the launcher's own confirmation dialog passes none. Nothing joins opening a modal to the state of the loop | unverified |
-| `CHROME-012` | `POST` | Setting a modal's open signal MUST show the element. | this spec section 2 | none | unheld -- one effect drives the element from the signal, and no test mounts a modal to watch it open | unverified |
-| `CHROME-091` | `POST` | Clearing a modal's open signal MUST hide the element. | this spec section 2 | none | unheld -- the same effect carries the closing arm, and no test mounts a modal to watch it close | unverified |
-| `CHROME-088` | `POST` | Escape and a click on the backdrop MUST close a modal, and MUST clear its signal. | this spec section 2 | none | unheld -- two handlers drive the signal from the element. A regression leaves a closed modal whose signal still reads open, which blocks the next open: the failure is not the dismissal, it is the one after | unverified |
-| `CHROME-089` | `FRAME` | Closing a modal MUST NOT leave the frame loop suspended. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none | unheld -- and this is the dangerous half: a missing pause costs a few frames of work, and a missing resume leaves the surface frozen with the interface answering normally around it. The resume callback is passed by the same three modals that pass the pause, and by no one else | unverified |
+| `CHROME-011` | `POST` | A modal MUST suspend the frame loop while it is open. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none | unheld -- three modals pass a pause callback and the launcher's own confirmation dialog passes none. Nothing joins opening a modal to the state of the loop; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-012` | `POST` | Setting a modal's open signal MUST show the element. | this spec section 2 | none | unheld -- one effect drives the element from the signal, and no test mounts a modal to watch it open; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-091` | `POST` | Clearing a modal's open signal MUST hide the element. | this spec section 2 | none | unheld -- the same effect carries the closing arm, and no test mounts a modal to watch it close; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-088` | `POST` | Escape and a click on the backdrop MUST close a modal. | this spec section 2 | none | unheld -- two handlers drive the dismissal from the element, and no test mounts one; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-092` | `POST` | A dismissed modal MUST clear its signal. | this spec section 2 | none | unheld -- a regression leaves a closed modal whose signal still reads open, which blocks the next open: the failure is not the dismissal, it is the one after; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-089` | `FRAME` | Closing a modal MUST NOT leave the frame loop suspended. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none | unheld -- and this is the dangerous half: a missing pause costs a few frames of work, and a missing resume leaves the surface frozen with the interface answering normally around it. The resume callback is passed by the same three modals that pass the pause, and by no one else; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.6 A drag drives a control
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-015` | `POST` | A control driven by a drag MUST coalesce the burst into one command. | this spec section 2 | none | unheld -- a debouncer reschedules its timer on each call, and each caller decides whether to use it. Nothing refuses a slider wired straight to a command, which is one command per pixel of travel | unverified |
-| `CHROME-090` | `FRAME` | Coalescing a burst MUST NOT drop its last value. | this spec section 2 | none | unheld -- the debouncer keeps the most recent call and fires it when the timer runs out, so the rule is held by the reschedule being written that way, and nothing drives a burst that ends before the delay. Dropping the tail leaves the control showing one value and the document holding another | unverified |
+| `CHROME-015` | `POST` | A control driven by a drag MUST coalesce the burst into one command. | this spec section 2 | none | unheld -- a debouncer reschedules its timer on each call, and each caller decides whether to use it. Nothing refuses a slider wired straight to a command, which is one command per pixel of travel; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-090` | `FRAME` | Coalescing a burst MUST NOT drop its last value. | this spec section 2 | none | unheld -- the debouncer keeps the most recent call and fires it when the timer runs out, so the rule is held by the reschedule being written that way, and nothing drives a burst that ends before the delay. Dropping the tail leaves the control showing one value and the document holding another; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 * **Budget.** none: the chrome renders in the DOM, off the frame loop, and
-  `ambre-spec-budgets.md` budgets no chrome operation. What the chrome does spend on
-  the frame is the pause of `CHROME-011`, which saves rather than costs.
+  `ambre-spec-budgets.md` budgets no chrome operation. What it does spend on the frame is the pause
+  of `CHROME-011`, which saves rather than costs.
 * **Boundary.** none: `UI-THREAD-004` and `UI-THREAD-049` ban a network, crypto and persistence
-  path on the UI thread, and the toolkit adds no exception. Its manifest names no transport and no
-  crypto crate, which is the same crate-graph fact `CHROME-001` and `CHROME-002` are read off.
-* **Verification.** 9 `verified`, 10 `unverified`, 1 `unimplemented`. The verified rows are either a
-  crate-graph fact, placement arithmetic the code extracted out of the DOM, or a component mounted
-  in a real headless document -- and every one of them asserts a first render. Three conjunctions
-  came apart and each hid the same shape: a rule that reads as one behaviour is a claim about the
-  mount and a claim about what happens afterwards, and only the mount is ever driven.
-  `CHROME-010` and `CHROME-013` each bundled what a control shows with a ban on it showing anything
-  of its own; the ban is one row now, `CHROME-087`, and nothing holds it -- the toggle test sets the
-  pressed signal itself before it clicks, so a control that also wrote it would pass. `CHROME-014`
-  claimed a chip reads its value **live**, and both chip tests state in their own comments that they
-  assert the synchronous first render because a re-render lands on a later microtask: the live half
-  is `CHROME-086` and is held by nothing. `CHROME-011` and `CHROME-012` each bundled two directions,
-  and in both cases the second is the dangerous one -- a missing resume freezes the surface while
-  the interface answers normally, and a signal left open blocks the next open rather than the
-  dismissal you just made. `CHROME-085` and `CHROME-090` are the two frame conditions the document
-  lacked: a menu that fits is not moved, and a coalesced burst does not lose its tail.
+  path on this thread, and the toolkit adds no exception. Its manifest names no transport and no
+  crypto crate, which is the crate-graph fact `CHROME-001` and `CHROME-002` are read off.
+* **Verification.** 9 `verified`, 11 `untested`, 1 `unimplemented`. What holds is a crate-graph
+  fact, placement arithmetic, or a component mounted in a headless document. Each asserts a first
+  render. What is loose is everything after that mount. A control writes its own state, a chip
+  re-renders live, a resume is missing, and a signal is left open.
 ---
 
 ## 2. MODEL
@@ -128,9 +118,10 @@ to the window (`CHROME-009`). An absent optional row collapses and costs no heig
 | the command palette | one overlay listing every command the application declares, filtered by a substring of the label | built |
 | the sidebar and the panels | a resizable region beside the content | design |
 
-**The command path, and the one direction it runs.** A trigger names a command; the command reaches
-the Logic thread; the mutation comes back as an event; the dispatcher writes the store; the control
-redraws. The chrome never shortens that loop by writing the store itself (`CHROME-010`).
+**The command path, and the one direction it runs.** A trigger names a command, and the command
+reaches the Logic thread. The mutation comes back as an event, the dispatcher writes the store, and
+the control redraws. The chrome never shortens that loop by writing the store itself
+(`CHROME-010`).
 
 1. a click, a chord or a menu entry invokes a command identifier;
 2. the launcher maps it to a command for the Logic thread, and sends it;
@@ -142,26 +133,26 @@ The identifier, the keymap and the registry that will describe a command once ar
 `ambre-spec-commands.md`, and are not restated here.
 
 **The floating menu, and the arithmetic under it.** Placement is a pure function of the click point,
-the menu size and the viewport size: each axis that would overflow anchors at `point - size`,
+the menu size and the viewport size. Each axis that would overflow anchors at `point - size`,
 clamped to zero. The DOM read stays in the effect and the decision is a host-tier function, which is
 why `CHROME-003` has five tests and no browser.
 
-**The modal.** The native dialog element supplies the focus trap, the inertness of the page behind
-it, Escape and the backdrop. The component adds two things and no more: it keeps the open signal and
-the element agreeing in both directions (`CHROME-012`), and it fires the callbacks that pause and
-resume the frame loop (`CHROME-011`). A blur over a frozen canvas then costs nothing.
+**The modal.** The native dialog element supplies the focus trap and the inertness of the page
+behind it, along with Escape and the backdrop. The component adds two things and no more. It keeps
+the open signal and the element agreeing in both directions (`CHROME-012`). It also fires the
+callbacks that pause and resume the frame loop (`CHROME-011`). A blur over a frozen canvas then costs nothing.
 
 **The application's own chrome.** An application builds its specific components on this toolkit, in
-its own crate: a formula bar, a filter popover, a find panel, a selection toolbar, a style
-inspector. The rule is one line -- shared upstream, specific in the application crate -- and the
-crate graph holds it (`CHROME-002`).
+its own crate. Those are a formula bar, a filter popover, a find panel, a selection toolbar and a
+style inspector. The rule is one line, shared upstream and specific in the application crate. The crate
+graph holds it (`CHROME-002`).
 
-**Code:** `crates/ambre-chrome/src/app_shell.rs` holds the grid,
-`crates/ambre-chrome/src/context_menu.rs` the menu and its placement function,
-`crates/ambre-chrome/src/palette.rs` the command palette and its filter,
+**Code:** `crates/ambre-chrome/src/app_shell.rs` holds the grid, and
+`crates/ambre-chrome/src/context_menu.rs` the menu and its placement function.
+`crates/ambre-chrome/src/palette.rs` holds the command palette and its filter,
 `crates/ambre-chrome/src/dialog.rs` the modal, `crates/ambre-chrome/src/toast.rs` the toasts,
-`crates/ambre-chrome/src/status.rs` the chips, `crates/ambre-chrome/src/format.rs`,
-`font.rs` and `color.rs` the formatting controls, `crates/ambre-chrome/src/debounce.rs` the
+and `crates/ambre-chrome/src/status.rs` the chips. `crates/ambre-chrome/src/format.rs`,
+`font.rs` and `color.rs` hold the formatting controls, `crates/ambre-chrome/src/debounce.rs` the
 debouncer, and `crates/ambre-chrome/src/command.rs` the store and the key translation. The wiring
 that mounts them is `crates/ambre-app/src/shell/app_root.rs`, and the belt is
 `crates/ambre-chrome/tests/chrome_ui.rs`.
@@ -211,15 +202,15 @@ label narrows the list (`CHROME-008`). The palette is why every command carries 
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **Four floating shells exist and `CHROME-004` names one.** The shared menu has the placement
-  arithmetic and the keyboard model; Trame's filter popover, Trame's find panel and Toile's
+  arithmetic and the keyboard model. Trame's filter popover, Trame's find panel and Toile's
   selection toolbar each have their own, and reuse only the value controls. The three keyboard
   models are not the same model.
 * **Closing a menu does not restore focus.** The roving tabindex moves the DOM focus into the menu
-  and nothing puts it back on Escape, so a keyboard user lands on the document body. No row covers
-  it, and `ambre-spec-accessibility.md` is where the rule would go.
+  and nothing puts it back on Escape. A keyboard user therefore lands on the document body. No row
+  covers it, and `ambre-spec-accessibility.md` is where the rule would go.
 * **The launcher's confirmation dialog is not the shared modal.** It opens the element directly, so
   it gets the focus trap and misses the pause of `CHROME-011`. It is harmless where it sits, because
-  the loop is already paused behind the launcher, and it is the counter-example that shows nothing
+  the loop is already paused behind the launcher. It is the counter-example that shows nothing
   enforces the rule.
 * **The palette offers a command the document cannot run.** The command store is `Rc` and stays in
   the mount owner, outside the `Send` router subtree. The overlay cannot subscribe to the store, so

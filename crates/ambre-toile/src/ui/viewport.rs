@@ -3,10 +3,11 @@
 // ViewportTransform: the render thread's world <-> screen camera (toile-viewport).
 //
 // Deliberately a distinct type from `ambre_bus::app::toile::Viewport` (the Logic
-// culling input): they carry identical fields but this one is the GPU transform,
-// updated locally and immediately on every pan / zoom for a jank-free gesture
-// (toile-viewport). The UI forwards each change to Logic as `SetViewport`, but never
-// waits on it to paint. Pure geometry -- host-unit-tested, no `cfg(wasm32)`.
+// culling input). They carry identical fields, but this one is the GPU transform.
+// It is updated locally and immediately on every pan / zoom for a jank-free
+// gesture (toile-viewport). The UI forwards each change to Logic as `SetViewport`,
+// but never waits on it to paint. Pure geometry -- host-unit-tested, no
+// `cfg(wasm32)`.
 // ============================================================================
 
 use ambre_bus::app::toile::Viewport;
@@ -21,8 +22,8 @@ pub const MAX_ZOOM: f64 = 10.0;
 pub const ZOOM_STEP: f64 = 1.2;
 
 /// Fractional breathing room left around the fitted content on a Fit /
-/// Zoom-to-selection: the content occupies `1 / (1 + FIT_PAD)`
-/// of each axis so it never touches the viewport edge.
+/// Zoom-to-selection. The content occupies `1 / (1 + FIT_PAD)` of each
+/// axis, so it never touches the viewport edge.
 pub const FIT_PAD: f64 = 0.08;
 
 /// The world <-> screen camera. `center` is the world point under the screen
@@ -90,9 +91,9 @@ impl ViewportTransform {
         self.center = world_anchor - offset;
     }
 
-    /// Zoom by `factor` about the viewport center (the zoom-in / zoom-out button
-    /// affordance,): unlike `zoom_about` this keeps the world point
-    /// under the screen center fixed, so the board scales in place. Clamped.
+    /// Zoom by `factor` about the viewport center: the zoom-in / zoom-out button
+    /// affordance. Unlike `zoom_about` this keeps the world point under the
+    /// screen center fixed, so the board scales in place. Clamped.
     pub fn zoom_by_center(&mut self, factor: f64) {
         let center_screen = Point::new(self.size.width / 2.0, self.size.height / 2.0);
         self.zoom_about(center_screen, factor);
@@ -105,11 +106,11 @@ impl ViewportTransform {
     }
 
     /// Fit `world` into the viewport with `pad_frac` breathing room on each axis,
-    /// centering the camera on the rect (Fit / Zoom-to-selection,).
-    /// A zero-area or non-finite rect is a no-op (nothing to frame); the fit zoom
-    /// is clamped to the supported range so a tiny rect does not blow past
-    /// `MAX_ZOOM`. `pad_frac` grows the target extent so the content occupies
-    /// `1 / (1 + pad_frac)` of the axis.
+    /// centering the camera on the rect (Fit / Zoom-to-selection). A zero-area or
+    /// non-finite rect is a no-op (nothing to frame). The fit zoom is clamped to
+    /// the supported range, so a tiny rect does not blow past `MAX_ZOOM`.
+    /// `pad_frac` grows the target extent so the content occupies `1 / (1 +
+    /// pad_frac)` of the axis.
     pub fn fit_bounds(&mut self, world: Rect, pad_frac: f64) {
         if let Some((center, zoom)) = self.fit_target(world, pad_frac) {
             self.center = center;
@@ -153,8 +154,8 @@ impl ViewportTransform {
         }
     }
 
-    /// Pan the camera by a screen-space delta (a drag of `delta` physical pixels
-    /// moves the content under the cursor by the same amount): the world center
+    /// Pan the camera by a screen-space delta. A drag of `delta` physical pixels
+    /// moves the content under the cursor by the same amount. The world center
     /// shifts against the drag, scaled down by the current zoom.
     pub fn pan_by_screen(&mut self, delta: Vec2) {
         self.center -= delta / self.zoom;

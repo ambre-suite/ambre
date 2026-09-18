@@ -22,13 +22,17 @@ impl Version {
     /// Maximum allowed version (127).
     pub const MAX: Self = Self(127);
 
-    /// Version 0 – development/placeholder.
+    /// Version 0 - development/placeholder.
     pub const V0: Self = Self(0);
 
-    /// Version 1 – first stable format.
+    /// Version 1 - first stable format.
     pub const V1: Self = Self(1);
 
     /// Creates a version from a `u8`, returning an error if the value exceeds 127.
+    ///
+    /// # Errors
+    ///
+    /// [`VersionError::OutOfRange`] above [`Version::MAX`], carrying `value`.
     pub fn new(value: u8) -> Result<Self, VersionError> {
         if value <= Self::MAX.0 {
             Ok(Self(value))
@@ -43,7 +47,7 @@ impl Version {
     }
 
     /// Checks whether this version is compatible with `other` under a simple
-    /// major‑version equality rule (same major version).
+    /// major-version equality rule (same major version).
     pub fn compatible_with(self, other: Self) -> bool {
         self.0 == other.0
     }

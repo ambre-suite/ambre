@@ -1,13 +1,13 @@
 //! Ed25519 signatures over the encrypted envelope.
 //!
-//! The signed transcript length-prefixes each field:
-//! `len(nonce) || nonce || len(ciphertext) || ciphertext || len(aad) || aad ||
-//! len(commitment_tag) || commitment_tag`, where every `len` is a `u32`
-//! little-endian byte count. The prefixes make every field boundary explicit, so
-//! two distinct `(ciphertext, aad)` splits can never produce the same transcript
-//! (positional concatenation would let `ciphertext || aad` collide across splits).
-//! Signing over the commitment tag prevents a relay from substituting it. The
-//! author's public key (in the message's public data) is the verification key.
+//! The signed transcript length-prefixes each field: `len(nonce) || nonce ||
+//! len(ciphertext) || ciphertext || len(aad) || aad || len(commitment_tag) ||
+//! commitment_tag`, where every `len` is a `u32` little-endian byte count. The
+//! prefixes make every field boundary explicit. Two distinct `(ciphertext, aad)`
+//! splits can never produce the same transcript, where positional concatenation
+//! would let `ciphertext || aad` collide across splits. Signing over the
+//! commitment tag prevents a relay from substituting it. The author's public key
+//! (in the message's public data) is the verification key.
 //!
 //! NOTE: `ambre-server` re-implements this exact framing in
 //! `ws/handler/message.rs::verify_update_signature` (it must not link
@@ -24,7 +24,7 @@ pub const SIGNATURE_LEN: usize = 64;
 fn push_framed(msg: &mut Vec<u8>, field: &[u8]) {
     // A field longer than u32::MAX is not representable on the wire and never
     // occurs (nonce/tag are fixed-small, ciphertext is bounded by transport
-    // limits); truncating the length would break the transcript, so assert it.
+    // limits). Truncating the length would break the transcript, so assert it.
     let len = u32::try_from(field.len()).expect("signed field exceeds u32::MAX");
     msg.extend_from_slice(&len.to_le_bytes());
     msg.extend_from_slice(field);
@@ -53,6 +53,12 @@ pub fn sign(
 }
 
 /// Verifies `signature` over the envelope against the author's 32-byte public key.
+///
+/// # Errors
+///
+/// [`CryptoError::InvalidSignature`] when `author_pub` is not a valid Ed25519
+/// point, or when strict verification refuses the signature. Ambre rejects a
+/// malleable signature, so a re-encoded one fails here too.
 pub fn verify(
     author_pub: &[u8; 32],
     nonce: &[u8],
@@ -99,7 +105,7 @@ mod tests {
         assert!(verify(&pk, b"nonce____", b"CIPHER", b"aad", b"tag", &sig).is_err());
     }
 
-    /// The length prefixes make the ciphertext|aad boundary unambiguous: two
+    /// The length prefixes make the ciphertext|aad boundary unambiguous. Two
     /// distinct splits that share the same concatenation must not verify under a
     /// signature made for the other split. Without framing, `("ab","c")` and
     /// `("a","bc")` would produce an identical transcript.

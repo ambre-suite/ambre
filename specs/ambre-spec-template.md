@@ -54,11 +54,11 @@ and an unterminated fence.
 ## 1. THE CONTRACT, SHARED BY BOTH TEMPLATES
 
 **Ambre specifies by contract, in Bertrand Meyer's sense.** A component declares what the caller
-owes before a call, what the component owes after it, and what holds at every instant in between --
-each as a falsifiable rule, checked one at a time. Meyer named three of those, a fourth is what a
-caller needs and no classical contract writes down, and Ambre adds four more: a document that
-converges across peers, draws itself on a screen and survives a file round trip makes claims a
-single-process contract has no word for. The eight are in section 1.B, and the vocabulary is closed.
+owes before a call, what the component owes after it, and what holds at every instant in between.
+Each is a falsifiable rule, checked one at a time. Meyer named three of those, a fourth is what a
+caller needs and no classical contract writes down, and Ambre adds four more. A document that
+converges across peers, draws itself on a screen and survives a file round trip makes claims
+classical contracts cannot state. The eight are in section 1.B, and the vocabulary is closed.
 
 ### A. The header, and the first four lines
 
@@ -87,7 +87,7 @@ spelling of a three-value vocabulary, and a gate that forgives it reads half the
 ### B. The contract table
 
 **Both templates carry one, and the grammar below is normative.** It is the shape of a spec, so it
-lives here. It is a contract table and not an invariant table: an invariant is one of the eight
+lives here. It is a contract table and not an invariant table. An invariant is one of the eight
 kinds below, and the other seven bind an operation, a pair of peers, a screen or a file. How a rule
 is verified is `ambre-spec-testing.md`; the roll-up of every row's status is derived in
 `ambre-contract-ledger.md`.
@@ -103,7 +103,7 @@ carries both:
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `XXX-005` | `POST` | The operation MUST ... | this spec section 4 | `ambre_crate::module::test_name` | none | verified |
-| `XXX-002` | `FRAME` | The operation MUST NOT ... | README pillar "E2EE" | none | unheld -- which half of the rule is open, and what a mechanism would take | unverified |
+| `XXX-002` | `FRAME` | The operation MUST NOT ... | README pillar "E2EE" | none | unheld -- what a mechanism would take; lands with the `...` Story (`ambre-roadmap.md` E0) | untested |
 | `XXX-004` | `FAIL` | Given [the condition the guard refuses], the operation MUST ... | this spec section 4 | `ambre_crate::module::guard_test` | none | verified |
 
 * **Budget.** none: the three rows above are an example, so they cost nothing and cite no row of
@@ -121,7 +121,7 @@ carries both:
 | `Sources` | where the rule comes from, in one of five forms: **a section**, of this spec or of a named sibling (`this spec section 3`, `` `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) ``); a **`README pillar "Zero-Knowledge"`**, the word `README` included, because a bare `pillar "..."` names something a reader cannot grep for; an **``audit `H9` ``** finding, by its number; a **named `document.md`** with the rule id it cites; or **`derived`**, which claims no source but the design. A row that closes a finding cites it, and the finding stops drifting from the code in silence |
 | `Verification` | the mechanism, and **nothing else**: one or more tokens of the closed set below, separated by `` ; ``. No argument. The cell answers one question -- what turns red when the rule breaks -- and that answer is a fact about CI, so it is finite and countable |
 | `Gap` | what the mechanism does not hold: one of the six openers below, then the argument in prose. The cell answers the other question, which is a judgement and ages with the code. `none` is an answer and the only one that carries no prose |
-| `Status` | one of the five values below. An empty cell fails |
+| `Status` | one of the six values below. An empty cell fails |
 
 **The mechanism tokens.** The closed set `Verification` draws on. Each token names a rung of the
 ladder in `1-Foundations/ambre-spec-testing.md section 2`. That document owns the method and wins
@@ -174,18 +174,26 @@ the one place in the row where an argument belongs.
 * **A `verified` row with a gap fails.** A status saying something turns red, beside a cell saying
   which half is loose, is two answers to one question. Move the status or close the gap.
 
-**The five status values.**
+**The six status values.** `Owes` is what the row must carry beside the status, and
+`contracts.py` holds it.
 
-| Value | Means |
-| :--- | :--- |
-| `verified` | something goes red if the rule breaks: a test, the compiler, a lint, `cargo deny` |
-| `unverified` | the code exists and nothing would go red. **Legitimate and valuable.** Silence about coverage is the failure mode, not the absence of a test |
-| `human-review` | nothing goes red automatically, and a reviewer is expected to catch it. By decision |
-| `qa-manual` | caught by using the application |
-| `unimplemented` | the code does not exist yet. **Counted apart**, never merged into `unverified`: one number is a risk, the other is planned work |
+| Value | Means | Owes |
+| :--- | :--- | :--- |
+| `verified` | something goes red if the rule breaks: a test, the compiler, a lint, `cargo deny` | the mechanism |
+| `failing` | **the code breaks the rule today.** A live defect, and the only status that reports one | a Story |
+| `untested` | the code exists, nothing holds it, and a mechanism could | a Story |
+| `human-review` | nothing goes red automatically, and a reviewer is expected to catch it. By decision | nothing |
+| `qa-manual` | caught by using the application | nothing |
+| `unimplemented` | the code does not exist yet | a Story |
+
+**Every gap that can close names its Story.** A row with no mechanism answers one question: can
+this gap close? If it can, it is debt, and debt has an owner, so the row lands with a Story of
+`ambre-roadmap.md`. If it cannot, it is a permanent property, and `qa-manual` and `human-review`
+are the two words for that. The roadmap is then the whole debt register, which is where `AGENTS.md`
+already puts every schedule.
 
 **The eight kinds.** A rule binds the state, at every instant, or one operation, at one point of
-its run. `From` says which half of the grammar is Meyer's and which is this corpus's: the classical
+its run. `From` says which half of the grammar is Meyer's and which is this corpus's. The classical
 three carry over unchanged, and the corpus had one word, `invariant`, for all eight.
 
 | Kind | Binds | Holds | From |
@@ -199,28 +207,28 @@ three carry over unchanged, and the corpus had one word, `invariant`, for all ei
 | `FRAME` | one operation, throughout | what the operation MUST NOT touch | the frame problem |
 | `FAIL` | one operation, given input it refuses | the refusal, the notice, the rollback | Ambre |
 
-**Where a kind sits.** A feature document opens its Contract on one table of state rows -- `INV`,
-`CONC`, `OBS`, `IO` -- then carries one table per operation, under a `###` heading naming it. An
+**Where a kind sits.** A feature document opens its Contract on one table of state rows: `INV`,
+`CONC`, `OBS`, `IO`. It then carries one table per operation, under a `###` heading naming it. An
 operation table holds the four operation kinds and no other, so a reader asking what one gesture
 guarantees reads one table.
 
 **The headings are numbered, and they name the gesture.** `### 1.1 The state`, then `### 1.2`
 onward, one per operation, in the order the document introduces them: `### 1.3 Unmerge the
 selection`, never `UnmergeActive` and never `1.3 Unmerge operation`. The number is what a citation
-carries and what makes a missing operation visible in a table of contents; the user's words are
-what section 1 owes its reader, per the rule above that an operation is named as the gesture and
-not as the `fn` that runs it. No script holds this: `spec_shape.py` numbers the `##` sections and
-does not read the `###` ones, so a document that drifts is caught in review or not at all.
+carries, and what makes a missing operation visible in a table of contents. The user's words are
+what section 1 owes its reader: an operation is named as the gesture, not as the `fn` that runs
+it. No script holds this. `spec_shape.py` numbers the `##` sections and does not read the `###`
+ones, so a document that drifts is caught in review or not at all.
 
-**A document that owns no gesture carries no `###` heading at all**: its one state table sits
+**A document that owns no gesture carries no `###` heading at all.** Its one state table sits
 directly under section 1, and a lone `### 1.1` over it names nothing the section heading has not
-already said. `ambre-spec-zero-knowledge.md` is that shape whole -- the boundary has no control of
-its own, so its fourteen rows are fourteen `INV`, and the column's answer there is the confirmation
+already said. `ambre-spec-zero-knowledge.md` is that shape whole. The boundary has no control of
+its own, so its fourteen rows are fourteen `INV`. The column's answer there confirms
 that none of them binds an operation.
 
 **One completeness rule**, held by `contracts.py`: **an operation with a `POST` declares a
 `FRAME`.** A frame condition is the rule nobody writes, and it is the one that catches an operation
-which fixes its target and corrupts a neighbour. It is legitimately `unverified`: naming what an
+which fixes its target and corrupts a neighbour. It is legitimately `untested`: naming what an
 operation leaves alone costs a row, and proving it costs an isolation assertion.
 
 **`contracts.py` holds the grammar of a row's own cells.** Each of its three rules answers a drift
@@ -228,43 +236,42 @@ only a reading could catch. A bare `Kind` cell in 519 rows; six statements with 
 keyword; twelve `Sources` cells citing an undeclared form. A vocabulary a gate compares loosely has
 two spellings, and the second arrives in silence.
 
-**One rule per row is a ceiling, not an error.** `FAIL` binds the refusal, the notice and the
-rollback as one outcome, and `FRAME` names everything one operation must not touch. Both carry a
-list by right; the other six kinds do not. A statement of theirs stating a second MUST after an
-`and` is two rules under one status: the half nothing tests breaks in green. Telling a licensed
-bundle from a hidden second rule is a reading, so `contracts.py` counts them per document in
-`scripts/statement_ceilings.json`. The count may only fall, on the same terms as the `unverified`
-ceiling: a growth is `just contracts-ceilings-raise`, one reviewed line of diff.
+**One rule per row is an error, and the kind draws the line.** `FAIL` binds the refusal, the notice
+and the rollback as one outcome, and `FRAME` names everything one operation must not touch. Both
+carry a list by right; the other six kinds do not. A statement of theirs stating a second MUST
+after an `and` is two rules under one status: the half nothing tests breaks in green.
+`contracts.py` refuses one, so a row of the six other kinds carries one rule.
 
 **Three rules a script cannot hold**, and they are what keeps two kinds from becoming one:
 
 * **One guard, one row: `PRE` when nothing checks it, `FAIL` when something does.** The test is
-  what happens when the caller breaks the rule. A defined refusal -- a rejection, a notice, an
-  unchanged document -- is a `FAIL`, and the operation is total: it accepts any input and answers.
+  what happens when the caller breaks the rule. A defined refusal (a rejection, a notice, an
+  unchanged document) is a `FAIL`, and the operation is total: it accepts any input and answers.
   Silent corruption is a `PRE`, and there is no `FAIL` to write because there is no defined
-  failure. `SYNC-003` in `ambre-spec-sealed-envelope.md` is the second case whole: nothing can
+  failure. `SYNC-003` in `ambre-spec-sealed-envelope.md` is the second case: nothing can
   check that a nonce is fresh, and a reused one breaks the sealing without an error. Writing both
-  rows for one condition states the guard twice: four of the thirty-five rows of
-  `trame-cell-merges` were that duplicate, and each pair doubled one test into two `verified` rows.
-  A feature document written in user terms rarely carries a `PRE`, because a defensive command
-  handler refuses instead of corrupting; a document describing a crate's API commonly does.
+  rows for one condition states the guard twice, and each pair doubles one test into two `verified`
+  rows.
 * **A ban on a capability is an `INV`, or the `FRAME` of the operation that would breach it.**
-  A rule whose subject is the crate graph, a type or the build binds the component at every
-  instant and names no gesture, so it is an `INV`: `ZK-004`, "the server process MUST NOT link a
-  crate able to decrypt", is true between two operations as much as during one. It is a `FRAME`
-  only where **this document owns the operation** the ban applies to: `SYNC-049` binds what the
-  blob upload may emit, and the document that owns that upload can state it as its frame
-  condition. The choice is not free: a `FRAME` lives in an operation table, under
-  the heading of the operation, and a table mixing it with a state kind fails, so a document owning
-  no gesture has one answer. What makes such a row distinctive is its mechanism, not its kind, and
-  the `Verification` cell already carries it: a crate graph, a `deny.toml` entry, a type that
-  cannot hold the value. These rows are most of the E2EE and Zero-Knowledge pillars, and reading
+  A rule whose subject is the crate graph, a type or the build names no gesture and binds every
+  instant, so it is an `INV`. It is a `FRAME` only where **this document owns the operation** the
+  ban applies to. These rows are most of the E2EE and Zero-Knowledge pillars, and reading
   them as ordinary invariants is what hides that nothing runs to check them.
+  * `ZK-004` says "the server process MUST NOT link a crate able to decrypt". It is true between
+    two operations as much as during one, so it is an `INV`.
+  * `SYNC-049` binds what the blob upload may emit, and the document that owns that upload states
+    it as its frame condition.
+  * The choice is not free. A `FRAME` lives in an operation table, under the heading of the
+    operation, and a table mixing it with a state kind fails. A document owning no gesture has one
+    answer.
+  * What makes such a row distinctive is its mechanism, not its kind, and the `Verification` cell
+    already carries it. That is a crate graph, a `deny.toml` entry, or a type that cannot hold the
+    value.
 * **A `CONC` row states what two peers reach, never what one does.** The kind is otherwise a
   drawer for any rule about an operation the document does not own. A rule holding on a single peer
   is an `INV`, or a `POST` of the operation that produces it.
 * **`OBS` is the rendering, never the gesture.** What the screen draws for a given document is
-  `OBS`; what a click or a key does is an operation, with a table and a frame condition of its own.
+  `OBS`. What a click or a key does is an operation, with a table and a frame condition of its own.
   Merging the two is the collapse the column exists to undo, one level down.
 
 **A `verified` row names the assertion, not only the test.** A test carrying five assertions can
@@ -281,7 +288,7 @@ own assertion stays a review act.
 * **One row per falsifiable consequence, never one per theme.** Five guarantees are five rows.
 * **Every contract table declares the `Kind` column.** The migration that added it is over, so a
   table without it no longer reads as a document the column has not reached. `contracts.py` reads
-  the header of every table and fails on a contract row under a header that declares none: the
+  the header of every table and fails on a contract row under a header that declares none. The
   column is what holds the row to the vocabulary and to the two completeness rules, and a table
   missing it checks nothing at all.
 * **Every contract table declares the `Gap` column.** That migration is over too. `contracts.py`
@@ -289,20 +296,21 @@ own assertion stays a review act.
   cells, and one cell holding both is the shape neither grammar above can read.
 * **A rule for code that does not exist yet is a row**, with `Status: unimplemented`, never prose held
   back. A numbered falsifiable statement is cheaper to read, to review and to revise than the
-  paragraph it replaces, and it is the only form in which an unbuilt design can be checked against
+  paragraph it replaces. It is the only form in which an unbuilt design can be checked against
   itself.
 * **An `unimplemented` row names its story** in its `Gap` cell, as `specs/ambre-roadmap.md`
   writes it: `` unbuilt -- lands with the <Story> Story (`ambre-roadmap.md` <epic>) ``. It is the
-  citation form every other mention takes. Never a section number, never a phase. **That story is
-  not `[x]` until
+  citation form every other mention takes, never a section number and never a phase. **That story
+  is not `[x]` until
   the row's status has moved.** Without the binding, `unimplemented` decays into the next `Draft`:
-  true everywhere, informative nowhere. `contracts.py` resolves the name against the roadmap, so a
-  story that is ticked, renamed or moved fails the build instead of leaving the row pointing nowhere.
+  true everywhere, informative nowhere. `contracts.py` resolves the name against the roadmap. A
+  story that is ticked, renamed or moved fails the build instead of leaving the row pointing
+  nowhere.
 * **Every other mention of a story is a citation, in one form**: `` `<Story>` Story
   (`ambre-roadmap.md` <epic>) ``, the whole of it on one line. A `Gap` cell answering a rule that
   fails today, a section 5 bullet, a rejected alternative -- all of them. Writing the name alone
-  reads like a citation and resolves to nothing: the corpus carried 41 of them, and one of them
-  named a story that had closed into the journal while the sentence still said "the roadmap's". The
+  reads like a citation and resolves to nothing. One such mention named a story that had closed
+  into the journal while the sentence still said "the roadmap's". The
   epic is not optional either: ten citations named the file and no epic, so the story could move
   under another epic and nothing failed. `contracts.py` refuses a bare name and a missing epic.
 * **A `Verification` cell that says `none` carries a `Gap` that is not `none`.** The mechanism cell
@@ -316,9 +324,9 @@ own assertion stays a review act.
 * **Extraction from existing code is a comparison, never a source.** A rule read off the code
   describes what the code does, not what it should do, and freezes current defects into
   specification. The spec and the README pillars stay the anchor; the code is inventory. Three
-  outcomes, all useful: the code complies (locked against regression), the code violates (a defect
-  found, the highest-value outcome), the code constrains beyond the spec (an undocumented decision to
-  write down, or an accidental constraint to remove -- the most frequent).
+  outcomes, all useful. The code complies, which locks it against regression, or the code violates,
+  which is a defect found and the highest-value outcome. The code constrains beyond the spec, the
+  most frequent: an undocumented decision to write down, or an accidental constraint to remove.
 
 **The three answers under the table.** A table states rules; it asks nothing. The three bullets ask,
 and they sit directly under the table in every document that carries one.
@@ -329,14 +337,25 @@ and they sit directly under the table in every document that carries one.
 | `Boundary` | whether anything here reaches the relay, holds a key or opens a socket | the rule that seals it; or `none`, and why |
 | `Verification` | how much of the table is held, and by what | the counts per status, and the rows that are the gaps |
 
+**The three answers together are one paragraph, and one paragraph is six sentences.** That is
+`prose.py`'s cap, and a reader sees the three bullets as one block. Six sentences under the 25-word
+cap is **150 words for the three**, which is the budget. Two sentences each is the shape that fits.
+A `Budget` that cites rows, a `Boundary` that names the sealing rule, a `Verification` that states
+the counts and then the gap.
+
+A `Verification` answer spends no sentence on the document's own history: not what a past pass
+changed here, not which row once carried what. The row below refuses that everywhere.
+
 * **`none`, and why is the answer for most documents.** It is what the deleted `QUALITY`,
   `PERFORMANCE` and `SECURITY` sections answered badly, at a page each, and often not at all.
 * `spec_shape.py` fails on a label that is missing, and on one whose bullet is empty. `contracts.py`
-  fails when the counts the `Verification` answer opens on are not the counts of the table above it,
-  and a status the answer leaves out claims zero. **Whether a `Budget` or a `Boundary` answer is
+  fails when the counts the `Verification` answer opens on are not the counts of the table above
+  it. A status the answer leaves out claims zero. `spec_answers.py` refuses a document whose three
+  answers run over the word budget, and that budget is one figure for the whole corpus.
+  **Whether a `Budget` or a `Boundary` answer is
   true, no script holds** -- the exact status of the `Implementation` field above. The sentence that
-  names the gaps stays a review act too. Forgetting becomes impossible; a false answer becomes
-  visible in review.
+  names the gaps stays a review act too, so forgetting becomes impossible and a false answer
+  becomes visible in review.
 
 ### C. What no document carries
 
@@ -344,7 +363,7 @@ and they sit directly under the table in every document that carries one.
 | :--- | :--- | :--- |
 | a checkbox, a phase, an integration plan, a backlog | a document per schedule is a schedule per document, and "Phase 1" named four different things | `specs/ambre-roadmap.md`, one row per story |
 | a milestone word (`MVP`) | a feature lives: it has an MVP form, then others. The increment is what carries the milestone | the roadmap, as a tag on a story |
-| production history ("landed", "used to", "was fixed") | the document says what **is**, including for behaviour not yet built | git, and the `Status` column |
+| history of any kind: the product's ("landed", "used to", "was fixed") and the document's own ("came apart", "the pass added", "was carrying", "is new") | the document says what **is**, including for behaviour not yet built. A sentence about how the document got here ages with no reader and no gate can tell whether it is still true | git, and the `Status` column. `spec_answers.py` counts the lines that do it |
 | a test list, or a coverage target | a list of intended tests has no join to the suite and no way to fail: 82 names were cited across the corpus and 23 resolved | the `Verification` column, one mechanism per rule |
 | a tier declaration, a seam list, a Definition of Done | these belong to a crate, never to a feature, which may span two | `ambre-spec-testing.md section 6`, one row per crate; the tested done condition is a roadmap rule |
 | a performance section | a budget is a rule, so it is a row | `ambre-spec-budgets.md`, cited by that row |
@@ -369,16 +388,15 @@ A pillar without a script is decoration. The second column names the script that
 | The mechanism cell is a mechanism | `contracts.py` -- a `Verification` cell is read **whole**: every token of it is one of the closed set, or the row fails. Prose in that cell fails even when the prose is true, which is the point: a cell a gate reads half of is a cell nothing holds |
 | The gap is stated, never implied | `contracts.py` -- a `Gap` cell opens on one of the six openers, and `none` is the only one carrying no prose. A row with no mechanism and no gap fails, and so does a `verified` row whose gap is not `none`: 78 rows read `verified` beside a reservation while the two answers shared one cell. A six-column header fails on every row under it, because neither grammar can read a cell holding both answers |
 | A cited document exists | `spec_refs.py` -- a document is cited by its name, in the corpus and in the code alike, and that name must resolve to a file |
-| A cited section exists | `spec_refs.py` -- a citation carrying `section N` must name a section the target document has. The number, never the letter after it. `§N` is the same coordinate |
+| A cited section exists | `spec_refs.py` -- a citation carrying `section N` must name a section the target document has. The number, never the letter after it. The section sign spells the same coordinate, and `spec_refs.py` reads it |
 | A coordinate is a corpus namespace | `spec_refs.py` -- **`crates/` carries no section number.** A name and a contract id are minted once; a section number is the one part a renumbering breaks, and the code held 906 that named no document at all. A comment cites the document, and the id where the rule has one |
 | The numbering has no holes | `spec_shape.py` -- sections run from 0 or 1 upward, one step at a time, and `bis` is not a number. A deletion pays for itself the day it happens |
 | Derived data is generated | `contracts.py` -- `ambre-contract-ledger.md` must match what the script would write. `feature_inventory.py` -- each application's inventory must match what it would write today |
 | Shapes, never bodies | `spec_code.py` -- section 0 |
 | Current state, never the steps | `spec_shape.py` -- a checkbox, a milestone word or a past-tense marker in a feature document fails |
 | One schedule | `spec_shape.py` -- a checkbox list or a roadmap heading **in any spec** fails |
-| An unbuilt row waits on an open story | `contracts.py` -- the story an `unimplemented` row lands with must resolve to one open row of `ambre-roadmap.md`. A name no row carries, a name two rows carry, a story already ticked and a stale epic each fail |
+| A gap that can close waits on an open story | `contracts.py` -- the story a `failing`, `untested` or `unimplemented` row lands with must resolve to one open row of `ambre-roadmap.md`. A name no row carries, a name two rows carry, a story already ticked and a stale epic each fail. `human-review` and `qa-manual` owe none: they are decisions |
 | Every story mention resolves | `contracts.py` -- a mention shaped `<name> Story` that names a row of the roadmap or the journal must carry `` (`ambre-roadmap.md` <epic>) `` on the same line, and the epic must be the one the story lives under. A bare name, a missing epic and a stale epic each fail |
-| The coverage debt only falls | `contracts.py` -- a ceiling per document on its `unverified` rows, in `scripts/contract_ceilings.json`, zero for a document the file does not name. An unbuilt row is held by its story; a shipped row nothing would fail on was held by nothing, and adding one cost an author a regeneration. A growth is `just contracts-ceilings-raise`, one reviewed line. `human-review` and `qa-manual` carry no ceiling: they are decisions |
 | The schema document stays a schema | `spec_shape.py` -- 600 prose words for the file, 40 for a container note |
 | The schema matches the code | `spec_shape.py`, **asymmetric**: a container declared with no code is normal; one built in the code and absent from the table fails |
 | One fact, one home | `spec_shape.py` -- a quality, performance or boundary-audit section fails, by title, everywhere but in the document that owns the fact. Otherwise review, plus the container check above |
@@ -402,7 +420,7 @@ Vertical or horizontal, same skeleton:
   virtual scrolling, PDF export, convergence. It lives in `specs/1-Foundations/`;
 * **vertical** otherwise, in the application's `features/`.
 
-**One tightly coupled engine is one document**, whichever of the two it is: the twelve formula
+**One tightly coupled engine is one document**, whichever of the two it is. The twelve formula
 features are the organs of one engine, so they are one file and not twelve. Coupling decides how
 many documents, sharing decides which directory. Reading the two as one test files an engine only
 one application has among the framework specs.
@@ -437,7 +455,7 @@ because its rules sit in the wrong place.
 
 ## 3. TEMPLATE B -- A SCHEMA DOCUMENT
 
-One per application, and hand-written: a generated inventory could list `cellstyle_{sheet}` but
+One per application, and hand-written. A generated inventory could list `cellstyle_{sheet}` but
 never say why it is one register and not eleven, which is the decision that mattered most. A feature
 cites a container **by its name**, which is unique, stable and verbatim in the code. A numeric id on
 top of the name adds an indirection and buys nothing.

@@ -1,30 +1,35 @@
 //! Public key wrapper (`[u8; 32]`).
 //!
-//! A type‑safe wrapper for 32‑byte public keys used in Ed25519 signatures and X25519 key exchange.
+//! A type-safe wrapper for 32-byte public keys used in Ed25519 signatures and X25519 key exchange.
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 use crate::error::PublicKeyError;
 
-/// A 32‑byte public key.
+/// A 32-byte public key.
 ///
 /// The underlying array is always 32 bytes, as required by Ed25519 and X25519.
 ///
 /// Public keys are not secret, so this type deliberately does NOT zeroize on
-/// drop: doing so would only add a memset to a hot, frequently-cloned type
-/// (every `UpdatePublicData` carries one) while implying a confidentiality it
-/// does not have. Zeroize is reserved for the real secret-key types.
+/// drop. Doing so would only add a memset to a hot, frequently-cloned type
+/// (every `UpdatePublicData` carries one). It would also imply a
+/// confidentiality the type does not have. Zeroize is reserved for the real
+/// secret-key types.
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PublicKey([u8; 32]);
 
 impl PublicKey {
-    /// Creates a public key from a 32‑byte array.
+    /// Creates a public key from a 32-byte array.
     pub const fn from_array(bytes: [u8; 32]) -> Self {
         Self(bytes)
     }
 
     /// Creates a public key from a slice, returning an error if the length is not 32.
+    ///
+    /// # Errors
+    ///
+    /// [`PublicKeyError::InvalidLength`], carrying the length it received.
     pub fn from_slice(slice: &[u8]) -> Result<Self, PublicKeyError> {
         slice
             .try_into()
@@ -32,7 +37,7 @@ impl PublicKey {
             .map_err(|_| PublicKeyError::InvalidLength(slice.len()))
     }
 
-    /// Returns the underlying 32‑byte array.
+    /// Returns the underlying 32-byte array.
     pub const fn as_array(&self) -> &[u8; 32] {
         &self.0
     }
@@ -42,7 +47,7 @@ impl PublicKey {
         &self.0
     }
 
-    /// Returns a hex‑encoded string of the public key (lowercase).
+    /// Returns a hex-encoded string of the public key (lowercase).
     pub fn to_hex(&self) -> String {
         hex::encode(self.0)
     }
@@ -50,6 +55,11 @@ impl PublicKey {
     /// Parses a public key from a hex string (with or without `0x` prefix).
     ///
     /// Returns an error if the string does not contain exactly 64 hex digits.
+    ///
+    /// # Errors
+    ///
+    /// [`PublicKeyError::InvalidHex`] on a non-hexadecimal digit, and
+    /// [`PublicKeyError::InvalidLength`] on any length other than 32 bytes.
     pub fn from_hex(hex_str: &str) -> Result<Self, PublicKeyError> {
         let stripped = hex_str.strip_prefix("0x").unwrap_or(hex_str);
         let bytes = hex::decode(stripped)?;
@@ -59,7 +69,7 @@ impl PublicKey {
 
 impl fmt::Debug for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "PublicKey(0x{}…)", hex::encode(&self.0[..4]))
+        write!(f, "PublicKey(0x{}...)", hex::encode(&self.0[..4]))
     }
 }
 

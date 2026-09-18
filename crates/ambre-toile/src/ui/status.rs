@@ -1,12 +1,12 @@
 // ambre-toile/src/ui/status.rs
 // ============================================================================
 // Pure status-bar model + formatting for the selection status band
-// (`toile-status-bar`). Kept in the always-compiled `ui` module (like `ui::find`) so the
-// count/bounds formatting is host-unit-tested; the DOM `StatusBar` component
-// (chrome/status.rs) is a thin wasm-only view over these helpers.
+// (`toile-status-bar`). Kept in the always-compiled `ui` module (like `ui::find`)
+// so the count/bounds formatting is host-unit-tested. The DOM `StatusBar`
+// component (chrome/status.rs) is a thin wasm-only view over these helpers.
 //
 // The band's left side reports the selection tally and its combined world
-// bounds (x / y / w / h); the right side hosts the shared zoom + fps chips
+// bounds (x / y / w / h). The right side hosts the shared zoom + fps chips
 // (`ambre-chrome`). An empty or single-element selection shows only the count
 // (no meaningful multi-element bounds), matching Trame's "lone cell shows
 // nothing" rule (`trame-status-bar`).
@@ -61,7 +61,7 @@ pub fn fmt_world(v: f64) -> String {
     }
 }
 
-/// The selection-count caption, e.g. `"1 element"` / `"3 elements"`. `None` on
+/// The selection-count caption, for example `"1 element"` / `"3 elements"`. `None` on
 /// an empty selection so the band shows only the zoom chip.
 pub fn count_label(stats: &SelStats) -> Option<String> {
     match stats.count {
@@ -72,7 +72,7 @@ pub fn count_label(stats: &SelStats) -> Option<String> {
 }
 
 /// The combined-bounds caption (`x / y / w / h` in world units), shown only for
-/// a multi-element selection where a union rectangle is meaningful; a lone or
+/// a multi-element selection where a union rectangle is meaningful. A lone or
 /// empty selection returns `None`.
 pub fn bounds_label(stats: &SelStats) -> Option<String> {
     if stats.count < 2 {

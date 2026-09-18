@@ -123,9 +123,9 @@ pub(crate) fn value_fn(args: &[CellValue]) -> CellValue {
 
 /// TEXT(value, format) -- minimal numeric formatting.
 ///
-/// Supports the common Excel patterns: a run of `0`/`#` with an optional `.`
-/// decimal section controls the number of decimals, and a leading `,` (in the
-/// integer section) turns on the thousands separator. Non-numeric values are
+/// Supports the common Excel patterns. A run of `0`/`#` with an optional `.`
+/// decimal section controls the number of decimals. A leading `,` in the
+/// integer section turns on the thousands separator. Non-numeric values are
 /// returned via their display form. Full Excel format-code parsing is out of
 /// scope.
 pub(crate) fn text(args: &[CellValue]) -> CellValue {
@@ -188,9 +188,9 @@ pub(crate) fn countif(args: &[CellValue]) -> CellValue {
 
 /// SUMIF(range, criterion, [sum_range]) -- sum cells matching `criterion`.
 ///
-/// When `sum_range` is omitted, the criterion range is summed; otherwise the
-/// two ranges are paired by position (Excel anchors `sum_range` at its top-left
-/// and walks it in parallel with `range`).
+/// When `sum_range` is omitted, the criterion range is summed. Otherwise the
+/// two ranges are paired by position: Excel anchors `sum_range` at its top-left
+/// and walks it in parallel with `range`.
 pub(crate) fn sumif(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);

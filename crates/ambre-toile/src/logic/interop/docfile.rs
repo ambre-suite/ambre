@@ -1,13 +1,13 @@
 //! The `.ambre` native container, Toile side (`ambre-spec-docfile.md`).
 //!
 //! Toile's half of the pair: the payload is this board's `LoroDoc` snapshot. The
-//! header is not built here -- layout, version registry and both normative read
-//! rules live once in `ambre_core::docfile` and are called from here (I5: one
-//! container, every app; no per-app header variant).
+//! header is not built here. Layout, version registry and both normative read
+//! rules live once in `ambre_core::docfile`, and are called from here. That is
+//! I5: one container, every app, with no per-app header variant.
 //!
-//! Unlike the SVG / raster converters next door, this path is **lossless**: it
+//! Unlike the SVG / raster converters next door, this path is **lossless**. It
 //! emits no [`ImportReport`](super::ImportReport) and no warning list, because
-//! nothing is converted -- the payload *is* the document (I1).
+//! nothing is converted: the payload *is* the document (I1).
 
 use loro::{ExportMode, LoroDoc};
 
@@ -34,11 +34,16 @@ pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Vec<u8> {
 /// Validate a plaintext `.ambre` as a *Toile* document and hand back the header
 /// plus the payload.
 ///
-/// The whole read policy is inherited: an older container migrates, a newer one
-/// is refused non-destructively, and a valid file belonging to another app comes
-/// back as [`DocFileError::WrongDocType`] carrying the type, so the caller
+/// The whole read policy is inherited. An older container migrates, and a newer
+/// one is refused non-destructively. A valid file belonging to another app comes
+/// back as [`DocFileError::WrongDocType`] carrying the type. The caller then
 /// re-dispatches those same bytes rather than coercing the document onto a board
 /// (dispatch rule, `docfile`).
+///
+/// # Errors
+///
+/// Every error of [`read_ambre_plaintext_as`], including
+/// [`DocFileError::WrongDocType`] for a valid file of another app.
 pub fn import_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
     read_ambre_plaintext_as(DocType::Toile, data)
 }

@@ -20,13 +20,12 @@
   `./run_tests.sh lint` checks it.
 * **A commit that touches only `specs/`** runs `just contracts` and `just spec-code` instead.
 * **Every commit runs `just prose`**, whatever it touched: the gate reads Rust comments and
-  Markdown alike. It goes red today on files outside any one commit, a debt that
-  `scripts/prose_ceilings.json` records. A commit must not add a line to that report for a file it
-  touched.
+  Markdown alike. Every metric is a hard error, so the gate is green on the tree and a commit
+  leaves it green.
 * **A commit that adds or edits a ` ```mermaid ` block** renders every touched block locally first
   and commits only once each one parses. Use the mermaid CLI, for example
   `npx --yes @mermaid-js/mermaid-cli -i block.mmd -o /dev/null`. `just spec-code` checks the fence
-  tag, not the diagram, so a broken diagram passes the lint and fails only on the forge.
+  tag and not the diagram. A broken diagram passes the lint and fails only on the forge.
 * **Commit message.** Imperative subject, 72 characters maximum, no final period. The body explains
   why, in 1 000 characters maximum, trailer excluded -- about four paragraphs. A body that needs
   more is a commit that does more than one thing: split it. Rest of the rules in
@@ -39,8 +38,8 @@
   git config core.hooksPath .githooks
   ```
 
-  It refuses a subject over 72 characters, a subject ending on a period, a body over 1 000
-  characters, a `Co-Authored-by` trailer and a character outside printable ASCII.
+  It refuses a subject over 72 characters, a subject ending on a period, and a body over 1 000
+  characters. It also refuses a `Co-Authored-by` trailer and a character outside printable ASCII.
   `scripts/commit_msg.py` holds the rules and the reason for each, and runs standalone on any
   message file. It checks shape and never vocabulary: no rule of it names a person or a tool.
   Whether the subject is imperative stays a review rule.

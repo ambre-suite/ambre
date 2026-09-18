@@ -1,14 +1,14 @@
 # AMBRE -- FEATURE: UNDO AND REDO
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- Trame and Toile ship an undo stack over the shared model; Prose is
-design-only, and the depth is unbounded in all three.
+**Implementation:** partial -- Trame and Toile ship an undo stack over the shared model, Prose is
+design-only. The depth is unbounded in all three.
 
 > A user presses `Ctrl+Z` and their last action comes back. A collaborator's action never does, and
 > never disappears from under them.
 
-Undo is local to the peer that acted: not a rewind of the document, but one more change to it, sent
-to the others like any other. This document owns the model; each application owns what merges into
+Undo is local to the peer that acted. It is not a rewind of the document but one more change to it,
+sent to the others like any other. This document owns the model; each application owns what merges into
 one step and which caches it rebuilds.
 
 ---
@@ -24,22 +24,22 @@ is normative in `ambre-spec-message-bus.md`. The prefix is `UNDO`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UNDO-004` | `INV` | The history MUST NOT survive the document being closed. | this spec section 3 | Trame `ambre_trame::logic::tests::group2::undo_stack_cleared_on_doc_close`; Toile `ambre_logic::dispatch::tests::close_document_drops_state_and_forwards` | none | verified |
-| `UNDO-009` | `INV` | A command that changes nothing MUST NOT refresh the undo affordances. | this spec section 4 | none | unheld -- it is the half `UNDO-006` was carrying, and it binds every mutating command rather than the undo itself, so no test of this feature reaches it. In Toile the question does not arise: twenty-eight handlers of thirty emit no availability at all | unverified |
+| `UNDO-009` | `INV` | A command that changes nothing MUST NOT refresh the undo affordances. | this spec section 4 | none | unheld -- it is the half `UNDO-006` was carrying, and it binds every mutating command rather than the undo itself, so no test of this feature reaches it. In Toile the question does not arise: twenty-eight handlers of thirty emit no availability at all; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Undo or redo the last action
 
-One gesture with two directions and one set of rules: the five steps are the same whichever way the
+One gesture with two directions and one set of rules. The five steps are the same whichever way the
 history moves, so the two share a table rather than repeating one.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `UNDO-001` | `POST` | An undo MUST revert this peer's own last operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the peer's own edit back as reverted; Toile `ambre_toile::logic::convergence_tests::undo_reverts_create_and_redo_restores` | partial -- Prose is design-only | unverified |
-| `UNDO-007` | `FRAME` | An undo MUST NOT revert a remote peer's operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the remote value back unchanged | partial -- Toile drives no remote change at all, so nothing there holds the half that matters: an undo that reached a collaborator's work | unverified |
-| `UNDO-002` | `POST` | An undo MUST broadcast its inverse operations as an ordinary CRDT delta, like any other change. | this spec section 2, row 2 | Trame `ambre_trame::logic::tests::group1::undo_then_redo_round_trips_a_cell_edit` | partial -- Toile emits through the shared emitter by construction and no test reads it back; Prose is design-only | unverified |
+| `UNDO-001` | `POST` | An undo MUST revert this peer's own last operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the peer's own edit back as reverted; Toile `ambre_toile::logic::convergence_tests::undo_reverts_create_and_redo_restores` | partial -- Prose is design-only; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
+| `UNDO-007` | `FRAME` | An undo MUST NOT revert a remote peer's operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the remote value back unchanged | partial -- Toile drives no remote change at all, so nothing there holds the half that matters: an undo that reached a collaborator's work; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
+| `UNDO-002` | `POST` | An undo MUST broadcast its inverse operations as an ordinary CRDT delta, like any other change. | this spec section 2, row 2 | Trame `ambre_trame::logic::tests::group1::undo_then_redo_round_trips_a_cell_edit` | partial -- Toile emits through the shared emitter by construction and no test reads it back; Prose is design-only; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UNDO-005` | `POST` | An undo MUST rebuild every derived cache whole, so nothing derived is stale afterwards. | this spec section 3; `4-Prose/features/ambre-spec-prose-undo.md` (`PROSE-UI-045`), the caret that stands in for a derived cache Prose has not got | Trame `ambre_trame::logic::tests::group2::undo_insert_row_rebuilds_sheet_index`; Toile `ambre_toile::logic::convergence_tests::undo_reverts_create_and_redo_restores`; `::undo_reverts_group_as_one_item` | none | verified |
-| `UNDO-006` | `POST` | The undo and redo affordances MUST report what the engine holds. | this spec section 4 | Trame `ambre_trame::logic::tests::group2::mutating_command_reports_undo_state`; chrome `ambre_trame::tests::chrome_ui::undo_state_mirrors_into_command_store` | fails -- in Toile, two handlers of thirty emit the event and the view discards it, section 6. Answered by the `Toile reports what its undo engine holds` Story (`ambre-roadmap.md` E7) | unverified |
-| `UNDO-003` | `FAIL` | An undo with nothing to revert MUST leave the document unchanged. | this spec section 3 | none | unheld -- Trame's `::undo_with_empty_stack_is_a_noop` reads the events and never the document, so a local write that emitted nothing would pass; Toile returns early on an unchanged history and no test drives it | unverified |
-| `UNDO-008` | `FAIL` | An undo with nothing to revert MUST emit no delta. | this spec section 3 | Trame `ambre_trame::logic::tests::group2::undo_with_empty_stack_is_a_noop` -- on the assertion that the handler produced no update at all | partial -- Toile has no equivalent, and this is the half that would reach the other peers | unverified |
+| `UNDO-006` | `POST` | The undo and redo affordances MUST report what the engine holds. | this spec section 4 | Trame `ambre_trame::logic::tests::group2::mutating_command_reports_undo_state`; chrome `ambre_trame::tests::chrome_ui::undo_state_mirrors_into_command_store` | fails -- in Toile, two handlers of thirty emit the event and the view drops it, section 6; lands with the `Toile reports what its undo engine holds` Story (`ambre-roadmap.md` E7) | failing |
+| `UNDO-003` | `FAIL` | An undo with nothing to revert MUST leave the document unchanged. | this spec section 3 | none | unheld -- Trame's `::undo_with_empty_stack_is_a_noop` reads the events and never the document, so a local write that emitted nothing would pass; Toile returns early on an unchanged history and no test drives it; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
+| `UNDO-008` | `FAIL` | An undo with nothing to revert MUST emit no delta. | this spec section 3 | Trame `ambre_trame::logic::tests::group2::undo_with_empty_stack_is_a_noop` -- on the assertion that the handler produced no update at all | partial -- Toile has no equivalent, and this is the half that would reach the other peers; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** none of its own: an undo replays one item through the command path, so it lands under
   the command rows of `ambre-spec-budgets.md section 1`. What the stack holds sits inside the
@@ -47,15 +47,9 @@ history moves, so the two share a table rather than repeating one.
   `UI-THREAD-016`, one number for every application.
 * **Boundary.** none of its own: an undo emits the reverting operations into the document, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 2 `verified`, 7 `unverified`, 0 `unimplemented`. The rule that holds across both
-  building applications is that the history dies with the document; the reseed holds too. What is
-  loose is whose operations revert, what an undo emits, and what the affordances are told -- held in
-  Trame and open in Toile. Prose is design-only and adds no code to any row. Three conjunctions came
-  apart, and each hid the half that matters. `UNDO-007` is the frame condition of an undo -- it does
-  not reach a collaborator's work -- and Toile drives no remote change, so nothing there holds it.
-  `UNDO-003` and `UNDO-008` split a refusal whose cited test reads the events and never the
-  document, so the emitted half is driven and the local one is not. `UNDO-009` binds every mutating
-  command rather than the undo, which is why no test of this feature was ever going to reach it.
+* **Verification.** 2 `verified`, 1 `failing`, 6 `untested`, 0 `unimplemented`. What holds is that the history
+  dies with the document, and that the reseed is clean. What is loose is whose operations revert,
+  what an undo emits, and what the affordances are told: held in Trame, open in Toile.
 
 ---
 
@@ -104,8 +98,8 @@ undo_manager: loro::UndoManager,
 4. flush the inverse operations as a delta the other users receive (`UNDO-002`);
 5. answer with the new availability (`UNDO-006`).
 
-Step 3 is a total reseed. That is why nothing derived -- an index, a span, a paint order, a compiled
-formula -- is stale after an undo, whichever application ran it.
+Step 3 is a total reseed. That is why nothing derived is stale after an undo: no index, no span, no
+paint order, no compiled formula, whichever application ran it.
 
 **What one undo item is, is per application.** The principle is one commit per mutating command, with
 a continuous gesture the exception that seals once at the end. Which gestures collapse into one item
@@ -151,9 +145,9 @@ never re-enables a button. Which keys carry these intents is `ambre-spec-command
   out of memory, and nothing measures it. The bound is one number shared by every application, which
   is why the row is `ambre-spec-ui.md`'s; what merges into one item stays each application's.
 * **Undo is in no convergence property.** The two-peer proptest drives every mutating command and
-  never an undo, in Trame or in Toile, so two peers undoing into each other has no coverage anywhere.
+  never an undo, in Trame or in Toile. Two peers undoing into each other has no coverage anywhere.
 * **Toile's affordances are never told anything** (`UNDO-006`). The availability event is emitted by
-  two handlers and discarded by the view, so a fresh board always offers Undo. Trame's counterpart is
+  two handlers and dropped by the view, so a fresh board always offers Undo. Trame's counterpart is
   held on two tests; the transposition is the cheapest gap in Toile to close
   (`3-Toile/features/ambre-spec-toile-undo.md section 4`).
 * **Version history is designed and unbuilt.** The stack dies with the session, and the answer across

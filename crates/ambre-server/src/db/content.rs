@@ -105,9 +105,10 @@ pub async fn get_latest_snapshot(
 
 /// Fetches a specific snapshot by id, scoped to its owning document.
 ///
-/// The `document_id` filter is a mandatory object-level authorization guard:
-/// callers authorize membership on a document and must only ever resolve
-/// snapshots belonging to that same document (prevents a cross-document IDOR).
+/// The `document_id` filter is a mandatory object-level authorization guard.
+/// Callers authorize membership on a document, and must only ever resolve
+/// snapshots belonging to that same document (this prevents a cross-document
+/// IDOR).
 pub async fn get_snapshot(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
@@ -200,7 +201,7 @@ pub async fn get_updates_after(
 
 /// The durable clock/seq state for a document, read from the `updates` index.
 /// Used to rehydrate Redis (the clock-validation authority) when it is cold --
-/// e.g. after a Redis restart while Postgres kept the delta history. Without this
+/// for example after a Redis restart while Postgres kept the delta history. Without this
 /// the per-author clock counter resets to 0 while clients still hold advanced
 /// clocks, and every subsequent update fails `CLOCK_MISMATCH`.
 #[derive(Debug, Default)]
@@ -212,8 +213,8 @@ pub struct ClockState {
 }
 
 /// Reads the durable clock/seq high-water marks for a document from the `updates`
-/// index, so a cold Redis can be reseeded to a state consistent with the history
-/// clients have already replayed (see [`ClockState`]).
+/// index. A cold Redis can then be reseeded to a state consistent with the
+/// history clients have already replayed (see [`ClockState`]).
 pub async fn get_clock_state(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
@@ -242,15 +243,15 @@ pub async fn get_clock_state(
 /// already folded in, returning the number of rows deleted.
 ///
 /// The purge horizon per document is `MIN(covered_seq)` across its remaining
-/// snapshots: a client restores from one of those snapshots and only ever needs
-/// updates past its `covered_seq`, so an update with `seq <= MIN(covered_seq)` is
-/// redundant for every possible restore point. Documents with no snapshot yet are
-/// skipped (nothing covers their updates).
+/// snapshots. A client restores from one of those snapshots, and only ever needs
+/// updates past its `covered_seq`. An update with `seq <= MIN(covered_seq)` is
+/// therefore redundant for every possible restore point. Documents with no
+/// snapshot yet are skipped (nothing covers their updates).
 ///
-/// This is the delta index's only garbage collector for a long-lived document.
-/// The `updates.snapshot_id -> snapshots(id)` FK was dropped (see the
+/// This is the delta index's only garbage collector for a long-lived document. The
+/// `updates.snapshot_id -> snapshots(id)` FK was dropped (see the
 /// `drop_updates_snapshot_fk` migration), so deleting an old snapshot no longer
-/// cascades its deltas away; without this pass the table would grow without bound.
+/// cascades its deltas away. Without this pass the table would grow without bound.
 /// Run once per compaction cycle, independent of snapshot deletion.
 pub async fn purge_superseded_updates(pool: &PgPool) -> Result<u64, AppError> {
     let deleted = sqlx::query(
@@ -281,10 +282,10 @@ pub async fn insert_media(
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*uploaded_by);
-    // Idempotent like `insert_update`: the `id` PK is the content hash, so a
-    // retried `confirm` (after the S3 PUT already succeeded) or two clients
-    // confirming the same blob would otherwise raise a unique violation and
-    // surface as a 500. The row is content-addressed, so a re-insert is a no-op.
+    // Idempotent like `insert_update`. The `id` PK is the content hash. A
+    // retried `confirm` would otherwise raise a unique violation and surface as
+    // a 500. So would two clients confirming the same blob. The row is
+    // content-addressed, so a re-insert is a no-op.
     sqlx::query(
         "INSERT INTO media (id, document_id, uploaded_by, mime_type, size_bytes, s3_key) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING"
     )
@@ -331,7 +332,7 @@ pub async fn find_compactable_snapshots(
 
 /// Deletes a single snapshot row.
 ///
-/// This does NOT touch `updates`: the `updates.snapshot_id` FK was dropped (see
+/// This does NOT touch `updates`. The `updates.snapshot_id` FK was dropped (see
 /// the `drop_updates_snapshot_fk` migration), so `snapshot_id` is now an opaque
 /// client-side correlation tag with no cascade. Superseded deltas are trimmed
 /// separately by [`purge_superseded_updates`]; the caller removes the S3 blob.

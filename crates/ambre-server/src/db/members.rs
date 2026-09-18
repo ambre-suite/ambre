@@ -17,8 +17,8 @@ pub struct MemberRow {
 }
 
 /// `document_members` joined with `users` for display purposes. Carries the
-/// member's public keys and their wrapped copy of the document key so a client
-/// can locate its own entry and unwrap the key (or rewrap on rotation).
+/// member's public keys and their wrapped copy of the document key. A client
+/// can then locate its own entry and unwrap the key, or rewrap on rotation.
 #[derive(Debug)]
 pub struct MemberWithUserRow {
     pub user_id: uuid::Uuid,
@@ -43,11 +43,10 @@ pub struct MemberWithUserRow {
 
 /// Adds (or updates) a user to a document's membership with a role and encrypted document key.
 ///
-/// The upsert doubles as the role-change path (`ON CONFLICT DO UPDATE`), so it
-/// enforces the same last-owner invariant as `update_document_member_role`: it
-/// refuses to demote the document's only remaining owner. The check and the
-/// write run in one transaction with the target row locked (`FOR UPDATE`) so
-/// concurrent demotions cannot both pass the count.
+/// The upsert doubles as the role-change path (`ON CONFLICT DO UPDATE`), so it enforces the
+/// same last-owner invariant as `update_document_member_role`. It refuses to demote the
+/// document's only remaining owner. The check and the write run in one transaction with the
+/// target row locked (`FOR UPDATE`) so concurrent demotions cannot both pass the count.
 pub async fn add_document_member(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
@@ -93,8 +92,8 @@ pub async fn add_document_member(
 /// target owner's row locked, so the count is stable for the transaction.
 ///
 /// A document also carries an `owner_id` column that survives membership
-/// changes, but every management operation (invite, revoke, role change)
-/// requires a live `owner` membership row: without one, nobody could manage
+/// changes. But every management operation (invite, revoke, role change)
+/// requires a live `owner` membership row. Without one, nobody could manage
 /// sharing anymore.
 async fn ensure_not_last_owner(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -261,8 +260,8 @@ pub async fn rotate_document_keys(
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     // The rotator re-wrapped every key with ITS exchange key, so it becomes the
-    // new wrapper of record: update `invited_by` alongside `doc_key_enc` or the
-    // ECDH unwrap would later use the stale inviter's key.
+    // new wrapper of record. Update `invited_by` alongside `doc_key_enc`, or
+    // the ECDH unwrap would later use the stale inviter's key.
     let rotator = id_to_uuid(*rotated_by);
     let mut tx = pool.begin().await?;
     for (user_id, key_enc) in keys {

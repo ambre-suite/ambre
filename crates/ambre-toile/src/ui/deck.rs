@@ -1,19 +1,19 @@
 // ambre-toile/src/ui/deck.rs
 // ============================================================================
-// The deck panel's pure model (toile-presentation). The engine can already
-// write a slide sequence (`SetSlideOrder`), and this is what turns a click into
-// one: every edit here answers with the WHOLE new order, because that is the
-// only shape the command takes -- the deck is small and a full rewrite converges
-// where a positional patch would not.
+// The deck panel's pure model (toile-presentation). The engine can already write
+// a slide sequence (`SetSlideOrder`), and this is what turns a click into one.
+// Every edit here answers with the WHOLE new order, because that is the only
+// shape the command takes. The deck is small, and a full rewrite converges where
+// a positional patch would not.
 //
-// No DOM and no Loro, so each edit is an ordinary unit test; the wasm-only
+// No DOM and no Loro, so each edit is an ordinary unit test. The wasm-only
 // Leptos panel (`chrome::deck`) is a thin renderer over these functions and the
 // signals declared at the bottom.
 // ============================================================================
 
 use ambre_bus::app::toile::{DeckFrame, FrameId};
 
-/// What a deck row reads (`TOILE-UI-317`): the frame's title, or its rank when
+/// What a deck row reads (`TOILE-UI-317`). The frame's title, or its rank when
 /// the frame has never been named, so a deck of unnamed frames is still
 /// navigable. `rank` is 0-based and shown 1-based, like the slide counter.
 pub fn deck_label(frame: &DeckFrame, rank: usize) -> String {
@@ -25,8 +25,9 @@ pub fn deck_label(frame: &DeckFrame, rank: usize) -> String {
     }
 }
 
-/// Append `frame` to the deck, or answer `None` when the deck already names it
-/// (the engine de-duplicates, and a no-op write would only cost an undo item).
+/// Append `frame` to the deck, or answer `None` when the deck already names
+/// it. The engine de-duplicates, and a no-op write would only cost an undo
+/// item.
 pub fn add(order: &[FrameId], frame: &FrameId) -> Option<Vec<FrameId>> {
     if order.contains(frame) {
         return None;
@@ -72,7 +73,7 @@ pub enum Move {
 
 /// What the deck panel asks the canvas view to do (`TOILE-FEAT-026`). The DOM
 /// holds no board state, so every intent is drained by the view, which owns the
-/// command channel; the view turns each into one `SetSlideOrder`, except
+/// command channel. The view turns each into one `SetSlideOrder`, except
 /// `Goto`, which is local playback.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DeckIntent {
@@ -86,10 +87,10 @@ pub enum DeckIntent {
     Goto(usize),
 }
 
-/// The signals the canvas view and the DOM panel share
-/// (`toile-presentation` section 4). The panel holds no board state of its own:
-/// the view writes what it read back from Logic, and reads the intents the panel
-/// emits, exactly like the comments panel.
+/// The signals the canvas view and the DOM panel share (`toile-presentation`
+/// section 4). The panel holds no board state of its own. The view writes what
+/// it read back from Logic, and reads the intents the panel emits, exactly like
+/// the comments panel.
 #[cfg(target_arch = "wasm32")]
 #[derive(Clone, Copy)]
 pub struct DeckSignals {

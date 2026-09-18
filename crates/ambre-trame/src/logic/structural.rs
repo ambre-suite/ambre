@@ -70,11 +70,10 @@ impl TrameState {
     /// Move the row/column at grid position `from` to grid position `to`
     /// (Excel-style drag reorder), realized as a single `LoroMovableList::mov` on
     /// `rows_/cols_{sheet}`. Cells keyed by the move-invariant `(row_uid, col_uid)`
-    /// pair travel with their line for free; the formula engine is NOT reseeded, so
+    /// pair travel with their line for free. The formula engine is NOT reseeded, so
     /// every reference resolves to its line's new position (`after_reorder`,
-    /// `trame-formula-engine`).
-    /// A no-op if `from == to` or either index is outside the materialized used
-    /// range (virtual lines carry nothing to move).
+    /// `trame-formula-engine`). A no-op if `from == to` or either index is outside
+    /// the materialized used range (virtual lines carry nothing to move).
     pub(super) fn move_axis(&mut self, from: u32, to: u32, axis: Axis) -> TrameOutcome {
         let used = match axis {
             Axis::Row => self.index.row_len(),
@@ -114,11 +113,11 @@ impl TrameState {
         outcome
     }
 
-    /// Single-column shared sort resolved against the tracked selection
-    /// rectangle (`trame-sort`). Sorts on the range's first column with no
-    /// header row, exactly the parameterless context-menu intent: whole rows are
-    /// permuted so cells outside the selection move with their row (Google Sheets
-    /// "sort range"). Delegates to [`sort_range`](Self::sort_range) on the active
+    /// Single-column shared sort resolved against the tracked selection rectangle
+    /// (`trame-sort`). Sorts on the range's first column with no header row,
+    /// exactly the parameterless context-menu intent. Whole rows are permuted, so
+    /// cells outside the selection move with their row (Google Sheets "sort
+    /// range"). Delegates to [`sort_range`](Self::sort_range) on the active
     /// sheet, which guards the empty/single-row cases and replies with
     /// [`TrameEvent::SortComplete`].
     pub(super) fn sort_selection(&mut self, ascending: bool) -> TrameOutcome {
@@ -186,10 +185,10 @@ impl TrameState {
         }
     }
 
-    /// Shared tail of every structural op: rebuild the position <-> id cache
-    /// (positions shifted), reseed the positional formula engine and the
-    /// formatting sets from the new layout, then flush the CRDT delta and ask
-    /// the UI to re-fetch its viewport.
+    /// Shared tail of every structural op. It rebuilds the position <-> id
+    /// cache, since positions shifted. It reseeds the positional formula
+    /// engine and the formatting sets from the new layout. It then flushes
+    /// the CRDT delta and asks the UI to re-fetch its viewport.
     pub(super) fn after_structural(&mut self) -> TrameOutcome {
         self.rebuild_index();
         // Merges resolve through the freshly rebuilt index; do this before the

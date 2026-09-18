@@ -3,13 +3,14 @@
 // AppShell -- the CSS-grid chrome layout (ambre-spec-chrome.md, CHROME-009).
 //
 // Rows: header, command bar (contextual toolbar), content, status bar. The
-// content row hosts the wgpu `<canvas>` cell; the shell OWNS that element so
-// the DOM chrome and the canvas content share one layout (the canvas resizes
-// to its grid cell, not the viewport).
+// content row hosts the wgpu `<canvas>` cell. The shell OWNS that element, so
+// the DOM chrome and the canvas content share one layout. The canvas resizes to
+// its grid cell, not the viewport.
 //
 // The shell is app-agnostic: every region is a slot the app fills. ambre-chrome
-// knows nothing about Trame/Prose/etc. -- it lays out whatever chrome content
-// the app provides, exactly as the renderer dispatches only over `AppView`.
+// knows nothing about Trame, Prose or any other app -- it lays out whatever
+// chrome content the app provides. This mirrors the renderer, which dispatches
+// only over `AppView`.
 // ============================================================================
 
 use leptos::prelude::*;
@@ -34,7 +35,7 @@ pub struct FormulaBar {
 }
 
 /// Tab strip: a thin band just below the content, above the status bar
-/// (app-provided content -- e.g. Trame's sheet tabs). Optional: apps with no
+/// (app-provided content -- for example Trame's sheet tabs). Optional: apps with no
 /// tabbed content (Prose) omit it and the row collapses.
 #[slot]
 pub struct Tabs {
@@ -77,7 +78,7 @@ pub fn AppShell(
                 // The layer a board's sandboxed web embeds are mounted into
                 // (`toile-embeds`, `TOILE-088`). Empty for every other app and
                 // for a board with no web embed on screen. It sits over the
-                // canvas and clips to it; each frame decides for itself whether
+                // canvas and clips to it. Each frame decides for itself whether
                 // it takes the pointer, so an embed nobody has entered leaves
                 // the board's own gestures reachable.
                 <div id="ambre-web-embeds" class="ambre-web-embeds"></div>

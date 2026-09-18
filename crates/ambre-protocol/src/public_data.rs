@@ -1,4 +1,4 @@
-//! Public (non‑encrypted) metadata attached to updates, snapshots and ephemerals.
+//! Public (non-encrypted) metadata attached to updates, snapshots and ephemerals.
 //!
 //! These fields are visible to the Blind Relay and are used for routing, integrity
 //! verification, and conflict resolution without decrypting the payload.
@@ -34,9 +34,9 @@ pub struct SnapshotPublicData {
     pub parent_snapshot_proof: Vec<u8>,
     /// For each author, the latest clock value included in this snapshot.
     ///
-    /// The vector contains `(pub_key, clock)` pairs where `pub_key` is the author's
-    /// 32‑byte Ed25519 public key and `clock` is the highest clock value of that author
-    /// that is reflected in the snapshot.
+    /// The vector contains `(pub_key, clock)` pairs. `pub_key` is the author's 32-byte
+    /// Ed25519 public key, and `clock` is the highest clock value of that author
+    /// reflected in the snapshot.
     pub parent_snapshot_update_clocks: Vec<(PublicKey, Clock)>,
 }
 

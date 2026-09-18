@@ -5,24 +5,33 @@ The style file closed on its own admission: "No script checks this file, unlike
 `just contracts` and `just spec-code`. It is a review rule, and review rules
 drift." This is the half of it a script can hold.
 
-**A ceiling, not a hard error.** The corpus predates the check by a thousand
-breaches, so a hard error would be red on the first run and turn into a flag
-everyone passes. Each file carries a per-metric ceiling that may only fall, the
-mechanism `contracts.py` and `spec_shape.py` already use. A file the table does
-not name has a ceiling of zero, which is the whole point: a new file, and a new
-comment in an old one, starts clean.
+**Every metric is a hard error.** The corpus once predated the check by a
+thousand breaches, so each file carried a per-metric ceiling that only fell.
+Every count reached zero, and a ceiling on a count of zero holds nothing a
+refusal does not hold better, so the ratchet is gone and a breach is red.
 
-  * ascii     -- a code point outside 32 to 126.
-  * latin     -- a Latin abbreviation, where the rule asks for words.
   * long      -- a sentence over 25 words.
-  * para      -- a paragraph over 6 sentences.
-  * passive   -- `is` / `are` / `was` / `were` plus a participle.
+  * latin     -- a Latin abbreviation, where the rule asks for words.
+  * para      -- a paragraph over 6 sentences. The last 16 were broken by hand,
+                 most of them a numbered list the reader counted as one
+                 paragraph rather than prose anyone wrote long.
 
-One rule stays a hard error, because the corpus breaches it nowhere: the four
-empty openers the style file names.
+Each of the three is an exact count. A rule enters this script when the measure
+is exact, never because a regular expression reaches it: a detector that guesses
+produces a number, not a rule. "Active voice, named actor" left on that test.
+`be` plus a participle names a state as often as a passive, and a closed list of
+participles reads about thirty of the two hundred English carries.
+
+Five more rules are a hard error. The four empty openers the style file names,
+which the corpus breaches nowhere. The banned terms of the style file's own
+table, which it breaches 18 times: one rewrite pass, not a debt. And a code
+point outside 32 to 126, letters of another script apart: the 296 the corpus
+carried were an em dash, a non-breaking hyphen, an arrow and a box rule, each of
+which has an ASCII spelling, so the debt closed by spelling them.
 
 **What no script holds.** A metaphor, an ambiguous pronoun, one word used for
-two meanings, and a comment that states what the code does instead of why. Those
+two meanings, the passive voice, one negative per sentence, and a comment that
+states what the code does instead of why. Those
 stay a human read of the diff. The script narrows the read; it does not replace
 it.
 
@@ -31,26 +40,25 @@ comment is where the workspace had no check at all; a spec had `spec_shape.py`
 for its shape and nothing for its sentences.
 
 Usage:
-    python3 scripts/prose.py --check              # CI: fail on a breach
-    python3 scripts/prose.py --ceilings           # record the counts, lower only
-    python3 scripts/prose.py --ceilings --raise   # a deliberate growth, reviewed
+    python3 scripts/prose.py --check    # CI: fail on a breach
 """
 
 from __future__ import annotations
 
-import json
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import glossary  # noqa: E402  -- the vocabulary, read from the corpus
+
 ROOT = Path(__file__).resolve().parent.parent
-CEILINGS = Path(__file__).resolve().parent / "prose_ceilings.json"
 
 # The Rust the workspace owns. `target/` holds generated crates.
 RUST_ROOTS = (ROOT / "crates",)
 # The English the corpus owns, beyond the specs' own shape gate.
 MARKDOWN_ROOTS = (ROOT / "specs", ROOT / "ai")
-MARKDOWN_FILES = (ROOT / "README.md", ROOT / "AGENTS.md", ROOT / "CONTRIBUTING.md")
 
 # One sentence, one idea: 25 words for descriptive text (20 for a rule, which no
 # script can tell apart from the rest).
@@ -64,18 +72,36 @@ OPENERS = re.compile(
     r"\b(it should be noted that|in order to|basically|obviously)\b", re.I
 )
 
+# "One word, one meaning", read from `specs/ambre-glossary.md` rather than typed
+# again here. The glossary is where a term, its gloss and the synonyms it
+# forbids are written, and a second copy in this file would drift from it in
+# silence (`scripts/template_vocabulary.py` states the rule and the incident
+# behind it).
+#
+# A hyphen binds as tightly as a letter, so `\b` is too loose: it read the
+# tool `cargo-deny` as the verb "deny" fourteen times. The list forbids a verb,
+# never a syllable of a name.
+TERMS = tuple(
+    (re.compile(rf"(?<![\w-]){re.escape(word)}(s|ed|ing)?(?![\w-])", re.I), entry.term, exception)
+    for entry in glossary.entries()
+    for word, exception in entry.forbidden
+)
+
+# A gloss names an idea; it does not specify one. These are what turns a gloss
+# into a second specification, free to drift from the document that defines the
+# term: a figure, a normative keyword, and length.
+GLOSS_WORDS_MAX = 12
+GLOSS_FIGURE = re.compile(r"\d")
+GLOSS_NORMATIVE = re.compile(r"\b(MUST|SHALL|SHOULD|MAY|REQUIRED|OPTIONAL)\b")
+
+# "A figure and its unit are separated by a space": 250 ms, not 250ms. A hard
+# error at zero, over a closed list of the units the workspace writes. A digit
+# welded to a unit reads as one token, which is what a literal is, and `clean`
+# has already dropped the code spans where `250ms` is exactly that.
+SI_UNIT = re.compile(r"(?<![\w.])\d+(ms|us|ns|s|Hz|KiB|MiB|GiB|B)\b")
+
 # "No Latin abbreviation: write 'for example', 'that is'."
 LATIN = re.compile(r"(?<![\w.])(e\.g\.|i\.e\.|etc\.|cf\.|viz\.)", re.I)
-
-# The passive the style file bans: "the frame is sealed" for "the Sync worker
-# seals the frame". A participle after `be` catches the regular form and the
-# irregulars the corpus actually uses. An adjective ("is tired") reads as a false
-# positive, which is why this one is a ceiling and not an error.
-PARTICIPLES = (
-    r"\w+ed|born|built|drawn|given|held|kept|known|lost|made|meant|put|read|"
-    r"seen|sent|set|shown|taken|told|written|thrown|drawn|torn|worn"
-)
-PASSIVE = re.compile(rf"\b(is|are|was|were|be|been|being)\s+(?:\w+ly\s+)?({PARTICIPLES})\b")
 
 # A code span, a Markdown link target and a URL are not English. Removing them
 # before the measure is what keeps `self.doc.commit()` from ending a sentence and
@@ -89,32 +115,68 @@ DIAGRAM = re.compile(r"^\s*[|+`\\/*-]{2,}")
 SENTENCE_SPLIT = re.compile(r"(?<=[.!?])[\s]+")
 # A Markdown bullet or numbered item, with its indent.
 BULLET = re.compile(r"^\s*(?:[*\-+]|\d+\.)\s+")
+# A block quote marker. The line under it is prose; the marker is not, and left
+# in place it lands mid-sentence once the lines are joined.
+QUOTE = re.compile(r"^\s*>\s?")
+# A line that is one bold run and nothing else. The spec template writes a
+# section heading that way, and a heading is not a sentence of the paragraph
+# below it.
+BOLD_HEADING = re.compile(r"^\*\*[^*]+\*\*$")
+# A horizontal rule: a block separator, never a sentence.
+RULE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
 
 
 def printable_breaches(text: str) -> list[tuple[int, str]]:
-    """Every line carrying a code point outside 32..126.
+    """Every line carrying a code point outside 32..126, letters apart.
 
     The whole file, not its comments alone: the rule covers prose, code and file
     names, and a `-` in a string is what reaches the user's screen.
+
+    A letter of another script is the one exception, and it is a class, not a
+    list of files. An em dash, a non-breaking hyphen, an arrow, an ellipsis and
+    a `<=` all have an ASCII spelling, so writing them outside ASCII is a
+    choice. A han ideograph has none: where one appears it is the text Ambre
+    renders, and `ambre-canvas` selects a font by script, so the character is
+    the subject of the test and not a way of writing English. Unicode says
+    which is which, which is what makes the exception exact.
     """
     out = []
     for lineno, line in enumerate(text.splitlines(), 1):
-        bad = {ch for ch in line if not (32 <= ord(ch) <= 126) and ch != "\t"}
+        bad = {
+            ch
+            for ch in line
+            if not (32 <= ord(ch) <= 126)
+            and ch != "\t"
+            and not unicodedata.category(ch).startswith("L")
+        }
         if bad:
             shown = ", ".join(f"U+{ord(ch):04X}" for ch in sorted(bad))
             out.append((lineno, f"non-printable character: {shown}"))
     return out
 
 
-def rust_comments(text: str) -> list[tuple[int, str, bool]]:
+def rust_comments(text: str) -> list[tuple[int, str, bool, bool]]:
     """The comment text of a Rust file, one entry per line, fences dropped.
 
     A fenced block inside a doc comment is code or a diagram, so it carries no
     English to measure. The third field marks a line that opens a paragraph; a
     Rust comment opens one by following a line of code, which the line numbers
-    already say.
+    already say. The fourth says the line is prose at all.
+
+    A table row is structure, not a sentence, and it is the one shape that read
+    as both. A doc comment holding a five-row table joined its cells into one
+    31-word "sentence", which no rewrite can shorten because nobody wrote it.
+    It stays in the result for the hard rules and leaves the paragraph.
+
+    An empty comment line and a Markdown heading both drop out, the way
+    `markdown_prose` drops a blank line and a `#` heading. A doc comment is
+    Markdown, so the two readers must agree. Keeping an empty `///` made a
+    whole rustdoc block one paragraph, so a section added to a six-sentence
+    block breached the budget whatever it said. Dropping it also ends a
+    paragraph at a `// ---` rule, where `DIAGRAM` used to swallow the prose
+    below the rule along with it.
     """
-    out: list[tuple[int, str, bool]] = []
+    out: list[tuple[int, str, bool, bool]] = []
     fenced = False
     for lineno, line in enumerate(text.splitlines(), 1):
         body = line_comment(line)
@@ -123,9 +185,15 @@ def rust_comments(text: str) -> list[tuple[int, str, bool]]:
         if body.lstrip().startswith("```"):
             fenced = not fenced
             continue
-        if fenced:
+        if fenced or not body.strip():
             continue
-        out.append((lineno, body, body.lstrip().startswith(("*", "-"))))
+        if body.lstrip().startswith("#"):
+            continue
+        if body.lstrip().startswith("|"):
+            out.append((lineno, body, True, False))
+            continue
+        opens = bool(BULLET.match(body))
+        out.append((lineno, BULLET.sub("", body), opens, True))
     return out
 
 
@@ -151,25 +219,43 @@ def line_comment(line: str) -> str | None:
     return None
 
 
-def markdown_prose(text: str) -> list[tuple[int, str, bool]]:
+def markdown_prose(text: str) -> list[tuple[int, str, bool, bool]]:
     """The prose lines of a Markdown file: no fence, no table, no heading.
 
-    A bullet opens a paragraph of its own. Merging a list into one paragraph
-    counted its items as sentences, which is the metric measuring the layout
-    instead of the writing.
+    The third field says the line opens a paragraph. A bullet opens one, and so
+    does every other block boundary: a bold heading, a horizontal rule, and each
+    edge of a block quote. Merging a list into one paragraph counted its items
+    as sentences, which is the metric measuring the layout instead of the
+    writing, and a heading glued to the text below it costs that text a sentence
+    of its budget.
+
+    A boundary line stays in the result rather than leaving it, because the hard
+    rules read every line. A heading that carries a forbidden synonym is still a
+    breach; it is simply not a sentence of the paragraph under it. A table row
+    is the same, and used to leave: a forbidden term in a cell went unread,
+    which is most of a corpus written in tables.
     """
-    out: list[tuple[int, str, bool]] = []
+    out: list[tuple[int, str, bool, bool]] = []
     fenced = False
+    quoted = False
     for lineno, line in enumerate(text.splitlines(), 1):
         if line.lstrip().startswith("```"):
             fenced = not fenced
             continue
         if fenced or not line.strip():
             continue
-        if line.lstrip().startswith(("|", "#")):
+        if line.lstrip().startswith("#"):
             continue
-        bullet = bool(BULLET.match(line))
-        out.append((lineno, BULLET.sub("", line).strip(), bullet))
+        if line.lstrip().startswith("|"):
+            out.append((lineno, line.strip(), True, False))
+            continue
+        was_quoted, quoted = quoted, bool(QUOTE.match(line))
+        body = BULLET.sub("", QUOTE.sub("", line)).strip()
+        if not body:
+            continue
+        opens = bool(BULLET.match(line)) or quoted != was_quoted
+        opens = opens or bool(BOLD_HEADING.match(body)) or bool(RULE.match(body))
+        out.append((lineno, body, opens, True))
     return out
 
 
@@ -181,25 +267,101 @@ def clean(text: str) -> str:
     return text.replace("**", "").replace("__", "")
 
 
-def opener_breaches(lines: list[tuple[int, str, bool]]) -> list[tuple[int, str]]:
+def opener_breaches(lines: list[tuple[int, str, bool, bool]]) -> list[tuple[int, str]]:
     """The one hard check: an empty opener the style file names."""
     out = []
-    for lineno, raw, _ in lines:
+    for lineno, raw, _, _ in lines:
         for match in OPENERS.finditer(clean(raw)):
             out.append((lineno, f'empty opener: "{match.group(0)}"'))
     return out
 
 
-def paragraphs(lines: list[tuple[int, str, bool]]) -> list[tuple[int, str]]:
+def unit_breaches(lines: list[tuple[int, str, bool, bool]]) -> list[tuple[int, str]]:
+    """A figure welded to its unit, outside a code span.
+
+    A hard error and not a ceiling: the corpus held six of them on the day the
+    rule was written, so the count starts at zero and stays there.
+    """
+    out = []
+    for lineno, raw, _, _ in lines:
+        for match in SI_UNIT.finditer(clean(raw)):
+            spaced = f"{match.group(0)[: -len(match.group(1))]} {match.group(1)}"
+            out.append((lineno, f'"{match.group(0)}": a unit takes a space -- "{spaced}"'))
+    return out
+
+
+def term_breaches(lines: list[tuple[int, str, bool, bool]]) -> list[tuple[int, str]]:
+    """A forbidden synonym of the glossary, with the term that replaces it.
+
+    A hard error and not a ceiling: a synonym enters the glossary once its uses
+    are rewritten, so the count starts at zero and stays there.
+
+    A frozen compound is removed before the word is matched, so
+    `deny (not default-deny)` refuses the verb and leaves the policy alone.
+    """
+    out = []
+    for lineno, raw, _, _ in lines:
+        text = clean(raw)
+        for pattern, instead, exception in TERMS:
+            body = re.sub(re.escape(exception), "", text, flags=re.I) if exception else text
+            for match in pattern.finditer(body):
+                out.append((lineno, f'"{match.group(0)}": the term is "{instead}"'))
+    return out
+
+
+def glossary_breaches() -> list[str]:
+    """What the glossary owes as a register, checked once per run.
+
+    A duplicate term is two definitions of one idea, which is the drift the
+    register exists to end. A reference that does not hold its own term sends
+    the reader to the wrong document, and the index this file replaced carried
+    four of those on the day it was written.
+    """
+    out = []
+    seen: dict[str, str] = {}
+    for entry in glossary.entries():
+        if entry.term in seen:
+            out.append(f"glossary: {entry.term!r} has two rows")
+        seen[entry.term] = entry.ref
+        words = len(entry.gloss.split())
+        if not entry.gloss:
+            out.append(f"glossary: {entry.term!r} has no definition")
+        elif words > GLOSS_WORDS_MAX:
+            out.append(
+                f"glossary: {entry.term!r}: {words} words, budget {GLOSS_WORDS_MAX}"
+                " -- a gloss names an idea, the reference defines it"
+            )
+        if GLOSS_FIGURE.search(entry.gloss):
+            out.append(f"glossary: {entry.term!r}: a figure belongs to the reference")
+        if GLOSS_NORMATIVE.search(entry.gloss):
+            out.append(f"glossary: {entry.term!r}: a normative keyword belongs to the reference")
+        path = ROOT / "specs" / entry.ref if not entry.ref.startswith("ai/") else ROOT / entry.ref
+        if not path.exists():
+            out.append(f"glossary: {entry.term!r}: reference {entry.ref} does not exist")
+        elif not re.search(re.escape(entry.term), path.read_text(), re.I):
+            out.append(f"glossary: {entry.term!r} is absent from {entry.ref}")
+    return out
+
+
+def paragraphs(lines: list[tuple[int, str, bool, bool]]) -> list[tuple[int, str]]:
     """Group consecutive prose lines into paragraphs, keyed by first line.
 
-    A blank line, a fence and a bullet each open a new one.
+    A blank line, a fence and a bullet each open a new one. A line the reader
+    marked as structure closes the paragraph above it and joins none: a table
+    row is not a sentence, and joining a column of cells into one made a
+    31-word "sentence" nobody wrote.
     """
     out: list[tuple[int, str]] = []
     start: int | None = None
     buffer: list[str] = []
     previous: int | None = None
-    for lineno, text, opens in lines:
+    for lineno, text, opens, is_prose in lines:
+        if not is_prose:
+            if start is not None:
+                out.append((start, " ".join(buffer)))
+                start, buffer = None, []
+            previous = lineno
+            continue
         if start is not None and (opens or lineno != previous + 1):
             out.append((start, " ".join(buffer)))
             start, buffer = None, []
@@ -220,54 +382,72 @@ def sentences(text: str) -> list[str]:
     return [s for s in SENTENCE_SPLIT.split(text) if s.strip()]
 
 
-def measure(text: str, lines: list[tuple[int, str]]) -> tuple[dict[str, int], list[tuple[int, str]]]:
-    """The five ratcheted counts of one file, and one message per breach."""
-    counts = {"ascii": 0, "latin": 0, "long": 0, "para": 0, "passive": 0}
-    detail: list[tuple[int, str]] = []
-    for lineno, reason in printable_breaches(text):
-        counts["ascii"] += 1
-        detail.append((lineno, reason))
-    for lineno, raw, _ in lines:
+def measure(
+    text: str, lines: list[tuple[int, str]]
+) -> tuple[dict[str, int], list[tuple[int, str, str]]]:
+    """The three counts of one file, and one `(line, metric, message)` per breach."""
+    counts = {"latin": 0, "long": 0, "para": 0}
+    detail: list[tuple[int, str, str]] = []
+    for lineno, raw, _, _ in lines:
         for match in LATIN.finditer(clean(raw)):
             counts["latin"] += 1
-            detail.append((lineno, f'Latin abbreviation: "{match.group(0)}"'))
+            detail.append(
+                (
+                    lineno,
+                    "latin",
+                    f'the Latin abbreviation "{match.group(0)}" reads as jargon: '
+                    "spell it in English",
+                )
+            )
     for lineno, text in paragraphs(lines):
         parts = sentences(text)
         if len(parts) > PARAGRAPH_SENTENCES_MAX:
             counts["para"] += 1
-            detail.append((lineno, f"{len(parts)} sentences, budget {PARAGRAPH_SENTENCES_MAX}"))
+            detail.append(
+                (
+                    lineno,
+                    "para",
+                    f"{len(parts)} sentences in one paragraph, budget "
+                    f"{PARAGRAPH_SENTENCES_MAX}: a paragraph holds one idea, so "
+                    "break it where the idea changes",
+                )
+            )
         for part in parts:
             words = len(part.split())
             if words > SENTENCE_WORDS_MAX:
                 counts["long"] += 1
-                detail.append((lineno, f"{words} words in one sentence: {part[:60]}..."))
-            for match in PASSIVE.finditer(part):
-                counts["passive"] += 1
-                detail.append((lineno, f'passive: "{match.group(0)}"'))
+                detail.append(
+                    (lineno, "long", f"{words} words in one sentence: {part[:60]}...")
+                )
     return counts, detail
 
 
-METRICS = (
-    ("ascii", "non-printable characters"),
-    ("latin", "Latin abbreviations"),
-    ("long", f"sentences over {SENTENCE_WORDS_MAX} words"),
-    ("para", f"paragraphs over {PARAGRAPH_SENTENCES_MAX} sentences"),
-    ("passive", "passive verbs"),
-)
+# The three counted metrics, each a hard error. Every one reached zero across
+# the corpus, and a ceiling on a count of zero holds nothing a refusal does not
+# hold better, so none of them is ratcheted.
+HARD = ("long", "latin", "para")
 
-# The style file quotes the four openers it bans, so it breaches its own rule by
-# stating it. The one exemption, named here rather than left as a mystery.
+# A document that states a rule has to spell what the rule forbids. The style
+# file quotes the four openers it bans, and it and the glossary both carry the
+# banned terms of the table. The exemptions, named here rather than left as a
+# mystery.
 OPENER_EXEMPT = {"ai/ambre-writing-style.md"}
+TERM_EXEMPT = {
+    "ai/ambre-writing-style.md",
+    "specs/ambre-glossary.md",
+}
 
 
 # `specs/reviews/` and `specs/Todo/` are local working notes, excluded from the
-# repository. A ceiling cannot hold a file no commit carries, so they are out,
-# for the same reason `spec_shape.py` skips them.
-UNTRACKED_DIRS = ("/reviews/", "/Todo/")
+# repository. A gate cannot hold a file no commit carries, so they are out,
+# for the same reason `spec_shape.py` skips them. `specs/audits/` is tracked and
+# still out: an audit quotes what it found, in the words of whoever wrote the
+# code, and a style gate rewriting the evidence is a gate rewriting the finding.
+SKIPPED_DIRS = ("/reviews/", "/Todo/", "/audits/")
 
 
 def tracked(path: Path) -> bool:
-    return not any(part in f"/{path.relative_to(ROOT)}" for part in UNTRACKED_DIRS)
+    return not any(part in f"/{path.relative_to(ROOT)}" for part in SKIPPED_DIRS)
 
 
 def rust_files() -> list[Path]:
@@ -276,68 +456,39 @@ def rust_files() -> list[Path]:
 
 def markdown_files() -> list[Path]:
     found = [p for root in MARKDOWN_ROOTS for p in root.rglob("*.md") if tracked(p)]
-    found += [p for p in MARKDOWN_FILES if p.exists()]
+    # A glob, never a list of names: a named list measures the documents someone
+    # remembered, and a document added later escapes the gate in silence.
+    found += sorted(ROOT.glob("*.md"))
     return sorted(found)
-
-
-def load_ceilings() -> dict[str, dict[str, int]]:
-    return json.loads(CEILINGS.read_text()) if CEILINGS.exists() else {}
 
 
 def main() -> int:
     check = "--check" in sys.argv
-    write = "--ceilings" in sys.argv
-    allow_raise = "--raise" in sys.argv
-    ceilings = load_ceilings()
-    fresh: dict[str, dict[str, int]] = {}
-    errors: list[str] = []
-    verbose = "--verbose" in sys.argv
+    errors: list[str] = list(glossary_breaches())
+    rust = rust_files()
+    documents = markdown_files()
 
-    for path in rust_files() + markdown_files():
+    for path in rust + documents:
         rel = str(path.relative_to(ROOT))
         text = path.read_text()
         lines = rust_comments(text) if path.suffix == ".rs" else markdown_prose(text)
         if rel not in OPENER_EXEMPT:
             for lineno, reason in opener_breaches(lines):
                 errors.append(f"{rel}:{lineno}: {reason}")
-        counts, detail = measure(text, lines)
-        # Every measured file lands here, a clean one included. A file rewritten
-        # to zero has to reach the writer below, or its old ceiling survives the
-        # rewrite and the ratchet never closes on it.
-        fresh[rel] = counts
-        recorded = ceilings.get(rel) or {}
-        for key, label in METRICS:
-            ceiling = recorded.get(key, 0)
-            if counts[key] > ceiling:
-                errors.append(
-                    f"{rel}: {counts[key]} {label}, ceiling {ceiling} -- it may only fall"
-                )
-        if verbose and detail:
-            for lineno, reason in detail:
-                print(f"  {rel}:{lineno}: {reason}")
+        for lineno, reason in printable_breaches(text):
+            errors.append(f"{rel}:{lineno}: {reason}")
+        for lineno, reason in unit_breaches(lines):
+            errors.append(f"{rel}:{lineno}: {reason}")
+        if rel not in TERM_EXEMPT:
+            for lineno, reason in term_breaches(lines):
+                errors.append(f"{rel}:{lineno}: {reason}")
+        _, detail = measure(text, lines)
+        for lineno, key, reason in detail:
+            if key in HARD:
+                errors.append(f"{rel}:{lineno}: {reason}")
 
-    if write:
-        merged = dict(ceilings)
-        for rel, counts in fresh.items():
-            recorded = merged.get(rel) or {}
-            # A ceiling only falls. `--raise` is the reviewed exception, so a
-            # growth is recorded in a diff instead of happening in silence.
-            # An unnamed file and an unnamed metric both stand at zero, the same
-            # default the check above reads. Anything else would let this pass
-            # hand a breaching file the ceiling it needs to go green.
-            merged[rel] = {
-                key: (counts[key] if allow_raise else min(counts[key], recorded.get(key, 0)))
-                for key, _ in METRICS
-            }
-        # A file with no breach left carries no entry: the ceiling is zero.
-        merged = {k: v for k, v in merged.items() if any(v.values()) and (ROOT / k).exists()}
-        CEILINGS.write_text(json.dumps(dict(sorted(merged.items())), indent=2) + "\n")
-        print(f"{len(merged)} files carry a prose ceiling")
-        return 0
-
-    total = sum(sum(c.values()) for c in fresh.values())
-    print(f"{len(rust_files())} Rust files, {len(markdown_files())} documents")
-    print(f"{total} ratcheted breaches under ceiling, {len(errors)} defects")
+    print(f"{len(rust)} Rust files, {len(documents)} documents")
+    print(f"{len(errors)} defects")
     for error in errors:
         print(f"ERROR {error}")
     return 1 if (check and errors) else 0

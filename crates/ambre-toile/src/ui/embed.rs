@@ -174,9 +174,9 @@ pub fn visible_embeds(
 // -- Placing an embed ---------------------------------------------------------
 //
 // The gesture that puts an embed on the board (`TOILE-086`, `TOILE-087`). The
-// shell owns both dialogs -- the user types a web address, and the document
-// list is the launcher's -- so what crosses into the view is the answer, not
-// the gesture, exactly as a dropped file does (`ui::interop::DroppedFile`).
+// shell owns both dialogs: the user types a web address, and the document list
+// is the launcher's. So what crosses into the view is the answer, not the
+// gesture, exactly as a dropped file does (`ui::interop::DroppedFile`).
 
 /// The default world size of a freshly placed embed. A web page and a nested
 /// document alike land at a readable width, rather than at a point the user
@@ -248,6 +248,13 @@ impl AddressError {
 /// This parses by hand rather than through a URL crate. The board needs the
 /// scheme and a non-empty host and nothing else. A conforming parser would
 /// carry the IDNA tables into the wasm bundle for the rest.
+///
+/// # Errors
+///
+/// * [`AddressError::Empty`] on an empty address.
+/// * [`AddressError::NotHttps`] on any scheme other than `https`.
+/// * [`AddressError::NoHost`] on a missing host, or a host holding a character
+///   no host may carry.
 pub fn normalize_web_address(typed: &str) -> Result<String, AddressError> {
     // A control character or a space inside an address is never legitimate. It
     // is a paste accident, or an attempt to hide a scheme from a naive prefix

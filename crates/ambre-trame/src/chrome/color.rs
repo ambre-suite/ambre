@@ -1,7 +1,7 @@
 // ambre-trame/src/chrome/color.rs
 // ============================================================================
-// Themed colour defaults for the formatting controls: the "Automatic" /
-// "Transparent" fallbacks the shared `ambre_chrome::ColorPopover` shows so an
+// Themed colour defaults for the formatting controls. These are the "Automatic"
+// / "Transparent" fallbacks the shared `ambre_chrome::ColorPopover` shows, so an
 // unset colour renders its real on-screen value (theme-aware). The hex <-> packed
 // conversions and the popover itself now live in `ambre-chrome`; only these
 // canvas-themed defaults stay app-side. Module-private.

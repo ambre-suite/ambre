@@ -1,11 +1,11 @@
-// ambre-trame/src/logic/metrics.rs
-// Column-width / row-height data plane (`trame-resize`, `trame-engine`).
+// ambre-trame/src/logic/metrics.rs Column-width / row-height data plane
+// (`trame-resize`, `trame-engine`).
 //
-// Resize is a synchronised CRDT mutation: widths/heights live in the per-sheet
-// `col_widths_{sheet}` / `row_heights_{sheet}` LWW maps keyed by the axis's
-// stable `Uid`, so a resized column keeps its width across inserts/deletes and
-// two peers resizing the same column converge by LWW (like any cell write). The
-// derived `col_widths` / `row_heights` position caches feed the viewport
+// Resize is a synchronised CRDT mutation. Widths/heights live in the per-sheet
+// `col_widths_{sheet}` / `row_heights_{sheet}` LWW maps, keyed by the axis's
+// stable `Uid`. A resized column then keeps its width across inserts/deletes,
+// and two peers resizing the same column converge by LWW, like any cell write.
+// The derived `col_widths` / `row_heights` position caches feed the viewport
 // response, which hands the UI a complete per-axis slice for its
 // variable-metric `GridLayout`.
 //

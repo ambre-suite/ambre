@@ -25,14 +25,14 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 
 ### 1.2 Export the document as a PDF
 
-That a page is drawn by the screen's own walk, is pure vector, keeps its characters and reaches the
-browser off the UI thread is `ambre-spec-pdf-export.md section 1.1`. What a paginated document adds
-is the layout it must not compute twice.
+`ambre-spec-pdf-export.md section 1.1` rules the shared half. A page is drawn by the screen's own
+walk, is pure vector, keeps its characters, and reaches the browser off the UI thread. What a
+paginated document adds is the layout it must not compute twice.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-IO-033` | `POST` | A user MUST be able to export the document as a PDF. | this spec section 4 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-037` | `POST` | An export MUST write the pages the engine already laid out, and MUST NOT lay the document out again. | this spec section 3 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-037` | `POST` | An export MUST write the pages the engine already laid out, never laying the document out again. | this spec section 3 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-038` | `POST` | An export MUST write the document as it stood when the export began; an edit made while it runs MUST NOT reach the file in part. | this spec section 3 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-039` | `FRAME` | An export MUST NOT change what the screen shows: not the page the reader is on, not the layout, and not the selection. | derived | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -40,12 +40,12 @@ is the layout it must not compute twice.
   `ambre-spec-budgets.md section 1`, reading **none exists**. The shared writer's weight is
   `ambre-spec-pdf-export.md`.
 * **Boundary.** the finished file reaches the browser and nothing else, on the shared export path
-  (`ambre-spec-pdf-export.md`, `PDF-002`, `PDF-003`); a picture it cannot find becomes a placeholder
+  (`ambre-spec-pdf-export.md`, `PDF-002`, `PDF-003`). A picture it cannot find becomes a placeholder
   rather than a fetch (`features/ambre-spec-prose-images.md`, `PROSE-IO-008`).
 * **Verification.** 8 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. The shared
   rules and their coverage are `ambre-spec-pdf-export.md`; what is counted here is the pagination,
   the links and the language. `PROSE-IO-029` and `PROSE-IO-031` are the two a host test reaches from
-  a fixture document, with no GPU and no picture, and `PROSE-IO-037` is the one no reading of the
+  a fixture document, with no GPU and no picture. `PROSE-IO-037` is the one no reading of the
   file can tell from a second pagination that happens to agree.
 
 ---
@@ -70,8 +70,8 @@ The shared scenario -- an export writes nothing, and two exports are the same by
 pagination produced, and writes nothing (`PROSE-IO-017`).
 
 **The entry point.** The shared flow draws and assembles the file
-(`ambre-spec-pdf-export.md section 3`); Prose's driver takes the intermediate form and the page
-layout the pagination already produced, because the page is frozen and written whole, unlike the
+(`ambre-spec-pdf-export.md section 3`). Prose's driver takes the intermediate form and the page
+layout the pagination already produced. The page is frozen and written whole, unlike the
 screen's live partial repaint (`features/ambre-spec-prose-page-rendering.md`).
 
 ```rust
@@ -96,11 +96,11 @@ pub fn export_pdf(
 
 **The pagination is not recomputed.** Step 1 reads the layout the engine already holds, which is
 what makes the file match the screen page for page. An export that laid the document out again
-under a page size of its own would be a second pagination (`PROSE-IO-037`), and the first divergence between
-the two would be invisible until a reader compared a printed page with a screen.
+under a page size of its own would be a second pagination (`PROSE-IO-037`). The first divergence
+between the two would be invisible until a reader compared a printed page with a screen.
 
 **The language is a parameter, then the document, then nothing.** A fixed locale in a writer is a
-default that is wrong for most readers and silent for all of them, and the metadata is what a
+default that is wrong for most readers and silent for all of them. The metadata is what a
 screen reader and an archive read to decide how to speak the file (`PROSE-IO-032`,
 `PROSE-IO-035`).
 **A picture is read from the cache, never fetched** (`features/ambre-spec-prose-images.md`,
@@ -158,14 +158,14 @@ The shared gaps -- no selectable text, lazy loading unbuilt, no benchmark -- are
   as a scan.
 * **The links are the one thing the shared surface does not carry.** The table of contents, the
   cross references and the external addresses are a Prose payload over the page, and no other editor
-  exports them, so the link-writing is this document's and not the shared flow's (`PROSE-IO-031`).
+  exports them. The link-writing is this document's and not the shared flow's (`PROSE-IO-031`).
 * **Nothing says how the export gets a still document.** `PROSE-IO-038` requires the file to hold
   the document as the export began, and a hundred pages take seconds during which remote deltas
-  keep arriving. No document declares a snapshot, a read lock or a version the walk is pinned to,
-  so the rule names the outcome and nothing names the mechanism.
+  keep arriving. No document declares a snapshot, a read lock or a version the walk is pinned to.
+  The rule names the outcome, and nothing names the mechanism.
 * **Nothing bounds the export.** A thousand-page document with a picture on every page has a
-  budget row and no refusal, no progress event of its own beyond the shared one, and no cap on the
-  bytes held in memory while the file is assembled.
+  budget row and no refusal. It has no progress event of its own beyond the shared one. Nothing
+  caps the bytes held in memory while the file is assembled.
 * **The writer's lazy loading is a claim, not a mechanism.** `ambre-spec-architecture.md
   section 5.E` bills the writer as lazily loaded on the first export. Splitting a module out of the
   client bundle is a build-system slice nobody has scheduled, and Toile records the same gap for

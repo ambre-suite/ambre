@@ -127,12 +127,12 @@ impl ToileState {
             (ElementKind::Frame, _) => {
                 // Frame content: an empty membership list plus an empty
                 // speaker-notes text at birth. Notes MUST be seeded here, not
-                // lazily on first edit: seeding at creation gives every peer the
+                // lazily on first edit. Seeding at creation gives every peer the
                 // same shared LoroText container (broadcast in the creation delta)
-                // before any edit, so concurrent notes edits converge.
-                // A lazy first edit on each peer would mint two rival containers
-                // under the same map key -> LWW collision, one side's notes lost.
-                // Autolayout stays lazy (absent = free positioning,).
+                // before any edit, so concurrent notes edits converge. A lazy
+                // first edit on each peer would mint two rival containers under
+                // the same map key -> LWW collision, one side's notes lost.
+                // Autolayout stays lazy (absent = free positioning).
                 let _ = em.insert_container(CHILDREN, LoroMovableList::new());
                 let _ = em.insert_container(NOTES, LoroText::new());
             }
@@ -164,10 +164,10 @@ impl ToileState {
     }
 
     /// Set or clear one element's link register (`toile-links`). The register is
-    /// its own field, never part of the style: a style is written whole, so a
-    /// link folded into it would be erased by any restyle of a selection the
-    /// element happens to be in (`TOILE-062`). A locked element refuses the
-    /// write like it refuses every other edit.
+    /// its own field, never part of the style. A style is written whole. A link
+    /// folded into it would be erased by any restyle of a selection the element
+    /// happens to be in (`TOILE-062`). A locked element refuses the write like
+    /// it refuses every other edit.
     pub(super) fn set_link(&mut self, id: &ElementId, link: Option<LinkTarget>) -> ToileOutcome {
         let Some(em) = self.element_map(id) else {
             return self.err_no_element(id);
@@ -223,11 +223,11 @@ impl ToileState {
     /// (`TOILE-037`).
     ///
     /// The boxes are the derived, rotation-expanded ones the picker and the
-    /// selection box already use, so a rotated element aligns by what the user
+    /// selection box already use. A rotated element then aligns by what the user
     /// sees rather than by an edge hidden under its own tilt. A group is one box
     /// and its whole subtree takes the group's translation, which is what
     /// `move_elements` does for a drag. A locked element is dropped before the
-    /// union is measured: it cannot move, and letting it set the reference edge
+    /// union is measured. It cannot move, and letting it set the reference edge
     /// would let a locked background swallow the whole operation (`TOILE-234`).
     pub(super) fn align_elements(&mut self, ids: &[ElementId], op: AlignOp) -> ToileOutcome {
         // Selection order, deduplicated: an id repeated in the selection would
@@ -326,9 +326,9 @@ impl ToileState {
 
     /// Overwrite the style register of every unlocked element in `ids`, **without**
     /// committing. Returns whether anything changed. The caller owns the
-    /// `doc.commit()` so an import can restyle a fresh element inside the same
-    /// undo group as its `CreateElement`: style is an independent LWW
-    /// register that cannot ride the create.
+    /// `doc.commit()`, so an import can restyle a fresh element inside the same
+    /// undo group as its `CreateElement`. Style is an independent LWW register that
+    /// cannot ride the create.
     pub(super) fn restyle_inner(&mut self, ids: &[ElementId], style: &ElementStyle) -> bool {
         let bytes = style.to_bytes();
         let mut touched = false;
@@ -379,8 +379,8 @@ impl ToileState {
     /// incremental caches, without committing. Drops group membership, orphaned
     /// connectors and layer entries, and prunes emptied groups (`toile-elements`).
     /// Returns whether anything was removed. The caller owns the `doc.commit()`
-    /// so a deletion can share one commit / one undo item with a sibling mutation
-    /// (e.g. a boolean op consuming its sources).
+    /// so a deletion shares one commit and one undo item with a sibling
+    /// mutation: a boolean op consuming its sources.
     pub(super) fn delete_from_doc(&mut self, ids: &[ElementId]) -> bool {
         // Deleting a group cascades to its members: expand the request
         // to the full subtree of every listed group before removing anything.
@@ -418,9 +418,9 @@ impl ToileState {
             NodeId::Connector(c) => !orphan_conns.contains(c),
         });
         // A deleted frame leaves the deck in the same write, so the two never
-        // disagree (`TOILE-FEAT-027`): a dead entry would be counted in the deck
-        // length and stop the camera when a viewer reached it, and the PDF
-        // export already skips it.
+        // disagree (`TOILE-FEAT-027`). A dead entry would be counted in the deck
+        // length and stop the camera when a viewer reached it. The PDF export
+        // already skips it.
         self.drop_slides(&del);
         for id in &expanded {
             self.bounds.remove(id);
@@ -497,7 +497,7 @@ impl ToileState {
 
 #[cfg(test)]
 mod inner_tests {
-    //! The commit-free `*_inner` helpers (`toile-import-export`): several creates,
+    //! The commit-free `*_inner` helpers (`toile-import-export`). Several creates,
     //! a restyle and a group must share ONE `doc.commit()` and collapse to ONE
     //! undo item, the invariant `apply_import` relies on.
 
@@ -553,8 +553,8 @@ mod inner_tests {
         assert_eq!(st.element_count(), 0);
     }
 
-    /// A rect of `w` x 10 at `(x, y)`, committed on its own so each fixture is
-    /// its own undo item and the alignment under test is the last one.
+    /// A rect of `w` x 10 at `(x, y)`, committed on its own. Each fixture is
+    /// then its own undo item, and the alignment under test is the last one.
     fn rect(st: &mut ToileState, x: f64, y: f64, w: f64) -> crate::logic::model::ElementId {
         let id = st
             .create_element_inner(

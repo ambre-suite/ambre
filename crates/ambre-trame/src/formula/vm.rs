@@ -1,12 +1,12 @@
 //! Stack VM for evaluating formula bytecode.
 //!
 //! The VM executes a [`CellBytecode`] sequence on a value stack. It detects
-//! dynamic cycles (not visible in the static cell_dag, e.g. cycles through
-//! ranges or cross-sheet references) via an `eval_stack` and memoizes results
-//! in `resolved` to avoid redundant work within a single recomputation pass.
+//! dynamic cycles through an `eval_stack`: a cycle through a range or a
+//! cross-sheet reference is invisible in the static cell_dag. It memoizes
+//! results in `resolved` to avoid redundant work within one recomputation pass.
 //!
 //! References are uid-anchored ([`CellId`] / [`RangeId`]). At evaluation each
-//! reference is resolved against the current per-sheet [`SheetIndex`]: a bound
+//! reference is resolved against the current per-sheet [`SheetIndex`]. A bound
 //! `Uid` that is missing yields `#REF!`; a virtual position beyond the used
 //! range reads `Empty`. The lookup is normalized to the bound `(row_uid,
 //! col_uid)` form so it matches the keys fed by the host.
@@ -22,7 +22,7 @@ use super::types::{
 
 /// Upper bound on the number of cells a single range reference may materialize
 /// during evaluation. Protects the WASM Logic worker from a peer-supplied
-/// formula (e.g. `=SUM(A1:ZZ100000)`) whose range would allocate gigabytes.
+/// formula (for example `=SUM(A1:ZZ100000)`) whose range would allocate gigabytes.
 /// 1M cells covers any realistic used area while capping the blast radius.
 const MAX_RANGE_CELLS: usize = 1_000_000;
 
@@ -45,7 +45,7 @@ pub struct EvalContext<'a> {
     /// pass so `TODAY()`/`NOW()` are stable within one recomputation.
     pub now_serial: f64,
     /// 1-based grid position of the cell currently being evaluated, used by the
-    /// no-argument `ROW()`/`COLUMN()`. `(0, 0)` means "unknown" (e.g. a bare
+    /// no-argument `ROW()`/`COLUMN()`. `(0, 0)` means "unknown" (for example a bare
     /// `execute` call in tests). Set by [`EvalContext::eval_cell`].
     pub current_pos: (u32, u32),
 }
@@ -134,8 +134,8 @@ impl<'a> EvalContext<'a> {
         }
     }
 
-    /// Resolve a [`CellId`] to the value it points at: `#REF!` for a deleted
-    /// bound id, `Empty` for a virtual position beyond the used range, otherwise
+    /// Resolve a [`CellId`] to the value it points at. `#REF!` for a deleted
+    /// bound id, `Empty` for a virtual position beyond the used range. Otherwise
     /// the evaluated value of the canonical bound cell at that position.
     fn read_cell(&mut self, r: CellId) -> CellValue {
         let Some(idx) = self.indices.get(&r.sheet) else {
@@ -196,7 +196,7 @@ impl<'a> EvalContext<'a> {
                     let a = stack.pop().unwrap_or(CellValue::Empty);
                     stack.push(match (a.as_number(), b.as_number()) {
                         (Err(e), _) | (_, Err(e)) => CellValue::Error(e),
-                        // Guard NaN/inf (e.g. `(-1)^0.5`, `0^-1`): a bare
+                        // Guard NaN/inf (for example `(-1)^0.5`, `0^-1`): a bare
                         // `powf` result would propagate silently through later
                         // arithmetic. Excel surfaces these as `#NUM!`.
                         (Ok(x), Ok(y)) => match x.powf(y) {
@@ -366,8 +366,8 @@ impl<'a> EvalContext<'a> {
 // -----------------------------------------------------------------------------
 
 /// The leftmost error among two operands, if either carries one. Every operator
-/// consults this before coercing: an error is a value that must reach the cell,
-/// not one to be turned into a number, a boolean or a piece of text.
+/// consults this before coercing. An error is a value that must reach the cell,
+/// not one to coerce into a number, a boolean or text.
 fn first_error(a: &CellValue, b: &CellValue) -> Option<CellValue> {
     match (a, b) {
         (CellValue::Error(_), _) => Some(a.clone()),
@@ -378,9 +378,9 @@ fn first_error(a: &CellValue, b: &CellValue) -> Option<CellValue> {
 
 /// An empty operand takes the zero of whatever type it is weighed against: `0`
 /// for a number, `""` for text, `false` for a boolean. [`CellValue::as_number`]
-/// already reads `Empty` as `0`, so without this the same blank cell answered `1`
-/// in `=A1+1` and `#TYPE!` in `=A1>0` -- the case a formula hits the moment it is
-/// dragged one row past the end of its data. Excel coerces the same way.
+/// already reads `Empty` as `0`. Without this, the same blank cell answered `1`
+/// in `=A1+1` and `#TYPE!` in `=A1>0`. That is the case a formula hits the moment
+/// it is dragged one row past the end of its data. Excel coerces the same way.
 fn values_equal(a: &CellValue, b: &CellValue) -> bool {
     match (a, b) {
         (CellValue::Number(x), CellValue::Number(y)) => nearly_equal(*x, *y),
@@ -444,8 +444,8 @@ mod tests {
         )
     }
 
-    /// Compile `src` for the cell at `(0, fcol)` over a 10x10 sheet, evaluate it
-    /// against `cache` (plain cell values keyed by their bound `CellId`), and
+    /// Compile `src` for the cell at `(0, fcol)` over a 10x10 sheet. Evaluate it
+    /// against `cache` (plain cell values keyed by their bound `CellId`) and
     /// return the result text. Exercises `PushCell`/`EvalRange` resolution.
     fn eval_with_cells(src: &str, fcol: u32, cache: HashMap<CellId, CellValue>) -> String {
         let indices = indices_with(10, 10);
@@ -531,9 +531,9 @@ mod tests {
     #[test]
     fn an_empty_operand_compares_at_its_peer_zero() {
         // `as_number` reads `Empty` as 0, so `=A1+1` answers 1 on a blank A1. The
-        // comparisons refused that same operand and answered `#TYPE!`, so a
-        // formula dragged one row past the end of its data (`=IF(A1>5,..)`,
-        // `=A1=0`) broke on the blank cell instead of reading it as a zero.
+        // comparisons refused that same operand and answered `#TYPE!`. A formula
+        // dragged one row past the end of its data (`=IF(A1>5,..)`, `=A1=0`)
+        // broke on the blank cell instead of reading it as zero.
         for (src, expect) in [
             ("A1=0", "true"),
             ("A1<>0", "false"),
@@ -584,9 +584,9 @@ mod tests {
 
     #[test]
     fn call_with_more_than_255_arguments_keeps_them_all() {
-        // `n_args` used to be a `u8`: the 256th argument wrapped the count to 0,
-        // so `SUM` was called with no argument and the formula silently answered
-        // the last operand left on the stack instead of the total.
+        // `n_args` used to be a `u8`: the 256th argument wrapped the count to 0.
+        // `SUM` was then called with no argument, and the formula silently
+        // answered the last operand left on the stack instead of the total.
         let args = std::iter::repeat_n("1", 256).collect::<Vec<_>>().join(",");
         assert_eq!(eval_formula(&format!("SUM({args})")).to_display(), "256");
     }

@@ -65,9 +65,9 @@ pub async fn list_documents_for_user(
     user_id: &ambre_core::UserId,
 ) -> Result<Vec<DocumentSummaryRow>, AppError> {
     let uid = id_to_uuid(*user_id);
-    // `inv` resolves the exchange pubkey of whoever wrapped our `doc_key_enc`
-    // (so the client can ECDH-unwrap each doc key and decrypt the name for the
-    // launcher); the correlated subquery counts members for the shared badge.
+    // `inv` resolves the exchange pubkey of whoever wrapped our `doc_key_enc`,
+    // so the client can ECDH-unwrap each doc key and decrypt the name for the
+    // launcher. The correlated subquery counts members for the shared badge.
     let rows = sqlx::query(
         "SELECT d.id, d.owner_id, d.doc_type, d.name_enc, d.updated_at, dm.role, dm.doc_key_enc, \
          inv.exchange_pubkey AS wrapper_exchange_pubkey, \
@@ -98,16 +98,16 @@ pub async fn list_documents_for_user(
         .collect()
 }
 
-/// Creates a document and returns the full row.
-/// Creates a document, optionally with a client-supplied id (lazy creation: the
-/// WASM client generates the `DocumentId` up front and only materializes the row
-/// on the first modification). Returns the row plus `created` = whether this call
-/// actually inserted it (false when an idempotent retry hit an existing id).
+/// Creates a document, optionally with a client-supplied id, and returns the full
+/// row. Lazy creation: the WASM client generates the `DocumentId` up front, and
+/// only materializes the row on the first modification. Returns the row plus
+/// `created` = whether this call actually inserted it (false when an idempotent
+/// retry hit an existing id).
 ///
 /// When `document_id` is provided the insert is idempotent (`ON CONFLICT DO
-/// NOTHING`): a second call with the same id returns the existing row without
-/// touching its `owner_id`, so a different caller can never seize ownership of an
-/// id that already exists.
+/// NOTHING`). A second call with the same id returns the existing row without
+/// touching its `owner_id`. A different caller can never seize ownership of an id
+/// that already exists.
 pub async fn create_document(
     pool: &PgPool,
     owner_id: &ambre_core::UserId,

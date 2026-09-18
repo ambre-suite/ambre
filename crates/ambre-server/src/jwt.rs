@@ -1,6 +1,6 @@
 //! Access-token signing and verification (EdDSA / Ed25519).
 //!
-//! The access token is a stateless JWT: the server verifies its signature
+//! The access token is a stateless JWT. The server verifies its signature
 //! locally and reads the identity straight from the claims, with **no Redis or
 //! Postgres lookup** on the request path. It carries exactly what the old Redis
 //! session hash held (`user_id`, `signing_pubkey`), so every authenticated
@@ -20,9 +20,9 @@ use ed25519_dalek::pkcs8::EncodePrivateKey;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 
-/// Access-token claims. `sub` is the user id, `spk` the hex Ed25519 signing
-/// public key (used server-side to verify WS message signatures without a DB
-/// hit), `iat`/`exp` are standard Unix-seconds timestamps.
+/// Access-token claims. `sub` is the user id, and `spk` the hex Ed25519
+/// signing public key (used server-side to verify WS message signatures
+/// without a DB hit). `iat`/`exp` are standard Unix-seconds timestamps.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String,

@@ -37,8 +37,8 @@ format, and an override that must not become an edit.
   writer's weight is `ambre-spec-pdf-export.md`.
 * **Boundary.** the finished file reaches the browser and nothing else, on the shared export path
   (`ambre-spec-pdf-export.md`, `PDF-002`, `PDF-003`).
-* **Verification.** 1 `verified`, 0 `unverified`, 3 `unimplemented`. One row holds, and it is the
-  one the shared document does not reach: `PDF-001` binds the walk that draws a page, and
+* **Verification.** 1 `verified`, 3 `unimplemented`; one row holds, and it is the
+  one the shared document does not reach. `PDF-001` binds the walk that draws a page, and
   `TRAME-IO-021` binds that walk's own primitives, which carry no screen state. The page setup has
   no writer, the pagination has no driver, and the shared rules are `ambre-spec-pdf-export.md`.
   Three of Trame's seven primitives run through a surface that is not the screen. The rest reach a
@@ -124,9 +124,9 @@ No progress reaches the user: a long export is one wait with no report
 
 ## 5. REJECTED ALTERNATIVES
 
-The shared decisions -- the page drawn by the screen's own walk, the export in the Logic thread, the
-pure-vector file, the glyph runs that carry their source range -- are
-`ambre-spec-pdf-export.md section 5`. Trame's own:
+The shared decisions are `ambre-spec-pdf-export.md section 5`: the page drawn by the screen's own
+walk, the export in the Logic thread. The pure-vector file and the glyph runs that carry their
+source range are shared too. Trame's own:
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
@@ -144,7 +144,7 @@ The shared gaps are in `ambre-spec-pdf-export.md section 6`. Trame's own:
 * **Nothing exports a PDF in Trame.** There is no driver, no pagination, no command on the bus and
   no menu entry. What exists is the shared seam they will use.
 * **The seam is proven three ways out of seven.** The render walk is generic over the surface for
-  all of its primitives, and only the cell bodies, the grid lines and the column headers are ever
+  all of its primitives. Only the cell bodies, the grid lines and the column headers are ever
   driven through a surface that is not the screen. The merge overlay and the cell borders reach a
   page for the first time when the driver lands, with no recording behind them.
 * **Nothing says the PDF surface stays a lazy chunk.** Toile declares `ambre-pdf` behind an
@@ -152,7 +152,7 @@ The shared gaps are in `ambre-spec-pdf-export.md section 6`. Trame's own:
   (`ambre-spec-budgets.md section 5`). Trame declares nothing yet, and no rule here says which of
   the two shapes it takes.
 * **Toile exports and Trame does not, through the same surface.** The difference between the two is
-  the pagination: a board yields one page per frame, and a grid must be cut into pages nobody has
+  the pagination. A board yields one page per frame, and a grid must be cut into pages nobody has
   specified.
 * **Nothing rules what a page break may cut.** A row taller than the printable area, a merged block
   that straddles the edge, and a column wider than the paper have no rule. Repeating the header strip

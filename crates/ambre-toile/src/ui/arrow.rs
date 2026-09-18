@@ -1,12 +1,12 @@
 // ambre-toile/src/ui/arrow.rs
 // ============================================================================
 // Selecting an arrow (toile-connectors, toile-selection). An arrow is not an
-// element: it has no box, no rotation and no body, so it is not a member of the
+// element: it has no box, no rotation and no body. So it is not a member of the
 // element selection but a selection of its own, and the two are exclusive.
 //
-// What lives here is the geometry a selected arrow needs -- where its two
-// endpoint handles sit, which one a press grabs, and what a release over a
-// shape means -- kept pure so the host tier can run it.
+// What lives here is the geometry a selected arrow needs. That is where its two
+// endpoint handles sit, which one a press grabs, and what a release over a shape
+// means. It is kept pure so the host tier can run it.
 // ============================================================================
 
 use ambre_bus::app::toile::{
@@ -44,7 +44,7 @@ pub fn handle_at(path: &BezPath, world: Point, tol: f64) -> Option<End> {
 /// The command a re-aim release produces: the dragged endpoint moves to the
 /// element under the pointer, anchored on that element's nearest side. `None`
 /// when the release lands on empty board or on an element the display has
-/// dropped -- a re-aim needs somewhere to land, and a dropped endpoint would
+/// dropped. A re-aim needs somewhere to land, and a dropped endpoint would
 /// dangle the arrow the user was repairing.
 pub fn retarget_on_release(
     id: &ConnectorId,
@@ -63,7 +63,7 @@ pub fn retarget_on_release(
 }
 
 /// What a board command means when the selection is one arrow. An arrow is not
-/// an element, so most entries mean nothing on it: it cannot be grouped,
+/// an element, so most entries mean nothing on it. It cannot be grouped,
 /// locked, reacted to, put in a frame, or copied (its two endpoints would not
 /// travel with it). What is left is the four the story names, minus the restyle
 /// the inspector drives through its own path.
@@ -169,7 +169,7 @@ mod tests {
         assert_eq!(to, Point::new(100.0, 100.0));
     }
 
-    /// A press near an end grabs that end; one in the middle of the arrow grabs
+    /// A press near an end grabs that end. One in the middle of the arrow grabs
     /// neither, so a click on the line selects instead of re-aiming.
     #[test]
     fn a_press_grabs_the_nearer_end() {

@@ -6,10 +6,10 @@
 //!
 //! The crate is deliberately standalone: it does **not** depend on
 //! `ambre-protocol`. Envelope functions operate on raw byte slices (`aad` =
-//! serialized public metadata supplied by the caller), so the three wire
-//! messages (Update, Snapshot, Ephemeral) are covered by a single seal/open
-//! pair. Assembly into protocol types and the compression version byte live in
-//! the Sync thread.
+//! serialized public metadata supplied by the caller). The three wire messages
+//! (Update, Snapshot, Ephemeral) are covered by a single seal/open pair.
+//! Assembly into protocol types and the compression version byte live in the
+//! Sync thread.
 
 pub mod aead;
 pub mod commitment;

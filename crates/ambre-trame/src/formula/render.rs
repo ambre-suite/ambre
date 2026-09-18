@@ -125,10 +125,10 @@ fn render_node(expr: &Expr) -> String {
         }
         Expr::BinOp { kind, lhs, rhs } => {
             let p = precedence(expr);
-            // Comparison operators are non-associative in the grammar (the parser
-            // accepts a single comparison, only a parenthesized one may nest), so
-            // both operands need a strictly tighter context. `^` is right- and the
-            // rest left-associative.
+            // Comparison operators are non-associative in the grammar. The parser
+            // accepts a single comparison, and only a parenthesized one may nest.
+            // So both operands need a strictly tighter context. `^` is right- and
+            // the rest left-associative.
             let is_cmp = matches!(
                 kind,
                 BinOpKind::Eq

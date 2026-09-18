@@ -6,7 +6,7 @@
 > How many words, characters, paragraphs and pages the document holds, shown in the status bar and
 > refreshed as it is written.
 
-Nothing here is shared state: the four tallies and the page count are read from the document and
+Nothing here is shared state. The four tallies and the page count are read from the document and
 written back nowhere, so there is no two-peer table below. Two authors editing at once each see
 the count of the document they both have.
 
@@ -50,21 +50,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the count is derived in the Logic thread from the document already there,
   and it reaches the chrome as an event.
 * **Verification.** 13 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line
-  `lib.rs`. One row stated four rules: the unit, what the count leaves out, the second count beside
-  it, and the empty document. Each is a separate way to be wrong on the same text, and
-  `PROSE-FEAT-039` is the one most likely to be, because three plausible units give three
-  different answers. `PROSE-FEAT-120` is where the second one hides -- the break between two
-  paragraphs is whitespace the tree does not store as a character. The empty document loses its
-  fifth figure: `PROSE-FEAT-122` claimed zero for all five, and the page count is the layout's
-  (`PROSE-FEAT-038`), which nothing says is zero for an empty document -- see section 5. The two
-  triggers had no rows at all, and both frame conditions are what the split turns up:
-  `PROSE-FEAT-125` and `PROSE-FEAT-127` are the rule that keeps the two writers of one cached
-  result out of each other's fields, which the old `PROSE-FEAT-038` stated as a clause about the
-  delayed tally. `PROSE-FEAT-124` is the delay section 4 decides and no row carried, and it is what
-  keeps a document walk off the keystroke path. Every row but `PROSE-FEAT-038`, `PROSE-FEAT-040`,
-  `PROSE-FEAT-126` and `PROSE-FEAT-127` is a host test over fixtures -- an emoji made of several
-  code points, a tab, an empty document; those four need a layout and land in the wasm tier of
-  `ambre-spec-testing.md section 6`.
+  `lib.rs`. The rule most likely to be wrong is the unit, where three plausible answers exist
+  (`PROSE-FEAT-039`). The next is the character count, where the break between two paragraphs is
+  whitespace the tree does not store (`PROSE-FEAT-120`). Nine rows are host tests over fixtures -- an emoji
+  made of several code points, a tab, an empty document. The four that read a layout land in the
+  wasm tier (`ambre-spec-testing.md section 6`).
 
 ---
 
@@ -96,16 +86,16 @@ pub fn compute_word_count(doc: &LoroDoc, tree: &LoroMovableTree, layout: &PageLa
 ```
 
 **What a character is.** Counting is over grapheme clusters, the same unit the feature layer
-requires wherever a position is addressed (`PROSE-FEAT-006`), never over bytes or Rust characters:
-an accented letter written as two code points is one character to the reader. The count without
+requires wherever a position is addressed (`PROSE-FEAT-006`), never over bytes or Rust characters.
+An accented letter written as two code points is one character to the reader. The count without
 spaces excludes every whitespace cluster, including the break between two paragraphs
 (`PROSE-FEAT-120`); the count with spaces includes them (`PROSE-FEAT-121`). An empty document
-answers zero for the four text tallies (`PROSE-FEAT-122`); what it answers for the fifth is the
+answers zero for the four text tallies (`PROSE-FEAT-122`). What it answers for the fifth is the
 applied layout's, and section 5 states that nothing decides it.
 
 **Where it goes.** One event, `WordCountUpdated`, declared in
 `features/ambre-spec-prose-engine.md section 3`. The view feeds it into the slot the shared status bar
-offers each application (`PROSE-FEAT-040`): Trame fills the same slot with its own summary
+offers each application (`PROSE-FEAT-040`). Trame fills the same slot with its own summary
 (`2-Trame/features/ambre-spec-trame-status-bar.md`), and neither application builds a bar.
 
 **Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
@@ -141,19 +131,19 @@ The status bar itself, its slots and its placement are the shared chrome's
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **What a word is, is not defined.** The tally is named and its unit is not: whether a
+* **What a word is, is not defined.** The tally is named and its unit is not. Whether a
   hyphenated compound, a number with a decimal separator or a string of punctuation counts as one
-  word decides the figure, and no rule states it.
+  word decides the figure. No rule states it.
 * **What is counted is not stated either.** The function takes the whole document or a set of
-  blocks, and nothing says whether table cells, footnotes, headers and footers are inside the
+  blocks. Nothing says whether table cells, footnotes, headers and footers are inside the
   whole-document figure. The character rule says they follow the same scope, and the scope is
   undecided.
 * **The count over a selection has no trigger.** The function accepts a block list and no gesture
   produces one, so the common "words in the selection" reading is unreachable.
 * **The paragraph tally has no rule for empty blocks.** Whether an empty paragraph, an image or a
-  page break counts as a paragraph is undecided, and it decides `PROSE-FEAT-122` too: a document
+  page break counts as a paragraph is undecided, and it decides `PROSE-FEAT-122` too. A document
   an author has not typed into holds one empty paragraph, not nothing.
 * **Nothing says how many pages an empty document has.** `PROSE-FEAT-038` reads the page count off
   the applied layout, and `features/ambre-spec-prose-pagination.md` has no rule for a document with
-  no content: one page or zero is undecided, so `PROSE-FEAT-122` is stated over the four text
+  no content. One page or zero is undecided, so `PROSE-FEAT-122` is stated over the four text
   tallies alone rather than contradicting the layout.

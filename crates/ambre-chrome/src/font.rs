@@ -1,16 +1,16 @@
 // ambre-chrome/src/font.rs
 // ============================================================================
 // Shared, app-agnostic font-family picker (ambre-spec-chrome.md). A single
-// toolbar trigger (the current family name + caret) toggling a context-menu
-// popover that lists the families, each rendered in its OWN typeface so the user
-// previews the font before picking. A `<select>` cannot reliably style its
+// toolbar trigger (the current family name + caret) toggles a context-menu
+// popover listing the families. Each is rendered in its OWN typeface, so the
+// user previews the font before picking. A `<select>` cannot reliably style its
 // `<option>`s per-font across browsers, hence this custom popover.
 //
 // Promoted here from Trame's cell font popover so Toile's style inspector and
 // Trame's cell formatting share the very same control (mirrors `ColorPopover`).
-// The control is value-agnostic: it takes the current family as a signal
-// (`None` = the app's default) and reports picks through `on_pick`. The caller
-// owns what a family label means to its renderer (`registered_family_name` in
+// The control is value-agnostic: it takes the current family as a signal (`None`
+// = the app's default) and reports picks through `on_pick`. The caller owns what
+// a family label means to its renderer (`registered_family_name` in
 // `ambre-canvas` maps the labels to registered faces).
 // ============================================================================
 
@@ -19,10 +19,10 @@ use leptos::prelude::*;
 use leptos_icons::Icon;
 use wasm_bindgen::JsCast;
 
-/// The font families offered by the picker: the abstract family label (what the
-/// renderer resolves to a face) paired with the CSS `font-family` used to render
-/// that entry in its own typeface (the live preview). "Default" maps to `None`
-/// (no explicit family -> the app default).
+/// The font families offered by the picker. Each pairs an abstract family label
+/// with the CSS `font-family` that renders the entry in its own typeface. The
+/// label is what the renderer resolves to a face, and the CSS is the live
+/// preview. "Default" maps to `None` (no explicit family -> the app default).
 pub const FONT_FAMILIES: &[(&str, &str)] = &[
     ("Default", "inherit"),
     ("Sans", "'Roboto', system-ui, sans-serif"),

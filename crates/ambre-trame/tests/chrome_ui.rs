@@ -61,9 +61,9 @@ fn style_applied(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Reactive / presentation belt
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /// `apply_style_event` fans a `StyleApplied` out into every `StyleState` signal
 /// the formatting toolbar subscribes to. This is the single style channel, so
@@ -105,7 +105,7 @@ fn style_applied_mirrors_into_style_state() {
     assert_eq!(state.format.get(), CellFormat::Percent);
 }
 
-/// Any non-`StyleApplied` event leaves the `StyleState` untouched: the launcher
+/// Any non-`StyleApplied` event leaves the `StyleState` untouched. The launcher
 /// calls the mirror for every relayed event, so it must be a strict no-op for
 /// the rest.
 #[wasm_bindgen_test]
@@ -173,9 +173,9 @@ fn command_to_app_maps_intents() {
     assert!(chrome::command_to_app(chrome::SORT_RANGE_MULTI).is_none());
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // DOM belt
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 fn document() -> web_sys::Document {
     web_sys::window().unwrap().document().unwrap()
@@ -184,15 +184,17 @@ fn document() -> web_sys::Document {
 /// Mount `view` into a fresh `<div>` appended to the body and return it.
 ///
 /// DOM tests must clean up after themselves, but they must NOT wipe the whole
-/// body: the `wasm-bindgen-test` browser harness keeps its own
-/// `<pre id="output">` / `<pre id="console_output">` elements there, and routes
-/// every `console.log` (including the final "test result: ..." line the runner
-/// polls for) through them. Clearing the body (`set_inner_html("")`) deletes
-/// those elements, so the next log throws `appendChild` on null, the summary is
-/// never written, and the runner times out (SIGKILL). Scoping each test to its
-/// own container -- removed via `container.remove()` -- leaves the harness
-/// elements untouched. `mount_to(..).forget()` keeps the view mounted for the
-/// assertions (like `mount_to_body`); the container removal tears it down.
+/// body. The `wasm-bindgen-test` browser harness keeps its own
+/// `<pre id="output">` / `<pre id="console_output">` elements there. It routes
+/// every `console.log` through them, including the final "test result: ..."
+/// line the runner polls for.
+///
+/// Clearing the body (`set_inner_html("")`) deletes those elements. The next
+/// log then throws `appendChild` on null, the summary is never written, and the
+/// runner times out (SIGKILL). Scoping each test to its own container --
+/// removed via `container.remove()` -- leaves the harness elements untouched.
+/// `mount_to(..).forget()` keeps the view mounted for the assertions (like
+/// `mount_to_body`); the container removal tears it down.
 fn mount_in_container<F, N>(f: F) -> web_sys::Element
 where
     F: FnOnce() -> N + 'static,
@@ -345,10 +347,10 @@ fn sort_dialog_adds_levels_and_emits_on_apply() {
     container.remove();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Context-menu scope (`trame-context-menu`): the grouped/iconed entries and the
 // header-scoped layout that drops the cell-only clipboard + merge groups.
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /// Collect the command labels of an entry list, skipping separators.
 fn item_commands(entries: &[ambre_chrome::MenuEntry]) -> Vec<ambre_chrome::commands::CommandId> {
@@ -456,9 +458,10 @@ fn filter_entry_toggles_with_filter_state() {
     assert!(!active.contains(&chrome::FILTER_COLUMN));
 }
 
-/// DOM test: the `SheetTabs` strip renders one `.tab` per sheet with the active
-/// one flagged, a click on another tab emits `on_activate`, and the trailing
-/// "+" emits `on_create`. Guards the canvas->DOM migration of the tab strip.
+/// DOM test for the `SheetTabs` strip. It renders one `.tab` per sheet with the
+/// active one flagged. A click on another tab emits `on_activate`, and the
+/// trailing "+" emits `on_create`. Guards the canvas->DOM migration of the tab
+/// strip.
 #[wasm_bindgen_test]
 fn sheet_tabs_render_active_and_emit_intents() {
     let activated = RwSignal::new(None::<String>);

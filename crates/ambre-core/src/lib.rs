@@ -33,7 +33,7 @@ pub mod schema;
 pub mod uuid;
 pub mod version;
 
-// Re‑export the main types for convenient use.
+// Re-export the main types for convenient use.
 pub use doc_type::DocType;
 pub use docfile::{
     AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, ContainerKind, DocFileError,

@@ -1,9 +1,9 @@
 //! X25519 key exchange and document-key wrapping.
 //!
-//! To share a document, its [`DocumentKey`] is wrapped for each member: an
-//! ephemeral-free static ECDH yields a shared secret, a key-encryption key (KEK)
-//! is derived from it via HKDF-BLAKE2b bound to both parties' public keys, and
-//! the document key is sealed under the KEK with XChaCha20-Poly1305. This module
+//! To share a document, its [`DocumentKey`] is wrapped for each member. An
+//! ephemeral-free static ECDH yields a shared secret. A key-encryption key (KEK)
+//! is derived from it via HKDF-BLAKE2b, bound to both parties' public keys. The
+//! document key is then sealed under the KEK with XChaCha20-Poly1305. This module
 //! provides the primitive only; the share/rotation flow lives in the Sync thread.
 
 use blake2::Blake2b512;
@@ -33,6 +33,11 @@ pub struct WrappedKey {
 /// Rejects a non-contributory exchange: a low-order `peer_public` drives the
 /// shared secret to an all-zero (predictable) value, which we refuse rather than
 /// derive a KEK from.
+///
+/// # Errors
+///
+/// [`CryptoError::WeakPublicKey`] when `peer_public` is a low-order point, so
+/// the exchange is non-contributory.
 pub fn shared_secret(
     own_secret: &StaticSecret,
     peer_public: &[u8; 32],
@@ -65,6 +70,11 @@ fn derive_kek(shared: &[u8; 32], sender_pk: &[u8; 32], recipient_pk: &[u8; 32]) 
 
 /// Wraps `doc_key` for the holder of `peer_public`, using `own_secret`. Here the
 /// caller is the sender, `peer_public` the recipient.
+///
+/// # Errors
+///
+/// [`CryptoError::WeakPublicKey`] from [`shared_secret`], and
+/// [`CryptoError::EncryptionFailed`] from the AEAD.
 pub fn wrap_document_key(
     own_secret: &StaticSecret,
     peer_public: &[u8; 32],
@@ -80,6 +90,14 @@ pub fn wrap_document_key(
 /// Unwraps a [`WrappedKey`] sent by the holder of `peer_public`, using
 /// `own_secret`. Here `peer_public` is the sender and the caller the recipient,
 /// so the identity binding is fed to [`derive_kek`] in that order.
+///
+/// # Errors
+///
+/// * [`CryptoError::WeakPublicKey`] from [`shared_secret`].
+/// * [`CryptoError::AeadFailed`] when the wrapped key does not verify under the
+///   derived key-encryption key.
+/// * [`CryptoError::InvalidKeyLength`] when the plaintext inside is not 32
+///   bytes wide.
 pub fn unwrap_document_key(
     own_secret: &StaticSecret,
     peer_public: &[u8; 32],

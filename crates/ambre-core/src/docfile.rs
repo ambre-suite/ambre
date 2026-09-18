@@ -225,6 +225,12 @@ pub enum ContainerKind {
 /// lineages diverge at offset 5, so a caller that parses before it classifies
 /// reads a salt as a document type. Five bytes are enough, so this answers for
 /// a file too short to hold either header in full.
+///
+/// # Errors
+///
+/// [`DocFileError::TruncatedHeader`] when `data` is shorter than 5 bytes, and
+/// [`DocFileError::InvalidMagic`] when the first four bytes are not
+/// [`AMBRE_MAGIC`].
 pub fn classify(data: &[u8]) -> Result<ContainerKind, DocFileError> {
     let Some(&version) = data.get(VERSION_AT) else {
         return Err(DocFileError::TruncatedHeader);
@@ -268,6 +274,15 @@ pub fn write_ambre_plaintext(doc_type: DocType, document_id: Uuid, payload: &[u8
 /// The container half of the read path, for callers that inspect raw bytes -- a
 /// header dump, a migration step validating its own output. The ordinary entry
 /// points are [`read_ambre_plaintext`] and [`read_ambre_plaintext_as`].
+///
+/// # Errors
+///
+/// * [`DocFileError::TruncatedHeader`] below [`HEADER_LEN`] bytes.
+/// * [`DocFileError::InvalidMagic`] on foreign bytes.
+/// * [`DocFileError::SealedFile`] when [`SEALED_BIT`] is set.
+/// * [`DocFileError::UnsupportedVersion`] on any other version.
+/// * [`DocFileError::UnknownDocType`] when the type byte names no app this
+///   build knows.
 pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
     if data.len() < HEADER_LEN {
         return Err(DocFileError::TruncatedHeader);
@@ -309,6 +324,13 @@ pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
 /// `doc_type` off the header and routes to the app that claims it. An importer
 /// that already knows which app it is wants [`read_ambre_plaintext_as`]
 /// instead.
+///
+/// # Errors
+///
+/// Every error of [`parse_header`], and every error of [`migrate_ambre`] when
+/// the container needs the migration walk. A version above [`AMBRE_VERSION`]
+/// keeps its [`DocFileError::UnsupportedVersion`]: this build cannot read
+/// forward.
 pub fn read_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
     match parse_header(data) {
         // Older container: migrate forward, then parse the result. The migrated
@@ -326,6 +348,13 @@ pub fn read_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
 /// The whole body of each app's `import_ambre_plaintext`. On
 /// [`DocFileError::WrongDocType`] the caller routes the same bytes to the
 /// importer named by `found` instead of coercing the document across apps.
+///
+/// # Errors
+///
+/// Every error of [`read_ambre_plaintext`], plus
+/// [`DocFileError::WrongDocType`] when the header names an app other than
+/// `expected`. That one carries the type it found, so the caller re-dispatches
+/// the same bytes.
 pub fn read_ambre_plaintext_as(
     expected: DocType,
     data: &[u8],
@@ -426,6 +455,12 @@ pub fn write_ambre_sealed(
 ///
 /// A ciphertext too short for an authentication tag still parses: this module
 /// owns no tag width (`DOCFILE-006`), and the AEAD refuses it one layer up.
+///
+/// # Errors
+///
+/// Every error of [`classify`], plus [`DocFileError::NotSealed`] on a plaintext
+/// container, [`DocFileError::SealedVersionUnsupported`] on an unknown layout,
+/// and [`DocFileError::TruncatedHeader`] below [`SEALED_HEADER_LEN`].
 pub fn parse_sealed_header(data: &[u8]) -> Result<SealedAmbre, DocFileError> {
     let version = match classify(data)? {
         ContainerKind::Plaintext(_) => return Err(DocFileError::NotSealed),
@@ -484,6 +519,13 @@ const MIGRATIONS: &[Migration] = &[];
 /// Returns fresh bytes; the input is never mutated (I3). `from` at the current
 /// version is the identity, and anything newer than this build draws a refusal
 /// rather than a guess.
+///
+/// # Errors
+///
+/// [`DocFileError::SealedFile`] when `from` carries [`SEALED_BIT`], and
+/// [`DocFileError::UnsupportedVersion`] when the registry holds no step out of
+/// a version the walk reaches. A step of the registry raises its own error
+/// unchanged.
 pub fn migrate_ambre(from: u8, bytes: &[u8]) -> Result<Vec<u8>, DocFileError> {
     // The walk would refuse a sealed version anyway, since every one of them
     // sits above `AMBRE_VERSION`. But it would call it an unknown *plaintext*
@@ -712,7 +754,7 @@ mod tests {
     // -- the synthetic registry ------------------------------------------
     //
     // The shipping registry is empty at 0x01, so the walk above has no real step
-    // to run. These tests drive it with a two-row synthetic registry: the day a
+    // to run. These tests drive it with a two-row synthetic registry. The day a
     // real bump lands, the harness it plugs into is already proven, and adding
     // the row is the whole change.
 

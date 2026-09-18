@@ -283,8 +283,8 @@ pub async fn add_member(
     // vector, mirroring the document `invite` N2 clamp:
     //   1. A caller may only grant a role at or below their own rank, so an admin
     //      can never mint (or self-promote to) an owner.
-    //   2. A caller may only touch a member currently at or below their own rank,
-    //      so an admin can never demote or lock out an owner via the upsert.
+    //   2. A caller may only touch a member currently at or below their own rank.
+    //      An admin can never demote or lock out an owner via the upsert.
     let caller_rank = org_role_rank(&caller.role).ok_or(AppError::Forbidden)?;
     let granted_rank = org_role_rank(&req.role).ok_or(AppError::Conflict {
         detail: "invalid role".into(),
@@ -354,7 +354,7 @@ pub async fn remove_member(
     // Owner or admin can remove. Members cannot remove others.
     let caller = require_org_role(&state.db, org_id, uid, &["owner", "admin"]).await?;
 
-    // Same rank clamp as `add_member`: a caller may only remove a member at or
+    // Same rank clamp as `add_member`. A caller may only remove a member at or
     // below their own rank, so an admin can never remove (or lock out) the owner.
     let caller_rank = org_role_rank(&caller.role).ok_or(AppError::Forbidden)?;
     if let Some(existing) = db::get_org_member(&state.db, org_id, target_uid).await? {
@@ -387,8 +387,9 @@ pub async fn update_member_role(
 
     require_org_role(&state.db, org_id, uid, &["owner"]).await?;
 
-    // Validate the role before hitting the DB so an unknown value returns a clean
-    // 409 instead of surfacing the `role IN (...)` CHECK violation as a raw 500.
+    // Validate the role before hitting the DB. An unknown value then returns a
+    // clean 409, instead of surfacing the `role IN (...)` CHECK violation as a
+    // raw 500.
     org_role_rank(&req.role).ok_or(AppError::Conflict {
         detail: "invalid role".into(),
     })?;
@@ -403,10 +404,10 @@ pub async fn update_member_role(
 ///
 /// SINGLE-AUTHORITY recovery: Shamir k-of-n threshold reconstruction is not yet
 /// implemented, so a lone owner can release a member's key. Recovery is therefore
-/// deliberately restricted to the `owner` role (not `admin`) and org creation
+/// deliberately restricted to the `owner` role, not `admin`. Org creation also
 /// rejects `shamir_threshold > 1`, so the data model never advertises a quorum the
-/// server does not enforce (N1). When true threshold reconstruction lands, this
-/// gate is replaced by "collect k shares before releasing anything".
+/// server does not enforce (N1). When true threshold reconstruction lands, this gate
+/// is replaced by "collect k shares before releasing anything".
 ///
 /// Returns the target user's `org_master_key_enc` (hex-encoded bytes). The caller
 /// decrypts it client-side with their copy of the organization private key, then

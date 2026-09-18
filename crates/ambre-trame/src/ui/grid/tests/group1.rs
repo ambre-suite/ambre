@@ -33,7 +33,7 @@ fn filter_button_hit_test_matches_drawn_rect() {
     // (r1, c1, r2, c2): a one-row, two-column block.
     assert_eq!(state.current_region(), Some((0, 0, 0, 1)));
 
-    // The button for column 1 sits at the right edge of cell (0, 1); hitting
+    // The button for column 1 sits at the right edge of cell (0, 1). Hitting
     // its centre resolves to that column on the region's header row.
     let (bx, by, w, h) = state.filter_button_rect(0, 1).expect("button visible");
     assert_eq!(
@@ -240,8 +240,8 @@ fn zoom_scales_metrics_and_round_trips_hit_test() {
     assert_eq!(state.zoom, *TrameUiState::ZOOM_PRESETS.last().unwrap());
 }
 
-/// A 2x2 merge master at (1,1) covering (1,1)..=(2,2): selecting any covered
-/// sub-cell snaps the active cell to the master, and arrow navigation steps
+/// A 2x2 merge master at (1,1) covering (1,1)..=(2,2). Selecting any covered
+/// sub-cell snaps the active cell to the master. Arrow navigation then steps
 /// across the whole block rather than landing inside it.
 #[test]
 fn merge_block_selects_as_a_whole_and_nav_steps_over_it() {
@@ -347,11 +347,11 @@ fn move_with_extend_keeps_anchor() {
     assert_eq!(state.selection.bounds(), (0, 0, 2, 3));
 }
 
-/// Reported bug: two vertical merges A1:A2 and B1:B2 selected by their
-/// masters only (row 0). Before the unmerge the cache holds the merges, so the
-/// rendered selection expands to cover all four cells; after the unmerge the
-/// Logic thread sends a `SelectRange` (applied via `select_rect`) so the freed
-/// cells stay selected once the re-fetch clears the merge spans.
+/// Reported bug: two vertical merges A1:A2 and B1:B2 selected by their masters
+/// only (row 0). Before the unmerge the cache holds the merges, so the
+/// rendered selection expands to cover all four cells. After the unmerge the
+/// Logic thread sends a `SelectRange`, applied via `select_rect`. The freed
+/// cells then stay selected once the re-fetch clears the merge spans.
 #[test]
 fn select_rect_keeps_unmerged_cells_selected() {
     let mut state = TrameUiState::new(800.0, 600.0);

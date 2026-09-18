@@ -1,9 +1,9 @@
 //! Pure, `self`-free helpers for [`ToileState`](super::ToileState): geometry
 //! (rotation-expanded AABBs), CRDT field (de)serialization, clipboard scalar
 //! capture, and the small `LoroMap` / deep-value field readers. Split out of
-//! `state/mod.rs` so the engine's mutation logic stays readable; everything here
-//! is stateless and shared by both the mutation and derivation impls via
-//! `use super::codec::*`.
+//! `state/mod.rs` so the engine's mutation logic stays readable. Everything here
+//! is stateless and shared by both the mutation and derivation impls via `use
+//! super::codec::*`.
 
 use kurbo::{Affine, Point, Rect, Vec2};
 use loro::{LoroMap, LoroText, LoroValue};
@@ -64,10 +64,10 @@ pub(super) fn stroke_aabb(points: &[StrokePoint]) -> Rect {
     )
 }
 
-/// Seed a group element's scalar fields. A group paints nothing and
-/// its geometry is a derived union, so it carries no x/y/w/h: only the type flag,
-/// lock state, rotation and default style live in the CRDT; the `children` list
-/// is attached by the caller.
+/// Seed a group element's scalar fields. A group paints nothing and its geometry
+/// is a derived union, so it carries no x/y/w/h. Only the type flag, lock state,
+/// rotation and default style live in the CRDT; the `children` list is attached
+/// by the caller.
 pub(super) fn em_seed_group(em: &LoroMap) {
     let _ = em.insert("type", "group");
     let _ = em.insert("rot", 0.0);
@@ -104,8 +104,9 @@ pub(super) fn capture_scalars(
     out
 }
 
-/// Write captured clipboard fields into a fresh element / connector map, adding
-/// `offset` to the `x` / `y` coordinates so the paste lands at the cursor.
+/// Write captured clipboard fields into a fresh element / connector map.
+/// `offset` is added to the `x` / `y` coordinates so the paste lands at the
+/// cursor.
 pub(super) fn write_clip_fields(m: &LoroMap, fields: &[(String, ClipValue)], offset: Vec2) {
     for (k, v) in fields {
         match v {
@@ -192,17 +193,17 @@ pub(super) fn write_connector(
     let _ = cm.insert("arrow_start", arrows.start);
     let _ = cm.insert("arrow_end", arrows.end);
     // The style register is seeded like an element's: an LWW binary the
-    // deriver reads back, so an arrow carries its own colour and width rather
+    // deriver reads back. So an arrow carries its own colour and width rather
     // than borrowing a default (`TOILE-046`).
     let _ = cm.insert(
         "style",
         LoroValue::Binary(ElementStyle::default().to_bytes().into()),
     );
     // The caption is seeded at birth, not on first edit. Seeding here gives
-    // every peer the same `LoroText` container (it travels in the creation
-    // delta) before anyone types, so two concurrent captions merge inside one
-    // text. A lazy seed on each peer would mint rival containers under the same
-    // key, and LWW would drop one side's caption whole (`TOILE-047`).
+    // every peer the same `LoroText` container before anyone types, since it
+    // travels in the creation delta. Two concurrent captions then merge inside
+    // one text. A lazy seed on each peer would mint rival containers under the
+    // same key, and LWW would drop one side's caption whole (`TOILE-047`).
     let _ = cm.insert_container(LABEL, LoroText::new());
 }
 

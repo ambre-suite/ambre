@@ -12,8 +12,9 @@ use crate::state::AppState;
 /// Response for the unauthenticated `GET /api/auth/config`.
 ///
 /// Lets the SPA decide which sign-in affordance to show on the landing page
-/// before any session exists: a dev-login field when `dev_mode` is set, the
-/// OIDC button otherwise. Exposes only this one non-sensitive flag.
+/// before any session exists. That is a dev-login field when `dev_mode` is
+/// set, the OIDC button otherwise. Exposes only this one non-sensitive
+/// flag.
 #[derive(serde::Serialize)]
 pub struct AuthConfigResponse {
     pub dev_mode: bool,
@@ -113,11 +114,12 @@ pub struct RefreshResponse {
 
 /// `POST /auth/refresh` (unauthenticated; the refresh token is the credential)
 ///
-/// Atomically claims the refresh token in Redis, rotating it so that a stolen
-/// token replayed after its first legitimate use is rejected, and returns a new
-/// access + refresh pair. A revoked, expired, or already-claimed token yields 401.
+/// Atomically claims the refresh token in Redis, and returns a new access +
+/// refresh pair. The rotation means a stolen token replayed after its first
+/// legitimate use is rejected. A revoked, expired, or already-claimed token yields
+/// 401.
 ///
-/// The claim has to be atomic: reading the record and then deleting it would let
+/// The claim has to be atomic. Reading the record and then deleting it would let
 /// two concurrent requests bearing the same token both mint a session.
 pub async fn refresh(
     State(state): State<Arc<AppState>>,
@@ -137,8 +139,9 @@ pub async fn refresh(
 /// `GET /auth/{provider}/login`
 ///
 /// Generates an OIDC authorization URL (with PKCE, CSRF state, and nonce),
-/// stores the transient auth state in Redis (TTL 10 min), and returns the
-/// URL + state so the client can redirect the browser to the OIDC provider.
+/// and stores the transient auth state in Redis (TTL 10 min). Returns the
+/// URL + state, so the client can redirect the browser to the OIDC
+/// provider.
 pub async fn oidc_login(
     State(state): State<Arc<AppState>>,
     Path(provider): Path<String>,
@@ -153,8 +156,8 @@ pub async fn oidc_login(
     // Persisting the transient auth state must succeed: the callback validates
     // the returned CSRF `state` against this Redis entry. If the write is
     // dropped, the client authenticates at the provider and only then hits a
-    // `SessionExpired` on callback -- a confusing failure after credentials were
-    // already handed over. Surface the failure now instead.
+    // `SessionExpired` on callback. That is a confusing failure after
+    // credentials were already handed over. Surface the failure now instead.
     redis_ops::oidc_state_set(
         &state.redis,
         &login_resp.state,
@@ -170,8 +173,8 @@ pub async fn oidc_login(
 ///
 /// Receives the authorization code and CSRF state from the client (obtained
 /// after the OIDC provider redirect). Validates the state against Redis,
-/// exchanges the code for tokens, verifies the ID token, upserts the user,
-/// creates a Redis session, and sets the session cookie.
+/// exchanges the code for tokens, and verifies the ID token. Upserts the
+/// user, creates a Redis session, and sets the session cookie.
 pub async fn oidc_callback(
     State(state): State<Arc<AppState>>,
     Path(provider): Path<String>,
@@ -193,9 +196,9 @@ pub async fn oidc_callback(
     let claims = oidc::exchange_code(provider_state, req.code, &stored_state).await?;
 
     let oidc_subject = claims.subject().to_string();
-    // Reject an unverified email: it is the resolution key for document sharing
-    // (`get_user_by_email`), so binding an unverified address to an account would
-    // let an attacker squat a victim's email and receive documents shared to it.
+    // Reject an unverified email. It is the resolution key for document sharing
+    // (`get_user_by_email`). Binding an unverified address to an account would
+    // let an attacker squat a victim's email, and receive documents shared to it.
     // A provider that omits the claim (`None`) is treated as unverified.
     if claims.email().is_some() && claims.email_verified() != Some(true) {
         return Err(AppError::BadRequest(

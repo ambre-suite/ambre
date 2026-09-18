@@ -16,10 +16,10 @@ impl TrameState {
     /// (`trame-shared-filter`).
     ///
     /// Evaluates each materialized row's cell in that column through the formula
-    /// cache, writes the rows failing the filter into `filter_hidden_{sheet}`
-    /// (keyed by `row_uid`), persists the filter definition for convergence and
-    /// later recompute, and broadcasts the delta. A no-op for a non-active sheet
-    /// or a virtual (never-materialized) column.
+    /// cache. Writes the rows failing the filter into `filter_hidden_{sheet}`,
+    /// keyed by `row_uid`. Persists the filter definition for convergence and
+    /// later recompute, then broadcasts the delta. A no-op for a non-active
+    /// sheet or a virtual (never-materialized) column.
     pub(super) fn apply_filter(
         &mut self,
         sheet_id: &str,

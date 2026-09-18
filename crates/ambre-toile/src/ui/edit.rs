@@ -5,10 +5,10 @@
 // + font-free `EditIntent` queue, driven at paint time when a `FontContext` is
 // live). Trame's cell editor wraps the same core.
 //
-// This wrapper owns only the Toile-specific concerns: which element is under
-// edit (`ElementId`), and how the pinned style / size is derived from the
-// element (sticky ink + auto-size, matching the static render in `render.rs`).
-// Every editing operation delegates to the core.
+// This wrapper owns only the Toile-specific concerns. Those are which element is
+// under edit (`ElementId`), and how the pinned style / size is derived from the
+// element. The derivation is sticky ink + auto-size, matching the static render
+// in `render.rs`. Every editing operation delegates to the core.
 // ============================================================================
 
 use ambre_bus::app::toile::{ConnectorId, DisplayElement, ElementId, ElementStyle};
@@ -62,8 +62,8 @@ pub struct InlineEditor {
 
 impl InlineEditor {
     /// Open an editor on `elem`, seeded with its current body `text`. `is_sticky`
-    /// switches to the sticky presentation: the body uses the fixed readable ink
-    /// (its `fill` is the card colour, not the text) and the font size tracks the
+    /// switches to the sticky presentation. The body then uses the fixed readable
+    /// ink: its `fill` is the card colour, not the text. The font size tracks the
     /// note size, matching the static render (`render.rs`).
     pub fn open(elem: &DisplayElement, text: &str, palette: &Palette, is_sticky: bool) -> Self {
         let font = &elem.style.font;
@@ -90,9 +90,10 @@ impl InlineEditor {
     }
 
     /// Open an editor on a connector's caption, seeded with `text`. A caption
-    /// has no element to take a style from: it uses the default body font at a
-    /// fixed world size and the theme's text ink, centred in its box so the
-    /// words sit on the arrow rather than beside it (`toile-connectors`).
+    /// has no element to take a style from. It uses the default body font at a
+    /// fixed world size and the theme's text ink. The words are centred in its
+    /// box, so they sit on the arrow rather than beside it
+    /// (`toile-connectors`).
     pub fn open_label(id: ConnectorId, text: &str, palette: &Palette) -> Self {
         let font = ElementStyle::default().font;
         let style = TextEditorStyle {

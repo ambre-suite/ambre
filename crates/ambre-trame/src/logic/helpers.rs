@@ -15,11 +15,11 @@ pub(crate) fn expr_to_name_target(expr: Expr) -> Option<NameTarget> {
     }
 }
 
-/// Order two cell values for sorting (`trame-sort`). Within
-/// a type the natural order applies; across types the precedence is
-/// `Number < Text < Boolean < Error < Empty`, so blanks sink to the bottom and
-/// errors group just above them, matching the spec. `Range` only ever appears on
-/// the VM stack, never in the cache, so it is treated as `Empty` defensively.
+/// Order two cell values for sorting (`trame-sort`). Within a type the natural
+/// order applies. Across types the precedence is `Number < Text < Boolean <
+/// Error < Empty`, so blanks sink to the bottom. Errors group just above them,
+/// matching the spec. `Range` only ever appears on the VM stack, never in the
+/// cache, so it is treated as `Empty` defensively.
 pub(crate) fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ordering {
     use std::cmp::Ordering::Equal;
     // Type rank: lower sorts first.

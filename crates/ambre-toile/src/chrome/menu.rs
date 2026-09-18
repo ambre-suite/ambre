@@ -7,7 +7,7 @@
 //
 // The pure command surface it consumes (the `CommandId`s, the `CtxScope`
 // descriptor, the id -> command resolver) lives in the always-compiled
-// `ui::menu`, and the label and icon of each row come from `ui::commands`
+// `ui::menu`. The label and icon of each row come from `ui::commands`
 // (`UI-THREAD-019`). This file decides which rows apply, never what they say.
 // ============================================================================
 
@@ -40,11 +40,11 @@ fn push_all(entries: &mut Vec<MenuEntry>, ids: &[CommandId]) {
 }
 
 /// The Toile right-click context-menu entries (`toile-menus`), iconed and
-/// separated. Inapplicable rows are omitted per `scope` (the Trame pattern):
-/// on empty canvas only Paste + Select-All; over a selection the full command set
-/// filtered to what applies (Group only for a multi-selection, Ungroup only when
-/// a group is selected, Lock/Unlock by lock state, frame entries only inside a
-/// frame).
+/// separated. Inapplicable rows are omitted per `scope`, the Trame pattern: on
+/// empty canvas only Paste + Select-All. Over a selection it is the full command
+/// set filtered to what applies. Group shows only for a multi-selection, Ungroup
+/// only when a group is selected, Lock/Unlock by lock state, and frame entries
+/// only inside a frame.
 pub fn context_entries_for(scope: &CtxScope) -> Vec<MenuEntry> {
     let mut entries = Vec::new();
 

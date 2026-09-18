@@ -8,18 +8,18 @@ use ambre_protocol::ws::{WsClientMsg, WsServerMsg};
 ///
 /// Manages document subscriptions, ordered update delivery (sequenced by a
 /// global `Seq`), and snapshot tracking. Clients connect via bidirectional
-/// `flume` channels — one channel pair per client — so the full SecSync
-/// pipeline (crypto, compression, quarantine) can be exercised without a
-/// network or real server.
+/// `flume` channels, one channel pair per client. The full SecSync
+/// pipeline (crypto, compression, quarantine) can then be exercised
+/// without a network or real server.
 ///
 /// Each client's outbound channel carries raw `WsClientMsg` bytes (encoded
 /// by `ambre_protocol::ws::encode_client_msg`), and each client's inbound
 /// channel delivers `WsServerMsg` values.
 pub struct MockBlindRelay {
-    /// Documents managed by this relay: client set → list of updates (with
+    /// Documents managed by this relay: client set -> list of updates (with
     /// their global sequence number).
     documents: HashMap<DocumentId, DocumentState>,
-    /// Connected clients: user_id → (client_tx for server→client msgs).
+    /// Connected clients: user_id -> (client_tx for server->client msgs).
     clients: HashMap<UserId, flume::Sender<WsServerMsg>>,
     /// Global sequence number, monotonically increasing per relay instance.
     next_seq: u64,
@@ -56,6 +56,11 @@ impl MockBlindRelay {
 
     /// Process one encoded client message. Returns `true` if the message was
     /// handled, `false` if decoding failed.
+    ///
+    /// # Panics
+    ///
+    /// When the document entry it just inserted is absent, which no execution
+    /// reaches.
     pub fn handle_message(&mut self, wire: &[u8]) -> bool {
         let msg = match ambre_protocol::ws::decode_client_msg(wire) {
             Ok(m) => m,

@@ -4,8 +4,8 @@
 // `TOILE-088`).
 //
 // A web page is DOM. The board is WebGPU inside one `<canvas>`, which has no way
-// to hold a page, so the board paints a placeholder box and publishes where the
-// page goes (`ToileView::visible_web_embeds`); this module reconciles one
+// to hold a page. So the board paints a placeholder box and publishes where the
+// page goes (`ToileView::visible_web_embeds`). This module reconciles one
 // `<iframe>` per visible embed into a layer positioned over the canvas.
 //
 // Two consequences the corpus should not discover later:
@@ -17,7 +17,7 @@
 //   - **The clip is the viewport's, not the embed's.** A CSS `clip-path` is
 //     resolved in the element's own box before its transform, so it cannot
 //     express a screen-space rectangle. The layer clips instead, which bounds
-//     every frame to the visible board; an embed sitting inside a board frame
+//     every frame to the visible board. An embed sitting inside a board frame
 //     that should crop it is not cropped ("Clip limitation").
 // ============================================================================
 
@@ -30,10 +30,10 @@ use wasm_bindgen::JsCast;
 /// What an embedded page is allowed to do (`TOILE-088`).
 ///
 /// **`allow-same-origin` is absent, and its absence is the rule.** With it, a
-/// page served from this very origin -- which is what embedding Ambre's own
-/// address would be -- could reach `parent.document` and take its own sandbox
-/// off. Without it every frame runs in an opaque origin: no shared storage, no
-/// access to the board, nothing to read from the document that hosts it. The
+/// page served from this very origin could reach `parent.document` and take its
+/// own sandbox off. Embedding Ambre's own address would be exactly that.
+/// Without it every frame runs in an opaque origin. There is no shared storage,
+/// no access to the board, nothing to read from the document that hosts it. The
 /// price is that a page needing its own storage degrades, and that is the trade
 /// `TOILE-088` names.
 const SANDBOX: &str = "allow-scripts allow-forms allow-popups";
@@ -43,8 +43,8 @@ const SANDBOX: &str = "allow-scripts allow-forms allow-popups";
 const PERMISSIONS: &str = "";
 
 /// The live `<iframe>` behind each visible web embed, keyed by the board element
-/// that carries the address -- one frame per embed, like one child view per
-/// embed (`TOILE-UI-097`).
+/// that carries the address. One frame per embed, like one child view per embed
+/// (`TOILE-UI-097`).
 #[derive(Default)]
 pub struct WebFrames {
     frames: HashMap<ElementId, web_sys::HtmlIFrameElement>,
@@ -88,7 +88,7 @@ impl WebFrames {
                 self.urls.insert(e.element.clone(), e.url.clone());
             }
             // Until the embed is entered the frame lets the pointer through, so
-            // the board's own move and resize stay reachable; entering it hands
+            // the board's own move and resize stay reachable. Entering it hands
             // the page its events directly (`TOILE-UI-091`, `TOILE-UI-324`).
             layer_click_through(&frame, e.focused);
             place(&frame, e, dpr);
@@ -133,7 +133,7 @@ fn layer_click_through(frame: &web_sys::HtmlIFrameElement, takes_input: bool) {
 }
 
 /// Size and place one frame. The size is the element's world size, in CSS
-/// pixels, so the page is laid out once; the camera lives entirely in the
+/// pixels, so the page is laid out once. The camera lives entirely in the
 /// transform, so a zoom moves the frame instead of reflowing the page.
 fn place(frame: &web_sys::HtmlIFrameElement, e: &VisibleWebEmbed, dpr: f64) {
     let style = frame.style();

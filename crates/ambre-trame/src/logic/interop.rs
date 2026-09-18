@@ -10,9 +10,9 @@ use super::*;
 
 impl TrameState {
     /// Import CSV bytes into the workbook (`trame-import-export`). Parses the
-    /// records, resolves
-    /// (or creates) the target sheet, writes each non-empty field as a literal
-    /// cell, and recomputes -- the whole import is a single undo group.
+    /// records, resolves (or creates) the target sheet, writes each non-empty
+    /// field as a literal cell, and recomputes. The whole import is a single
+    /// undo group.
     pub(super) fn import_csv(
         &mut self,
         data: Vec<u8>,
@@ -42,9 +42,9 @@ impl TrameState {
             return TrameOutcome::display_only(vec![]);
         }
 
-        // Open the undo group up front so a freshly created sheet and every cell
-        // write collapse into a single undo item (sealed by the next command's
-        // fallback `group_end`, like `SetCellText`).
+        // Open the undo group up front. A freshly created sheet and every cell
+        // write then collapse into a single undo item, sealed by the next
+        // command's fallback `group_end` (like `SetCellText`).
         let _ = self.undo_manager.group_start();
 
         // Resolve the target sheet: an existing id is reused, anything else
@@ -69,7 +69,7 @@ impl TrameState {
         let cols = records.iter().map(Vec::len).max().unwrap_or(0) as u32;
 
         // Pre-materialize every written cell first (same reasoning as
-        // `SetCellsBatch`): a `materialize` commit carries the excluded origin,
+        // `SetCellsBatch`). A `materialize` commit carries the excluded origin,
         // so interleaving it between value commits would split the undo item.
         for (r, record) in records.iter().enumerate() {
             for (c, value) in record.iter().enumerate() {
@@ -153,11 +153,11 @@ impl TrameState {
     }
 
     /// Inclusive `(max_row, max_col)` grid position holding actual content on
-    /// `sheet_id`, or `None` when the sheet is empty. Scans the `cells_{sheet}`
-    /// map (the source of truth) rather than the row/column lists: those lists
-    /// stay materialized at their high-water mark after a scroll or a since-cleared
-    /// edit, so using their length would export a rectangle padded with empty
-    /// trailing rows/columns.
+    /// `sheet_id`, or `None` when the sheet is empty. Scans the `cells_{sheet}` map
+    /// (the source of truth) rather than the row/column lists. Those lists stay
+    /// materialized at their high-water mark after a scroll or a since-cleared
+    /// edit. Using their length would therefore export a rectangle padded with
+    /// empty trailing rows/columns.
     fn used_extent(&self, sheet_id: &str, index: &SheetIndex) -> Option<(u32, u32)> {
         let LoroValue::Map(cells) = self.doc.get_map(cells_map_name(sheet_id)).get_value() else {
             return None;

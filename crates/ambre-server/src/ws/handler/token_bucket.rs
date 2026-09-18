@@ -1,13 +1,14 @@
-// ambre-server/src/ws/handler/token_bucket.rs
-// Per-connection inbound-message rate limiter for the WebSocket loop.
+// ambre-server/src/ws/handler/token_bucket.rs Per-connection inbound-message rate
+// limiter for the WebSocket loop.
 //
-// The REST/WS *upgrade* is rate-limited (see `middleware::rate_limit`), but once
-// a socket is open there is no bound on how many messages a client may send. Each
+// The REST/WS *upgrade* is rate-limited (see `middleware::rate_limit`), but once a
+// socket is open there is no bound on how many messages a client may send. Each
 // `Update` drives a Postgres INSERT + Redis RPUSH + S3 pending write + PubSub
-// fan-out, so an authorized `editor` flooding updates is a real storage/cost
-// amplification (and `Ephemeral` broadcasts have no cap either). A small in-memory
-// token bucket per connection bounds the sustained rate and the burst without a
-// per-message Redis round-trip -- it lives entirely on `WsConnectionState`.
+// fan-out. An authorized `editor` flooding updates is therefore a real
+// storage/cost amplification, and `Ephemeral` broadcasts have no cap either. A
+// small in-memory token bucket per connection bounds the sustained rate and the
+// burst without a per-message Redis round-trip -- it lives entirely on
+// `WsConnectionState`.
 
 #[cfg(test)]
 use std::time::Duration;
@@ -33,7 +34,7 @@ pub(crate) struct TokenBucket {
 impl TokenBucket {
     /// Builds a bucket that starts full (`capacity` tokens), refilling at
     /// `refill_per_sec`. A full start lets a freshly connected client burst up to
-    /// `capacity` messages (e.g. an initial batch of subscribes) immediately.
+    /// `capacity` messages (for example an initial batch of subscribes) immediately.
     pub(crate) fn new(capacity: u32, refill_per_sec: u32) -> Self {
         let capacity = capacity.max(1) as f64;
         Self {

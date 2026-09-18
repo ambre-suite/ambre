@@ -9,16 +9,16 @@
 // live `FontContext` for *any* operation (move, select, hit, render). The render
 // thread only holds that `FontContext` during paint (`ambre-app` frame host), so
 // the editor cannot be driven at input time. The seam that resolves this: input
-// handling records font-free [`EditIntent`]s in a queue; the paint pass drains
+// handling records font-free [`EditIntent`]s in a queue. The paint pass drains
 // and applies them through the PlainEditor driver, then renders caret / selection
 // / glyphs. Reading the committed buffer needs no font context, so a view can
 // emit its commit from the queue-flush.
 //
-// Coordinate spaces: PlainEditor lays out in its own local frame with the origin
-// at the text's top-left screen corner and the zoom baked into the font size +
-// wrap width. The host converts screen pointers to this local frame before
-// queueing a pointer intent, so this module stays font-free at input time and
-// purely geometric at paint time.
+// Coordinate spaces: PlainEditor lays out in its own local frame. The origin
+// sits at the text's top-left screen corner, with the zoom baked into the font
+// size and the wrap width. The host converts screen pointers to this local frame
+// before queueing a pointer intent. This module therefore stays font-free at
+// input time and purely geometric at paint time.
 // ============================================================================
 
 use ambre_draw::{
@@ -92,7 +92,7 @@ pub enum EditIntent {
 }
 
 /// The pinned visual style of an edit, captured by the host at open and re-applied
-/// to the editor's default style each frame so the in-edit body matches the
+/// to the editor's default style each frame. The in-edit body then matches the
 /// committed look. `base_size` is in world units (zoom is applied per paint);
 /// `family` is a family label resolved through [`registered_family_name`].
 #[derive(Clone, Debug, PartialEq)]
@@ -105,9 +105,9 @@ pub struct TextEditorStyle {
 }
 
 /// A shared inline text edit over one text unit (a Toile element body or a Trame
-/// cell). App-specific concerns (which unit, how the style / geometry is derived,
-/// how a commit is dispatched) live in the host wrapper; this core owns only the
-/// PlainEditor, its layout context, the intent queue and the pinned style.
+/// cell). App-specific concerns live in the host wrapper: which unit, how the
+/// style / geometry is derived, how a commit is dispatched. This core owns only
+/// the PlainEditor, its layout context, the intent queue and the pinned style.
 pub struct TextEditor {
     editor: PlainEditor<Brush>,
     /// The editor's own layout context (PlainEditor re-shapes through it). Kept
@@ -149,7 +149,7 @@ impl TextEditor {
         self.editor.set_alignment(align);
     }
 
-    /// Re-pin the style (the host may recompute it per frame, e.g. on a font /
+    /// Re-pin the style (the host may recompute it per frame, for example on a font /
     /// size change). Applied at the next [`flush`](Self::flush).
     pub fn set_style(&mut self, style: TextEditorStyle) {
         self.style = style;
@@ -272,10 +272,11 @@ impl TextEditor {
 
     /// Replace the whole buffer synchronously (no font context needed), caret
     /// re-seeded to the end at the next flush. For a host that owns the text
-    /// elsewhere and pushes it in wholesale (Trame's formula bar, which holds DOM
-    /// focus + caret while the in-cell editor is only the render / commit vehicle).
-    /// `initial` is left untouched, so [`committed_text`](Self::committed_text)
-    /// still compares against the open-time value.
+    /// elsewhere and pushes it in wholesale. Trame's formula bar does this: it
+    /// holds DOM focus and caret while the in-cell editor is only the render /
+    /// commit vehicle. `initial` is left untouched, so
+    /// [`committed_text`](Self::committed_text) still compares against the
+    /// open-time value.
     pub fn set_text(&mut self, text: &str) {
         if self.text() != text {
             self.editor.set_text(text);
@@ -410,10 +411,10 @@ impl TextEditor {
 
         // Rebuild the layout before the caller renders. `edit_styles()` and
         // `set_width()` above mark the layout dirty every frame, but only a driver
-        // operation refreshes it -- so on a frame with no intents (the common
-        // steady-caret case) the layout would stay dirty and `try_layout()` /
-        // `cursor_geometry()` would return `None`, painting neither glyphs nor
-        // caret. Refreshing here keeps both live every frame.
+        // operation refreshes it. On a frame with no intents (the common
+        // steady-caret case) the layout would stay dirty. `try_layout()` /
+        // `cursor_geometry()` would then return `None`, painting neither glyphs
+        // nor caret. Refreshing here keeps both live every frame.
         self.editor.refresh_layout(font_cx, &mut self.layout_cx);
     }
 
@@ -432,12 +433,13 @@ impl TextEditor {
 
     /// Draw the selection band, glyphs and caret at `origin` (screen space). The
     /// editor's local coordinates are offset by `origin`. `selection` is the base
-    /// selection tint (drawn at 30% alpha behind the text); `show_caret` gates the
-    /// blinking caret bar (the caller toggles it on a timer). The caret takes the
-    /// style colour, not a theme caret: the body ink is fixed (e.g. a sticky's dark
-    /// ink on a light card), so a theme caret could be invisible against it.
+    /// selection tint, drawn at 30% alpha behind the text. `show_caret` gates the
+    /// blinking caret bar, which the caller toggles on a timer. The caret takes
+    /// the style colour, not a theme caret. The body ink is fixed, such as a
+    /// sticky's dark ink on a light card, so a theme caret could be invisible
+    /// against it.
     ///
-    /// Everything is drawn in the editor's local (origin-relative) frame, so a
+    /// Everything is drawn in the editor's local (origin-relative) frame. A
     /// caller can rotate the whole overlay by pushing a transform on the surface
     /// before calling (Toile rotated elements). The selection band and caret use
     /// `fill_path` (not `fill_rect`) precisely so they follow such a rotation --
@@ -472,12 +474,12 @@ impl TextEditor {
                     surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
 
                     // Underline decoration. parley underlines the IME preedit
-                    // range itself (a `StyleProperty::Underline` on the composing
-                    // text), so drawing the run's underline here restores the IME
-                    // preedit hint that `draw_glyphs` alone drops. Drawn as a thin
-                    // filled rect (not `stroke_line`) so it follows a caller
-                    // rotation like the glyphs and caret. Placed 2px below the
-                    // baseline, matching the static cell decoration.
+                    // range itself, through a `StyleProperty::Underline` on the
+                    // composing text. Drawing the run's underline here restores
+                    // the IME preedit hint that `draw_glyphs` alone drops. Drawn
+                    // as a thin filled rect (not `stroke_line`) so it follows a
+                    // caller rotation like the glyphs and caret. Placed 2px below
+                    // the baseline, matching the static cell decoration.
                     if run.style().underline.is_some() {
                         let adv = run.advance() as f64;
                         let uy = ty + 2.0;
@@ -562,7 +564,7 @@ mod tests {
         assert_eq!(ed.text(), "");
     }
 
-    /// An edit that leaves the buffer as it opened commits nothing: the close
+    /// An edit that leaves the buffer as it opened commits nothing. The close
     /// path asks for a body and gets `None`, so no command is sent for a caret
     /// that only moved (`toile-connectors`, `toile-text-editing`).
     #[test]

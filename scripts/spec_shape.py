@@ -15,27 +15,13 @@ section 1.D):
                     cap moved from 30 to 25 with the unit: a table row is
                     word-dense, so a line-based share overstated prose by about
                     six points and 30-in-words would have held nothing.
-  * prose words  -- every unmigrated spec carries a ceiling on its **count** of
-                    prose words, so it can improve and never regress. Not the
-                    share: a share is a ratio, so deleting a table makes a
-                    document that got shorter look worse, and the migration's
-                    whole job is deleting tables. Measured 2026-08-21: moving the
-                    twenty per-spec backlogs out cut 168 prose lines and 1 264
-                    lines overall, and turned the share check red on fifteen
-                    specs. And words, not lines: a metric has to be invariant to
-                    the improvement it asks for. Wrapping one 613-character
-                    paragraph in `ambre-spec-ui.md` turned 1 prose line into 6
-                    and took the count from 67 to 104 -- the line ceiling made
-                    the wrap a regression, which is the ratio bug again, one
-                    metric later.
-  * long lines   -- **the prose meter is blind to line length, and a reader is
+  * long lines   --**the prose meter is blind to line length, and a reader is
                     not.** A bullet is structure to the classifier whatever its
                     length, so the template measured 29.4 %, under the cap,
                     while its section 0 was three bullets of 741, 650 and 530
                     characters. Wrapping them changed no word and no metric, and
                     it was the biggest difference in how the file reads. Held
-                    like the prose count: a ceiling per unmigrated spec, zero
-                    for a migrated one. A table row and a fenced line are not
+                    to zero for every spec. A table row and a fenced line are not
                     counted, because neither can be wrapped at all -- a
                     too-wide table is fixed by a shorter cell, which no script
                     can hold.
@@ -88,15 +74,20 @@ section 1.D):
                     no code is normal under spec-driven development; a container
                     built in the code and absent from the table is a lie.
 
-Run: `just spec-shape` (report), `--check` (fail), `--update` (rewrite the
-ceilings after a deliberate change). `--update` **lowers only**: a ceiling that
-rises is a ceiling that does nothing, and the discipline was a sentence in this
-docstring until 2026-08-24, which is to say the command blessed a regression by
-being run twice. A spec that legitimately grows needs `--raise` and a reviewed
-diff.
+Every metric is a hard cap. A ratchet held the prose count and the long lines
+per spec while the corpus migrated, and it is gone: the whole corpus is under
+the caps, and a ceiling on a count already at the cap holds nothing a refusal
+does not hold better.
+
+**The prose word count is a column, not a check.** The report prints it beside
+the share so a reader sees a document growing, and no threshold reads it: a
+count is not comparable between a two-page spec and a register, which is what
+the share is for. The schema document is the one place a raw count decides
+anything, and there it is a budget the template states.
+
+Run: `just spec-shape` (report), `--check` (fail).
 """
 
-import json
 import re
 import sys
 from collections import namedtuple
@@ -105,6 +96,7 @@ from pathlib import Path
 # The `Implementation` vocabulary is the template's, read from it, and the other
 # two gates read it from the same place (`scripts/template_vocabulary.py`).
 from template_vocabulary import IMPLEMENTATION_VALUES
+
 
 # What `classify` returns: the same partition counted twice, in lines and in
 # words. Named because a six-tuple indexed by position is how a caller reads
@@ -125,14 +117,11 @@ WORD_NOISE = re.compile(r"[`*>#]")
 
 ROOT = Path(__file__).resolve().parent.parent
 SPECS = ROOT / "specs"
-CEILINGS = Path(__file__).resolve().parent / "spec_shape_ceilings.json"
 
-# Not specs: an audit, and the roadmap journal (a record of what shipped, held to
-# the roadmap's one-row rule, not to a prose budget).
-NON_NORMATIVE = {
-    "security-audit.md",
-    "ambre-roadmap-journal.md",
-}
+# Not a spec: the roadmap journal, a record of what shipped, held to the
+# roadmap's one-row rule rather than to a prose budget. `specs/audits/` is out
+# for the same reason, and by directory: the next audit needs no script edit.
+NON_NORMATIVE = {"ambre-roadmap-journal.md"}
 
 # A generated aggregation: no author, so no prose budget and no `Implementation`
 # header. Its shape is held by the script that writes it -- `feature_inventory.py`
@@ -141,53 +130,6 @@ NON_NORMATIVE = {
 # exemption from them.
 GENERATED = re.compile(r"-(inventory|ledger)\.md$")
 
-# A Foundations document rewritten to the migrated shape: held by the prose cap,
-# not by a ceiling. A ceiling only lets an unmigrated spec improve; a document
-# that has already been rewritten answers the real question instead -- may a
-# reader stop after the tables.
-MIGRATED_DOCS = {
-    "1-Foundations/ambre-spec-testing.md",
-    "1-Foundations/ambre-spec-presence.md",
-    "1-Foundations/ambre-spec-docfile.md",
-    "1-Foundations/ambre-spec-fixtures.md",
-    "1-Foundations/ambre-spec-frame.md",
-    "1-Foundations/ambre-spec-render-assets.md",
-    "1-Foundations/ambre-spec-drawing-surface.md",
-    "1-Foundations/ambre-spec-text-editor.md",
-    "1-Foundations/ambre-spec-high-density.md",
-    "1-Foundations/ambre-spec-chrome.md",
-    "1-Foundations/ambre-spec-text-input.md",
-    "1-Foundations/ambre-spec-accessibility.md",
-    "1-Foundations/ambre-spec-adaptive-layout.md",
-    "1-Foundations/ambre-spec-launcher.md",
-    "1-Foundations/ambre-spec-key-verification.md",
-    "1-Foundations/ambre-spec-ui.md",
-    "1-Foundations/ambre-spec-clipboard.md",
-    "1-Foundations/ambre-spec-zoom.md",
-    "1-Foundations/ambre-spec-undo.md",
-    "1-Foundations/ambre-spec-pdf-export.md",
-    "1-Foundations/ambre-spec-find.md",
-    "1-Foundations/ambre-spec-commands.md",
-    "1-Foundations/ambre-spec-design-tokens.md",
-    "1-Foundations/ambre-spec-sync.md",
-    "1-Foundations/ambre-spec-sealed-envelope.md",
-    "1-Foundations/ambre-spec-delta-order.md",
-    "1-Foundations/ambre-spec-membership.md",
-    "1-Foundations/ambre-spec-key-rotation.md",
-    "1-Foundations/ambre-spec-media.md",
-    "1-Foundations/ambre-spec-server.md",
-    "1-Foundations/ambre-spec-session.md",
-    "1-Foundations/ambre-spec-sequencer.md",
-    "1-Foundations/ambre-spec-broadcast.md",
-    "1-Foundations/ambre-spec-object-store.md",
-    "1-Foundations/ambre-spec-organizations.md",
-    "1-Foundations/ambre-spec-architecture.md",
-    "1-Foundations/ambre-spec-message-bus.md",
-    "1-Foundations/ambre-spec-zero-knowledge.md",
-    "1-Foundations/ambre-spec-schema-version.md",
-    "1-Foundations/ambre-spec-budgets.md",
-}
-
 # The one register the corpus keeps outside both templates: every budget of the
 # workspace, one row each. It is `ambre-spec-template.md section 4` material --
 # the class the roadmap and the generated inventories belong to -- so it carries
@@ -195,6 +137,15 @@ MIGRATED_DOCS = {
 # the prose cap and to the long-line rule, because a register a reader cannot
 # scan is a register nobody cites.
 BUDGETS = "1-Foundations/ambre-spec-budgets.md"
+
+# The second register, and the same class. One row per term of art: a gloss that
+# names the idea, the synonyms the term forbids, and the document that defines
+# it. The gloss is deliberately too short to specify anything, because a
+# definition living in two files drifts in one of them -- the rule
+# `ambre-spec-template.md section 0` holds over the code, and prose earns it for
+# the same reason. `scripts/glossary.py` reads the table, and `prose.py` holds
+# the forbidden column.
+TERM_INDEX = "ambre-glossary.md"
 
 # The template declares the pillars, so it is held to the one it can be held to:
 # the prose cap. It was exempt until 2026-08-21 and stood at 34.5 %, which is
@@ -282,6 +233,22 @@ METHOD_MARKERS = [
 # table is there, so it reads the one cell that says so.
 CONTRACT_ROW = re.compile(r"^\|\s*`[A-Z][A-Z0-9-]*-\d{3}`\s*\|")
 
+# A code span inside a cell is a token, not English: a row quoting `may` names
+# the word rather than using it.
+CODE_SPAN = re.compile(r"`[^`]*`")
+
+# An RFC 2119 keyword written in lower case, read inside the `Statement` cell of
+# a contract row and nowhere else. The scope is what makes the measure exact:
+# descriptive prose uses `may` correctly, and the same word inside a rule is
+# either the modality, which is spelled in upper case, or a description, which
+# belongs to a verb that is not a keyword at all (`can`, `needs`). A code span is
+# dropped first, so a row quoting `may` as a token is not a breach.
+RFC2119_LOWER = re.compile(
+    r"(?<![\w`-])(must not|shall not|should not|may not|must|shall|should|may)(?![\w`-])"
+)
+# The `Statement (RFC 2119)` column, third in every contract table.
+STATEMENT_CELL = 3
+
 # The three answers a contract table owes, directly under it. Matched as a
 # **bullet**, so naming a label inside a table cell is not an answer --
 # `ambre-spec-template.md` names all three to define them.
@@ -297,7 +264,7 @@ ANSWERS = {
 SECTION_HEADING = re.compile(r"^##\s+(\d+)\s*(bis)?\s*[.:]")
 
 # Documents that describe no code, so they carry no `Implementation` field.
-NO_CODE_DOCS = SCHEDULE_DOCS | {TEMPLATE, BUDGETS}
+NO_CODE_DOCS = SCHEDULE_DOCS | {TEMPLATE, BUDGETS, TERM_INDEX}
 
 # The header field, and the only values it takes, read from the table that
 # states them (`ambre-spec-template.md section 1.A`). One clause may follow,
@@ -316,13 +283,17 @@ IMPLEMENTATION = re.compile(
 )
 
 # A feature document describes the current state. These betray the steps.
+#
+# Each marker names a form, never a sense. `landed`, `used to` and `was fixed`
+# were here and are gone: they read a verb and guessed what it was about, so
+# "the codec used to encode the frame" was refused as production history. A
+# detector that guesses produces a number, not a rule, which is why the passive
+# meter left this suite too. What a past tense is really saying stays a reading,
+# and a reading belongs to review.
 FEATURE_MARKERS = [
     (re.compile(r"^\s*[-*]\s*\[[ x]\]"), "a checkbox: the steps live in the roadmap"),
     (re.compile(r"\bMVP\b"), "a milestone word: a milestone tags a story, never a feature"),
     (re.compile(r"\bPhase\s+\d"), "a phase: the schedule lives in the roadmap"),
-    (re.compile(r"\blanded\b", re.I), "production history: git holds it"),
-    (re.compile(r"\bused to\b", re.I), "production history: git holds it"),
-    (re.compile(r"\bwas fixed\b", re.I), "production history: git holds it"),
 ]
 
 # Per-application: the schema document, and the source -- a file or a directory
@@ -508,6 +479,28 @@ def answer_issues(text: str):
             yield "answer", f"`**{label}.**` is empty -- `none`, and why, is an answer"
 
 
+def keyword_issues(text: str):
+    """Yield (line_no, reason) for a lower-case RFC 2119 keyword in a rule.
+
+    A hard error at zero. The corpus held thirteen when the rule was written,
+    and each one was read rather than cased: a keyword that describes an actor
+    is a description and takes a plain verb, and a negative permission takes the
+    `MUST NOT` the RFC writes it with, not a lower-case `may` under a negation.
+    """
+    for i, line in enumerate(text.splitlines(), 1):
+        if not CONTRACT_ROW.match(line):
+            continue
+        cells = line.split("|")
+        if len(cells) <= STATEMENT_CELL:
+            continue
+        for match in RFC2119_LOWER.finditer(CODE_SPAN.sub("CODE", cells[STATEMENT_CELL])):
+            word = match.group(0)
+            yield i, (
+                f'"{word}" in a rule: the modality is "{word.upper()}", '
+                "and a description takes a verb that is not a keyword"
+            )
+
+
 def schedule_issues(text: str):
     """Yield (line_no, reason) for every backlog shape in a spec."""
     for i, line in enumerate(text.splitlines(), 1):
@@ -609,26 +602,14 @@ def schema_issues(text: str, source: Path):
         yield "container-missing", f"`{name}` is built in {where} and absent from the table"
 
 
-def load_ceilings() -> dict:
-    """`{spec: {"prose": n, "long": m}}` -- one ceiling per metric, per spec."""
-    return json.loads(CEILINGS.read_text()) if CEILINGS.exists() else {}
-
-
-# The two ratcheted counts, and how a breach reads. Reflowing a paragraph lowers
-# the second and must not move the first, which is why the first counts words.
-METRICS = (
-    ("prose_words", "prose words"),
-    ("long", f"lines over {LONG_LINE_COLS} columns"),
-)
+# How a breach of the line cap reads. The prose word count has no entry here:
+# it is printed and nothing refuses it, and a tuple pairing a gate with a
+# column made the report look like two rules.
+LONG_LINES = f"lines over {LONG_LINE_COLS} columns"
 
 
 def main() -> int:
     check = "--check" in sys.argv
-    update = "--update" in sys.argv
-    allow_raise = "--raise" in sys.argv
-    ceilings = load_ceilings()
-    fresh: dict[str, dict[str, int]] = {}
-    held_by_cap: set[str] = set()
     errors: list[str] = []
 
     for path in sorted(SPECS.rglob("*.md")):
@@ -639,6 +620,7 @@ def main() -> int:
         if (
             "reviews/" in rel
             or "Todo/" in rel
+            or "audits/" in rel
             or path.name in NON_NORMATIVE
             or GENERATED.search(path.name)
         ):
@@ -646,38 +628,23 @@ def main() -> int:
         text = path.read_text()
         share = prose_share(text)
         measured = {"prose_words": classify(text).prose_words, "long": long_lines(text)}
-        migrated = (
-            "/features/" in f"/{rel}"
-            or rel in SCHEMA_DOCS
-            or rel in MIGRATED_DOCS
-            or rel == TEMPLATE
-        )
-        fresh[rel] = measured
 
-        if migrated:
-            held_by_cap.add(rel)
-            if share > MIGRATED_PROSE_MAX:
-                errors.append(f"{rel}: prose {share:.1f} %, cap {MIGRATED_PROSE_MAX:.0f} %")
-            if measured["long"] > MIGRATED_LONG_MAX:
-                errors.append(
-                    f"{rel}: {measured['long']} {METRICS[1][1]},"
-                    f" cap {MIGRATED_LONG_MAX} -- a migrated document wraps"
-                )
-        else:
-            recorded = ceilings.get(rel) or {}
-            for key, label in METRICS:
-                ceiling = recorded.get(key)
-                if ceiling is None:
-                    errors.append(f"{rel}: no {key} ceiling recorded -- run --update")
-                elif measured[key] > ceiling:
-                    errors.append(
-                        f"{rel}: {measured[key]} {label}, ceiling {ceiling}"
-                        " -- it may only fall"
-                    )
+        # Every spec, whatever its class. The caps held the migrated documents
+        # while a ceiling carried the rest down to them, and the rest arrived.
+        if share > MIGRATED_PROSE_MAX:
+            errors.append(f"{rel}: prose {share:.1f} %, cap {MIGRATED_PROSE_MAX:.0f} %")
+        if measured["long"] > MIGRATED_LONG_MAX:
+            errors.append(
+                f"{rel}: {measured['long']} {LONG_LINES},"
+                f" cap {MIGRATED_LONG_MAX} -- a spec wraps"
+            )
 
         if "/features/" in f"/{rel}":
             for lineno, reason in feature_issues(text):
                 errors.append(f"{rel}:{lineno}: {reason}")
+
+        for lineno, reason in keyword_issues(text):
+            errors.append(f"{rel}:{lineno}: {reason}")
 
         if rel not in SCHEDULE_DOCS:
             for lineno, reason in schedule_issues(text):
@@ -705,38 +672,6 @@ def main() -> int:
             f"{flag} {share:>5.1f} %  {measured['prose_words']:>5} prose words"
             f"  {measured['long']:>4} long  {rel}"
         )
-
-    if update:
-        # A migrated document is held by the caps, not by a ceiling. Recording
-        # one is dead weight, and worse: it is a number `--update` may raise,
-        # which is how `ambre-spec-testing.md` carried a ceiling that grew from
-        # 35 to 49 while the document it holds was capped all along.
-        keep = {k: v for k, v in fresh.items() if k not in held_by_cap}
-        out: dict[str, dict[str, int]] = {}
-        refused: list[str] = []
-        for rel, measured in keep.items():
-            recorded = ceilings.get(rel) or {}
-            row = {}
-            for key, _ in METRICS:
-                ceiling = recorded.get(key)
-                if ceiling is not None and measured[key] > ceiling:
-                    refused.append(f"{rel}: {key} {ceiling} -> {measured[key]}")
-                    row[key] = measured[key] if allow_raise else ceiling
-                else:
-                    row[key] = measured[key]
-            out[rel] = row
-        CEILINGS.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n")
-        print(f"\nceilings rewritten: {len(out)} specs")
-        for line in refused:
-            verb = "RAISED" if allow_raise else "KEPT"
-            print(f"{verb} {line}", file=sys.stderr)
-        if refused and not allow_raise:
-            print(
-                f"{len(refused)} ceilings would have risen and were kept:"
-                " a ceiling only falls. Use `--raise` for a deliberate growth.",
-                file=sys.stderr,
-            )
-        return 0
 
     for e in errors:
         print(f"ERROR {e}", file=sys.stderr)

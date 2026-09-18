@@ -22,9 +22,9 @@ impl TrameState {
         // Feed every sheet's cells under a uid-anchored [`CellId`], tagged with
         // the sheet's local index. The active sheet is index 0 (see
         // `sheets_by_idx`), so its cells address the same keys the single-sheet
-        // read paths use. Each cell's stable key already carries its
-        // `(row_uid, col_uid)`, so feeding is a direct `CellId::bound`; a cell
-        // whose row/column uid is absent from the sheet index (a deleted line) is
+        // read paths use. Each cell's stable key already carries its `(row_uid,
+        // col_uid)`, so feeding is a direct `CellId::bound`. A cell whose
+        // row/column uid is absent from the sheet index (a deleted line) is
         // skipped.
         let indices = self.engine_indices();
         let sheets: Vec<(String, u16)> = self
@@ -41,14 +41,14 @@ impl TrameState {
             else {
                 continue;
             };
-            // Masking is derived per sheet from that sheet's `merges_{sheet}` map,
-            // so a masked conflicted cell is excluded from the DAG on *every*
-            // sheet -- a cross-sheet reference to it converges regardless of the
-            // active tab (`trame-cell-merges`). For the active sheet this equals
-            // `self.masked_cells`.
+            // Masking is derived per sheet from that sheet's `merges_{sheet}` map.
+            // A masked conflicted cell is therefore excluded from the DAG on
+            // *every* sheet. A cross-sheet reference to it converges regardless of
+            // the active tab (`trame-cell-merges`). For the active sheet this
+            // equals `self.masked_cells`.
             let masked = self.masked_cells_for(&sheet_id, index);
             // Feed the cells in stable key order. The map iterates in hash order,
-            // and the feed order decides which cell of a cycle gets rejected: a
+            // and the feed order decides which cell of a cycle gets rejected. A
             // document where `A1=B1` and `B1=A1` met through a CRDT merge would
             // otherwise flag a different culprit on each reseed.
             let mut keys: Vec<&String> = cells.keys().collect();
@@ -204,10 +204,11 @@ impl TrameState {
         }
     }
 
-    /// Canonical tab-strip order, deterministic on every peer: the implicit
-    /// default sheet first, then any sheet not yet present in `sheet_order`
-    /// (sorted by id -- covers a create whose order op has not merged), then the
-    /// explicit `sheet_order` entries that still correspond to a live sheet.
+    /// Canonical tab-strip order, deterministic on every peer. The implicit
+    /// default sheet comes first. Then any sheet not yet present in
+    /// `sheet_order`, sorted by id -- which covers a create whose order op has
+    /// not merged. Then the explicit `sheet_order` entries that still correspond
+    /// to a live sheet.
     pub(super) fn sheet_order_ids(&self) -> Vec<String> {
         let listed: Vec<String> = match self.doc.get_movable_list(SHEET_ORDER).get_value() {
             LoroValue::List(items) => items

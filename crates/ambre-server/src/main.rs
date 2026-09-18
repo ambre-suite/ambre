@@ -58,11 +58,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("failed to connect to Redis: {e}"))?;
 
     // `Config::builder()` alone carries no region or credentials, so the SDK
-    // falls back to the default chain (ending at the EC2 metadata endpoint),
-    // which is unreachable off-EC2 and surfaces as a "dispatch failure" on every
-    // request. Set both explicitly. Credentials come from the environment; when
-    // an endpoint override is present (local MinIO) we default to its dev root
-    // user so the stack works out of the box.
+    // falls back to the default chain (ending at the EC2 metadata endpoint).
+    // That chain is unreachable off-EC2, and surfaces as a "dispatch failure" on
+    // every request. Set both explicitly. Credentials come from the environment.
+    // When an endpoint override is present (local MinIO) we default to its dev
+    // root user, so the stack works out of the box.
     let aws_region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_owned());
     let mut s3_config =
         aws_sdk_s3::Config::builder().region(aws_sdk_s3::config::Region::new(aws_region));
@@ -99,8 +99,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Access-token signing key. In a multi-instance deployment the seed MUST be
-    // shared so any instance can verify a token minted by another; absent (dev),
-    // generate an ephemeral one so a restart simply forces clients to refresh.
+    // shared, so any instance can verify a token minted by another. Absent
+    // (dev), generate an ephemeral one so a restart simply forces clients to
+    // refresh.
     let jwt_seed: [u8; 32] = match std::env::var("JWT_SIGNING_SEED") {
         Ok(hex_seed) => {
             let bytes = hex::decode(hex_seed.trim())
@@ -161,8 +162,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // OIDC is optional (a self-host / dev deployment may run without provider
     // login). But when credentials ARE configured, a discovery failure is a
-    // misconfiguration we must not silently swallow into "login disabled": log
-    // at ERROR and fail-fast so the operator notices at startup (M7).
+    // misconfiguration we must not silently swallow into "login disabled". Log
+    // at ERROR and fail-fast, so the operator notices at startup (M7).
     let oidc_configured = !oidc_google_client_id.is_empty();
     let oidc_clients = match oidc::init_oidc_clients(
         &oidc_google_client_id,
@@ -350,7 +351,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nest("/api", api_router)
         .layer(cors)
         // Per-request access log (method, path, status, latency). The span
-        // records only the URI *path*, never the query string: the WS upgrade
+        // records only the URI *path*, never the query string. The WS upgrade
         // carries the access JWT as `?token=`, and the default `new_for_http`
         // span would log the full URI (M15). Enable with `tower_http=debug`.
         .layer(TraceLayer::new_for_http().make_span_with(

@@ -42,7 +42,7 @@
 key is minted once, because a few hundred contract rows cite one. The `Milestone` column orders the
 work.
 
-A story is cited by its name, and the name is a join key: `contracts.py` fails on a citation this
+A story is cited by its name, and the name is a join key. `contracts.py` fails on a citation this
 file does not answer (`ambre-spec-template.md` section 1, `ambre-spec-architecture.md` section 4).
 
 ---
@@ -65,8 +65,8 @@ Closed epics live in `ambre-roadmap-journal.md`, whole. They are named here so a
 
 ## 3. E5 -- APPLICATION EXPANSION  `[ ]`  *current core objective*
 
-Prose, then Murmure. Prose is the text pilot: it validates the axis neither Trame's grid nor Toile's
-plane touches, and it unblocks Toile's inline rich text and Trame's text colours.
+Prose, then Murmure. Prose is the text pilot, and it validates the axis neither Trame's grid nor
+Toile's plane touches. It unblocks Toile's inline rich text and Trame's text colours.
 
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
@@ -158,7 +158,7 @@ plane touches, and it unblocks Toile's inline rich text and Trame's text colours
 
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
-| `[x]` A lost edit is never shown as applied | MVP | a full command channel drops a lossless command in both applications: Toile logs a warning inside its edit send, and Trame returns the error to a call site that logs it and then writes the same text into its own view state, so the user reads an edit the document never received. The undo group boundary is discarded outright beside it (`BUS-011`) |
+| `[x]` A lost edit is never shown as applied | MVP | a full command channel drops a lossless command in both applications: Toile logs a warning inside its edit send, and Trame returns the error to a call site that logs it and then writes the same text into its own view state, so the user reads an edit the document never received. The undo group boundary is dropped outright beside it (`BUS-011`) |
 | `[ ]` A dropped lossy request does not leave a stale screen | MVP | the lossless class now holds its commands, and the lossy one still drops silently into a screen that already moved: a column resize writes the local width and sends on the lossy class, whose send returns nothing, so the grid keeps a width the document never took; a status-band refresh drops the same way and leaves the totals of the previous selection on screen; and a row or column insert is the one document mutation sent lossy, so the active cell moves and nothing is inserted (`TRAME-UI-127`, `TRAME-UI-136`, `TRAME-UI-048`) |
 | `[ ]` One clipboard host | MVP | the asynchronous write replaces the ownership token the copy event wrote, so a same-tab paste reaches the worst rung of the fidelity ladder; and the toolbar Paste button is a second path that skips the ladder and names one application inside the launcher |
 | `[ ]` `SYNC P4` hardening | -- | backpressure on the socket, which the two-instance split made unreachable rather than unbuilt; the access token that rides the socket address into the console; the snapshot adopted as a parent before it is downloaded; and the two tokens a sign-out drops without wiping |
@@ -178,7 +178,7 @@ plane touches, and it unblocks Toile's inline rich text and Trame's text colours
 | `[ ]` The quarantine asks once per gap | V1 | the soft threshold is re-tested on every quarantined arrival, so past nine hundred held updates every further one sends another history request and the relay rate-limits the socket (`SYNC-031`) |
 | `[ ]` The member list shows no invented identity | V1 | a member row whose identifier does not parse is given a freshly generated one, so the list shows a person nothing can act on and a revoke aimed at that row addresses nobody (`SYNC-038`) |
 | `[ ]` A failed members request is not an absent document | V1 | a network failure and a genuine absence take the same branch, so the open generates a throwaway key, marks the document local and never hydrates (`SYNC-040`) |
-| `[ ]` Toile reports what its undo engine holds | MVP | two command handlers of thirty emit the undo state and the view discards the event, so the undo and redo affordances of a shipped MVP report nothing (`UNDO-006`) |
+| `[ ]` Toile reports what its undo engine holds | MVP | two command handlers of thirty emit the undo state and the view drops the event, so the undo and redo affordances of a shipped MVP report nothing (`UNDO-006`) |
 | `[ ]` The selection reaches the Logic thread whole | MVP | the active-cell report carries one pair of coordinates, and a header band is clamped to the last non-empty cell of the UI cache. So a disjoint selection answers for the rectangle clicked last, and a column longer than the screen answers for its first screen -- in the total, the sort, the style, the delete and the copy alike (`TRAME-UI-129`, `TRAME-UI-033`, `TRAME-UI-104`) |
 | `[ ]` Every selection change refreshes the aggregates | MVP | the refresh hangs off the active-cell announcement, and extending a header band is the one selection path that does not announce, so sweeping columns A to D leaves the total of A on screen with no sign it is stale (`TRAME-UI-109`) |
 | `[ ]` A filter converges as one definition | MVP | the shared filter converges field by field, so a concurrent race can join one user's column to another user's operator. Every peer agrees on a definition no user applied (`TRAME-FEAT-025`) |
@@ -193,7 +193,7 @@ plane touches, and it unblocks Toile's inline rich text and Trame's text colours
 | `[ ]` A marquee takes what it was drawn around | MVP | the marquee returns raw members without climbing the group chain, so it selects the parts a click would have selected the group of; and containment is read on the upright box, so a tilted shape is taken by a rectangle that does not cover it (`TOILE-UI-236`, `TOILE-UI-237`) |
 | `[ ]` A Toile command that names nothing answers an error | MVP | the move, the restyle and the delete skip an id the board does not hold and answer as though it had; the menu resolver falls through to the empty command list a handled intent returns; a group of one and an ungroup of a non-group refuse in silence; and a reaction names a target the board no longer holds with nothing to check it (`TOILE-194`, `TOILE-201`, `TOILE-UI-152`, `TOILE-055`, `TOILE-159`, `TOILE-FEAT-060`) |
 | `[ ]` A remote change the board cannot apply is announced | MVP | the failure is reported as an error carrying an empty element id and the canvas logs it without surfacing it; in a batch the others keep merging and the import reports success, so a board silently stops receiving a collaborator's work (`TOILE-214`, `TOILE-215`) |
-| `[ ]` A dropped display request leaves a trace | MVP | Toile's lossy send matches a disconnected channel alone, so a full one discards a camera request with no log; the cull request goes the same way while the dirty flag is cleared in the same frame, and the board paints the previous set until the camera moves again (`TOILE-UI-313`, `TOILE-UI-275`) |
+| `[ ]` A dropped display request leaves a trace | MVP | Toile's lossy send matches a disconnected channel alone, so a full one drops a camera request with no log; the cull request goes the same way while the dirty flag is cleared in the same frame, and the board paints the previous set until the camera moves again (`TOILE-UI-313`, `TOILE-UI-275`) |
 | `[ ]` The board tools let go | MVP | the pan flag is raised on `Space` and lowered by nothing, so one press turns every later drag into a pan for the rest of the session; and a press on a transform handle emits a resize or a rotate whatever the pointer did, costing a delta and an undo item for a geometry nobody changed (`TOILE-UI-256`, `TOILE-UI-252`) |
 | `[ ]` The deck is one list for every peer | MVP | the presentation order and configuration are created by the first write rather than with their parent, so two peers building the deck at the same moment mint rival lists and one is kept (`TOILE-029`) |
 | `[ ]` Presentation mode holds the screen it promises | MVP | the overlay pass is never told the mode, so the selection box, the handles, the find hits and the presence cursors paint over the slide; the follow affordance names a presenter and is cleared by nothing; a co-author's note edit stays invisible until the slide changes; a fade-out stops when the gliding camera culls its element; and the transition eases over a constant instead of the deck's own configuration (`TOILE-UI-083`, `TOILE-UI-315`, `TOILE-UI-316`, `TOILE-UI-085`, `TOILE-FEAT-028`) |
@@ -249,8 +249,11 @@ owns the subsystem.
 | `[ ]` Visual tests of canvas content | -- | no canvas content is verifiable in CI: headless browsers read back a blank frame |
 | `[ ]` The Sync and relay belts | -- | the shipped rows no test would fail on, across the Sync worker, the sealed envelope, the delta order, the membership, the key rotation, the media transfer, the relay, its session, its sequencer and its stores |
 | `[ ]` The UI-thread belts | -- | the same debt on the frame, the chrome shell, the clipboard, the input pipe, the launcher, the key verification, the design tokens, the render assets and accessibility |
+| `[ ]` The thread-separation belts | -- | the shipped rows no test would fail on across the three-thread stack, the message bus and the zero-knowledge boundary: the crate graph a build shape holds by accident, the envelopes no test drives, and the plaintext a gate reads off a manifest |
+| `[ ]` The shared document-tool belts | -- | the same debt across the command dispatch, the undo engine, find and replace, the text editor and the PDF export |
 | `[ ]` The Trame belts | -- | the same debt across the grid viewport, the cell surface, the number formats and the data tools |
 | `[ ]` The Toile belts | -- | the same debt across the board surface, the connectors, the presentation and the interop converters |
+| `[ ]` The container and schema belts | -- | the shipped rows no test would fail on across the `.ambre` container, the schema register and the fixture corpora: the header a wire payload must never carry, the bump obligation a reviewer holds today, and the writers a version freeze binds |
 | `[ ]` Fuzzing the untrusted readers | -- | a `cargo-fuzz` target on the wire decode, the `.ambre` container and the formula parser, each of which is fed by a relay or by a user's file |
 | `[ ]` The suite checked adversarially | -- | `cargo-mutants` over the crates whose tests are generated, so a test that asserts nothing fails |
 | `[ ]` The workspace lints | -- | `forbid(unsafe_code)` in every crate instead of two, and a workspace lint table in place of the default clippy set |

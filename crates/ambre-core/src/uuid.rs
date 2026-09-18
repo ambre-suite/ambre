@@ -26,12 +26,12 @@ impl Uuid {
         Self(*uuid.as_bytes())
     }
 
-    /// Creates a UUID from a 16‑byte array.
+    /// Creates a UUID from a 16-byte array.
     pub const fn from_bytes(bytes: [u8; 16]) -> Self {
         Self(bytes)
     }
 
-    /// Returns the underlying 16‑byte array.
+    /// Returns the underlying 16-byte array.
     pub const fn as_bytes(&self) -> &[u8; 16] {
         &self.0
     }
@@ -44,6 +44,10 @@ impl Uuid {
     /// Creates a UUID from a slice of bytes.
     ///
     /// Returns an error if the slice length is not 16.
+    ///
+    /// # Errors
+    ///
+    /// [`UuidError::InvalidLength`], carrying the length it received.
     pub fn from_slice(slice: &[u8]) -> Result<Self, UuidError> {
         slice
             .try_into()
@@ -53,7 +57,11 @@ impl Uuid {
 
     /// Parses a UUID from a string representation.
     ///
-    /// Accepts both hyphenated and non‑hyphenated forms.
+    /// Accepts both hyphenated and non-hyphenated forms.
+    ///
+    /// # Errors
+    ///
+    /// [`UuidError::InvalidString`] when `s` is not a UUID in either form.
     pub fn parse_str(s: &str) -> Result<Self, UuidError> {
         Ok(Self(*ExternalUuid::parse_str(s)?.as_bytes()))
     }

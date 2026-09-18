@@ -1,10 +1,10 @@
-// ambre-trame/src/logic/docfile.rs
-// The `.ambre` native container, Trame side (`ambre-spec-docfile.md`).
+// ambre-trame/src/logic/docfile.rs The `.ambre` native container, Trame side
+// (`ambre-spec-docfile.md`).
 //
 // Trame's half of the pair: the payload is this workbook's `LoroDoc` snapshot.
-// The header is not built here -- layout, version registry and both normative
-// read rules live once in `ambre_core::docfile` and are called from here (I5:
-// one container, every app; no per-app header variant).
+// The header is not built here. Layout, version registry and both normative read
+// rules live once in `ambre_core::docfile` and are called from here. That is I5:
+// one container, every app, and no per-app header variant.
 //
 // Part of the `TrameState` impl, split out by concern like `sync` and `interop`.
 // Submodule of `logic`, so it reaches the private fields of the parent module
@@ -37,11 +37,16 @@ pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Vec<u8> {
 /// Validate a plaintext `.ambre` as a *Trame* document and hand back the header
 /// plus the payload.
 ///
-/// The whole read policy is inherited: an older container migrates, a newer one
-/// is refused non-destructively, and a valid file belonging to another app comes
-/// back as [`DocFileError::WrongDocType`] carrying the type, so the caller
+/// The whole read policy is inherited. An older container migrates, and a newer
+/// one is refused non-destructively. A valid file belonging to another app comes
+/// back as [`DocFileError::WrongDocType`] carrying the type. The caller then
 /// re-dispatches those same bytes rather than coercing the document into a
 /// spreadsheet (dispatch rule, `docfile`).
+///
+/// # Errors
+///
+/// Every error of [`read_ambre_plaintext_as`], including
+/// [`DocFileError::WrongDocType`] for a valid file of another app.
 pub fn import_ambre_plaintext(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
     read_ambre_plaintext_as(DocType::Trame, data)
 }
@@ -50,7 +55,7 @@ impl TrameState {
     /// Export this workbook as plaintext `.ambre` bytes.
     ///
     /// `doc_id` is supplied by the caller because the engine does not hold the
-    /// document's identity -- the registry does (`ambre-logic`), and a fixture
+    /// document's identity. The registry does (`ambre-logic`), and a fixture
     /// generator pins it from its seed (`ambre-spec-fixtures.md`).
     pub fn export_ambre_plaintext(&self, doc_id: Uuid) -> Vec<u8> {
         export_ambre_plaintext(&self.doc, doc_id)
@@ -60,10 +65,15 @@ impl TrameState {
     /// carried and the display events the UI needs to repaint.
     ///
     /// Nothing is applied until the header and the schema register have both
-    /// validated, and a payload the CRDT
-    /// engine refuses leaves the state as it was: the two failure modes are
-    /// distinct, and [`DocFileError::PayloadRejected`] is the only one this layer
-    /// adds to the container taxonomy.
+    /// validated. A payload the CRDT engine refuses leaves the state as it was.
+    /// The two failure modes are distinct, and [`DocFileError::PayloadRejected`]
+    /// is the only one this layer adds to the container taxonomy.
+    ///
+    /// # Errors
+    ///
+    /// Every error of the free [`import_ambre_plaintext`], plus
+    /// [`DocFileError::PayloadRejected`] when the schema register or the CRDT
+    /// engine refuses the payload. The state is unchanged in either case.
     pub fn import_ambre_plaintext(
         &mut self,
         data: &[u8],
@@ -155,7 +165,7 @@ mod tests {
         // received nothing but this payload reproduce the file exactly. Asserted
         // on a bare `LoroDoc` rather than a `TrameState`, because
         // `TrameState::new` commits its own default-sheet op under a fresh random
-        // peer id -- that op is a second peer's history, not a lost round trip.
+        // peer id. That op is a second peer's history, not a lost round trip.
         let bytes = populated().export_ambre_plaintext(doc_id());
         let header = import_ambre_plaintext(&bytes).expect("a Trame container");
         let reloaded = LoroDoc::new();

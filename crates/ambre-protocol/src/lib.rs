@@ -1,4 +1,4 @@
-//! Wire protocol types for Ambre client‑server communication.
+//! Wire protocol types for Ambre client-server communication.
 //!
 //! Defines all network messages: updates, snapshots, ephemerals, WebSocket frames,
 //! and signaling messages for WebRTC meetings.
@@ -17,7 +17,7 @@ pub mod signaling;
 pub mod version;
 pub mod ws;
 
-// Re‑exports for convenient consumption.
+// Re-exports for convenient consumption.
 pub use error::Error;
 pub use messages::{CommitmentTag, Ephemeral, Nonce, SeqUpdate, Signature, Snapshot, Update};
 pub use public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};

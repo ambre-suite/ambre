@@ -56,15 +56,15 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-146` | `FRAME` | Outdenting an item MUST NOT touch its text, nor the style of any item it leaves behind. | derived | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the ordinal and the section numbering, one row of
-  `ambre-spec-budgets.md section 1`: both are read-time walks over the block tree, and
+  `ambre-spec-budgets.md section 1`. Both are read-time walks over the block tree, and
   pagination pays for them once per layout.
 * **Boundary.** none of its own: a list item is a block like any other, and `ZK-001` seals every
   payload before it leaves the client.
 * **Verification.** 17 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-005` and `PROSE-FEAT-002` are the two a reviewer can hold without a test, because a
-  stored depth or a stored ordinal is a key in the schema table and the schema table has neither.
+  `PROSE-005` and `PROSE-FEAT-002` are the two a reviewer can hold without a test. A stored depth
+  or a stored ordinal is a key in the schema table, and the schema table has neither.
   `PROSE-FEAT-137` is the one that needs two peers, and it is the row the four commands are
-  designed to earn: it fails the moment any of them writes a number.
+  designed to earn. It fails the moment any of them writes a number.
 
 ---
 
@@ -87,7 +87,7 @@ Two peers in one list. No test resolves yet: the last column names the row each 
 
 **Containers.** None of its own. A list item is a block of the movable tree, and its style is an
 attribute of that block; both are declared in `ambre-spec-prose-schema.md section 3`. There is no
-list container node: nesting is the tree's own parent chain, which is what makes `PROSE-005` a
+list container node. Nesting is the tree's own parent chain, which is what makes `PROSE-005` a
 statement about the format rather than about this feature.
 
 **The styles:**
@@ -127,9 +127,9 @@ fn ordered_style_of(tree: &LoroMovableTree, id: &TreeID) -> Option<OrderedStyle>
 | `UnindentList { block_id }` | reparents the item under its grandparent, after its former parent's subtree |
 
 **The two edges of nesting.** Indenting the first item of a run has no previous neighbour to
-become its parent, so it is refused and reported rather than silently ignored
+become its parent. The command is refused and reported rather than silently ignored
 (`PROSE-FEAT-028`). Outdenting a top-level item has no grandparent to rise to, so it becomes an
-ordinary paragraph and loses its style (`PROSE-FEAT-027`): that is the gesture by which a user
+ordinary paragraph and loses its style (`PROSE-FEAT-027`). That is the gesture by which a user
 leaves a list from the keyboard.
 
 **Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
@@ -173,8 +173,8 @@ see section 6.
   `features/ambre-spec-prose-engine.md section 3` never declares. The styles feature reports
   through the same missing variant, and it lands with the `A refused command names what it refused`
   Story (`ambre-roadmap.md` E5).
-* **Nothing rules on Enter in an empty item.** Every editor of this kind ends a list that way, and
-  no rule here says whether it outdents, leaves the list, or adds another empty item.
+* **Nothing rules on Enter in an empty item.** Every editor of this kind ends a list that way. No
+  rule here says whether it outdents, leaves the list, or adds another empty item.
 * **Continuing a previous numbering has no design.** It is named as a future per-item override and
   nothing carries it, so a document imported with a continued list loses that intent.
 * **The checkbox state is a style, not a property.** Ticking an item rewrites its style value,
@@ -182,6 +182,6 @@ see section 6.
 * **Nothing rules on how deep a list may nest**, nor on what the marker is past the styles the
   numbering offers.
 * **Nothing states that two concurrent moves settle on one shape.** Two rows of section 2 rest on
-  it -- two peers indenting the same item, and an indent racing an outdent -- and they cite
+  it: two peers indenting the same item, and an indent racing an outdent. They cite
   `PROSE-005`, which says only where the depth is read from. It is a property of the movable tree,
   so it belongs to `ambre-spec-prose-schema.md section 1`, and no row there carries it either.

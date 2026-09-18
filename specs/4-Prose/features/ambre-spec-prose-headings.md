@@ -3,7 +3,7 @@
 **Type:** Vertical (feature)
 **Implementation:** design-only
 
-> Six levels of section title. Each one carries its level and nothing else: the number in front of
+> Six levels of section title. Each one carries its level and nothing else. The number in front of
 > it, and its place in the outline, are computed from the document order when the page is drawn.
 
 ---
@@ -35,18 +35,13 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 1`: both walk the block tree once per layout.
 * **Boundary.** none of its own: a heading is a block like any other, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 8 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line
-  `lib.rs`, and `ambre-bus` carries no Prose command at all, so no row here can be held either way.
-  Two rows stated two rules each, and in both the pair sat on opposite sides of the grammar: what
-  the screen shows is an `OBS`, what the document may not hold is an `INV`. The gesture had no
-  rows: nothing said what setting a level leaves behind, nothing said what it must not touch, and
-  `PROSE-FEAT-094` is the rule the out-of-range table leaned on without stating -- an import is the
-  only way a level outside one to six enters, and a command that wrote one would make
-  `PROSE-FEAT-029` a normal path rather than a tolerance. `PROSE-FEAT-029` has an oracle already:
-  numbering a document whose levels are all in range and numbering the same document with an
-  out-of-range level are two paths that must agree, which is the shape a property test reaches.
-  `PROSE-FEAT-031` is compiler-held the day the command enum exists, because an untyped attribute
-  write is a variant that is not there.
+* **Verification.** 8 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line `lib.rs`
+  and `ambre-bus` carries no Prose command, so no row can be held either way. One row has an oracle
+  already, the shape a property test reaches. Numbering a document with levels in range and
+  numbering it with a level outside one to six must agree (`PROSE-FEAT-029`).
+  `PROSE-FEAT-031` is compiler-held the day the command enum exists, since an untyped attribute
+  write is a variant that is not there. The rest wait on the gesture: what setting a level leaves
+  behind and what it must not touch.
 
 ---
 
@@ -84,8 +79,8 @@ fn heading_level_of(tree: &LoroMovableTree, id: &TreeID) -> Option<u8>;
 ```
 
 **A level out of range.** The format documents one to six, and an import is the only way in for a
-level outside it (`PROSE-FEAT-094`): a document can arrive carrying zero, seven or more, and it is
-numbered as the nearest level in range (`PROSE-FEAT-029`) while the stored level stays as it came
+level outside it (`PROSE-FEAT-094`). A document can arrive carrying zero, seven or more. It is
+numbered as the nearest level in range (`PROSE-FEAT-029`), and the stored level stays as it came
 (`PROSE-FEAT-091`).
 
 | The stored level | Numbering reads | The export writes |
@@ -108,7 +103,7 @@ is not one (`PROSE-FEAT-031`). What each leaves behind is `PROSE-FEAT-092`, and 
 touch is `PROSE-FEAT-093`.
 
 **What reads this feature.** The table of contents reads the outline
-(`features/ambre-spec-prose-table-of-contents.md`), pagination reads the heading's own settings for
+(`features/ambre-spec-prose-table-of-contents.md`). Pagination reads the heading's own settings for
 its keep-with-next rule (`features/ambre-spec-prose-pagination.md`), and the cross references read
 the number (`features/ambre-spec-prose-cross-references.md`). None of the three stores what it read.
 
@@ -126,7 +121,7 @@ the number (`features/ambre-spec-prose-cross-references.md`). None of the three 
 | an import | keeps the level the file carried, even out of range |
 
 The appearance of each level -- its size, its spacing, its weight -- is the built-in settings of
-the block type, resolved by the cascade
+the block type. The cascade resolves them
 (`features/ambre-spec-prose-inline-styles.md section 3`).
 
 ---
@@ -145,11 +140,11 @@ the block type, resolved by the cascade
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing rules on a skipped level.** A level-one heading followed by a level-three one has no
-  defined number: whether the missing level counts as zero, is skipped, or is treated as the level
-  above is undecided, and the table of contents reads whatever the numbering produces.
+  defined number. Whether the missing level counts as zero, is skipped, or is treated as the level
+  above is undecided. The table of contents reads whatever the numbering produces.
 * **Numbering has no format.** The number is a vector of counters, and no rule says how it is
-  rendered -- the separator, whether a trailing separator is written, or whether a level may be
-  lettered rather than numbered.
+  rendered. Nothing names the separator, whether a trailing separator is written, or whether a
+  level may be lettered rather than numbered.
 * **Numbering cannot be turned off per heading.** The table of contents carries a switch for the
   whole document (`features/ambre-spec-prose-table-of-contents.md`); a single unnumbered heading
   has no representation.

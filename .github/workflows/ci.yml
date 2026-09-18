@@ -58,6 +58,9 @@ jobs:
       # How a spec is built: prose share, production markers in a feature
       # document, the schema budgets, and the container cross-check.
       - run: just spec-shape
+      # What the three answers under a contract table spend, and whether any line
+      # writes the document's own history rather than what the system is.
+      - run: just spec-answers
       # What a spec points at: every document name cited, in the code and in the
       # corpus, names a document that exists (`ambre-spec-template.md` §1.D).
       - run: just spec-refs
@@ -65,8 +68,11 @@ jobs:
       # be what the feature documents say today (`ambre-spec-template.md` §4).
       - run: just inventory
       # How the English is written: the mechanical half of
-      # `ai/ambre-writing-style.md`, held as a ceiling that only falls.
+      # `ai/ambre-writing-style.md`, every metric a hard error.
       - run: just prose
+      # What the checks above themselves read: a defect in a reader is silent,
+      # so each of them proves nothing unless this one is green.
+      - run: just test-scripts
 
   # ---------------------------------------------------------------------------
   # deny -- supply chain (advisories, licences, sources) plus the zero-knowledge

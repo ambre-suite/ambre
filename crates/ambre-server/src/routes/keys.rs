@@ -41,20 +41,20 @@ pub async fn store_master_keys(
         detail: e.to_string(),
     })?;
 
-    // Write the master key material and the pubkeys in ONE statement: they
-    // describe a single identity, so a partial write (new master_key_enc but
-    // stale pubkeys, or vice versa) would leave the account unable to unwrap its
-    // own material. A single UPDATE to the one row is atomic without a
-    // transaction round-trip.
+    // Write the master key material and the pubkeys in ONE statement. They
+    // describe a single identity. A partial write (new master_key_enc but stale
+    // pubkeys, or vice versa) would leave the account unable to unwrap its own
+    // material. A single UPDATE to the one row is atomic without a transaction
+    // round-trip.
     //
     // First-time only: the `master_key_enc IS NULL` guard makes this endpoint the
     // one-shot setup path it is documented to be. Without it, a second call would
-    // overwrite `signing_pubkey`/`exchange_pubkey` unconditionally, and every
+    // overwrite `signing_pubkey`/`exchange_pubkey` unconditionally. Every
     // `doc_key_enc` already wrapped to the previous exchange key on shared
-    // documents would become undecryptable -- the caller would silently lose
+    // documents would then become undecryptable. The caller would silently lose
     // access to its own shared documents. A legitimate passphrase change keeps the
-    // seed and goes through `rotate_master_keys` (which touches only enc + salt),
-    // so a re-store here is always a mistake and is rejected.
+    // seed and goes through `rotate_master_keys`, which touches only enc + salt. A
+    // re-store here is always a mistake, and is rejected.
     let uid = uuid::Uuid::from_bytes(*s.user_id.as_uuid().as_bytes());
     let result = sqlx::query(
         "UPDATE users SET master_key_enc = $2, master_key_salt = $3, signing_pubkey = $4, exchange_pubkey = $5, updated_at = now() WHERE id = $1 AND master_key_enc IS NULL"

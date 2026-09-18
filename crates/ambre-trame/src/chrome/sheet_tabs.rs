@@ -2,12 +2,12 @@
 // ============================================================================
 // The sheet-tab strip (`trame-sheets`), as DOM Leptos chrome.
 //
-// Migrated off the canvas: tabs, the trailing "+" add button, in-place rename,
+// Migrated off the canvas. Tabs, the trailing "+" add button, in-place rename,
 // the per-tab `{ Rename, Delete }` context menu and drag-reorder are now plain
-// DOM, so they share the chrome's hover tokens and accessibility for free (the
-// canvas era hand-painted all of this and hand-routed every pointer event).
+// DOM. They therefore share the chrome's hover tokens and accessibility for free.
+// The canvas era hand-painted all of this and hand-routed every pointer event.
 //
-// The component is purely presentational: it emits intents through callbacks and
+// The component is purely presentational. It emits intents through callbacks, and
 // the launcher maps them onto `TrameCommand`s (ActivateSheet / CreateSheet /
 // RenameSheet / DeleteSheet / MoveSheet). The sheet list + active id are fed as
 // signals, mirrored from `TrameEvent::SheetList`.

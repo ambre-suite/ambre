@@ -2,11 +2,11 @@
 // Process-wide PubSub hub.
 //
 // Redis PubSub subscriptions are GLOBAL to a connection, so we cannot give each
-// WebSocket connection its own subscriber over the shared multiplexed client
-// (two connections watching the same document would collide on "already
+// WebSocket connection its own subscriber over the shared multiplexed client.
+// Two connections watching the same document would collide on "already
 // subscribed", and juggling N independent subscribers on one connection
-// desynchronises its command/reply stream). Instead a SINGLE task owns ONE
-// `PubSubStream` on the shared RESP3 connection and fans every received message
+// desynchronises its command/reply stream. Instead a SINGLE task owns ONE
+// `PubSubStream` on the shared RESP3 connection. It fans every received message
 // out IN-PROCESS to the WS connections that registered interest. Redis channel
 // (un)subscriptions are ref-counted: SUBSCRIBE on the first interested
 // connection, UNSUBSCRIBE when the last one leaves.
@@ -128,9 +128,9 @@ async fn hub_loop(redis: rustis::client::Client, mut cmd_rx: mpsc::Receiver<HubC
             msg = pubsub.next() => match msg {
                 Some(Ok(m)) => {
                     // Every channel this hub subscribes to is a name it built
-                    // itself, so a name that is not text is a defect here
-                    // rather than a peer's doing: say so instead of routing a
-                    // lossy reading of it.
+                    // itself. A name that is not text is therefore a defect
+                    // here, rather than a peer's doing. Say so, instead of
+                    // routing a lossy reading of it.
                     let Ok(channel) = m.channel_str() else {
                         tracing::warn!("pubsub hub: non-UTF-8 channel name, message dropped");
                         continue;

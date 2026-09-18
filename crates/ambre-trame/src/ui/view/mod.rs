@@ -44,10 +44,10 @@ const BLINK_MS: f64 = 530.0;
 /// farthest from the source wins, and the destination always contains the
 /// source. Returns the normalized rectangle `(r1, c1, r2, c2)`.
 ///
-/// `block` is the source's fill granularity `(rows, cols)`: a plain cell source
-/// is `(1, 1)` and the destination tracks the pointer cell exactly, while a
+/// `block` is the source's fill granularity `(rows, cols)`. A plain cell source
+/// is `(1, 1)`, and the destination tracks the pointer cell exactly. A
 /// merged-cell source carries its block size so the extension snaps to whole
-/// blocks (Excel behaviour -- a 2x1 merge fills two rows at a time).
+/// blocks (Excel behaviour). A 2x1 merge fills two rows at a time.
 fn fill_dest(src: CellRect, row: u32, col: u32, block: (u32, u32)) -> CellRect {
     let (sr1, sc1, sr2, sc2) = src;
     let (bh, bw) = block;
@@ -98,10 +98,10 @@ impl Clock for PerfClock<'_> {
 /// Gap (ms) with no `wheel` event after which the gesture is considered ended
 /// and coasting may begin. Continuous touchpad scrolling fires well under this.
 const FLING_GAP_MS: f64 = 60.0;
-/// Velocity retained per 16.667 ms of coasting (≈ exponential friction). This
-/// is a *time constant*, not a per-frame factor: the decay is raised to
-/// `dt / 16.667` each frame, so the deceleration curve over wall-clock time is
-/// identical at 60 Hz, 240 Hz, or any variable refresh rate.
+/// Velocity retained per 16.667 ms of coasting (~ exponential friction). This
+/// is a *time constant*, not a per-frame factor. The decay is raised to `dt /
+/// 16.667` each frame. The deceleration curve over wall-clock time is
+/// therefore identical at 60 Hz, 240 Hz, or any variable refresh rate.
 const FLING_FRICTION: f64 = 0.94;
 /// Minimum speed (physical px/ms) at gesture end to bother coasting at all.
 const FLING_START_PX_PER_MS: f64 = 0.05;
@@ -110,9 +110,9 @@ const FLING_STOP_PX_PER_MS: f64 = 0.012;
 /// Smoothing for the running velocity estimate: weight of the newest sample.
 const FLING_VELOCITY_BLEND: f64 = 0.8;
 /// A single pixel-mode `wheel` delta at or above this (physical px) is treated
-/// as a notched mouse wheel, not a touchpad glide: applied 1:1 with no inertia.
-/// Touchpad events stay well below this; a mouse notch (Chrome ~100 px/dpr,
-/// Firefox uses line mode anyway) sits comfortably above it.
+/// as a notched mouse wheel, not a touchpad glide. It is applied 1:1 with no
+/// inertia. Touchpad events stay well below this; a mouse notch (Chrome ~100
+/// px/dpr, Firefox uses line mode anyway) sits comfortably above it.
 const DISCRETE_WHEEL_PX: f64 = 40.0;
 
 /// Result of folding the pixel accumulator into a viewport pan.
@@ -156,10 +156,10 @@ fn formula_input_focused() -> bool {
 }
 
 /// Trigger a browser download of `data` named `filename` (interop export,
-/// `trame-import-export`). Wraps the bytes in a `Blob`, mints an
-/// object URL, and clicks a synthetic `<a download>`; the URL is revoked right
-/// after so it does not leak. Best-effort: any missing DOM handle is logged and
-/// skipped (the export bytes are already computed, only the download is lost).
+/// `trame-import-export`). Wraps the bytes in a `Blob`, mints an object URL,
+/// and clicks a synthetic `<a download>`. The URL is revoked right after so it
+/// does not leak. Best-effort: any missing DOM handle is logged and skipped
+/// (the export bytes are already computed, only the download is lost).
 #[cfg(target_arch = "wasm32")]
 fn trigger_download(filename: &str, data: &[u8]) {
     use wasm_bindgen::JsCast;
@@ -242,13 +242,13 @@ pub struct TrameView {
     /// Publishes the per-frame perf snapshot (fps + timings) so the DOM status
     /// bar can render it -- the HUD left the wgpu overlay (`trame-status-bar`).
     perf_pub: PerfPublisher,
-    /// One-shot canvas->launcher channel raised when an in-canvas autofilter
-    /// button is clicked (`trame-shared-filter`). The launcher consumes it to open the
-    /// DOM `FilterPopover` over the active cell -- the same path as the
-    /// context-menu "Filter by column" entry, so there is one filter code path.
+    /// One-shot canvas->launcher channel raised when an in-canvas autofilter button is
+    /// clicked (`trame-shared-filter`). The launcher consumes it to open the DOM
+    /// `FilterPopover` over the active cell. That is the same path as the context-menu
+    /// "Filter by column" entry, so there is one filter code path.
     filter_open: FilterOpenPublisher,
     /// Status-bar selection aggregates signal (`trame-status-bar`). The view
-    /// clears it to `None` on a single-cell selection; the Logic round-trip
+    /// clears it to `None` on a single-cell selection. The Logic round-trip
     /// (`RequestSelectionStats` -> `SelectionStats`) sets it from the launcher's
     /// event loop on a multi-cell one. Browser-only, like the formula signals.
     #[cfg(target_arch = "wasm32")]
@@ -278,17 +278,17 @@ pub struct TrameView {
     #[cfg(target_arch = "wasm32")]
     formula_action: RwSignal<Option<FormulaAction>>,
     /// Grid zoom factor (`1.0` = 100%) shared with the status-bar zoom menu
-    /// (`trame-status-bar`): the menu writes it, the view polls it each frame and
-    /// applies it via [`set_zoom`](Self::set_zoom). Browser-only, like the formula
-    /// signals; pure local view state, never synced.
+    /// (`trame-status-bar`). The menu writes it, and the view polls it each frame
+    /// and applies it via [`set_zoom`](Self::set_zoom). Browser-only, like the
+    /// formula signals; pure local view state, never synced.
     #[cfg(target_arch = "wasm32")]
     zoom_sig: RwSignal<f64>,
     /// Active in-cell edit session, or `None` in navigation mode.
     editor: Option<CellEditor>,
-    /// A commit requested from a grid key / click, deferred to the next paint.
-    /// The shared editor applies edits only at paint-time flush (a `FontContext`
-    /// is live only then), so the buffer is not final when the key is handled;
-    /// the commit runs after `draw_edit` flushes. `None` when no commit is pending.
+    /// A commit requested from a grid key / click, deferred to the next paint. The
+    /// shared editor applies edits only at paint-time flush, since a `FontContext`
+    /// is live only then. The buffer is not final when the key is handled, so the
+    /// commit runs after `draw_edit` flushes. `None` when no commit is pending.
     pending_commit: Option<PendingCommit>,
     /// True while the pointer is dragging out a text selection inside the open
     /// editor (between a press in the cell and its release).
@@ -306,23 +306,23 @@ pub struct TrameView {
     /// so the release knows which column/row to resize; pointer moves update the
     /// live guide line ([`TrameUiState::resize_preview`]).
     resize_drag: Option<HeaderHit>,
-    /// A pending column/row auto-fit (`trame-resize`) awaiting the parley
-    /// font context: set on a border double-click, resolved and cleared by the
-    /// next [`paint_content`](Self::paint_content) which owns the measurement.
+    /// A pending column/row auto-fit (`trame-resize`) awaiting the parley font
+    /// context. Set on a border double-click, it is resolved and cleared by
+    /// the next [`paint_content`](Self::paint_content), which owns the
+    /// measurement.
     pending_autofit: Option<HeaderHit>,
     /// In-progress autofill drag from the fill handle, or `None`
     /// (`trame-autofill`). Holds the source rectangle the drag started from and
-    /// the source block granularity `(rows, cols)` -- `(1, 1)` for a plain cell,
-    /// the merge
-    /// span for a merged-cell source so the drag snaps block by block. Ctrl is
-    /// read at *release* time (forces Copy on a multi-cell source and a +1 numeric
-    /// Series on a single-cell one, Excel-style), so toggling it mid-drag counts.
-    /// Pointer moves grow [`TrameUiState::fill_preview`] and the release emits a
-    /// `FillRange`.
+    /// the source block granularity `(rows, cols)`. That is `(1, 1)` for a plain
+    /// cell, or the merge span for a merged-cell source so the drag snaps block by
+    /// block. Ctrl is read at *release* time, so toggling it mid-drag counts. It
+    /// forces Copy on a multi-cell source and a +1 numeric Series on a single-cell
+    /// one, Excel-style. Pointer moves grow [`TrameUiState::fill_preview`] and the
+    /// release emits a `FillRange`.
     fill_drag: Option<(CellRect, (u32, u32))>,
     /// In-progress Excel-style header reorder drag, or `None`. Holds the grabbed
-    /// axis and the origin column/row index (`(Cols, from)` / `(Rows, from)`);
-    /// pointer moves update the [`TrameUiState::reorder_preview`] insertion slot
+    /// axis and the origin column/row index (`(Cols, from)` / `(Rows, from)`).
+    /// Pointer moves update the [`TrameUiState::reorder_preview`] insertion slot,
     /// and the release emits a `MoveColumn` / `MoveRow` (a no-op if it lands back
     /// on the origin). Armed only when the press lands on an already-selected
     /// header body, so a plain click still selects/extends the axis.
@@ -340,8 +340,8 @@ pub struct TrameView {
     /// `performance.now()` of the last blink toggle (or blink reset).
     last_blink_ms: f64,
     /// `performance.now()` of the input awaiting its caret paint, set by an edit
-    /// interaction and consumed once the caret is next drawn -- the keydown->caret
-    /// latency probe, against the keystroke-to-draft budget of
+    /// interaction and consumed once the caret is next drawn. This is the
+    /// keydown->caret latency probe, against the keystroke-to-draft budget of
     /// `ambre-spec-budgets.md`. `None` when idle.
     pending_input_mark: Option<f64>,
 
@@ -353,7 +353,7 @@ pub struct TrameView {
     draw_stats: DrawStats,
     initial_viewport_sent: bool,
 
-    /// Latest viewport request awaiting send, coalesced to ≤1 per frame so a
+    /// Latest viewport request awaiting send, coalesced to <=1 per frame so a
     /// fast key-repeat can't outrun the Logic thread. Set in `handle_input`,
     /// flushed in `update`. Only the newest is kept (it carries the highest
     /// `version`, which supersedes any it replaces).
@@ -383,8 +383,8 @@ pub struct TrameView {
     /// events; drives the momentum coast once the fingers lift.
     fling_vx: f64,
     fling_vy: f64,
-    /// Timestamp (perf ms) of the last wheel event; `>0` means a gesture is in
-    /// progress / just ended and we should watch for the fling gap.
+    /// Timestamp (perf ms) of the last wheel event. `>0` means a gesture is in
+    /// progress / just ended, and we should watch for the fling gap.
     last_wheel_ms: f64,
     /// True while coasting after a flick; cleared by a new wheel or a stop.
     coasting: bool,
@@ -402,8 +402,8 @@ pub struct TrameView {
     /// (`trame-clipboard`). `None` between a drain and the next copy.
     pending_clipboard: Option<ambre_bus::ClipboardBlob>,
     /// The last authoritative clipboard blob copied this session, kept in memory
-    /// for a full-fidelity same-tab paste that never depends on the OS custom
-    /// MIME type surviving the round-trip (`trame-clipboard`).
+    /// for a full-fidelity same-tab paste. That paste never depends on the OS
+    /// custom MIME type surviving the round-trip (`trame-clipboard`).
     last_clip: Option<ambre_bus::ClipboardBlob>,
 }
 

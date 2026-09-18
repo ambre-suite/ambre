@@ -2,20 +2,21 @@
 //!
 //! Moving between slide A and slide B, Toile interpolates the animatable
 //! properties of elements that appear in **both** frames and share the same
-//! stable [`ElementId`] -- position, size, rotation, opacity, fill -- with an
-//! eased `lerp`; elements only in A fade out, only in B fade in. Matching is by
-//! **stable id**, so an element the author moved / resized between two frames
-//! animates smoothly "for free" (the Figma Smart Animate model,); geometry
-//! / heuristic matching is the rejected alternative (fragile).
+//! stable [`ElementId`]. Those are position, size, rotation, opacity and fill,
+//! interpolated with an eased `lerp`. Elements only in A fade out, only in B
+//! fade in. Matching is by **stable id**, so an element the author moved /
+//! resized between two frames animates smoothly "for free": the Figma Smart
+//! Animate model. Geometry / heuristic matching is the rejected alternative
+//! (fragile).
 //!
-//! This module is **pure and deterministic**: given two [`FrameSnapshot`]s and a
-//! phase `t` it returns the [`AnimatedElement`]s to paint, with no CRDT mutation
-//! -- it animates the *presentation* of existing elements. The two snapshots are
-//! derived by the engine (`ToileState::frame_snapshot`); consuming the output in
-//! the `toile-presentation` camera pass is Phase 1 (roadmap).
+//! This module is **pure and deterministic**. Given two [`FrameSnapshot`]s and a
+//! phase `t` it returns the [`AnimatedElement`]s to paint, with no CRDT
+//! mutation. It animates the *presentation* of existing elements. The two
+//! snapshots are derived by the engine (`ToileState::frame_snapshot`); consuming
+//! the output in the `toile-presentation` camera pass is Phase 1 (roadmap).
 //!
-//! Frame membership is **explicit, not spatial** (note): a snapshot's
-//! elements are the frame's declared `children`, not whatever overlaps its rect.
+//! Frame membership is **explicit, not spatial** (note): a snapshot's elements
+//! are the frame's declared `children`, not whatever overlaps its rect.
 
 use std::collections::HashMap;
 
@@ -23,9 +24,9 @@ use kurbo::Rect;
 
 use crate::logic::model::ElementId;
 
-// The `SnapElement` / `FrameSnapshot` capture DTOs live in `ambre-bus` so the
-// enriched `SlideChanged` event can carry them to the render thread (which owns
-// no board state); this solver stays here as the sole consumer.
+// The `SnapElement` / `FrameSnapshot` capture DTOs live in `ambre-bus`, so the
+// enriched `SlideChanged` event can carry them to the render thread. That
+// thread owns no board state. This solver stays here as the sole consumer.
 pub use ambre_bus::app::toile::{FrameSnapshot, SnapElement};
 
 /// The interpolated presentation of one element for a single transition frame.
@@ -145,7 +146,7 @@ fn lerp_rect(a: Rect, b: Rect, t: f64) -> Rect {
 
 /// Interpolate two ARGB fills. Both present -> per-channel lerp. Otherwise there
 /// is no common color to blend, so crossfade to the `t`-dominant side (`< 0.5`
-/// keeps `a`, `>= 0.5` takes `b`); this keeps the tween deterministic and never
+/// keeps `a`, `>= 0.5` takes `b`). This keeps the tween deterministic and never
 /// invents a color out of `None`.
 fn lerp_fill(a: Option<u32>, b: Option<u32>, t: f64) -> Option<u32> {
     match (a, b) {

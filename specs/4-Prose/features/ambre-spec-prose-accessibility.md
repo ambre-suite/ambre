@@ -42,21 +42,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the surface carries text the Logic thread already decrypted and sent, and it
   opens no path of its own (`UI-THREAD-004`).
 * **Verification.** 9 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line
-  `lib.rs`. `PROSE-UI-069` carried a second half `PROSE-UI-001` already owns -- the UI thread holds
-  no document data -- so the row keeps the source rule and the ban stays where it was written.
-  Four rules the document turns on carried no row: the surface's own caret sits where the author's
-  does (`PROSE-UI-077`), it holds one block and not the document (`PROSE-UI-078`, the alternative
-  section 5 rejects), an edit reaches it with no caret move (`PROSE-UI-079`, which scenario three
-  of section 2 rests on while the steps of section 3 run on a selection change alone), and a move
-  inside one context announces nothing (`PROSE-UI-080`). That last one is the difference between a
-  live region and one an author switches off, and an implementation speaking on every arrow key
-  satisfies `PROSE-UI-067` and `PROSE-UI-068` whole. `PROSE-UI-081` is the frame condition the
-  section 5 decision to reuse the input element needs, and section 6 records that
-  `ambre-spec-text-input.md` contradicts it as both are written today. `PROSE-UI-067`,
-  `PROSE-UI-068` and `PROSE-UI-080` are the three a host test can hold, because the announcement is
-  a string built from the caret's context and needs neither a browser nor a screen reader. The
-  other six need the live element and land in the wasm tier of `ambre-spec-testing.md section 6`,
-  and no tier in the corpus drives an actual screen reader.
+  `lib.rs`. Three rows are what a host test can hold. An announcement is a string built
+  from the caret's context, and needs neither a browser nor a screen reader. The other six need the
+  live element and land in the wasm tier (`ambre-spec-testing.md section 6`), and no tier in the
+  corpus drives an actual screen reader. Section 6 records that `ambre-spec-text-input.md`
+  contradicts `PROSE-UI-081` as both are written today.
 
 ---
 
@@ -80,7 +70,7 @@ resolves yet: the last column names the row each scenario rests on.
 
 **Two surfaces, both already there.** The shared transparent `<textarea>` is every application's
 keyboard and input pipe (`ambre-spec-text-input.md`), and it is what a screen reader
-navigates: it carries the caret block's text rather than staying empty (`PROSE-UI-066`). Beside it
+navigates. It carries the caret block's text rather than staying empty (`PROSE-UI-066`). Beside it
 sits one polite live region, where a caret move is announced.
 
 **What the surface carries.** The caret block's text, kept in step with the runs the page is
@@ -90,9 +80,9 @@ painted from (`PROSE-UI-066`) -- not the whole document (`PROSE-UI-078`).
 
 1. the view resolves the caret's block and its ancestors from the layout it already holds;
 2. it replaces the surface's text with that block's text, which is a write into the pipe and not a
-   keystroke (`PROSE-UI-081`), and places the surface's own caret at the matching offset
+   keystroke (`PROSE-UI-081`). It places the surface's own caret at the matching offset
    (`PROSE-UI-066`, `PROSE-UI-077`);
-3. it builds the context sentence: the block's kind, its heading level when it has one, and the
+3. it builds the context sentence. The block's kind, its heading level when it has one, and the
    structures the caret entered or left since the last move (`PROSE-UI-067`, `PROSE-UI-068`);
 4. it writes that sentence into the live region, and writes nothing when the context is unchanged
    (`PROSE-UI-080`).
@@ -109,9 +99,9 @@ painted from (`PROSE-UI-066`) -- not the whole document (`PROSE-UI-078`).
 | on a suggested insertion or deletion | the kind of change, and that it is pending |
 
 **One source, two renderings.** The surface and the live region are filled from the runs and the
-layout the canvas paints from (`PROSE-UI-069`), so neither can hold text the page does not show. An
+layout the canvas paints from (`PROSE-UI-069`). Neither can hold text the page does not show. An
 edit to the caret's block therefore reaches the surface on the frame that paints it, with no caret
-move behind it (`PROSE-UI-079`); the steps above run on a selection change and are not that path.
+move behind it (`PROSE-UI-079`). The steps above run on a selection change and are not that path.
 Prose's announcement is the same act as Trame's active-cell announcement
 (`features/ambre-spec-trame-selection.md`); the two differ in what they name, not in where the
 sentence comes from.
@@ -154,15 +144,15 @@ There is no control: nothing here is switched on or off by the author.
 * **Nothing exists.** `crates/ambre-prose/src/lib.rs` is seven lines, so the surface, the region and
   the context sentence are a design, and every row above is `unimplemented`.
 * **The mechanism is now chosen, and the budget still measures nothing.**
-  `ambre-spec-accessibility.md` settles what the corpus long stated two ways: content reaches a
-  screen reader through the input element and a live region, not through a platform tree, because
-  the web has no platform adapter to push one to. The four rows above are written against that
+  `ambre-spec-accessibility.md` settles what the corpus long stated two ways. Content reaches a
+  screen reader through the input element and a live region, not through a platform tree. The web
+  has no platform adapter to push one to. The four rows above are written against that
   choice. What stays open is the cost: the budget row of
   `ambre-spec-budgets.md section 2` measures a diff no design has produced.
 * **The pipe cannot hold the block's text as `ambre-spec-text-input.md` is written.** The decision
-  above reuses the shared input element, and that document empties the pipe after every commit
+  above reuses the shared input element. That document empties the pipe after every commit
   (`CHROME-017`) and forwards whatever it holds as one committed run (`CHROME-061`). Text put there
-  for a screen reader is then the block repeated into the document on the next keystroke, which is
+  for a screen reader is then the block repeated into the document on the next keystroke. That is
   the defect the clear exists to prevent. `PROSE-UI-081` states what must hold; which of the two
   mechanisms gives way is undecided, and the two documents were written apart.
 * **The other two applications have no content surface at all.** Trame announces its active cell
@@ -170,10 +160,10 @@ There is no control: nothing here is switched on or off by the author.
   `CANVAS-009` states for every application is designed for one of the three. This document is not
   the horizontal half: it would be a second copy of a rule Foundations already owns.
 * **Nothing drives a screen reader.** `ambre-spec-testing.md` has no tier that reads a live region
-  or walks an accessibility tree, so the three rows a host test can hold are the announcement's
+  or walks an accessibility tree. The three rows a host test can hold are the announcement's
   text and its silence, never that anything says either.
 * **The reading order of a page is not the document's order.** A header, a footer and a footnote
-  band are laid out around the body, and no rule says where they fall for a reader who is walking
+  band are laid out around the body. No rule says where they fall for a reader who is walking
   the document rather than looking at the page.
 * **A picture's alternative text reaches no surface.** The image node carries `alt`
   (`ambre-spec-prose-schema.md section 3`) and no announcement names it, so a picture is silent

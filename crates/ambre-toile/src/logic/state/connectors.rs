@@ -112,8 +112,8 @@ impl ToileState {
     }
 
     /// Overwrite an arrow's caption. The caption is a `LoroText`, and the whole
-    /// body is diffed into it rather than replacing it, so two peers typing on
-    /// one arrow converge character by character (`TOILE-047`).
+    /// body is diffed into it rather than replacing it. Two peers typing on one
+    /// arrow then converge character by character (`TOILE-047`).
     pub(super) fn set_connector_label(&mut self, id: ConnectorId, text: &str) -> ToileOutcome {
         let Some(cm) = self.connector_map(&id) else {
             return self.err_no_connector(&id);

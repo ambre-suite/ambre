@@ -3,10 +3,10 @@
 **Type:** Vertical (feature)
 **Implementation:** partial -- the language, the graph and the evaluator are built; whole-axis ranges are not.
 
-> A user types `=SUM(A1:A3)*2`. The cell shows a number, and keeps showing the right number after
+> A user types `=SUM(A1:A3)*2`. The cell shows a number. It keeps showing the right number after
 > someone else edits `A2`, sorts the rows or renames the sheet the formula reads from.
 
-Twelve behaviours here name organs, not features: a range needs a binding, a binding needs a graph,
+Twelve behaviours here name organs, not features. A range needs a binding, a binding needs a graph,
 a graph needs a cycle rule, and none of the four ships alone. They are one document. The function
 catalogue and the named ranges are not organs of it, and have their own.
 
@@ -33,9 +33,9 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-046` | `INV` | An empty cell MUST compare as the zero of whatever it is compared with. | this spec section 4 | `ambre_trame::formula::vm::tests::an_empty_operand_compares_at_its_peer_zero`; `::booleans_order_false_before_true` | none | verified |
 | `TRAME-047` | `INV` | Two numbers MUST compare on a relative tolerance, never an absolute one. | this spec section 5 | `ambre_trame::formula::vm::tests::equality_is_relative_not_absolute` | none | verified |
 | `TRAME-044` | `INV` | A range too large to hold in memory MUST read `#REF!`. | this spec section 3 | `ambre_trame::formula::vm::tests::eval_range_over_cell_cap_yields_ref_error` | none | verified |
-| `TRAME-209` | `INV` | A range over that cap MUST NOT be materialized. | this spec section 3 | none | unheld -- the test above reads the error value back, which a run that allocated the million cells and then returned the error would return too. Nothing weighs the allocation | unverified |
-| `TRAME-210` | `INV` | The cells a single recompute materializes for ranges MUST be bounded across the whole pass, not one range at a time. | this spec section 6 | none | fails -- the cap is per range by construction: `MAX_RANGE_CELLS` guards one `EvalRange`, so a hundred formulas each just under it materialize a hundred million values on every recompute, on every peer | unverified |
-| `TRAME-042` | `INV` | A loop closed through a range, a name or another sheet MUST be caught while evaluating. | this spec section 3 | none | unheld -- the guard is the evaluation stack in `formula/vm.rs`, and every cycle test drives the static graph instead, so no test closes a loop the graph cannot see | unverified |
+| `TRAME-209` | `INV` | A range over that cap MUST NOT be materialized. | this spec section 3 | none | unheld -- the test above reads the error value back, which a run that allocated the million cells and then returned the error would return too. Nothing weighs the allocation; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-210` | `INV` | The cells a single recompute materializes for ranges MUST be bounded across the whole pass, not one range at a time. | this spec section 6 | none | fails -- the cap is per range by construction: `MAX_RANGE_CELLS` guards one `EvalRange`, so a hundred formulas each just under it materialize a hundred million values on every recompute, on every peer; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-042` | `INV` | A loop closed through a range, a name or another sheet MUST be caught while evaluating. | this spec section 3 | none | unheld -- the guard is the evaluation stack in `formula/vm.rs`, and every cycle test drives the static graph instead, so no test closes a loop the graph cannot see; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-048` | `INV` | A whole-column or whole-row range MUST cover the used part of its axis. | this spec section 6 | not built | unbuilt -- lands with the `Engine completion` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-033` | `OBS` | A formula shown back to its author MUST carry only the parentheses its meaning needs. | this spec section 4 | `ambre_trame::formula::render::tests::precedence_minimal_parens`; `::pow_right_associative` | none | verified |
 | `TRAME-045` | `OBS` | Every evaluation failure MUST show a named error, never a blank and never a number. | this spec section 4 | `ambre_trame::formula::vm::tests::division_by_zero`; `ambre_trame::formula::engine::tests::division_by_zero_displayed`; `ambre_trame::formula::types::tests::cell_value_display` | none | verified |
@@ -45,13 +45,13 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-211` | `PRE` | A sheet a formula qualifies MUST already exist when the formula is typed. | this spec section 3 | none | fails -- `canonicalize` leaves a qualifier it cannot resolve as a name, so the formula is stored by name. It resolves the day the sheet appears and breaks the day that sheet is renamed, which is the one thing `TRAME-034` promises never happens | unverified |
+| `TRAME-211` | `PRE` | A sheet a formula qualifies MUST already exist when the formula is typed. | this spec section 3 | none | fails -- `canonicalize` leaves a qualifier it cannot resolve as a name, so the formula is stored by name. It resolves the day the sheet appears and breaks the day that sheet is renamed, which is the one thing `TRAME-034` promises never happens; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-011` | `POST` | Typing into a cell MUST compile that cell again. | this spec section 3 | `ambre_trame::formula::cache::tests::stale_cell_recompiled`; `::non_formula_clears_cache` | none | verified |
 | `TRAME-040` | `POST` | An edit MUST update every cell that reads it, directly or through a range. | this spec section 3 | `ambre_trame::formula::dag::tests::simple_dependency_propagation`; `::range_dirty_collection`; `::collect_dirty_reaches_a_fixpoint_over_chained_ranges`; `ambre_trame::formula::engine::tests::cascade_after_edit`; `::range_dependency_propagates_through_a_chain` | none | verified |
 | `TRAME-041` | `FRAME` | An edit MUST NOT recompute a cell that reads nothing it changed. | this spec section 3 | `ambre_trame::formula::dag::tests::range_outside_no_dirty`; `ambre_trame::formula::cache::tests::not_stale_no_recompile` | none | verified |
-| `TRAME-212` | `FRAME` | Retyping the text a cell already holds MUST NOT recompile it. | this spec section 6 | none | fails -- `on_cell_changed` calls `invalidate` before it compares anything, so the staleness check `TRAME-011` rests on never sees a hit from the edit path. `::not_stale_no_recompile` holds for the cache unit alone | unverified |
+| `TRAME-212` | `FRAME` | Retyping the text a cell already holds MUST NOT recompile it. | this spec section 6 | none | fails -- `on_cell_changed` calls `invalidate` before it compares anything, so the staleness check `TRAME-011` rests on never sees a hit from the edit path. `::not_stale_no_recompile` holds for the cache unit alone; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-012` | `FAIL` | A formula that reads itself through other cells MUST be refused with its culprits named. | this spec section 3 | `ambre_trame::formula::dag::tests::static_cycle_detected`; `::cycle_detection_kosaraju_returns_culprits`; `::rejected_cycle_leaves_no_stale_range_deps` | none | verified |
-| `TRAME-213` | `FAIL` | A formula that reads its own cell directly MUST be refused. | this spec section 3 | none | fails -- the static graph cannot refuse it: `DependencyGraph::update` drops every dependency equal to the formula's own cell before it adds an edge, so no self-loop is ever built and the cycle check has nothing to find. `::self_reference_rejected` names the case and asserts only that a formula with no dependencies is accepted | unverified |
+| `TRAME-213` | `FAIL` | A formula that reads its own cell directly MUST be refused. | this spec section 3 | none | fails -- the static graph cannot refuse it: `DependencyGraph::update` drops every dependency equal to the formula's own cell before it adds an edge, so no self-loop is ever built and the cycle check has nothing to find. `::self_reference_rejected` names the case and asserts only that a formula with no dependencies is accepted; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-035` | `FAIL` | A reference to a sheet that never existed MUST be refused, not evaluated. | this spec section 4 | `ambre_trame::formula::parser::tests::unknown_sheet_name_is_parse_error`; `::unknown_sheet_is_error` | none | verified |
 | `TRAME-039` | `FAIL` | A refused formula MUST replace the cell's previous result, never leave it on screen. | this spec section 3 | `ambre_trame::formula::engine::tests::parse_error_replaces_the_stale_value`; `::cycle_replaces_the_stale_value_with_an_error` | none | verified |
 
@@ -59,7 +59,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-008` | `POST` | A row or column delete MUST propagate `#REF!` to every formula that read the deleted line. | this spec section 6 | none | fails -- the delete path rebinds every formula from its raw text, so the reference lands positionally on the shifted grid. `ambre_trame::logic::tests::group2::formula_reference_is_positional_after_delete` asserts `=A2` reads empty after deleting row 1 | unverified |
+| `TRAME-008` | `POST` | A row or column delete MUST propagate `#REF!` to every formula that read the deleted line. | this spec section 6 | none | fails -- the delete path rebinds every formula from its raw text, so the reference lands positionally on the shifted grid. `ambre_trame::logic::tests::group2::formula_reference_is_positional_after_delete` asserts `=A2` reads empty after deleting row 1; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-009` | `POST` | Deleting a sheet MUST break the references that read it. | this spec section 3 | `ambre_trame::logic::tests::group1::cross_sheet_reference_survives_rename_and_breaks_on_delete`; `ambre_trame::formula::parser::tests::deleted_sheet_id_yields_broken_ref` | none | verified |
 | `TRAME-214` | `FRAME` | Renaming or reordering a sheet MUST NOT break a reference that reads it. | this spec section 3 | `ambre_trame::logic::tests::group1::cross_sheet_reference_survives_rename_and_breaks_on_delete`; `ambre_trame::logic::tests::group3::cross_sheet_reference_converges_across_peers_on_rename`; `::rename_sheet_keeps_id_and_cells`; `::move_sheet_reorders_tabs` | none | verified |
 | `TRAME-215` | `FRAME` | A row or column delete MUST NOT rewrite the raw text of a formula. | this spec section 3 | `ambre_trame::logic::tests::group2::formula_reference_is_positional_after_delete` -- it reads the shifted grid through unchanged text, and `shift_formula` is reachable only from the paste and fill paths | none | verified |
@@ -78,25 +78,19 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-217` | `POST` | A paste or a fill MUST shift every cell and range reference by the offset the formula moved. | this spec section 4 | `ambre_trame::formula::shift::tests::shifts_cell_and_range_down_right`; `::keeps_operators_and_functions` | none | verified |
 | `TRAME-043` | `POST` | A reference a paste or a fill pushes off the grid MUST read `#REF!`. | this spec section 4 | `ambre_trame::formula::shift::tests::off_grid_reference_becomes_ref_error`; `::ref_error_text_is_reparseable` | none | verified |
 | `TRAME-218` | `FRAME` | A paste or a fill MUST NOT rewrite an operator, a literal or a function name. | this spec section 4 | `ambre_trame::formula::shift::tests::keeps_operators_and_functions`; `::no_shift_is_verbatim` | none | verified |
-| `TRAME-219` | `FRAME` | A paste or a fill MUST NOT shift a defined name. | this spec section 4 | none | unheld -- `shift_expr` returns a `Name` node untouched, which is the whole of the rule and is stated nowhere else, and no test pastes a formula that carries one | unverified |
+| `TRAME-219` | `FRAME` | A paste or a fill MUST NOT shift a defined name. | this spec section 4 | none | unheld -- `shift_expr` returns a `Name` node untouched, which is the whole of the rule and is stated nowhere else, and no test pastes a formula that carries one; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-220` | `FAIL` | A formula the parser refuses MUST be pasted verbatim, never mangled. | this spec section 4 | `ambre_trame::formula::shift::tests::unparseable_left_verbatim` | none | verified |
 
-* **Budget.** three rows of `ambre-spec-budgets.md section 1` -- the 10k-cell DAG recompute
-  in < 50 ms, the `range_index` scan of 1k range formulas in < 1 ms, `SetCellText` to the viewport
-  in < 5 ms -- plus the DAG and cache holder of `ambre-spec-budgets.md section 6`, < 50 MB
-  per 100k formula cells. **None of the four has a mechanism**: the workspace holds one `benches`
-  directory, `ambre-crypto`, and no recipe runs a Trame benchmark.
-* **Boundary.** none of its own: `TRAME-010` keeps computed values out of the document, so only the
-  raw source travels, and `ZK-001` seals it before it leaves the client.
-* **Verification.** 30 `verified`, 8 `unverified`, 1 `unimplemented`. Every gap is named. Three
-  rows are ones the code contradicts: `TRAME-008` claims a `#REF!` on a row delete and the suite
-  asserts the opposite, green; `TRAME-212` claims a re-type is free and the edit path invalidates
-  before it compares; `TRAME-213` claims a direct self-reference is refused and the graph drops the
-  self-edge before the cycle check can see it. `TRAME-042` is the dynamic half of cycle detection,
-  which exists for the loops the static graph cannot see and is driven by nothing -- and it is now
-  the only guard left for `TRAME-213`. `TRAME-209`, `TRAME-210` and `TRAME-219` are absences of
-  weight, not of behaviour: nothing measures what a range allocates, per range or per pass, and
-  nothing pastes a defined name.
+* **Budget.** three rows of `ambre-spec-budgets.md section 1`: the 10k-cell DAG recompute, the
+  `range_index` scan and `SetCellText` to the viewport, plus the DAG and cache holder of section 6.
+  **None of the four has a mechanism**: no recipe runs a Trame benchmark.
+* **Boundary.** none of its own. `TRAME-010` keeps computed values out of the document, so only
+  the raw source travels, and `ZK-001` seals it before it leaves the client.
+* **Verification.** 30 `verified`, 5 `failing`, 3 `untested`, 1 `unimplemented`. What holds is the
+  graph and its recompute, the best-covered engine of the workspace. What is loose is weight rather
+  than behaviour: nothing measures what a range allocates. The failures are three rules the code
+  contradicts (`TRAME-008`, `TRAME-212`, `TRAME-213`). Beside them is the dynamic half of cycle
+  detection, which nothing drives and which is the only guard left for the third.
 
 ---
 
@@ -115,7 +109,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ## 3. MODEL
 
-**Containers.** None. The engine owns no CRDT state: it reads the raw text of `cells_{sheet}`
+**Containers.** None. The engine owns no CRDT state. It reads the raw text of `cells_{sheet}`
 (`ambre-spec-trame-schema.md section 3`) and holds every derived structure in memory, rebuilt from
 the document on load. Named ranges are the exception, and are a feature of their own.
 
@@ -167,12 +161,12 @@ pub struct DependencyGraph {
 
 **Bytecode.** `CellBytecode` carries the ops, the cells read and the ranges read. The instruction set
 is a stack machine: `PushNum`, `PushStr`, `PushBool`, `PushEmpty`, `PushCell`, `EvalRange`, the
-binary and unary operators, `CallFn { name, n_args }`, and `PushError` for a failure the compiler
-already knows about.
+binary and unary operators and `CallFn { name, n_args }`. `PushError` carries a failure the
+compiler already knows about.
 
-**Evaluating one cell**, in order: a cell already on the evaluation stack returns a circular-reference
-error (`TRAME-042`); a cell already resolved returns its memo; otherwise it is pushed, executed,
-popped and memoised. This is the only guard against a loop the cell graph cannot see.
+**Evaluating one cell**, in order. A cell already on the evaluation stack returns a
+circular-reference error (`TRAME-042`). A cell already resolved returns its memo. Otherwise it is
+pushed, executed, popped and memoised. This is the only guard against a loop the cell graph cannot see.
 
 **The value domain.** What the machine pushes, what a builtin receives, and what the cache holds.
 
@@ -199,7 +193,7 @@ pub enum FormulaError {
 }
 ```
 
-An error is a value, not an exception: it is pushed like any other, and it reaches the screen as the
+An error is a value, not an exception: it is pushed like any other. It reaches the screen as the
 cell's displayed text (`features/ambre-spec-trame-engine.md`, `TRAME-UI-014`).
 
 **Code.**
@@ -271,7 +265,7 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **The delete rule and the code disagree** (`TRAME-008`). A row delete rebuilds the sheet index and
-  rebinds every formula from its raw text, so nothing survives holding the deleted uid: `=A2` after
+  rebinds every formula from its raw text, so nothing survives holding the deleted uid. `=A2` after
   deleting row 1 reads the shifted cell, not `#REF!`. The broken-reference machinery is real and
   tested at the instruction level, and unreachable from this path. Positional like Excel, or broken
   like a deleted sheet, is a product decision no document has made.
@@ -280,9 +274,9 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
   The interactive cousin, a whole-column selection, ships.
 * **No absolute reference.** There is no `$A$1` syntax, so every reference shifts on a paste or a
   fill. A user who wants a fixed lookup table has no way to say so, and no rule covers it.
-* **The dynamic cycle guard is driven by nothing** (`TRAME-042`). It is one line in the evaluator,
-  and the case it exists for -- a loop through a range, a name or another sheet -- is the case no
-  test builds. It also carries a case the static graph was supposed to hold: `update` drops a
+* **The dynamic cycle guard is driven by nothing** (`TRAME-042`). It is one line in the evaluator.
+  The case it exists for is the one no test builds: a loop through a range, a name or another
+  sheet. It also carries a case the static graph was supposed to hold. `update` drops a
   dependency equal to the formula's own cell before adding an edge, so a direct self-reference
   reaches the evaluator too (`TRAME-213`).
 * **The range cap bounds one range, not one pass** (`TRAME-209`, `TRAME-210`). `MAX_RANGE_CELLS`
@@ -291,9 +285,9 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
   materialize a hundred million values on every recompute. The aggregate ceiling the premise needs
   does not exist, and no budget row names one.
 * **A tab switch recompiles the workbook.** `rebuild_sheet_maps` pins the active sheet at index 0
-  and every `CellId` carries that index, so `activate_sheet` resets the engine and re-parses every
-  cell of every sheet. The numbers stay right (`TRAME-021` holds), but the engine's state is a
-  function of what the reader is looking at, and no budget covers the gesture.
+  and every `CellId` carries that index. `activate_sheet` therefore resets the engine and re-parses
+  every cell of every sheet. The numbers stay right (`TRAME-021` holds), but the engine's state is
+  a function of what the reader is looking at. No budget covers the gesture.
 * **The second level of the graph is tested on a shape the compiler never emits.** `resolve_range`
   binds range endpoints to `AxisId::Virtual` only; the range tests in `dag.rs` build
   `AxisId::Bound` endpoints, where a deleted line makes the endpoint unresolvable. Only
@@ -303,7 +297,7 @@ cell shows the source again. Both are specified in `features/ambre-spec-trame-ce
   equal a rebuild. Every reference resolves through that index, so a divergence in it is a wrong
   number in a cell, not a slow redraw.
 * **The graph pays twice for every edit.** The memo of the evaluation pass is held behind an
-  interior mutability that results staged before write-back no longer need, and every edit
+  interior mutability that results staged before write-back no longer need. Every edit
   invalidates the compiled form of the written cell before anything compares its text
   (`TRAME-212`), so re-typing a value recompiles it. Neither produces a wrong number; both are a
   cost nothing weighs. The walk and the cycle check are the

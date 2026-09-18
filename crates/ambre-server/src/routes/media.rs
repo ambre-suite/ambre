@@ -50,8 +50,9 @@ pub async fn media_upload_url(
     if !s3::is_valid_content_hash(&req.content_hash) {
         return Err(AppError::BadRequest("invalid content_hash".into()));
     }
-    // Reject an oversized blob before handing out an upload URL, and bind the
-    // declared size into the presigned PUT so the actual upload cannot exceed it.
+    // Reject an oversized blob before handing out an upload URL. Bind the
+    // declared size into the presigned PUT, so the actual upload cannot exceed
+    // it.
     if req.size_bytes == 0 || req.size_bytes > state.config.media_max_bytes {
         return Err(AppError::PayloadTooLarge(format!(
             "media size {} bytes outside 1..={}",
@@ -130,7 +131,7 @@ pub async fn media_confirm_upload(
         .ok_or(AppError::Forbidden)?;
     // Writing a `media` row must be gated exactly like `media_upload_url`
     // (owner/editor). A viewer cannot obtain an upload URL, so it must not be
-    // able to register a media row either; otherwise the two halves of the
+    // able to register a media row either. Otherwise the two halves of the
     // upload flow would disagree on who may add media.
     if !["owner", "editor"].contains(&m.role.as_str()) {
         return Err(AppError::Forbidden);

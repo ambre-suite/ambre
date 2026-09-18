@@ -8,9 +8,9 @@
 // flipped if it would overflow, with arrow/Home/End/Enter/Escape keyboard
 // navigation and close on Escape / click-outside.
 //
-// Items are registry commands: selecting one invokes a `CommandId` through
-// `on_command`, the same path as the toolbar and shortcuts -- so a right-click
-// "Bold" runs the exact same command, decoupled from the trigger.
+// Items are registry commands. Selecting one invokes a `CommandId` through
+// `on_command`, the same path as the toolbar and shortcuts. A right-click
+// "Bold" therefore runs the exact same command, decoupled from the trigger.
 // ============================================================================
 
 use ambre_commands::{CommandId, KeyBinding};
@@ -29,7 +29,7 @@ use wasm_bindgen::closure::Closure;
 #[derive(Clone, PartialEq)]
 pub enum MenuEntry {
     /// A selectable command, with an optional leading icon and an optional
-    /// trailing keybinding chip (shown right-aligned, e.g. a menu-bar accelerator).
+    /// trailing keybinding chip (shown right-aligned, for example a menu-bar accelerator).
     Item {
         command: CommandId,
         label: String,
@@ -121,7 +121,7 @@ pub fn ContextMenu(
 
     // Close on any pointerdown outside the menu. A document-level capture
     // listener (rather than a full-viewport backdrop) lets the click reach
-    // whatever is underneath: a right-click on the canvas reaches the canvas, so
+    // whatever is underneath. A right-click on the canvas reaches the canvas, so
     // it re-selects the cell (pointerdown) and reopens the menu at the new point
     // (contextmenu). A backdrop would have swallowed both -- the menu moved but
     // the selection stayed on the old cell. Registered once (the menu is a shell
@@ -167,9 +167,9 @@ pub fn ContextMenu(
     move || {
         pos.get()?;
 
-        // Only `Item` rows are focusable: build the parallel command + typeahead
+        // Only `Item` rows are focusable. Build the parallel command + typeahead
         // vectors over them, skipping separators, so keyboard nav and the roving
-        // `data-idx` index the items (not the raw rows).
+        // `data-idx` index the items, not the raw rows.
         let rows = entries.get();
         let cmds: Vec<CommandId> = rows
             .iter()
@@ -301,12 +301,13 @@ pub fn ContextMenu(
 }
 
 /// Place a `w` x `h` menu opened at click point `(x, y)` inside a `vw` x `vh`
-/// viewport, flipping each axis that would overflow so the menu stays visible.
+/// viewport. Each axis that would overflow is flipped, so the menu stays
+/// visible.
 ///
-/// Pure geometry (no DOM): the `Effect` above reads the real rect/viewport from
-/// `web-sys` and delegates the decision here so it is host-testable (the
-/// `cfg(wasm32)` boundary stays at the DOM read). On the flipped axis the menu
-/// is anchored at `point - size`, clamped to `0` so a menu taller/wider than the
+/// Pure geometry (no DOM). The `Effect` above reads the real rect/viewport from
+/// `web-sys` and delegates the decision here, so it is host-testable. The
+/// `cfg(wasm32)` boundary stays at the DOM read. On the flipped axis the menu is
+/// anchored at `point - size`, clamped to `0`. A menu taller/wider than the
 /// viewport pins to the top/left edge rather than going off-screen.
 pub(crate) fn place_menu(x: f64, y: f64, w: f64, h: f64, vw: f64, vh: f64) -> (f64, f64) {
     let lx = if x + w > vw { (x - w).max(0.0) } else { x };

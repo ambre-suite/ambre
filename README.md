@@ -125,11 +125,11 @@ The `specs/` directory is the source of truth for behaviour. Layout:
 | `specs/2-Trame/`, `specs/3-Toile/`, `specs/4-Prose/` | Vertical specs, one directory per application. |
 | `specs/<app>/features/` | One document per feature, always current: its contract, its model and its whole surface. A feature is the smallest thing a user can name, ship alone and specify end to end. |
 | `specs/Todo/` | Applications not started: Murmure, Rendez-Vous. |
-| [`specs/security-audit.md`](specs/security-audit.md) | Numbered audit findings. A contract row that closes a finding cites it. |
+| [`specs/audits/security-audit.md`](specs/audits/security-audit.md) | Numbered audit findings. A contract row that closes a finding cites it. |
 
 An application directory holds a schema document, a generated inventory and one document per
-feature. One of those feature documents is the **engine**: it takes what no single feature owns --
-the CRDT state, the command and event planes, and the convergence rules of the document tree. The
+feature. One of those feature documents is the **engine**. It takes what no single feature
+owns: the CRDT state, the command and event planes, and the convergence rules of the document tree. The
 three started applications all follow this shape.
 
 Every spec declares its rules as a contract table, one falsifiable rule per row. Three documents

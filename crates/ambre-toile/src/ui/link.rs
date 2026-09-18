@@ -1,12 +1,12 @@
 // ambre-toile/src/ui/link.rs
 // ============================================================================
 // Following a link on an element (toile-links). The one board gesture that
-// writes nothing: it reads a register the painted element carries and moves a
+// writes nothing. It reads a register the painted element carries, then moves a
 // camera, opens a tab, or opens a document.
 //
-// The three decisions live here, pure, so the host tier runs them: whether a
-// click is asking to follow, which element it is asking about, and what
-// following that element means.
+// The three decisions live here, pure, so the host tier runs them. They are
+// whether a click is asking to follow, which element it is asking about, and
+// what following that element means.
 // ============================================================================
 
 use ambre_bus::app::toile::{DisplayElement, DisplayNode, DisplayViewport, ElementId, LinkTarget};
@@ -25,8 +25,8 @@ const BADGE_GAP: f64 = 3.0;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LinkAction {
     /// Fit the camera to that frame's box (`TOILE-113`). The frame is named,
-    /// not measured: it may sit outside the culled frame, which is exactly the
-    /// case a link to it is for, so the board is asked for its bounds and a
+    /// not measured. It may sit outside the culled frame, which is exactly the
+    /// case a link to it is for. So the board is asked for its bounds, and a
     /// frame it no longer holds answers nothing (`TOILE-064`).
     GoToFrame(ElementId),
     /// Hand the address to the shell, which opens it in a sandboxed tab. The

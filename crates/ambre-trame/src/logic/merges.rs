@@ -135,10 +135,11 @@ impl TrameState {
             .is_ok()
     }
 
-    /// Shared tail of merge/unmerge: rebuild the derived merge cache (which also
-    /// re-evaluates masking), reseed the formula engine so unmasked cells rejoin
-    /// the DAG, flush the delta and ask the UI to re-fetch. Conflict events from
-    /// the rebuild ride along with the `DataReset`.
+    /// Shared tail of merge/unmerge. It rebuilds the derived merge cache (which
+    /// also re-evaluates masking) and reseeds the formula engine, so unmasked
+    /// cells rejoin the DAG. It then flushes the delta and asks the UI to
+    /// re-fetch. Conflict events from the rebuild ride along with the
+    /// `DataReset`.
     pub(super) fn after_merge_change(&mut self) -> TrameOutcome {
         let mut display = self.rebuild_merges();
         self.reseed_engine();
@@ -219,11 +220,11 @@ impl TrameState {
     /// mutates the CRDT -- no corrective op, no conflict loop
     /// (`trame-cell-merges`, `TRAME-126`, `TRAME-144`).
     ///
-    /// Sheet-parametric and side-effect-free, so both consumers -- the display
+    /// Sheet-parametric and side-effect-free. Both consumers -- the display
     /// caches ([`Self::rebuild_merges`]) and the formula feed
-    /// ([`Self::masked_cells_for`]) -- read one answer instead of each deriving
-    /// its own. A second copy of this precedence would let a masked cell differ
-    /// from the block the grid draws.
+    /// ([`Self::masked_cells_for`]) -- therefore read one answer instead of
+    /// each deriving its own. A second copy of this precedence would let a
+    /// masked cell differ from the block the grid draws.
     pub(super) fn resolved_merges(
         &self,
         sheet_id: &str,
@@ -274,10 +275,10 @@ impl TrameState {
     /// same [`Self::resolved_merges`] the display caches read: it touches no
     /// active-sheet cache and emits no event. The formula engine feed
     /// ([`Self::reseed_engine`]) uses it to exclude masked cells uniformly on
-    /// every sheet, not only the displayed one -- so a cross-sheet reference to a
-    /// masked conflicted cell reads the same value regardless of the active tab
-    /// (`trame-cell-merges`, `TRAME-020`). For the active
-    /// sheet (fed with [`Self::index`]) it returns exactly [`Self::masked_cells`].
+    /// every sheet, not only the displayed one. A cross-sheet reference to a
+    /// masked conflicted cell therefore reads the same value regardless of the
+    /// active tab (`trame-cell-merges`, `TRAME-020`). For the active sheet (fed
+    /// with [`Self::index`]) it returns exactly [`Self::masked_cells`].
     pub(super) fn masked_cells_for(&self, sheet_id: &str, index: &SheetIndex) -> HashSet<String> {
         let cells = self.doc.get_map(cells_map_name(sheet_id));
         self.resolved_merges(sheet_id, index)
@@ -297,10 +298,10 @@ impl TrameState {
     }
 }
 
-/// Whether a stored cell value counts as holding something. The one place the
-/// test lives, so the display path ([`TrameState::cell_has_raw`]) and the
-/// formula feed ([`TrameState::masked_cells_for`]) cannot disagree about which
-/// covered cell is a concurrent conflict.
+/// Whether a stored cell value counts as holding something. The one place that
+/// test lives. The display path ([`TrameState::cell_has_raw`]) and the formula
+/// feed ([`TrameState::masked_cells_for`]) therefore cannot disagree about
+/// which covered cell is a concurrent conflict.
 fn has_raw_value(value: Option<LoroValue>) -> bool {
     value.is_some_and(|v| matches!(v, LoroValue::String(s) if !s.is_empty()))
 }

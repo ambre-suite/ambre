@@ -27,20 +27,20 @@ pub type OidcClient = CoreClient<
 
 /// Per-provider OIDC state: the configured client and its redirect URI.
 ///
-/// The redirect URI is stored separately from the client so the same
-/// `OidcClient` can be used by `login_url` and `exchange_code` without
-/// baking the URI into the typestate at construction time.
+/// The redirect URI is stored separately from the client. The same
+/// `OidcClient` can then be used by `login_url` and `exchange_code`,
+/// without baking the URI into the typestate at construction time.
 pub struct OidcProviderState {
     pub client: OidcClient,
     pub redirect_uri: RedirectUrl,
     /// Shared HTTP client for token exchange. `reqwest::Client` owns a
-    /// connection pool internally and is cheap to clone, so one instance is
-    /// built at discovery time and reused for every callback rather than
+    /// connection pool internally and is cheap to clone. One instance is
+    /// built at discovery time and reused for every callback, rather than
     /// spinning up a fresh pool (and TLS handshake) per request.
     pub http_client: reqwest::Client,
 }
 
-/// Map of OIDC provider name ("google", "github", …) to its state.
+/// Map of OIDC provider name ("google", "github", ...) to its state.
 ///
 /// Wrapped in `Arc` so every Axum handler can reference the same
 /// discovered clients without cloning the entire map.
@@ -136,9 +136,9 @@ pub async fn init_oidc_clients(
 
 /// Generates an OIDC authorization URL with PKCE challenge, CSRF token, and nonce.
 ///
-/// Returns the URL the client must redirect to and the `OidcAuthState` that
-/// must be stored in Redis (keyed by the CSRF token) so the callback can
-/// validate the PKCE verifier and nonce.
+/// Returns the URL the client must redirect to, and the `OidcAuthState` that must
+/// be stored in Redis (keyed by the CSRF token). The callback needs it to validate
+/// the PKCE verifier and nonce.
 pub async fn login_url(
     state: &OidcProviderState,
 ) -> Result<(LoginResponse, OidcAuthState), AppError> {

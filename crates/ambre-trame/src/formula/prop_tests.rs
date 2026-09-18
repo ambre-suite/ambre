@@ -2,9 +2,9 @@
 // ============================================================================
 // Property tests for the formula stack (parser/render, compile, VM, engine,
 // functions). The crate's convergence proptest (`logic/convergence_tests.rs`)
-// covers the CRDT contract; this module covers the *algebraic* contracts of the
-// most structural subsystem -- a parser/printer, a compiler, a stack VM and a
-// dependency-driven engine -- which were exercised by examples only.
+// covers the CRDT contract. This module covers the *algebraic* contracts of the
+// most structural subsystem: a parser/printer, a compiler, a stack VM and a
+// dependency-driven engine. Those were exercised by examples only.
 //
 // Host-only for the same reason as `convergence_tests`: `proptest` is a
 // host-target dev-dependency (its `wait-timeout` transitive dep does not build
@@ -304,8 +304,8 @@ proptest! {
     #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
 
     /// `SUM(A1:C5)` over a grid of plain numeric cells equals the naive sum of
-    /// those cells, regardless of the insertion order, and a forced full
-    /// recompute reproduces the result (recompute determinism).
+    /// those cells, regardless of the insertion order. A forced full recompute
+    /// reproduces the result (recompute determinism).
     #[test]
     fn engine_sum_matches_naive_sum(
         entries in proptest::collection::vec((0u32..5, 0u32..3, -1_000i64..1_000), 0..16)

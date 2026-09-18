@@ -64,7 +64,7 @@ This resolves two namespaces and checks nothing else. It does not grade a
 citation, rewrite it into a rule id or a code path, or read what the target says.
 
 `specs/reviews/` is out of the corpus, exactly as in `spec_code.py`. A dated
-record is out of the *coordinate* namespace: `security-audit.md` and its kin state
+record is out of the *coordinate* namespace: `specs/audits/` and its kin state
 what the corpus held the day they were written, and a finding that quotes a
 since-deleted heading is doing its job. Their document names are still resolved,
 less the names the corpus has deliberately deleted -- `RETIRED`, which is that
@@ -152,8 +152,16 @@ MARKER = re.compile(r"^\s*(?://[/!]?|[*>|-]+|#+)?\s*")
 HEADING = re.compile(rf"^##\s+(\d+)\s*({ORDINAL})?\s*[.:]", re.IGNORECASE)
 
 # Dated records. Their coordinates are quotations of a past state, so they are
-# not resolved; their document names are, except for the names below.
-RECORDS = ("security-audit.md", "ambre-roadmap-journal.md")
+# not resolved; their document names are, except for the names below. Everything
+# under `specs/audits/` is one, by directory rather than by name, so the next
+# audit is a record the day it lands.
+RECORDS = ("ambre-roadmap-journal.md",)
+RECORD_DIRS = ("audits/",)
+
+
+def is_record(path: Path) -> bool:
+    rel = str(path.relative_to(SPECS)) if SPECS in path.parents else path.name
+    return path.name in RECORDS or any(d in rel for d in RECORD_DIRS)
 
 # Documents the corpus deleted. A record naming one is quoting the corpus of the
 # day it was written, exactly as it quotes a since-deleted heading: finding 65 is
@@ -207,33 +215,59 @@ def coordinate(number: str, ordinal: str | None) -> str:
     return f"{number} {ordinal.lower()}" if ordinal else number
 
 
-def documents() -> dict[str, Path]:
-    """Every citable document, by file name: the corpus, plus the rules.
+def corpus_files() -> list[Path]:
+    """Every file `documents` reads, before the file name becomes the key.
 
     `specs/` is the corpus. `ai/` holds the rules a spec legitimately cites --
     `ambre-spec-template.md` names the writing style -- so those files are
     resolved as targets. They are not `sources()`: nothing checks a citation
     they carry.
     """
-    known = {path.name: path for path in SPECS.rglob("*.md")}
-    known.update({path.name: path for path in RULES.glob("*.md")})
-    return known
+    return sorted(SPECS.rglob("*.md")) + sorted(RULES.glob("*.md"))
+
+
+def documents() -> dict[str, Path]:
+    """Every citable document, by file name.
+
+    The key is the file name, not the path, because that is what a citation
+    carries: `ambre-spec-sync.md`, or `sync section 3`. A path that appears is
+    dropped before resolution. So two documents of the same name are a defect
+    of the corpus, reported by `duplicates`, and never a case to resolve.
+    """
+    return {path.name: path for path in corpus_files()}
+
+
+def duplicates(paths: list[Path]) -> dict[str, list[Path]]:
+    """File names that two documents share, with the documents that share them.
+
+    `documents` keys by file name, so the second file of a name silently
+    replaces the first, and the survivor depends on the walk order. Citations
+    then reach the wrong document, and their coordinates are verified against
+    the wrong table of contents.
+
+    A writer cannot lift such an ambiguity anyway: `sync section 3` has no room
+    to say which `sync`. The namespace citations use is flat, so the corpus is
+    held flat rather than the resolver taught to carry two.
+    """
+    seen: dict[str, list[Path]] = {}
+    for path in paths:
+        seen.setdefault(path.name, []).append(path)
+    return {name: found for name, found in seen.items() if len(found) > 1}
 
 
 def short_names(known: dict[str, Path]) -> dict[str, str]:
-    """Short name -> file name, kept only where the short name is unambiguous.
+    """Short name -> file name, for every document carrying the fixed prefix.
 
-    `ambre-spec-trame-sort.md` is cited `trame-sort`, `ambre-spec-ui.md` is cited
-    `ui`. A short name claimed by two documents resolves to neither: it is dropped
-    here, so a citation using it is reported as a dead name rather than silently
-    aimed at one of the two.
+    `ambre-spec-trame-sort.md` is cited `trame-sort`, `ambre-spec-ui.md` is
+    cited `ui`. A short name is unique because the file name it is cut from is:
+    `duplicates` is what holds that, and it holds it over the whole corpus
+    rather than over the documents that happen to carry the prefix.
     """
-    claims: dict[str, set[str]] = {}
+    shorts = {}
     for name in known:
         if name.startswith("ambre-spec-") and name.endswith(".md"):
-            claims.setdefault(name[len("ambre-spec-"):-len(".md")], set()).add(name)
-    return {short: next(iter(files)) for short, files in claims.items()
-            if len(files) == 1}
+            shorts[name[len("ambre-spec-"):-len(".md")]] = name
+    return shorts
 
 
 def sections(path: Path) -> set[str]:
@@ -317,12 +351,25 @@ def citations(text: str, own: str | None, shorts: dict[str, str]):
     previous = None   # (kind, target)
     trailing = None   # text between the last token and its end of line
 
-    for number, line in enumerate(text.splitlines(), 1):
+    lines = text.splitlines()
+    for number, line in enumerate(lines, 1):
         tokens = []
         starts = [match.start() for match in COORD.finditer(line)]
+        # A coordinate opening the next line is adjacent to a name closing this
+        # one, and a short name needs that to be a citation at all: `` `sync` ``
+        # resolves only when a coordinate follows it. Without this, a wrapped
+        # `` `architecture` `` / `section 5.F` produced no name token, so the
+        # coordinate fell back on the citing document and was verified against a
+        # section 5 that existed there and said something else -- the exact
+        # fall-back the wrap rule was written against, surviving inside it for
+        # every short name.
+        following = MARKER.sub("", lines[number], count=1) if number < len(lines) else ""
+        wrapped = COORD.match(following) is not None
         for match in NAME.finditer(line):
             near = any(match.end() <= at <= match.end() + GLUE_MAX
-                       for at in starts)
+                       for at in starts) or (
+                wrapped and len(line) - match.end() <= GLUE_MAX
+            )
             # The coordinate is inside this candidate's own span: the span opened
             # at the backtick and no backtick closed it before the coordinate.
             span = any(match.end() <= at <= match.end() + 1 for at in starts)
@@ -375,6 +422,8 @@ def citations(text: str, own: str | None, shorts: dict[str, str]):
 
 def main() -> int:
     check = "--check" in sys.argv
+    files = corpus_files()
+    shared = duplicates(files)
     known = documents()
     shorts = short_names(known)
     known_sections = {name: sections(path) for name, path in known.items()}
@@ -392,7 +441,7 @@ def main() -> int:
                 if value not in known:
                     # A record may name a document the corpus deleted, and only
                     # such a document: see `RETIRED`.
-                    if path.name in RECORDS and (
+                    if is_record(path) and (
                         value in RETIRED or value in RETIRED_SHORTS
                     ):
                         continue
@@ -401,7 +450,7 @@ def main() -> int:
             # The coordinate namespace is the corpus. A `.rs` file cites a name and
             # a contract id, both minted once; a section number is the one part
             # that a renumbering breaks, so the code does not carry it.
-            if path.suffix != ".md" or path.name in RECORDS:
+            if path.suffix != ".md" or is_record(path):
                 continue
             coords += 1
             if target is None:
@@ -423,9 +472,22 @@ def main() -> int:
 
     report(dead_names, "no document")
     report(dead_coords, "no such section")
+    for name in sorted(shared):
+        print(f"\n`{name}` -- one file name, {len(shared[name])} documents")
+        for path in shared[name]:
+            print(f"  {path.relative_to(ROOT)}")
     print(f"\n{names} document citations, {coords} section coordinates, "
           f"{len(known)} documents, "
-          f"{len(dead_names)} dead names, {len(dead_coords)} dead coordinates")
+          f"{len(dead_names)} dead names, {len(dead_coords)} dead coordinates, "
+          f"{len(shared)} shared file names")
+    if check and shared:
+        print(
+            "\nERROR: two documents carry one file name, and a citation carries "
+            "the file name alone (ambre-spec-template.md section 1.D). One of "
+            "them resolves and the other is unreachable, so rename one.",
+            file=sys.stderr,
+        )
+        return 1
     if check and (dead_names or dead_coords):
         print(
             "\nERROR: a citation names a document, or a section of one, that does "

@@ -20,7 +20,7 @@
 //! - [`BoolOp::Union`] / [`BoolOp::Intersect`] / [`BoolOp::Exclude`]: associative,
 //!   so the fold is the natural n-ary union / intersection / symmetric difference.
 //! - [`BoolOp::Subtract`]: the first element is the subject; every later element is
-//!   removed from it. `((a - b) - c)` equals `a - (b ∪ c)`, so folding difference
+//!   removed from it. `((a - b) - c)` equals `a - (b union c)`, so folding difference
 //!   left to right matches "subject minus the union of the rest".
 //!
 //! Fills use the non-zero rule, matching how shapes are painted.
@@ -38,14 +38,14 @@ type Contour = Vec<[f64; 2]>;
 type Shape = Vec<Contour>;
 
 /// Flatten tolerance (world units) for turning curves into polylines before the
-/// boolean runs. Sub-pixel at typical board zoom; small enough that the result
-/// tracks the source outline, large enough to keep the contour point count (and
-/// so the solve cost,) bounded.
+/// boolean runs. Sub-pixel at typical board zoom, and small enough that the
+/// result tracks the source outline. It is large enough to keep the contour
+/// point count, and so the solve cost, bounded.
 pub const FLATTEN_TOL: f64 = 0.25;
 
-/// Combine world-space `paths` with a boolean `op`. Each path is flattened
-/// to closed contours at `tol`, the paths fold left to right via [`i_overlay`],
-/// and the result is rebuilt as a line-segment [`BezPath`]. Returns an empty path
+/// Combine world-space `paths` with a boolean `op`. Each path is flattened to
+/// closed contours at `tol`, then the paths fold left to right via [`i_overlay`].
+/// The result is rebuilt as a line-segment [`BezPath`]. Returns an empty path
 /// when fewer than two paths are given or the geometry fully cancels (the caller
 /// treats an empty result as a no-op). Deterministic.
 pub fn boolean_op(op: BoolOp, paths: &[BezPath], tol: f64) -> BezPath {

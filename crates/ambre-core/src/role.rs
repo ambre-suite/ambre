@@ -3,7 +3,7 @@
 //! Defines the allowed values for the `role` field in `document_members`,
 //! `channel_members`, and `organization_members` tables.
 //!
-//! The variants are serialized as lowercase strings (e.g., `"owner"`, `"editor"`)
+//! The variants are serialized as lowercase strings (for example, `"owner"`, `"editor"`)
 //! for JSON REST APIs and as `u8` discriminants for binary serialization (postcard).
 
 use crate::error::RoleError;
@@ -23,7 +23,7 @@ pub enum Role {
     Owner = 0,
     /// Editor of a document (write access).
     Editor = 1,
-    /// Viewer of a document (read‑only access).
+    /// Viewer of a document (read-only access).
     Viewer = 2,
     /// Administrator of a channel or organization.
     /// Can manage members but cannot delete the entity.
@@ -116,7 +116,7 @@ impl std::convert::TryFrom<u8> for Role {
     }
 }
 
-/// Parses a role from a string (case‑insensitive).
+/// Parses a role from a string (case-insensitive).
 ///
 /// Returns `RoleError::InvalidString` if the string does not match any known role.
 impl FromStr for Role {

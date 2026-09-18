@@ -3,7 +3,7 @@
 **Type:** Vertical (feature)
 **Implementation:** design-only
 
-> What a page looks like on the canvas: the text of every visible block, the caret, the selections,
+> What a page looks like on the canvas. The text of every visible block, the caret, the selections,
 > the remote carets and the inline highlights, painted from runs the engine shaped once. The same
 > drawing code produces the exported PDF.
 
@@ -23,7 +23,8 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-UI-006` | `INV` | A full text layout or a table-of-contents recompute MUST NOT run in the UI thread: both arrive already computed. | this spec section 2; `features/ambre-spec-prose-pagination.md` | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-113` | `INV` | A shaped run handed from the side that shapes to the side that draws MUST NOT carry a GPU handle or any other handle bound to one thread. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-114` | `INV` | Resolving the position under a pointer MUST read the runs already shaped and MUST NOT shape a block: a block that was culled and never painted MUST resolve like any other. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-114` | `INV` | Resolving the position under a pointer MUST read the runs already shaped, never shaping a block. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-172` | `INV` | A block that was culled and never painted MUST resolve a position like any other. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-019` | `INV` | The run cache MUST be bounded: it MUST evict rather than grow with the document. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-018` | `INV` | Block drawing MUST be written once against the drawing surface: the screen and the PDF MUST NOT be two implementations. | this spec section 2; `ambre-spec-drawing-surface.md section 2` | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5); `ambre-spec-pdf-export.md`, `PDF-001` is the export half of the same rule | unimplemented |
 | `PROSE-UI-017` | `INV` | Partial repaint MUST use the shared content-repaint contract; a second repaint mechanism MUST NOT exist beside it. | this spec section 2; `ambre-spec-frame.md section 2` | not built | unbuilt -- lands with the "One repaint contract" Story (`ambre-roadmap.md` E8) | unimplemented |
@@ -37,7 +38,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-119` | `POST` | Painting a page MUST build the GPU state of a run the first time that run is drawn, and MUST reuse it afterwards. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-119` | `POST` | Painting a page MUST build the GPU state of a run the first time that run is drawn. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-173` | `POST` | Painting a page MUST reuse a run's GPU state after the first time that run is drawn. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-020` | `FRAME` | Painting a page MUST NOT walk an annotation anchored outside the pages it draws. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-120` | `FRAME` | Painting a page MUST NOT write to the document, and MUST NOT build the GPU state of a run it does not draw. | derived | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -48,18 +50,17 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-121` | `POST` | A layout newer than the one in force MUST replace it, and the version it carries MUST become the version the view holds. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-016` | `FAIL` | A layout older than the one already applied MUST be dropped, so a late arrival MUST NOT replace a newer one. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-122` | `FRAME` | Applying a layout MUST NOT write to the document and MUST NOT shape a block. | derived | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-* **Budget.** the display-list build and the whole page paint, two rows of
-  `ambre-spec-budgets.md section 2`; the run cache and the vertex buffers, two rows of
-  `ambre-spec-budgets.md section 6`. The second of those exceeds the shared UI-thread total, and
-  the register says so.
+* **Budget.** the display-list build and the whole page paint (`ambre-spec-budgets.md section 2`);
+  the run cache and the vertex buffers (`ambre-spec-budgets.md section 6`). The second of those
+  exceeds the shared UI-thread total, and the register says so.
 * **Boundary.** none: this thread paints view state, where `UI-THREAD-004` bans a network, crypto
   or persistence path. What it draws arrives as an event and leaves as nothing.
-* **Verification.** 17 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-UI-018` and `PROSE-UI-113` are the two rows a compiler can hold before a test exists: a
-  second drawing implementation cannot hide behind a generic parameter, and a run carrying a
-  device handle does not cross a thread. The four drawn rows are screenshot work, which is the
-  weakest mechanism this workspace uses, and `PROSE-UI-116` is the one of them a layout fixture
-  can hold instead -- a block broken across two pages is drawn twice or it is not.
+* **Verification.** 19 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. Two rows
+  a compiler holds before a test exists. A second drawing implementation cannot hide behind a
+  generic parameter (`PROSE-UI-018`), and a run carrying a device handle does not cross a thread
+  (`PROSE-UI-113`). The four drawn rows are screenshot work, the weakest mechanism this workspace
+  uses, and `PROSE-UI-116` is the one a layout fixture holds instead. A block broken across two
+  pages is drawn twice or it is not.
 
 ---
 
@@ -140,7 +141,7 @@ Steps 4 and 5 skip any annotation anchored outside the visible page range, and t
 returns immediately when it is empty (`PROSE-UI-020`).
 
 **What is repainted.** `RepaintStrip` is Prose's use of the shared content-repaint contract, not a
-mechanism beside it (`PROSE-UI-017`): the dirty pages map onto the shared full and reuse modes, and
+mechanism beside it (`PROSE-UI-017`). The dirty pages map onto the shared full and reuse modes.
 Prose does not use the scroll-band mode, because a page column reflows rather than blits.
 
 **Dropping a stale layout.** Each layout carries the version the engine stamped it with, and the
@@ -169,8 +170,8 @@ is on it. What is drawn, and where each colour comes from:
 | a spelling error | the `error` status, as a wavy underline | full |
 
 Each of those names a generated token, read at paint time from the constants
-`ambre-spec-design-tokens.md` declares and `ambre-spec-frame.md section 2` consumes -- which is
-what `PROSE-UI-014` asks for and what a table of literal colours cannot give. The chrome surfaces
+`ambre-spec-design-tokens.md` declares and `ambre-spec-frame.md section 2` consumes. That is
+what `PROSE-UI-014` asks for, and what a table of literal colours cannot give. The chrome surfaces
 that sit over the canvas are DOM and are not painted here (`UI-THREAD-001`,
 `features/ambre-spec-prose-toolbar.md`, `features/ambre-spec-prose-slash-command.md`).
 
@@ -195,16 +196,16 @@ that sit over the canvas are DOM and are not painted here (`UI-THREAD-001`,
 
 * **The Prose frame budget exceeds the shared one, and neither document reconciles them.** A page
   paint is budgeted at fourteen milliseconds against a shared frame target of five typical
-  (`ambre-spec-budgets.md section 2`). The two are not contradictory -- a full page repaint
-  is a busy case, as a full board paint is for the whiteboard -- but nothing says which one a
+  (`ambre-spec-budgets.md section 2`). The two are not contradictory: a full page repaint
+  is a busy case, as a full board paint is for the whiteboard. Nothing says which one a
   reviewer holds a regression against.
 * **The UI-thread memory figures do not fit the shared total.** The run cache alone is budgeted at
-  twenty megabytes and the vertex buffers and atlases for three pages at fifty of video memory,
-  against a shared UI-thread total of forty-one (`ambre-spec-budgets.md section 6`). The
+  twenty megabytes, and the vertex buffers and atlases for three pages at fifty of video memory.
+  The shared UI-thread total is forty-one (`ambre-spec-budgets.md section 6`). The
   rows now sit beside each other, which is the first time the arithmetic is visible. Settling it
   lands with the `The memory budgets add up` Story (`ambre-roadmap.md` E7).
 * **The table above names tokens the catalogue does not spell out.** The design started from seven
-  literal hex colours, beside a rule banning exactly that; the tokens replace them, and
+  literal hex colours, beside a rule banning exactly that. The tokens replace them, and
   `ambre-spec-design-tokens.md` lists its catalogue by group rather than by name. Until a token
   has a name, `PROSE-UI-014` is checkable by a reviewer and by nothing else.
 * **Nothing paints an orphaned comment or a broken cross reference.** Both are specified as
@@ -212,6 +213,6 @@ that sit over the canvas are DOM and are not painted here (`UI-THREAD-001`,
 * **Nothing rules the order of two overlapping annotations.** Section 3 gives a comment
   highlight, a suggested insertion and a suggested deletion an opacity each, and a sentence can
   carry all three. `PROSE-UI-117` puts highlights over the glyphs and says nothing about which of
-  them sits over which, so three overlapping marks have three orders and no rule between them.
+  them sits over which. Three overlapping marks have three orders and no rule between them.
 * **A page taller than the viewport at minimum zoom is not ruled.** The sheet is drawn whole and
   clipped by the viewport, and no rule says what a block overflowing its own page frame looks like.

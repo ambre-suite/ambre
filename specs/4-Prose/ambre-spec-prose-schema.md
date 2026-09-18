@@ -10,7 +10,7 @@
 
 ## 0. SCOPE, AND THE MENTION RULE
 
-A schema decision is often justified by an action: a block survives a move, an indent and a split,
+A schema decision is often justified by an action. A block survives a move, an indent and a split,
 and Loro's own `TreeID` answers concurrent minting. So an action appears here as a **cause**, never
 as a **rule**.
 
@@ -33,7 +33,7 @@ as a **rule**.
 
 Prefix `PROSE`, shared with the feature documents: one prefix, one numbering, no renumbering.
 `PROSE-002`, `-007`, `-008` and `-027` sit here because each states a property of the format, not
-of the engine; `PROSE-089`, `-090`, `-091` and `-094` are the halves those four hid, and three of
+of the engine. `PROSE-089`, `-090`, `-091` and `-094` are the halves those four hid. Three of
 them state what two peers reach rather than what one peer holds. `PROSE-085` to `-088`, `-093`,
 `-095` and `-096` state format rules sections 2 to 5 already lean on and no row carried. Grammar and
 status values are normative in `ambre-spec-template.md`.
@@ -64,18 +64,18 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-029` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5). Unverifiable by the same argument as `SCHEMA-009`: the rule binds a code change to a constant | unimplemented |
 
 * **Budget.** none: a format has no operation to budget. What opening, shaping and paginating a
-  document costs is now rows of the register in `ambre-spec-budgets.md`, cited by
-  the documents that own each operation.
+  document costs is a row of `ambre-spec-budgets.md`, cited by the document that owns it.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and an image node holds a content hash, never the pixels
   (`features/ambre-spec-prose-images.md`).
-* **Verification.** 22 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. Six
-  conjunctions came apart, and in four of them the hidden half was the convergence the decision of
-  section 6 is argued from: the format was written down, the merge result was not. Seven rules were
-  load-bearing and unwritten -- the block identity, the reference that survives a move, the
-  annotation id on the mark, the body key as a pair, the built-ins that are not stored, the
-  parentages of section 4, and the absent key as the value. `PROSE-031` still names a defect the
-  shape already has.
+* **Verification.** 22 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. Four rows
+  state the merge result rather than the layout, and a convergence test reaches them once
+  a document type exists. `PROSE-031`
+  names a defect the shape already has. A shape that breaks a structural rule cannot be declared,
+  so these are schema-held:
+  * the block identity, and the reference that survives a move;
+  * the body key as a pair, and the built-ins that are not stored;
+  * the parentages of section 4.
 
 ---
 
@@ -91,7 +91,8 @@ names the style's, and the blob's own bytes decide the image's.
   -- `"t:{tree_id}"`. A `TreeID` renders as hex and `@`, so it cannot contain the separator
   (`PROSE-088`).
 * An annotation -- a comment, a suggestion, a footnote -- is identified by a `Uuid` minted by the
-  peer that creates it, carried as the String value of the mark that anchors it (`PROSE-087`).
+  peer that creates it. The mark that anchors it carries that id as its String value
+  (`PROSE-087`).
 * A style is identified by its `style_id`, a name. The nine built-in names are not stored.
 * An image is identified by the content hash of its plaintext blob, which is also its key into the
   media flow of `architecture section 2.D`.
@@ -197,8 +198,8 @@ function is total (`PROSE-007`).
 | `text` | Text | the note body | footnote | design |
 | `name`, `block_id`, `range` | -- | the deferred bookmark fields | bookmark | design |
 
-**Absence is a value** (`PROSE-096`). No `s` key means the block type's built-in style; no `a` map
-means the type carries no attribute; no mark on a range means the cascade decides; an empty
+**Absence is a value** (`PROSE-096`). No `s` key means the block type's built-in style. No `a` map
+means the type carries no attribute. No mark on a range means the cascade decides. An empty
 `annots` map means no comment, no suggestion and no footnote. No container carries a "cleared" marker.
 
 ---
@@ -221,7 +222,7 @@ means the type carries no attribute; no mark on a range means the cascade decide
       * per reply: the author, the stamp, and `text`
   * `bibliography`
 
-**What may nest under what.** The tree is not free: a reader of a converged document meets only
+**What may nest under what.** The tree is not free. A reader of a converged document meets only
 these parentages, and the feature that inserts a block is what refuses the rest (section 8).
 
 | Parent | Allowed children |
@@ -246,14 +247,14 @@ Only where a schema decision needs a reason. 40 words each.
 * **`meta`.** `schema_version` is declared here and by nothing else in this application: no key, no
   command and no rule required it before `PROSE-028`. `pageless` and `line_numbers` are deferred
   designs whose register is named so the version rule already covers them.
-* **`blocks`.** One tree holds paragraphs, list items, table rows and cells alike, so one lifecycle
-  serves every block and the nesting table is the only structural rule. Depth is read from the
+* **`blocks`.** One tree holds paragraphs, list items, table rows and cells alike. One lifecycle
+  serves every block, and the nesting table is the only structural rule. Depth is read from the
   ancestor chain, never stored.
 * **`t:{tree_id}`.** A root container per leaf block, addressed by name rather than nested in the
-  node map: Loro's text is opened from the document, not from a map entry. Deleting a block leaves
+  node map. Loro's text is opened from the document, not from a map entry. Deleting a block leaves
   its text container behind, and nothing reclaims it.
 * **`styles`.** Only the user's custom styles (`PROSE-093`). The nine built-ins, `quote` among
-  them, are compiled in, so a document written by an older client renders them from the client
+  them, are compiled in. A document written by an older client renders them from the client
   rather than from stale copies of its own.
 * **`annots`.** One map for comments, suggestions and footnotes, because all three are reached the
   same way: a mark carrying an id. The cost is the discriminant of `PROSE-031`.

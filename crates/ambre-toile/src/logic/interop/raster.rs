@@ -1,8 +1,8 @@
 //! Raster image import (`toile-import-export`).
 //!
 //! Decodes PNG/JPG bytes with the pure-Rust `image` crate, bounds the decoded
-//! dimensions against [`Limits`], builds a small placeholder thumbnail for
-//! the first paint, and emits a single `image` `CreateElement` plus the
+//! dimensions against [`Limits`], and builds a small placeholder thumbnail for
+//! the first paint. It then emits a single `image` `CreateElement` plus the
 //! plaintext [`MediaBlob`] the Sync layer will encrypt/upload. Interop never
 //! hashes: the blob's content address is a **pre-upload placeholder token**
 //! (`pending:{n}`) that Phase 1 rewrites to the real blake2b once Sync returns
@@ -32,6 +32,11 @@ pub(super) fn pending_hash(index: usize) -> ContentHash {
 /// `image` element at the origin sized to the native (clamped) resolution. The
 /// full-res plaintext rides in the returned [`MediaBlob`]; the element references
 /// it by the placeholder token.
+///
+/// # Errors
+///
+/// [`ImportError::Decode`] when the decoder refuses `bytes`, and
+/// [`ImportError::ImageTooLarge`] when the decoded image exceeds `limits`.
 pub fn import_raster(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, ImportError> {
     let mut batch = ImportBatch::default();
     let hash = pending_hash(0);

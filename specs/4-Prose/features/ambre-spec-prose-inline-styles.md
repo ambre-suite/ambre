@@ -4,8 +4,8 @@
 **Implementation:** design-only
 
 > Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph
-> settings underneath it. What a character finally looks like is decided at read time, from the
-> mark on it, the paragraph it sits in, and the defaults of the document.
+> settings underneath it. What a character finally looks like is decided at read time. It reads
+> the mark on it, the paragraph it sits in, and the defaults of the document.
 
 ---
 
@@ -42,14 +42,16 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-180` | `POST` | After removal the named key MUST cover no character of the range, and MUST still cover every character outside it that it covered before. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-180` | `POST` | After removal the named key MUST cover no character of the range. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-287` | `POST` | After removal the named key MUST still cover every character outside the range that it covered before. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-181` | `FRAME` | Removing one key MUST NOT change the text of the block, or any other key of the registry over that range. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Clear the formatting of a range
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-024` | `POST` | Clearing MUST remove every presentation mark and the link over the range, and MUST leave the range's text as it was. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-024` | `POST` | Clearing MUST remove every presentation mark and the link over the range. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-288` | `POST` | Clearing MUST leave the range's text as it was. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-182` | `FRAME` | Clearing MUST NOT touch a comment, a suggestion, a footnote, a cross reference or a dynamic field over the range: each carries an identity a formatting reset MUST NOT destroy. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Set a paragraph's settings
@@ -60,14 +62,14 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-183` | `FRAME` | Setting a paragraph's settings MUST NOT change the block's text, the inline marks on it, or the settings of any other block. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the resolution of the effective style for a block, a row of
-  `ambre-spec-budgets.md section 1`: it runs once per block per layout, so it is on the
+  `ambre-spec-budgets.md section 1`. It runs once per block per layout, so it is on the
   pagination path rather than beside it.
 * **Boundary.** none of its own: a mark is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 20 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-FEAT-023` and `PROSE-FEAT-175` are the two an oracle reaches with one function: a round
-  trip of the stored bytes, and two spellings of one colour parsing to one value. `PROSE-FEAT-174`
-  is decided by a comparison rather than by two arrival orders, so it holds before any peer exists;
+* **Verification.** 22 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+  `PROSE-FEAT-023` and `PROSE-FEAT-175` are the two an oracle reaches with one function: a byte
+  round trip, and two colour spellings parsing to one value. `PROSE-FEAT-174`
+  is decided by a comparison rather than by two arrival orders, so it holds before any peer exists.
   `PROSE-FEAT-021`, `PROSE-FEAT-008`, `PROSE-FEAT-184` and `PROSE-FEAT-176` are the four the
   two-peer table below is written for. The four `FRAME` rows are the ones nothing reaches until
   a handler exists to leave something alone.
@@ -166,7 +168,7 @@ which is what lets two authors change two properties of one paragraph at once
 | `SetParagraphStyle { block_id, style }` | the whole set, diffed by the handler (`PROSE-FEAT-025`) |
 
 **Validating a value.** The value travels as a string, and each key has its own grammar. The
-grammar is checked before the document is touched: a malformed value is refused whole and reported,
+grammar is checked before the document is touched. A malformed value is refused whole and reported,
 so no unparseable value ever reaches the format (`PROSE-FEAT-022`).
 
 ```rust
@@ -190,7 +192,7 @@ fn parse_font_size(raw: &str) -> Result<f32, MarkValueError>;
 The refusal has to reach the author, and the event that carries it is not declared: see section 6.
 
 **What clearing removes.** Clearing formatting removes the eleven presentation marks and the link.
-It removes no comment, suggestion, footnote or cross reference, and no dynamic field: each of those
+It removes no comment, suggestion, footnote or cross reference, and no dynamic field. Each of those
 carries an identity or a binding that a formatting reset must not destroy (`PROSE-FEAT-182`).
 Removing one of them is its own command.
 
@@ -233,20 +235,20 @@ Which control sits where, and what the format bar shows for the current selectio
 
 * **The event a refusal travels on does not exist.** `PROSE-FEAT-022` requires the author to be
   told, and the refusal was written as `CommandRejected`, a variant
-  `features/ambre-spec-prose-engine.md section 3` never declares -- the lists feature reports
+  `features/ambre-spec-prose-engine.md section 3` never declares. The lists feature reports
   through the same missing variant. The enum carries one generic error instead, which names no
   command and no reason. It lands with the
   `A refused command names what it refused` Story (`ambre-roadmap.md` E5).
 * **Nothing says which side of the registry a new key falls on.** Clearing removes the
-  presentation marks and the link, and spares the annotations; the split is a sentence of
-  section 3 rather than a column of the registry, so a key added to
+  presentation marks and the link, and spares the annotations. The split is a sentence of
+  section 3 rather than a column of the registry. A key added to
   `ambre-spec-prose-schema.md section 3` falls on neither side until someone edits this document.
 * **The font family is resolved against what the device loaded**, and pagination depends on the
   result (`features/ambre-spec-prose-pagination.md`). No rule says what an unknown family name
   resolves to for the reader who does not have it, only that measurement may then differ.
 * **A named paragraph style cannot inherit from another.** The style store is flat and the cascade
   above has no level for a base style. The deferred design gives a style a `based_on` key and walks
-  the chain, capped at five levels with a cycle guard; no container carries the key
+  the chain, capped at five levels with a cycle guard. No container carries the key
   (`ambre-spec-prose-schema.md section 3`), and the Story is
   "The later writing set" (`ambre-roadmap.md` POST-V1).
 * **Nothing rules on a link's target.** The link mark carries a string, and no rule constrains the

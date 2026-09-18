@@ -203,8 +203,9 @@ mod tests {
 
     /// Shared harness: a recording surface, a fixed clock, a real (empty) font
     /// context and text cache. Text shaping may yield zero glyphs on a host with
-    /// no fonts, so tests never assert glyph *counts* -- only structural ops and
-    /// the renderer's own `cells_drawn` tally, which is font-independent.
+    /// no fonts. Tests therefore never assert glyph *counts*, only structural
+    /// ops and the renderer's own `cells_drawn` tally, which is
+    /// font-independent.
     fn harness() -> (
         RecordingSurface,
         FixedClock,
@@ -262,9 +263,9 @@ mod tests {
     fn draw_cells_scroll_strip_base_is_blank_not_pending_grey() {
         // A scroll strip repaints a band entering the viewport on top of the
         // shifted pixels. Its base fill must be the blank content background, not
-        // the grey "pending" veil: a cell scrolled in faster than the Logic
-        // round-trip should read as empty until its data lands, never flash grey
-        // (the source of the Arrow/Page Up/wheel scroll flicker).
+        // the grey "pending" veil. A cell scrolled in faster than the Logic
+        // round-trip should read as empty until its data lands, never flash grey.
+        // That grey flash is the Arrow/Page Up/wheel scroll flicker.
         let state = fixture(&[]);
         let palette = Theme::Light.palette();
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
@@ -470,7 +471,7 @@ mod tests {
     fn autofilter_button_shows_funnel_on_filtered_column() {
         // With a filter active on column 0, that button paints the MdiFilter
         // funnel glyph as selection-coloured scanline FillRects (the GPU surface
-        // has no fill_path); the secondary letter-header badge fills it too. An
+        // has no fill_path). The secondary letter-header badge fills it too. An
         // unfiltered fixture draws no selection-coloured fills here.
         let mut state = fixture(&[(0, 0, "a"), (0, 1, "b")]);
         state.filtered_col = Some(0);
@@ -513,9 +514,9 @@ mod tests {
 
     #[test]
     fn multi_cell_selection_fills_and_outlines_each_range() {
-        // A live range (0,0)..=(1,1) plus a disjoint single cell (3,3): both get
-        // a translucent selection fill, and no 2px active-cell border is drawn
-        // (Excel behaviour: the range outline alone marks the selection).
+        // A live range (0,0)..=(1,1) plus a disjoint single cell (3,3). Both get
+        // a translucent selection fill, and no 2px active-cell border is drawn;
+        // the range outline alone marks the selection, as in Excel.
         let mut state = fixture(&[]);
         state.select(0, 0);
         state.select_extend(1, 1);
@@ -616,9 +617,9 @@ mod tests {
 
     #[test]
     fn renderer_uses_only_palette_colors_for_fills() {
-        // Guards the "no hardcoded product colour" invariant on the cells layer:
-        // every fill colour must come from the active palette (the HUD, which
-        // does use literals, lives only in the overlay).
+        // Guards the "no hardcoded product colour" invariant on the cells layer.
+        // Every fill colour must come from the active palette; the HUD, which
+        // does use literals, lives only in the overlay.
         let state = fixture(&[(0, 0, "x")]);
         let palette = Theme::Light.palette();
         let allowed = [palette.content_pending, palette.content_bg];

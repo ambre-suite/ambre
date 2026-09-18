@@ -65,7 +65,7 @@ impl ToileState {
             return None;
         }
         // Detach each member from its current group, then prune any group emptied
-        // by the detach so the incremental caches stay equal to a full rebuild
+        // by the detach, so the incremental caches stay equal to a full rebuild.
         // Done before computing `insert_at` since pruning shifts `layers`.
         for m in &members {
             if let Some(g) = self.enclosing_group(m) {
@@ -123,9 +123,9 @@ impl ToileState {
         let _ = self.doc.get_map(ELEMENTS).delete(group.as_str());
         self.strip_layers(|node| !matches!(node, NodeId::Element(e) if e == group));
 
-        // Re-parent the children to the enclosing group (board parent is implicit):
-        // drop the ungrouped group from the parent's `children` (else it lingers as
-        // a dangling ref, desyncing recompute_groups from a full rebuild,), then
+        // Re-parent the children to the enclosing group (board parent is implicit).
+        // Drop the ungrouped group from the parent's `children`, else it lingers as
+        // a dangling ref, desyncing recompute_groups from a full rebuild. Then
         // append the surviving children.
         if let Some(p) = &parent {
             self.remove_child(p, group);
@@ -201,9 +201,10 @@ impl ToileState {
         self.emit_with_update(vec![self.viewport_event()])
     }
 
-    /// Clamp every child of `frame` to paint after (above) the frame in `layers`
-    /// A child sitting below the frame is moved to just above it; repeats
-    /// until the invariant holds. Commits the reordering as part of the batch.
+    /// Clamp every child of `frame` to paint after (above) the frame in
+    /// `layers`. A child sitting below the frame is moved to just above it, and
+    /// this repeats until the invariant holds. Commits the reordering as part of
+    /// the batch.
     fn enforce_frame_zorder(&mut self, frame: &ElementId) {
         let children = self.children_of(frame);
         if children.is_empty() {
@@ -329,14 +330,13 @@ impl ToileState {
             .unwrap_or(false)
     }
 
-    /// Delete every childless group (element + layers node + derived bounds) to a
-    /// fixpoint, so pruning a group that was the last member of its parent
-    /// cascades upward. An empty group is meaningless (created with >=2 members,
-    /// only shrinks via re-parent or member deletion), and left behind
-    /// it desyncs the incremental caches from a full rebuild, which never
-    /// materializes one: a rebuild's `recompute_groups` skips a childless
-    /// group. Runs inside the caller's single `doc.commit()` so it stays one undo
-    /// item.
+    /// Delete every childless group to a fixpoint: the element, its layers node
+    /// and its derived bounds. Pruning a group that was the last member of its
+    /// parent cascades upward. An empty group is meaningless (created with >=2
+    /// members, only shrinks via re-parent or member deletion). Left behind, it
+    /// desyncs the incremental caches from a full rebuild, which never
+    /// materializes one: a rebuild's `recompute_groups` skips a childless group.
+    /// Runs inside the caller's single `doc.commit()` so it stays one undo item.
     pub(super) fn prune_empty_groups(&mut self) {
         loop {
             let empties: Vec<ElementId> = {

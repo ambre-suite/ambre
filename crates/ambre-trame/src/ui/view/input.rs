@@ -11,15 +11,17 @@ impl TrameView {
             // so typing or IME can start there (spec: canvas click ->
             // textarea.focus). Shift extends the range to the clicked cell;
             // Ctrl adds it as a disjoint range; a plain click collapses to it and
-            // arms a drag-to-select.
-            // A press on the fill handle (bottom-right of the selection) arms an
-            // autofill drag instead of a new selection (`trame-autofill`). Checked before
-            // the plain selection press so the ~7px handle wins the hit.
-            // A click on an in-canvas autofilter button (`trame-shared-filter`) selects the
-            // button's column on the region's header row, then raises the one-shot
-            // intent so the launcher opens the FilterPopover for that column --
-            // the same path as the context-menu entry (one filter code path).
-            // Tested before the fill handle / cells so the small button wins.
+            // arms a drag-to-select. A press on the fill handle (bottom-right of
+            // the selection) arms an autofill drag instead of a new selection
+            // (`trame-autofill`). Checked before the plain selection press so the
+            // ~7px handle wins the hit.
+            //
+            // A click on an in-canvas autofilter button (`trame-shared-filter`)
+            // selects the button's column on the region's header row. It then
+            // raises the one-shot intent so the launcher opens the FilterPopover
+            // for that column. That is the same path as the context-menu entry,
+            // so there is one filter code path. Tested before the fill handle /
+            // cells so the small button wins.
             InputEvent::PointerDown {
                 x, y, button: 0, ..
             } if self.fill_drag.is_none() && self.state.filter_button_at(*x, *y).is_some() => {
@@ -60,10 +62,11 @@ impl TrameView {
                 self.end_fill_drag(*ctrl);
                 true
             }
-            // A press on a header strip (`trame-headers`): body -> whole-column/row
-            // select (Shift extends, drag sweeps); corner -> select-all; a border
-            // band -> arm a resize drag (`trame-resize`). Checked before the grid-cell
-            // press since headers sit outside the cell area anyway.
+            // A press on a header strip (`trame-headers`) acts by zone. The body does
+            // a whole-column/row select (Shift extends, drag sweeps); the corner does
+            // select-all; a border band arms a resize drag (`trame-resize`). Checked
+            // before the grid-cell press since headers sit outside the cell area
+            // anyway.
             InputEvent::PointerDown {
                 x,
                 y,
@@ -210,10 +213,10 @@ impl TrameView {
                 self.selecting_drag = false;
                 true
             }
-            // Bare hover (no button held): advertise the affordance under the
-            // cursor (`trame-resize`, `trame-autofill`) -- a header boundary shows the
-            // col/row-resize cursor, a header body the select pointer, the fill
-            // handle the crosshair, everything else the default. Pure feedback.
+            // Bare hover (no button held) advertises the affordance under the cursor
+            // (`trame-resize`, `trame-autofill`). A header boundary shows the
+            // col/row-resize cursor, a header body the select pointer, the fill handle
+            // the crosshair, everything else the default. Pure feedback.
             InputEvent::PointerMove { x, y } => {
                 let hit = self.state.header_hit(*x, *y);
                 let css = match hit {
@@ -252,10 +255,10 @@ impl TrameView {
                 false
             }
             // A right-click on a header selects the whole column/row (or all, on
-            // the corner) before the DOM context menu opens, and flags the menu
-            // as header-scoped (`trame-context-menu`). A border/insert band keeps
-            // the existing selection -- the header menu still acts on it. We don't
-            // preventDefault here; the `contextmenu` listener owns the menu.
+            // the corner) before the DOM context menu opens. It also flags the
+            // menu as header-scoped (`trame-context-menu`). A border/insert band
+            // keeps the existing selection -- the header menu still acts on it. We
+            // don't preventDefault here; the `contextmenu` listener owns the menu.
             InputEvent::PointerDown {
                 x, y, button: 2, ..
             } if self.state.header_hit(*x, *y).is_some() => {
@@ -289,9 +292,9 @@ impl TrameView {
                 x, y, button: 2, ..
             } => {
                 self.text_input.focus();
-                // Right-click inside the current multi-cell selection keeps it
-                // (so a context menu can act on the range); otherwise it collapses
-                // to the clicked cell, like a left click.
+                // Right-click inside the current multi-cell selection keeps it, so
+                // a context menu can act on the range. Otherwise it collapses to
+                // the clicked cell, like a left click.
                 if let Some((row, col)) = self.state.cell_at(*x, *y)
                     && !self.state.selection.contains(row, col)
                 {
@@ -353,9 +356,9 @@ impl TrameView {
                     "ArrowLeft" => self.nav_move(0, -1, ext),
                     "ArrowRight" => self.nav_move(0, 1, ext),
                     // Tab / Shift+Tab walk columns; Enter / Shift+Enter walk rows
-                    // (convention, `trame-selection`) -- these always collapse the
-                    // selection (Shift is the reverse-direction modifier here, not
-                    // a range extender). preventDefault keeps the browser from
+                    // (convention, `trame-selection`). These always collapse the
+                    // selection: Shift is the reverse-direction modifier here, not
+                    // a range extender. preventDefault keeps the browser from
                     // moving focus off the canvas.
                     "Tab" if !chord => self.nav_move(0, if *shift { -1 } else { 1 }, false),
                     "Enter" if !chord => self.nav_move(if *shift { -1 } else { 1 }, 0, false),
@@ -470,7 +473,7 @@ impl TrameView {
         // Update the velocity estimate (physical px/ms) from this sample's
         // interval, smoothed to ride out jitter. A long gap means a fresh
         // gesture, so seed from the sample alone rather than blending stale
-        // velocity; clamp dt so a near-zero interval can't blow it up.
+        // velocity. Clamp dt so a near-zero interval can't blow it up.
         let now = self.perf.now();
         let gap = now - self.last_wheel_ms;
         if self.last_wheel_ms == 0.0 || gap > FLING_GAP_MS {
@@ -519,8 +522,8 @@ impl TrameView {
 
     /// Advance the momentum coast by one frame. Called every frame from
     /// `update`. Starts coasting when a flick's velocity outlives the gesture,
-    /// integrates the decaying velocity into the scroll accumulator, and stops
-    /// once the speed dies down or the viewport hits an edge.
+    /// then integrates the decaying velocity into the scroll accumulator.
+    /// Stops once the speed dies down or the viewport hits an edge.
     pub(crate) fn step_momentum(&mut self) {
         let now = self.perf.now();
 
@@ -552,8 +555,8 @@ impl TrameView {
         let dt = dt.min(100.0);
 
         // Integrate over the *measured* frame dt and apply friction scaled to
-        // that same dt, so the coast is identical at 60 Hz or 240 Hz (it just
-        // runs in finer steps at higher refresh rates).
+        // that same dt. The coast is then identical at 60 Hz or 240 Hz; it
+        // just runs in finer steps at higher refresh rates.
         self.scroll_accum_x += self.fling_vx * dt;
         self.scroll_accum_y += self.fling_vy * dt;
         let decay = FLING_FRICTION.powf(dt / 16.667);
@@ -593,8 +596,9 @@ impl TrameView {
     }
 
     /// Build the active-cell report from the current selection, carrying the
-    /// anchor corner so the Logic thread can track the whole selection rectangle
-    /// (needed by the structural intents -- merge / delete rows-cols).
+    /// anchor corner. The Logic thread needs that corner to track the whole
+    /// selection rectangle, as the structural intents do (merge / delete
+    /// rows-cols).
     pub(crate) fn set_active_cmd(&self) -> TrameCommand {
         let (row, col) = self.state.selection.active;
         let (anchor_row, anchor_col) = self.state.selection.anchor;
@@ -654,9 +658,9 @@ impl TrameView {
     }
 
     /// Clear every selected cell's content (Delete / Backspace in navigation
-    /// mode). Optimistically empties the local cache and forwards an empty
-    /// `SetCellText` per cell -- the same path a committed empty edit takes --
-    /// sealed as one undo group by a trailing `CommitEdit`. Returns `true`
+    /// mode). Optimistically empties the local cache, then forwards an empty
+    /// `SetCellText` per cell -- the same path a committed empty edit takes. A
+    /// trailing `CommitEdit` seals them as one undo group. Returns `true`
     /// (consumed).
     pub(crate) fn clear_active_cell(&mut self) -> bool {
         let cells = self.state.selection.selected_cells();
@@ -777,7 +781,7 @@ impl TrameView {
         match (drag, preview) {
             (HeaderHit::ColBorder(c), crate::ui::grid::ResizePreview::Col(px)) => {
                 // The guide is in physical (zoomed) px; the stored width is BASE
-                // px (zoom-independent content), so divide the on-screen extent
+                // px (zoom-independent content). Divide the on-screen extent
                 // back out by the zoom before persisting.
                 let width = ((px - self.state.col_x(c)) / self.state.zoom)
                     .max(crate::ui::grid::MIN_COL_WIDTH);

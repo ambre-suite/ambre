@@ -180,10 +180,10 @@ fn weak_peer_public_key_rejected() {
 
 #[test]
 fn kek_binds_peer_identity() {
-    // The KEK is derived over `sender_pk || recipient_pk`, so a key wrapped by
-    // Alice for Bob cannot be unwrapped by Carol even if Carol somehow presents
-    // Alice's public key as the sender: the recipient half of the transcript
-    // differs, so the KEK (and thus the AEAD open) fails.
+    // The KEK is derived over `sender_pk || recipient_pk`. A key wrapped by
+    // Alice for Bob cannot be unwrapped by Carol, even if Carol somehow
+    // presents Alice's public key as the sender. The recipient half of the
+    // transcript differs, so the KEK (and thus the AEAD open) fails.
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
     let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
     let carol = MasterSeed::from_array([0x03; 32]).derive_exchange_key();
@@ -264,9 +264,9 @@ proptest! {
 #[test]
 fn fingerprint_is_stable_grouped_base32() {
     // Golden vector: the all-zero key. This is the string a user reads aloud for
-    // out-of-band verification, so it is frozen -- any change to the domain tag,
-    // truncation length, alphabet or grouping must break this test on purpose,
-    // not silently shift what two people compare over the phone.
+    // out-of-band verification, so it is frozen. Any change to the domain tag,
+    // truncation length, alphabet or grouping must break this test on purpose.
+    // It must not silently shift what two people compare over the phone.
     let fp = hash::fingerprint(&[0u8; 32]);
     assert_eq!(fp, "2HBA RR6Y FDOA EIJF ZZFT YWQZ MKRW N5FK");
 

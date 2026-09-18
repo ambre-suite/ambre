@@ -1,13 +1,15 @@
 // ambre-toile/src/ui/present.rs
 // ============================================================================
 // Presentation transition core (toile-presentation Smart Animate + Focus
-// Mode). Pure and host-testable: given the endpoints of a slide change and a
-// wall-clock timestamp, it produces the camera transform (an eased glide toward
-// the fitted target frame) and the per-element content overrides (the Smart
-// Animate tween / fade set) for the current frame. It owns no GPU state and
-// reads no board data -- the enriched `SlideChanged` event carries the two
-// `FrameSnapshot`s and the camera fit target into the view, which builds a
-// `Transition` and advances it each `plan_repaint` until it is `done`.
+// Mode), pure and host-testable. Given the endpoints of a slide change and a
+// wall-clock timestamp, it produces the camera transform: an eased glide toward
+// the fitted target frame. It also produces the per-element content overrides
+// for the current frame, the Smart Animate tween / fade set. It owns no GPU
+// state and reads no board data.
+//
+// The enriched `SlideChanged` event carries the two `FrameSnapshot`s and the
+// camera fit target into the view. The view builds
+// a `Transition` and advances it each `plan_repaint` until it is `done`.
 // ============================================================================
 
 use ambre_bus::app::toile::FrameSnapshot;
@@ -48,8 +50,8 @@ pub struct TransitionFrame {
 
 impl Transition {
     /// Build a transition. `cam_to_center` / `cam_to_zoom` are the fit target for
-    /// the new slide (the view resolves them from the frame rect, falling back to
-    /// the current camera when the slide has no resolvable frame). `dur_ms <= 0`
+    /// the new slide. The view resolves them from the frame rect, falling back to
+    /// the current camera when the slide has no resolvable frame. `dur_ms <= 0`
     /// makes the transition resolve in a single `advance` (an instant snap).
     pub fn new(
         cam_from: ViewportTransform,
@@ -71,10 +73,10 @@ impl Transition {
     }
 
     /// Advance to wall-clock `now_ms`, stamping the start on the first call. The
-    /// raw phase `t` is `(now - start) / dur` clamped to `0..=1`; it is eased
+    /// raw phase `t` is `(now - start) / dur` clamped to `0..=1`. It is eased
     /// before both the camera glide and the content solve, so the whole
-    /// transition shares one easing curve. `done` uses the raw (un-eased)
-    /// phase so the end is reached exactly at `dur`.
+    /// transition shares one easing curve. `done` uses the raw (un-eased) phase
+    /// so the end is reached exactly at `dur`.
     pub fn advance(&mut self, now_ms: f64) -> TransitionFrame {
         let start = *self.start_ms.get_or_insert(now_ms);
         let raw = if self.dur_ms <= 0.0 {

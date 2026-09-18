@@ -8,7 +8,7 @@ use super::super::*;
 /// Resolve what the user typed into an address the board may hold, and place it
 /// (`TOILE-087`, `TOILE-088`).
 ///
-/// A refusal stays in the dialog: the user reads it beside the field they typed
+/// A refusal stays in the dialog. The user reads it beside the field they typed
 /// into and fixes it there, rather than finding a box on the board that never
 /// paints. `normalize_web_address` is the gate -- only `https` survives it, so
 /// nothing that could run in the board's stead reaches a frame.
@@ -53,7 +53,7 @@ fn set_web_link(
 /// Perform the half of a followed link that leaves the board (`TOILE-065`,
 /// `TOILE-114`). An address opens in a fresh tab with `noopener,noreferrer`, so
 /// the page can neither reach back into this window nor learn where it came
-/// from; the board itself never fetches it (`TOILE-110`). A document opens the
+/// from. The board itself never fetches it (`TOILE-110`). A document opens the
 /// same way the launcher opens one, reloading only when the target's render kind
 /// differs from the booted one.
 fn follow_shell_nav(
@@ -90,8 +90,8 @@ fn follow_shell_nav(
 /// The single root view, rendered inside `<Router>` so it can read the client
 /// route. Renders the persistent chrome + canvas and overlays the landing on the
 /// `/` route. The document binding (open/close, canvas swap, rAF gate) is driven
-/// OUTSIDE this tree by the per-frame route poll (see `pre_frame` in `main`),
-/// because the canvas handle is `!Send` and the `<Router>` subtree must be Send.
+/// OUTSIDE this tree by the per-frame route poll (see `pre_frame` in `main`).
+/// The canvas handle is `!Send`, and the `<Router>` subtree must be Send.
 #[component]
 pub(crate) fn AppRoot() -> impl IntoView {
     let Wiring {
@@ -206,9 +206,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
     });
 
     // Embed a web page (`TOILE-087`). The shell owns the dialog because it owns
-    // the DOM; the board is handed an address that has already been through
-    // `normalize_web_address`, so a refusal is read while the dialog is still on
-    // screen rather than after a box lands on the board.
+    // the DOM. The board is handed an address that has already been through
+    // `normalize_web_address`. A refusal is read while the dialog is still on
+    // screen, rather than after a box lands on the board.
     let embed_web_open = RwSignal::new(false);
     let embed_web_text = RwSignal::new(String::new());
     let embed_web_error = RwSignal::new(None::<&'static str>);
@@ -218,7 +218,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     // embed never touches the document it points at (`TOILE-225`).
     let embed_doc_open = RwSignal::new(false);
     // Put a link on the selected element (`toile-links`). The chooser is the
-    // shell's for the same two reasons as the embed dialogs: an address is
+    // shell's for the same two reasons as the embed dialogs. An address is
     // validated where the user can still read the refusal, and only the launcher
     // knows which documents this user may open. The frame list is the deck's,
     // which already holds every frame on the board -- including the off-screen
@@ -276,16 +276,16 @@ pub(crate) fn AppRoot() -> impl IntoView {
         install_canvas_file_drop(toile_dropped_file, toasts);
     }
 
-    // Toile cursor feedback (toile-tools): reflect the active tool on
-    // the canvas element as a CSS cursor (crosshair while a creation tool is
-    // armed, grab for Hand, arrow for Select). A pure function of the shared
-    // active-tool signal, applied here in the chrome -- it never touches the
-    // canvas render pass. Mounted only for a Toile board.
+    // Toile cursor feedback (toile-tools): reflect the active tool on the
+    // canvas element as a CSS cursor. That is crosshair while a creation
+    // tool is armed, grab for Hand, arrow for Select. A pure function of the
+    // shared active-tool signal, applied here in the chrome -- it never
+    // touches the canvas render pass. Mounted only for a Toile board.
     if boot_is_toile {
         Effect::new(move |_| {
-            // Position-dependent override (a directional resize / grab cursor over
-            // a selection edge / corner, or during a transform) wins; otherwise the
-            // cursor is the pure function of the active tool.
+            // A position-dependent override wins: a directional resize or grab
+            // cursor over a selection edge or corner, or during a transform.
+            // Otherwise the cursor is the pure function of the active tool.
             let cursor = toile_cursor.get().unwrap_or_else(|| {
                 std::borrow::Cow::Borrowed(ambre_toile::ui::palette::cursor_css(
                     toile_active_tool.get(),
@@ -352,10 +352,10 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 } else if id == toile_chrome::LINK_SET {
                     link_text.set(String::new());
                     link_error.set(None);
-                    // Both lists are refreshed rather than trusted: a frame added
-                    // since the panel last read the deck, and a document shared
-                    // since the landing screen fetched, are both things the user
-                    // expects to find here.
+                    // Both lists are refreshed rather than trusted. A frame may
+                    // have been added since the panel last read the deck. A
+                    // document may have been shared since the landing screen
+                    // fetched. The user expects to find both here.
                     if let Some(document_id) = current_doc.get_untracked() {
                         let _ = tx.try_send(LogicCommand::App {
                             document_id,
@@ -376,8 +376,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
             }
             // `FILTER_COLUMN` is a UI-only intent: open the popover anchored under
             // the active cell and ask the Logic thread for the column's distinct
-            // values (it resolves the active column itself). Everything else flows
-            // through the shared CommandId -> AppCommand path.
+            // values. Logic resolves the active column itself. Everything else
+            // flows through the shared CommandId -> AppCommand path.
             if id == trame_chrome::FIND || id == trame_chrome::REPLACE {
                 // UI-only intents (`trame-find-replace`): open the find/replace panel in the
                 // matching mode. The panel emits FindNext/ReplaceAll itself.
@@ -428,7 +428,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             } else if id == trame_chrome::COPY || id == trame_chrome::CUT {
                 // Copy/cut (`trame-clipboard`): focus the canvas text pipe and ask the
                 // browser to fire the `copy`/`cut` DOM event the host listeners
-                // service (they write both the TSV and the typed payload).
+                // service. They write both the TSV and the typed payload.
                 if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
                     if let Ok(Some(ta)) = doc.query_selector(".ambre-input")
                         && let Some(el) = ta.dyn_ref::<web_sys::HtmlElement>()
@@ -446,16 +446,15 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 }
             } else if id == trame_chrome::PASTE {
                 // Paste (`trame-clipboard`): `execCommand("paste")` is blocked by browsers,
-                // so read the OS clipboard via the async Clipboard API (allowed in
-                // this click gesture). `read()` recovers the private Ambre payload
-                // (full styled / formula-reindexed paste, like Ctrl+V) when
-                // present, else the plain text; the Logic thread resolves the
-                // target from the tracked active cell.
+                // so read the OS clipboard via the async Clipboard API (allowed in this
+                // click gesture). `read()` recovers the private Ambre payload (full styled
+                // / formula-reindexed paste, like Ctrl+V) when present, else the plain
+                // text. The Logic thread resolves the target from the tracked active cell.
                 if let Some(document_id) = current_doc.get_untracked() {
                     let clipboard = web_sys::window().map(|w| w.navigator().clipboard());
-                    // `navigator.clipboard` is undefined outside a secure context
-                    // (http:// on a LAN IP, etc.): there the button cannot read at
-                    // all -- tell the user instead of failing silently.
+                    // `navigator.clipboard` is undefined outside a secure context, such as
+                    // http:// on a LAN IP. There the button cannot read at all, so tell
+                    // the user instead of failing silently.
                     let available = clipboard
                         .as_ref()
                         .map(|c| {
@@ -484,8 +483,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 }
             } else if id == trame_chrome::IMPORT_CSV {
                 // Interop (`trame-import-export`): open a file picker, read the chosen
-                // CSV bytes, and send them to the Logic thread, which creates a new
-                // sheet and converts client-side (Zero-Knowledge).
+                // CSV bytes, and send them to the Logic thread. It creates a new sheet
+                // and converts client-side (Zero-Knowledge).
                 if let Some(document_id) = current_doc.get_untracked() {
                     open_csv_picker(document_id, tx.clone(), toasts);
                 }
@@ -523,9 +522,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
             }
         }
     });
-    // Multi-column sort (`trame-sort`): the dialog emits the levels; forward
-    // them as the parameterless `SortSelectionMulti`, like the single-column sort
-    // intents -- the Logic thread resolves the range and active sheet from the
+    // Multi-column sort (`trame-sort`): the dialog emits the levels. Forward them
+    // as the parameterless `SortSelectionMulti`, like the single-column sort
+    // intents. The Logic thread resolves the range and active sheet from the
     // tracked selection. The dialog's snapshotted bounds are used only to label
     // its column picker, so the keys are range-relative and match Logic's view.
     let on_sort_apply = Callback::new({
@@ -560,7 +559,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         }
     });
     // Toile Find (`toile-find`): the panel emits a `Find` with the query,
-    // options and resume point; Logic scans the whole board (off-screen matches
+    // options and resume point. Logic scans the whole board (off-screen matches
     // included) and replies with `FindResults`. Find-only -- no Replace on a
     // free-form canvas.
     let on_find_toile = Callback::new({
@@ -580,8 +579,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
         }
     });
     // Presenter overlay panel intents (toile-presentation): navigation maps to
-    // the local playback commands; note edits target the active slide's frame
-    // (captured from the last SlideChanged into `presenter_frame`).
+    // the local playback commands. Note edits target the active slide's frame,
+    // captured from the last SlideChanged into `presenter_frame`.
     let on_present_intent = Callback::new({
         let tx = to_logic.clone();
         move |intent: toile_chrome::PresenterIntent| {
@@ -710,12 +709,11 @@ pub(crate) fn AppRoot() -> impl IntoView {
     });
 
     // The menu layout follows the right-click scope the view published
-    // (`trame-context-menu`): a cell right-click gets the full menu, a header the
-    // header-scoped one (no clipboard / merge).
-    // A Toile board builds its menu from the selection scope the canvas view
-    // publishes (`toile-menus`); a Trame sheet from the cell/header scope
-    // (`trame-context-menu`). Both return `ambre_chrome::MenuEntry` rows, so one
-    // `<ContextMenu>` renders either.
+    // (`trame-context-menu`). A cell right-click gets the full menu, a header the
+    // header-scoped one (no clipboard / merge). A Toile board builds its menu
+    // from the selection scope the canvas view publishes (`toile-menus`); a Trame
+    // sheet from the cell/header scope (`trame-context-menu`). Both return
+    // `ambre_chrome::MenuEntry` rows, so one `<ContextMenu>` renders either.
     let ctx_entries = Memo::new(move |_| {
         if boot_is_toile {
             toile_chrome::context_entries_for(&toile_ctx_scope.get())
@@ -724,13 +722,13 @@ pub(crate) fn AppRoot() -> impl IntoView {
         }
     });
 
-    // Per-slot sender clones. Each slot's children is a `Fn` (re-runnable), so it
-    // captures its own clone and re-clones inside the handler rather than moving
-    // the sender out (which would make the children `FnOnce`).
+    // Per-slot sender clones. Each slot's children is a `Fn`, so it captures its
+    // own clone and re-clones inside the handler rather than moving the sender
+    // out. Moving it out would make the children `FnOnce`.
     let tx_invite = to_logic.clone();
     // The member-row handlers live inside a `<For>` whose item template is a
-    // re-runnable `Fn`; a plain `Sender` clone would be moved into it (making it
-    // `FnOnce`). A `StoredValue` is `Copy`, so each row reads its own clone.
+    // re-runnable `Fn`. A plain `Sender` clone would be moved into it, making it
+    // `FnOnce`. A `StoredValue` is `Copy`, so each row reads its own clone.
     let tx_member = StoredValue::new(to_logic.clone());
     let landing_signals = LandingSignals {
         docs,
@@ -809,7 +807,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             </Header>
             // The toolbar / formula bar / sheet tabs / status bar are Trame chrome
             // (`trame-cell-styles`, `trame-cell-editing`, `trame-sheets`,
-            // `trame-status-bar`); a Toile board renders none of them -- its tool palette,
+            // `trame-status-bar`). A Toile board renders none of them. Its tool palette,
             // status bar and panels are separate roadmap items (`toile-tools`,
             // `toile-status-bar`). Gated on the booted app kind, fixed per page load.
             <Toolbar slot>
@@ -1431,19 +1429,19 @@ pub(crate) fn AppRoot() -> impl IntoView {
         {boot_is_toile.then(|| view! {
             <toile_chrome::ToolPalette active=toile_active_tool />
         })}
-        // Toile top menu bar + zoom control (toile-menus): the low-
-        // frequency menus (File/Edit/View/Object/Present) and the zoom cluster.
-        // Every entry routes through the shared `on_command` path (the same channel
-        // the context menu uses); the zoom readout mirrors the `zoom` signal the
-        // canvas view publishes each frame.
+        // Toile top menu bar + zoom control (toile-menus): the low- frequency menus
+        // (File/Edit/View/Object/Present) and the zoom cluster. Every entry routes
+        // through the shared `on_command` path, the same channel the context menu
+        // uses. The zoom readout mirrors the `zoom` signal the canvas view
+        // publishes each frame.
         {boot_is_toile.then(|| view! {
             <toile_chrome::TopMenuBar zoom=zoom on_command=on_command />
         })}
-        // Toile style / property inspector (toile-styles): a side panel
-        // shown only for a non-empty selection. It reads the common style the canvas
-        // view publishes, reuses `toile_ctx_scope` for the lock buttons and the shared
-        // `on_command` path for z-order / lock, and writes debounced whole-style edits
-        // into `toile_restyle` the view turns into `RestyleElements`.
+        // Toile style / property inspector (toile-styles): a side panel shown only for
+        // a non-empty selection. It reads the common style the canvas view publishes.
+        // It reuses `toile_ctx_scope` for the lock buttons and the shared `on_command`
+        // path for z-order / lock. It writes debounced whole-style edits into
+        // `toile_restyle`, which the view turns into `RestyleElements`.
         {boot_is_toile.then(|| view! {
             <toile_chrome::StyleInspector
                 model=toile_style_model
@@ -1452,13 +1450,14 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 restyle=toile_restyle
             />
         })}
-        // Toile content-anchored floating selection toolbar (toile-styles):
-        // follows the selection as the board pans/zooms (the canvas view republishes
-        // its client anchor into `toile_float_bar` each frame). Its command buttons
-        // reuse the shared `on_command` path (a strict subset of the context menu);
-        // the style controls (fill, text colour, font, size, bold, italic) seed from
-        // the inspector `toile_style_model` and write single-field `StyleEdit` edits
-        // the view turns into a live-based `RestyleElements` over the selection.
+        // Toile content-anchored floating selection toolbar (toile-styles): follows
+        // the selection as the board pans/zooms (the canvas view republishes its
+        // client anchor into `toile_float_bar` each frame). Its command buttons
+        // reuse the shared `on_command` path, a strict subset of the context menu.
+        // The style controls (fill, text colour, font, size, bold, italic) seed from
+        // the inspector `toile_style_model`. They write single-field `StyleEdit`
+        // edits the view turns into a live-based `RestyleElements` over the
+        // selection.
         {boot_is_toile.then(|| view! {
             <toile_chrome::SelectionToolbar
                 bar=toile_float_bar
@@ -1473,8 +1472,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // Toile comments (`toile-comments`): the board-wide thread list with the
         // one thread it shows whole, and the composer the comment tool opens
         // where the user clicked. Both hold nothing of their own
-        // (`TOILE-UI-023`): they render what the canvas view read back from the
-        // board and hand every action to it as one intent.
+        // (`TOILE-UI-023`). They render what the canvas view read back from the
+        // board, and hand every action to it as one intent.
         {boot_is_toile.then(|| view! {
             <toile_chrome::CommentsPanel
                 state=toile_comments.panel
@@ -1494,8 +1493,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
 
         // The deck panel (`toile-presentation`): the surface that adds a frame
         // to the presentation, reorders it and removes it (`TOILE-FEAT-026`).
-        // It holds no order of its own -- it renders the frames the canvas view
-        // read back from the board and hands each edit to it as one intent.
+        // It holds no order of its own. It renders the frames the canvas view
+        // read back from the board, and hands each edit to it as one intent.
         {boot_is_toile.then(|| view! {
             <toile_chrome::DeckPanel
                 state=toile_deck.panel

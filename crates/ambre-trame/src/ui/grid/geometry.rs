@@ -19,7 +19,7 @@ impl TrameUiState {
         let entry = self.cell_cache.entry((row, col)).or_default();
         // `text` here is the raw buffer. For a formula we cannot evaluate it on
         // the UI thread, so the displayed result stays blank until the next
-        // ViewportData carries the computed value -- never echo the formula
+        // ViewportData carries the computed value. Never echo the formula
         // source as its own result. For a plain literal, raw == display.
         let is_formula = text.starts_with('=');
         entry.raw = text.clone();
@@ -31,7 +31,7 @@ impl TrameUiState {
     }
 
     /// Mint the next monotonic command version (shared with the viewport
-    /// request). Used by commands that carry a `version` for echo ordering, e.g.
+    /// request). Used by commands that carry a `version` for echo ordering, for example
     /// [`TrameCommand::ResizeCol`].
     pub fn bump_version(&mut self) -> u64 {
         let v = self.next_version;
@@ -129,10 +129,11 @@ impl TrameUiState {
     }
 
     /// Insertion slot for a column reorder drop at physical x `px`: the column
-    /// index the grabbed column would land *before*, snapping to the nearer
-    /// vertical boundary (left edge of the column under the cursor, or the next
-    /// one past its midpoint so the last position is reachable). `None` left of
-    /// the grid. The returned index may equal the column count (drop at the end).
+    /// index the grabbed column would land *before*. It snaps to the nearer
+    /// vertical boundary: the left edge of the column under the cursor, or the
+    /// next one past its midpoint. That last option keeps the final position
+    /// reachable. `None` left of the grid. The returned index may equal the
+    /// column count (drop at the end).
     pub fn col_drop_slot(&self, px: f64) -> Option<u32> {
         let col = self.col_at_x(px)?;
         let mid = self.col_x(col) + self.col_width_of(col) / 2.0;
@@ -140,7 +141,7 @@ impl TrameUiState {
     }
 
     /// Insertion slot for a row reorder drop at physical y `py`: the row index
-    /// the grabbed row would land *above*, snapping to the nearer horizontal
+    /// the grabbed row would land *above*. It snaps to the nearer horizontal
     /// boundary. Row analogue of [`col_drop_slot`](Self::col_drop_slot).
     pub fn row_drop_slot(&self, py: f64) -> Option<u32> {
         let row = self.row_at_y(py)?;
@@ -282,8 +283,8 @@ impl TrameUiState {
     /// span `(master_row, master_col, col_span, row_span)`.
     ///
     /// A covered cell carries no back-reference to its master, so this scans the
-    /// cached merge masters (the cache is bounded to the viewport + padding, so
-    /// the scan is cheap). The master itself resolves to its own block.
+    /// cached merge masters. The cache is bounded to the viewport + padding, so
+    /// the scan is cheap. The master itself resolves to its own block.
     pub fn merge_master_at(&self, row: u32, col: u32) -> Option<(u32, u32, u32, u32)> {
         self.cell_cache.iter().find_map(|(&(mr, mc), c)| {
             let (col_span, row_span) = c.merge_span?;
@@ -293,15 +294,15 @@ impl TrameUiState {
     }
 
     /// Screen pixel rect (x, y, w, h) of the merged block the active cell belongs
-    /// to, or `None` when the active cell is not merged (or scrolled out). Lets
-    /// the overlay draw the active-cell border around the whole merge.
+    /// to. `None` when the active cell is not merged (or scrolled out). Lets the
+    /// overlay draw the active-cell border around the whole merge.
     pub fn active_merge_rect(&self) -> Option<(f64, f64, f64, f64)> {
         let (mr, mc, cs, rs) = self.merge_master_at(self.active_row(), self.active_col())?;
         self.range_pixel_rect(mr, mc, mr + rs - 1, mc + cs - 1)
     }
 
     /// Screen pixel rect (x, y, w, h) of cell (row, col) relative to the
-    /// top-left corner of the canvas, or `None` if the cell is outside the
+    /// top-left corner of the canvas. `None` if the cell is outside the
     /// visible area.
     pub fn cell_pixel_rect(&self, row: u32, col: u32) -> Option<(f64, f64, f64, f64)> {
         // A collapsed (filtered) row is not drawn at all.
@@ -325,9 +326,9 @@ impl TrameUiState {
         Some((x, y, cw, rh))
     }
 
-    /// Screen pixel rect (x, y, w, h) covering the cell range
-    /// `(r1, c1)..=(r2, c2)`, clipped to the scrollable grid area (never under a
-    /// header strip or the tab strip). Returns `None` if the range is entirely
+    /// Screen pixel rect (x, y, w, h) covering the cell range `(r1, c1)..=(r2,
+    /// c2)`, clipped to the scrollable grid area. The clip never reaches under a
+    /// header strip or the tab strip. Returns `None` if the range is entirely
     /// outside the visible area. Used to fill / outline a multi-cell selection.
     pub fn range_pixel_rect(
         &self,
@@ -338,9 +339,10 @@ impl TrameUiState {
     ) -> Option<(f64, f64, f64, f64)> {
         let cells_top = self.header_h();
         // Unclipped edges (signed: the range may start left/above the viewport).
-        // Row edges are in collapsed (visible-row) space: the top is the first
-        // row's slot, the bottom is one slot past the last *visible* row of the
-        // range (so a range straddling hidden rows shrinks to its visible height).
+        // Row edges are in collapsed (visible-row) space. The top is the first
+        // row's slot; the bottom is one slot past the last *visible* row of the
+        // range. A range straddling hidden rows therefore shrinks to its visible
+        // height.
         let x_left = self.col_x(c1);
         let x_right = self.col_x(c2) + self.col_width_of(c2);
         let y_top = self.row_y(r1);
@@ -364,13 +366,14 @@ impl TrameUiState {
         Some((cx1, cy1, cx2 - cx1, cy2 - cy1))
     }
 
-    /// Grow `rect` so it fully contains every merged block it intersects. A
-    /// merge is one logical cell (`trame-cell-merges`): a selection touching part
-    /// of a block must cover the whole block -- both for drawing (the drag reads
-    /// as selecting the merge at once, not cell by cell) and for the autofill
-    /// handle (anchored on the block's extent corner). Iterates to a fixpoint
-    /// because expanding onto one merge can bring a neighbouring one into range.
-    /// Scans the cached merge masters (bounded to the viewport, so it is cheap).
+    /// Grow `rect` so it fully contains every merged block it intersects. A merge
+    /// is one logical cell (`trame-cell-merges`), so a selection touching part of
+    /// a block must cover the whole block. That holds for drawing: the drag reads
+    /// as selecting the merge at once, not cell by cell. It holds for the
+    /// autofill handle too, which is anchored on the block's extent corner.
+    /// Iterates to a fixpoint because expanding onto one merge can bring a
+    /// neighbouring one into range. Scans the cached merge masters (bounded to
+    /// the viewport, so it is cheap).
     pub fn expand_to_merges(&self, rect: CellRect) -> CellRect {
         let (mut r1, mut c1, mut r2, mut c2) = rect;
         loop {
@@ -397,9 +400,9 @@ impl TrameUiState {
 
     /// The fill granularity `(rows, cols)` of an autofill source `bounds`
     /// (`trame-autofill`). When the source is tiled by equal merged blocks (one
-    /// block or a uniform grid of identically sized merges), returns the span so
-    /// the drag snaps block by block and the release re-merges each tile (Excel
-    /// behaviour); otherwise `(1, 1)` keeps the plain per-cell fill. A source that
+    /// block or a uniform grid of identically sized merges), returns the span. The
+    /// drag then snaps block by block and the release re-merges each tile (Excel
+    /// behaviour). Otherwise `(1, 1)` keeps the plain per-cell fill. A source that
     /// mixes merges of different sizes or a merge with extra cells is not
     /// block-aligned and falls back to `(1, 1)`.
     pub fn fill_source_block(&self, bounds: CellRect) -> (u32, u32) {
@@ -466,12 +469,12 @@ impl TrameUiState {
     }
 
     /// Excel-style "current region" around the active cell (`trame-shared-filter`):
-    /// the contiguous rectangle of non-empty cells, grown one line at a time
+    /// the contiguous rectangle of non-empty cells. It grows one line at a time
     /// until the bordering row/column is fully empty. Resolved from the viewport
     /// `cell_cache` (cells beyond the cache read as empty -- acceptable for the
-    /// always-on autofilter affordance, which only draws on visible cells).
-    /// Returns absolute `(r1, c1, r2, c2)`; `None` when the active cell is an
-    /// isolated empty cell (no block to filter).
+    /// always-on autofilter affordance, which only draws on visible cells). Returns
+    /// absolute `(r1, c1, r2, c2)`; `None` when the active cell is an isolated
+    /// empty cell (no block to filter).
     pub fn current_region(&self) -> Option<(u32, u32, u32, u32)> {
         let non_empty = |r: u32, c: u32| {
             self.cell_cache
@@ -508,10 +511,10 @@ impl TrameUiState {
         Some((r1, c1, r2, c2))
     }
 
-    /// Screen pixel rect (x, y, w, h) of the autofilter button for column `col`
-    /// on the current region's header row `band_row` (`trame-shared-filter`): a small
-    /// square hugging the right edge of cell `(band_row, col)`. `None` when that
-    /// cell is hidden or scrolled out of view.
+    /// Screen pixel rect (x, y, w, h) of the autofilter button for column `col` on
+    /// the current region's header row `band_row` (`trame-shared-filter`). It is a
+    /// small square hugging the right edge of cell `(band_row, col)`. `None` when
+    /// that cell is hidden or scrolled out of view.
     pub fn filter_button_rect(&self, band_row: u32, col: u32) -> Option<(f64, f64, f64, f64)> {
         let (x, y, w, h) = self.cell_pixel_rect(band_row, col)?;
         // Scale the button with the grid zoom so it tracks the cell (which is

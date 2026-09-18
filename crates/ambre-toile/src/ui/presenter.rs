@@ -4,10 +4,11 @@
 // testable helpers the wasm-only `chrome::PresenterPanel` builds on:
 //   - `slide_counter_label`: the "k / n" slide counter text.
 //   - `notes_delta`: a full-textarea replacement reduced to one char-CRDT splice
-//     (`TextDelta`), computed over unicode codepoints so its indices line up with
-//     the loro `LoroText` positions the Logic engine clamps (presentation.rs
-//     `edit_notes`). A `<textarea>` only exposes its whole value on `input`, so
-//     the panel diffs the old and new strings into the minimal splice here.
+//     (`TextDelta`). It is computed over unicode codepoints, so its indices line
+//     up with the loro `LoroText` positions the Logic engine clamps
+//     (presentation.rs `edit_notes`). A `<textarea>` only exposes its whole value
+//     on `input`, so the panel diffs the old and new strings into the minimal
+//     splice here.
 // No DOM, no Loro: this stays in `ui` and is host-tested, like `ui::find`.
 // ============================================================================
 
@@ -21,12 +22,12 @@ pub fn slide_counter_label(index: usize, count: usize) -> String {
 }
 
 /// Reduce a full-textarea replacement (`old` -> `new`) to the single minimal
-/// splice that turns one into the other, or `None` when they are equal (a no-op
-/// the caller skips, matching `edit_notes`' empty-delta guard). The splice is
-/// expressed in **unicode codepoints** (not bytes): a common-prefix and a
+/// splice that turns one into the other. `None` when they are equal, a no-op the
+/// caller skips, matching `edit_notes`' empty-delta guard. The splice is
+/// expressed in **unicode codepoints**, not bytes. A common-prefix and a
 /// common-suffix are trimmed, and what remains in the middle is the deleted span
 /// (`old`) and the inserted text (`new`). This yields one contiguous edit, which
-/// is exactly what a typed keystroke or a paste produces; it is not a minimal
+/// is exactly what a typed keystroke or a paste produces. It is not a minimal
 /// edit script for arbitrary rewrites, but the panel only ever sees incremental
 /// textarea input.
 pub fn notes_delta(old: &str, new: &str) -> Option<TextDelta> {

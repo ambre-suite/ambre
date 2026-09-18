@@ -105,3 +105,6 @@ wasm-bindgen = { workspace = true }
 # host-testable, so gate it to the host target like ambre-trame does.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,6 +1,6 @@
 // ambre-canvas/src/host.rs
 // ============================================================================
-// UI Thread host plumbing — generic, app-agnostic GPU + rAF primitives.
+// UI Thread host plumbing -- generic, app-agnostic GPU + rAF primitives.
 //
 //   GpuState            wgpu Device/Queue/Surface + QuadRenderer + text stack.
 //   bootstrap_gpu       async wgpu init (WebGL2 by default, ?webgpu opt-in).
@@ -10,10 +10,10 @@
 //
 // This module owns no application state and names no per-app view. The frame
 // DRIVER (`FrameHost`), the closed `AppView` registry, and the DOM event wiring
-// live in the launcher (`ambre-app`), which depends on every app crate -- a
-// closed view enum naming `TrameView` cannot live upstream here without a
-// dependency cycle (ambre-spec-architecture.md). The launcher reads/writes the
-// `GpuState` it gets from `bootstrap_gpu` and drives `start_raf_loop`.
+// live in the launcher (`ambre-app`), which depends on every app crate. A closed
+// view enum naming `TrameView` cannot live upstream here without a dependency
+// cycle (ambre-spec-architecture.md). The launcher reads/writes the `GpuState`
+// it gets from `bootstrap_gpu` and drives `start_raf_loop`.
 //
 // wasm32-only: surface creation from an HTMLCanvasElement
 // (`wgpu::SurfaceTarget::Canvas`) and the web_sys glue do not exist on native.
@@ -52,14 +52,14 @@ pub struct GpuState {
 // -----------------------------------------------------------------------------
 
 /// Handle to gate the rAF loop, so the chrome can freeze the canvas behind a
-/// fullscreen `<dialog>`: while paused the loop keeps ticking but does no work
-/// (no dispatch, no render), so the canvas holds its last frame -- a
-/// `backdrop-filter: blur()` over it is then free and the GPU stays idle.
+/// fullscreen `<dialog>`. While paused the loop keeps ticking but does no
+/// work: no dispatch, no render. The canvas holds its last frame, a
+/// `backdrop-filter: blur()` over it is free, and the GPU stays idle.
 ///
 /// Backed by an `Arc<AtomicBool>` so it is `Send + Sync` and can ride inside a
 /// Leptos `Callback`. (A literal `cancelAnimationFrame` would stop the loop
-/// entirely, but resuming it needs main-thread access to the JS closure, which
-/// is `!Send` and cannot cross a Leptos callback boundary; gating is the clean
+/// entirely. Resuming it needs main-thread access to the JS closure, which is
+/// `!Send` and cannot cross a Leptos callback boundary. Gating is the clean
 /// equivalent here.)
 #[derive(Clone)]
 pub struct RafControl {
@@ -97,10 +97,10 @@ impl RafControl {
 /// Start the requestAnimationFrame loop, invoking `frame(timestamp)` once per
 /// frame while `control` is running (skipped while paused).
 ///
-/// One `Closure` is kept alive for the app lifetime and reused every frame
-/// (zero per-frame allocation): the naive allocate-and-forget pattern leaks a
-/// closure per frame, which at 240 Hz grows the JS heap and makes Firefox
-/// throttle rAF down to 60 Hz as self-protection.
+/// One `Closure` is kept alive for the app lifetime and reused every frame,
+/// with zero per-frame allocation. The naive allocate-and-forget pattern
+/// leaks a closure per frame. At 240 Hz that grows the JS heap and makes
+/// Firefox throttle rAF down to 60 Hz as self-protection.
 pub fn start_raf_loop(mut frame: impl FnMut(f64) + 'static, control: RafControl) {
     #[allow(clippy::type_complexity)]
     let cb: Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>> = Rc::new(RefCell::new(None));
@@ -131,16 +131,16 @@ pub fn start_raf_loop(mut frame: impl FnMut(f64) + 'static, control: RafControl)
 // -----------------------------------------------------------------------------
 
 pub async fn bootstrap_gpu(canvas: HtmlCanvasElement) -> Option<GpuState> {
-    // WebGPU on Mesa/Intel Firefox has a compositor bug: the render pipeline
-    // produces correct pixels (confirmed via GPU readback) but the browser
+    // WebGPU on Mesa/Intel Firefox has a compositor bug. The render pipeline
+    // produces correct pixels (confirmed via GPU readback), but the browser
     // compositor silently fails to display the canvas on screen.
     //
     // This cannot be detected from JavaScript: `drawImage` reads the GPU buffer
     // directly and bypasses the compositor, so a probe canvas always looks correct.
     //
-    // Strategy: default to GL (WebGL2) on WASM, which works universally.
-    // Opt in to WebGPU with `?webgpu` in the URL (useful for Nvidia and future
-    // Mesa versions where the bug is fixed).
+    // Strategy: default to GL (WebGL2) on WASM, which works universally. Opt in to
+    // WebGPU with `?webgpu` in the URL (useful for Nvidia and future Mesa versions
+    // where the bug is fixed).
     let use_webgpu = url_flag("webgpu");
     let backends = if use_webgpu {
         tracing::info!("WebGPU requested via URL flag");
@@ -237,9 +237,9 @@ async fn create_gpu_state(canvas: HtmlCanvasElement, backends: wgpu::Backends) -
     );
 
     let mut quad_renderer = QuadRenderer::new(&device, format);
-    // Size the ping-pong offscreens to the initial canvas; ResizeObserver
-    // doesn't fire on startup so handle_resize wouldn't get a chance to
-    // initialize them before the first render otherwise.
+    // Size the ping-pong offscreens to the initial canvas. ResizeObserver
+    // doesn't fire on startup, so handle_resize would otherwise never
+    // initialize them before the first render.
     quad_renderer.resize_offscreens(&device, width, height);
 
     // The base faces (Noto Sans + DejaVu) shared with every other text-capable

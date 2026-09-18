@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE MEDIA TRANSFER
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the upload and the download both ship in the Sync worker; the address
-is a hash of the plaintext, and the relay reads it.
+**Implementation:** partial -- the upload and the download both ship in the Sync worker. The
+address is a hash of the plaintext, and the relay reads it.
 
 > A picture in a document travels apart from it. The document holds an address; the pixels go
 > straight to object storage, sealed, and come back the same way.
@@ -23,9 +23,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-050` | `INV` | A blob's address MUST NOT be derived from its plaintext. | `ZK-007`; this spec section 3 | none | fails -- the address is a hash of the plaintext bytes and it travels to the relay in clear, so the relay can confirm that a document holds a file it already knows. Answered by the `The media address is not the plaintext` Story (`ambre-roadmap.md` E7) | unverified |
-| `SYNC-051` | `INV` | A sealed blob MUST be bound to the document it belongs to. | this spec section 3; `SYNC-018` | none | fails -- the seal's additional data is one constant string, shared by every blob of every document, so a blob sealed for one document opens under any other holding the same key | unverified |
-| `SYNC-074` | `INV` | A sealed blob MUST be bound to the address that names it. | this spec section 3; `SYNC-018` | none | fails -- the same constant additional data names no address, so nothing ties the ciphertext to the string the document stores. It is the half `SYNC-052` needs and does not have | unverified |
+| `SYNC-050` | `INV` | A blob's address MUST NOT be derived from its plaintext. | `ZK-007`; this spec section 3 | none | fails -- the address is a hash of the plaintext bytes and it travels to the relay in clear, so the relay can confirm that a document holds a file it already knows; lands with the `The media address is not the plaintext` Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-051` | `INV` | A sealed blob MUST be bound to the document it belongs to. | this spec section 3; `SYNC-018` | none | fails -- the seal's additional data is one constant string, shared by every blob of every document, so a blob sealed for one document opens under any other holding the same key; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | failing |
+| `SYNC-074` | `INV` | A sealed blob MUST be bound to the address that names it. | this spec section 3; `SYNC-018` | none | fails -- the same constant additional data names no address, so nothing ties the ciphertext to the string the document stores. It is the half `SYNC-052` needs and does not have; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | failing |
 
 ### 1.2 Add a picture
 
@@ -34,10 +34,10 @@ the put are the Sync worker's.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-075` | `POST` | An upload MUST answer the requesting application with the blob's address. | this spec section 3, the upload steps | none | unheld -- the worker emits the address on the last step and no test drives the leg, which runs only in a browser. `ambre_toile::logic::state::import::tests::seed_media_dedups_repeated_hashes` reads what an application does with two equal addresses, never that the upload produced one | unverified |
-| `SYNC-049` | `FRAME` | An upload MUST NOT emit a byte of the picture that is not sealed under the document key. | `ZK-001`; this spec section 3 | none | unheld -- the upload seals before it puts, and the crate graph keeps every application out of the cipher (`TOILE-IO-013`). Nothing here refuses a put that skips the seal, which is the same absence as `SYNC-001` | unverified |
-| `SYNC-053` | `FRAME` | An upload MUST NOT tell the relay anything about a blob beyond its size. | `ZK-007`; this spec section 3 | none | fails -- the confirmation carries the plaintext address and the media type, and neither is in the set `ZK-007` allows. Answered by the `The media address is not the plaintext` Story (`ambre-roadmap.md` E7) | unverified |
-| `SYNC-076` | `FAIL` | An upload that fails at any step MUST be reported, and MUST confirm nothing to the relay. | this spec section 2, row 3 | none | unheld -- each step returns before the next runs, so a failed put never reaches the confirmation; `ambre_toile::logic::state::import::tests::a_failed_upload_aborts_the_pending_import` holds what one application does with the report, not that the worker sends one | unverified |
+| `SYNC-075` | `POST` | An upload MUST answer the requesting application with the blob's address. | this spec section 3, the upload steps | none | unheld -- the worker emits the address on the last step and no test drives the leg, which runs only in a browser. `ambre_toile::logic::state::import::tests::seed_media_dedups_repeated_hashes` reads what an application does with two equal addresses, never that the upload produced one; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-049` | `FRAME` | An upload MUST NOT emit a byte of the picture that is not sealed under the document key. | `ZK-001`; this spec section 3 | none | unheld -- the upload seals before it puts, and the crate graph keeps every application out of the cipher (`TOILE-IO-013`). Nothing here refuses a put that skips the seal, which is the same absence as `SYNC-001`; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-053` | `FRAME` | An upload MUST NOT tell the relay anything about a blob beyond its size. | `ZK-007`; this spec section 3 | none | fails -- the confirmation carries the plaintext address and the media type, and neither is in the set `ZK-007` allows; lands with the `The media address is not the plaintext` Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-076` | `FAIL` | An upload that fails at any step MUST be reported, and MUST confirm nothing to the relay. | this spec section 2, row 3 | none | unheld -- each step returns before the next runs, so a failed put never reaches the confirmation; `ambre_toile::logic::state::import::tests::a_failed_upload_aborts_the_pending_import` holds what one application does with the report, not that the worker sends one; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 Show a picture
 
@@ -45,28 +45,21 @@ The application names an address it does not hold. The worker fetches the object
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-077` | `POST` | A download MUST answer with the plaintext the address names. | this spec section 3, the download steps | none | unheld -- the leg runs only in a browser and the suite performs no round trip against object storage | unverified |
-| `SYNC-054` | `FRAME` | A download MUST NOT let a decrypted blob reach persistent storage. | `ZK-004`; this spec section 3 | none | unheld -- the worker opens no storage handle and hands the plaintext straight up, so the rule holds by absence. Nothing would fail the day a writer appeared | unverified |
-| `SYNC-052` | `FAIL` | A download MUST refuse a blob that is not the one the address names. | this spec section 3 | none | fails -- the download opens whatever object storage returned and hands the plaintext up without recomputing the address, so a substituted blob under the same document key is accepted | unverified |
-| `SYNC-055` | `FAIL` | A blob that fails to open MUST be reported, never delivered half-read. | this spec section 3 | none | unheld -- every failure returns before the answer is built, a short blob, a fetch error and a bad tag each report and stop, so nothing partial is delivered. No test drives a failing download, because the leg runs only in a browser | unverified |
+| `SYNC-077` | `POST` | A download MUST answer with the plaintext the address names. | this spec section 3, the download steps | none | unheld -- the leg runs only in a browser and the suite performs no round trip against object storage; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-054` | `FRAME` | A download MUST NOT let a decrypted blob reach persistent storage. | `ZK-004`; this spec section 3 | none | unheld -- the worker opens no storage handle and hands the plaintext straight up, so the rule holds by absence. Nothing would fail the day a writer appeared; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-052` | `FAIL` | A download MUST refuse a blob that is not the one the address names. | this spec section 3 | none | fails -- the download opens whatever object storage returned and hands the plaintext up without recomputing the address, so a substituted blob under the same document key is accepted; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | failing |
+| `SYNC-055` | `FAIL` | A blob that fails to open MUST be reported, never delivered half-read. | this spec section 3 | none | unheld -- every failure returns before the answer is built, a short blob, a fetch error and a bad tag each report and stop, so nothing partial is delivered. No test drives a failing download, because the leg runs only in a browser; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
-* **Budget.** none of its own for the transfer: `ambre-spec-budgets.md section 1` budgets the
-  first paint of a picture under 15 ms and no refetch on a revisit, and both are the reading
-  application's. The seal of a blob is charged to the crypto rows of the same table, per kilobyte.
+* **Budget.** none of its own for the transfer. `ambre-spec-budgets.md section 1` budgets the first
+  paint of a picture and the absence of a refetch, and both are the reading application's. The seal
+  of a blob is charged to the crypto rows of the same table.
 * **Boundary.** this is the one path on which a whole file leaves the client. The bytes are sealed
-  (`SYNC-049`), and the metadata beside them is not: the address and the media type reach the relay
-  in clear, which is the leak `SYNC-050` and `SYNC-053` state. Nothing here holds a key of its own or
-  opens a socket -- the two legs are ordinary requests, and the transfer itself goes straight to
-  object storage on a presigned link.
-* **Verification.** 0 `verified`, 11 `unverified`, 0 `unimplemented`. Nothing is held: the two legs
-  run in a browser, the host tier reaches neither, and the suite performs no round trip against
-  object storage at all (`ambre-spec-testing.md section 9`). Five of the eleven are stated as failing
-  on a reading of the code, and two of those five are a zero-knowledge leak. The pass split
-  `SYNC-051`, which bound a blob to its document and to its address in one row: they are two
-  absences of the same constant, and the second is the half `SYNC-052` needs before it can refuse
-  anything. It also gave each leg the two rules its steps state and no row held -- the address an
-  upload owes its caller, the plaintext a download owes it -- and separated the upload's own failure
-  from the download's, which the one row before it collapsed.
+  (`SYNC-049`) and the metadata beside them is not. The address and the media type reach the relay
+  in clear, which is the leak `SYNC-050` and `SYNC-053` state.
+* **Verification.** 0 `verified`, 5 `failing`, 6 `untested`, 0 `unimplemented`. Nothing is held: the
+  two legs run in a browser, the host tier reaches neither, and no test round-trips against object
+  storage. Five of the eleven rows are stated as failing on a reading of the code, and two of those
+  are a zero-knowledge leak.
 
 ---
 
@@ -128,9 +121,9 @@ compressed, so a zstd pass over a PNG or a JPEG costs time and saves nothing. Wh
 version byte buys elsewhere is a choice per payload; here there is no choice to record.
 
 **What the relay stores, and what that lets it do.** The relay keeps the address, the media type and
-the size against the document. The address is a hash of the plaintext, so the relay can take a file
-it already has -- a photograph, a leaked page, a known image -- hash it, and answer whether this
-document contains it. That is a confirmation oracle over content, which `ZK-007` does not allow
+the size against the document. The address is a hash of the plaintext. The relay can hash a file it
+already has, a photograph or a leaked page, and answer whether this document contains it. That is a
+confirmation oracle over content, which `ZK-007` does not allow
 (`SYNC-050`, `SYNC-053`).
 
 **Code.**
@@ -160,10 +153,10 @@ of the three, and what is painted in the meantime, is the application's own feat
 
 ## 5. REJECTED ALTERNATIVES
 
-The blob seal is absent from this table because no alternative was refused: the cipher was
-the cheaper path and the guarantees it drops were never weighed. The three absences are
-rows, not a decision -- `SYNC-051`, `SYNC-074` and `SYNC-052` -- and the repair is to give a
-blob the same additional data the envelope gives a frame.
+The blob seal is absent from this table because no alternative was refused. The cipher was the
+cheaper path, and the guarantees it drops were never weighed. The three absences are rows, not a
+decision: `SYNC-051`, `SYNC-074` and `SYNC-052`. The repair is to give a blob the same additional
+data the envelope gives a frame.
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
@@ -178,7 +171,7 @@ blob the same additional data the envelope gives a frame.
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **The address is a hash of the plaintext, and the relay reads it.** So the relay holds a
-  fingerprint of every file in every document, and can confirm by hash whether a document contains a
+  fingerprint of every file in every document. It can confirm by hash whether a document contains a
   file it already knows. Nothing about the seal helps: the seal protects the bytes and the address
   travels beside it (`SYNC-050`, `SYNC-053`).
 * **A blob is bound to nothing.** No signature, no commitment tag, and one constant string as
@@ -190,7 +183,7 @@ blob the same additional data the envelope gives a frame.
 * **The media type reaches the relay in clear.** It says what kind of file a document holds, which is
   outside the set `ZK-007` allows and is not what `SYNC-050` is about.
 * **The client bounds a blob nowhere.** The relay refuses one over its own cap and binds the
-  declared size into the link (`ambre-spec-object-store.md`, `SRV-055`, `SRV-053`); this side
+  declared size into the link (`ambre-spec-object-store.md`, `SRV-055`, `SRV-053`). This side
   states no maximum, so what a user may attempt is whatever the browser accepts.
 * **Nothing expires a blob.** A picture removed from a document leaves its object in storage, and
   deleting the document leaves every one of them there (`ambre-spec-object-store.md`, `SRV-057`).

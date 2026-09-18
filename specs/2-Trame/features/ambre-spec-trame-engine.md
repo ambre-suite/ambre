@@ -24,13 +24,13 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-001` | `INV` | The workbook CRDT MUST NOT leave the Logic thread; it exits only as bytes. | this spec section 3; architecture section 2.B | cargo-deny -- `deny.toml` bans `loro` outside the four engine crates (`SYNC-011`), so no crate on the other side of the seam can even name the type. `ambre_trame::logic::docfile::export_ambre_plaintext` is a public signature naming `LoroDoc`, but it takes the document and returns bytes, and no accessor hands one out | none | verified |
 | `TRAME-015` | `CONC` | Two peers exchanging the same operations in any interleaving MUST converge to the same document. | audit `H6`; this spec section 2; `ambre-spec-testing.md` | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest over the interleavings; `ambre_trame::logic::tests::group3::two_peers_converge_via_mock_sync` | none | verified |
-| `TRAME-023` | `INV` | The incrementally maintained sheet index MUST equal a from-scratch rebuild after any sequence of structural operations. | this spec section 3 | `ambre_trame::model::sheet_index::tests::apply_insert_and_delete_row_shift_positions`; `::apply_move_row_permutes_order_and_reindexes` -- per-operation unit tests | partial -- the equivalence property exists on the Toile index and not here, though this is the cache invariant the whole engine rests on | unverified |
-| `TRAME-024` | `INV` | `ambre-trame` MUST contain no `unsafe`. | README pillar "Security" | none | claim -- the crate measures zero `unsafe`, and its root carries no `#![forbid(unsafe_code)]`, so the count is a measurement and not a mechanism (`ambre-spec-testing.md`, the mechanism ladder) | unverified |
+| `TRAME-023` | `INV` | The incrementally maintained sheet index MUST equal a from-scratch rebuild after any sequence of structural operations. | this spec section 3 | `ambre_trame::model::sheet_index::tests::apply_insert_and_delete_row_shift_positions`; `::apply_move_row_permutes_order_and_reindexes` -- per-operation unit tests | partial -- the equivalence property exists on the Toile index and not here, though this is the cache invariant the whole engine rests on; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-024` | `INV` | `ambre-trame` MUST contain no `unsafe`. | README pillar "Security" | none | claim -- the crate measures zero `unsafe`, and its root carries no `#![forbid(unsafe_code)]`, so the count is a measurement and not a mechanism (`ambre-spec-testing.md`, the mechanism ladder); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-FEAT-001` | `INV` | A feature handler MUST NOT send on any channel: it returns a `TrameOutcome` and the Logic dispatcher fans it out. | this spec section 3; architecture section 4 | type-level -- `TrameState` holds no sink or sender, so a handler has no channel in reach; `ambre_trame::logic::tests::group3::edit_emits_send_update_through_sink` -- the dispatcher seam | none | verified |
-| `TRAME-UI-001` | `INV` | The UI thread MUST hold no document data -- only view state and the viewport the Logic thread sends. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | none | claim -- no occurrence of `LoroDoc` or `loro::` sits under `ambre-trame/src/ui/` today, but nothing runs that search: `deny.toml` bans the crate, not the directory, and `ambre-trame` is one of the four the ban allows. It is a measurement, like `TRAME-024` | unverified |
+| `TRAME-UI-001` | `INV` | The UI thread MUST hold no document data -- only view state and the viewport the Logic thread sends. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | none | claim -- no occurrence of `LoroDoc` or `loro::` sits under `ambre-trame/src/ui/` today, but nothing runs that search: `deny.toml` bans the crate, not the directory, and `ambre-trame` is one of the four the ban allows. It is a measurement, like `TRAME-024`; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-002` | `INV` | Every document mutation MUST leave the UI thread as a `TrameCommand`; the UI MUST NOT write document state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the outbound path is `TrameView::send_command_lossless` and its lossy twin (`ui/view/lifecycle.rs`), both of which take a `TrameCommand`, and the document itself is out of reach on this side (`TRAME-UI-001`) | none | verified |
 | `TRAME-UI-003` | `INV` | The UI thread MUST NOT block on the Logic channel. | architecture section 2.B; `ambre-spec-ui.md section 1` | type-level -- both senders are `try_send`, and neither has a blocking form in scope | none | verified |
-| `TRAME-UI-142` | `INV` | A command the UI thread failed to send MUST NOT be dropped in silence. | this spec section 4; `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), every lossless call site reading its outcome and logging a refusal, the two that discarded it outright included: the source clear of a cut and the undo group boundary on cell exit | none | qa-manual |
+| `TRAME-UI-142` | `INV` | A command the UI thread failed to send MUST NOT be dropped in silence. | this spec section 4; `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), every lossless call site reading its outcome and logging a refusal, the two that dropped it outright included: the source clear of a cut and the undo group boundary on cell exit | none | qa-manual |
 | `TRAME-UI-006` | `INV` | The canvas dispatch over `TrameEvent` MUST be exhaustive -- no wildcard arm -- so a new variant is a compile error, not a silent drop. | this spec section 4 | exhaustive-match -- `ui/view/frame.rs::dispatch_trame` names all 26 variants of the enum and carries no `_` arm, so adding one fails the build | none | verified |
 | `TRAME-UI-014` | `INV` | There MUST NOT be an `is_error` field on `DisplayCell`. | this spec section 3 | type-level -- the struct declares no such field, and the renderer has no other input | none | verified |
 | `TRAME-UI-141` | `OBS` | A cell in error MUST be marked visually from its displayed text. | this spec section 3 | `ambre_trame::ui::renderer::tests::errored_cell_gets_a_corner_marker`; `::dirty_cell_gets_a_translucent_veil` | none | verified |
@@ -50,24 +50,17 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-168` | `FRAME` | Applying a remote delta MUST NOT re-broadcast it. | this spec section 3 | type-level -- `apply_remote` returns `Vec<TrameEvent>` and no outcome, so it has no shape to broadcast through | none | verified |
 | `TRAME-169` | `FRAME` | An import MUST NOT swallow the local peer's own operations before they have been broadcast. | this spec section 2, row 4 | `ambre_trame::logic::tests::group7::edit_after_reopen_broadcasts_causally_complete_delta` -- it drives two reopens and asserts the second replay carries both cells, the merge preserving this peer's entry in the export cursor and adopting every other | none | verified |
 
-* **Budget.** the Trame rows of `ambre-spec-budgets.md section 1` -- the 10k-cell recompute
-  in < 50 ms, the sheet-index rebuild of 10k rows in < 10 ms, the 50-cell batch in < 1 ms, the
-  `ScrollViewport` send in < 1 ms and the `ViewportData` render in < 5 ms -- plus the workbook and
-  graph holders of `section 6`. Only the recompute has a benchmark behind it.
+* **Budget.** five rows of `ambre-spec-budgets.md section 1`: the 10k-cell recompute, the
+  sheet-index rebuild, the 50-cell batch, the viewport send and its render. The workbook and graph
+  holders of section 6 come on top. Only the recompute has a benchmark.
 * **Boundary.** none of its own: `TRAME-001` keeps the workbook inside this thread and lets it out
-  as bytes alone, which the Sync worker seals before anything reaches the relay (`ZK-001`).
-  `UI-THREAD-004` bans a network, crypto or persistence path on the other side of the seam.
-* **Verification.** 13 `verified`, 3 `unverified`, 1 `qa-manual`. Eleven rows became
-  seventeen, and six mechanisms came with them, so the split manufactured no coverage. What holds is
-  what a type or a compiler holds: a handler with no channel in reach, an apply that returns display
-  events and cannot broadcast, a dispatch the compiler checks against all 26 variants of the event
-  enum. `TRAME-UI-001` is withdrawn: nothing runs the search it cites, `deny.toml` bans the crate
-  rather than the directory, and `ambre-trame` is one of the four crates the ban allows -- it is a
-  measurement, exactly like `TRAME-024`. Two conjunctions came apart. `TRAME-UI-014` claimed a
-  drawing and an absent field, and each half has its own mechanism now. `TRAME-UI-003` claimed the
-  send never waits and that a refused one reaches the log: the first is `try_send`, the second is
-  `TRAME-UI-142`, which two call sites break. The three new frames were the rules the seam relied on
-  and never wrote down. Four divergences between this design and the code are named in section 6.
+  as bytes alone, which the Sync worker seals (`ZK-001`). `UI-THREAD-004` bans a network, crypto or
+  persistence path on the other side.
+* **Verification.** 13 `verified`, 3 `untested`, 1 `qa-manual`. What holds is what a compiler
+  holds: a handler with no channel in reach, an apply that returns display events and cannot
+  broadcast. A dispatch is checked against all 26 event variants. What is loose is what only a running
+  thread shows: the refused send that must reach the log (`TRAME-UI-142`), broken at two call
+  sites. Section 6 names four divergences from the code.
 
 ---
 
@@ -226,7 +219,7 @@ the UI, `update` and `ephemeral` to Sync. Its routing is normative in
 `ambre-spec-message-bus.md`. A session or a connection event never reaches the state.
 
 **The delta is a cursor, not a drain.** The export reads from the last exported version vector and
-advances it once the bytes have left, so a second export from the same cursor repeats the
+advances it once the bytes have left. A second export from the same cursor therefore repeats the
 operations rather than answering empty.
 
 ### E. What the UI thread receives
@@ -274,9 +267,9 @@ Three shapes are deliberately absent, and each one is a rule:
 ## 4. SURFACE
 
 The user touches no part of this document directly. What it exposes is the answer every other
-Trame feature draws from, and the rules that keep the drawing thread honest: it holds view state
-and the current window and nothing else (`TRAME-UI-001`), every mutation leaves as a command
-(`TRAME-UI-002`), and a full channel drops that command rather than blocking the frame
+Trame feature draws from, and the rules that keep the drawing thread honest. The UI thread holds
+view state and the current window and nothing else (`TRAME-UI-001`). Every mutation leaves as a
+command (`TRAME-UI-002`), and a full channel drops that command rather than blocking the frame
 (`TRAME-UI-003`).
 
 **Where each event lands.** One arm per variant and **no `_` arm**, so a new variant is a compile
@@ -323,44 +316,49 @@ Each viewport answer carries a version, and the UI drops one older than the last
 * **`unsafe` is measured, not banned** (`TRAME-024`). The crate root carries no
   `#![forbid(unsafe_code)]`, so nothing goes red the day a line of it appears.
 * **A remote change costs the whole document.** Every remote batch reseeds the engine rather than
-  taking the diff-driven path P3 prescribes, and the same reseed runs on an undo, a sheet rename, a
-  name definition and a tab switch. So one peer keystroke costs O(total cells) on the receiver,
-  against the client-processing budget of `ambre-spec-budgets.md section 1`. **The target
-  drives the apply from the document's own diff:** a changed `cells_{sheet}` key recomputes that
-  cell, a `rows_{sheet}` or `cols_{sheet}` list diff calls the incremental methods of section 3.B,
-  and a derived cache is rebuilt for the container that changed. The full reseed stays the fallback
-  for a snapshot import and for a diff the incremental path cannot classify. One consequence rides
-  with it: a per-batch `DataReset` makes the UI re-fetch the whole viewport, where an
-  invalidated-range event would name what changed. Answered by the
+  taking the diff-driven path P3 prescribes. The same reseed runs on an undo, a sheet rename, a
+  name definition and a tab switch. One peer keystroke therefore costs O(total cells) on the
+  receiver, against the client-processing budget of `ambre-spec-budgets.md section 1`.
+
+  **The target drives the apply from the document's own diff.** A changed `cells_{sheet}` key
+  recomputes that cell, and a `rows_{sheet}` or `cols_{sheet}` list diff calls the incremental
+  methods of section 3.B. A derived cache is rebuilt for the container that changed. The full
+  reseed stays the fallback for a snapshot import and for a diff the incremental path cannot
+  classify. Answered by the "Incremental remote apply" Story (`ambre-roadmap.md` E6).
+* **The UI re-fetches the whole viewport on every batch.** A per-batch `DataReset` tells it to,
+  where an invalidated-range event would name what changed. Answered by the
   "Incremental remote apply" Story (`ambre-roadmap.md` E6).
 * **The sheet indexes are state here and a rebuild in the code.** The active sheet's index is cloned
   and every other sheet's is reconstructed from its full lists, once per write and once per scroll.
   A scroll on one sheet therefore rebuilds every other sheet's index, against the P1 budget on any
   multi-sheet document. **The target materializes the map as state**, invalidated per sheet by a
-  structural write or an import, with the active entry shared by borrow rather than by clone.
+  structural write or an import. The active entry is shared by borrow rather than by clone.
   Answered by the "Cached sheet indexes" Story (`ambre-roadmap.md` E6).
 * **A tab switch resets the engine.** The active sheet is pinned to engine index 0, so which sheet
   is displayed -- a view state -- decides engine identity. It is the direct cause of `TRAME-062`,
   the unqualified name that follows the reader from tab to tab
   (`ambre-spec-trame-named-ranges.md`). **The target interns a sheet index at first sight**, stable
-  for the document lifetime, so a tab switch rebuilds the active sheet's display caches alone and
+  for the document lifetime. A tab switch then rebuilds the active sheet's display caches alone and
   resets no engine. Answered by the "Stable engine sheet indexes" Story (`ambre-roadmap.md` E6).
 * **The recompute walks the whole graph.** The cycle check and the topological walk both cover every
-  formula cell rather than the dirty closure. **The target bounds each one:** a new cycle exists
-  only where the edited cell is reachable from a dependency it has just gained, which a bounded
-  search answers, and a Kahn walk over the dirty closure's induced subgraph costs the dirty set
-  rather than the DAG. Two further defects sit in the same path, and they belong to the graph:
+  formula cell rather than the dirty closure.
+
+  **The target bounds each one.** A new cycle exists only where the edited cell is reachable from a
+  dependency it has just gained, which a bounded search answers. A Kahn walk over the dirty
+  closure's induced subgraph costs the dirty set rather than the DAG. Two further defects sit in
+  the same path, and they belong to the graph:
   `features/ambre-spec-trame-formula-engine.md section 6`. Answered by the "A recompute bounded by
   what changed" story.
 * **A local edit costs the whole viewport too** (`TRAME-002`). Section 3.C says P2 answers with a
   fresh viewport only when the recompute touched the visible window. `finish_cell_writes` answers
-  with a bare `DataReset` every time, so each keystroke that commits makes the UI re-fetch the whole
-  window, whether or not anything visible changed. It is the same defect as the remote one above,
-  on the path taken far more often, and the invalidated-range event that answers one answers both.
+  with a bare `DataReset` every time. Each keystroke that commits therefore makes the UI re-fetch
+  the whole window, whether or not anything visible changed. It is the same defect as the remote one
+  above, on the path taken far more often. The invalidated-range event that answers one answers
+  both.
 * **A dropped command is silent twice** (`TRAME-UI-142`). Fifteen call sites match `SendError::Full`
-  and log it; the `SetCellsBatch` of a paste fallback and the `CommitEdit` on cell exit discard the
+  and log it; the `SetCellsBatch` of a paste fallback and the `CommitEdit` on cell exit drop the
   result. A `CommitEdit` lost this way leaves the undo group open, so the next command's fallback
-  seal is what closes it -- and a lost `SetCellsBatch` is a paste the user watched land.
+  seal is what closes it. A lost `SetCellsBatch` is a paste the user watched land.
   `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) states the general rule, unbuilt.
 * **Presence is a stub, and section 3.D describes what it will be.** `apply_ephemeral` takes a
   payload it ignores and returns an empty vector; it takes no `from_user_id` at all. The signature

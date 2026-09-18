@@ -1,17 +1,17 @@
 // ambre-canvas/src/view.rs
 // ============================================================================
-// Per-frame view value types -- the GPU-agnostic vocabulary the frame driver
-// and the app views share: `FrameStats` (driver timings), `RepaintPlan` (what
-// to repaint), `InputEvent` (a DOM event reduced to a flat enum).
+// Per-frame view value types: the GPU-agnostic vocabulary the frame driver and
+// the app views share. `FrameStats` covers driver timings, `RepaintPlan` what to
+// repaint, `InputEvent` a DOM event reduced to a flat enum.
 //
 // The frame DRIVER (`FrameHost`) and the closed `AppView` registry that names
 // the concrete per-app view (`ambre_trame::ui::TrameView`) live in the launcher
-// (`ambre-app`): a closed enum naming an app view cannot sit upstream here
+// (`ambre-app`). A closed enum naming an app view cannot sit upstream here
 // without a dependency cycle (ambre-spec-architecture.md). This module only
-// defines the shared value types both sides exchange; app views consume them
-// directly (inherent methods), so the types stay GPU-agnostic at the type level
-// (they only name `WgpuSurface`/`TextCache`, which compile on every target) and
-// app crates can unit-test their view logic without a browser.
+// defines the shared value types both sides exchange. App views consume them
+// directly, through inherent methods, so the types stay GPU-agnostic at the type
+// level. They only name `WgpuSurface` / `TextCache`, which compile on every
+// target, and app crates can unit-test their view logic without a browser.
 // ============================================================================
 
 use ambre_draw::Rect;
@@ -30,10 +30,10 @@ pub struct FrameStats {
 }
 
 /// A full per-frame performance snapshot, published from the canvas view to the
-/// DOM status bar (the perf HUD migrated out of the wgpu overlay -- there is no
-/// point shaping debug glyphs on the GPU every frame). Carries the driver
+/// DOM status bar. The perf HUD migrated out of the wgpu overlay: there is no
+/// point shaping debug glyphs on the GPU every frame. It carries the driver
 /// timings ([`FrameStats`]) plus the view's own sub-phase breakdown and glyph
-/// cache misses, so the DOM panel shows the same detail the old overlay did.
+/// cache misses. The DOM panel shows the same detail the old overlay did.
 #[derive(Default, Clone, Copy)]
 pub struct PerfSnapshot {
     pub fps: f32,
@@ -70,10 +70,10 @@ pub enum InputEvent {
         shift: bool,
         meta: bool,
     },
-    /// `shift` / `ctrl` carry the modifier state at press time so the grid can
-    /// distinguish a plain click (single select), Shift+click (extend the range)
-    /// and Ctrl+click (add a disjoint range). On macOS the Cmd key is folded
-    /// into `ctrl` by the host so the same disjoint-select gesture works.
+    /// `shift` / `ctrl` carry the modifier state at press time. The grid can
+    /// then distinguish a plain click (single select), Shift+click (extend the
+    /// range) and Ctrl+click (add a disjoint range). On macOS the Cmd key is
+    /// folded into `ctrl` by the host so the same disjoint-select gesture works.
     PointerDown {
         x: f64,
         y: f64,
@@ -100,8 +100,8 @@ pub enum InputEvent {
         y: f64,
     },
     /// Wheel / two-finger touchpad scroll. `dx`/`dy` are already scaled to
-    /// physical pixels (CSS px × dpr). `delta_mode` is the DOM `WheelEvent`
-    /// unit: 0 = pixel (touchpad, modern mice), 1 = line, 2 = page; the view
+    /// physical pixels (CSS px x dpr). `delta_mode` is the DOM `WheelEvent`
+    /// unit: 0 = pixel (touchpad, modern mice), 1 = line, 2 = page. The view
     /// normalises lines/pages to pixels before scrolling.
     Wheel {
         dx: f64,

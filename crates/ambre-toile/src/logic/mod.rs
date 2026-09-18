@@ -1,10 +1,11 @@
 //! Toile **Logic-thread** engine.
 //!
 //! Groups every logic-side module of the crate: the CRDT-backed [`state`]
-//! machine ([`ToileState`]), the command / event surface ([`command`]), the
-//! CRDT [`model`], the `rstar` spatial [`index`], the [`connector`] geometry and
-//! [`stroke`] smoothing. The UI renderer, presentation mode and interop paths
-//! arrive in later crates / slices (Epic `E4`).
+//! machine ([`ToileState`]), the command / event surface ([`command`]), and the
+//! CRDT [`model`]. It also groups the `rstar` spatial [`index`], the
+//! [`connector`] geometry and [`stroke`] smoothing. The UI renderer,
+//! presentation mode and interop paths arrive in later crates / slices (Epic
+//! `E4`).
 
 pub mod align;
 pub mod animate;

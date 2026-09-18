@@ -1,5 +1,5 @@
 //! Shared test helper: build a `SheetIndex` with synthetic materialized rows and
-//! columns, so the formula-engine unit tests can bind positional references to
+//! columns. The formula-engine unit tests can then bind positional references to
 //! `Uid`s without a live `LoroDoc`. Rows use peer 1, columns peer 2; the counter
 //! is the grid position, so `row_id(p)`/`col_id(p)` are stable and distinct.
 

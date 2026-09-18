@@ -3,7 +3,7 @@ use std::fmt;
 use crate::model::{SheetIndex, Uid};
 
 // -----------------------------------------------------------------------------
-// CellRef — positional cell identifier (AST / parser / renderer)
+// CellRef -- positional cell identifier (AST / parser / renderer)
 // -----------------------------------------------------------------------------
 
 /// Identifies a cell by its sheet plus zero-based row and column index.
@@ -41,7 +41,7 @@ impl fmt::Display for CellRef {
 }
 
 // -----------------------------------------------------------------------------
-// RangeDep — bounded cell range
+// RangeDep -- bounded cell range
 // -----------------------------------------------------------------------------
 
 /// Describes a rectangular range of cells.
@@ -122,20 +122,20 @@ impl RangeDep {
 //
 // The parser produces positional `CellRef` / `RangeDep` (a typed `A1`). The
 // compiler resolves those against the current `SheetIndex` into the uid-anchored
-// forms below, which are what the bytecode, dependency graph, bytecode cache and
-// VM are keyed by. Binding to the row/column `Uid` is what makes a reference
-// follow the data through inserts, deletes and sorts
+// forms below. Those forms are what the bytecode, dependency graph, bytecode
+// cache and VM are keyed by. Binding to the row/column `Uid` is what makes a
+// reference follow the data through inserts, deletes and sorts
 // (`trame-formula-engine`).
 
 /// Engine-side identity of one axis (a row or a column) inside a compiled
 /// reference.
 ///
 /// Within the used range a reference binds to the row/column `Uid`, so it tracks
-/// the physical line through any reorder. Beyond the used range -- a *virtual*
-/// row/column that has no list element yet (`trame-rows-and-columns`) -- there is no
-/// `Uid` to bind, so the reference keeps the grid position it was typed at and
-/// evaluates `Empty` until that line is materialized (at which point a re-edit
-/// re-binds it to the new `Uid`).
+/// the physical line through any reorder. Beyond the used range lies a
+/// *virtual* row/column that has no list element yet
+/// (`trame-rows-and-columns`), and no `Uid` to bind. The reference therefore
+/// keeps the grid position it was typed at, and evaluates `Empty` until that
+/// line is materialized. A re-edit then re-binds it to the new `Uid`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AxisId {
     /// Bound to a materialized row/column `Uid`. `#REF!` once that id is deleted.
@@ -258,10 +258,10 @@ fn endpoint_pos(
 /// Whether two floats are equal to within a few units in the last place.
 ///
 /// A fixed absolute tolerance such as `f64::EPSILON` (~2.2e-16) is meaningless
-/// once the operands leave the neighbourhood of 1.0: below it, `1e-16` and
+/// once the operands leave the neighbourhood of 1.0. Below it, `1e-16` and
 /// `2e-16` are two distinct numbers it declares equal. Scaling the tolerance by
-/// the operands' magnitude keeps the test at "equal to a few ulps" everywhere,
-/// which is also what Excel's 15-significant-digit comparison amounts to.
+/// the operands' magnitude keeps the test at "equal to a few ulps" everywhere.
+/// That is also what Excel's 15-significant-digit comparison amounts to.
 pub fn nearly_equal(x: f64, y: f64) -> bool {
     // Exact hit first: covers both zeros and same-sign infinities, where the
     // relative test below would compute `inf - inf`.
@@ -316,6 +316,11 @@ pub enum CellValue {
 
 impl CellValue {
     /// Coerce this value to a numeric `f64`, or return an error.
+    ///
+    /// # Errors
+    ///
+    /// [`FormulaError::TypeError`] on text that does not parse as a number, and
+    /// on a range. An error value returns itself.
     pub fn as_number(&self) -> Result<f64, FormulaError> {
         match self {
             CellValue::Number(n) => Ok(*n),
@@ -372,7 +377,7 @@ pub enum FormulaError {
     TypeError,
     /// A formula produced a numeric overflow or invalid math operation.
     NumError,
-    /// No applicable value (e.g. VLOOKUP did not find a match).
+    /// No applicable value (for example VLOOKUP did not find a match).
     NaError,
 }
 
@@ -391,7 +396,7 @@ impl fmt::Display for FormulaError {
 }
 
 // -----------------------------------------------------------------------------
-// Op — bytecode instruction
+// Op -- bytecode instruction
 // -----------------------------------------------------------------------------
 
 /// A single instruction in the stack VM bytecode.
@@ -406,7 +411,7 @@ pub enum Op {
     PushBool(bool),
     PushEmpty,
     /// Push a constant error onto the stack. Emitted for an error literal,
-    /// e.g. a cross-sheet reference whose sheet was deleted (`#REF!`).
+    /// for example a cross-sheet reference whose sheet was deleted (`#REF!`).
     PushError(FormulaError),
 
     // -- Cell / range references (resolved at eval time) -----------------------
@@ -448,7 +453,7 @@ pub enum Op {
 }
 
 // -----------------------------------------------------------------------------
-// CellBytecode — compiled formula for one cell
+// CellBytecode -- compiled formula for one cell
 // -----------------------------------------------------------------------------
 
 /// The compiled bytecode for a formula cell, plus its extracted dependencies
@@ -463,14 +468,14 @@ pub struct CellBytecode {
 }
 
 // -----------------------------------------------------------------------------
-// Expr — AST produced by the parser
+// Expr -- AST produced by the parser
 // -----------------------------------------------------------------------------
 
 /// The abstract syntax tree of a parsed formula, fed into the compiler.
 ///
 /// [`Expr::SheetRef`] and [`Expr::Name`] are produced by the (context-free)
 /// parser and removed by [`resolve_refs`](super::parser::resolve_refs) before
-/// compilation: the resolver rewrites them into [`Expr::CellRef`] /
+/// compilation. The resolver rewrites them into [`Expr::CellRef`] /
 /// [`Expr::Range`] carrying the resolved sheet index. The compiler therefore
 /// never sees them.
 #[derive(Debug, Clone)]
@@ -528,8 +533,8 @@ pub enum SheetQualifier {
     Id(String),
 }
 
-/// Resolution services the formula crate needs from the host (`TrameState`):
-/// mapping a sheet *display name* or stable *id* to its local index, and a
+/// Resolution services the formula crate needs from the host (`TrameState`).
+/// It maps a sheet *display name* or stable *id* to its local index, and a
 /// defined name to its target. Implemented by the host; [`SingleSheetCtx`] is
 /// the no-op default for single-sheet code and unit tests.
 pub trait FormulaCtx {

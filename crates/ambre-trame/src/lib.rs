@@ -2,11 +2,11 @@
 //!
 //! Holds **everything** specific to Trame:
 //!
-//! - [`logic`] — [`TrameState`], the per-document model driven by the Logic
+//! - [`logic`] -- [`TrameState`], the per-document model driven by the Logic
 //!   thread (CRDT / formula engine), plus its command/event handlers.
-//! - [`ui`] — `TrameUiState` + the `DrawSurface` renderer driven by the UI
+//! - [`ui`] -- `TrameUiState` + the `DrawSurface` renderer driven by the UI
 //!   Thread (wgpu / text layout).
-//! - [`TOTAL_ROWS`] / [`TOTAL_COLS`] — grid dimensions shared by the logic
+//! - [`TOTAL_ROWS`] / [`TOTAL_COLS`] -- grid dimensions shared by the logic
 //!   (bounds clamping) and the UI (virtual-scroll math).
 //!
 //! The IPC message types ([`TrameCommand`], [`TrameEvent`], [`DisplayCell`])

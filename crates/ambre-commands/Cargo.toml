@@ -9,3 +9,6 @@ description = "Shared command registry: CommandId/Command/CommandState/CommandSo
 # Intentionally empty. This is the leaf of the UI-thread crate graph: depended
 # on by every app AND by ambre-chrome, it must stay framework-agnostic. Pure
 # data + pure functions, fully testable on the host.
+
+[lints]
+workspace = true

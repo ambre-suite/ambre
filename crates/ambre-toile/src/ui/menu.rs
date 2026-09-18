@@ -1,25 +1,23 @@
 // ambre-toile/src/ui/menu.rs
-// ============================================================================
-// Command surface for the Toile right-click context menu (`toile-menus`). The
-// host-visible half: the `CommandId`s the menu contributes, the pure selection
-// scope descriptor the canvas view publishes to the DOM chrome, and the pure
-// `CommandId -> Vec<ToileCommand>` resolver the view applies against its local
-// selection.
+// ============================================================================ Command surface for
+// the Toile right-click context menu (`toile-menus`). The host-visible half is three things. The
+// `CommandId`s the menu contributes, and the pure selection scope descriptor the canvas view
+// publishes to the DOM chrome. Then the pure `CommandId -> Vec<ToileCommand>` resolver the view
+// applies against its local selection.
 //
-// Kept in the always-compiled `ui` module (not the wasm-only `chrome`) so it is
-// host-unit-tested, exactly like `ui::find`. The wasm-only entry builder
-// (icons + `MenuEntry` + separators) that consumes these lives in `chrome::menu`.
+// Kept in the always-compiled `ui` module (not the wasm-only `chrome`) so it is host-unit-tested,
+// exactly like `ui::find`. The wasm-only entry builder (icons + `MenuEntry` + separators) that
+// consumes these lives in `chrome::menu`.
 //
-// Unlike Trame -- whose context commands are parameterless because the Logic
-// thread tracks the active cell -- Toile selection is UI-only state living in
-// `ToileView` (`toile-selection`, and `ambre-spec-ui.md`). The Logic thread never sees it, so a menu
-// `CommandId` cannot be turned into a `ToileCommand { ids: .. }` in the DOM
-// shell. The shell forwards the bare `CommandId` into the view, which calls
-// [`resolve_menu_command`] with its selection to build the real command(s).
+// Trame's context commands are parameterless, because the Logic thread tracks the active cell.
+// Toile selection instead is UI-only state living in `ToileView` (`toile-selection`, and
+// `ambre-spec-ui.md`). The Logic thread never sees it, so a menu `CommandId` cannot be turned into
+// a `ToileCommand { ids: .. }` in the DOM shell. The shell forwards the bare `CommandId` into the
+// view, which calls [`resolve_menu_command`] with its selection to build the real command(s).
 //
-// Everything here is pure and `cfg`-agnostic (no Leptos, no wasm), so it is
-// host-unit-tested per `toile-menus`: each context-menu entry emits the expected
-// command. The wasm-only entry builder (icons + separators) lives in `mod.rs`.
+// Everything here is pure and `cfg`-agnostic (no Leptos, no wasm), so it is host-unit-tested per
+// `toile-menus`: each context-menu entry emits the expected command. The wasm-only entry builder
+// (icons + separators) lives in `mod.rs`.
 // ============================================================================
 
 use ambre_bus::app::toile::{
@@ -38,8 +36,8 @@ const DUPLICATE_NUDGE: f64 = 10.0;
 // string, so the shell can round-trip an id through a signal without carrying the
 // `Command` table.
 
-// The three clipboard intents carry the shared identity, not one of Toile's:
-// a cut is the same command in every application, whether a menu entry, a
+// The three clipboard intents carry the shared identity, not one of Toile's.
+// A cut is the same command in every application, whether a menu entry, a
 // toolbar button or the browser's own event raised it
 // (`ambre-spec-commands.md`, `UI-THREAD-011`).
 
@@ -154,8 +152,9 @@ pub const COMMANDS: &[CommandId] = &[
 
 /// Pure descriptor of the current selection, published by the canvas view on a
 /// right-click and consumed by the entry builder (`mod.rs`) to omit inapplicable
-/// rows (the "greyed out when inapplicable" of `toile-menus`, realized as omission --
-/// the Trame pattern). `Default` is the empty-canvas scope (Paste + Select-All).
+/// rows. That is the "greyed out when inapplicable" of `toile-menus`, realized as
+/// omission, the Trame pattern. `Default` is the empty-canvas scope (Paste +
+/// Select-All).
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct CtxScope {
     /// True when the right-click landed on a non-empty selection. False on empty
@@ -348,9 +347,9 @@ pub fn resolve_menu_command(
 }
 
 /// One `React` command per selected element, setting (`Some`) or clearing
-/// (`None`) the local user's reaction. The `Reaction` is cloned per target;
-/// `ts` is left at 0 for the MVP (the derived tally ignores it -- ordering by
-/// time is a later concern once a UI time source feeds the picker).
+/// (`None`) the local user's reaction. The `Reaction` is cloned per target.
+/// `ts` is left at 0 for the MVP, and the derived tally ignores it. Ordering
+/// by time is a later concern, once a UI time source feeds the picker.
 fn react_each(selection: &[ElementId], reaction: Option<Reaction>) -> Vec<ToileCommand> {
     selection
         .iter()
@@ -679,7 +678,7 @@ mod tests {
         assert!(resolve_menu_command(SELECT_ALL, &[], None, &dv).is_empty());
     }
 
-    /// Every align id resolves to one batch over the whole selection: the
+    /// Every align id resolves to one batch over the whole selection. The
     /// arithmetic is Logic's, because the culled display does not carry the
     /// boxes that sit off screen.
     #[test]

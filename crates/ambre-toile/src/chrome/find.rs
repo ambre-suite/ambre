@@ -3,15 +3,15 @@
 // The Find panel (toile-find): a single Leptos component pinned to a
 // board corner, opened by Ctrl+F. Find-only -- Replace is out of MVP on a
 // free-form canvas. The panel owns the query and the two options
-// (match_case / whole_word) as its own signals and emits one intent, `on_find`
+// (match_case / whole_word) as its own signals. It emits one intent, `on_find`
 // (-> ToileCommand::Find), whenever the query changes or the user steps through
 // matches with Enter / Shift+Enter.
 //
 // Because a match can sit off-screen (the UI holds only the culled viewport),
-// the search runs in the Logic thread: `on_find` carries a `from` element so
+// the search runs in the Logic thread. `on_find` carries a `from` element so
 // Logic's forward-wrapping scan lands on the next / previous hit. The panel
-// tracks the current `FindResults` (fed back by the launcher relay) purely to
-// render the "k/n" counter and to compute the `from` for the next step -- the
+// tracks the current `FindResults`, fed back by the launcher relay. It uses them
+// to render the "k/n" counter and to compute the `from` for the next step. The
 // canvas view handles the highlight + camera recenter off the same event.
 // ============================================================================
 
@@ -21,9 +21,9 @@ use leptos::prelude::*;
 
 use crate::ui::find::active_index;
 
-/// A `Find` request emitted by the panel: the query, the options, the hit to
-/// resume from (`None` = a fresh search focusing the first hit), and the step
-/// direction. The launcher forwards it as
+/// A `Find` request emitted by the panel. It carries the query, the options, the
+/// hit to resume from (`None` = a fresh search focusing the first hit), and the
+/// step direction. The launcher forwards it as
 /// [`ambre_bus::app::toile::ToileCommand::Find`]; Logic steps `focus` forward or
 /// backward from `from` itself (toile-find).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

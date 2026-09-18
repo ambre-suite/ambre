@@ -118,9 +118,9 @@ fn border_stroke(style: ambre_bus::BorderStyle) -> (f64, f64) {
 }
 
 /// Stroke a straight axis-aligned segment in the given border `style`. Dashed and
-/// dotted patterns are drawn as a run of short segments because [`DrawSurface`]
-/// has no dash parameter; solid/medium/thick are a single stroke; `Double` draws
-/// two thin parallel lines straddling the edge.
+/// dotted patterns are drawn as a run of short segments, because [`DrawSurface`]
+/// has no dash parameter. Solid, medium and thick are a single stroke. `Double`
+/// draws two thin parallel lines straddling the edge.
 fn styled_segment<S: DrawSurface>(
     surface: &mut S,
     x0: f64,
@@ -191,8 +191,9 @@ fn has_border(b: &ambre_bus::Borders) -> bool {
 }
 
 /// Draw the border layer for each supplied `(rect, content)`. Called **after** the
-/// grid lines (and the merge repaint) so a deliberate border is never overpainted;
-/// `rect` is the owning cell's rect, or the full span rect for a merge master.
+/// grid lines (and the merge repaint), so a deliberate border is never
+/// overpainted. `rect` is the owning cell's rect, or the full span rect for a
+/// merge master.
 pub fn draw_cell_borders_on<'a, S, I>(surface: &mut S, cells: I)
 where
     S: DrawSurface,

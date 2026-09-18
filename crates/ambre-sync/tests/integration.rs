@@ -440,8 +440,8 @@ fn full_session_flow_unlock_create_open_close_logout() {
     );
 
     // 5. Send an update. The doc is local-only in this synchronous test, so mark
-    // it server-created first to exercise the direct-send path (lazy creation is
-    // covered separately and needs an async runtime).
+    // it server-created first to exercise the direct-send path. Lazy creation is
+    // covered separately and needs an async runtime.
     state.mark_document_server_created(doc_id);
     state.handle_command(SyncCommand::SendUpdate {
         document_id: doc_id,
@@ -477,7 +477,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
 // -----------------------------------------------------------------------------
 // Passphrase-sealed files (`DOCFILE P2`)
 //
-// These run the real Argon2id work factor, which is the point: the seam under
+// These run the real Argon2id work factor, which is the point. The seam under
 // test is the service plane, and a test key derivation would not exercise it.
 // Each one costs a few hundred milliseconds, so there are as few as the rules
 // need.

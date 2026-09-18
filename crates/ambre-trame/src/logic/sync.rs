@@ -18,8 +18,8 @@ impl TrameState {
             return None;
         }
         // Export the incremental ops. On failure we must NOT advance the export
-        // cursor: swallowing the error (the old `.ok()`) dropped the local delta
-        // for good, and since remote apply is now live a lost local delta means
+        // cursor. Swallowing the error (the old `.ok()`) dropped the local delta
+        // for good. Since remote apply is now live, a lost local delta means
         // permanent divergence, not just a skipped frame. Leaving the cursor put
         // means the next flush re-attempts the same range.
         let delta = match self.doc.export(ExportMode::updates(&self.last_exported_vv)) {
@@ -30,7 +30,7 @@ impl TrameState {
             }
         };
         self.last_exported_vv = current;
-        tracing::info!("[Logic] flush_delta → {} bytes of CRDT ops", delta.len());
+        tracing::info!("[Logic] flush_delta -> {} bytes of CRDT ops", delta.len());
         Some(delta)
     }
 
@@ -39,8 +39,9 @@ impl TrameState {
     /// `payload` is the raw (decrypted) Loro binary update forwarded by the Sync
     /// thread (a peer's edit, or our own history replayed on open). Loro's
     /// `import` ingests both incremental updates and full snapshots, so the same
-    /// reseed path as [`import_snapshot`](Self::import_snapshot) applies: merge
-    /// the ops, reseed the formula engine, and tell the UI to re-fetch.
+    /// reseed path as [`import_snapshot`](Self::import_snapshot) applies. That
+    /// path merges the ops, reseeds the formula engine, and tells the UI to
+    /// re-fetch.
     pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<TrameEvent> {
         self.import_and_reseed(payload, "apply_remote")
     }
@@ -53,8 +54,8 @@ impl TrameState {
     }
 
     /// Export the full CRDT state for snapshot compaction. A failed export is
-    /// logged (not silently swallowed): the caller persists the returned bytes to
-    /// IndexedDB, so an empty snapshot from a dropped error would silently wipe the
+    /// logged, not silently swallowed. The caller persists the returned bytes to
+    /// IndexedDB. An empty snapshot from a dropped error would silently wipe the
     /// stored document on the next compaction.
     pub fn export_snapshot(&self) -> Vec<u8> {
         self.doc.export(ExportMode::Snapshot).unwrap_or_else(|e| {
@@ -65,18 +66,19 @@ impl TrameState {
 
     /// Import a full CRDT snapshot (local restore from IndexedDB at startup).
     ///
-    /// Imports the persisted Loro state into the live document, advances the
+    /// Imports the persisted Loro state into the live document, and advances the
     /// export cursor so the next edit still produces a correct incremental
-    /// delta, and reseeds the formula engine from the restored cells (so formula
-    /// cells evaluate instead of showing their literal source). Returns no
-    /// display events: the next viewport request re-renders the restored grid.
+    /// delta. It also reseeds the formula engine from the restored cells, so
+    /// formula cells evaluate instead of showing their literal source. Returns
+    /// no display events: the next viewport request re-renders the restored
+    /// grid.
     ///
     /// # Errors
     /// Every failure of the schema gate: a workbook written by a newer client
-    /// (`SCHEMA-008`), a migration the registry cannot run, and bytes the CRDT
-    /// engine refuses. On any of them the workbook is untouched (`SCHEMA-012`)
-    /// -- the gate reads the payload in a scratch document precisely so a
-    /// refusal costs the caller nothing.
+    /// (`SCHEMA-008`), or a migration the registry cannot run. Bytes the CRDT
+    /// engine refuses fail it too. On any of them the workbook is untouched
+    /// (`SCHEMA-012`). The gate reads the payload in a scratch document
+    /// precisely so a refusal costs the caller nothing.
     ///
     /// The remote-delta path ([`apply_remote`](Self::apply_remote)) carries no
     /// version and applies blind: a delta is not a full-state read, and there is
@@ -88,7 +90,7 @@ impl TrameState {
         Ok(self.import_and_reseed(&payload, "import_snapshot"))
     }
 
-    /// Resolve a sheet name to its stable sheet id (e.g. `"Sheet1"` -> `"s0"`).
+    /// Resolve a sheet name to its stable sheet id (for example `"Sheet1"` -> `"s0"`).
     /// Groundwork for cross-sheet formula references (`Sheet2!A1`). Linear scan
     /// over the `sheets` map -- there are only a handful of sheets.
     pub fn sheet_name_to_id(&self, name: &str) -> Option<String> {
@@ -100,11 +102,12 @@ impl TrameState {
         }
     }
 
-    /// Shared import path for both a local snapshot restore and a remote delta:
-    /// merge the Loro bytes, advance the export cursor past the imported ops (so
-    /// they are not re-broadcast), reseed the formula engine from the resulting
-    /// cell values, and emit a `DataReset` so the UI re-fetches its viewport
-    /// (the original request may predate this import and show an empty grid).
+    /// Shared import path for both a local snapshot restore and a remote delta.
+    /// It merges the Loro bytes and advances the export cursor past the imported
+    /// ops, so they are not re-broadcast. It then reseeds the formula engine
+    /// from the resulting cell values and emits a `DataReset` so the UI
+    /// re-fetches its viewport. The original request may predate this import and
+    /// show an empty grid.
     pub(super) fn import_and_reseed(&mut self, payload: &[u8], origin: &str) -> Vec<TrameEvent> {
         if !self.merge_payload(payload, origin) {
             return Vec::new();
@@ -114,11 +117,11 @@ impl TrameState {
 
     /// Apply a batch of decrypted remote deltas as a SINGLE merge+reseed, so the
     /// UI sees one `DataReset` instead of one per delta. A server history replay
-    /// on (re)open arrives as N sequenced updates; delivering them one by one
-    /// re-fetches and repaints the grid N times, and a cell that only appears in
-    /// the last delta visibly flickers in from blank. Merging the whole batch
-    /// first, then reseeding once, renders the final state in a single repaint.
-    /// A no-op (no display events) if nothing imported.
+    /// on (re)open arrives as N sequenced updates. Delivering them one by one
+    /// re-fetches and repaints the grid N times. A cell that only appears in the
+    /// last delta visibly flickers in from blank. Merging the whole batch first,
+    /// then reseeding once, renders the final state in a single repaint. A no-op
+    /// (no display events) if nothing imported.
     pub fn apply_remote_batch(&mut self, payloads: &[Vec<u8>]) -> Vec<TrameEvent> {
         let mut merged_any = false;
         for payload in payloads {
@@ -150,8 +153,8 @@ impl TrameState {
     /// [`apply_remote_batch`] / quarantine-release paths.
     pub(super) fn reseed_after_merge(&mut self, origin: &str) -> Vec<TrameEvent> {
         // Rebuild the position <-> id cache first: the merged doc may carry rows
-        // or columns this cache does not yet know about, and both the engine
-        // reseed and the formatting reseed below resolve cell keys through it.
+        // or columns this cache does not yet know about. Both the engine reseed
+        // and the formatting reseed below resolve cell keys through it.
         self.rebuild_index();
         let cells_map = self.doc.get_map(cells_map_name(&self.active_sheet));
         let cell_count = match cells_map.get_value() {
@@ -159,16 +162,18 @@ impl TrameState {
             _ => 0,
         };
         tracing::info!("[Logic] {origin} merged, {cell_count} cell(s) now present");
-        // Advance the cursor to include the imported ops: we did not author them
-        // (or already persisted them), so the next `flush_delta` must not export
-        // them back. BUT preserve our own peer's cursor: a freshly constructed
-        // doc (every reopen mints a new random PeerID) commits local genesis ops
-        // in `new()` that have never been broadcast, and the first import on a
-        // reopen runs before any flush. Swallowing those here would make a later
-        // edit's delta causally depend on ops no other peer has -- a dangling
-        // dependency that silently drops the edit on the next reopen. Keeping our
-        // prior cursor re-exports our own un-broadcast ops with the next flush;
-        // for already-flushed peers it is a no-op (the cursor already matches).
+        // Advance the cursor to include the imported ops: we did not author
+        // them, or already persisted them. The next `flush_delta` must not
+        // export them back. BUT preserve our own peer's cursor.
+        //
+        // A freshly constructed doc (every reopen mints a new random PeerID)
+        // commits local genesis ops in `new()` that have never been broadcast.
+        // The first import on a reopen runs before any flush. Swallowing those
+        // here would make a later edit's delta causally depend on ops no other
+        // peer has. That is a dangling dependency that silently drops the edit
+        // on the next reopen. Keeping our prior cursor re-exports our own
+        // un-broadcast ops with the next flush; for already-flushed peers it is
+        // a no-op (the cursor already matches).
         let our_peer = self.doc.peer_id();
         let prior_ours = self.last_exported_vv.get(&our_peer).copied();
         self.last_exported_vv = self.doc.oplog_vv();
@@ -191,7 +196,7 @@ impl TrameState {
         self.reseed_styles();
         // Rebuild the column-width / row-height caches from the merged metric maps.
         self.reseed_metrics();
-        // Adopt the (possibly remote) hidden-row set directly: a peer's filter
+        // Adopt the (possibly remote) hidden-row set directly. A peer's filter
         // arrives as `filter_hidden_{sheet}` ops and is applied without recompute
         // (`trame-shared-filter` -- only the filter author recomputes).
         self.rebuild_filter();
@@ -204,21 +209,21 @@ impl TrameState {
         ];
         events.extend(conflicts);
         // A register the reseed could not decode is reported here rather than at
-        // each import site: this is the one body every full-state read and every
+        // each import site. This is the one body every full-state read and every
         // remote delta passes through (`SCHEMA-003`).
         events.extend(self.undecodable_notice());
         events
     }
 
     /// The schema version this workbook carries (`SCHEMA-004`), for a report rather
-    /// than for a decision: the fixture manifest records the version its
-    /// artefact was written at.
+    /// than for a decision. The fixture manifest records the version its artefact
+    /// was written at.
     ///
     /// A register this build cannot read comes back as
-    /// [`SCHEMA_VERSION_ABSENT`](ambre_core::schema::SCHEMA_VERSION_ABSENT)
-    /// here. Every path that *decides* anything goes through `schema::gate`,
-    /// which refuses it instead (`SCHEMA-013`); this one is called on a document
-    /// the caller just generated, where the case cannot arise.
+    /// [`SCHEMA_VERSION_ABSENT`](ambre_core::schema::SCHEMA_VERSION_ABSENT) here.
+    /// Every path that *decides* anything goes through `schema::gate`, which
+    /// refuses it instead (`SCHEMA-013`). This one is called on a document the
+    /// caller just generated, where the case cannot arise.
     #[must_use]
     pub fn schema_version(&self) -> u32 {
         schema::read_version(&self.doc).unwrap_or(ambre_core::schema::SCHEMA_VERSION_ABSENT)

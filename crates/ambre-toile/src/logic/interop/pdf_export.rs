@@ -2,15 +2,15 @@
 //! feature so the krilla dependency only links when export is compiled in.
 //!
 //! One presentation frame becomes one PDF page. The export drives the **same**
-//! [`paint_content`](crate::ui::render::paint_content) walk the screen uses --
-//! the reuse demands ("the same `DrawSurface` code as the screen") -- but
+//! [`paint_content`](crate::ui::render::paint_content) walk the screen uses, as
+//! the reuse demands ("the same `DrawSurface` code as the screen"). It runs
 //! against a [`KrillaSurface`](ambre_pdf::KrillaSurface) instead of the GPU
 //! surface, so screen and PDF render identically. This is why `logic::interop`
 //! reaches into `ui::render` / `ui::viewport`: both are pure, wgpu-free geometry.
 //!
 //! Each page is culled and fitted to its frame's spatial rect (a [`PdfPage`],
 //! built by `ToileState::pdf_pages`, a later slice) and then **clipped** to that
-//! rect. The clip is the fix for the aspect-ratio bleed: `fit_target` scales to
+//! rect. The clip is the fix for the aspect-ratio bleed. `fit_target` scales to
 //! the tighter axis (`ui::viewport`), so slack on the wider axis would otherwise
 //! pull neighbouring board content into the page. Present mode (`present = true`)
 //! also drops the board grid, so the page shows only slide content.
@@ -55,11 +55,11 @@ impl Default for PageSize {
     }
 }
 
-/// One rendered page: the culled, z-ordered viewport already derived at the page
-/// camera (`ToileState::derive_viewport_at`), the camera that fits the slide into
-/// the page, and the frame's **world-space** rect to clip to. `clip` is `None`
-/// for the whole-content fallback page of an empty deck: there is no frame to
-/// clip to, so the fitted content is shown unclipped.
+/// One rendered page. That is the culled, z-ordered viewport already derived at
+/// the page camera (`ToileState::derive_viewport_at`). Then the camera that
+/// fits the slide into the page, and the frame's **world-space** rect to clip
+/// to. `clip` is `None` for the whole-content fallback page of an empty deck.
+/// There is no frame to clip to, so the fitted content is shown unclipped.
 #[derive(Debug, Clone)]
 pub struct PdfPage {
     pub viewport: DisplayViewport,
@@ -81,13 +81,23 @@ pub enum PdfExportError {
 ///
 /// Every page runs the screen content walk against a fresh krilla page surface,
 /// clipped to its frame rect. `font_cx` must already carry the base faces
-/// (`LogicState::export_cx`, seeded at boot) or text emits no glyphs; `images`
-/// carries the decoded media pixels an `Image` element paints (an absent hash
-/// falls back to a placeholder box,). `editing` and Smart Animate overrides
-/// have no meaning off-screen, so the walk runs with none.
+/// (`LogicState::export_cx`, seeded at boot) or text emits no glyphs. `images`
+/// carries the decoded media pixels an `Image` element paints; an absent hash
+/// falls back to a placeholder box. `editing` and Smart Animate overrides have
+/// no meaning off-screen, so the walk runs with none.
 ///
-/// Deterministic: krilla assembles the same bytes for the same input, so
-/// two runs of identical `pages` are byte-stable.
+/// Deterministic: krilla assembles the same bytes for the same input, so two
+/// runs of identical `pages` are byte-stable.
+///
+/// # Errors
+///
+/// [`PdfExportError::Empty`] on an empty `pages`, or
+/// [`PdfExportError::Serialize`] when krilla refuses the bytes.
+///
+/// # Panics
+///
+/// When krilla refuses a unit page as a fallback page size, which its own
+/// validity rule accepts.
 pub fn export_pdf(
     pages: &[PdfPage],
     page: PageSize,
@@ -143,8 +153,8 @@ pub fn export_pdf(
         .map_err(|e| PdfExportError::Serialize(format!("{e:?}")))
 }
 
-/// Map an axis-aligned rect through a scale + translate affine (the camera's
-/// `world_to_screen`, which has no rotation), yielding the enclosing axis-aligned
+/// Map an axis-aligned rect through a scale + translate affine, the camera's
+/// `world_to_screen`, which has no rotation. It yields the enclosing axis-aligned
 /// rect in the target space.
 fn map_rect(a: Affine, r: Rect) -> Rect {
     let p0 = a * Point::new(r.x0, r.y0);

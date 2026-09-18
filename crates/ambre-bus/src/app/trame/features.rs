@@ -2,16 +2,15 @@
 //! deferred `TrameCommand` variants (grid ranges, fill/sort keys, conditional
 //! formatting and data-validation predicates). Travel by move, no `serde`.
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Deferred feature payloads (Phase 2+)
+// ----------------------------------------------------------------------------- Deferred
+// feature payloads (Phase 2+)
 //
-// Typed value types carried by the deferred `TrameCommand` variants above. They
-// live in `ambre-bus` (re-exported by `ambre-trame`) and travel by move inside
-// `AppCommand::Trame` -- no `serde`. Ranges are expressed in **grid
-// coordinates** here because the engine-level `RangeDep` (`ambre-trame`) is not
-// visible from the bus; the Logic thread resolves these positions to stable ids
-// when each feature's handler lands.
-// ─────────────────────────────────────────────────────────────────────────────
+// Typed value types carried by the deferred `TrameCommand` variants above. They live in
+// `ambre-bus` (re-exported by `ambre-trame`) and travel by move inside `AppCommand::Trame`
+// -- no `serde`. Ranges are expressed in **grid coordinates** here, because the
+// engine-level `RangeDep` (`ambre-trame`) is not visible from the bus. The Logic thread
+// resolves these positions to stable ids when each feature's handler lands.
+// -----------------------------------------------------------------------------
 
 /// A rectangular grid range `[row..=row_end] x [col..=col_end]` (0-based,
 /// inclusive). Corners may be given in any order; the handler normalizes them.
@@ -59,7 +58,7 @@ pub enum CondFormatKind {
     Equal(String),
     Contains(String),
     StartsWith(String),
-    /// Custom formula, e.g. `"=A1>AVERAGE(A:A)"` (relative refs resolved from
+    /// Custom formula, for example `"=A1>AVERAGE(A:A)"` (relative refs resolved from
     /// the target cell).
     Formula(String),
     IsEmpty,

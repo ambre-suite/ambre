@@ -5,11 +5,11 @@
 //!
 //! The **spec is CRDT** -- a single LWW value register (`Binary(postcard(
 //! AutoLayout))`) under the frame element map's `autolayout` key. Being a plain
-//! value register (not a container), concurrent sets from two peers converge by
-//! Loro's map register LWW, so no birth-seeding is needed (absent = free
-//! positioning). The **solved positions are derived on render, never persisted**
-//! persisting them would be redundant derived state that could desync from
-//! the spec, exactly like connector routing (`toile-connectors`).
+//! value register, not a container, concurrent sets from two peers converge by
+//! Loro's map register LWW. No birth-seeding is needed, and an absent key means
+//! free positioning. The **solved positions are derived on render, never
+//! persisted**. Persisting them would be redundant derived state that could
+//! desync from the spec, exactly like connector routing (`toile-connectors`).
 
 use loro::LoroValue;
 

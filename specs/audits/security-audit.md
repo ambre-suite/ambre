@@ -453,7 +453,7 @@ Carried from the previous audit, which holds the three writeups. Wave R4 closed 
 
 - **Channel & meeting handlers remain empty stubs** (`lib.rs:823-863`):
   `ListChannels`/`CreateChannel`/`DeleteChannel`/`CreateMeeting`/`JoinMeeting`
-  only `tracing::info!`; server channel data is discarded. Expected (Murmure/
+  only `tracing::info!`; server channel data is dropped. Expected (Murmure/
   Rendez-Vous are `Todo/`), but the bus surface exists and looks live.
 - **Ephemeral remote counters unbounded** (`lib.rs:329`):
   `HashMap<[u8; 32], u64>` per document, no eviction. Carried over.

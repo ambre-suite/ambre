@@ -37,13 +37,12 @@ fn col_label(col: u32) -> String {
     crate::columns::col_to_alpha(col)
 }
 
-/// The shared filter popover: anchored under the active column header, it offers
-/// the "by values" (checkbox list of the column's distinct visible values) and a
-/// minimal "by condition" (operator + value) modes (`trame-shared-filter`).
-/// Applying
-/// fires `on_apply` with the chosen [`FilterKind`]; "Clear filter" routes through
-/// `on_command` (the shared command path). `values` is fed by the launcher from
-/// [`ambre_bus::TrameEvent::ColumnValues`].
+/// The shared filter popover (`trame-shared-filter`), anchored under the active
+/// column header. It offers a "by values" mode (a checkbox list of the column's
+/// distinct visible values) and a minimal "by condition" mode (operator + value).
+/// Applying fires `on_apply` with the chosen [`FilterKind`]; "Clear filter"
+/// routes through `on_command`, the shared command path. `values` is fed by the
+/// launcher from [`ambre_bus::TrameEvent::ColumnValues`].
 #[component]
 pub fn FilterPopover(
     state: RwSignal<Option<FilterPopoverState>>,

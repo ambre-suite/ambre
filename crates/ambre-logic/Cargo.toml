@@ -110,3 +110,6 @@ required-features = ["fixtures"]
 name = "scale"
 harness = false
 required-features = ["fixtures", "toile-pdf"]
+
+[lints]
+workspace = true

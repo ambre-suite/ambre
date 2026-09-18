@@ -11,12 +11,13 @@ use crate::state::AppState;
 
 /// Atomic sliding-window rate-limit script (M6).
 ///
-/// Replaces the fixed-window `INCR`/`EXPIRE` pair (which allowed a 2x burst
-/// across the window boundary and could leave a TTL-less key if the process
-/// crashed between the two commands). One sorted set per limiter key holds the
-/// timestamps of recent requests; each call prunes entries older than the
-/// window, records the current request, counts the survivors, and refreshes the
-/// key TTL -- all atomically, so there is no boundary burst and no partial state.
+/// Replaces the fixed-window `INCR`/`EXPIRE` pair. That pair allowed a 2x burst
+/// across the window boundary, and could leave a TTL-less key if the process
+/// crashed between the two commands. One sorted set per limiter key holds the
+/// timestamps of recent requests. Each call prunes entries older than the window,
+/// records the current request, counts the survivors, and refreshes the key TTL.
+/// It does all that atomically, so there is no boundary burst and no partial
+/// state.
 ///
 /// - `KEYS[1]` = `rate:{prefix}:{key}` (sorted set: member -> request time ms)
 /// - `ARGV[1]` = now (ms)
@@ -35,17 +36,18 @@ redis.call('PEXPIRE', KEYS[1], window)
 return count
 "#;
 
-/// Process-local monotonic counter, appended to each sorted-set member so two
+/// Process-local monotonic counter, appended to each sorted-set member. Two
 /// requests landing in the same millisecond (even across the same key) stay
-/// distinct entries instead of one clobbering the other.
+/// distinct entries, instead of one clobbering the other.
 static REQUEST_NONCE: AtomicU64 = AtomicU64::new(0);
 
 /// Random per-instance id, mixed into each sorted-set member so two pods cannot
-/// collide on the same member. The process id is NOT enough: containers usually
-/// run the server as PID 1, and each process's `REQUEST_NONCE` restarts at 0, so
-/// two pods handling their first request in the same millisecond would produce
-/// an identical member and one `ZADD` would clobber the other (undercounting the
-/// shared window). A fresh random id per boot removes that overlap.
+/// collide on the same member. The process id is NOT enough. Containers usually
+/// run the server as PID 1, and each process's `REQUEST_NONCE` restarts at 0.
+/// Two pods handling their first request in the same millisecond would then
+/// produce an identical member. One `ZADD` would clobber the other,
+/// undercounting the shared window. A fresh random id per boot removes that
+/// overlap.
 static INSTANCE_ID: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| uuid::Uuid::new_v4().simple().to_string());
 
@@ -159,8 +161,8 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
         .unwrap_or("")
         .to_string();
     // Only consult `X-Forwarded-For` when the operator has vouched for a proxy
-    // that overwrites it; otherwise it is attacker-controlled and must be
-    // ignored so the socket peer address is authoritative.
+    // that overwrites it. Otherwise it is attacker-controlled and must be
+    // ignored, so the socket peer address is authoritative.
     let x_forwarded_for = if state.config.trust_proxy_headers {
         req.headers()
             .get("x-forwarded-for")

@@ -4,7 +4,7 @@
 **Implementation:** design-only
 
 > Typing, deleting, splitting and joining paragraphs. A keystroke shows on the glass at once and
-> reaches the document a moment later, so two authors typing in the same paragraph never wait for
+> reaches the document a moment later. Two authors typing in the same paragraph never wait for
 > each other and never lose a character.
 
 ---
@@ -65,7 +65,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-005` | `POST` | An event confirming the anchored block MUST discard the draft: its text is then in the confirmed runs. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-005` | `POST` | An event confirming the anchored block MUST drop the draft: its text is then in the confirmed runs. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-028` | `POST` | A remote change MUST shift the pending draft by what it applied at or before the draft position. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-143` | `POST` | The draft MUST be dropped only when the block it is anchored in is deleted, and the caret MUST then collapse to the nearest confirmed position. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-027` | `FRAME` | An event carrying no change MUST leave the draft untouched: a download or a presence update MUST NOT erase what is being typed. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -73,12 +73,12 @@ status values are normative in `ambre-spec-template.md`.
 * **Budget.** the keystroke to a local echo and the keystroke to a confirmed one, two rows of
   `ambre-spec-budgets.md section 1`. The first is what the draft exists to hold.
 * **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
-  network, crypto or persistence path, and every mutation leaves as a command (`PROSE-UI-002`,
+  network, crypto or persistence path. Every mutation leaves as a command (`PROSE-UI-002`,
   `features/ambre-spec-prose-engine.md section 1`).
 * **Verification.** 21 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
   `PROSE-039` and `PROSE-UI-137` are the two a reviewer holds before a test exists, because a
   second primitive is a second declaration. The four rows of section 1.7 are a pure state machine
-  over one struct, which is the shape a property test reaches directly; `PROSE-UI-134` is the one
+  over one struct, which is the shape a property test reaches directly. `PROSE-UI-134` is the one
   row of this document that needs a page drawn, so it waits on the renderer rather than on the
   engine.
 
@@ -149,7 +149,7 @@ carries. Anything else erases keystrokes the user is still typing.
 | deleted the anchored block | dropped, the caret collapses to the confirmed position (`PROSE-UI-143`) |
 
 **The input path.** Printable text is never matched key by key. The shared transparent text field
-owns editing focus and normalizes the DOM events (`ambre-spec-text-input.md`); the view
+owns editing focus and normalizes the DOM events (`ambre-spec-text-input.md`). The view
 receives them as input events and answers whether the host must swallow the key.
 
 1. The host normalizes a key or a text input and dispatches it to the view.
@@ -193,7 +193,7 @@ the insertion that replaced it. Whether the two are one undo item is undecided
 **The join, in one primitive.** A deletion across paragraphs keeps the head block
 (`PROSE-041`), appends the tail's surviving suffix to it and removes what it emptied
 (`PROSE-037`). Backspace at offset zero
-is that deletion with both endpoints at the boundary, so a merge and a cross-paragraph delete are
+is that deletion with both endpoints at the boundary. A merge and a cross-paragraph delete are
 one code path and one convergence case (`PROSE-039`). Splitting is its inverse (`PROSE-038`,
 `PROSE-042`), and it leaves the caret on the new paragraph (`PROSE-UI-141`).
 
@@ -236,7 +236,7 @@ toolbar and the slash command.
 
 * **The corpus states the position unit four ways, and they are not the same.** The command plane
   declares a Unicode code point (`features/ambre-spec-prose-engine.md section 3`), the interaction model
-  declares a UTF-8 byte offset and cites that same section for it, the shaped run joins glyphs to
+  declares a UTF-8 byte offset and cites that same section for it. The shaped run joins glyphs to
   byte ranges (`features/ambre-spec-prose-page-rendering.md section 2`), and `PROSE-FEAT-006`
   requires graphemes wherever a Loro position is addressed. Every document of this area converts
   between the UI representation and the command one, and no document says what the conversion is.
@@ -249,13 +249,13 @@ toolbar and the slash command.
   `PROSE-UI-005` rules on the confirming event alone, and section 1.7 has no `FAIL` row because
   no event reports a refusal.
 * **Nothing rules on what a split does to a mark it cuts.** `PROSE-038` carries the type and the
-  paragraph style to the new paragraph, and says nothing of an inline mark, a comment or a
+  paragraph style to the new paragraph. It says nothing of an inline mark, a comment or a
   footnote anchored across the point the paragraph parts. `PROSE-042` holds the text and leaves
   the marks over it unruled.
 * **A protected range is designed and unbuilt, and its limit is the design.** The deferred design
   marks a range with the peers allowed to write it and has the dispatcher refuse a mutation from
   anyone else. The mark key is in no registry (`ambre-spec-prose-schema.md section 3`), and the
-  rule it would carry is application-level only: a peer writing to the document directly is not
+  rule it would carry is application-level only. A peer writing to the document directly is not
   refused by anything, because a CRDT has no writer to check. That is a limitation to state to the
   author, not a security boundary, and `ZK-001` is untouched by it. The Story is
   "The later writing set" (`ambre-roadmap.md` POST-V1).

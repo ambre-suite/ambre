@@ -10,9 +10,10 @@ use super::*;
 // draw_col_headers_on / draw_row_headers_on -- fixed header strips
 // -----------------------------------------------------------------------------
 
-/// Draw the top column-header strip: opaque background, the hover tint (when
-/// `hover_col` is visible and not the active column), the active-column tint
-/// (when `active_col` is visible), the bottom separator, then the A/B/C labels.
+/// Draw the top column-header strip. The order is the opaque background, then
+/// the hover tint (when `hover_col` is visible and not the active column). Then
+/// the active-column tint (when `active_col` is visible), the bottom separator,
+/// and the A/B/C labels.
 ///
 /// `active_col == None` (PDF) skips the highlight; `hover_col == None` skips the
 /// hover tint.
@@ -115,9 +116,10 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     }
 }
 
-/// Draw the left row-header strip: opaque background, the hover tint (when
-/// `hover_row` is visible and not the active row), the active-row tint (when
-/// `active_row` is visible), the right separator, then the 1/2/3 numbers.
+/// Draw the left row-header strip. The order is the opaque background, then the
+/// hover tint (when `hover_row` is visible and not the active row). Then the
+/// active-row tint (when `active_row` is visible), the right separator, and the
+/// 1/2/3 numbers.
 ///
 /// `active_row == None` (PDF) skips the highlight; `hover_row == None` skips the
 /// row hover tint; `hover_corner` tints the top-left select-all corner.
@@ -203,9 +205,9 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     }
     let brush = Brush::Solid(palette.header_text);
     let max_width = (hw - 8.0) as f32;
-    // Clip every row label to the strip: the last visible row is usually
-    // partial, and its vertically centred number would otherwise spill below
-    // the grid bottom and bleed through onto the sheet-tab strip
+    // Clip every row label to the strip. The last visible row is usually
+    // partial. Its vertically centred number would otherwise spill below the
+    // grid bottom and bleed through onto the sheet-tab strip
     // (`trame-sheets`).
     surface.push_clip(Rect::new(0.0, cells_top, hw, h));
     // Walk the visible rows, accumulating their variable heights. `slot` only

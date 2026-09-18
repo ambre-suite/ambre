@@ -1,6 +1,6 @@
 //! Freehand stroke smoothing. The CRDT stores only the raw sampled
-//! [`StrokePoint`]s; the smoothed polyline is recomputed here at derivation time
-//! (and again on the GPU path in `toile-board-rendering`), never persisted.
+//! [`StrokePoint`]s. The smoothed polyline is recomputed here at derivation
+//! time, and again on the GPU path in `toile-board-rendering`, never persisted.
 
 use kurbo::Point;
 

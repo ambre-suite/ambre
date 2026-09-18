@@ -19,10 +19,12 @@ from pathlib import Path
 
 SPECS = Path(__file__).resolve().parent.parent / "specs"
 
-# A non-normative analysis document that lives under `specs/` but is not a spec:
-# the security audit. It quotes real source on purpose, so it is exempt from the
-# "shapes only" rule, exactly like everything under `reviews/`.
-NON_NORMATIVE = {"security-audit.md"}
+# `specs/audits/` holds the non-normative analysis documents that live under
+# `specs/` without being specs. An audit quotes real source on purpose, so it is
+# exempt from the "shapes only" rule, exactly like everything under `reviews/`.
+# A directory rather than a list of names: the next audit is covered the day it
+# lands, where a named list covers the documents someone remembered.
+AUDITS = "audits/"
 
 # `fn name(...) ... {` on one line, or a signature whose brace lands on the next.
 # A trailing `;` is a declaration, not a body.
@@ -195,8 +197,8 @@ def main() -> int:
         rel_str = str(path.relative_to(SPECS))
         # Analysis artefacts, not normative specs: they quote real source (an audit
         # cites the vulnerable line as its evidence; a review logs a code smell), so
-        # the "no implementation" rule does not apply. Same status as `reviews/`.
-        if "reviews/" in rel_str or path.name in NON_NORMATIVE:
+        # the "no implementation" rule does not apply.
+        if "reviews/" in rel_str or AUDITS in rel_str:
             continue
         text = path.read_text()
         rel = path.relative_to(SPECS)

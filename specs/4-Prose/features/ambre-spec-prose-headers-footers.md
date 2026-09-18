@@ -4,7 +4,7 @@
 **Implementation:** design-only
 
 > A band at the top of every page and a band at the bottom, each holding ordinary text. A page
-> number, a page count, a date or the title may be placed in either one, and none of them is
+> number, a page count, a date or the title may be placed in either one. None of them is
 > written down: they are resolved when the page is drawn.
 
 ---
@@ -20,14 +20,17 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-006` | `INV` | A header and a footer MUST be ordinary blocks addressed by a stable identity. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-160` | `INV` | No command MUST carry a band's edits inside another command: the text of a band MUST be edited by the ordinary text commands, against the block the metadata names. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-161` | `INV` | A band's configuration MUST hold the identity of its block, whether the side is shown, and its alignment, and MUST hold no copy of the block's text. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-161` | `INV` | A band's configuration MUST hold the identity of its block, whether the side is shown, and its alignment. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-281` | `INV` | A band's configuration MUST hold no copy of its block's text. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-063` | `INV` | One document-level setting MUST govern the first page's header and its footer together. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-064` | `INV` | While that setting is off, the first page's own blocks MUST be kept. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-133` | `OBS` | While that setting is off, no page MUST draw the first page's own blocks: the first page MUST draw the same two bands as every other page. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-065` | `INV` | A field MUST store no rendered value in the document: it MUST store what to show, never what it shows today. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-162` | `INV` | The date field MUST store a format and MUST NOT store a locale: the language it is rendered in MUST be the document's. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-162` | `INV` | The date field MUST store a format, never a locale. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-282` | `INV` | The date field MUST be rendered in the document's language. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-066` | `INV` | The date field MUST be resolved from the document's own last-modified stamp, never from the reader's clock. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-163` | `INV` | A field MUST be one atom to the caret: typing beside it MUST NOT extend it, and it MUST be selected whole and deleted whole. | this spec section 3; this spec section 4 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-163` | `INV` | A field MUST be one atom to the caret: typing beside it never extends it. | this spec section 3; this spec section 4 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-283` | `INV` | A field MUST be selected whole and deleted whole. | this spec section 3; this spec section 4 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-047` | `OBS` | A field MUST be resolved when the page is drawn, from the page it is drawn on. | this spec section 4 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-164` | `CONC` | Two peers editing one band's block concurrently MUST converge on the text a body paragraph would carry for the same two edits. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -44,7 +47,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-167` | `POST` | Showing or hiding one side MUST change that side's own setting, and MUST leave the other side shown or hidden as it was. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-167` | `POST` | Showing or hiding one side MUST change that side's own setting. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-284` | `POST` | Showing or hiding one side MUST leave the other side shown or hidden as it was. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-168` | `FRAME` | Hiding a side MUST NOT touch the block it names: the text MUST be kept, so showing the side again MUST bring back what was written there. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Turn the first page's own bands on
@@ -58,18 +62,19 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-171` | `POST` | An alignment MUST be written into the configuration of the band the caret is in, and MUST apply to that band on every page it is drawn on. | this spec section 3; this spec section 4 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-171` | `POST` | An alignment MUST be written into the configuration of the band the caret is in. | this spec section 3; this spec section 4 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-285` | `POST` | An alignment MUST apply to its band on every page that band is drawn on. | this spec section 3; this spec section 4 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-172` | `FRAME` | An alignment MUST NOT change the block's text, the paragraph styles inside it, or the alignment of any other band. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** none of its own: a band is measured once per document and subtracted from every page,
-  which is the second step of `features/ambre-spec-prose-pagination.md section 3` and is charged to
+* **Budget.** none of its own: a band is measured once per document and subtracted from every page.
+  That is the second step of `features/ambre-spec-prose-pagination.md section 3`, charged to
   the pagination rows of `ambre-spec-budgets.md section 1`.
 * **Boundary.** none of its own: a header is a block like any other, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 22 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+* **Verification.** 27 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
   `PROSE-FEAT-160` is compiler-held the day the command enum exists, because a nested content
   command is a variant that is not there. `PROSE-FEAT-065`, `PROSE-FEAT-066` and `PROSE-FEAT-164`
-  are the three a two-peer test reaches without a page: two peers whose clocks differ must render
+  are the three a two-peer test reaches without a page. Two peers whose clocks differ must render
   one date, and two peers typing in one band must converge. The five `OBS` and `POST` rows about
   what a page draws reach nothing until pagination places a page.
 
@@ -92,9 +97,9 @@ Two peers over one band. No test resolves yet: the last column names the row eac
 
 ## 3. MODEL
 
-**Containers.** The document metadata carries the configuration of four bands -- the header, the
-footer, and the first page's own header and footer -- and the document-level setting that turns the
-last two on. Each configuration holds whether the side is shown, the identity of the block that
+**Containers.** The document metadata carries the configuration of four bands: the header, the
+footer, and the first page's own header and footer. It also carries the document-level setting that
+turns the last two on. Each configuration holds whether the side is shown, the identity of the block that
 holds its text, and its alignment. All of them are declared in
 `ambre-spec-prose-schema.md section 3`.
 
@@ -102,7 +107,7 @@ holds its text, and its alignment. All of them are declared in
 text (`PROSE-FEAT-161`); the text lives in the block tree like any other text (`PROSE-006`). Every
 ordinary editing command therefore works on a header by naming that block: typing, marks, paragraph
 styles, the cascade. There is no second editing surface and no command that carries another command
-(`PROSE-FEAT-160`), so two peers in one band merge as they would in a body paragraph
+(`PROSE-FEAT-160`). Two peers in one band merge as they would in a body paragraph
 (`PROSE-FEAT-164`).
 
 **The four fields.** A field is an inline mark carrying no rendered text
@@ -129,16 +134,16 @@ pub enum HfTarget { Regular, FirstPage }
 
 The page number and the page count are resolved from the page the band is drawn on
 (`PROSE-UI-047`). The date is resolved from the document's own last-modified stamp and its
-language; a reader's wall clock is never read, because two readers would then render two dates for
-one document (`PROSE-FEAT-066`). The short and the long forms follow the document's language; the
-calendar form is the same everywhere; the field stores which of the three, never a locale
+language. A reader's wall clock is never read: two readers would then render two dates for
+one document (`PROSE-FEAT-066`). The short and the long forms follow the document's language, and
+the calendar form is the same everywhere. The field stores which of the three, never a locale
 (`PROSE-FEAT-162`).
 
 **The first page.** One setting, on the document and not on a side, turns both first-page blocks on
 at once (`PROSE-FEAT-063`, `PROSE-FEAT-169`). While it is off, the two blocks are kept
 (`PROSE-FEAT-064`) and never drawn (`PROSE-UI-133`), so turning it on again brings back what was
 written there. Pagination reads this one setting
-to decide, on the first page alone, which of the two blocks a side draws; whether a side is drawn
+to decide, on the first page alone, which of the two blocks a side draws. Whether a side is drawn
 at all is that side's own setting.
 
 **The commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
@@ -162,7 +167,7 @@ Editing the text of a band uses the ordinary text commands against the block the
 4. write the field's mark at that position, in the block the target names (`PROSE-FEAT-165`).
 
 **Where a band is measured.** The two bands are measured once against the content width, and the
-first-page variants beside them, before any page is placed; a band is capped at a quarter of the
+first-page variants beside them, before any page is placed. A band is capped at a quarter of the
 page height. Both are `features/ambre-spec-prose-pagination.md`, `PROSE-016`.
 
 **Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
@@ -180,7 +185,7 @@ page height. Both are `features/ambre-spec-prose-pagination.md`, `PROSE-016`.
 | the alignment control while the caret is in a band | left, centre or right for that band (`PROSE-FEAT-171`) |
 | Escape, or a click in the body | returns the caret to the document |
 
-A field is drawn as its resolved value and behaves as one character to the caret: it is selected
+A field is drawn as its resolved value and behaves as one character to the caret. It is selected
 whole, deleted whole, and never edited in place (`PROSE-FEAT-163`).
 
 ---
@@ -210,19 +215,19 @@ whole, deleted whole, and never edited in place (`PROSE-FEAT-163`).
   through the same gap, and it lands with the
   `A refused command names what it refused` Story (`ambre-roadmap.md` E5).
 * **A field in a hidden side is not refused.** `PROSE-FEAT-067` refuses a field in the first
-  page's own block while the setting is off, because nothing would draw it; a side whose own
-  setting is off is invisible for the same reason, and `PROSE-FEAT-165` writes the mark there
+  page's own block while the setting is off, because nothing would draw it. A side whose own
+  setting is off is invisible for the same reason. `PROSE-FEAT-165` writes the mark there
   without a word. The two inert blocks are told apart by which flag turned them off.
 * **Nothing rules on two peers moving one flag.** The three settings are metadata a peer writes
-  without reading the others, and no row says what the document holds when one peer hides a side
+  without reading the others. No row says what the document holds when one peer hides a side
   while the other turns the first page's bands on for it.
 * **Nothing rules on a header per section.** The document has one header and one footer, plus the
   first page's pair; a header per section is named as a design nobody has written.
 * **Nothing rules on odd and even pages.** A document printed on both sides wants a mirrored band,
   and the four bands above cannot express one.
-* **A field of the body is not ruled on.** The four fields are described in a band, and nothing
-  says whether a page number may be placed in the body text, where its resolution would be the
-  same and its behaviour under editing would not.
+* **A field of the body is not ruled on.** The four fields are described in a band. Nothing
+  says whether a page number may be placed in the body text. Its resolution there would be the
+  same, and its behaviour under editing would not.
 * **The title field reads a metadata key nothing writes.** The document title is a metadata key
   (`ambre-spec-prose-schema.md section 3`), and no command in the corpus sets it.
 * **Nothing rules on a band taller than its cap.** Pagination clips it (`PROSE-016`); no rule says

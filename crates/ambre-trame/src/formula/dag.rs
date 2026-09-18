@@ -2,11 +2,11 @@
 //!
 //! Level 1 (`cell_dag`): cell-to-cell dependencies with static cycle detection
 //! via Kosaraju SCC. Level 2 (`range_index`): range dependencies registered per
-//! sheet and scanned linearly, testing each formula's range for containment of
-//! the changed cell through the current [`SheetIndex`] (MVP).
+//! sheet and scanned linearly. Each formula's range is tested for containment
+//! of the changed cell through the current [`SheetIndex`] (MVP).
 //!
-//! Both levels are keyed by the uid-anchored [`CellId`] so that dependencies
-//! survive structural reorder: a `=A1` edge points at the row/column `Uid`, not
+//! Both levels are keyed by the uid-anchored [`CellId`], so that dependencies
+//! survive structural reorder. A `=A1` edge points at the row/column `Uid`, not
 //! a grid position.
 //!
 //! # Design rationale
@@ -76,6 +76,12 @@ impl DependencyGraph {
     /// cell edges, and registers new range deps. If cell-level edges create a
     /// cycle, the operation is rolled back and a [`CycleError`] is returned
     /// listing the offending cells.
+    ///
+    /// # Errors
+    ///
+    /// [`CycleError`] when the new cell edges close a cycle, listing the cells
+    /// that carry it. The dependencies are rolled back first, so a refused
+    /// formula depends on nothing.
     pub fn update(
         &mut self,
         formula_cell: CellId,
@@ -85,8 +91,8 @@ impl DependencyGraph {
         let node = self.get_or_create_node(formula_cell);
 
         // Drop the previous dependencies, cell and range alike. Both are cleared
-        // up front so that a rejected formula (cycle) is left depending on
-        // nothing, rather than keeping range entries its bytecode no longer has.
+        // up front, so that a rejected formula (cycle) is left depending on
+        // nothing. It does not keep range entries its bytecode no longer has.
         self.clear_incoming(node);
         self.clear_range_deps(formula_cell);
 
@@ -124,10 +130,10 @@ impl DependencyGraph {
     /// Drop the dependencies *of* `cell` -- the cells and ranges it reads --
     /// when it stops being a formula (cleared, or replaced by a literal).
     ///
-    /// The node itself survives as long as something still points out of it:
-    /// an edge `cell -> dependent` is owned by the *dependent*'s formula, and
-    /// removing the node would silently unhook it, freezing that dependent on
-    /// its last computed value. Only a node left with no edge at all is dropped.
+    /// The node itself survives as long as something still points out of it. An
+    /// edge `cell -> dependent` is owned by the *dependent*'s formula. Removing
+    /// the node would silently unhook it, freezing that dependent on its last
+    /// computed value. Only a node left with no edge at all is dropped.
     pub fn clear_deps(&mut self, cell: CellId) {
         if let Some(&node) = self.cell_to_node.get(&cell) {
             self.clear_incoming(node);
@@ -139,7 +145,7 @@ impl DependencyGraph {
         self.clear_range_deps(cell);
     }
 
-    /// Remove every edge pointing *into* `node`, i.e. the dependencies its own
+    /// Remove every edge pointing *into* `node`, that is, the dependencies its own
     /// formula declared. Outgoing edges (its dependents) are untouched.
     fn clear_incoming(&mut self, node: petgraph::graph::NodeIndex) {
         let incoming: Vec<_> = self
@@ -163,14 +169,14 @@ impl DependencyGraph {
     /// Collect all cells that must be marked dirty after `changed` is modified.
     ///
     /// Returns the transitive closure of downstream dependents across *both*
-    /// levels. A single sweep does not suffice: a range dependent found at
+    /// levels. A single sweep does not suffice. A range dependent found at
     /// level 2 may itself sit inside another formula's range (`B1=SUM(A1:A3)`,
     /// `C1=SUM(B1:B3)`), a link the `cell_dag` does not carry. So newly dirtied
     /// cells are queued and re-expanded until the set reaches a fixpoint.
     ///
-    /// Containment is tested per sheet: `indices` carries every sheet's index
-    /// because a dependent reached through a cross-sheet edge lives on its own
-    /// sheet, whose uids the edited cell's index knows nothing about.
+    /// Containment is tested per sheet: `indices` carries every sheet's index.
+    /// A dependent reached through a cross-sheet edge lives on its own sheet,
+    /// whose uids the edited cell's index knows nothing about.
     pub fn collect_dirty(&self, changed: CellId, indices: &SheetIndices) -> HashSet<CellId> {
         let mut dirty = HashSet::new();
         let mut queue = vec![changed];
@@ -396,8 +402,8 @@ mod tests {
     }
 
     /// A `SheetIndex` for `sheet`, with per-sheet peers so that no uid is shared
-    /// between two sheets (as in a live document, where each sheet owns its own
-    /// Loro row/column lists).
+    /// between two sheets. As in a live document, where each sheet owns its own
+    /// Loro row/column lists.
     fn sheet_index(sheet: u16, rows: usize, cols: usize) -> SheetIndex {
         let mut idx = SheetIndex::default();
         for i in 0..rows {

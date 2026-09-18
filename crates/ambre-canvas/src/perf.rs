@@ -5,7 +5,7 @@
 //
 // The perf HUD used to be shaped as glyphs on the wgpu overlay every frame --
 // pure waste for a developer read-out. The canvas view now publishes a
-// `PerfSnapshot` each frame; the DOM status bar mirrors it into a reactive
+// `PerfSnapshot` each frame. The DOM status bar mirrors it into a reactive
 // signal and renders it as plain text (an `fps` chip plus a collapsible panel).
 //
 // Pure value plumbing (an `Rc<Cell>`): compiles on every target, depends on no

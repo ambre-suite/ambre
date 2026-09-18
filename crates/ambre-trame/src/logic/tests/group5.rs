@@ -62,7 +62,7 @@ fn clear_filter_unhides_and_noops_when_absent() {
 }
 
 /// The hidden set is keyed by stable `row_uid`, so it follows its row across a
-/// sort -- the hidden row tracks the data, no recompute needed.
+/// sort. The hidden row tracks the data, and no recompute is needed.
 #[test]
 fn shared_filter_hidden_follows_sort() {
     let mut state = TrameState::new();
@@ -540,8 +540,9 @@ fn fill_series_single_cell_increments_by_one() {
     assert_eq!((at(1), at(2), at(3)), ("6".into(), "7".into(), "8".into()));
 }
 
-/// `Copy` mode tiles a multi-cell numeric source verbatim (Excel's Ctrl+drag
-/// of a selection): A1=1, A2=2 filled to A6 repeats 1, 2, 1, 2 -- no series.
+/// `Copy` mode tiles a multi-cell numeric source verbatim, as Excel's
+/// Ctrl+drag of a selection does. A1=1, A2=2 filled to A6 repeats 1, 2, 1, 2
+/// -- no series.
 #[test]
 fn fill_copy_multi_cell_tiles_verbatim() {
     use crate::{FillMode, GridRange};

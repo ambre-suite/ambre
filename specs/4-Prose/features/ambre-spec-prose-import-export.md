@@ -3,7 +3,7 @@
 **Type:** Vertical (feature)
 **Implementation:** design-only
 
-> A user opens a document that came from Word, from a web page or from a Markdown file, and hands
+> A user opens a document that came from Word, from a web page or from a Markdown file. They hand
 > the document back as a file someone without Ambre can read. Every conversion runs on the user's
 > own machine.
 
@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-045` | `INV` | A writer MUST NOT read the document. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-046` | `INV` | The walk from the document into the intermediate form MUST be one, shared by every writer. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-004` | `INV` | Every fidelity loss MUST raise a warning naming the construct that was dropped. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-005` | `INV` | A reader MUST warn before it discards an element it does not recognise. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-005` | `INV` | A reader MUST warn before it drops an element it does not recognise. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-006` | `INV` | A writer that emits an approximation MUST record it in the report. | this spec section 3 | not built | unbuilt -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-047` | `INV` | A conversion that finished MUST answer with a report, and one that produced nothing MUST answer with an error: the two MUST NOT be one type. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -112,25 +112,16 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-064` | `FRAME` | An HTML export MUST NOT emit a script or an event handler: the file it writes MUST be inert. | this spec section 3 | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** six rows of `ambre-spec-budgets.md section 1`: the Word import and export of a
-  hundred pages, the Markdown export, the HTML clipboard import, the plaintext native export, and
-  the document-to-intermediate-form walk the four writers share (`PROSE-IO-046`). The four reader
-  crates are billed in `section 5`, each one lazily loaded. Every row of both reads
-  **none exists**.
+  hundred pages, and the Markdown export. The other three are the HTML clipboard import, the
+  plaintext native export, and the shared walk. Every one reads **none exists**.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
-  conversion in the Logic thread and `PROSE-IO-043` keeps the document off the relay while it runs,
-  `PROSE-IO-016`, `PROSE-IO-062` and `PROSE-IO-024` stop an imported file executing or fetching
-  anything, `PROSE-IO-023` stops an import becoming a fetch, and `PROSE-IO-022` stops an export
-  carrying commentary the user did not ask to publish. A native file written to disk is plaintext
-  at rest by decision, and `ambre-spec-docfile.md section 5` owns that decision.
-* **Verification.** 47 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-IO-009` and `PROSE-IO-045` are the two a compiler can hold before a test exists, because a
-  reader that emits a command and a writer that reads the document are both type errors once the
-  two halves take the intermediate form and nothing else. `PROSE-IO-003` and `PROSE-IO-017` are the
-  pair a host test reaches with no network and no file picker. The frame conditions are new and
-  none of them is held: nine rows say what a conversion must not touch, and the crate that would
-  touch it does not exist. `PROSE-IO-007` and `PROSE-IO-008` left two steps
-  earlier for `features/ambre-spec-prose-images.md`: a picture is part of the document structure,
-  not of the pipeline beside it.
+  conversion in the Logic thread, `PROSE-IO-043` keeps the document off the relay, and `PROSE-
+  IO-016` stops an imported file executing or fetching.
+* **Verification.** 47 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. Two rows a
+  compiler holds first. A reader that emits a command (`PROSE-IO-009`) and a writer that reads the
+  document (`PROSE-IO-045`) are type errors once both halves take the intermediate form. `PROSE-
+  IO-003` and `PROSE-IO-017` are the pair a host test reaches with no network and no file picker.
+  Nine frame conditions say what a conversion must not touch.
 
 ---
 
@@ -154,7 +145,7 @@ nothing. No test resolves yet: the last column names the row each scenario rests
 ## 3. MODEL
 
 **Containers.** This feature owns none. An import writes the block tree, the style register and the
-annotation register the schema declares (`ambre-spec-prose-schema.md section 3`); the native export
+annotation register the schema declares (`ambre-spec-prose-schema.md section 3`). The native export
 serializes the whole document and adds nothing to it.
 
 **The pipeline is symmetric.** A reader turns bytes into the intermediate form, and a writer turns
@@ -166,7 +157,7 @@ Import:  bytes -> reader -> ProseIr -> command builder -> Vec<ProseCommand> -> t
 Export:  the document -> document walk -> ProseIr -> writer -> bytes
 ```
 
-The native path is the one exception and it is deliberate: it carries a Loro snapshot under the
+The native path is the one exception, and it is deliberate. It carries a Loro snapshot under the
 shared header, so it passes through no intermediate form and loses nothing (`PROSE-IO-012`,
 `PROSE-IO-059`).
 
@@ -400,12 +391,12 @@ other is a file it could not open.
 4. apply them as one batch, so the whole file is one undo item (`PROSE-IO-051`);
 5. hand the report to the view (`PROSE-IO-053`).
 
-Step 2 is a separate pass on purpose: the tree's nesting rule is one predicate
+Step 2 is a separate pass on purpose. The tree's nesting rule is one predicate
 (`ambre-spec-prose-schema.md section 4`), and a reader that applied it inline would need a copy of
 it per format.
 
 **Steps, on an export:** walk the document once into the intermediate form, then hand that form to
-the writer. The walk is shared by all four writers (`PROSE-IO-046`), which is what makes it one
+the writer. The walk is shared by all four writers (`PROSE-IO-046`). That is what makes it one
 budget row rather than four, and what keeps a writer from reading the document (`PROSE-IO-045`).
 
 **The commands and the events** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
@@ -449,14 +440,14 @@ The media type each format declares:
 | PDF | `application/pdf` |
 | HTML | `text/html; charset=utf-8` |
 
-A Markdown and an HTML writer produce text, and the bus encodes it as UTF-8 bytes, so the view has
+A Markdown and an HTML writer produce text, and the bus encodes it as UTF-8 bytes. The view has
 one download path and reads the media type to name the file (`PROSE-IO-020`).
 
 **The native file.** Prose owns one pair of entry points over the shared container, and nothing
-else: the header layout, the version registry, the migration policy and the at-rest decision are
+else. The header layout, the version registry, the migration policy and the at-rest decision are
 `ambre-spec-docfile.md section 3`. Prose writes its own document-type byte (`PROSE-IO-058`), and a file
 carrying another one is handed back to the caller for re-dispatch rather than read
-(`PROSE-IO-013`). A native file on disk is a different destination from the network snapshot: the
+(`PROSE-IO-013`). A native file on disk is a different destination from the network snapshot. The
 snapshot carries no header and is sealed by the Sync worker, and the file is not.
 
 **What a Word file becomes, and what it loses:**
@@ -527,19 +518,19 @@ a warning at the drop site, never a silent omission (`PROSE-IO-018`, `PROSE-IO-0
 | a picture, a page break, a rule | `img`, a rule carrying a page-break class, `hr` |
 | a table of contents | a labelled `nav` holding an ordered list |
 
-A mark becomes its semantic element -- emphasis, strong emphasis, deletion, insertion, superscript,
-subscript, code, anchor -- and a colour, a size or a family becomes an inline style. A comment and
+A mark becomes its semantic element: emphasis, strong emphasis, deletion, insertion, superscript,
+subscript, code, anchor. A colour, a size or a family becomes an inline style. A comment and
 a suggestion become a data attribute carrying the identifier, and both are gated by the export
 options (`PROSE-IO-022`). The header and the footer have no element at all, so the writer reports
 them (`PROSE-IO-019`).
 
 **HTML import is the paste path.** The same reader serves a file the user chose and the rich half
-of a paste, so a paste from a web page and an import of the same page produce the same blocks
+of a paste. A paste from a web page and an import of the same page produce the same blocks
 (`PROSE-IO-025`, `features/ambre-spec-prose-clipboard.md`). It is the one leg of this feature a
 user waits on, which is why it carries its own budget row.
 
 **A remote address is not fetched.** A Markdown or an HTML picture may name a URL rather than a
-content hash. The Logic thread never opens a socket, and a fetch on the import path would turn
+content hash. The Logic thread never opens a socket. A fetch on the import path would turn
 opening a file into a signal to a third party. So the picture lands unresolved and the report names
 it (`PROSE-IO-023`).
 
@@ -567,7 +558,7 @@ None of the four readers is in the manifest today: `crates/ambre-prose` declares
 **There is none** (`PROSE-IO-027`, `PROSE-IO-028`). The chrome Prose declares is the contextual
 toolbar (`features/ambre-spec-prose-toolbar.md`), the slash menu
 (`features/ambre-spec-prose-slash-command.md`), the ruler (`features/ambre-spec-prose-ruler.md`) and
-the comment panel (`features/ambre-spec-prose-comments.md`); no entry among them opens a file and
+the comment panel (`features/ambre-spec-prose-comments.md`). No entry among them opens a file, and
 none saves one.
 
 | Trigger, once it exists | What must happen |
@@ -579,7 +570,7 @@ none saves one.
 | the report | what the conversion lost, named construct by construct (`PROSE-IO-004`) |
 
 **The two options a reader must see before an export.** The comments and the suggestions travel in
-a Word and in an HTML file, and a document handed to a third party carries the review with it
+a Word and in an HTML file. A document handed to a third party carries the review with it
 unless the export leaves it out. The dialog states both, and the writer honours both
 (`PROSE-IO-022`).
 
@@ -598,7 +589,7 @@ unless the export leaves it out. The dialog states both, and the writer honours 
 | A picture is an address, and an import never fetches one | fetching a remote picture during the import | it puts a network call in the thread whose whole contract is that it makes none. The Logic thread holds no key and opens no socket, and a fetch on the import path would tell a third party which document a user just opened, before the user has seen it |
 | A block the tree refuses is lifted, never dropped | refusing the file | it fails on an ordinary Word document. A file the reader opens is not a command they typed, so losing part of it in silence loses content they still have and cannot see is gone; lifting keeps it, and the report says where it went |
 | A block the tree refuses is lifted, never dropped | dropping the block | it is the silent loss this pipeline exists to make impossible. A file the reader opens is not a command they typed, so losing part of it in silence loses content they still have and cannot see is gone; lifting keeps it, and the report says where it went |
-| A wildcard arm warns before it discards | matching the rest and moving on | it is what makes a lossy import look like a faithful one. A reader meets constructs its author never saw, and the honest answer is to name them; an arm that discards in silence turns every future format extension into an invisible data loss |
+| A wildcard arm warns before it drops | matching the rest and moving on | it is what makes a lossy import look like a faithful one. A reader meets constructs its author never saw, and the honest answer is to name them; an arm that drops in silence turns every future format extension into an invisible data loss |
 | An export is idempotent | writing in map order | it is stable within one run and different across builds. A user who exports twice and gets two different files cannot tell a real change from a serialization detail, and neither can a test; fixing the order of every attribute is what makes the round trip provable at all |
 | The comments and the suggestions are opt-in on the way out | exporting them always | it publishes the review with the document and is discovered by the reader on the other side. A review is internal by default: a document sent to a client should not carry who doubted which sentence, so the safe direction is the one that needs an explicit act to publish |
 | A report accompanies a conversion that finished, and an error replaces one that did not | one error type | it makes "the file opened with three warnings" and "the file did not open" the same value. The two are different facts and a caller acts on them differently: one is shown beside a document, the other instead of it; merging them forces every caller to ask which case it is holding |
@@ -616,38 +607,38 @@ unless the export leaves it out. The dialog states both, and the writer honours 
   Two commands are declared on the plane and nothing emits them. Same shape as the collaboration
   features, which are specified from the second step onward.
 * **Where an import lands is not ruled.** A failed import leaves the document untouched
-  (`PROSE-IO-011`), and nothing says what a successful one does to a document that already has
+  (`PROSE-IO-011`). Nothing says what a successful one does to a document that already has
   content: replace it, append to it, or insert at the caret. Toile answers the same question with
   `TOILE-IO-023` and Prose states nothing, so the batch of step 4 has no defined destination.
 * **A failed conversion has no way back to the user.** `PROSE-IO-047` makes the report and the
-  error two answers, and the bus carries one of them: `ImportCompleted` holds a report, and no
+  error two answers, and the bus carries one of them. `ImportCompleted` holds a report, and no
   event holds an `InteropError`. A file that does not open therefore has a typed refusal and no
   declared path to the screen that must show it.
 * **An export has no size to measure its progress against.** `PROSE-IO-057` owes a progress event
-  and the threshold is one megabyte of file, which an import knows before it starts and an export
-  learns only when it has finished. Nothing states what an export counts instead.
+  and the threshold is one megabyte of file. An import knows that before it starts, and an export
+  learns it only when it has finished. Nothing states what an export counts instead.
 * **A named style's character defaults have no home in the document.** The intermediate form
   carries them, because a Word style carries them, and the style register of
   `ambre-spec-prose-schema.md section 3` holds paragraph fields alone. A Word file whose "Quote"
-  style is italic therefore imports as a style that is not italic, and no warning covers it: the
+  style is italic therefore imports as a style that is not italic, and no warning covers it. The
   loss is in the command builder, not in the reader.
 * **A comment's author survives an export and not a rename.** The document stamps a display name
-  and a document peer, and the Word format carries an author string, so the round trip is faithful
+  and a document peer, and the Word format carries an author string. The round trip is faithful
   to what Prose stores. It stores no stable user identity, which
   `features/ambre-spec-prose-comments.md section 6` records, and an export freezes whatever name
   the author had that day.
 * **A cross reference crosses formats as a bookmark and comes back by name.** The document holds a
-  block identifier, Word holds a generated bookmark, and nothing states how the two are joined on a
+  block identifier, and Word holds a generated bookmark. Nothing states how the two are joined on a
   round trip through a file that a third party edited in between.
 * **Nothing bounds an import.** Toile clamps foreign geometry, bounds the element count and bounds
   the nesting depth (`TOILE-IO-002`); Prose bounds nothing. A file with a million blocks, or a list
-  nested ten thousand deep, has no stated refusal, and the atomicity rule means the whole batch is
+  nested ten thousand deep, has no stated refusal. The atomicity rule means the whole batch is
   held in memory before any of it is applied.
 * **No reader has a fuzz target.** They are fed by files the user did not write, and
   `ambre-spec-testing.md` names them as the first targets. None exists, and neither does the crate.
 * **Three applications now import and export, and the vocabulary is theirs alone.** Trame reports
-  an import through one type and one event name, Toile through another, and Prose through a third:
-  the report, the progress event and the completion event differ in shape and in spelling for one
+  an import through one type and one event name, Toile through another, and Prose through a third.
+  The report, the progress event and the completion event differ in shape and in spelling for one
   behaviour. The formats share nothing and belong to each application; the report a user reads does
   not. No rule holds the three together, and no document owns the question.
 * **The four reader crates are a plan.** `crates/ambre-prose` declares none of them, so the

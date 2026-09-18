@@ -1,7 +1,7 @@
 // ambre-trame/src/logic/packing.rs
 // Style helpers for the Logic thread (`trame-cell-styles`): merging a toolbar
 // `StylePatch` into a cell's `CellStyle`, and rendering a numeric value per its
-// number format. The CRDT no longer packs style into an i64 bit-mask: a cell's
+// number format. The CRDT no longer packs style into an i64 bit-mask. A cell's
 // whole style is one atomic `cellstyle_{sheet}` register (see `schema.rs` /
 // `styles.rs`), so `CellStyle` is stored serde-encoded verbatim.
 
@@ -60,9 +60,9 @@ pub(crate) fn format_number(value: f64, fmt: &CellFormat, decimals: Option<u8>) 
         CellFormat::Scientific => format!("{:.*e}", dec(2), value),
         CellFormat::Fraction => {
             // Simple proper-fraction rendering over a /16 denominator (MVP).
-            // Round the whole value to sixteenths in one step so a fraction that
-            // rounds up to 16/16 carries into the integer part instead of being
-            // printed as such.
+            // Round the whole value to sixteenths in one step. A fraction that
+            // rounds up to 16/16 then carries into the integer part, instead of
+            // being printed as such.
             let sixteenths = (value * 16.0).round() as i64;
             let whole = sixteenths / 16;
             let frac = (sixteenths % 16).abs();

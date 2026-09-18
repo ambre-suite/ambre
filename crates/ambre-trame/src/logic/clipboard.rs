@@ -1,11 +1,10 @@
-// ambre-trame/src/logic/clipboard.rs
-// Clipboard paste (`trame-clipboard`).
+// ambre-trame/src/logic/clipboard.rs Clipboard paste (`trame-clipboard`).
 //
-// Copy/cut are pure UI-thread operations (they read the viewport cache and write
-// the OS clipboard); only paste reaches the Logic thread, because reindexing a
-// formula's relative references and applying styles both need the document model
-// the UI does not hold (`trame-clipboard`). Submodule of `logic`, so it
-// reaches the private fields/helpers of the parent through `use super::*`.
+// Copy/cut are pure UI-thread operations: they read the viewport cache and write
+// the OS clipboard. Only paste reaches the Logic thread. Reindexing a formula's
+// relative references and applying styles both need the document model the UI
+// does not hold (`trame-clipboard`). Submodule of `logic`, so it reaches the
+// private fields/helpers of the parent through `use super::*`.
 
 use super::*;
 use crate::formula::shift::shift_formula;
@@ -13,14 +12,16 @@ use crate::formula::shift::shift_formula;
 impl TrameState {
     /// Paste `payload` with its top-left landing on `(target_row, target_col)`
     /// (`trame-clipboard`). Each pasted cell lands at `(target_row + dr,
-    /// target_col + dc)`; a formula's relative references shift by the same
-    /// `(target - src)` offset (every reference is relative -- AMBRE has no `$`
-    /// syntax), and the carried [`CellStyle`] (plus bold/italic) is written
-    /// verbatim. The whole paste is a single undo group, so one paste = one undo
-    /// item. Blank source cells are omitted from the payload and leave their
-    /// destination untouched (Excel/Sheets behaviour). Returns the standard write
-    /// outcome (a `DataReset` so the UI re-fetches the pasted region, plus the
-    /// CRDT delta).
+    /// target_col + dc)`.
+    ///
+    /// A formula's relative references shift by the same `(target - src)` offset,
+    /// since every reference is relative and AMBRE has no `$` syntax. The carried
+    /// [`CellStyle`] (plus bold/italic) is written verbatim.
+    ///
+    /// The whole paste is a single undo group, so one paste = one undo item. Blank
+    /// source cells are omitted from the payload and leave their destination
+    /// untouched (Excel/Sheets behaviour). Returns the standard write outcome (a
+    /// `DataReset` so the UI re-fetches the pasted region, plus the CRDT delta).
     pub(super) fn paste_range(
         &mut self,
         target_row: u32,
@@ -105,14 +106,17 @@ impl TrameState {
     }
 
     /// Build the [`ClipboardPayload`] for the tracked selection from the document
-    /// (`trame-clipboard`), replied via [`TrameEvent::Clipboard`]. This is the
-    /// authoritative, Logic-side counterpart of the old UI viewport-cache builder
-    /// (`ui/grid/geometry.rs`): the whole selection is read from the CRDT, never
-    /// culled to a viewport, so a copy after `Ctrl+A` or a scroll-extend is
-    /// complete. Blank cells are omitted (they leave their paste destination
-    /// untouched). The per-cell [`CellStyle`] is taken verbatim from the tracked
-    /// style register, so number format / decimals -- which the viewport did not
-    /// surface -- survive the round-trip. Non-mutating: emits a display-only
+    /// (`trame-clipboard`), replied via [`TrameEvent::Clipboard`].
+    ///
+    /// This is the authoritative, Logic-side counterpart of the old UI
+    /// viewport-cache builder (`ui/grid/geometry.rs`). The whole selection is read
+    /// from the CRDT, never culled to a viewport, so a copy after `Ctrl+A` or a
+    /// scroll-extend is complete. Blank cells are omitted, and they leave their
+    /// paste destination untouched.
+    ///
+    /// The per-cell [`CellStyle`] is taken verbatim from the tracked style
+    /// register. Number format and decimals, which the viewport did not surface,
+    /// therefore survive the round-trip. Non-mutating: emits a display-only
     /// outcome with the single clipboard event.
     pub(super) fn copy_range(&self) -> TrameOutcome {
         let (r1, c1, r2, c2) = self.selection;
@@ -146,14 +150,16 @@ impl TrameState {
 
     /// Write a pasted cell's formatting into the single `cellstyle_{sheet}`
     /// register, mirroring the per-cell tail of
-    /// [`set_cell_style`](Self::set_cell_style): bold/italic go into their own
+    /// [`set_cell_style`](Self::set_cell_style). Bold/italic go into their own
     /// in-memory sets, the rest into the cell's `CellStyle`, and
     /// [`write_cell_style`](Self::write_cell_style) folds the whole thing into one
-    /// record. Like [`write_cell`](Self::write_cell) it does not commit: the whole
-    /// paste is committed once by [`finish_cell_writes`](Self::finish_cell_writes),
-    /// so a styled paste is a single undo item. Borders are taken verbatim from
-    /// the source cell (no selection-level preset resolution -- the source already
-    /// carries resolved per-edge borders).
+    /// record.
+    ///
+    /// Like [`write_cell`](Self::write_cell) it does not commit. The whole paste is
+    /// committed once by [`finish_cell_writes`](Self::finish_cell_writes), so a
+    /// styled paste is a single undo item. Borders are taken verbatim from the
+    /// source cell: no selection-level preset resolution, since the source already
+    /// carries resolved per-edge borders.
     pub(super) fn apply_pasted_style(&mut self, row: u32, col: u32, cell: &ClipboardCell) {
         let pos = (row, col);
         if cell.bold {

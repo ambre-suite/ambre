@@ -3,11 +3,11 @@
 // The deck panel (toile-presentation): the surface that builds a presentation.
 // One Leptos component over the shared signals `ui::deck::DeckSignals` carries.
 //
-// Two lists: the deck, in playback order, each row carrying its rank, the two
-// reorder steps and the drop; and the board's other frames, each addable at the
-// end of the deck. Every word it renders was read back from the board, and every
-// action leaves as a `DeckIntent` the canvas view drains -- the DOM names no
-// command channel, and the panel keeps no order of its own.
+// Two lists. The deck comes first, in playback order, each row carrying its
+// rank, the two reorder steps and the drop. Then the board's other frames, each
+// addable at the end of the deck. Every word it renders was read back from the
+// board, and every action leaves as a `DeckIntent` the canvas view drains. The
+// DOM names no command channel, and the panel keeps no order of its own.
 // ============================================================================
 
 use ambre_bus::app::toile::DeckView;
@@ -15,9 +15,9 @@ use leptos::prelude::*;
 
 use crate::ui::deck::{DeckIntent, Move, deck_label};
 
-/// The deck panel. `state` is the open flag (the Present menu sets it); `view`
-/// is the board's frames as the view last read them; `on_intent` carries every
-/// action out.
+/// The deck panel. `state` is the open flag, set by the Present menu. `view`
+/// is the board's frames as the view last read them, and `on_intent` carries
+/// every action out.
 #[component]
 pub fn DeckPanel(
     state: RwSignal<bool>,

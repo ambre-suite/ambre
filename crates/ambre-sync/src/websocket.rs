@@ -34,10 +34,10 @@ impl SyncState {
                 ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
                 self.wire_ws_callbacks(&ws);
                 self.ws = Some(ws);
-                // Subscriptions are (re)sent from the `onopen` handler, NOT here:
-                // the socket is still CONNECTING at this point and `ws_send` would
-                // be dropped, leaving the server with a connection but no
-                // subscription (every later Update then gets 403 "not subscribed").
+                // Subscriptions are (re)sent from the `onopen` handler, NOT here.
+                // The socket is still CONNECTING at this point and `ws_send` would
+                // be dropped. The server would then have a connection but no
+                // subscription, and every later Update gets 403 "not subscribed".
                 tracing::info!("Sync: WebSocket connecting ({url})");
             }
             Err(e) => {
@@ -138,8 +138,8 @@ impl SyncState {
     }
 
     /// Schedules a reconnect attempt after an exponential backoff (with jitter)
-    /// so a rejected upgrade -- e.g. an HTTP 429 from the rate limiter -- does not
-    /// trigger a tight reconnect storm. Each failed attempt lengthens the delay;
+    /// so a rejected upgrade does not trigger a tight reconnect storm. An HTTP
+    /// 429 from the rate limiter is one. Each failed attempt lengthens the delay;
     /// a successful open resets the counter via [`SyncEvent::WsConnected`].
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn schedule_reconnect(&mut self) {
@@ -148,7 +148,7 @@ impl SyncState {
         let attempt = self.reconnect_attempts;
         self.reconnect_attempts = attempt.saturating_add(1);
 
-        // 250ms base, doubling, capped at 10s, plus up to 100% jitter.
+        // 250 ms base, doubling, capped at 10 s, plus up to 100% jitter.
         let base = 250u32.saturating_mul(1u32 << attempt.min(6));
         let capped = base.min(10_000);
         let jitter = (js_sys::Math::random() * capped as f64) as u32;
@@ -257,7 +257,7 @@ impl SyncState {
                         self.open_websocket();
                     }
                 } else if let Some(username) = self.dev_username.clone() {
-                    // Refresh token also dead (e.g. server restarted with a fresh
+                    // Refresh token also dead (for example server restarted with a fresh
                     // ephemeral key and empty Redis): re-login with the same
                     // deterministic dev identity. SessionReady reopens the socket.
                     tracing::warn!(
@@ -274,11 +274,11 @@ impl SyncState {
             SyncEvent::WsError => {
                 tracing::error!("Sync: WebSocket error");
                 // A raw socket `onerror` is not always followed by a clean
-                // `onclose`, so treat it as a disconnect: tear down the dead
+                // `onclose`, so treat it as a disconnect. Tear down the dead
                 // socket and reconnect on the same backoff path as
                 // `WsDisconnected` (M10). Without the teardown, an `onerror`
                 // with no close would leave `self.ws` set and stall the
-                // `ReconnectNow` guard (`self.ws.is_none()`); a following
+                // `ReconnectNow` guard (`self.ws.is_none()`). A following
                 // `onclose`, if any, is idempotent here.
                 self.handle_ws_disconnected(0, "ws error".to_owned());
                 if !self.documents.is_empty() {
@@ -377,8 +377,9 @@ impl SyncState {
                 doc_state.current_snapshot_id = snapshot_id;
                 doc_state.known_snapshots.insert(snapshot_id);
                 // Advance the replay cursor past the history folded into the
-                // downloaded snapshot, so the RequestMissing below fetches only
-                // newer deltas instead of replaying everything since genesis.
+                // downloaded snapshot. The RequestMissing below then fetches
+                // only newer deltas instead of replaying everything since
+                // genesis.
                 doc_state.last_seq = covered_seq;
                 if let Some(payload) = snapshot_payload {
                     self.send_to_logic(LogicEvent::RemoteSnapshot {
@@ -393,10 +394,10 @@ impl SyncState {
                     self.ws_send(&WsClientMsg::Subscribe { document_id });
                     // Subscribing alone does not replay history (the server only
                     // forwards live updates to subscribers). On a fresh open the
-                    // loaded snapshot (if any) covers state up to its own point,
-                    // but any deltas committed after it -- including the whole
-                    // history when no snapshot was ever uploaded -- must be pulled
-                    // explicitly. `last_seq` was just set to the snapshot's covered
+                    // loaded snapshot (if any) covers state up to its own point.
+                    // Any deltas committed after it must be pulled explicitly. That
+                    // includes the whole history when no snapshot was ever
+                    // uploaded. `last_seq` was just set to the snapshot's covered
                     // seq (0 when none), so this requests only the deltas the
                     // snapshot does not already contain.
                     let after_seq = self
@@ -415,7 +416,7 @@ impl SyncState {
                 });
                 // Hydration-complete signal (dismisses the UI loading overlay).
                 // When a replay was requested above, defer it to the matching
-                // `MissingUpdates`: the document is only fully hydrated once the
+                // `MissingUpdates`. The document is only fully hydrated once the
                 // deltas the snapshot does not cover (the whole history for a
                 // delta-only doc) have arrived. Without a replay (local-only or
                 // offline open) there is nothing to wait for, so signal now.
@@ -567,8 +568,8 @@ impl SyncState {
                 new_doc_key,
             } => {
                 // Swap the local key cache. This is the remaining-member path: a
-                // rotation is not a revocation, so nothing is reported as a member
-                // loss here (a revoked user is told via `DocumentRevoked`).
+                // rotation is not a revocation. Nothing is reported as a member
+                // loss here; a revoked user is told via `DocumentRevoked`.
                 if let Some(doc_state) = self.documents.get_mut(&document_id) {
                     doc_state.rotate_key(new_doc_key);
                 }
@@ -623,7 +624,7 @@ impl SyncState {
         // Any frame from the server proves the connection is authenticated and
         // live, so the reconnect backoff resets. A bare `onopen` is NOT enough:
         // an auth-rejected upgrade still returns 101 (then the server drops it),
-        // firing `onopen` without ever sending a frame -- resetting on `onopen`
+        // firing `onopen` without ever sending a frame. Resetting on `onopen`
         // there would spin a tight reconnect loop (storm). A rejected connection
         // never reaches this point, so its backoff keeps growing as intended.
         self.reconnect_attempts = 0;
@@ -637,7 +638,7 @@ impl SyncState {
 
             WsServerMsg::Update { seq, update } => {
                 tracing::debug!(
-                    "[Sync←Server] WS Update seq={} doc={} clock={}",
+                    "[Sync<-Server] WS Update seq={} doc={} clock={}",
                     seq.0,
                     update.public_data.document_id,
                     update.public_data.clock.0,
@@ -665,13 +666,13 @@ impl SyncState {
                 }
 
                 // Presence is keyed by the sender's canonical `UserId`
-                // (`ambre-spec-membership.md`), resolved from the
-                // authoring Ed25519 key before delivery so a peer cannot spoof
-                // another user's cursor. The client-side key directory (member
-                // signing keys / trusted-keys) is not wired yet, so an
-                // unattributable frame is dropped rather than shown under a
-                // guessed identity. Presence is best-effort; a dropped frame is
-                // corrected by the next one.
+                // (`ambre-spec-membership.md`), resolved from the authoring
+                // Ed25519 key before delivery so a peer cannot spoof another
+                // user's cursor. The client-side key directory (member signing
+                // keys / trusted-keys) is not wired yet. An unattributable
+                // frame is dropped rather than shown under a guessed identity.
+                // Presence is best-effort; a dropped frame is corrected by the
+                // next one.
                 let Some(from_user_id) = doc_state.resolve_ephemeral_author(author_pk) else {
                     tracing::debug!(
                         "Sync: dropping ephemeral from unattributable author {author_pk:?}"
@@ -715,11 +716,11 @@ impl SyncState {
                 updates,
             } => {
                 // Decrypt the whole replay, then deliver it as one batch so the
-                // UI repaints once (not once per delta -- a cell that only
-                // appears in the last delta would otherwise flicker in). Updates
-                // whose parent snapshot is unknown are held in quarantine by
-                // `ingest_update` and released later; decrypt failures surface as
-                // their own `SyncWarning` (preserving the per-update path).
+                // UI repaints once, not once per delta. A cell that only appears
+                // in the last delta would otherwise flicker in. Updates whose
+                // parent snapshot is unknown are held in quarantine by
+                // `ingest_update` and released later. Decrypt failures surface as
+                // their own `SyncWarning`, preserving the per-update path.
                 let mut payloads: Vec<Vec<u8>> = Vec::new();
                 for seq_update in updates {
                     match self.ingest_update(seq_update.seq, seq_update.update) {
@@ -737,15 +738,15 @@ impl SyncState {
                     });
                 }
                 // The replay has advanced `local_clock` past everything the
-                // server already holds for us, so any update buffered before the
+                // server already holds for us. Any update buffered before the
                 // session was ready can now be sealed with a fresh, conflict-free
                 // clock.
                 self.flush_pre_session_updates(document_id);
                 // Initial catch-up done: the document is now fully hydrated
                 // (snapshot + every delta the server holds). Signal the UI to
                 // dismiss its loading overlay -- exactly once, on the first
-                // replay after open (a later reconnect replay leaves the flag
-                // cleared, so no duplicate fires).
+                // replay after open. A later reconnect replay leaves the flag
+                // cleared, so no duplicate fires.
                 if let Some(doc_state) = self.documents.get_mut(&document_id)
                     && doc_state.awaiting_initial_hydration
                 {
@@ -770,7 +771,7 @@ impl SyncState {
             WsServerMsg::KeyRotationRequired { document_id } => {
                 // Remaining-member re-key path only. Being revoked is a separate,
                 // targeted signal now (`DocumentRevoked`), so this message never
-                // closes a document: fetch our freshly wrapped key, unwrap it, and
+                // closes a document. Fetch our freshly wrapped key, unwrap it, and
                 // rotate the local cache.
                 let event_tx = self.event_tx.clone();
                 let api_base = self.api_base.clone();
@@ -826,7 +827,7 @@ impl SyncState {
                                 .try_into()
                                 .map_err(|_| "invalid nonce length")?;
                             let ciphertext = encrypted[24..].to_vec();
-                            // The new key was wrapped by the rotator; unwrap
+                            // The new key was wrapped by the rotator. Unwrap
                             // against THEIR exchange key, not our own (fallback to
                             // our own for older servers without the wrapper field).
                             let wrapper_hex = if entry.wrapper_exchange_pub_key.is_empty() {

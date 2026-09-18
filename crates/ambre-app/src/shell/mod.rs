@@ -1,9 +1,9 @@
 // ambre-app/src/shell.rs
 // ============================================================================
-// Leptos shell: `mount_shell` creates all reactive state inside the mount owner
-// (pulling `!Send` handles back out via slots) and mounts the `<Router>`, and
-// `AppRoot` is the single root view (persistent chrome + canvas + landing
-// overlay). The document binding is driven outside this tree by the per-frame
+// Leptos shell. `mount_shell` creates all reactive state inside the mount owner,
+// pulling `!Send` handles back out via slots, and mounts the `<Router>`.
+// `AppRoot` is the single root view: persistent chrome, canvas and landing
+// overlay. The document binding is driven outside this tree by the per-frame
 // route poll in `main`.
 // ============================================================================
 

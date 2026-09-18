@@ -3,15 +3,15 @@
 // Trame's command registry: one `Command` per affordance, and the pure
 // `CommandId -> AppCommand` mapping (`ambre-spec-commands.md`, UI-THREAD-019).
 //
-// Host-compiled, like `ambre-toile`'s `ui::menu`, and for the same reason: the
-// description is what every view derives from -- the context menu, the toolbar
-// and the command palette -- so a test must reach it without a browser. The
-// wasm-only half (the `MenuEntry` builders, the command store, the toast
-// mirror) stays in `chrome::commands`.
+// Host-compiled, like `ambre-toile`'s `ui::menu`, and for the same reason. The
+// description is what every view derives from: the context menu, the toolbar and
+// the command palette. A test must reach it without a browser. The wasm-only
+// half (the `MenuEntry` builders, the command store, the toast mirror) stays in
+// `chrome::commands`.
 //
 // The registry carries `IconId`, a string. `chrome::icons` resolves it to the
 // concrete `icondata::Icon`, which keeps `ambre-commands` a leaf with an empty
-// dependency table (UI-THREAD-027) and keeps Trame's icon set out of the
+// dependency table (UI-THREAD-027). It also keeps Trame's icon set out of the
 // shared crate.
 // ============================================================================
 
@@ -26,9 +26,9 @@ use crate::ui::grid::CtxScope;
 /// icon, its default chord and its category.
 ///
 /// A macro rather than 26 hand-written blocks, because `Command::title` is a
-/// plain `fn` pointer: it captures nothing, so every command needs a function
+/// plain `fn` pointer. It captures nothing, so every command needs a function
 /// item of its own. Generating them from one line each is what makes the single
-/// declaration site real -- a second label for a command cannot be written
+/// declaration site real. A second label for a command cannot be written
 /// without a second line here.
 macro_rules! commands {
     ($($name:ident = $id:expr, $label:literal, $icon:expr, $chords:expr, $category:expr;)*) => {
@@ -46,7 +46,7 @@ macro_rules! commands {
         }
 
         /// Every command Trame contributes, described once. The launcher builds
-        /// the command store and the keymap from this table, and every view of a
+        /// the command store and the keymap from this table. Every view of a
         /// command reads its label and its icon here (`UI-THREAD-019`).
         pub const COMMANDS: &[Command] = &[
             $(Command {
@@ -72,11 +72,11 @@ const INTEROP: CommandCategory = CommandCategory("interop");
 const GENERAL: CommandCategory = CommandCategory("general");
 
 // The labels are the ones the chrome shows today: the context-menu entries of
-// `chrome::commands` and the toolbar `aria-label`s of `chrome::bars`, which
+// `chrome::commands` and the toolbar `aria-label`s of `chrome::bars`. Those
 // carried "Copy", "Bold" and "Undo" twice over.
 //
-// The clipboard rows name the shared identities and the shared chords, so a
-// copy is the same command in every application and answers the legacy chord
+// The clipboard rows name the shared identities and the shared chords. A copy
+// is then the same command in every application and answers the legacy chord
 // as well (`UI-THREAD-011`). Undo and Redo take the shared chord lists, which
 // is where Ctrl+Y is declared beside Ctrl+Shift+Z.
 commands! {
@@ -130,7 +130,7 @@ pub fn icon(id: CommandId) -> Option<IconId> {
 ///
 /// Every chord comes from the table, so a chord is declared beside the command
 /// it triggers and nowhere else. The clipboard chords are the exception the
-/// shared crate holds: the table declares them so a surface announces them, and
+/// shared crate holds: the table declares them so a surface announces them.
 /// `Keymap::bind_table` leaves them out because the browser raises those events
 /// itself (`ambre-spec-commands.md`, `UI-THREAD-011`).
 ///
@@ -143,10 +143,10 @@ pub fn bind_keys(keymap: &mut Keymap) {
 // -- Context-menu layouts (`trame-context-menu`) -------------------------------
 //
 // A layout is a list of identities and separators. The label and the icon of an
-// entry come from the table above (`UI-THREAD-019`), so a layout declares an
-// order and a grouping, never a word the user reads. `chrome::commands` turns a
-// row into the `MenuEntry` the DOM menu renders; the layout stays here, where a
-// host test reaches it.
+// entry come from the table above (`UI-THREAD-019`). A layout declares an order
+// and a grouping, never a word the user reads. `chrome::commands` turns a row
+// into the `MenuEntry` the DOM menu renders; the layout stays here, where a host
+// test reaches it.
 
 /// One row of a context-menu layout: a command, or a group separator.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -175,10 +175,10 @@ const ROW_STRUCTURAL_GROUP: &[CommandId] = &[INSERT_ROW_ABOVE, INSERT_ROW_BELOW,
 
 /// Sort group, shared by the cell and the header menus (`trame-sort`).
 ///
-/// Single-column shared sort over the selection (reference column = the
-/// selection's first column; the Logic thread no-ops an empty/single-row range)
-/// and the whole-sheet sort by the active column (whole-column selection: sorts
-/// the full used range so rows stay aligned).
+/// Single-column shared sort over the selection: the reference column is the
+/// selection's first column, and the Logic thread no-ops an empty/single-row
+/// range. Also the whole-sheet sort by the active column: a whole-column
+/// selection sorts the full used range so rows stay aligned.
 const SORT_GROUP: &[CommandId] = &[
     SORT_RANGE_ASC,
     SORT_RANGE_DESC,
@@ -190,9 +190,9 @@ const SORT_GROUP: &[CommandId] = &[
 /// Clipboard group (`trame-clipboard`): cell-only, driven by the launcher.
 const CLIPBOARD_GROUP: &[CommandId] = &[CUT, COPY, PASTE];
 
-/// Merge group (`trame-cell-merges`): cell-only. Always listed; the Logic thread
-/// guards it (single-cell Merge is a no-op, a covered cell replies
-/// MergeRejected -> toast, Unmerge outside a merge is a no-op).
+/// Merge group (`trame-cell-merges`): cell-only. Always listed, and the Logic
+/// thread guards it. A single-cell Merge is a no-op, a covered cell replies
+/// MergeRejected -> toast, and Unmerge outside a merge is a no-op.
 const MERGE_GROUP: &[CommandId] = &[MERGE, UNMERGE];
 
 /// Whole-sheet sort, for the corner menu.
@@ -214,11 +214,12 @@ pub fn filter_command(filter_active: bool) -> CommandId {
 }
 
 /// The right-click context-menu layout Trame contributes, grouped and
-/// separated (`trame-context-menu`). `scope` selects it: the cell menu
-/// (clipboard + full structural + sort/filter + merge), the column- or
-/// row-header menu (axis-scoped structural + sort/filter, no clipboard/merge),
-/// or the corner menu (whole-sheet sort + filter). `filter_active` drives the
-/// dynamic [`filter_command`] (Filter by column XOR Remove filter).
+/// separated (`trame-context-menu`). `scope` selects it. The cell menu carries
+/// clipboard + full structural + sort/filter + merge. The column- or
+/// row-header menu carries axis-scoped structural + sort/filter, with no
+/// clipboard or merge. The corner menu carries whole-sheet sort + filter.
+/// `filter_active` drives the dynamic [`filter_command`] (Filter by column XOR
+/// Remove filter).
 pub fn context_layout(scope: CtxScope, filter_active: bool) -> Vec<MenuRow> {
     /// Append one group of commands to a layout under construction.
     fn group(rows: &mut Vec<MenuRow>, ids: &[CommandId]) {
@@ -270,8 +271,8 @@ pub fn context_layout(scope: CtxScope, filter_active: bool) -> Vec<MenuRow> {
 /// it), and for a command the launcher intercepts before the bus.
 pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
     // The identities are constants of a derived `PartialEq` type, so they are
-    // patterns: one decision over the identity string, and no literal repeated
-    // beside the table that declares it.
+    // patterns. That means one decision over the identity string, and no
+    // literal repeated beside the table that declares it.
     let cmd = match id {
         UNDO => TrameCommand::Undo,
         REDO => TrameCommand::Redo,
@@ -295,10 +296,10 @@ pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
         // the container's header carries the document's identity.
         SAVE_FILE => TrameCommand::ExportAmbreFile,
         // BOLD / ITALIC (style toggles), FILTER_COLUMN, FIND / REPLACE and the
-        // clipboard commands are UI-only intents the launcher intercepts:
+        // clipboard commands are UI-only intents the launcher intercepts.
         // BOLD/ITALIC become a `SetCellStyle` patch toggled against the tracked
-        // style state, FILTER_COLUMN opens the popover, FIND/REPLACE open the
-        // find/replace panel. None has a direct AppCommand here.
+        // style state, FILTER_COLUMN opens the popover, and FIND/REPLACE open
+        // the find/replace panel. None has a direct AppCommand here.
         _ => return None,
     };
     Some(AppCommand::Trame(cmd))
@@ -330,8 +331,8 @@ mod tests {
     }
 
     /// The chords the table declares must not collide: a chord resolves to at
-    /// most one command (`UI-THREAD-026`), and the keymap keeps the last seen,
-    /// so a collision here would silently drop a command's default.
+    /// most one command (`UI-THREAD-026`). The keymap keeps the last seen, so
+    /// a collision here would silently drop a command's default.
     #[test]
     fn declared_chords_are_distinct() {
         let chords: Vec<KeyBinding> = COMMANDS
@@ -359,8 +360,8 @@ mod tests {
     }
 
     /// The three clipboard intents are described under the shared identities
-    /// and announce the shared chords, the modern one and the legacy one, so a
-    /// copy is one command in every application (`UI-THREAD-011`).
+    /// and announce the shared chords, the modern one and the legacy one. A
+    /// copy is therefore one command in every application (`UI-THREAD-011`).
     #[test]
     fn the_clipboard_intents_carry_the_shared_identity() {
         for (id, chords) in [
@@ -379,8 +380,8 @@ mod tests {
     }
 
     /// The four clipboard chords reach no command: the browser raises `cut`,
-    /// `copy` and `paste` itself, on the modern and the legacy chords alike, so
-    /// a second decoder here would double-handle them (`UI-THREAD-011`).
+    /// `copy` and `paste` itself, on the modern and the legacy chords alike. A
+    /// second decoder here would double-handle them (`UI-THREAD-011`).
     #[test]
     fn the_keymap_binds_no_clipboard_chord() {
         let mut keymap = Keymap::new();
@@ -432,9 +433,9 @@ mod tests {
     }
 
     /// `DOCFILE-009`: the surface that offers the export says the file carries
-    /// no encryption of its own. The label is where it says it -- the one string
-    /// a user reads before clicking -- so the rule is asserted on the label
-    /// rather than on a comment about a tooltip.
+    /// no encryption of its own. The label is where it says it, the one string a
+    /// user reads before clicking. So the rule is asserted on the label rather
+    /// than on a comment about a tooltip.
     #[test]
     fn the_save_label_says_the_file_is_not_encrypted() {
         let label = title(SAVE_FILE, &Locale::En).expect("SAVE_FILE is declared");

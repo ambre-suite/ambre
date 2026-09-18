@@ -9,14 +9,14 @@ use super::*;
 use serde::{Deserialize, Serialize};
 
 /// A cell's whole visual style as one CRDT record. Bold/italic are not part of
-/// [`CellStyle`] (the toolbar reports them separately, via their own sets), so
-/// they ride here alongside it: the record is the *entire* style of a cell.
+/// [`CellStyle`]: the toolbar reports them separately, via their own sets. They
+/// ride here alongside it, so the record is the *entire* style of a cell.
 /// postcard-encoded into the single `cellstyle_{sheet}` register (see
-/// [`cellstyle_map_name`]). Storing the whole style in one LWW register -- rather
-/// than scattering it over ~11 per-attribute maps -- is the convergence
-/// invariant: two peers that concurrently restyle the same cell race exactly
-/// once, so the merged style is always one writer's, never a per-attribute blend
-/// (`trame-schema`, `TRAME-016`).
+/// [`cellstyle_map_name`]). Storing the whole style in one LWW register, rather
+/// than scattering it over ~11 per-attribute maps, is the convergence invariant
+/// (`trame-schema`, `TRAME-016`). Two peers that concurrently restyle the same
+/// cell race exactly once, so the merged style is always one writer's, never a
+/// per-attribute blend.
 #[derive(Serialize, Deserialize, Default)]
 struct StyleRecord {
     bold: bool,
@@ -29,9 +29,9 @@ impl TrameState {
     /// the single `cellstyle_{sheet}` register. A default (unstyled) cell is
     /// removed from the map so it never accumulates a dead entry. Does **not**
     /// commit or flush: every caller batches many cell writes (a style selection,
-    /// a paste) and commits + flushes the whole group once, so the batch is a
-    /// single undo item and a single broadcast delta. Committing here would both
-    /// split the batch into one undo item per cell and, mid-batch, strip the
+    /// a paste) and commits + flushes the whole group once. The batch is then a
+    /// single undo item and a single broadcast delta. Committing here would split
+    /// the batch into one undo item per cell. It would also, mid-batch, strip the
     /// intervening ops out of the broadcast delta (mirrors [`write_cell`]).
     pub(super) fn write_cell_style(&mut self, row: u32, col: u32) -> Option<()> {
         let pos = (row, col);
@@ -49,7 +49,7 @@ impl TrameState {
             let _ = map.delete(&key);
         } else {
             // postcard is deterministic, so both peers encode the same style to
-            // the same bytes; the register is compared by CRDT metadata, not the
+            // the same bytes. The register is compared by CRDT metadata, not the
             // payload, so the encoding only has to round-trip.
             let bytes = postcard::to_allocvec(&record).unwrap_or_default();
             let _ = map.insert(&key, bytes);
@@ -61,20 +61,20 @@ impl TrameState {
     // Rich manual formatting (`trame-cell-styles`)
     // -------------------------------------------------------------------------
 
-    /// Apply a [`StylePatch`] to every cell of the tracked selection, persist the
-    /// merged styles in the CRDT, and report the active cell's resulting style so
+    /// Apply a [`StylePatch`] to every cell of the tracked selection, then persist
+    /// the merged styles in the CRDT. Reports the active cell's resulting style so
     /// the toolbar reflects the selection. Bold/italic fold into their dedicated
     /// sets (and the `format_{sheet}` map); the rest into the cell's [`CellStyle`]
     /// (the `style_{sheet}` / colour / font containers).
     pub(super) fn set_cell_style(&mut self, patch: StylePatch) -> TrameOutcome {
         let (r1, c1, r2, c2) = self.selection;
-        // One undo group + one commit for the whole selection, so the restyle is
+        // One undo group + one commit for the whole selection. The restyle is then
         // a single undo step and a single broadcast delta (mirrors `fill_range` /
         // `SetCellsBatch`). Pre-materialize every targeted cell up front so the
-        // excluded-origin `materialize` commits happen first; interleaving them
+        // excluded-origin `materialize` commits happen first. Interleaving them
         // between the style writes would split the batch into one undo item per
         // cell. The style writes below never commit (`write_cell_style`), so they
-        // collapse into the single trailing commit, and the group is sealed by the
+        // collapse into the single trailing commit. The group is sealed by the
         // next command's fallback `group_end`.
         let _ = self.undo_manager.group_start();
         for row in r1..=r2 {
@@ -88,9 +88,10 @@ impl TrameState {
             for col in c1..=c2 {
                 let cell = (row, col);
                 // Cells covered by a merge are swallowed by their master: they
-                // render blank, so styling them is pointless and -- for `All`
-                // borders -- actively wrong (it would draw interior edges inside
-                // the merged block). The master carries the whole span's style.
+                // render blank, so styling them is pointless. For `All` borders
+                // it is actively wrong, since it would draw interior edges
+                // inside the merged block. The master carries the whole span's
+                // style.
                 if self.covered.contains(&cell) {
                     continue;
                 }
@@ -222,7 +223,7 @@ impl TrameState {
                 continue; // references a deleted row/column
             };
             let Ok(record) = postcard::from_bytes::<StyleRecord>(bytes) else {
-                // Skip rather than crash the reseed -- but say so: a cell that
+                // Skip rather than crash the reseed, but say so. A cell that
                 // silently loses its formatting is a workbook that looks intact
                 // and is not (`SCHEMA-003`).
                 self.note_undecodable(bytes);

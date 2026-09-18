@@ -35,9 +35,9 @@ use super::popovers::{
 use super::style::{StyleState, Toggles};
 
 /// The Trame format toolbar (the launcher mounts it inside the chrome `Toolbar`
-/// slot). Bold/Italic/Undo/Redo invoke their `CommandId` through `on_command`
-/// (the shared command path); the rich-formatting controls (underline, font,
-/// size, colours, alignment, number format, borders, wrap) emit a [`StylePatch`]
+/// slot). Bold/Italic/Undo/Redo invoke their `CommandId` through `on_command`,
+/// the shared command path. The rich-formatting controls (underline, font, size,
+/// colours, alignment, number format, borders, wrap) emit a [`StylePatch`]
 /// through `on_style`, routed as `SetCellStyle` (`trame-cell-styles`).
 #[component]
 pub fn FormatBar(
@@ -50,15 +50,15 @@ pub fn FormatBar(
     on_style: Callback<StylePatch>,
 ) -> impl IntoView {
     view! {
-        // Clipboard (`trame-clipboard`): the launcher drives the browser
-        // clipboard from these intents (copy/cut read the viewport cache, paste
-        // reads the OS clipboard). Ctrl+C/X/V are serviced directly by the
-        // DOM clipboard listeners, not through these buttons.
+        // Clipboard (`trame-clipboard`): the launcher drives the browser clipboard
+        // from these intents (copy/cut read the viewport cache, paste reads the OS
+        // clipboard). Ctrl+C/X/V are serviced directly by the DOM clipboard
+        // listeners, not through these buttons.
         //
-        // `mousedown` preventDefault keeps DOM focus on the canvas text pipe: a
-        // button stealing focus both broke the next grid click (needed a second
-        // click to reselect) and made `navigator.clipboard.read()` throw "Document
-        // is not focused", so the Paste button did nothing.
+        // `mousedown` preventDefault keeps DOM focus on the canvas text pipe. A
+        // button stealing focus broke the next grid click, which needed a second
+        // click to reselect. It also made `navigator.clipboard.read()` throw
+        // "Document is not focused", so the Paste button did nothing.
         <button
             aria-label=label(COPY)
             on:mousedown=move |ev| ev.prevent_default()
@@ -159,8 +159,9 @@ pub fn FormatBar(
         <span class="sep"></span>
 
         // Font family (custom popover: each family previewed in its own
-        // typeface) + size (shared `ambre_chrome::FontSizeSelect`; "Default" =
-        // the body default the cell follows when it carries no explicit size).
+        // typeface) + size (shared `ambre_chrome::FontSizeSelect`). "Default"
+        // is the body default the cell follows when it carries no explicit
+        // size.
         <FontPopover style=style on_style=on_style />
         <FontSizeSelect
             current=style.size.into()
@@ -241,7 +242,7 @@ pub fn FormatBar(
         </button>
 
         // Merge / unmerge cells: a stateful toggle. Pressed when the active cell
-        // is part of a merge, in which case clicking splits it (UNMERGE); on a
+        // is part of a merge, in which case clicking splits it (UNMERGE). On a
         // plain selection it merges the range (MERGE). The Logic thread guards
         // both (single-cell merge is a no-op, non-empty covered cell rejects).
         <button

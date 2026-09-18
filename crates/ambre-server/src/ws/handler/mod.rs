@@ -38,7 +38,7 @@ fn chan_pubsub_channel(channel_id: &ChannelId) -> String {
     format!("chan:{channel_id}")
 }
 
-/// Redis PubSub channel name for a user's personal events (e.g. a document was
+/// Redis PubSub channel name for a user's personal events (for example a document was
 /// shared with them). Every connection subscribes to its own user channel for
 /// the whole session so server-initiated, non-document-scoped pushes reach it.
 pub(crate) fn user_pubsub_channel(user_id: &UserId) -> String {
@@ -46,12 +46,12 @@ pub(crate) fn user_pubsub_channel(user_id: &UserId) -> String {
 }
 
 /// Query parameters on the WS upgrade. The browser WebSocket API forbids custom
-/// headers, so the access JWT travels in the `token` query parameter; it is
+/// headers, so the access JWT travels in the `token` query parameter. It is
 /// verified at the handshake exactly like a `Authorization: Bearer` on REST.
 ///
 /// Operational note (M15): this is a bearer credential in a URL. The server's
 /// `TraceLayer` span logs only the URI path (never the query), and the reverse
-/// proxy MUST strip `?token=` from its access logs; the short access-token TTL
+/// proxy MUST strip `?token=` from its access logs. The short access-token TTL
 /// bounds the residual exposure. See `ambre-spec-session.md`, `SRV-031`.
 #[derive(serde::Deserialize)]
 pub struct WsQuery {
@@ -67,7 +67,7 @@ pub async fn ws_upgrade(
 ) -> impl IntoResponse {
     // Bound the inbound frame so the server never buffers an oversized message
     // (axum defaults to 64 MiB). The delta ciphertext cap is enforced per-message
-    // in `handle_update`; this is the outer envelope guard, sized with headroom
+    // in `handle_update`. This is the outer envelope guard, sized with headroom
     // for the wire framing (version byte, postcard tag, public_data) around a
     // `delta_max_bytes` ciphertext.
     let max_frame = state.config.delta_max_bytes.saturating_add(64 * 1024);
@@ -77,7 +77,7 @@ pub async fn ws_upgrade(
         None => Err(AppError::Unauthorized),
     };
     // The WS upgrade always returns 101, then `handle_ws` drops the connection
-    // if auth failed -- so the error never reaches `AppError::into_response` and
+    // if auth failed. So the error never reaches `AppError::into_response`, and
     // would otherwise be invisible. Log it here, by severity: a rejected session
     // is routine (client), a server fault (Redis/DB) must be loud.
     if let Err(e) = &session {
@@ -100,8 +100,8 @@ const MEMBERSHIP_RECHECK_TTL: Duration = Duration::from_secs(30);
 
 /// Minimum interval between two `RequestMissing` replays for the same document on
 /// one connection. A single `RequestMissing{after_seq:0}` triggers a full paged
-/// replay of the document history from S3 (concurrent GET fan-out per page), so
-/// an unthrottled client could spam it and turn a trivial message into an O(n)
+/// replay of the document history from S3, a concurrent GET fan-out per page. An
+/// unthrottled client could spam it and turn a trivial message into an O(n)
 /// storage-read amplification. One replay per reconnect is the legitimate need;
 /// this cooldown bounds the abuse without touching that path.
 const REPLAY_MIN_INTERVAL: Duration = Duration::from_secs(1);
@@ -111,8 +111,8 @@ const REPLAY_MIN_INTERVAL: Duration = Duration::from_secs(1);
 struct WsConnectionState {
     user_id: UserId,
     /// Ed25519 signing key bound to this session (from the access token's `spk`
-    /// claim). Every authored `Update` MUST carry this exact key: it bounds the
-    /// per-document clock hash to one entry per member and stops a member from
+    /// claim). Every authored `Update` MUST carry this exact key. It bounds the
+    /// per-document clock hash to one entry per member, and stops a member from
     /// authoring under an arbitrary self-generated key (impersonation).
     signing_pubkey: ambre_core::PublicKey,
     doc_subscriptions: HashSet<DocumentId>,
@@ -123,7 +123,7 @@ struct WsConnectionState {
     /// (`owner`/`editor`, not `viewer`). Captured at `Subscribe` and refreshed on
     /// the H8 membership recheck, so `handle_update` can reject a read-only
     /// member's delta without a per-message DB hit. The REST write paths gate on
-    /// the same role set; without this the hot WS write path would let a `viewer`
+    /// the same role set. Without this the hot WS write path would let a `viewer`
     /// author sequenced, persisted, broadcast updates.
     doc_write_allowed: HashMap<DocumentId, bool>,
     /// Last instant a `RequestMissing` replay was served per document, enforcing
@@ -131,7 +131,7 @@ struct WsConnectionState {
     last_replay_at: HashMap<DocumentId, Instant>,
     channel_subscriptions: HashSet<ChannelId>,
     /// Per-connection inbound-message rate limiter. The WS upgrade is rate-limited
-    /// once, but a long-lived socket is otherwise unbounded: each `Update` drives
+    /// once, but a long-lived socket is otherwise unbounded. Each `Update` drives
     /// a Postgres + Redis + S3 write and a fan-out, so an authorized flooder is a
     /// storage/cost amplification. One token is spent per inbound message; when
     /// the bucket is empty the message is rejected before any handler runs.
@@ -147,10 +147,10 @@ async fn handle_ws(
         Ok(s) => s,
         Err(_) => {
             // Tell the client explicitly that the upgrade was refused for auth
-            // reasons (expired/rotated JWT) with an application close code, so it
-            // can refresh its token and reconnect silently instead of treating it
-            // as a generic network drop. 4401 = our "unauthorized" (4000-4999 is
-            // the reserved application range).
+            // reasons (expired/rotated JWT) with an application close code. It
+            // can then refresh its token and reconnect silently, instead of
+            // treating it as a generic network drop. 4401 = our "unauthorized"
+            // (4000-4999 is the reserved application range).
             let mut socket = socket;
             let _ = socket
                 .send(Message::Close(Some(axum::extract::ws::CloseFrame {
@@ -191,15 +191,15 @@ async fn handle_ws(
     // Live broadcasts (a peer's update / ephemeral / membership change) are
     // published to Redis PubSub by the writer's connection. THIS connection
     // registers its outbound queue with the process-wide hub for every channel
-    // it watches; the hub holds the single Redis subscriber per channel and fans
-    // each message in-process to all registered connections. (The writer's own
-    // broadcast is echoed back to it too; a client's CRDT import of its own ops
-    // is an idempotent no-op.)
+    // it watches. The hub holds the single Redis subscriber per channel, and
+    // fans each message in-process to all registered connections. (The writer's
+    // own broadcast is echoed back to it too; a client's CRDT import of its own
+    // ops is an idempotent no-op.)
     let pubsub = state.pubsub.clone();
 
     // Personal channel: subscribe for the whole session so server-initiated
-    // pushes not tied to an already-open document (e.g. `DocumentShared` on a
-    // fresh invite) reach this connection.
+    // pushes reach this connection even when no document is open. A
+    // `DocumentShared` on a fresh invite is one.
     pubsub
         .subscribe(
             user_pubsub_channel(&user_id),
@@ -224,11 +224,11 @@ async fn handle_ws(
         };
 
         // Per-connection message rate limit (#1). Spend one token per inbound
-        // message before dispatching: an open socket is otherwise unbounded, and
-        // an `Update`/`Ephemeral` flood turns into a Postgres + Redis + S3 + fan-out
+        // message before dispatching. An open socket is otherwise unbounded, and an
+        // `Update`/`Ephemeral` flood turns into a Postgres + Redis + S3 + fan-out
         // amplification. When the bucket is empty we reject with 429 and drop the
-        // message before any handler (and any durable write) runs. The token
-        // costs no Redis round-trip; it lives entirely on `conn`.
+        // message before any handler (and any durable write) runs. The token costs
+        // no Redis round-trip; it lives entirely on `conn`.
         if !conn.msg_bucket.try_consume(Instant::now()) {
             let err = encode_server_msg(&WsServerMsg::Error {
                 code: 429,
@@ -255,8 +255,8 @@ async fn handle_ws(
             }
             WsClientMsg::Unsubscribe { document_id } => {
                 // Announce the departure to the peers still on the document
-                // before the subscription goes (`PRESENCE-014`), so their live
-                // set drops this peer at once rather than on a timeout.
+                // before the subscription goes (`PRESENCE-014`). Their live
+                // set then drops this peer at once, rather than on a timeout.
                 if conn.doc_subscriptions.contains(&document_id) {
                     announce_departure(&state, &document_id, &conn.signing_pubkey).await;
                 }
@@ -329,7 +329,7 @@ async fn handle_ws(
     // drops its Redis subscription when the last interested connection leaves).
     for doc_id in &conn.doc_subscriptions {
         // A closed connection is a departure from every document it watched
-        // (`PRESENCE-014`): the peers still there hear it now instead of
+        // (`PRESENCE-014`). The peers still there hear it now, instead of
         // waiting out the presence field's TTL.
         announce_departure(&state, doc_id, &conn.signing_pubkey).await;
         pubsub

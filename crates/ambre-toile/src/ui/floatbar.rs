@@ -1,22 +1,22 @@
 // ambre-toile/src/ui/floatbar.rs
 // ============================================================================
-// Command surface + placement for the content-anchored floating selection
-// toolbar (`toile-styles`). The host-visible half: the pure model the
-// canvas view publishes to the DOM bar each frame -- the bar's screen anchor
-// (recomputed from the `ViewportTransform`, so it follows the selection as the
-// board pans / zooms) plus the applicability flags that gate its buttons.
+// Command surface + placement for the content-anchored floating selection toolbar
+// (`toile-styles`). The host-visible half: the pure model the canvas view publishes
+// to the DOM bar each frame. That is the bar's screen anchor plus the applicability
+// flags that gate its buttons. The anchor is recomputed from the
+// `ViewportTransform`, so it follows the selection as the board pans / zooms.
 //
 // Kept in the always-compiled `ui` module (not the wasm-only `chrome`) so the
-// geometry + flags are host-unit-tested, exactly like `ui::menu`,
-// `ui::style` and `ui::status`. The wasm-only Leptos component that renders it
-// (`chrome::SelectionToolbar`) consumes this model; its command buttons route
-// through the shared `on_command` path with `ui::menu` `CommandId`s, so the bar
-// is a strict subset of the context menu and the two never diverge (`toile-menus`).
+// geometry + flags are host-unit-tested, exactly like `ui::menu`, `ui::style` and
+// `ui::status`. The wasm-only Leptos component that renders it
+// (`chrome::SelectionToolbar`) consumes this model. Its command buttons route
+// through the shared `on_command` path with `ui::menu` `CommandId`s. So the bar is
+// a strict subset of the context menu and the two never diverge (`toile-menus`).
 //
-// The bar's transient hiding (during a move/resize/rotate gesture, a pan, an
-// open inline editor, or an empty selection) is decided by the view at publish
-// time (`None` == hidden), not here; this module only turns a resolved,
-// visible selection into an anchored [`FloatBar`].
+// The bar's transient hiding is decided by the view at publish time (`None` ==
+// hidden), not here. It hides during a move/resize/rotate gesture, a pan, an open
+// inline editor, or an empty selection. This module only turns a resolved, visible
+// selection into an anchored [`FloatBar`].
 // ============================================================================
 
 use ambre_bus::app::toile::{
@@ -26,12 +26,12 @@ use ambre_draw::{Point, Rect};
 
 use super::viewport::ViewportTransform;
 
-/// The floating selection toolbar's published model (`toile-styles`).
-/// `x` / `y` are the client (viewport) CSS-pixel position of the selection's
-/// top-edge midpoint -- the bar is `position: fixed` there and lifted above the
-/// selection with a CSS gap ("air", like Miro). The flags gate the applicable
-/// buttons, mirroring the context-menu scope (`ui::menu::CtxScope`); `fill` is
-/// the selection's common fill for the quick-colour swatch (`None` when unset or
+/// The floating selection toolbar's published model (`toile-styles`). `x` / `y`
+/// are the client (viewport) CSS-pixel position of the selection's top-edge
+/// midpoint. The bar is `position: fixed` there and lifted above the selection
+/// with a CSS gap ("air", like Miro). The flags gate the applicable buttons,
+/// mirroring the context-menu scope (`ui::menu::CtxScope`). `fill` is the
+/// selection's common fill for the quick-colour swatch (`None` when unset or
 /// mixed). Published only for a resolved, visible selection (`None` == hidden).
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct FloatBar {
@@ -52,15 +52,16 @@ pub struct FloatBar {
     pub fill: Option<u32>,
 }
 
-/// A single-field style edit the floating bar emits back (`toile-styles`).
-/// Unlike the inspector's `restyle` (which carries a whole `ElementStyle` built on
-/// an accumulating working copy), each bar control emits exactly ONE changed field;
-/// the view re-derives the selection's common style LIVE at apply time and sets
-/// only that field, so successive quick edits never clobber one another (a stale
-/// working copy hazard). The view folds the result into a whole-register
-/// `RestyleElements` over the live selection (`TOILE-018`), attaching the ids the DOM bar
-/// cannot name. Colours are packed ARGB `Option<u32>` (`None` == unset / no fill);
-/// the font family is the picker label (`None` == the "Default" reset).
+/// A single-field style edit the floating bar emits back (`toile-styles`). Unlike the
+/// inspector's `restyle`, which carries a whole `ElementStyle` built on an accumulating
+/// working copy, each bar control emits exactly ONE changed field. The view re-derives
+/// the selection's common style LIVE at apply time and sets only that field. Successive
+/// quick edits then never clobber one another (a stale working copy hazard). The view
+/// folds the result into a whole-register `RestyleElements` over the live selection
+/// (`TOILE-018`), attaching the ids the DOM bar cannot name.
+///
+/// Colours are packed ARGB `Option<u32>` (`None` == unset / no fill). The font
+/// family is the picker label (`None` == the "Default" reset).
 #[derive(Clone, PartialEq, Debug)]
 pub enum StyleEdit {
     /// Fill colour (`None` == no fill).
@@ -103,11 +104,11 @@ impl StyleEdit {
     }
 }
 
-/// The client CSS-pixel anchor for the bar: the selection's top-edge midpoint,
-/// mapped through the camera (physical screen px), converted to CSS px by the
-/// device pixel ratio, then shifted by the canvas's client offset so the
-/// `position: fixed` bar lands in viewport coordinates. Pure; `dpr` is 1.0 and
-/// `offset` is `(0, 0)` in host tests.
+/// The client CSS-pixel anchor for the bar: the selection's top-edge midpoint.
+/// It is mapped through the camera (physical screen px), then converted to CSS
+/// px by the device pixel ratio. A final shift by the canvas's client offset
+/// lands the `position: fixed` bar in viewport coordinates. Pure; `dpr` is 1.0
+/// and `offset` is `(0, 0)` in host tests.
 pub fn top_center_anchor(
     world_bounds: Rect,
     cam: &ViewportTransform,
@@ -122,9 +123,9 @@ pub fn top_center_anchor(
 /// Build the floating-bar model from the UI selection and the culled viewport, or
 /// `None` when nothing selectable resolves (the bar hides). Pure: reads only the
 /// `DisplayViewport`, the selection ids and the camera. The union of the selected
-/// elements' bounds anchors the bar; the per-element kind / lock state set the
-/// button flags; the common fill seeds the quick-colour swatch. Connectors are not
-/// addressed by the bar, so only `DisplayElement`s contribute.
+/// elements' bounds anchors the bar. The per-element kind / lock state set the
+/// button flags, and the common fill seeds the quick-colour swatch. Connectors are
+/// not addressed by the bar, so only `DisplayElement`s contribute.
 pub fn build_floatbar(
     selection: &[ElementId],
     display: &DisplayViewport,
@@ -407,9 +408,9 @@ mod tests {
         assert_eq!(bar.fill, Some(0xff11_2233));
     }
 
-    // A `StyleEdit` overwrites exactly its own field and nothing else -- the
-    // no-clobber property the floating bar relies on (each control emits one field,
-    // applied on the live common style).
+    // A `StyleEdit` overwrites exactly its own field and nothing else. That is the
+    // no-clobber property the floating bar relies on: each control emits one field,
+    // applied on the live common style.
     #[test]
     fn style_edit_touches_only_its_field() {
         let base = ElementStyle {

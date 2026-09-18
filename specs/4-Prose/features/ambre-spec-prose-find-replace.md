@@ -19,7 +19,7 @@ is one undo item. Prose's own turn is what a document match is, and how a replac
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-148` | `OBS` | The matches of a search MUST be highlighted for the peer that started it, and MUST NOT be drawn for any other peer. | this spec section 5 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-148` | `OBS` | The matches of a search MUST be highlighted for the peer that started it and for no other peer. | this spec section 5 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-033` | `INV` | A search MUST match text in the body blocks and nothing else: comment and reply bodies, suggestion metadata, footnote bodies and the text of headers and footers MUST NOT be matched. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-034` | `INV` | A match MUST lie inside one block; a query spanning a block boundary MUST NOT match. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-035` | `INV` | Matches MUST NOT overlap: after one match, the search MUST resume past its end. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -66,16 +66,15 @@ walk may not disturb is Prose's.
 
 * **Budget.** the search over the document and the replace-all, two rows of
   `ambre-spec-budgets.md section 1`.
-* **Boundary.** none of its own: a search reads the document in the Logic thread and writes
-  nothing, and a replacement is an ordinary document write sealed by `ZK-001`.
-* **Verification.** 14 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. The shared
-  rules and their coverage are `ambre-spec-find.md`; what is counted here is what a Prose match is,
+* **Boundary.** none of its own. A search reads the document in the Logic thread and writes
+  nothing. A replacement is an ordinary document write sealed by `ZK-001`.
+* **Verification.** 14 `unimplemented`, nothing else, since `crates/ambre-prose` is a `lib.rs`; the
+  shared rules and their coverage are `ambre-spec-find.md`. Counted here is what a Prose match is
   and what each gesture may not disturb. `PROSE-FEAT-035` and `PROSE-FEAT-156` are the two with an
-  oracle: matching is a pure function of one string and one query, and a replace-all is checked
-  against the list it was handed -- every reported range carries the replacement and no character
-  outside them moved, which is the pair that fails when a replacement shifted a later position. A
-  replace-all is not idempotent and no row claims it is: a replacement that contains the query
-  leaves the query matching.
+  oracle: matching is a pure function of one string and one query. A replace-all is checked
+  against the list it was handed: every reported range carries the replacement, and nothing
+  outside them moved. A replace-all is not idempotent, no row claims it is, and the pair fails
+  when a replacement shifted a later position.
 
 ---
 
@@ -125,13 +124,13 @@ pub fn replace_all(doc: &LoroDoc, tree: &LoroMovableTree, query: &FindQuery,
 
 * **What is searched** -- the body blocks of the movable tree, in document order, and nothing else.
   Comment and reply bodies, suggestion metadata, footnote bodies and header and footer text live in
-  their own stores, each reached its own way, and are out of scope by decision (`PROSE-FEAT-033`).
-* **Why a match stays inside a block** -- blocks are not concatenated for the search, so a match is
-  one range inside one block and needs no second identifier to be addressed (`PROSE-FEAT-034`); a
+  their own stores, each reached its own way. All are out of scope by decision (`PROSE-FEAT-033`).
+* **Why a match stays inside a block** -- blocks are not concatenated for the search. A match is
+  one range inside one block and needs no second identifier to be addressed (`PROSE-FEAT-034`). A
   query that spans a paragraph break therefore finds nothing.
 * **Why replacements run backwards** -- each replacement shifts every position after it in its block.
   Applying them from the end of the document towards the start leaves every position not yet applied
-  still valid, so the whole set is computed once and sent as one run (`PROSE-FEAT-036`), which is also
+  still valid. The whole set is computed once and sent as one run (`PROSE-FEAT-036`), which is also
   what makes it one undo item (`ambre-spec-find.md`, `FIND-006`).
 
 **The commands and the events** (`ambre-bus`, the shared shape is `ambre-spec-find.md section 3`,
@@ -183,9 +182,9 @@ whole-word and case fold -- are in `ambre-spec-find.md section 6`. Prose's own:
   text may itself match the query, and nothing says whether the walk can loop on it.
 * **Nothing rules on a selection that seeds the query across a block boundary.** Section 4 opens
   the search with the selection as the initial query, and `PROSE-FEAT-034` says a query spanning a
-  block boundary never matches, so selecting two paragraphs and pressing the find chord opens a
+  block boundary never matches. Selecting two paragraphs and pressing the find chord opens a
   search that cannot hit. No rule says whether the seed is truncated to the first block, dropped,
   or taken whole.
-* **Regular-expression search is a switch with no design.** The query carries the flag, no rule
-  covers what a pattern may express, what it costs or what a malformed one reports, and the Story
+* **Regular-expression search is a switch with no design.** The query carries the flag. No rule
+  covers what a pattern may express, what it costs or what a malformed one reports. The Story
   that would build it is "The later writing set" (`ambre-roadmap.md` POST-V1).

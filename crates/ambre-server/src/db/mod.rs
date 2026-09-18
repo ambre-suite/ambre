@@ -173,7 +173,7 @@ mod tests {
     }
 
     /// F1: the purge horizon is the MIN `covered_seq` across the RETAINED
-    /// snapshots, so an update still needed by the oldest retained snapshot for
+    /// snapshots. An update still needed by the oldest retained snapshot for
     /// incremental catch-up is never deleted.
     #[sqlx::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]

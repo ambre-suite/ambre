@@ -16,6 +16,11 @@ pub const NONCE_LEN: usize = 24;
 
 /// Encrypts `plaintext` under `key` with the given `aad`, returning a freshly
 /// generated nonce and the ciphertext (Poly1305 tag appended).
+///
+/// # Errors
+///
+/// [`CryptoError::EncryptionFailed`] when `plaintext` exceeds the size limit of
+/// XChaCha20-Poly1305. The cipher raises nothing else.
 pub fn seal(
     plaintext: &[u8],
     aad: &[u8],
@@ -25,6 +30,11 @@ pub fn seal(
 }
 
 /// Decrypts `ciphertext` under `key`, verifying the Poly1305 tag against `aad`.
+///
+/// # Errors
+///
+/// [`CryptoError::AeadFailed`] when the tag does not verify: a wrong key,
+/// wrong `aad`, or a modified ciphertext. Poly1305 cannot tell a caller which.
 pub fn open(
     nonce: &[u8; NONCE_LEN],
     ciphertext: &[u8],
@@ -39,6 +49,11 @@ pub fn open(
 /// A separate entry point from [`seal`], not a generic one: the two keys are
 /// not interchangeable (`ambre-spec-docfile.md section 5`). Two functions with
 /// two key types turn a swap into a compile error rather than a review note.
+///
+/// # Errors
+///
+/// [`CryptoError::EncryptionFailed`] when `plaintext` exceeds the size limit of
+/// XChaCha20-Poly1305.
 pub fn seal_file(
     plaintext: &[u8],
     aad: &[u8],
@@ -52,6 +67,10 @@ pub fn seal_file(
 /// [`CryptoError::AeadFailed`] here means a wrong passphrase **or** a modified
 /// file. Poly1305 cannot tell a caller which, and a message that claims one is
 /// guessing.
+///
+/// # Errors
+///
+/// [`CryptoError::AeadFailed`], for the reason the paragraph above states.
 pub fn open_file(
     nonce: &[u8; NONCE_LEN],
     ciphertext: &[u8],

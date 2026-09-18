@@ -1,18 +1,17 @@
 // ambre-trame/src/chrome/mod.rs
 // ============================================================================
-// Trame-SPECIFIC chrome (ambre-spec-architecture.md: per-app chrome lives in
-// the app crate, NOT the launcher). Built on the app-agnostic `ambre-chrome`
-// toolkit, this module owns everything the launcher used to hard-code about
-// Trame:
+// Trame-SPECIFIC chrome (ambre-spec-architecture.md: per-app chrome lives in the
+// app crate, NOT the launcher). Built on the app-agnostic `ambre-chrome` toolkit,
+// this module owns everything the launcher used to hard-code about Trame:
 //
 //   - the format `CommandId`s (Bold/Italic) and their keybindings;
 //   - the CommandId -> `AppCommand` mapping (UI affordance -> IPC payload);
 //   - the inbound `UiEvent` -> command-store mirror (authoritative toggle state);
 //   - the toolbar markup and the status label.
 //
-// The launcher (`ambre-app`) stays app-agnostic: it owns the generic AppShell,
-// the `CommandStates` store, and the per-frame relay, and reaches into this
-// module for the Trame pieces (`COMMANDS`, `bind_keys`, `command_to_app`,
+// The launcher (`ambre-app`) stays app-agnostic. It owns the generic AppShell,
+// the `CommandStates` store, and the per-frame relay. It reaches into this module
+// for the Trame pieces (`COMMANDS`, `bind_keys`, `command_to_app`,
 // `mirror_event`, the `<FormatBar>` / `<SelectionBar>` components, ...).
 //
 // Wasm-only, like the rest of the chrome stack (leptos CSR + DOM).

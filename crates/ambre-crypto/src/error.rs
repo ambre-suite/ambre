@@ -1,6 +1,6 @@
 //! Error types for cryptographic operations.
 //!
-//! Variants are intentionally coarse and free of sensitive detail: a caller on
+//! Variants are intentionally coarse and free of sensitive detail. A caller on
 //! the Sync thread maps any failure to a DROP + `SyncWarning`, never surfacing
 //! which check failed to a potential attacker.
 

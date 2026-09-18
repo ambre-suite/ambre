@@ -7,7 +7,7 @@ misreads a formatted number (section 5).
 > A label wider than its column runs over the empty cells beside it. Put a value in the next cell
 > and the label stops at its own edge, because something is now there to hide.
 
-Where a cell's text lands inside its box: which way it is aligned, whether it breaks into lines,
+Where a cell's text lands inside its box. Which way it is aligned, whether it breaks into lines,
 how far it may run past its column, and where it is cut. All of it is UI-thread work on the
 `DisplayViewport` alone -- no document, no round trip (`TRAME-UI-001`).
 
@@ -20,15 +20,15 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-093` | `OBS` | A cell the user did not align MUST put a number right and anything else left. | this spec section 3 | none | fails -- on three formats. `render::content::cell_alignment` parses the text it is handed, and that text is already formatted (`TRAME-157`), so a currency, a percentage and a fraction stop parsing as numbers and align left | unverified |
-| `TRAME-UI-094` | `OBS` | The alignment control MUST resolve an automatic alignment the way the renderer does. | this spec section 3 | none | fails -- the two copies of the parse read two different texts, `cell_alignment` the formatted text and `style_state_event` the computed value, so a percentage cell reports numeric to the toolbar and draws left in the grid | unverified |
+| `TRAME-UI-093` | `OBS` | A cell the user did not align MUST put a number right and anything else left. | this spec section 3 | none | fails -- on three formats. `render::content::cell_alignment` parses the text it is handed, and that text is already formatted (`TRAME-157`), so a currency, a percentage and a fraction stop parsing as numbers and align left; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-UI-094` | `OBS` | The alignment control MUST resolve an automatic alignment the way the renderer does. | this spec section 3 | none | fails -- the two copies of the parse read two different texts, `cell_alignment` the formatted text and `style_state_event` the computed value, so a percentage cell reports numeric to the toolbar and draws left in the grid; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-UI-095` | `OBS` | A cell that does not wrap MUST spill only over neighbours that are empty. | this spec section 3 | `ambre_trame::render::tests::spill_width_stops_at_first_non_empty_neighbour` -- over an occupied neighbour, an immediate one and the grid edge | none | verified |
-| `TRAME-UI-096` | `OBS` | A spill MUST run in the direction the text is aligned in. | this spec section 3 | none | unheld -- the three branches, left spills right, right spills left and centred both ways, are in `draw_cells_on`, and no test enters any of them | unverified |
-| `TRAME-UI-097` | `OBS` | A cell that wraps MUST stay inside its own box. | this spec section 3 | none | unheld -- wrap excludes the cell from the spill branch and clips it to its own rect. The one test that draws a cell draws one that fits, so it reaches neither half | unverified |
-| `TRAME-UI-098` | `OBS` | Text taller than its row MUST be cut, never painted over the row below. | this spec section 3 | none | unheld -- the test this row once cited asserts that the clip stack unwinds, and its cell fits its box, so no clip is pushed and the assertion holds over an empty stack | unverified |
-| `TRAME-UI-099` | `OBS` | A vertical alignment MUST NOT lift text above the top of its cell. | this spec section 3 | none | unheld -- `cell_v_offset` clamps the offset at zero, and no test passes it text taller than the box, though it is a free function the render tier already reaches, like `spill_width` | unverified |
-| `TRAME-UI-100` | `OBS` | Glyphs MUST scale with the zoom, like the row heights and column widths. | this spec section 3 | none | unheld -- the font size is multiplied by the layout zoom in `draw_cells_on`, and every render fixture builds a layout at zoom one | unverified |
-| `TRAME-UI-139` | `OBS` | A fill and a border MUST be cut at the cell's own edge, whatever its text does. | this spec section 3 | none | unheld -- the fill takes the cell rect and is emitted before the spill clip is pushed, so only glyphs cross a column edge, and the one fill test counts the fills and reads neither rect | unverified |
+| `TRAME-UI-096` | `OBS` | A spill MUST run in the direction the text is aligned in. | this spec section 3 | none | unheld -- the three branches, left spills right, right spills left and centred both ways, are in `draw_cells_on`, and no test enters any of them; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-097` | `OBS` | A cell that wraps MUST stay inside its own box. | this spec section 3 | none | unheld -- wrap excludes the cell from the spill branch and clips it to its own rect. The one test that draws a cell draws one that fits, so it reaches neither half; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-098` | `OBS` | Text taller than its row MUST be cut, never painted over the row below. | this spec section 3 | none | unheld -- the test this row once cited asserts that the clip stack unwinds, and its cell fits its box, so no clip is pushed and the assertion holds over an empty stack; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-099` | `OBS` | A vertical alignment MUST NOT lift text above the top of its cell. | this spec section 3 | none | unheld -- `cell_v_offset` clamps the offset at zero, and no test passes it text taller than the box, though it is a free function the render tier already reaches, like `spill_width`; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-100` | `OBS` | Glyphs MUST scale with the zoom, like the row heights and column widths. | this spec section 3 | none | unheld -- the font size is multiplied by the layout zoom in `draw_cells_on`, and every render fixture builds a layout at zoom one; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-139` | `OBS` | A fill and a border MUST be cut at the cell's own edge, whatever its text does. | this spec section 3 | none | unheld -- the fill takes the cell rect and is emitted before the spill clip is pushed, so only glyphs cross a column edge, and the one fill test counts the fills and reads neither rect; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-020` | `INV` | A sparkline MUST be derived on the UI thread from the viewport data alone, with no round trip to the Logic thread. | this spec section 5 | not built | unbuilt -- lands with the `Post-V1 surface` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-UI-021` | `OBS` | A chart MUST be clipped to the cell range that hosts it. | this spec section 5 | not built | unbuilt -- lands with the `Post-V1 surface` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-UI-140` | `OBS` | A chart MUST NOT paint outside the grid. | this spec section 5 | not built | unbuilt -- lands with the `Post-V1 surface` Story (`ambre-roadmap.md` post-V1) | unimplemented |
@@ -38,15 +38,12 @@ status values are normative in `ambre-spec-template.md`.
   measures it.
 * **Boundary.** none: the renderer paints view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path.
-* **Verification.** 1 `verified`, 8 `unverified`, 3 `unimplemented`. The one that holds is the one
-  extracted into a pure function of a layout and an emptiness predicate; everything else lives
-  inside `draw_cells_on`, which the render tests already reach. Two rows changed hands, both
-  downward. `TRAME-UI-093` and `TRAME-UI-094` were untested rules and are rules the code answers
-  with something else: the renderer resolves the automatic alignment on the **formatted** text and
-  the toolbar on the **computed** value, so a percentage cell disagrees with itself -- section 5.
-  `TRAME-UI-098` was `partial` and is `none`: the test it cited draws a cell that fits, which
-  pushes no clip at all. The two new rows are a claim section 3 made and no row carried, and the
-  second half of the chart rule.
+* **Verification.** 1 `verified`, 2 `failing`, 6 `untested`, 3 `unimplemented`. What holds is the
+  one rule extracted into a pure function of a layout and an emptiness predicate. What is loose is
+  everything else, inside `draw_cells_on`, where the render tests reach the drawing and read none of
+  its decisions back. The clip a too-wide text pushes is among them. The two alignment rows fail:
+  the renderer resolves the automatic alignment on the **formatted** text and the toolbar on the
+  **computed** value (section 5).
 
 ---
 
@@ -78,10 +75,10 @@ Both the screen cache and a paginated surface map onto this type, so the drawing
 on neither. The same code path therefore serves the canvas and, in time, a printed page.
 
 **The drawing module** is `crates/ambre-trame/src/render/`, inside the application crate rather than
-a UI crate of its own, so the Logic thread reaches the same walk for a PDF page. Every entry point
-is generic over the `DrawSurface` of `ambre-spec-drawing-surface.md section 2`, and the caller chooses the
-implementation: the UI thread hands it a `WgpuSurface` in its frame, the PDF path a `KrillaSurface`
-(`ambre-spec-pdf-export.md`, `PDF-001`).
+a UI crate of its own. The Logic thread therefore reaches the same walk for a PDF page. Every entry
+point is generic over the `DrawSurface` of `ambre-spec-drawing-surface.md section 2`, and the caller
+chooses the implementation. The UI thread hands it a `WgpuSurface` in its frame, the PDF path a
+`KrillaSurface` (`ambre-spec-pdf-export.md`, `PDF-001`).
 
 | Entry point | Draws |
 |---|---|
@@ -135,7 +132,7 @@ A fill and a border are always cut to the owning cell: only glyphs ever cross a 
 (`TRAME-UI-139`).
 
 **Zoom** scales the glyph size the same way the per-axis metrics scale the column widths and row
-heights, so a zoomed grid is the same layout, not a different one.
+heights. A zoomed grid is the same layout, not a different one.
 
 ---
 
@@ -166,15 +163,16 @@ heights, so a zoomed grid is the same layout, not a different one.
   (`features/ambre-spec-trame-number-formats.md section 5`).
 * **The automatic alignment reads the formatted text, not the value** (`TRAME-UI-093`,
   `TRAME-UI-094`). The Logic thread formats a cell before it packs it, so the renderer parses
-  `314.2%`, `3.14 EUR` or `3 2/16` and finds no number, and a value the user reads as a number is
-  drawn left. The toolbar's copy of the parse reads the computed value instead and reports the same
-  cell as numeric, so the alignment control shows right while the grid draws left. One parse read
-  by both sides, on one text, is the fix; which text is the open question, and
+  `314.2%`, `3.14 EUR` or `3 2/16` and finds no number. A value the user reads as a number is drawn
+  left. The toolbar's copy of the parse reads the computed value instead and reports the same cell
+  as numeric. The alignment control shows right while the grid draws left.
+
+  One parse read by both sides, on one text, is the fix. Which text is the open question, and
   `features/ambre-spec-trame-number-formats.md section 5` states the same split from the format's
   side.
-* **A merged block never spills.** `draw_merges_on` clips every master to its span rect, so a label
+* **A merged block never spills.** `draw_merges_on` clips every master to its span rect. A label
   wider than its merge is cut where a label wider than its column would run on. Nothing here or in
   `features/ambre-spec-trame-cell-merges.md` says whether that is the intent.
 * **The style surface has no test.** Nine rows above say `none`, and all nine are reachable from the
-  render tests that already exist -- they build a font context, a recording surface and a grid
-  layout, and they only ever draw one plain cell that fits its box at zoom one.
+  render tests that already exist. Those tests build a font context, a recording surface and a grid
+  layout. They only ever draw one plain cell that fits its box at zoom one.

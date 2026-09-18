@@ -1,8 +1,8 @@
 //! Align and distribute a selection (`toile-elements section 1.7`).
 //!
 //! This module is **pure and deterministic**: it takes the boxes of the selected
-//! nodes, in selection order, and returns one translation per box. It never
-//! reads the document and never writes it -- the handler
+//! nodes, in selection order, and returns one translation per box. It never reads
+//! the document and never writes it. The handler
 //! (`state::elements::align_elements`) owns the boxes it feeds in and the
 //! registers it writes, so the geometry can be tested without a CRDT.
 //!
@@ -13,16 +13,17 @@
 //!   selected, so the selection as a whole never moves.
 //! - An **alignment** moves on one axis and leaves the other untouched.
 //! - A **distribution** pins the two extreme boxes and spreads the ones between
-//!   them so the gaps between consecutive boxes are equal (edge to edge, not
-//!   centre to centre -- see `toile-elements section 5`). The extremes are the
-//!   boxes with the smallest and largest near edge, in the order fed in.
+//!   them so the gaps between consecutive boxes are equal. That is edge to
+//!   edge, not centre to centre (see `toile-elements section 5`). The extremes
+//!   are the boxes with the smallest and largest near edge, in the order fed
+//!   in.
 //! - **Fewer than two boxes** align to nothing, and **fewer than three** have
-//!   nothing to distribute: both answer all-zero translations, and the handler
+//!   nothing to distribute. Both answer all-zero translations, and the handler
 //!   reads that as "write nothing".
-//! - A selection whose boxes **overlap** (their extents exceed the span) yields a
-//!   negative gap rather than pushing an extreme: pinning the extremes is what
-//!   makes the operation idempotent, and a user who overlaps three shapes gets
-//!   an even overlap.
+//! - A selection whose boxes **overlap** (their extents exceed the span) yields
+//!   a negative gap rather than pushing an extreme. Pinning the extremes is
+//!   what makes the operation idempotent, and a user who overlaps three shapes
+//!   gets an even overlap.
 
 use kurbo::{Rect, Vec2};
 
@@ -54,7 +55,7 @@ pub fn align_deltas(boxes: &[Rect], op: AlignOp) -> Vec<Vec2> {
     }
 }
 
-/// The axis an operation works on, as the pair of accessors it needs: the near
+/// The axis an operation works on, as the accessors it needs. That is the near
 /// edge of a box, its extent along the axis, and the translation a scalar makes.
 struct Axis {
     near: fn(&Rect) -> f64,
@@ -87,9 +88,9 @@ fn distribute(boxes: &[Rect], union: Rect, axis: Axis) -> Vec<Vec2> {
     if boxes.len() < 3 {
         return vec![Vec2::ZERO; boxes.len()];
     }
-    // Selection order is not paint order and not screen order: sort by near
-    // edge so the walk lays the boxes out left to right (top to bottom), and
-    // keep the original index to answer in the order fed in.
+    // Selection order is not paint order and not screen order. Sort by near
+    // edge so the walk lays the boxes out left to right (top to bottom).
+    // Keep the original index to answer in the order fed in.
     let mut order: Vec<usize> = (0..boxes.len()).collect();
     order.sort_by(|&a, &b| {
         (axis.near)(&boxes[a])

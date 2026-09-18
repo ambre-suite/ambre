@@ -1,13 +1,13 @@
-//! Relative-reference shifting for clipboard paste (`trame-clipboard`).
-//! When a range is copied and pasted elsewhere, every reference in a
-//! pasted formula moves by the same offset as the cell that carries it -- the
-//! standard "relative reference" behaviour. AMBRE has no absolute (`$A$1`)
-//! syntax, so every cell/range reference is relative and shifts.
+//! Relative-reference shifting for clipboard paste (`trame-clipboard`). When a
+//! range is copied and pasted elsewhere, every reference in a pasted formula
+//! moves by the same offset as the carrying cell. That is the standard
+//! "relative reference" behaviour. AMBRE has no absolute (`$A$1`) syntax, so
+//! every cell/range reference is relative and shifts.
 //!
 //! The shift is a parse -> rewrite -> render round-trip over the stored formula
-//! text: [`parse_formula`] yields the AST, [`shift_expr`] offsets every
-//! [`CellRef`]/[`RangeDep`] (a reference driven off the grid resolves to
-//! `#REF!`), and [`render`] serialises back to canonical formula text. The text
+//! text. [`parse_formula`] yields the AST, and [`shift_expr`] offsets every
+//! [`CellRef`]/[`RangeDep`]. A reference driven off the grid resolves to
+//! `#REF!`, and [`render`] serialises back to canonical formula text. The text
 //! shifted here is the *display* form the UI cached; the Logic thread
 //! re-canonicalises it on write, so cross-sheet qualifiers survive.
 
@@ -70,9 +70,9 @@ fn shift_range(mut r: RangeDep, dr: i64, dc: i64) -> Expr {
 }
 
 /// Recursively offset every reference in `expr`. Cross-sheet references
-/// (`Sheet2!A1`) shift their inner cell/range too -- a relative cross-sheet ref
-/// tracks the paste like any other (`=Sheet2!A1` pasted one row down reads
-/// `=Sheet2!A2`). Named ranges and literals are left intact.
+/// (`Sheet2!A1`) shift their inner cell/range too. A relative cross-sheet ref
+/// tracks the paste like any other: `=Sheet2!A1` pasted one row down reads
+/// `=Sheet2!A2`. Named ranges and literals are left intact.
 fn shift_expr(expr: Expr, dr: i64, dc: i64) -> Expr {
     match expr {
         Expr::CellRef(r) => shift_cell(r, dr, dc),

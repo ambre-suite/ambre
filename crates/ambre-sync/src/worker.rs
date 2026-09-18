@@ -3,18 +3,18 @@
 // Sync Web Worker entry point (wasm only).
 //
 // This crate compiles to a standalone `cdylib` that runs in its OWN wasm
-// instance inside a dedicated Web Worker, separate from the Main instance
-// (UI + Logic). It owns all crypto, the WebSocket and HTTP I/O, and talks to
-// Main exclusively over `postMessage`:
+// instance inside a dedicated Web Worker. That instance is separate from the
+// Main instance (UI + Logic). It owns all crypto, the WebSocket and HTTP I/O,
+// and talks to Main exclusively over `postMessage`:
 //
 //   Main  --(postcard SyncCommand bytes, Transferable ArrayBuffer)-->  here
 //   here  --(postcard LogicEvent  bytes, Transferable ArrayBuffer)-->  Main
 //
 // Inbound bytes are decoded in `onmessage` and pushed into an in-worker `flume`
 // channel feeding [`crate::run_wasm`]. Outbound events go through a
-// [`crate::LogicSink`] that encodes and posts them back. Because producer and
-// consumer of every internal channel live in THIS worker, the event loop stays
-// free for WebSocket / fetch callbacks and flume's wakers fire correctly.
+// [`crate::LogicSink`] that encodes and posts them back. Producer and consumer
+// of every internal channel live in THIS worker. The event loop therefore stays
+// free for WebSocket / fetch callbacks, and flume's wakers fire correctly.
 // ============================================================================
 
 use wasm_bindgen::JsCast;
@@ -82,12 +82,12 @@ pub fn start() {
 
     // Readiness handshake: the inbound `onmessage` is now installed, so every
     // SyncCommand Main posts from here on is guaranteed to be delivered. Main
-    // buffers all commands until it sees this sentinel, closing the startup race
-    // where a command posted during the worker's async wasm bootstrap (before
-    // `onmessage` existed) was silently dropped -- notably the boot `DevLogin`,
-    // whose loss left the session key unset and every `OpenDocument` queued
-    // forever behind the loading overlay. An empty payload is the sentinel: a
-    // postcard-encoded LogicEvent is never zero-length.
+    // buffers all commands until it sees this sentinel. That closes the startup
+    // race where a command posted during the worker's async wasm bootstrap
+    // (before `onmessage` existed) was silently dropped. The boot `DevLogin` was
+    // the notable one: its loss left the session key unset and every
+    // `OpenDocument` queued forever behind the loading overlay. An empty payload
+    // is the sentinel: a postcard-encoded LogicEvent is never zero-length.
     post_bytes(&scope, &[]);
 
     wasm_bindgen_futures::spawn_local(run_wasm(cmd_rx, logic_sink, api_base));

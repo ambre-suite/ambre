@@ -2,19 +2,19 @@
 // ============================================================================
 // The transparent `<textarea>` keyboard/IME/clipboard pipe
 // (`ambre-spec-text-input.md`) and the content a11y mirror
-// (`ambre-spec-accessibility.md`). The textarea renders NOTHING -- the
-// canvas draws caret, selection and the IME composition string -- but it is the
-// real keyboard FOCUS, so it doubles as the accessibility entry point to the
-// canvas content: an accessible textbox plus a paired polite live region that
-// announces the focused cell as the selection moves.
+// (`ambre-spec-accessibility.md`). The textarea renders NOTHING: the canvas
+// draws caret, selection and the IME composition string. But it is the real
+// keyboard FOCUS, so it doubles as the accessibility entry point to the canvas
+// content. That means an accessible textbox plus a paired polite live region
+// that announces the focused cell as the selection moves.
 //
-// On the web the accessibility tree IS the DOM, so content a11y means mirroring
-// the focused content into the DOM rather than pushing a tree to a platform
-// adapter. Scope is deliberately the focused unit, not a full 100k-row mirror
-// (`ambre-spec-accessibility.md`).
+// On the web the accessibility tree IS the DOM. Content a11y therefore means
+// mirroring the focused content into the DOM rather than pushing a tree to a
+// platform adapter. Scope is deliberately the focused unit, not a full 100k-row
+// mirror (`ambre-spec-accessibility.md`).
 //
 // Ownership: created and positioned by the launcher's frame host under the
-// canvas's positioned container; the per-app view (an `AppView` variant) drives
+// canvas's positioned container. The per-app view (an `AppView` variant) drives
 // WHERE it sits (caret follow), WHEN it has focus, and WHAT it announces through
 // the handle below.
 //
@@ -43,11 +43,16 @@ pub struct TextInput {
 }
 
 impl TextInput {
-    /// Build the `<textarea class="ambre-input">` pipe and attach it under
-    /// `parent` (the canvas's `position: relative` cell). Styling -- transparent
-    /// text/caret/background, `pointer-events: none` -- lives in the app stylesheet
-    /// so the chrome owns the look; here we only guarantee the element exists,
-    /// is keyboard-reachable, and never autocorrects.
+    /// Build the `<textarea class="ambre-input">` pipe and attach it under `parent`
+    /// (the canvas's `position: relative` cell). Styling -- transparent
+    /// text/caret/background, `pointer-events: none` -- lives in the app
+    /// stylesheet, so the chrome owns the look. Here we only guarantee the element
+    /// exists, is keyboard-reachable, and never autocorrects.
+    ///
+    /// # Panics
+    ///
+    /// When the DOM refuses to create or attach the `<textarea>`. The canvas has no
+    /// keyboard entry point without it, so there is nothing to degrade to.
     pub fn create(document: &Document, parent: &Element) -> Self {
         let textarea: HtmlTextAreaElement = document
             .create_element("textarea")
@@ -128,7 +133,7 @@ impl TextInput {
         self.textarea.set_value("");
     }
 
-    /// Announce the focused content (e.g. `"B2, 42"`) to screen readers via the
+    /// Announce the focused content (for example `"B2, 42"`) to screen readers via the
     /// polite live region. Called by the view when the selection moves or a cell
     /// edit commits (`ambre-spec-accessibility.md`). Replacing the text content
     /// of an `aria-live` region is what triggers the announcement.

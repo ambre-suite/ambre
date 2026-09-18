@@ -2,15 +2,16 @@
 // ============================================================================
 // The shared cross-app presence-colour algorithm.
 //
-// Every collaborator is painted in a stable colour derived purely from the
-// seed bytes of their canonical `UserId`. Because the mapping is a pure
-// function of those 16 bytes -- no per-app state, no random salt -- the same
-// user keeps one colour across Prose, Trame and Toile, and a single colour
-// even when signed in from two devices (`toile-presence`). Its
-// home is `ambre-draw` because that is the render-primitives crate every app's
-// canvas already depends on. It is seeded on the canonical `UserId` (not a raw
-// `Uuid`) so the newtype is preserved end-to-end through presence; this is the
-// sole reason `ambre-draw` takes a scoped `ambre-core` dependency (types only).
+// Every collaborator is painted in a stable colour derived purely from the seed
+// bytes of their canonical `UserId`. The mapping is a pure function of those 16
+// bytes: no per-app state, no random salt. The same user therefore keeps one
+// colour across Prose, Trame and Toile. The colour holds even when they are
+//
+// signed in from two devices (`toile-presence`). Its home is `ambre-draw`
+// because that is the render-primitives crate every app's canvas already
+// depends on. It is seeded on the canonical `UserId` (not a raw `Uuid`), so the
+// newtype is preserved end-to-end through presence. That is the sole reason
+// `ambre-draw` takes a scoped `ambre-core` dependency (types only).
 // ============================================================================
 
 use ambre_core::UserId;
@@ -20,10 +21,10 @@ use crate::Color;
 /// A stable, well-separated presence colour for the given peer, seeded on their
 /// canonical [`UserId`].
 ///
-/// The id bytes are folded into a hue with FNV-1a and mapped through HSL at a
-/// fixed saturation / lightness, so every peer colour is vivid and legible
-/// against both the light and dark board backgrounds while staying visually
-/// distinct from its neighbours around the wheel.
+/// The id bytes are folded into a hue with FNV-1a, then mapped through HSL at a
+/// fixed saturation / lightness. Every peer colour is vivid and legible against
+/// both the light and dark board backgrounds. It also stays visually distinct
+/// from its neighbours around the wheel.
 pub fn peer_color(user_id: &UserId) -> Color {
     // FNV-1a over the id seed bytes -> a well-mixed 32-bit hash.
     let mut hash: u32 = 0x811c_9dc5;

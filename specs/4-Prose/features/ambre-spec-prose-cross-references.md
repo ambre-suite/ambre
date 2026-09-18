@@ -45,25 +45,17 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-085` | `POST` | A click on a reference MUST bring its target into view. | this spec section 4 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-086` | `FRAME` | A click on a reference MUST NOT write to the document. | derived | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** none of its own: a reference is resolved with the page it is drawn on, from the page
-  layout and the section numbers the headings feature derives, and both figures are rows of
-  `ambre-spec-budgets.md section 1` owned by pagination and by the headings.
+* **Budget.** none of its own: a reference is resolved with the page it is drawn on, from the
+  layout and the section numbers the headings derive. Both figures are rows of
+  `ambre-spec-budgets.md section 1`, owned by pagination and by the headings.
 * **Boundary.** none of its own: a reference is a mark on the text, and `ZK-001` seals every
   payload before it leaves the client.
 * **Verification.** 16 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line
-  `lib.rs`. The row on the stored value promised a test its statement does not make: the cell named
-  a label round-tripping unchanged and the row states an encoding. `PROSE-FEAT-128` is that round
-  trip, and it is the one row here a host test reaches with a fixture and no document.
-  `PROSE-FEAT-014` stated the broken mark and the ban on resolving elsewhere in one row, and the
-  ban is the half an implementation resolving to a neighbour still satisfies (`PROSE-FEAT-132`).
-  `PROSE-FEAT-074` stated the mark's survival and its repair; the repair is `PROSE-FEAT-133`, and
-  it rests on a restored block keeping its identity, which nothing in the corpus states --
-  section 6. Nothing carried what a reference shows: the page comes from the layout being drawn
-  (`PROSE-FEAT-130`), the section number from the derived outline (`PROSE-FEAT-131`), and neither
-  is written back (`PROSE-FEAT-129`), which is the section 5 decision that keeps a reference out of
-  the merge path. The two gestures had no rows at all. `PROSE-FEAT-135` separates a pointer from an
-  annotation -- a reference that wrote an anchor into its target would make every insertion an edit
-  of two places -- and `PROSE-UI-086` is the difference between a link and an edit.
+  `lib.rs`. The one row a host test reaches with a fixture and no document is the stored value's
+  round trip (`PROSE-FEAT-128`). What a reference shows is derived and never written back
+  (`PROSE-FEAT-129`), which is the section 5 decision that keeps it out of the merge path. The
+  repair of a broken mark rests on a restored block keeping its identity, which nothing in the
+  corpus states -- section 6.
 
 ---
 
@@ -120,9 +112,9 @@ number is the one the headings feature derives (`features/ambre-spec-prose-headi
 both follow every edit above the target with no write (`PROSE-FEAT-129`).
 
 **The broken reference.** When the target no longer resolves to a live block, the reference is
-neither an error nor a deletion (`PROSE-FEAT-014`): the view draws a neutral broken mark, and the
+neither an error nor a deletion (`PROSE-FEAT-014`). The view draws a neutral broken mark, and the
 mark stays in the document (`PROSE-FEAT-074`). An undo of the deletion therefore brings the
-reference back on its own (`PROSE-FEAT-133`); a peer who retypes the heading does not, because a
+reference back on its own (`PROSE-FEAT-133`). A peer who retypes the heading does not, because a
 new block is a new identity (`PROSE-FEAT-073`). A reference carrying its own label keeps
 showing that label, because the label is in the reference and needs no target to be read
 (`PROSE-UI-048`).
@@ -133,7 +125,7 @@ showing that label, because the label is in the reference and needs no target to
 |---|---|
 | `InsertCrossRef { block_id, pos, target_block_id, kind }` | a reference at a position, naming a target (`PROSE-FEAT-134`, `PROSE-FEAT-135`) |
 
-There is no command that edits a reference: a reference is changed by removing it and inserting
+There is no command that edits a reference. A reference is changed by removing it and inserting
 another, and it is deleted as one character with the text it sits in.
 
 **Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
@@ -150,7 +142,7 @@ another, and it is deleted as one character with the text it sits in.
 | a broken reference | drawn as a neutral broken mark, or as its own label |
 | deleting the character | removes the reference |
 
-A reference is drawn as its resolved value and behaves as one character to the caret: it is
+A reference is drawn as its resolved value and behaves as one character to the caret. It is
 selected whole and deleted whole, and no caret position falls inside it (`PROSE-UI-084`).
 
 ---
@@ -171,11 +163,11 @@ selected whole and deleted whole, and no caret position falls inside it (`PROSE-
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing rules on what a reference may target.** The picker above offers the headings; the
+* **Nothing rules on what a reference may target.** The picker above offers the headings. The
   stored value names any block, so a reference to a table, a picture or a paragraph is
   representable and undecided.
 * **A reference to a numbered item shows no label of its own.** A page number and a section number
-  resolve to a bare figure, and nothing says whether "see" or "page" is drawn with it or typed by
+  resolve to a bare figure. Nothing says whether "see" or "page" is drawn with it or typed by
   the author.
 * **The import path drops what this document keeps.** `features/ambre-spec-prose-engine.md section 3`
   states that a reference whose target does not resolve is dropped at import validation, while
@@ -188,24 +180,25 @@ selected whole and deleted whole, and no caret position falls inside it (`PROSE-
 * **Nothing says that a restored block keeps its identity.** `PROSE-FEAT-133` rests on an undo of
   a deletion bringing the target back under the same identity a reference names. `ambre-spec-undo.md`
   states that an undo reverts this peer's own operation and says nothing about what identity the
-  revert produces, and `ambre-spec-prose-schema.md section 2` states only that the id survives a
+  revert produces. `ambre-spec-prose-schema.md section 2` states only that the id survives a
   move. The repair this feature promises is a property of the CRDT no row asserts.
 * **What the reference is a mark on is not settled.** Section 3 makes it an inline mark deleted as
-  one character with the text it sits in, and section 4 draws it as a resolved value selected whole
+  one character with the text it sits in. Section 4 draws it as a resolved value selected whole
   (`PROSE-UI-084`). Either the mark rides a character the author typed or the insert writes a
-  carrier character no rule declares; `features/ambre-spec-prose-footnotes.md section 6` records the
+  carrier character no rule declares. `features/ambre-spec-prose-footnotes.md section 6` records the
   same question for a note's call, and the schema holds neither shape
   (`ambre-spec-prose-schema.md section 3`).
 * **Nothing lists the references to a block.** An author deleting a heading is told nothing about
   the references that will break, and no command answers the question.
 * **A bookmark is a second kind of target, designed and unbuilt.** The deferred design marks a
-  range with an identity and keeps the author's name for it in `annots`, so two bookmarks may share
-  a display name and still resolve to one place; the annotation entry already carries the three
-  fields (`ambre-spec-prose-schema.md section 3`) and no mark key does. Nothing says what a
+  range with an identity and keeps the author's name for it in `annots`. Two bookmarks may share
+  a display name and still resolve to one place. The annotation entry already carries the three
+  fields (`ambre-spec-prose-schema.md section 3`), and no mark key does. Nothing says what a
   reference to a bookmark renders, which is the question this feature would inherit.
 * **A citation is a third, and it needs a store this feature does not own.** The deferred design
-  puts the sources in a `bibliography` map, marks each citation with the source's key, and formats
-  both the citation and the generated list on demand from the chosen style. The container is
-  declared and unwritten (`ambre-spec-prose-schema.md section 3`), the mark key is not declared at
-  all, and the generated list is a derived block like the table of contents rather than a reference.
+  puts the sources in a `bibliography` map and marks each citation with the source's key. It
+  formats both the citation and the generated list on demand from the chosen style. The container
+  is declared and unwritten (`ambre-spec-prose-schema.md section 3`), and the mark key is not
+  declared at all. The generated list is a derived block like the table of contents rather than a
+  reference.
   Both designs are the "The later writing set" Story (`ambre-roadmap.md` POST-V1).

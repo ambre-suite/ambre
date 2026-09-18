@@ -1,15 +1,16 @@
 # AMBRE -- FEATURE: THE SEALED ENVELOPE
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the three message types take one pipeline; the document name and a
+**Implementation:** partial -- the three message types take one pipeline. The document name and a
 media blob take a bare cipher beside it.
 
-> Nothing a user writes leaves the browser readable. What the relay carries is a sealed frame: it
-> can route it, count it and drop it, and it can never open it, move it to another document, or
-> replay it.
+> Nothing a user writes leaves the browser readable. What the relay carries is a sealed frame. It
+> can route it, count it and drop it. It can never open it, move it to another document, or replay
+> it.
 
 Every frame the Sync worker sends takes this path, and every frame it accepts comes back through
-the inverse. This document owns the envelope; what a payload means is the document that produced it.
+the inverse. This document owns the envelope. What a payload means is the document that produced
+it.
 
 ---
 
@@ -25,8 +26,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-088` | `INV` | The per-document map of remote ephemeral counters MUST be bounded. | this spec section 2; `SYNC-008` | `ambre_sync::ephemeral_tests::author_map_is_bounded` -- a hundred authors past the cap, and the map never exceeds it, and a peer can mint signing keys at will, so without the cap one document's presence state is an unbounded allocation | none | verified |
-| `SYNC-001` | `INV` | The Sync worker MUST NOT hand the socket a payload that has not passed through the sealing pipeline. | `ZK-001`; this spec section 2 | none | unheld -- the rule cannot be stated as a test at all: the wire ciphertext is a public byte vector that accepts any bytes from anywhere, so the fix is a private field with a constructor reachable only from the seal, section 4 | unverified |
-| `SYNC-018` | `INV` | Every payload sealed under a document key MUST carry the author signature and the commitment tag. | `ZK-001`; this spec section 2 | none | fails -- the document name and every media blob take the bare cipher with no signature and no tag, so the relay can substitute one for another inside a document nobody has to be a member of (`SYNC-068`, `SYNC-051`). Answered by the `The document name is sealed like every other payload` Story (`ambre-roadmap.md` E7) | unverified |
+| `SYNC-001` | `INV` | The Sync worker MUST NOT hand the socket a payload that has not passed through the sealing pipeline. | `ZK-001`; this spec section 2 | none | unheld -- the rule cannot be stated as a test at all: the wire ciphertext is a public byte vector that accepts any bytes from anywhere, so the fix is a private field with a constructor reachable only from the seal, section 4; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-018` | `INV` | Every payload sealed under a document key MUST carry the author signature and the commitment tag. | `ZK-001`; this spec section 2 | none | fails -- the document name and every media blob take the bare cipher with no signature and no tag, so the relay can substitute one for another inside a document nobody has to be a member of (`SYNC-068`, `SYNC-051`); lands with the `The document name is sealed like every other payload` Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.2 A payload is sealed
 
@@ -34,9 +35,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 |---|---|---|---|---|---|---|
 | `SYNC-004` | `POST` | A message MUST NOT be replayable into another document: the commitment tag MUST bind the ciphertext to its document. | this spec section 2 | `ambre_sync::pipeline::tests::tampered_document_id_rejected` -- a sealed message whose document is forged on its public metadata fails to open; `ambre_crypto::tests::commitment_tag_wrong_aad_rejected` -- the same one layer down | none | verified |
 | `SYNC-021` | `POST` | A payload at or below the compression threshold MUST NOT be compressed. | this spec section 2 | `ambre_sync::pipeline::tests::compression_threshold` -- a payload exactly at the threshold comes back marked raw, and one byte over comes back compressed and round-trips | none | verified |
-| `SYNC-003` | `POST` | Every sealed message MUST use a fresh 192-bit nonce drawn from the operating system generator. | this spec section 2 | none | unheld -- sealing is exercised (`ambre_crypto::tests::prop_roundtrip_encrypt_decrypt`), and nonce freshness is asserted nowhere: no test seals the same payload twice and compares the two nonces | unverified |
-| `SYNC-022` | `POST` | A snapshot MUST pass the wire checks before it is uploaded, because no relay ever sees it. | this spec section 2 | none | unheld -- the seal calls the check and returns its error, and no test hands the seal a snapshot that fails one: the two refusals the check can raise are unreached from here | unverified |
-| `SYNC-020` | `FRAME` | The seal MUST NOT place the compression version outside the ciphertext, where the relay would read it. | `ZK-007`; this spec section 2 | none | unheld -- `ambre_sync::pipeline::tests::roundtrip_snapshot_large_compresses` and `::roundtrip_update_small` recover the version through the seal, which shows where it is today; nothing refuses a version byte moved into the public metadata, and a byte there tells the relay how compressible a document is | unverified |
+| `SYNC-003` | `POST` | Every sealed message MUST use a fresh 192-bit nonce drawn from the operating system generator. | this spec section 2 | none | unheld -- sealing is exercised (`ambre_crypto::tests::prop_roundtrip_encrypt_decrypt`), and nonce freshness is asserted nowhere: no test seals the same payload twice and compares the two nonces; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-022` | `POST` | A snapshot MUST pass the wire checks before it is uploaded, because no relay ever sees it. | this spec section 2 | none | unheld -- the seal calls the check and returns its error, and no test hands the seal a snapshot that fails one: the two refusals the check can raise are unreached from here; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-020` | `FRAME` | The seal MUST NOT place the compression version outside the ciphertext, where the relay would read it. | `ZK-007`; this spec section 2 | none | unheld -- `ambre_sync::pipeline::tests::roundtrip_snapshot_large_compresses` and `::roundtrip_update_small` recover the version through the seal, which shows where it is today; nothing refuses a version byte moved into the public metadata, and a byte there tells the relay how compressible a document is; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 An inbound frame is opened
 
@@ -47,32 +48,22 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-008` | `FAIL` | An ephemeral frame whose counter is not greater than the last one seen for its author and document MUST be dropped. | this spec section 2 | `ambre_sync::ephemeral_tests::monotonic_counter_accepted_replay_dropped` -- an equal and a lower counter are both refused, and forward progress resumes, and the check has one hole the rule does not state, an author evicted by `SYNC-088`'s cap losing the baseline the rule reads and replaying once | none | verified |
 | `SYNC-009` | `FAIL` | Decompression MUST be refused past a size ceiling drawn from the compressed length. | audit `H9`; this spec section 2 | `ambre_sync::pipeline::tests::decompress_bomb_rejected` -- 8 MiB compressed answers the typed refusal; `::decompress_within_ceiling_ok` -- a legitimate payload is untouched by the bound, the half that keeps the ceiling from being a denial of service of its own | none | verified |
 | `SYNC-090` | `FAIL` | An unknown compression version MUST be refused, never guessed. | audit `H9`; this spec section 2 | `ambre_sync::pipeline::tests::decompress_unknown_version_rejected` -- the version byte is echoed in a typed error rather than falling through to a default codec | none | verified |
-| `SYNC-089` | `POST` | The signature MUST be verified before the cipher is opened. | this spec section 2; `ZK-001` | none | unheld -- the three refusals are each driven, and their order is not: `SYNC-019`'s tests would pass on any order, so nothing would go red if the open decrypted first and authenticated afterwards. The order is what keeps unauthenticated bytes out of the decoder | unverified |
-| `SYNC-072` | `FAIL` | A signature MUST be accepted only in its canonical form. | audit `M13` | none | unheld -- the client verifier and the relay one both call the strict form, which refuses a non-canonical scalar and a small-order key, and no test presents a second valid signature over one message | unverified |
-| `SYNC-091` | `POST` | A failed check MUST reach the user's client as a warning. | this spec section 2 | none | unheld -- every refusal returns a typed error and the caller raises one warning code for all of them, so a reader cannot tell a corrupt frame from a wrong key, and a wrong key is the one that means a re-key was missed. No test drives the path | unverified |
-| `SYNC-023` | `FRAME` | A frame that fails any check MUST NOT be applied in part. | this spec section 2 | none | unheld -- each refusal returns before the payload reaches the engine, so the whole-frame drop is held by the checks running ahead of the apply; no test asserts the document is unchanged after a refused frame | unverified |
+| `SYNC-089` | `POST` | The signature MUST be verified before the cipher is opened. | this spec section 2; `ZK-001` | none | unheld -- the three refusals are each driven, and their order is not: `SYNC-019`'s tests would pass on any order, so nothing would go red if the open decrypted first and authenticated afterwards. The order is what keeps unauthenticated bytes out of the decoder; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-072` | `FAIL` | A signature MUST be accepted only in its canonical form. | audit `M13` | none | unheld -- the client verifier and the relay one both call the strict form, which refuses a non-canonical scalar and a small-order key, and no test presents a second valid signature over one message; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-091` | `POST` | A failed check MUST reach the user's client as a warning. | this spec section 2 | none | unheld -- every refusal returns a typed error and the caller raises one warning code for all of them, so a reader cannot tell a corrupt frame from a wrong key, and a wrong key is the one that means a re-key was missed. No test drives the path; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-023` | `FRAME` | A frame that fails any check MUST NOT be applied in part. | this spec section 2 | none | unheld -- each refusal returns before the payload reaches the engine, so the whole-frame drop is held by the checks running ahead of the apply; no test asserts the document is unchanged after a refused frame; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
-* **Budget.** four rows of `ambre-spec-budgets.md section 1`: the outbound seal of 1 KB
-  under 200 us, the inbound open of 1 KB under 350 us, the round trip under 600 us, and the
-  compression of a 100 KB snapshot under 5 ms. `criterion` measures the primitives in
-  `ambre-crypto`; no bench measures this pipeline as a whole.
-* **Boundary.** this is the boundary `ambre-spec-zero-knowledge.md` draws, on the client
-  side. Every byte of user content that leaves the client leaves through the seal here, and
-  `SYNC-001` and `SYNC-020` are what keep the metadata down to the whitelist `ZK-007` names.
-* **Verification.** 8 `verified`, 9 `unverified`, 0 `unimplemented`. What holds is refusal: a
-  tampered byte, a wrong document, a wrong key, a bad signature, a replayed counter, a
-  decompression bomb and an unknown codec each fail closed, and the two crates test them apart.
-  What is loose is every rule stated as an absence -- nothing forbids an unsealed send, nothing
-  asserts a nonce is fresh, and nothing observes the drop path. Three conjunctions came apart.
-  `SYNC-009` bundled a size ceiling with an unknown-version refusal; two tests, two rules, and the
-  second is now `SYNC-090`. `SYNC-023` bundled the whole-frame drop with the warning that reports
-  it, and the drop is a frame condition while the warning is a duty to the user -- `SYNC-091` is
-  the half that decides whether a person learns a re-key was missed. `SYNC-019` claimed an
-  **order**, and its three tests each drive one refusal without ever establishing which runs first:
-  they would pass on any order, so the order itself is `SYNC-089` and is held by nothing. One row
-  is new rather than split: `SYNC-088`, the cap on the ephemeral counter map, was tested by
-  `author_map_is_bounded` and claimed by no rule -- and writing it down surfaced what the cap costs,
-  because an evicted author loses the baseline `SYNC-008` refuses replays against.
+* **Budget.** four rows of `ambre-spec-budgets.md section 1`. The outbound seal of 1 KB is under
+  200 us, the inbound open under 350 us, and the round trip under 600 us. A 100 KB snapshot
+  compresses under 5 ms. `criterion` measures the primitives. No bench measures the
+  pipeline.
+* **Boundary.** this is the boundary `ambre-spec-zero-knowledge.md` draws, on the client side. Every
+  byte of user content that leaves the client leaves through the seal here. `SYNC-001` and
+  `SYNC-020` keep the metadata down to the whitelist `ZK-007` names.
+* **Verification.** 8 `verified`, 1 `failing`, 8 `untested`. What holds is refusal: a tampered byte,
+  a wrong document and a wrong key fail closed. So do a bad signature, a replayed counter, a
+  decompression bomb and an unknown codec. What is loose is every rule stated as an absence. No unsealed
+  send is forbidden, no nonce asserted fresh, no order established.
 ---
 
 ## 2. MODEL
@@ -95,14 +86,13 @@ metadata and by their transport. The seal and the open are the same code for all
 2. form the plaintext as the version byte followed by the body, so the version is sealed with it
    (`SYNC-020`);
 3. encrypt with XChaCha20-Poly1305 under the document key, with a fresh 192-bit nonce
-   (`SYNC-003`), and with the public metadata as the additional data that binds the ciphertext to
-   it;
+   (`SYNC-003`). The public metadata is the additional data that binds the ciphertext to it;
 4. commit the key: an HMAC-SHA256 over the nonce, the ciphertext and the metadata bytes
    (`SYNC-004`);
 5. sign the nonce, the ciphertext, the metadata bytes and the commitment tag with the author's
    Ed25519 key (`SYNC-018`).
 
-**The open, in the inverse order.** The order is the rule, not an implementation detail: the
+**The open, in the inverse order.** The order is the rule, not an implementation detail. The
 signature says who wrote the frame, the tag says under which key, and only then is the cipher run
 (`SYNC-019`).
 
@@ -117,9 +107,9 @@ signature says who wrote the frame, the tag says under which key, and only then 
 theory open under two keys. The HMAC binds the frame to one key, which is what stops a compromised
 relay re-injecting a ciphertext into another document (`SYNC-004`).
 
-**The decompression ceiling.** The document key is shared with every collaborator, so an authorized
-peer can craft a bomb that has already passed the signature, the tag and the cipher. The ceiling is
-derived per message and the decoder streams into it rather than allocating it.
+**The decompression ceiling.** The document key is shared with every collaborator. An authorized
+peer can therefore craft a bomb that has already passed the signature, the tag and the cipher. The
+ceiling is derived per message, and the decoder streams into it rather than allocating it.
 
 | Bound | Value | Why |
 |---|---|---|
@@ -128,8 +118,8 @@ derived per message and the decoder streams into it rather than allocating it.
 | absolute cap | 64 MiB | the client-memory pillar is 100 MB for a whole document |
 
 **The ephemeral counter is a per-device replay guard**, kept apart from the identity the frame is
-delivered under. It is keyed by the author's signing key, which is per session, and the map is
-capped so a peer minting keys cannot grow it without bound (`SYNC-008`). Who the author *is* is
+delivered under. It is keyed by the author's signing key, which is per session. The map is capped
+so a peer minting keys cannot grow it without bound (`SYNC-008`). Who the author *is* is
 `ambre-spec-membership.md`.
 
 **Code.**
@@ -144,8 +134,8 @@ capped so a peer minting keys cannot grow it without bound (`SYNC-008`). Who the
 ## 3. SURFACE
 
 The envelope has no surface. A user sees it only when it refuses something, and then only as the
-warning `SYNC-023` describes: content that does not arrive, and a message that does not say which
-of the four refusals fired.
+warning `SYNC-023` describes. That is content which does not arrive, and a message that does not
+say which of the four refusals fired.
 
 ---
 

@@ -2,18 +2,18 @@
 // ============================================================================
 // Reaction badge overlay (toile-reactions). Each element carrying a derived
 // reaction tally (in `DisplayViewport.reactions`) gets a row of chips painted
-// just below its bottom edge, in screen space above all content and never
-// culled -- the same overlay pass as presence. Badges are ALWAYS visible (edit
-// and present modes).
+// just below its bottom edge. They are drawn in screen space above all content
+// and never culled -- the same overlay pass as presence. Badges are ALWAYS
+// visible (edit and present modes).
 //
-// One chip per distinct emoji shows the color emoji glyph followed by its count
-// (e.g. "thumbs-up 3"); the emoji renders in full color through the shared color
-// atlas (ambre-canvas), the digits as ordinary text, both in a single layout.
+// One chip per distinct emoji shows the color emoji glyph followed by its count,
+// such as "thumbs-up 3". The emoji renders in full color through the shared
+// color atlas (ambre-canvas), the digits as ordinary text, both in one layout.
 // Votes collapse into one trailing badge: the signed weight sum and the
 // voter count.
 //
-// Chips are a constant screen size regardless of Toile zoom (like presence
-// chips): the element rect is mapped to screen, but the chip metrics are in
+// Chips are a constant screen size regardless of Toile zoom, like presence
+// chips. The element rect is mapped to screen, but the chip metrics are in
 // logical pixels. Pure over `DrawSurface`, so it is host-testable against
 // `RecordingSurface` with no GPU.
 // ============================================================================
@@ -86,15 +86,15 @@ fn paint_chip_row<S: DrawSurface>(
     }
 
     // A single trailing vote badge when any vote exists: signed weight sum
-    // and voter count, e.g. "+3 (5)".
+    // and voter count, for example "+3 (5)".
     if tally.vote_count > 0 {
         let label = format!("{:+} ({})", tally.vote_total, tally.vote_count);
         paint_chip(surface, &label, x, y, font_cx, text_cache, palette);
     }
 }
 
-/// Paint one chip (rounded pill + label) with its top-left at `(x, y)` and
-/// return the chip's right edge x so the caller can place the next one.
+/// Paint one chip (rounded pill + label) with its top-left at `(x, y)`.
+/// Returns the chip's right edge x so the caller can place the next one.
 fn paint_chip<S: DrawSurface>(
     surface: &mut S,
     label: &str,

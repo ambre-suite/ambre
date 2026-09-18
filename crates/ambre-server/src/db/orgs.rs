@@ -149,11 +149,11 @@ fn map_member_user_fk(e: sqlx::Error) -> AppError {
 /// Adds a member to an organization with an optional encrypted Shamir share.
 ///
 /// The upsert doubles as the role-change path (`ON CONFLICT DO UPDATE`), so it
-/// enforces the same last-owner invariant as `update_org_member_role`: it
-/// refuses to demote the organization's only remaining owner, which would leave
-/// it with no one able to manage membership or recover keys. The check and the
-/// write run in one transaction with the owner row locked (`FOR UPDATE`) so
-/// concurrent demotions cannot both pass the count.
+/// enforces the same last-owner invariant as `update_org_member_role`. It
+/// refuses to demote the organization's only remaining owner. That would leave
+/// the organization with no one able to manage membership or recover keys. The
+/// check and the write run in one transaction with the owner row locked (`FOR
+/// UPDATE`) so concurrent demotions cannot both pass the count.
 pub async fn add_org_member(
     pool: &PgPool,
     org_id: uuid::Uuid,

@@ -51,7 +51,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-061` | `POST` | The menu MUST close on the deletion of the slash, on a space, on Escape and on a pointer press outside it. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-095` | `FRAME` | Closing the menu MUST NOT write to the document: the slash and the query stay exactly as the author typed them. | this spec section 5 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** none of its own: filtering runs over a list of twelve items on a keystroke, inside
+* **Budget.** none of its own. Filtering runs over a list of twelve items on a keystroke, inside
   the keystroke budget the draft buffer already owns
   (`features/ambre-spec-prose-text-editing.md`, `ambre-spec-budgets.md section 1`).
 * **Boundary.** none: the menu reads view state and emits commands. It holds no key and opens no
@@ -85,7 +85,7 @@ No test resolves yet: the last column names the row each scenario rests on.
 block command.
 
 **The state the view publishes.** The menu is a DOM element on the shared menu primitives, and the
-canvas view is what knows where the caret is, so the view publishes a state and the element renders
+canvas view is what knows where the caret is. The view publishes a state, and the element renders
 it (`ambre-spec-ui.md section 2`).
 
 ```rust
@@ -132,7 +132,7 @@ what happened.
    the menu spans (`PROSE-UI-060`);
 5. the item's command is sent, addressed to the origin block (`PROSE-UI-091`).
 
-**Where it may open.** A slash in the middle of a sentence is a slash, not a menu, so the menu opens
+**Where it may open.** A slash in the middle of a sentence is a slash, not a menu. The menu opens
 only where inserting a block is meaningful: on an empty block, or before the block's first
 character (`PROSE-UI-058`).
 
@@ -189,18 +189,18 @@ toolkit's, and are not respecified here (`ambre-spec-chrome.md`).
   its origin are a design, and every row above is `unimplemented`.
 * **The deletion and the command are two operations, and nothing binds them.** Step 4 and step 5
   are a `DeleteText` and a block command, and a peer can insert between them. The corpus declares
-  no way to send the pair as one, so the failure is a table appearing after a `/tab` that a remote
+  no way to send the pair as one. The failure is a table appearing after a `/tab` that a remote
   edit rescued.
 * **The origin is not reanchored.** The menu remembers a block and an offset, and a remote edit
   before that offset moves the text under it. `features/ambre-spec-prose-text-editing.md` reanchors
   the draft over a remote delta; nothing does the same for the menu's range.
-* **The filter is undefined.** "Filtered by the query" is the whole of it: no rule says whether the
-  match is a prefix, a substring or fuzzy, whether it is case-folded, or what order the survivors
-  are listed in.
+* **The filter is undefined.** "Filtered by the query" is the whole of it. No rule says whether the
+  match is a prefix, a substring or fuzzy. Nothing says whether it is case-folded, or what order
+  the survivors are listed in.
 * **The item list is fixed and reaches only nine features.** Twelve items name the paragraph, the
   heading, the three list styles, the table, the code block, the two rules and the table of
   contents. A picture, a footnote, a cross reference, a comment and an equation have no item, and
   `features/ambre-spec-prose-images.md section 4` names this menu as their trigger.
 * **The three heading items stop at level three.** The document model carries six
-  (`ambre-spec-prose-schema.md section 3`), so half the levels are reachable from the bar and the
+  (`ambre-spec-prose-schema.md section 3`). Half the levels are reachable from the bar and the
   menu alike only through a control neither one declares.

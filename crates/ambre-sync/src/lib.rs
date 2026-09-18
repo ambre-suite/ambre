@@ -1,31 +1,31 @@
 // ambre-sync/src/lib.rs
 // ============================================================================
-// Sync logic — runs in its OWN wasm instance (a dedicated Web Worker with its
-// own linear memory), separate from the Main instance (UI + Logic). The worker
-// shell lives in `ambre-sync-worker`; this crate owns `SyncState` and the
-// select loop ([`run_wasm`]).
+// Sync logic -- runs in its OWN wasm instance, a dedicated Web Worker with its
+// own linear memory. It is separate from the Main instance (UI + Logic). The
+// worker shell lives in `ambre-sync-worker`; this crate owns `SyncState` and
+// the select loop ([`run_wasm`]).
 //
 // Responsibilities:
-//   - Own ALL cryptographic material (MasterSeed, DocumentKeys) — never leaves
+//   - Own ALL cryptographic material (MasterSeed, DocumentKeys) -- never leaves
 //     this thread.
 //   - Own the single session-level WebSocket (one WS, N document subscriptions).
 //   - Perform HTTP REST calls (fetch via gloo-net).
 //   - Encrypt/decrypt/compress/decompress every outbound and inbound payload.
 //
 // Out of scope:
-//   - CRDT mutations — exclusively in ambre-logic.
-//   - Rendering, input — exclusively in the UI Thread.
+//   - CRDT mutations -- exclusively in ambre-logic.
+//   - Rendering, input -- exclusively in the UI Thread.
 //
 // Transport: inbound `SyncCommand`s arrive over `postMessage` from the Main
 // instance, decoded by `ambre-sync-worker` and fed into [`run_wasm`] via an
 // in-worker `flume` channel. Outbound `LogicEvent`s are emitted through a
 // [`LogicSink`] (the worker posts them back to Main via `postMessage`).
 //
-// Because this is now a SINGLE worker, the internal event bus and the command
-// channel both have their producer and consumer on the same worker, so flume's
-// async waker fires correctly (the old cross-worker freeze that motivated
-// `sab_channel` cannot happen here). The select loop awaits both channels'
-// `recv_async`; the worker's JS event loop stays free for WebSocket / fetch.
+// This is now a SINGLE worker. The internal event bus and the command channel
+// both have their producer and consumer on it, so flume's async waker fires
+// correctly. The old cross-worker freeze that motivated `sab_channel` cannot
+// happen here. The select loop awaits both channels' `recv_async`; the worker's
+// JS event loop stays free for WebSocket / fetch.
 //
 // WebSocket topology (when implemented):
 //   ONE WebSocket per session, opened at Unlock, closed at Logout.
@@ -65,7 +65,7 @@ use hex::encode;
 /// Sink for events flowing Sync -> Logic. Sync no longer shares memory with the
 /// Logic thread, so it cannot hold a channel `Sender<LogicEvent>` directly:
 /// instead it calls this type-erased closure. In the wasm worker the closure
-/// postcard-encodes the event and `postMessage`s it to the Main instance; in
+/// postcard-encodes the event and `postMessage`s it to the Main instance. In
 /// native tests it pushes into a `flume` channel (see [`LogicSink::channel`]).
 ///
 /// `Rc`-backed (clonable, `'static`) so it can be captured by the `spawn_local`
@@ -75,10 +75,9 @@ pub struct LogicSink(std::rc::Rc<dyn Fn(LogicEvent)>);
 
 /// Returned by [`LogicSink::send`]. The send is infallible in practice (the
 /// closure always accepts the event); the type mirrors a channel `SendError` so
-/// existing call sites are unchanged.
-/// The failed event is boxed so the `Err` variant stays small (the `LogicEvent`
-/// payload is large): `send` is in practice infallible, so this never allocates
-/// on the hot path.
+/// existing call sites are unchanged. The failed event is boxed so the `Err`
+/// variant stays small, the `LogicEvent` payload being large. `send` is in
+/// practice infallible, so this never allocates on the hot path.
 pub struct SendError(pub Box<LogicEvent>);
 
 impl LogicSink {
@@ -100,6 +99,11 @@ impl LogicSink {
     }
 
     /// Emit one event to the Logic thread.
+    ///
+    /// # Errors
+    ///
+    /// Never today. The sink owns a closure that swallows a closed channel, and
+    /// the signature keeps the `Result` for a sink that can refuse.
     pub fn send(&self, event: LogicEvent) -> Result<(), SendError> {
         (self.0)(event);
         Ok(())
@@ -129,11 +133,8 @@ mod worker;
 // -----------------------------------------------------------------------------
 
 /// Soft threshold: once this many updates are quarantined for a document, we ask
-/// the server to resend the missing history (`RequestMissing`) so the parent
-/// snapshot can arrive and release them.
-/// Soft threshold: once this many updates are quarantined for a document, we ask
-/// the server to resend the missing history (`RequestMissing`) so the parent
-/// snapshot can arrive and release them.
+/// the server to resend the missing history (`RequestMissing`). The parent
+/// snapshot can then arrive and release them.
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 const QUARANTINE_ALERT: usize = 900;
 /// Hard cap: beyond this, the oldest update (by `clock`) is dropped to bound the
@@ -149,12 +150,12 @@ const WS_CLOSE_UNAUTHORIZED: u16 = 4401;
 /// Hard cap on the per-document ephemeral anti-replay map
 /// ([`SyncDocumentState::ephemeral_remote_counters`]). In practice the author set
 /// is bounded by document membership, but a malicious peer can mint arbitrary
-/// signing keys, so the map is capped to bound heap; at the cap a new author
-/// evicts the least-active (lowest-counter) entry.
+/// signing keys. The map is therefore capped to bound heap. At the cap a new
+/// author evicts the least-active (lowest-counter) entry.
 const MAX_EPHEMERAL_REMOTE_AUTHORS: usize = 512;
 
 // -----------------------------------------------------------------------------
-// Internal event bus — carries WebSocket frames and spawned-task results
+// Internal event bus -- carries WebSocket frames and spawned-task results
 // into the non-blocking select loop. Sent by JS callbacks (onmessage /
 // onclose / onerror) and by HTTP tasks spawned via spawn_local.
 // -----------------------------------------------------------------------------
@@ -219,8 +220,8 @@ enum SyncEvent {
         doc_key: DocumentKey,
         snapshot_payload: Option<Vec<u8>>,
         snapshot_id: SnapshotId,
-        /// Highest delta `seq` folded into `snapshot_payload` (0 when no snapshot
-        /// was downloaded): the post-open `RequestMissing` starts after this seq
+        /// Highest delta `seq` folded into `snapshot_payload`, 0 when no snapshot
+        /// was downloaded. The post-open `RequestMissing` starts after this seq,
         /// so the history already in the snapshot is not replayed.
         covered_seq: Seq,
         /// Document kind, carried so a not-yet-on-server doc can be lazily created
@@ -300,8 +301,8 @@ enum SyncEvent {
         members: Vec<MemberInfo>,
         /// Refreshed presence directory (`ambre-spec-membership.md`), harvested from
         /// the same response. Membership just changed often enough for someone to
-        /// ask for the list, so this is where a new member becomes resolvable and
-        /// a revoked one stops. Ignored when the document is not open locally.
+        /// ask for the list. This is where a new member becomes resolvable and a
+        /// revoked one stops. Ignored when the document is not open locally.
         signing_keys: Vec<([u8; 32], UserId)>,
     },
     /// User search results from the server (decoded, plaintext).
@@ -390,7 +391,7 @@ struct SyncDocumentState {
     /// notification propagated to this client.
     old_keys: Vec<DocumentKey>,
     /// Per-author ephemeral anti-replay counter. Keyed by the author's Ed25519
-    /// verifying key bytes. An inbound ephemeral whose counter is ≤ the stored
+    /// verifying key bytes. An inbound ephemeral whose counter is <= the stored
     /// value is silently dropped.
     ephemeral_remote_counters: HashMap<[u8; 32], u64>,
     /// Directory of this document's members' Ed25519 signing keys, mapping an
@@ -405,8 +406,8 @@ struct SyncDocumentState {
     signing_keys: HashMap<[u8; 32], UserId>,
     /// This client's own role on this document, resolved from the members
     /// response at open. Carried here rather than emitted straight through
-    /// because `DocumentReady` fires from two places (immediately for a
-    /// local-only / offline open, or after the initial replay), and both must
+    /// because `DocumentReady` fires from two places: immediately for a
+    /// local-only / offline open, or after the initial replay. Both must
     /// report the same role.
     ///
     /// Defaults to `Role::Owner`: a document with no members response is
@@ -415,9 +416,9 @@ struct SyncDocumentState {
     role: Role,
     /// True between sending the post-open `RequestMissing` and receiving its
     /// `MissingUpdates` reply. The initial catch-up replay is the point at which
-    /// the document is fully hydrated (snapshot + every delta the server already
-    /// holds), so `DocumentReady` is emitted when this clears -- not at open,
-    /// which would dismiss the UI loading overlay before delta-only documents
+    /// the document is fully hydrated: snapshot plus every delta the server
+    /// already holds. `DocumentReady` is emitted when this clears, not at open.
+    /// Opening would dismiss the UI loading overlay before delta-only documents
     /// have any content. Stays `false` for local-only / offline opens, which
     /// emit `DocumentReady` immediately (no replay to wait for).
     awaiting_initial_hydration: bool,
@@ -432,7 +433,7 @@ impl SyncDocumentState {
     ) -> Self {
         // Anchor the base to the document's genesis snapshot, which every client
         // derives identically. Until a real snapshot is uploaded, the earliest
-        // deltas reference this id, so a fresh open (or a peer) recognises their
+        // deltas reference this id. A fresh open (or a peer) then recognises their
         // parent instead of quarantining them forever. A later `OpenDocumentReady`
         // or `SnapshotAvailable` carrying a real snapshot id supersedes it.
         let current_snapshot_id = SnapshotId::genesis(document_id);
@@ -490,7 +491,7 @@ impl SyncDocumentState {
     /// The counter map is bounded by [`MAX_EPHEMERAL_REMOTE_AUTHORS`]: when a new
     /// author would exceed the cap, the least-active entry (lowest counter) is
     /// evicted first. Eviction resets that author's baseline, so a later *stale*
-    /// ephemeral from an evicted author could replay once -- harmless for
+    /// ephemeral from an evicted author could replay once. That is harmless for
     /// presence, and it cannot affect an active author whose counter keeps rising.
     fn accept_ephemeral_counter(&mut self, author_pk: [u8; 32], counter: u64) -> bool {
         let last = self
@@ -521,7 +522,7 @@ impl SyncDocumentState {
     /// Called with the members response fetched at open, and again whenever
     /// membership changes, so a revoked member stops resolving.
     ///
-    /// Entries whose key is not valid hex or not 32 bytes are skipped: a member
+    /// Entries whose key is not valid hex or not 32 bytes are skipped. A member
     /// we cannot key on simply never resolves, which costs that peer's cursor
     /// rather than the whole document's presence.
     fn set_signing_keys(&mut self, entries: impl IntoIterator<Item = ([u8; 32], UserId)>) {
@@ -530,9 +531,9 @@ impl SyncDocumentState {
 
     /// Resolve the canonical `UserId` behind an ephemeral's authoring Ed25519
     /// key (`ambre-spec-membership.md`). Presence must be keyed by a per-user
-    /// identity, not by the per-device signing key, and the sender-supplied
-    /// payload can never be trusted for identity -- so the key is matched
-    /// against the members directory, on this trusted side.
+    /// identity, not by the per-device signing key. The sender-supplied payload
+    /// can never be trusted for identity, so the key is matched against the
+    /// members directory, on this trusted side.
     ///
     /// `None` means the author is not a known member of this document (or the
     /// directory has not been filled yet). The caller drops the frame: presence
@@ -589,9 +590,9 @@ fn doc_type_to_api_string(doc_type: DocType) -> String {
 }
 
 pub struct SyncState {
-    /// Outbound sink: Sync → Logic thread (postMessage in the worker).
+    /// Outbound sink: Sync -> Logic thread (postMessage in the worker).
     logic_tx: LogicSink,
-    /// Base URL for REST API calls (e.g. `"api.ambre.app"`).
+    /// Base URL for REST API calls (for example `"api.ambre.app"`).
     #[allow(dead_code)]
     api_base: String,
     /// URL scheme: `"http"` on localhost, `"https"` otherwise.
@@ -630,7 +631,7 @@ pub struct SyncState {
     _reconnect_timer: Option<Closure<dyn FnMut()>>,
     /// Consecutive failed/closed connection count, reset to 0 once a socket
     /// actually opens. Drives the exponential reconnect backoff so a server that
-    /// rejects the upgrade (e.g. 429 rate limit) is not hammered into a storm.
+    /// rejects the upgrade (for example 429 rate limit) is not hammered into a storm.
     reconnect_attempts: u32,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
@@ -646,24 +647,24 @@ pub struct SyncState {
     // -- Document metadata (in-memory mirror for mock mode) --------------------
     doc_metadata: HashMap<DocumentId, (DocType, String)>,
 
-    /// Opens received before the session keys were ready (e.g. a deep-link
-    /// refresh dispatches `OpenDocument` at frame 0, before `DevLogin` lands).
-    /// Held here and replayed by [`flush_pending_opens`](Self::flush_pending_opens)
-    /// once the session is established, so the document fetches its real key and
+    /// Opens received before the session keys were ready (for example a deep-link
+    /// refresh dispatches `OpenDocument` at frame 0, before `DevLogin` lands). Held
+    /// here and replayed by [`flush_pending_opens`](Self::flush_pending_opens) once
+    /// the session is established. The document then fetches its real key and
     /// hydrates instead of opening local-only with a throwaway key.
     pending_opens: Vec<(DocumentId, DocType)>,
 
-    /// Outbound updates produced before the session keys / document were ready
-    /// (e.g. the user edits a restored cell in the milliseconds after F5, while
-    /// `DevLogin` is still in flight). Held here instead of dropped, and flushed
-    /// once the document is open: for a server-side doc after its `RequestMissing`
-    /// replay (so `local_clock` has caught up to the server and no CLOCK_MISMATCH
-    /// occurs), for a local-only doc right when it opens.
+    /// Outbound updates produced before the session keys / document were ready.
+    /// The user edits a restored cell in the milliseconds after F5, while
+    /// `DevLogin` is still in flight. Held here instead of dropped, and flushed
+    /// once the document is open. A server-side doc flushes after its
+    /// `RequestMissing` replay, so `local_clock` has caught up to the server and
+    /// no CLOCK_MISMATCH occurs. A local-only doc flushes right when it opens.
     pending_pre_session_updates: Vec<(DocumentId, Vec<u8>)>,
 
     /// Last dev username seen on `DevLogin`, kept so the WS reauth path can
-    /// silently re-login if the refresh token is also dead (e.g. the server was
-    /// restarted with a fresh ephemeral JWT key and an empty Redis). `None` in a
+    /// silently re-login if the refresh token is also dead. That happens when
+    /// the server restarts with a fresh JWT key and an empty Redis. `None` in a
     /// real (non-dev) session, where reauth relies solely on the refresh token.
     dev_username: Option<String>,
 }
@@ -728,7 +729,7 @@ impl SyncState {
         }
     }
 
-    // -- Outbound: Sync → Logic ------------------------------------------------
+    // -- Outbound: Sync -> Logic ------------------------------------------------
 
     fn send_to_logic(&self, event: LogicEvent) {
         if let Err(SendError(ev)) = self.logic_tx.send(event) {
@@ -765,7 +766,7 @@ impl SyncState {
         }
     }
 
-    // -- Outbound: Sync → Server (WebSocket) -----------------------------------
+    // -- Outbound: Sync -> Server (WebSocket) -----------------------------------
 
     /// Hook the in-memory mock transport onto this SyncState. In test mode the
     /// mock captures every WS message that would be sent, without touching
@@ -778,7 +779,7 @@ impl SyncState {
     /// outbound path sends updates directly instead of buffering them behind a
     /// lazy-creation POST. In production this flag is set by the async
     /// `OpenDocumentReady` (server returned members) or `DocumentMaterialized`
-    /// flows, neither of which can complete in a synchronous native test.
+    /// flows. Neither can complete in a synchronous native test.
     pub fn mark_document_server_created(&mut self, document_id: DocumentId) {
         if let Some(doc_state) = self.documents.get_mut(&document_id) {
             doc_state.server_created = true;
@@ -793,10 +794,10 @@ impl SyncState {
     /// Encode and push a client message onto the WebSocket.
     ///
     /// A missing socket or a failed `send` is a transient network condition, not
-    /// a programmer error: it must **not** panic (a panic is `panic=abort` and
-    /// would tear the Sync thread down silently). Callers already gate on
+    /// a programmer error. It must **not** panic: a panic is `panic=abort` and
+    /// would tear the Sync thread down silently. Callers already gate on
     /// `self.ws.is_some()`; this only logs if that race is lost. The reconnect
-    /// path (onclose → backoff) re-establishes the socket.
+    /// path (onclose -> backoff) re-establishes the socket.
     fn ws_send(&self, msg: &WsClientMsg) {
         let wire = encode_client_msg(msg);
         let Some(ws) = self.ws.as_ref() else {
@@ -804,11 +805,11 @@ impl SyncState {
                 let _ = tx.send(wire);
                 return;
             }
-            tracing::warn!("[Sync→Server] ws_send called with no socket, dropping message");
+            tracing::warn!("[Sync->Server] ws_send called with no socket, dropping message");
             return;
         };
         tracing::debug!(
-            "[Sync→Server] ws_send {:?} → {} bytes wire",
+            "[Sync->Server] ws_send {:?} -> {} bytes wire",
             std::mem::discriminant(msg),
             wire.len()
         );
@@ -819,14 +820,14 @@ impl SyncState {
         let buf = js_sys::Uint8Array::new_with_length(wire.len() as u32);
         buf.copy_from(&wire);
         if let Err(e) = ws.send_with_array_buffer(&buf.buffer()) {
-            tracing::warn!("[Sync→Server] WebSocket send failed ({e:?}); reconnect will retry");
+            tracing::warn!("[Sync->Server] WebSocket send failed ({e:?}); reconnect will retry");
         }
         if let Some(tx) = &self.mock_ws_tx {
             let _ = tx.send(wire);
         }
     }
 
-    // -- Inbound: Logic → Sync -------------------------------------------------
+    // -- Inbound: Logic -> Sync -------------------------------------------------
 
     /// Whether a transport (real WebSocket or mock) is available.
     fn ws_connected(&self) -> bool {
@@ -1156,7 +1157,7 @@ mod ephemeral_tests {
         d.set_signing_keys([([7u8; 32], UserId::new())]);
 
         // A non-member (or a document whose directory is not filled yet) must not
-        // be attributed to anyone: the caller drops the frame rather than showing
+        // be attributed to anyone. The caller drops the frame rather than showing
         // a cursor under a guessed identity.
         assert_eq!(d.resolve_ephemeral_author([9u8; 32]), None);
         assert_eq!(doc_state().resolve_ephemeral_author([7u8; 32]), None);

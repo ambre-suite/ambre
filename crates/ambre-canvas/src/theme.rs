@@ -4,10 +4,10 @@
 // palettes and scales are generated from `tokens.ron` by `build.rs`; this module
 // wraps them in the runtime theme switch shared across the canvas/DOM boundary:
 //
-//   Palette / LIGHT / DARK / SPACE_* / RADIUS / FONT_*   (generated)
-//   THEME_CSS        the DOM custom-property sheet, injected by the launcher
-//   Theme            Light | Dark, selects a Palette and the `data-theme` value
-//   ThemeControl     Send handle: the chrome toggles it, the canvas reads it
+//   Palette / LIGHT / DARK / SPACE_* / RADIUS / FONT_*   (generated).
+//   THEME_CSS        the DOM custom-property sheet, injected by the launcher.
+//   Theme            Light | Dark, selects a Palette and the `data-theme` value.
+//   ThemeControl     Send handle: the chrome toggles it, the canvas reads it.
 //
 // One source (`tokens.ron`) keeps the wgpu content and the DOM chrome coherent.
 // ============================================================================
@@ -69,8 +69,8 @@ impl Theme {
     }
 }
 
-/// Shared, `Send` theme switch: the chrome toggle writes it (from a Leptos
-/// callback, hence `Arc<AtomicU8>` like `RafControl`), the canvas view reads it
+/// Shared, `Send` theme switch. The chrome toggle writes it (from a Leptos
+/// callback, hence `Arc<AtomicU8>` like `RafControl`). The canvas view reads it
 /// each frame and repaints on change. The single source of truth for the active
 /// theme on the UI thread.
 #[derive(Clone)]

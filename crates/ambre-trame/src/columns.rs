@@ -3,7 +3,7 @@
 //! A Trame grid has up to [`crate::TOTAL_COLS`] columns, well past 26, so a
 //! label needs the full bijective base-26 encoding (A..Z, AA..ZZ, AAA..).
 //! Previously four near-identical copies of this logic lived across `formula`,
-//! `logic`, `model`, and the UI/chrome modules -- several of them the buggy
+//! `logic`, `model`, and the UI/chrome modules. Several of them were the buggy
 //! single-letter `(b'A' + col % 26)` form that wraps at column 26. This module
 //! is the single source of truth; every call site delegates here.
 
@@ -25,6 +25,11 @@ pub fn col_to_alpha(mut col: u32) -> String {
 /// Convert spreadsheet column letters back to a 0-based index.
 ///
 /// Inverse of [`col_to_alpha`]. Rejects an empty or non-`A..Z` string.
+///
+/// # Errors
+///
+/// A message naming `s` when it is empty or holds a byte outside `A..Z`, and
+/// another when the accumulated index overflows a `u32`.
 pub fn alpha_to_col(s: &str) -> Result<u32, String> {
     if s.is_empty() || !s.bytes().all(|b| b.is_ascii_uppercase()) {
         return Err(format!("invalid column reference: {s}"));

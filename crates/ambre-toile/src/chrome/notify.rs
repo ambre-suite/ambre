@@ -15,11 +15,11 @@ use ambre_chrome::Toasts;
 use crate::ui::interop::import_message;
 
 /// Surface a Toile `UiEvent` as a transient toast when it carries something the
-/// user must see: what an import brought in and what it dropped
-/// (`TOILE-IO-022`), why a file was refused, that an export produced a file, and
-/// the two schema notices -- a board this build cannot open (`SCHEMA-008`) and a
-/// register it cannot decode (`SCHEMA-003`).
-/// A no-op for every other event.
+/// user must see. That is: what an import brought in and what it dropped
+/// (`TOILE-IO-022`), why a file was refused, and that an export produced a file.
+/// It also surfaces the two schema notices: a board this build cannot open
+/// (`SCHEMA-008`) and a register it cannot decode (`SCHEMA-003`). A no-op for
+/// every other event.
 pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
     let UiEvent::Viewport {
         event: AppEvent::Toile(te),
@@ -60,9 +60,9 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
             toasts.error(reason.clone());
         }
         // Part of the board could not be read and is drawn plain (`SCHEMA-003`).
-        // The document is open and usable, so this is a warning -- but it must be
-        // said: a register that silently reads as the default style is a
-        // document that looks intact and is not.
+        // The document is open and usable, so this is a warning. But it must be
+        // said: a register that silently reads as the default style is a document
+        // that looks intact and is not.
         ToileEvent::UndecodableRecords => {
             toasts.warning(
                 "Some formatting in this board was written by a newer client and could not be read.",

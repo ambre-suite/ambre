@@ -6,10 +6,10 @@
 //! Threading: every IndexedDB operation is async and resolves through a JS
 //! callback, which only fires when an event loop is idle. The Logic thread
 //! blocks on `flume::Selector` (Atomics-backed) and therefore starves its own
-//! event loop, so the store is owned and driven by the **Main thread** (see
-//! `ambre-app`): Logic exports snapshot bytes over a `flume` channel, the Main
-//! thread persists them here. Reads/opens return a `flume::Receiver` the Main
-//! thread awaits via `recv_async` (never blocking the page).
+//! event loop. The store is owned and driven by the **Main thread** instead
+//! (see `ambre-app`). Logic exports snapshot bytes over a `flume` channel, and
+//! the Main thread persists them here. Reads/opens return a `flume::Receiver`
+//! the Main thread awaits via `recv_async` (never blocking the page).
 
 use js_sys::Uint8Array;
 use wasm_bindgen::JsCast;
@@ -67,8 +67,8 @@ impl PersistenceStore {
 
         // Create the object stores during upgrade (first visit or version bump).
         // This fires for a fresh database (v0->2) AND for an existing v1 database
-        // (v1->2), so each store is created only if it does not already exist --
-        // calling `create_object_store` for a store that exists throws
+        // (v1->2). Each store is therefore created only if it does not already
+        // exist. Calling `create_object_store` for a store that exists throws
         // `ConstraintError` and aborts the whole upgrade transaction.
         let on_upgrade = Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
             if let Some(db) = request_database(&event) {
@@ -144,17 +144,16 @@ impl PersistenceStore {
     /// Save a snapshot and report when the write is **durable**.
     ///
     /// [`save_snapshot`](Self::save_snapshot) is fire-and-forget, which is right
-    /// for the per-edit persist: the page stays open and the transaction commits
+    /// for the per-edit persist. The page stays open and the transaction commits
     /// on the next turn of the event loop. It is wrong for a caller that is about
-    /// to navigate away -- opening an `.ambre` file whose document is of another
-    /// kind hard-reloads the page (`route::needs_reload`), and a transaction
-    /// still open when the document unloads is aborted, taking the file with it.
+    /// to navigate away. Opening an `.ambre` file whose document is of another
+    /// kind hard-reloads the page (`route::needs_reload`). A transaction still
+    /// open when the document unloads is aborted, taking the file with it.
     ///
-    /// So this one resolves on the transaction's `complete`, not on the
-    /// request's `success`: the former is the commit, the latter only says the
-    /// write was accepted into it. `false` on any failure, so a caller can tell
-    /// the user the file did not land instead of navigating to an empty
-    /// document.
+    /// So this one resolves on the transaction's `complete`, not on the request's
+    /// `success`. The former is the commit; the latter only says the write was
+    /// accepted into it. `false` on any failure, so a caller can tell the user
+    /// the file did not land instead of navigating to an empty document.
     pub fn save_snapshot_committed(
         &self,
         document_id: [u8; 16],
@@ -403,9 +402,9 @@ fn id_to_hex(id: &[u8; 16]) -> String {
 // ============================================================================
 // wasm tests (headless Chrome via `wasm-pack test`). Exercise the two paths the
 // TOFU store adds (`ambre-spec-key-verification.md`, CHROME-053) that a native
-// test cannot reach:
-// the trusted_keys roundtrip, and the DB_VERSION 1 -> 2 upgrade that must add
-// trusted_keys WITHOUT a ConstraintError on the existing snapshots store.
+// test cannot reach. One is the trusted_keys roundtrip. The other is the
+// DB_VERSION 1 -> 2 upgrade that must add trusted_keys WITHOUT a
+// ConstraintError on the existing snapshots store.
 // ============================================================================
 #[cfg(test)]
 mod wasm_tests {

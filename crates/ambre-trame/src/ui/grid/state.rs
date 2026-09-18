@@ -49,7 +49,7 @@ impl TrameUiState {
 
     /// Bottom edge (physical px) of the scrollable grid area. The sheet-tab strip
     /// moved to DOM chrome (`SheetTabs`), so the grid now fills the full canvas
-    /// height; the DOM strip occupies its own shell row outside this surface.
+    /// height. The DOM strip occupies its own shell row outside this surface.
     pub fn grid_bottom(&self) -> f64 {
         self.canvas_height.max(self.header_h())
     }
@@ -93,12 +93,12 @@ impl TrameUiState {
         self.selection.active.1
     }
 
-    /// Collapse the selection to a single cell (`trame-selection`).
-    /// Used on a plain pointer hit; no clamping -- callers pass valid grid coords.
+    /// Collapse the selection to a single cell (`trame-selection`). Used on a
+    /// plain pointer hit; no clamping -- callers pass valid grid coords.
     ///
     /// A hit inside a merged block snaps to the block's master, so the merge is
-    /// always selected as a whole (its sub-cells are never individually
-    /// selectable, `trame-cell-merges`).
+    /// always selected as a whole. Its sub-cells are never individually selectable
+    /// (`trame-cell-merges`).
     pub fn select(&mut self, row: u32, col: u32) {
         let (row, col) = self.snap_to_master(row, col);
         self.selection = Selection::single(row, col);
@@ -106,9 +106,10 @@ impl TrameUiState {
 
     /// Replace the live selection with the rectangle `(r1,c1)`-`(r2,c2)` (corners
     /// already ordered), collapsing the active cell onto the top-left corner. Used
-    /// when the Logic thread dictates a selection the canvas cannot derive locally
-    /// (a [`SelectRange`](ambre_bus::TrameEvent::SelectRange) after an unmerge):
-    /// the freed cells must stay selected though the span-defining merge is gone.
+    /// when the Logic thread dictates a selection the canvas cannot derive
+    /// locally, such as a [`SelectRange`](ambre_bus::TrameEvent::SelectRange)
+    /// after an unmerge. The freed cells must stay selected though the
+    /// span-defining merge is gone.
     pub fn select_rect(&mut self, r1: u32, c1: u32, r2: u32, c2: u32) {
         self.selection = Selection {
             anchor: (r2, c2),
@@ -130,22 +131,22 @@ impl TrameUiState {
     /// the selection onto the block master and return `true`. Covered sub-cells
     /// are never individually selectable (`trame-cell-merges`), so this is a safe
     /// correction. Called after a viewport batch so a freshly-created merge
-    /// re-homes the cursor on its master (top-left): the editor and range ops
+    /// re-homes the cursor on its master (top-left). The editor and range ops
     /// then target the master, not a covered cell that would reject the write as
     /// a merge conflict. A no-op when the active cell is a master or unmerged.
     pub fn snap_active_to_master(&mut self) -> bool {
         let (ar, ac) = self.selection.active;
         match self.merge_master_at(ar, ac) {
             Some((mr, mc, cs, rs)) if (mr, mc) != (ar, ac) => {
-                // Collapse onto the master only when this one block covers the
-                // whole selection (e.g. drag-selected cells that just became a
-                // single merge). A selection spanning more than this block -- such
-                // as an autofill that produced a grid of merges, whose active
-                // corner landed on the last block's covered sub-cell -- must keep
-                // its full extent; we only re-home the active corner onto that
-                // block's master so it stops sitting on a covered sub-cell. The
-                // bounds then re-expand through `expand_to_merges`, so the rendered
-                // selection still covers every filled block.
+                // Collapse onto the master only when this one block covers the whole
+                // selection (for example drag-selected cells that just became a
+                // single merge). A selection spanning more than this block must keep
+                // its full extent. An autofill that produced a grid of merges, whose
+                // active corner landed on the last block's covered sub-cell, is such
+                // a case. We only re-home the active corner onto that block's master
+                // so it stops sitting on a covered sub-cell. The bounds then
+                // re-expand through `expand_to_merges`, so the rendered selection
+                // still covers every filled block.
                 let (sr1, sc1, sr2, sc2) = self.selection.bounds();
                 let covers_selection = self.selection.extra.is_empty()
                     && sr1 >= mr
@@ -181,9 +182,10 @@ impl TrameUiState {
     /// anchor stays, growing a range; without it the selection collapses onto
     /// the new cell. Scrolls the viewport if the new position falls outside the
     /// visible area. Returns `None` if the cursor did not move (clamped at an
-    /// edge); otherwise a [`CursorMove`] carrying the new active cell (always,
-    /// so the Logic thread can retarget formatting) plus an optional
-    /// `ScrollViewport` to fetch newly exposed cells.
+    /// edge). Otherwise it returns a [`CursorMove`] carrying the new active
+    /// cell, plus an optional `ScrollViewport` to fetch newly exposed cells.
+    /// The active cell always travels, so the Logic thread can retarget
+    /// formatting.
     pub fn move_cursor(&mut self, dr: i32, dc: i32, extend: bool) -> Option<CursorMove> {
         let (ar, ac) = (self.active_row(), self.active_col());
         // Stepping off a merge master must clear its whole span, else the
@@ -223,9 +225,9 @@ impl TrameUiState {
     /// if the cell did not change, otherwise a [`CursorMove`] with the new
     /// active cell plus an optional `ScrollViewport`.
     pub fn move_to(&mut self, row: u32, col: u32, extend: bool) -> Option<CursorMove> {
-        // Landing on a covered sub-cell snaps to its master (only when
-        // collapsing: an extension keeps its raw corner so the live rectangle
-        // can grow cell by cell).
+        // Landing on a covered sub-cell snaps to its master, but only when
+        // collapsing. An extension keeps its raw corner so the live rectangle
+        // can grow cell by cell.
         let (new_row, new_col) = if extend {
             (row.min(TOTAL_ROWS - 1), col.min(TOTAL_COLS - 1))
         } else {
@@ -255,8 +257,8 @@ impl TrameUiState {
         }
 
         // Scroll viewport so the active cell stays visible. When the active cell
-        // is still within the cached range the highlight moves without a Logic
-        // round-trip, but we still report the new active cell (formatting target).
+        // is still within the cached range, the highlight moves without a Logic
+        // round-trip. We still report the new active cell (formatting target).
         let scroll = self
             .scroll_to_include(new_row, new_col)
             .then(|| self.scroll_viewport_cmd());
@@ -273,10 +275,10 @@ impl TrameUiState {
     }
 
     /// Rightmost cached non-empty column in `row`, or `None` if the row has no
-    /// cached content. Backs the End key: the UI thread has no used-range model,
-    /// so the local cell cache is the only view of content available
-    /// (`trame-grid-viewport`),
-    /// making this a best-effort jump to the end of the visible data.
+    /// cached content. Backs the End key: the UI thread has no used-range model.
+    /// The local cell cache is the only view of content available
+    /// (`trame-grid-viewport`), making this a best-effort jump to the end of the
+    /// visible data.
     pub fn last_content_col(&self, row: u32) -> Option<u32> {
         self.cell_cache
             .iter()
@@ -338,22 +340,22 @@ impl TrameUiState {
 
     /// Build a `ScrollViewport` command for the current visible area plus padding.
     ///
-    /// Evicts cached cells that fall outside the new requested range so that
-    /// cells scrolled into view from an un-fetched area appear grey until the
-    /// Logic thread responds. Cells already within the new range stay white,
-    /// avoiding flicker on slow continuous scrolling.
+    /// Evicts cached cells that fall outside the new requested range. Cells
+    /// scrolled into view from an un-fetched area then appear grey until the Logic
+    /// thread responds. Cells already within the new range stay white, avoiding
+    /// flicker on slow continuous scrolling.
     pub fn scroll_viewport_cmd(&mut self) -> TrameCommand {
         // Prefetch one full screen of rows above and below the viewport (with a
         // PADDING_ROWS floor for tiny windows). A Page Up/Down jump moves the
-        // viewport by exactly viewport_rows, so a smaller fixed margin would land
+        // viewport by exactly viewport_rows. A smaller fixed margin would land
         // beyond the cache and flash the entering rows grey until the Logic thread
         // responds. Sizing the margin to the viewport keeps a page jump's
         // destination within already-fetched data, eliminating that flash.
         let row_pad = self.viewport_rows.max(PADDING_ROWS);
         let row_start = self.top_row.saturating_sub(row_pad);
-        // Extend the fetched window by the number of currently-hidden rows in it,
-        // so that after the row axis collapses there are still enough *visible*
-        // rows to fill the screen (a filtered window would otherwise run short).
+        // Extend the fetched window by the number of currently-hidden rows in it.
+        // After the row axis collapses there are then still enough *visible* rows
+        // to fill the screen; a filtered window would otherwise run short.
         let hidden_in_window = self.hidden_rows.len() as u32;
         let row_end = (self.top_row + self.viewport_rows + row_pad + hidden_in_window)
             .min(TOTAL_ROWS.saturating_sub(1));
@@ -382,7 +384,7 @@ impl TrameUiState {
 
     /// Merge a `ViewportData` batch into the local cache.
     ///
-    /// Older responses (stale version) are silently discarded.
+    /// Older responses (stale version) are silently dropped.
     pub fn on_viewport_data(&mut self, update: TrameEvent) {
         let TrameEvent::ViewportData {
             version,
@@ -400,8 +402,9 @@ impl TrameUiState {
         }
         self.accepted_version = version;
         // Adopt the per-axis metrics for the covered window (absolute keys). Only
-        // a non-default entry is stored; a column/row reset to the default drops
-        // out of the map so it falls back to the uniform metric (`trame-resize`).
+        // a non-default entry is stored. A column/row reset to the default drops
+        // out of the map, so it falls back to the uniform metric
+        // (`trame-resize`).
         for (i, w) in col_widths.iter().enumerate() {
             let col = col_start + i as u32;
             if (*w as f64 - COL_WIDTH).abs() > f64::EPSILON {
@@ -470,8 +473,9 @@ impl TrameUiState {
     }
 
     /// Signed count of *visible* row slots between [`top_row`](Self::top_row) and
-    /// `row` -- the vertical offset (in `ROW_HEIGHT` units) where `row` is drawn
-    /// once filtered rows are collapsed out. Mirrors `GridLayout::visible_offset`.
+    /// `row`. That is the vertical offset (in `ROW_HEIGHT` units) where `row` is
+    /// drawn once filtered rows are collapsed out. Mirrors
+    /// `GridLayout::visible_offset`.
     pub fn visible_offset(&self, row: u32) -> i64 {
         if self.hidden_rows.is_empty() {
             return row as i64 - self.top_row as i64;

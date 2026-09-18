@@ -5,20 +5,20 @@
 use super::CellStyle;
 use serde::{Deserialize, Serialize};
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Clipboard (`trame-clipboard`)
 //
 // The serialized payload of a copied/cut range. Built by the UI from its
-// viewport cache, written onto the OS clipboard (postcard, alongside a
-// tab-separated text fallback for cross-app interop), read back on paste, and
-// moved to the Logic thread inside [`TrameCommand::PasteRange`]. It derives
+// viewport cache, and written onto the OS clipboard (postcard, alongside a
+// tab-separated text fallback for cross-app interop). It is read back on paste,
+// and moved to the Logic thread inside [`TrameCommand::PasteRange`]. It derives
 // `serde` (unlike the rest of the data plane) precisely so the UI can postcard
 // it onto the clipboard.
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /// A copied/cut rectangular range: its source origin (top-left absolute grid
-/// position, for relative-formula reindexing) plus its non-empty cells, each
-/// keyed by an offset from that origin.
+/// position, for relative-formula reindexing). It also carries its non-empty
+/// cells, each keyed by an offset from that origin.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ClipboardPayload {
     /// Source range top-left absolute row (0-based). The paste reindex shift is
@@ -41,7 +41,7 @@ impl ClipboardPayload {
     /// between rows), the lingua-franca a spreadsheet writes to the OS clipboard
     /// for cross-application paste. Cells are placed by their `(dr, dc)` offset;
     /// gaps (blank source cells, omitted from `cells`) render as empty fields. A
-    /// formula cell contributes its raw text (e.g. `=A1*2`).
+    /// formula cell contributes its raw text (for example `=A1*2`).
     pub fn to_tsv(&self) -> String {
         let mut grid =
             vec![vec![String::new(); self.cols.max(1) as usize]; self.rows.max(1) as usize];
@@ -60,7 +60,7 @@ impl ClipboardPayload {
 }
 
 /// One cell of a [`ClipboardPayload`], positioned by its offset from the source
-/// origin and carrying its raw text (formula source for a formula cell) plus its
+/// origin. It carries its raw text (formula source for a formula cell) plus its
 /// full formatting.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ClipboardCell {
@@ -68,7 +68,7 @@ pub struct ClipboardCell {
     pub dr: u32,
     /// Column offset from [`ClipboardPayload::src_col`].
     pub dc: u32,
-    /// Raw cell text (e.g. `=SUM(A1:B1)` for a formula), in display form. A
+    /// Raw cell text (for example `=SUM(A1:B1)` for a formula), in display form. A
     /// formula's relative references are reindexed by the Logic thread on paste.
     pub raw: String,
     pub bold: bool,

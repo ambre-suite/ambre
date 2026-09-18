@@ -1,16 +1,16 @@
 // ambre-chrome/src/debounce.rs
-// ============================================================================
-// A tiny debounce helper for chrome controls that must coalesce a burst of rapid
-// edits into a single downstream action -- e.g. dragging the Toile style
-// inspector's opacity slider should emit ONE `RestyleElements`, not one per
-// pixel (`toile-styles`, "edits are debounced").
+// ============================================================================ A
+// tiny debounce helper for chrome controls that must coalesce a burst of rapid
+// edits into a single downstream action. Dragging the Toile style inspector's
+// opacity slider emits ONE `RestyleElements`, not one per pixel (`toile-styles`,
+// "edits are debounced").
 //
-// It wraps leptos' `set_timeout_with_handle` (the same timer facility the toast
-// host uses): each `call` cancels the still-pending timer and reschedules, so the
+// It wraps leptos' `set_timeout_with_handle`, the same timer facility the toast
+// host uses. Each `call` cancels the still-pending timer and reschedules, so the
 // closure runs only once the caller has been quiet for `delay`. The pending
-// handle lives in a leptos `StoredValue`, so `Debouncer` is `Copy + Send + Sync`
-// and drops straight into the `Callback` / event closures a component hands to
-// `ColorPopover` and friends (leptos requires those be `Send + Sync`).
+// handle lives in a leptos `StoredValue`, so `Debouncer` is `Copy + Send +
+// Sync`. It drops straight into the `Callback` / event closures a component
+// hands to `ColorPopover` and friends (leptos requires those be `Send + Sync`).
 // ============================================================================
 
 use std::time::Duration;
@@ -36,8 +36,9 @@ impl Debouncer {
     }
 
     /// Schedule `f` to run after `delay`, cancelling any still-pending call. On a
-    /// non-wasm host (tests) there is no event loop, so `f` runs immediately -- the
-    /// debounce is a wasm-only concern and host tests want the effect synchronously.
+    /// non-wasm host (tests) there is no event loop, so `f` runs immediately. The
+    /// debounce is a wasm-only concern, and host tests want the effect
+    /// synchronously.
     #[cfg(target_arch = "wasm32")]
     pub fn call(&self, delay: Duration, f: impl FnOnce() + 'static) {
         use leptos::prelude::*;

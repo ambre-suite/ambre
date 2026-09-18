@@ -240,7 +240,7 @@ mod tests {
         let gapped: Vec<_> = registry().into_iter().filter(|s| s.from != 1).collect();
         let err = migrate_schema(&gapped, 0, 3, &doc).expect_err("the walk cannot reach 3");
         assert_eq!(err, SchemaError::NoMigrationPath { from: 1 });
-        // The hop that did run is not rolled back -- the caller discards the
+        // The hop that did run is not rolled back -- the caller drops the
         // scratch document, which is why nothing here has to undo.
         assert_eq!(*doc.0.borrow(), vec![1]);
     }

@@ -10,8 +10,8 @@ use leptos::prelude::*;
 
 use crate::render::{CommitDirection, FormulaAction};
 
-/// The formula bar component: a name box showing the active cell reference
-/// (e.g. `"B2"`) and an HTML `<input>` bound to the cell's raw value or the
+/// The formula bar component. A name box shows the active cell reference,
+/// such as `"B2"`; an HTML `<input>` binds to the cell's raw value or the
 /// live edit buffer. The input is always editable; focus or typed characters
 /// open an edit session.
 ///
@@ -26,9 +26,9 @@ pub fn FormulaBar(
 ) -> impl IntoView {
     let input_ref = NodeRef::<html::Input>::new();
 
-    // When the signal changes from outside (e.g. a new cell was selected or an
-    // edit was seeded), push the new value into the DOM input without resetting
-    // the caret. The comparison avoids fighting the user's typing.
+    // When the signal changes from outside, push the new value into the DOM
+    // input without resetting the caret. A new cell was selected, or an edit
+    // was seeded. The comparison avoids fighting the user's typing.
     create_effect(move |_| {
         let val = content.get();
         if let Some(input) = input_ref.get() {

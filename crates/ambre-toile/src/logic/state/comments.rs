@@ -292,7 +292,7 @@ impl ToileState {
     /// The pins to paint for camera `vp` (`TOILE-026`): one per thread whose
     /// anchor resolves here. An element anchor resolves to the element's
     /// top-right corner, so the pin follows the element through every move
-    /// (`TOILE-024`); a point anchor resolves when the camera contains it. A
+    /// (`TOILE-024`). A point anchor resolves when the camera contains it. A
     /// thread whose anchor element is gone yields no pin and is left untouched
     /// (`TOILE-025`). No body travels (`TOILE-205`).
     ///

@@ -6,22 +6,22 @@
 // ============================================================================
 
 use super::*;
-// The deck's PDF export is answered here rather than inside `ToileState`, so
-// this file names the two Toile bus types the rest of the module reaches only
-// through `AppCommand` / `AppEvent`.
+// The deck's PDF export is answered here rather than inside `ToileState`.
+// This file therefore names the two Toile bus types the rest of the module
+// reaches only through `AppCommand` / `AppEvent`.
 use ambre_bus::SecretBytes;
 use ambre_bus::app::toile::{ToileCommand, ToileEvent};
 
 impl LogicState {
     /// Render a Toile deck to a PDF and answer with the bytes
     /// (`toile-pdf-export`, `TOILE-IO-029`). The board is read through a shared
-    /// reference and the fonts through a mutable one, which is why this borrows
-    /// the two fields apart rather than going through `handle_app_command`'s
-    /// single `get_mut`.
+    /// reference and the fonts through a mutable one. This borrows the two
+    /// fields apart rather than going through `handle_app_command`'s single
+    /// `get_mut`.
     ///
-    /// Every refusal reaches the user as a `ExportFailed`: a build without the
-    /// export compiled in, a session whose fonts have not landed, a board with
-    /// nothing to draw, and a serializer that gave up all answer by name.
+    /// Every refusal reaches the user as a `ExportFailed`. A build without the
+    /// export compiled in and a session whose fonts have not landed answer by
+    /// name. So do a board with nothing to draw and a serializer that gave up.
     fn export_toile_pdf(&mut self, document_id: DocumentId) {
         let Self {
             docs, export_cx, ..
@@ -49,8 +49,8 @@ impl LogicState {
 
     /// Write a document to a native `.ambre` file and answer with the bytes
     /// (`ambre-spec-docfile.md`). The second app command this thread serves
-    /// itself, and for a reason of its own: the container's header carries the
-    /// document's identity, and an engine does not know its own -- only this
+    /// itself, and for a reason of its own. The container's header carries the
+    /// document's identity. An engine does not know its own; only this
     /// registry, which keyed it, does.
     ///
     /// App-agnostic by construction: one container serves every application
@@ -141,11 +141,11 @@ impl LogicState {
     /// Route a typed application command to its document's state, send display
     /// events to the UI Thread, and forward CRDT/ephemeral payloads to Sync.
     ///
-    /// The registry is **flat**: a document embedded in a Toile via a `doc_embed`
-    /// is an ordinary entry here, keyed by its own `DocumentId`, and its
-    /// commands arrive addressed straight to it. Nesting adds no routing step --
-    /// the child's view holds the child's id and emits through the same channel,
-    /// so a command never travels through the parent.
+    /// The registry is **flat**. A document embedded in a Toile via a `doc_embed`
+    /// is an ordinary entry here, keyed by its own `DocumentId`. Its commands
+    /// arrive addressed straight to it. Nesting adds no routing step. The child's
+    /// view holds the child's id and emits through the same channel, so a command
+    /// never travels through the parent.
     pub(crate) fn handle_app_command(&mut self, document_id: DocumentId, command: AppCommand) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             tracing::warn!("Logic: no live document {document_id} for app command");
@@ -165,8 +165,8 @@ impl LogicState {
             return;
         }
         // The deck's PDF export is the one app command this thread serves itself
-        // (`toile-pdf-export`): the render walk needs the base font faces the
-        // Main thread fetched at boot, and those live here, beside the documents
+        // (`toile-pdf-export`). The render walk needs the base font faces the
+        // Main thread fetched at boot. Those live here, beside the documents
         // rather than inside one.
         if matches!(command, AppCommand::Toile(ToileCommand::ExportPdf)) {
             self.export_toile_pdf(document_id);
@@ -197,10 +197,11 @@ impl LogicState {
         };
         let doc = &mut doc.state;
 
-        // Each arm produces the same triple -- display events, an optional CRDT
-        // `update`, an optional `ephemeral` payload -- so the fan-out to UI /
-        // Sync / persist is factored into `dispatch_outcome`, keeping the arms to
-        // the single differing line (which `state` and which `AppEvent` wrap).
+        // Each arm produces the same triple: display events, an optional CRDT
+        // `update`, an optional `ephemeral` payload. The fan-out to UI / Sync /
+        // persist is therefore factored into `dispatch_outcome`. That keeps the
+        // arms to the single differing line (which `state` and which `AppEvent`
+        // wrap).
         match (doc, command) {
             (DocState::Trame(state), AppCommand::Trame(cmd)) => {
                 let outcome = state.handle_command(cmd);
@@ -227,7 +228,7 @@ impl LogicState {
                     outcome.requests,
                 );
             }
-            // A mismatched (state, command) pair is impossible by routing: the
+            // A mismatched (state, command) pair is impossible by routing. The
             // `document_id` selects a single `DocState`, and the UI only ever
             // sends the matching `AppCommand` variant for that document.
             (state, command) => tracing::warn!(
@@ -239,10 +240,10 @@ impl LogicState {
     }
 
     /// Fan an already-typed outcome out to the UI Thread (display events), to
-    /// Sync (`SendUpdate` / `SendEphemeral`), and to local persistence (a full
-    /// snapshot, captured while the `state` borrow was live). Shared by every
-    /// `AppCommand` arm; the arm only decides which `AppEvent` variant wraps the
-    /// display events and whether a snapshot was taken.
+    /// Sync (`SendUpdate` / `SendEphemeral`), and to local persistence. The
+    /// snapshot is a full one, captured while the `state` borrow was live.
+    /// Shared by every `AppCommand` arm; the arm only decides which `AppEvent`
+    /// variant wraps the display events and whether a snapshot was taken.
     fn dispatch_outcome(
         &mut self,
         document_id: DocumentId,
@@ -257,7 +258,7 @@ impl LogicState {
         }
         if let Some(payload) = update {
             tracing::info!(
-                "[Logic→Sync] pushing SendUpdate doc={document_id} delta_size={}",
+                "[Logic->Sync] pushing SendUpdate doc={document_id} delta_size={}",
                 payload.len(),
             );
             self.send_to_sync(SyncCommand::SendUpdate {
@@ -274,9 +275,9 @@ impl LogicState {
                 payload,
             });
         }
-        // Lower each Toile-level service request to a `RestCommand`, supplying
-        // the owning `document_id` (which the engine does not hold) and recording
-        // the route so the answering `RestEvent` / `ApiError` is fed back into the
+        // Lower each Toile-level service request to a `RestCommand`, supplying the
+        // owning `document_id` (which the engine does not hold). Record the route
+        // as well, so the answering `RestEvent` / `ApiError` is fed back into the
         // engine instead of forwarded to the UI (`toile-media`).
         for request in requests {
             let (id, cmd) = self.lower_request(document_id, request);
@@ -384,10 +385,10 @@ impl LogicState {
             DocState::Trame(state) => {
                 let events = state.apply_remote(payload);
                 // Persist the merged state locally whenever the remote delta
-                // actually changed the document (it emitted display events), so a
-                // refresh restores it even for a client that only ever receives
-                // (never edits) -- otherwise such a client has no local snapshot
-                // and depends entirely on a fresh server replay.
+                // actually changed the document (it emitted display events). A
+                // refresh then restores it even for a client that only ever
+                // receives, never edits. Otherwise such a client has no local
+                // snapshot and depends entirely on a fresh server replay.
                 let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
                 (events.into_iter().map(AppEvent::Trame).collect(), snapshot)
             }
@@ -501,9 +502,9 @@ impl LogicState {
 /// the file is named for what it holds, like the SVG export.
 const PDF_FILENAME: &str = "deck.pdf";
 
-/// The deck as PDF bytes, or the reason there are none. Split out of the handler
-/// so the two builds -- with the export compiled in and without -- differ in one
-/// function and not in the routing around it.
+/// The deck as PDF bytes, or the reason there are none. Split out of the
+/// handler. The build with the export compiled in and the build without differ
+/// in one function, not in the routing around it.
 #[cfg(feature = "toile-pdf")]
 fn export_pdf_of(
     state: &ToileState,

@@ -28,12 +28,12 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | `CANVAS-025` | `INV` | The drawing crate MUST declare no GPU and no PDF dependency. | this spec section 2; `ambre-spec-architecture.md section 2` | crate-graph -- `ambre-draw` declares `kurbo`, `peniko`, `parley` and `ambre-core`, and a `wgpu` or `krilla` line added there fails the build of every host-tier render test | none | verified |
 | `CANVAS-026` | `INV` | The drawing crate MUST decode nothing: a raster image MUST arrive as pixels the caller already decoded. | this spec section 2 | crate-graph -- `ambre-draw` declares no codec, and `ImageSource` borrows a slice it never owns | none | verified |
 | `CANVAS-055` | `INV` | The PDF back end MUST NOT be in the startup bundle. | this spec section 2; `ambre-spec-budgets.md section 5` | crate-graph -- `ambre-app` declares neither `krilla` nor `ambre-pdf`, and Toile's `pdf` feature is off by default, so nothing links krilla into a client build | none | verified |
-| `CANVAS-028` | `INV` | The PDF back end MUST run in the Logic thread. | this spec section 2 | none | unheld -- it is the half the crate graph does not hold: keeping krilla out of the startup bundle says nothing about which thread calls it, and a PDF built on the UI thread would block the frame for as long as the document is long | unverified |
+| `CANVAS-028` | `INV` | The PDF back end MUST run in the Logic thread. | this spec section 2 | none | unheld -- it is the half the crate graph does not hold: keeping krilla out of the startup bundle says nothing about which thread calls it, and a PDF built on the UI thread would block the frame for as long as the document is long; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-030` | `INV` | A surface that does not implement an optional primitive MUST do nothing, never fail. | this spec section 2 | type-level -- each optional method carries a default empty body, so a back end that omits it compiles and draws nothing | none | verified |
 | `CANVAS-061` | `OBS` | A vector edge MUST reach the screen antialiased. | this spec section 2 | not built | unbuilt -- lands with the "Antialiased vector geometry" Story (`ambre-roadmap.md` E6). Every screen pipeline runs at one sample and the solid shader returns its vertex colour unmodified, so a diagonal is a hard staircase and only glyphs escape, through their own coverage atlas | unimplemented |
 | `CANVAS-063` | `OBS` | An antialiased edge MUST keep its width in screen pixels at every zoom. | this spec section 2 | not built | unbuilt -- lands with the "Antialiased vector geometry" Story (`ambre-roadmap.md` E6). Tessellation is in model space, so a width in model units is a band that thickens as the board zooms in | unimplemented |
-| `CANVAS-064` | `OBS` | Antialiasing MUST NOT mark the inside of a shape: only its silhouette may be softened. | this spec section 2 | not built | unbuilt -- lands with the "Antialiased vector geometry" Story (`ambre-roadmap.md` E6). It is the rule that separates a contour band from a per-triangle coverage term, which softens every internal edge of the tessellation and draws a seam along each one | unimplemented |
-| `CANVAS-065` | `OBS` | A minified picture MUST be sampled through a mip chain, never through its full-size texels alone. | this spec section 2 | `ambre_canvas::render::mipmap::tests::the_chain_halves_down_to_one_texel`; `::a_flat_image_keeps_halving_its_long_axis` -- the descent; `::a_reduced_texel_is_the_mean_of_its_block` -- the averaging | partial -- that the sampler is the trilinear one is held by construction and by no test, because no host tier reads a rendered frame (`ambre-spec-testing.md section 2`) | unverified |
+| `CANVAS-064` | `OBS` | Antialiasing MUST NOT mark the inside of a shape: only its silhouette MAY be softened. | this spec section 2 | not built | unbuilt -- lands with the "Antialiased vector geometry" Story (`ambre-roadmap.md` E6). It is the rule that separates a contour band from a per-triangle coverage term, which softens every internal edge of the tessellation and draws a seam along each one | unimplemented |
+| `CANVAS-065` | `OBS` | A minified picture MUST be sampled through a mip chain, never through its full-size texels alone. | this spec section 2 | `ambre_canvas::render::mipmap::tests::the_chain_halves_down_to_one_texel`; `::a_flat_image_keeps_halving_its_long_axis` -- the descent; `::a_reduced_texel_is_the_mean_of_its_block` -- the averaging | partial -- that the sampler is the trilinear one is held by construction and by no test, because no host tier reads a rendered frame (`ambre-spec-testing.md section 2`); lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-066` | `INV` | An uploaded picture MUST be reused across frames, under a bounded budget that drops the least recently drawn first. | this spec section 2; `ambre-spec-budgets.md section 6` | `ambre_canvas::render::renderer::image_cache_tests::the_least_recently_drawn_entry_is_evicted_first`; `::a_hit_stamps_the_entry_with_the_current_frame`; `::reinserting_a_key_replaces_its_cost`; `::a_key_at_another_size_is_a_miss`; `::consecutive_quads_of_one_picture_are_one_run` -- the run merge that keeps one picture to one draw | none | verified |
 
 ### 1.2 Draw one document onto a surface
@@ -43,29 +43,21 @@ or a page, and the walk is not told which.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CANVAS-029` | `POST` | One render walk MUST serve the screen and the page. | this spec section 2 | none | unheld -- the trait declares no screen type, so the rule holds by its signature, and no test walks one document onto both surfaces and compares what each recorded | unverified |
+| `CANVAS-029` | `POST` | One render walk MUST serve the screen and the page. | this spec section 2 | none | unheld -- the trait declares no screen type, so the rule holds by its signature, and no test walks one document onto both surfaces and compares what each recorded; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-027` | `POST` | Every `push_clip` and `push_transform` MUST be matched by its pop before the surface is finished. | this spec section 2 | `ambre_pdf::tests::zero_area_clip_stays_balanced` -- the degenerate case, where an unbalanced push corrupts the rest of the page | none | verified |
-| `CANVAS-056` | `FRAME` | A drawing primitive MUST NOT hold screen-only state. | this spec section 2 | none | unheld -- it is the half `CANVAS-029` carried, and the one an implementation breaks rather than a caller. Nothing refuses a back end that reads a frame counter or a device pixel ratio behind the trait, and the page then stops matching the screen one primitive at a time | unverified |
+| `CANVAS-056` | `FRAME` | A drawing primitive MUST NOT hold screen-only state. | this spec section 2 | none | unheld -- it is the half `CANVAS-029` carried, and the one an implementation breaks rather than a caller. Nothing refuses a back end that reads a frame counter or a device pixel ratio behind the trait, and the page then stops matching the screen one primitive at a time; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-062` | `FRAME` | Antialiasing MUST NOT add a render pass, a compute dispatch or a multisampled attachment. | this spec section 2; `ambre-spec-frame.md section 4` | not built | unbuilt -- lands with the "Antialiased vector geometry" Story (`ambre-roadmap.md` E6). It is the rule that keeps the edge treatment inside the decision `ambre-spec-frame.md` already took against a compute rasterizer, and a WebGL2 back end has no compute stage to run one on | unimplemented |
 
-* **Budget.** the krilla row of `ambre-spec-budgets.md section 5` -- about 400 KB raw, about
-  120 KB gzipped, counted once for the whole suite. `CANVAS-028` keeps it out of the startup
-  bundle. `ambre-spec-budgets.md section 2` charges the drawing calls themselves to the
-  vertex-batch and render-pass phases.
+* **Budget.** the krilla row of `ambre-spec-budgets.md section 5`, counted once for the whole suite
+  and kept out of the startup bundle by `CANVAS-028`. `ambre-spec-budgets.md section 2` charges the
+  drawing calls to the vertex-batch and render-pass phases.
 * **Boundary.** none: a surface writes to a texture or to a byte buffer, holds no key and opens no
-  socket. A PDF the user exports leaves the machine only when the user sends it, and
-  `ambre-spec-docfile.md` owns what a plaintext export owes them.
-* **Verification.** 7 `verified`, 4 `unverified`, 4 `unimplemented`. The rendering layer still
-  holds this document better than any other, for a structural reason. The crate graph or the
-  compiler holds five of the six verified rules. The frame path can use neither, because a frame
-  is a runtime property. The pass split the two rows whose second half no crate graph can read.
-  * `CANVAS-028` claimed the PDF back end runs on the Logic thread and stays out of the startup
-    bundle. One crate-graph mechanism carried both claims, and it holds only the second. Keeping
-    krilla unlinked says nothing about which thread calls it. A PDF built on the UI thread blocks
-    the frame for as long as the document is long.
-  * `CANVAS-029` claimed one walk serves both destinations and that no primitive holds screen-only
-    state. The second is what an implementation breaks rather than a caller, and it is
-    `CANVAS-056`.
+  socket. A PDF leaves the machine only when the user sends it, and `ambre-spec-docfile.md` owns
+  what a plaintext export owes them.
+* **Verification.** 7 `verified`, 4 `untested`, 4 `unimplemented`. The crate graph or the compiler
+  holds five of the seven, which is why the rendering layer reads better here than anywhere else.
+  What neither can reach is a runtime property: which thread calls the PDF back end, and whether a
+  primitive holds screen-only state.
 
 ---
 

@@ -10,7 +10,7 @@ use crate::jwt::JwtKeys;
 use crate::oidc::OidcClients;
 use crate::state::{AppState, Config};
 
-/// Empty OIDC clients map — no providers configured.
+/// Empty OIDC clients map -- no providers configured.
 pub fn empty_oidc_clients() -> OidcClients {
     Arc::new(HashMap::new())
 }

@@ -1,17 +1,17 @@
 // ambre-canvas/src/render/atlas.rs
 // ============================================================================
-// GlyphAtlas: Swash rasterization into two 2048x2048 GPU textures -- an R8Unorm
-// coverage-mask atlas for regular text glyphs and a parallel Rgba8Unorm atlas
-// for full-color glyphs (color emoji), plus a shelf packer and the per-glyph
-// UV/bearing cache. Batched CPU->GPU uploads once per frame.
+// GlyphAtlas: Swash rasterization into two 2048x2048 GPU textures. An R8Unorm
+// coverage-mask atlas serves regular text glyphs, a parallel Rgba8Unorm atlas
+// full-color glyphs (color emoji). A shelf packer and the per-glyph UV/bearing
+// cache complete it. Batched CPU->GPU uploads once per frame.
 //
-// Color glyphs (e.g. the CBDT bitmap Noto Color Emoji) come back from Swash as
-// `Content::Color` (straight-alpha RGBA) and are packed into the color atlas;
-// everything else stays on the alpha-mask path with no extra memory cost. Which
-// atlas a glyph lives in is recorded on its `AtlasSlot::is_color`, so the draw
-// path can route it to the matching pipeline. Keeping two atlases (rather than
-// one RGBA atlas for all glyphs) avoids paying 4x texture memory for text, which
-// dominates the working set.
+// Color glyphs (for example the CBDT bitmap Noto Color Emoji) come back from
+// Swash as `Content::Color` (straight-alpha RGBA) and are packed into the color
+// atlas. Everything else stays on the alpha-mask path with no extra memory cost.
+// Which atlas a glyph lives in is recorded on its `AtlasSlot::is_color`, so the
+// draw path can route it to the matching pipeline. Keeping two atlases (rather
+// than one RGBA atlas for all glyphs) avoids paying 4x texture memory for text,
+// which dominates the working set.
 // ============================================================================
 
 use rustc_hash::FxHashMap;
@@ -34,16 +34,16 @@ struct GlyphKey {
 /// Retained bitmap for a packed glyph, kept so the atlas can repack its working
 /// set on overflow (LRU compaction) without re-rasterizing through Swash.
 /// Invisible glyphs (space) have no bitmap. Whether the bytes are R8 coverage
-/// or RGBA color is carried by the owning slot's `is_color`, which the
-/// compaction path reads to re-queue into the matching atlas.
+/// or RGBA color is carried by the owning slot's `is_color`. The compaction
+/// path reads it to re-queue into the matching atlas.
 struct GlyphBitmap {
     w: u32,
     h: u32,
     data: Vec<u8>,
 }
 
-/// A cache entry: its current atlas slot, the frame it was last drawn on (for
-/// LRU compaction), and the retained bitmap (`None` for a zero-size glyph).
+/// A cache entry: the current atlas slot, the frame it was last drawn on (LRU
+/// compaction), and the retained bitmap. `None` marks a zero-size glyph.
 struct CachedGlyph {
     slot: AtlasSlot,
     last_used: u64,
@@ -133,7 +133,7 @@ pub struct GlyphAtlas {
     color_pending: Vec<(u32, u32, u32, u32, Vec<u8>)>,
     /// The color atlas is allocated lazily: a full 2048x2048 RGBA texture is 16
     /// MB, wasted on the many documents with no color emoji. Until the first
-    /// color glyph appears the texture is a 1x1 placeholder; `color_ready` gates
+    /// color glyph appears the texture is a 1x1 placeholder. `color_ready` gates
     /// packing, `color_wanted` latches the first sighting so the renderer can
     /// grow the texture (and rebuild its bind group) on the next frame.
     color_ready: bool,
@@ -220,9 +220,10 @@ impl GlyphAtlas {
     }
 
     /// Called at the start of each frame. Advances the frame clock used to age
-    /// glyphs for LRU compaction, and runs a deferred compaction if the atlas
-    /// overflowed on the previous frame (deferred so it never rewrites the UVs
-    /// of glyphs already emitted into that frame's vertex buffer).
+    /// glyphs for LRU compaction. It also runs a deferred compaction if the
+    /// atlas overflowed on the previous frame. Deferring it means the UVs of
+    /// glyphs already emitted into that frame's vertex buffer are never
+    /// rewritten.
     pub fn begin_frame(&mut self) {
         self.frame += 1;
         if self.needs_compact {
@@ -232,9 +233,9 @@ impl GlyphAtlas {
     }
 
     /// Repack the recently-used glyphs into a fresh atlas, dropping the cold
-    /// ones. Called at frame start after an overflow. Instead of the old
-    /// full-clear (which threw away every glyph, including the ones still on
-    /// screen, causing a blank flash), we keep glyphs touched within the last
+    /// ones. Called at frame start after an overflow. The old full-clear
+    /// threw away every glyph, including the ones still on screen, causing a
+    /// blank flash. Instead we keep glyphs touched within the last
     /// `KEEP_FRAMES` frames, re-pack them from their retained bitmaps (no
     /// re-rasterization), and re-queue those bitmaps for upload.
     fn compact(&mut self) {
@@ -287,7 +288,7 @@ impl GlyphAtlas {
     }
 
     /// Look up a glyph in the cache. If absent, rasterize it via Swash and
-    /// queue the bitmap for upload. Returns `None` for invisible glyphs (e.g.
+    /// queue the bitmap for upload. Returns `None` for invisible glyphs (for example
     /// whitespace) or if the atlas just became full (will clear next frame).
     pub fn get_or_rasterize(
         &mut self,
@@ -336,11 +337,11 @@ impl GlyphAtlas {
         let w = image.placement.width;
         let h = image.placement.height;
         // A color glyph (color emoji) comes back as straight-alpha RGBA and is
-        // packed into the parallel color atlas; everything else is a coverage
+        // packed into the parallel color atlas. Everything else is a coverage
         // mask on the R8 atlas.
         let is_color = matches!(image.content, swash::scale::image::Content::Color);
 
-        // Invisible glyph (e.g. space): cache a zero-size slot, no upload.
+        // Invisible glyph (for example space): cache a zero-size slot, no upload.
         if w == 0 || h == 0 || image.data.is_empty() {
             let slot = AtlasSlot {
                 uv_min: [0.0; 2],
@@ -371,8 +372,8 @@ impl GlyphAtlas {
         }
 
         // Pack into the matching atlas. On overflow, flag a compaction for the
-        // next frame (deferred to avoid rewriting UVs already baked into this
-        // frame) and drop the glyph for now, as the previous path did.
+        // next frame, deferred to avoid rewriting UVs already baked into this
+        // frame. The glyph is dropped for now, as the previous path did.
         let (packer, pending) = if is_color {
             (&mut self.color_packer, &mut self.color_pending)
         } else {
@@ -432,8 +433,8 @@ impl GlyphAtlas {
 ///
 /// `bpp` is 1 (R8 coverage mask) or 4 (RGBA color). WebGL2 (via the wgpu GL
 /// backend) requires `bytes_per_row` to be a multiple of 4 for
-/// `texSubImage2D`; the R8 path pads each row up to that alignment, while the
-/// RGBA path is already a multiple of 4 (`w * 4`) so it uploads as-is.
+/// `texSubImage2D`. The R8 path pads each row up to that alignment. The RGBA
+/// path is already a multiple of 4 (`w * 4`), so it uploads as-is.
 #[allow(clippy::too_many_arguments)]
 fn upload_glyph(
     queue: &wgpu::Queue,

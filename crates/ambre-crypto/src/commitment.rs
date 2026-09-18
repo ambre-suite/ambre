@@ -39,6 +39,11 @@ pub fn commitment_tag(
 }
 
 /// Verifies `tag` against a freshly computed commitment, in constant time.
+///
+/// # Errors
+///
+/// [`CryptoError::CommitmentMismatch`] when `tag` does not match the computed
+/// one: a substituted key, or an input the tag does not cover.
 pub fn verify_commitment(
     key: &DocumentKey,
     nonce: &[u8],

@@ -7,9 +7,9 @@
 
 use crate::UserId;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Trame (spreadsheet) — events (Logic → UI)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Trame (spreadsheet) -- events (Logic -> UI)
+// -----------------------------------------------------------------------------
 
 /// Display events emitted by the Trame logic to the UI Thread.
 #[derive(Debug, Clone)]
@@ -40,11 +40,11 @@ pub enum TrameEvent {
 
     /// The resolved formatting of the **active cell** after a
     /// [`SetCellStyle`](super::TrameCommand::SetCellStyle) or a
-    /// [`SetActiveCell`](super::TrameCommand::SetActiveCell), driving the
-    /// whole formatting toolbar (bold/italic/underline toggles, font/size selects,
-    /// colour swatches, align buttons, cell-format / border menus, wrap). Bold and
-    /// italic ride alongside the [`CellStyle`] -- they are now part of the single
-    /// style channel, not a separate per-flag event (`trame-cell-styles`).
+    /// [`SetActiveCell`](super::TrameCommand::SetActiveCell). It drives the whole
+    /// formatting toolbar: bold/italic/underline toggles, font/size selects, colour
+    /// swatches, align buttons, cell-format / border menus, wrap. Bold and italic ride
+    /// alongside the [`CellStyle`]. They are part of the single style channel, not a
+    /// separate per-flag event (`trame-cell-styles`).
     ///
     /// [`CellStyle`]: super::CellStyle
     StyleApplied {
@@ -54,10 +54,10 @@ pub enum TrameEvent {
         /// Whether the active cell is part of a merge (a master or a covered
         /// cell), driving the toolbar's merge/unmerge toggle pressed state.
         merged: bool,
-        /// Whether the active cell's display value parses as a number. Lets the
-        /// toolbar resolve [`HAlign::Auto`](super::HAlign::Auto) the same
-        /// way the renderer does (numbers right, text left), so the alignment
-        /// control reflects the de-facto alignment of an `Auto` cell.
+        /// Whether the active cell's display value parses as a number. Lets the toolbar
+        /// resolve [`HAlign::Auto`](super::HAlign::Auto) the same way the renderer does,
+        /// numbers right and text left. The alignment control then reflects the de-facto
+        /// alignment of an `Auto` cell.
         numeric: bool,
     },
 
@@ -69,8 +69,8 @@ pub enum TrameEvent {
     /// Ask the UI Thread to replace the rendered grid selection with the
     /// rectangle `(r1,c1)`-`(r2,c2)` (inclusive, corners ordered). Emitted when a
     /// command changes the area the user should see selected and the canvas
-    /// cannot derive it locally -- e.g. after an unmerge, where the freed cells
-    /// must stay selected even though the merge that defined the span is gone.
+    /// cannot derive it locally. An unmerge is the case: the freed cells must
+    /// stay selected, though the merge that defined the span is gone.
     /// The active cell collapses onto the top-left corner.
     SelectRange { r1: u32, c1: u32, r2: u32, c2: u32 },
 
@@ -110,28 +110,28 @@ pub enum TrameEvent {
         active: String,
     },
 
-    /// A command was rejected for a reason the user should see (e.g. deleting the
+    /// A command was rejected for a reason the user should see (for example deleting the
     /// last remaining sheet). Purely informational; no CRDT mutation occurred.
     Error { message: String },
 
-    /// The workbook was written by a newer client and was refused whole
-    /// (`SCHEMA-008`): nothing was applied, and the grid on screen is the one
-    /// that was already open. Distinct from [`Error`](Self::Error), which
-    /// reports a rejected *command* -- this one reports a document the build
-    /// cannot read at all, and the remedy is to update the client.
+    /// The workbook was written by a newer client and was refused whole (`SCHEMA-008`).
+    /// Nothing was applied, and the grid on screen is the one that was already open.
+    /// Distinct from [`Error`](Self::Error), which reports a rejected *command*. This one
+    /// reports a document the build cannot read at all, and the remedy is to update the
+    /// client.
     DocumentRefused { reason: String },
 
-    /// At least one record in the workbook could not be decoded and lost its
-    /// formatting (`SCHEMA-003`). A fact rather than a count: the same
-    /// unreadable register is met again on every later reseed, so any number
-    /// reported here would be an artefact of how often the grid was rebuilt.
+    /// At least one record in the workbook could not be decoded and lost its formatting
+    /// (`SCHEMA-003`). A fact rather than a count. The same unreadable register is met
+    /// again on every later reseed. Any number reported here would be an artefact of how
+    /// often the grid was rebuilt.
     UndecodableRecords,
 
     /// A local [`SortRange`](super::TrameCommand::SortRange) finished
     /// reordering the rows (`trame-sort`). The accompanying
     /// [`DataReset`](Self::DataReset) prompts the UI to re-fetch the viewport with
-    /// the new ordering; this event is the explicit completion signal (e.g. to
-    /// clear a "sorting..." affordance). A no-op sort emits nothing.
+    /// the new ordering. This event is the explicit completion signal, which
+    /// clears a "sorting..." affordance. A no-op sort emits nothing.
     SortComplete,
 
     /// A local [`ApplyFilter`](super::TrameCommand::ApplyFilter) finished
@@ -152,11 +152,11 @@ pub enum TrameEvent {
     ColumnValues { col: u32, values: Vec<String> },
 
     /// Selection aggregates for the status bar (`trame-status-bar`), replying to
-    /// [`RequestSelectionStats`](super::TrameCommand::RequestSelectionStats).
-    /// `count` is the number of non-empty cells in the selection; `count_num` is
-    /// the number of numeric cells, and drives whether the UI shows `sum`/`avg`/
-    /// `min`/`max` (they are meaningless, and left at `0.0`, when `count_num == 0`).
-    /// `avg` is `sum / count_num` (0.0 for no numeric cell).
+    /// [`RequestSelectionStats`](super::TrameCommand::RequestSelectionStats). `count` is
+    /// the number of non-empty cells in the selection. `count_num` is the number of numeric
+    /// cells, and drives whether the UI shows `sum`/`avg`/`min`/`max` (they are
+    /// meaningless, and left at `0.0`, when `count_num == 0`). `avg` is `sum / count_num`
+    /// (0.0 for no numeric cell).
     SelectionStats {
         sum: f64,
         avg: f64,
@@ -172,12 +172,12 @@ pub enum TrameEvent {
     /// visible again. A no-op clear (no active filter) emits nothing.
     FilterCleared,
 
-    /// The matches of a [`FindNext`](super::TrameCommand::FindNext) on the
-    /// active sheet (`trame-find-replace`). `matches` lists every matching cell as a
-    /// `(row, col)` grid pair in scan order; `active` is the index within
-    /// `matches` of the cell to focus (`None` when there is no match). Local view
-    /// state: the UI highlights the set and scrolls the focused cell into view; it
-    /// is never synced. An empty `matches` means "not found".
+    /// The matches of a [`FindNext`](super::TrameCommand::FindNext) on the active sheet
+    /// (`trame-find-replace`). `matches` lists every matching cell as a `(row, col)` grid
+    /// pair in scan order. `active` is the index within `matches` of the cell to focus
+    /// (`None` when there is no match). Local view state: the UI highlights the set and
+    /// scrolls the focused cell into view; it is never synced. An empty `matches` means
+    /// "not found".
     FindResult {
         matches: Vec<(u32, u32)>,
         active: Option<usize>,
@@ -201,7 +201,7 @@ pub enum TrameEvent {
     /// memory and mirrors it to the OS clipboard. Non-mutating, never synced.
     Clipboard(super::ClipboardPayload),
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     // Deferred feature surface (Phase 2+)
     //
     // Completes the `TrameEvent` surface mandated by
@@ -209,7 +209,7 @@ pub enum TrameEvent {
     // enums"). Emitted once the matching command handlers land (personal filter
     // views / conditional formatting -> Phase 2/3, validation -> Phase 2/3,
     // range protection -> Post-MVP).
-    // ─────────────────────────────────────────────────────────────────────────
+    // -------------------------------------------------------------------------
     /// A personal filter view was persisted to local storage
     /// ([`SaveFilterView`](super::TrameCommand::SaveFilterView),
     /// `trame-shared-filter`). `view_id` is its stable local id.
@@ -300,7 +300,7 @@ pub struct DisplayCell {
     pub col: u32,
     /// Display text (formula result or raw string).
     pub text: String,
-    /// Raw cell text as stored in the CRDT (e.g. `=SUM(A1:B1)` for a formula).
+    /// Raw cell text as stored in the CRDT (for example `=SUM(A1:B1)` for a formula).
     /// Used to seed the in-cell editor so editing a formula shows the formula,
     /// not its computed result. Equals `text` for plain cells.
     pub raw: String,
@@ -338,6 +338,7 @@ pub struct DisplayCell {
     pub merge_span: Option<(u32, u32)>,
     /// The cell's row is hidden by the active shared filter
     /// (`trame-shared-filter`). The UI Thread collapses such
-    /// rows; the value is still present (and still counted by `=SUM`, etc.).
+    /// rows; the value is still present, and the aggregates such as `=SUM` still
+    /// count it.
     pub is_filtered: bool,
 }

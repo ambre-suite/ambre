@@ -5,8 +5,8 @@
 use super::*;
 
 /// `UnmergeActive` over a selection spanning several merges splits every one of
-/// them, not just the merge under the active cell (regression: only the last
-/// selected merge was freed).
+/// them, not just the merge under the active cell. Regression: only the last
+/// selected merge was freed.
 #[test]
 fn unmerge_active_splits_every_merge_in_selection() {
     let mut state = TrameState::new();
@@ -59,9 +59,9 @@ fn unmerge_active_splits_every_merge_in_selection() {
 }
 
 /// `UnmergeActive` over a selection that only clips the edge of a merge still
-/// grows the post-unmerge selection to the freed block: the merge extends past
-/// the drag rectangle, so the exposed cells must end up selected (the reported
-/// bug -- the selection was smaller than the unmerged cells).
+/// grows the post-unmerge selection to the freed block. The merge extends past
+/// the drag rectangle, so the exposed cells must end up selected. In the
+/// reported bug the selection was smaller than the unmerged cells.
 #[test]
 fn unmerge_selection_grows_to_cover_straddling_merge() {
     let mut state = TrameState::new();
@@ -95,8 +95,8 @@ fn unmerge_selection_grows_to_cover_straddling_merge() {
 }
 
 /// Two vertical merges A1:A2 and B1:B2, selected by their masters only (row 0),
-/// then unmerged: the post-unmerge selection must grow down to row 1 to cover
-/// every freed cell (the exact case reported: only A1/B1 stayed selected).
+/// then unmerged. The post-unmerge selection must grow down to row 1 to cover
+/// every freed cell. In the exact case reported, only A1/B1 stayed selected.
 #[test]
 fn unmerge_two_vertical_merges_selected_by_masters() {
     let mut state = TrameState::new();
@@ -147,7 +147,7 @@ fn merge_selection_single_cell_is_noop() {
 }
 
 /// A concurrent edit that lands a value in a covered cell is masked, not
-/// destroyed: the value is hidden while the merge is active and reappears on
+/// destroyed. The value is hidden while the merge is active and reappears on
 /// unmerge (`trame-cell-merges`, data is never destroyed).
 #[test]
 fn concurrent_value_under_merge_is_masked_then_restored() {
@@ -209,9 +209,9 @@ fn concurrent_value_under_merge_is_masked_then_restored() {
     );
 }
 
-/// Two concurrent merges that overlap resolve to one block, and the survivor
-/// is the merge whose master key sorts first -- not the last writer, and not
-/// the local one. The winner is read from the keys, so the assertion holds the
+/// Two concurrent merges that overlap resolve to one block. The survivor is
+/// the merge whose master key sorts first, not the last writer and not the
+/// local one. The winner is read from the keys, so the assertion holds the
 /// rule and not the positions this run happened to mint (`TRAME-144`).
 #[test]
 fn overlapping_merges_resolve_to_the_lowest_master_key() {
@@ -317,7 +317,7 @@ fn merge_follows_structural_insert() {
     );
 }
 
-/// An edit emits a CRDT delta through the `CommandSink`: absorbing the
+/// An edit emits a CRDT delta through the `CommandSink`. Absorbing the
 /// outcome captures exactly one `SyncCommand::SendUpdate`, the seam the
 /// production controller drives the Sync thread through.
 #[test]
@@ -345,9 +345,9 @@ fn edit_emits_send_update_through_sink() {
     ));
 }
 
-/// Full two-peer collaboration loop driven through `MockSyncHandle`: peer A
+/// Full two-peer collaboration loop driven through `MockSyncHandle`. Peer A
 /// edits, the mock captures and relays the delta to peer B, and B converges
-/// on A's value -- a controller test with no network and no hand-shuffled
+/// on A's value. A controller test with no network and no hand-shuffled
 /// snapshots.
 #[test]
 fn two_peers_converge_via_mock_sync() {
@@ -382,8 +382,8 @@ fn two_peers_converge_via_mock_sync() {
 }
 
 /// Two peers sharing a cross-sheet formula converge when one renames the
-/// target sheet: the reference is bound to the stable `sheet_id` (same id on
-/// both peers via sync), so both keep computing and reconstruct identical
+/// target sheet. The reference is bound to the stable `sheet_id`, the same
+/// id on both peers via sync. Both keep computing and reconstruct identical
 /// formula-bar text (`trame-sheets`).
 #[test]
 fn cross_sheet_reference_converges_across_peers_on_rename() {
@@ -423,9 +423,10 @@ fn cross_sheet_reference_converges_across_peers_on_rename() {
     );
     assert_eq!(read_raw(&mut b, 0, 1), "=Sheet2!A1*2");
 
-    // B renames the target sheet; A merges B's state (a snapshot carries
+    // B renames the target sheet; A merges B's state. A snapshot carries
     // B's full history, including the implicit-s0 op each peer mints in
-    // `new()`, which an incremental delta would leave as a dangling dep).
+    // `new()`. An incremental delta would leave that op as a dangling
+    // dep.
     b.handle_command(TrameCommand::RenameSheet {
         sheet_id: s2.clone(),
         name: "Data".to_owned(),
@@ -483,9 +484,9 @@ fn create_sheet_lists_and_isolates() {
     assert_eq!(read_cell(&mut state, 0, 0), "on_s0");
 }
 
-/// The first `ScrollViewport` of a session rides a `SheetList` back so the
-/// UI tab strip hydrates on load (no separate fetch command); subsequent
-/// scrolls carry only the viewport.
+/// The first `ScrollViewport` of a session rides a `SheetList` back, so
+/// the UI tab strip hydrates on load with no separate fetch command.
+/// Subsequent scrolls carry only the viewport.
 #[test]
 fn first_scroll_viewport_hydrates_sheet_list_once() {
     let mut state = TrameState::new();

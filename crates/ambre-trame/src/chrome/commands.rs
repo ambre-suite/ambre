@@ -7,11 +7,11 @@
 //   - the keymap aliases the registry cannot hold;
 //   - the inbound `UiEvent` mirroring (toggle state, toasts).
 //
-// The registry itself -- the identities, the descriptions and the
-// `CommandId -> AppCommand` mapping -- is `crate::ui::commands`, which is
-// host-compiled so a test reaches a label without a browser. The identities are
-// re-exported here so the launcher and the chrome components keep naming
-// `chrome::BOLD` (`ambre-spec-commands.md`).
+// The registry itself is `crate::ui::commands`: the identities, the descriptions
+// and the `CommandId -> AppCommand` mapping. It is host-compiled, so a test
+// reaches a label without a browser. The identities are re-exported here so the
+// launcher and the chrome components keep naming `chrome::BOLD`
+// (`ambre-spec-commands.md`).
 // ============================================================================
 
 use ambre_bus::{AppEvent, DocType, TrameEvent, UiEvent};
@@ -32,9 +32,9 @@ pub use crate::ui::grid::CtxScope;
 
 /// Bind Trame's command chords into the launcher's keymap.
 ///
-/// The table is the one declaration site, chords included, so the seeding is
-/// host-compiled beside it (`registry::bind_keys`) and a test resolves a chord
-/// without a browser. Nothing is bound here on the side.
+/// The table is the one declaration site, chords included. The seeding is
+/// therefore host-compiled beside it (`registry::bind_keys`), and a test
+/// resolves a chord without a browser. Nothing is bound here on the side.
 pub fn bind_keys(keymap: &mut Keymap) {
     registry::bind_keys(keymap);
 }
@@ -90,19 +90,20 @@ pub fn mirror_event(store: &CommandStates, ev: &UiEvent) {
     }
 }
 
-/// Seed the command store for a freshly mounted Trame document: Undo and Redo
-/// start disabled (an untouched document has an empty history) until the first
-/// [`TrameEvent::UndoState`] arrives. Every other command stays enabled by
-/// default. Called by the launcher right after it builds the store.
+/// Seed the command store for a freshly mounted Trame document. Undo and Redo
+/// start disabled, an untouched document having an empty history, until the
+/// first [`TrameEvent::UndoState`] arrives. Every other command stays enabled
+/// by default. Called by the launcher right after it builds the store.
 pub fn init_command_states(store: &CommandStates) {
     store.set_enabled(UNDO, false);
     store.set_enabled(REDO, false);
 }
 
 /// Surface a Trame `UiEvent` to the user as a transient toast, when it carries a
-/// message the user should see: a rejected merge/edit, a sheet-lifecycle error,
-/// or the completion of a shared sort/filter. A no-op for every other event; the
-/// launcher calls this for each event it relays, naming no Trame variant itself.
+/// message the user should see. That means a rejected merge/edit, a
+/// sheet-lifecycle error, or the completion of a shared sort/filter. A no-op for
+/// every other event; the launcher calls this for each event it relays, naming
+/// no Trame variant itself.
 pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
     let UiEvent::Viewport {
         event: AppEvent::Trame(te),
@@ -125,9 +126,9 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
         // not a warning: nothing opened, and the remedy is not in this workbook.
         TrameEvent::DocumentRefused { reason } => toasts.error(reason.clone()),
         // Part of the workbook could not be read and lost its formatting
-        // (`SCHEMA-003`). The document is open and usable, so this is a warning
-        // -- but it must be said: a register that silently reads as unformatted
-        // is a workbook that looks intact and is not.
+        // (`SCHEMA-003`). The document is open and usable, so this is a
+        // warning. But it must be said: a register that silently reads as
+        // unformatted is a workbook that looks intact and is not.
         TrameEvent::UndecodableRecords => toasts.warning(
             "Some formatting in this workbook was written by a newer client and could not be read.",
         ),
@@ -185,10 +186,10 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
                 "Protection violated by a collaborator: {description}"
             ));
         }
-        // No toast: state-only events (cell data / toolbar style / sheet list /
-        // undo-redo / find matches / filter values) or wholesale refreshes whose
-        // user feedback rides elsewhere. Listed explicitly so a future variant is
-        // a compile error here, not a silent drop.
+        // No toast for state-only events: cell data, toolbar style, sheet list,
+        // undo-redo, find matches, filter values. Wholesale refreshes whose user
+        // feedback rides elsewhere are silent too. Listed explicitly so a future
+        // variant is a compile error here, not a silent drop.
         TrameEvent::ViewportData { .. }
         | TrameEvent::StyleApplied { .. }
         | TrameEvent::DataReset
@@ -208,7 +209,7 @@ pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
 //
 // The layout is `ui::commands::context_layout`, host-tested. This half turns
 // one row into the `MenuEntry` the DOM menu renders, reading the label and the
-// icon from the registry (`UI-THREAD-019`): a menu declares an order and a
+// icon from the registry (`UI-THREAD-019`). A menu declares an order and a
 // grouping, never a word the user reads.
 
 /// The menu entry for one layout row, labelled and iconed from the registry.

@@ -1,7 +1,7 @@
 //! Core error types for Ambre.
 //!
 //! This module defines `Error`, an enum that encompasses all errors that can
-//! originate from the `ambre‑core` crate.
+//! originate from the `ambre-core` crate.
 
 use thiserror::Error;
 
@@ -64,8 +64,8 @@ pub enum DocTypeError {
 /// Errors related to version byte operations.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum VersionError {
-    /// The version byte is out of allowed range (0‑127).
-    #[error("version byte out of range: must be 0‑127, got {0}")]
+    /// The version byte is out of allowed range (0-127).
+    #[error("version byte out of range: must be 0-127, got {0}")]
     OutOfRange(u8),
 }
 

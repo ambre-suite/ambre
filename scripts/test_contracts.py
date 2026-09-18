@@ -1,0 +1,366 @@
+#!/usr/bin/env python3
+"""What `contracts.py` reads, and what it refuses.
+
+This gate holds the row grammar of the whole corpus, and every rule it carries
+was written after a drift it could not see: 519 rows dropped the backticks
+around their `Kind` and passed a vocabulary check; a seventh column moved the
+`Verification` cell and every position-based read followed the wrong cell in
+silence; a status renamed under a `Counter` returned 0 and under-reported the
+shipped surface by 826 rows.
+
+The pattern is the same each time. The gate answered, the answer was wrong, and
+nothing in the repository disagreed with it. These tests are what disagrees.
+
+Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
+"""
+
+from __future__ import annotations
+
+import sys
+import unittest
+from collections import Counter
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import contracts  # noqa: E402  -- the module under test
+import template_vocabulary  # noqa: E402  -- where the closed sets are stated
+
+
+WHERE = "ambre-spec-frame.md:12"
+
+# A schedule, in the shape `read_schedule` returns: key -> epic, ticked, line, name.
+SCHEDULE = {
+    "the ui-thread belts": ("E9", False, 40, "The UI-thread belts"),
+    "arch p8": ("E4", False, 51, "ARCH P8 -- persisted schema versioning"),
+    "arch p8 -- persisted schema versioning": ("E4", False, 51, "ARCH P8 -- persisted schema versioning"),
+    "one clipboard host": ("E7", True, 62, "One clipboard host"),
+}
+CLOSED = {"the delta order": ("E2", True, 8, "The delta order")}
+
+
+def lands(cell: str, status: str = "untested") -> list[str]:
+    return contracts.story_defects(WHERE, status, cell, SCHEDULE, CLOSED)
+
+
+class Vocabulary(unittest.TestCase):
+    """Every closed set is the template's, read from it exactly once."""
+
+    def test_the_statuses_are_the_templates_own(self):
+        self.assertIs(contracts.STATUSES, template_vocabulary.STATUSES)
+
+    def test_loose_and_owes_story_name_declared_statuses(self):
+        for status in contracts.LOOSE + contracts.OWES_STORY:
+            with self.subTest(status=status):
+                self.assertIn(status, template_vocabulary.STATUSES)
+
+    def test_loose_covers_every_built_status_but_verified(self):
+        """The summary sums over `LOOSE`, so a status missing from it is a
+        silent under-count -- which is precisely what `unverified` was."""
+        self.assertEqual(
+            set(template_vocabulary.STATUSES) - {"verified", "unimplemented"},
+            set(contracts.LOOSE),
+        )
+
+    def test_a_state_kind_and_an_operation_kind_never_overlap(self):
+        self.assertEqual(set(), set(contracts.STATE_KINDS) & set(contracts.OPERATION_KINDS))
+        self.assertEqual(set(contracts.KINDS), set(contracts.STATE_KINDS) | set(contracts.OPERATION_KINDS))
+
+
+class Header(unittest.TestCase):
+    """A cell is read by the name its own header declares, never by position."""
+
+    def test_the_columns_are_read_in_the_order_the_header_writes_them(self):
+        header = "| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |"
+        self.assertEqual("Gap", contracts.header_cells(header)[5])
+
+    def test_a_reordered_header_moves_the_cell_with_it(self):
+        """Pinning a column to its place is what a seventh column broke in
+        silence: `Verification` was 'the last one before the status'."""
+        columns = contracts.header_cells("| ID | Kind | Statement | Sources | Gap | Verification | Status |")
+        rest = " `INV` | The frame MUST land. | derived | none | `insta` | verified |"
+        cells = contracts.row_cells(columns, rest)
+        self.assertEqual("`insta`", cells["Verification"])
+        self.assertEqual("none", cells["Gap"])
+
+    def test_a_table_with_no_header_yields_no_cells(self):
+        self.assertEqual({}, contracts.row_cells(None, " `INV` | x |"))
+
+
+class Cells(unittest.TestCase):
+    """The three rules one row's own cells obey."""
+
+    def defects(self, kind="`INV`", statement="The frame MUST land.", sources="derived"):
+        return contracts.row_defects(WHERE, kind, statement, sources)
+
+    def test_a_well_formed_row_passes(self):
+        self.assertEqual([], self.defects())
+
+    def test_a_kind_without_backticks_is_half_a_column(self):
+        """519 rows dropped them and passed: a vocabulary check that forgives
+        the spelling checks half a column."""
+        self.assertIn("written in backticks", self.defects(kind="INV")[0])
+
+    def test_a_kind_off_the_eight_is_refused(self):
+        self.assertIn("none of the eight", self.defects(kind="`RULE`")[0])
+
+    def test_a_statement_with_no_keyword_describes_instead_of_binding(self):
+        self.assertIn("no RFC 2119 keyword", self.defects(statement="The frame lands.")[0])
+
+    def test_every_declared_keyword_binds(self):
+        for keyword in ("MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "MAY"):
+            with self.subTest(keyword=keyword):
+                self.assertEqual([], self.defects(statement=f"The frame {keyword} land."))
+
+    def test_a_source_nobody_can_resolve_is_refused(self):
+        """`pillar "Local-First"` names a pillar no reader can grep for."""
+        self.assertIn("none of the", self.defects(sources='pillar "Local-First"')[0])
+
+    def test_every_declared_source_form_resolves(self):
+        for form in (
+            "this spec section 2",
+            'README pillar "Security"',
+            "audit `H9`",
+            "derived",
+            "`ambre-spec-sync.md`",
+            "`1-Foundations/ambre-spec-message-bus.md section 4`",
+        ):
+            with self.subTest(form=form):
+                self.assertEqual([], self.defects(sources=form))
+
+
+class Conjunction(unittest.TestCase):
+    """Two rules under one status: the half nothing tests breaks in green."""
+
+    def test_a_second_keyword_behind_an_and_is_two_rules(self):
+        statement = "The frame MUST paint above the content, and MUST follow the gesture."
+        self.assertIsNotNone(contracts.CONJUNCTION.search(statement))
+
+    def test_one_rule_over_two_clauses_is_one_rule(self):
+        statement = "The frame MUST paint above the content and follow the gesture."
+        self.assertIsNone(contracts.CONJUNCTION.search(statement))
+
+    def test_a_sentence_break_ends_the_reach(self):
+        """The measure stops at `.`, `;` and `:`, so a row stating one rule and
+        then explaining it is not read as two."""
+        statement = "The frame MUST paint above the content. The sink MUST follow the gesture."
+        self.assertIsNone(contracts.CONJUNCTION.search(statement))
+
+    def test_the_kinds_that_carry_a_list_by_right_are_named(self):
+        """A `FAIL` binds the refusal, the notice and the rollback as one
+        outcome, and a `FRAME` names everything an operation must not touch."""
+        self.assertEqual(("FAIL", "FRAME"), contracts.BUNDLING_KINDS)
+
+
+class Verification(unittest.TestCase):
+    """A total read: the cell is a mechanism, and nothing else."""
+
+    def defects(self, cell):
+        return contracts.verification_defects(WHERE, cell)
+
+    def test_an_empty_cell_is_refused(self):
+        self.assertIn("write `none`", self.defects("")[0])
+
+    def test_a_token_of_the_closed_set_passes(self):
+        self.assertEqual([], self.defects("`insta`; `proptest`"))
+
+    def test_prose_fails_even_when_it_is_true(self):
+        """What it says belongs in `Gap`, where a reader and a script can both
+        find it."""
+        self.assertIn("no mechanism", self.defects("a reviewer checks the margin")[0])
+
+    def test_a_rust_path_is_a_belt(self):
+        self.assertEqual([], self.defects("`ambre_toile::state::insert`"))
+
+    def test_the_path_continuation_carries_the_module_before_it(self):
+        self.assertEqual([], self.defects("`ambre_toile::state::insert`; `::remove`"))
+
+    def test_an_application_may_precede_the_path(self):
+        self.assertEqual([], self.defects("Toile `ambre_toile::state::insert`"))
+
+    def test_a_token_naming_no_mechanism_takes_no_clause(self):
+        """What follows `none` is an argument, and an argument belongs in
+        `Gap`."""
+        self.assertIn("names no", self.defects("none -- the belt is not written")[0])
+
+    def test_a_token_naming_a_shape_a_reader_cannot_grep_must_locate_it(self):
+        self.assertIn("on its own", self.defects("type-level")[0])
+
+    def test_a_located_token_with_its_clause_passes(self):
+        self.assertEqual([], self.defects("type-level -- the handle is `!Send`"))
+
+    def test_every_item_of_the_list_is_read(self):
+        """A cell a gate reads half of is a cell nothing holds."""
+        self.assertEqual(1, len(self.defects("`insta`; a reviewer checks the rest")))
+
+
+class Gap(unittest.TestCase):
+    """What the mechanism leaves open, and the two rules across the columns."""
+
+    def defects(self, cell, verification="`insta`", status="untested"):
+        return contracts.gap_defects(WHERE, cell, verification, status)
+
+    def test_an_opener_off_the_closed_set_is_refused(self):
+        self.assertIn("`Gap` opens on", self.defects("nothing holds it yet")[0])
+
+    def test_every_declared_opener_is_accepted(self):
+        for opener in contracts.BARE_GAP_OPENERS:
+            with self.subTest(opener=opener):
+                self.assertEqual([], self.defects(opener))
+        for opener in contracts.CARRIED_GAP_OPENERS:
+            with self.subTest(opener=opener):
+                self.assertEqual([], self.defects(f"{opener}the belt is not written"))
+
+    def test_no_mechanism_and_no_gap_is_a_coverage_the_row_does_not_have(self):
+        self.assertIn("claims a coverage", self.defects("none", verification="none")[0])
+
+    def test_verified_beside_an_open_gap_is_two_answers_to_one_question(self):
+        found = self.defects("partial -- the belt holds half", status="verified")
+        self.assertIn("two answers", found[0])
+
+    def test_verified_beside_a_closed_gap_passes(self):
+        self.assertEqual([], self.defects("none", status="verified"))
+
+
+class Stories(unittest.TestCase):
+    """A row that owes a Story lands with an open story of the roadmap."""
+
+    def test_a_row_owing_a_story_and_citing_none_is_refused(self):
+        self.assertIn("without a Story", lands("unheld -- the belt is not written")[0])
+
+    def test_a_story_of_the_roadmap_with_its_epic_passes(self):
+        self.assertEqual([], lands(
+            "unheld -- lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9)"
+        ))
+
+    def test_a_phase_code_is_a_citation_key_of_its_own(self):
+        """`ARCH P8 -- persisted schema versioning` is cited 13 times as
+        `ARCH P8`, which section 1 of the roadmap makes a key."""
+        self.assertEqual([], lands(
+            "unheld -- lands with the `ARCH P8` Story (`ambre-roadmap.md` E4)"
+        ))
+
+    def test_a_story_no_row_of_the_roadmap_carries_is_refused(self):
+        self.assertIn("no row of", lands(
+            "unheld -- lands with the `The margin belts` Story (`ambre-roadmap.md` E9)"
+        )[0])
+
+    def test_a_story_that_shipped_cannot_be_waited_on(self):
+        self.assertIn("closed under epic", lands(
+            "unheld -- lands with the `The delta order` Story (`ambre-roadmap.md` E2)"
+        )[0])
+
+    def test_a_ticked_story_stays_open_until_every_row_is_verified(self):
+        self.assertIn("ticks `[x]`", lands(
+            "unheld -- lands with the `One clipboard host` Story (`ambre-roadmap.md` E7)"
+        )[0])
+
+    def test_a_citation_naming_no_epic_is_refused(self):
+        """So a move of the story fails here."""
+        self.assertIn("names no epic", lands(
+            "unheld -- lands with the `The UI-thread belts` Story"
+        )[0])
+
+    def test_the_wrong_epic_is_refused(self):
+        """`One clipboard host` was cited under `E6` by three rows while the
+        story lived under `E7`."""
+        self.assertIn("cites epic", lands(
+            "unheld -- lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E4)"
+        )[0])
+
+    def test_a_note_after_the_citation_is_not_part_of_the_name(self):
+        self.assertEqual([], lands(
+            "unheld -- lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9);"
+            " the belt is three tests"
+        ))
+
+
+class StoryKeys(unittest.TestCase):
+    """A story name is a join key, and a key that forgives a word joins wrong."""
+
+    def test_the_delimiters_a_citation_adds_are_stripped(self):
+        self.assertEqual(contracts.story_key("`One clipboard host`"), contracts.story_key("One clipboard host"))
+
+    def test_the_case_and_the_spacing_are_folded(self):
+        self.assertEqual("one clipboard host", contracts.story_key("One   Clipboard  Host"))
+
+    def test_a_word_is_never_forgiven(self):
+        self.assertNotEqual(contracts.story_key("One clipboard host"), contracts.story_key("One clipboard"))
+
+    def test_a_phase_code_registers_as_a_key_of_its_own(self):
+        self.assertEqual(
+            ["arch p8 -- persisted schema versioning", "arch p8"],
+            contracts.story_keys("ARCH P8 -- persisted schema versioning"),
+        )
+
+    def test_a_name_without_a_code_registers_once(self):
+        self.assertEqual(["one clipboard host"], contracts.story_keys("One clipboard host"))
+
+
+class Counts(unittest.TestCase):
+    """The `Verification` answer opens on the counts of the table above it."""
+
+    def test_the_counts_are_read_off_the_head_of_the_bullet(self):
+        self.assertEqual(
+            {"verified": 7, "untested": 1, "unimplemented": 1},
+            contracts.stated_counts("7 `verified`, 1 `untested`, and 1 `unimplemented`."),
+        )
+
+    def test_a_figure_after_the_counts_is_a_review_act_not_a_parse(self):
+        """"two of the four are rules the code answers with the opposite" is
+        prose, and it carries figures of its own."""
+        self.assertEqual(
+            {"verified": 4},
+            contracts.stated_counts("4 `verified`. Two of the four are held by 1 belt."),
+        )
+
+    def test_an_answer_opening_on_no_count_is_refused(self):
+        found = contracts.answer_defects("spec.md", (9, "The belt holds it."), Counter({"verified": 1}))
+        self.assertIn("states no count", found[0])
+
+    def test_an_answer_that_disagrees_with_its_table_is_refused(self):
+        found = contracts.answer_defects("spec.md", (9, "2 `verified`."), Counter({"verified": 3}))
+        self.assertIn("says 2 `verified` and the table holds 3", found[0])
+
+    def test_an_answer_counting_a_status_off_the_six_is_refused(self):
+        found = contracts.answer_defects("spec.md", (9, "2 `unverified`."), Counter({"verified": 2}))
+        self.assertIn("no status of the six", found[0])
+
+    def test_a_missing_answer_belongs_to_the_other_gate(self):
+        """One rule, one home: `spec_shape.py` holds whether the label exists."""
+        self.assertEqual([], contracts.answer_defects("spec.md", None, Counter({"verified": 1})))
+
+    def test_an_answer_that_matches_its_table_passes(self):
+        found = contracts.answer_defects("spec.md", (9, "3 `verified`, 1 `untested`."),
+                                         Counter({"verified": 3, "untested": 1}))
+        self.assertEqual([], found)
+
+
+class Tables(unittest.TestCase):
+    """Two rules about the table as a whole."""
+
+    def table(self, *kinds: str) -> list[tuple[int, str, str]]:
+        return [(10 + i, f"SPEC-{i:03}", kind) for i, kind in enumerate(kinds)]
+
+    def test_a_table_mixing_the_two_families_is_the_layout_collapsing(self):
+        """One list again, which is what hid the frame conditions."""
+        found = contracts.table_defects("spec.md", self.table("INV", "POST", "FRAME"))
+        self.assertIn("operation carries a table of its own", found[0])
+
+    def test_a_post_with_no_frame_names_what_it_writes_and_not_what_it_spares(self):
+        found = contracts.table_defects("spec.md", self.table("PRE", "POST"))
+        self.assertIn("declares a `POST` and no `FRAME`", found[0])
+
+    def test_a_complete_operation_table_passes(self):
+        self.assertEqual([], contracts.table_defects("spec.md", self.table("PRE", "POST", "FRAME", "FAIL")))
+
+    def test_a_state_table_passes(self):
+        self.assertEqual([], contracts.table_defects("spec.md", self.table("INV", "CONC", "OBS", "IO")))
+
+    def test_an_unknown_kind_is_reported_once_by_the_cell_check(self):
+        """A typo must not also read as a family clash."""
+        self.assertEqual([], contracts.table_defects("spec.md", self.table("RULE")))
+
+
+if __name__ == "__main__":
+    unittest.main()

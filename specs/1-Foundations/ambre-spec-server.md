@@ -1,15 +1,15 @@
 # AMBRE -- FEATURE: THE BLIND RELAY
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the register, the roles and the three stores all ship; deleting a
+**Implementation:** partial -- the register, the roles and the three stores all ship. Deleting a
 document leaves its state behind, and the brute-force limiter is never selected.
 
 > The one process every client talks to. It routes, it orders and it keeps, and it can read none of
-> what it holds: a document is a row of metadata and a pile of sealed bytes.
+> what it holds. A document is a row of metadata and a pile of sealed bytes.
 
-This document owns the relay itself: what it is, what it stores, who may touch a document, and what
-a caller gets back when something goes wrong. What it does with a token, a delta, a socket, a blob
-or an organization is the five documents beside it.
+This document owns the relay itself: what it is, what it stores and who may touch a document. It
+also owns what a caller gets back when something goes wrong. What it does with a token, a delta, a
+socket, a blob or an organization is the five documents beside it.
 
 ---
 
@@ -27,68 +27,52 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-012` | `INV` | The relay MUST perform no cryptographic operation beyond verifying a signature and minting its own tokens. | this spec section 5; `ZK-004` | cargo-deny -- `deny.toml` refuses the cipher, the exchange and the passphrase derivation in this process, and the continuous-integration `deny` job fails the manifest that adds one. `ed25519-dalek` is the one grant, which is exactly the two operations named | none | verified |
 | `SRV-011` | `INV` | A document MUST NOT be left without an owner. | this spec section 3 | `ambre_server::routes::tests::handler_tests::owner_cannot_drop_last_owner` -- the refusal; `::owner_can_leave_when_another_owner_remains` -- the case that must still work, so neither end rots into the other | none | verified |
 | `SRV-001` | `INV` | The relay MUST NOT store or log a plaintext document payload. | `ZK-001`, `ZK-006`; this spec section 3 | human-review -- the reviewer reads each diff on the flush and storage paths for a log line that carries the payload, against the explicit "never log the blob" rule the flush path already states | unheld -- nothing refuses the log line that would break it, so the rule leans on `ZK-006` and on attention | human-review |
-| `SRV-014` | `INV` | Relay code MUST contain no unchecked memory access. | README pillar "Security" | none | unheld -- the workspace measures zero unchecked access today, and this crate carries no crate-level refusal of it: two crates of seventeen do (`ambre-spec-testing.md section 8`) | unverified |
-| `SRV-021` | `INV` | Any instance MUST be able to serve any client: no request state MUST live in the process. | this spec section 3 | none | unheld -- every store is external and the one process-wide object is the fan-out hub, which holds no request, and nothing boots two instances to observe it. The one exception is stated by `ambre-spec-session.md`, `SRV-024` | unverified |
-| `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated. | `ambre-spec-architecture.md section 2` | none | unheld -- the relay serves the requests and not the page, so the two headers are the deployment's obligation on whatever serves the page and the worker bootstrap, and nothing in continuous integration reads them back | unverified |
+| `SRV-014` | `INV` | Relay code MUST contain no unchecked memory access. | README pillar "Security" | none | unheld -- the workspace measures zero unchecked access today, and this crate carries no crate-level refusal of it: two crates of seventeen do (`ambre-spec-testing.md section 8`); lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-021` | `INV` | Any instance MUST be able to serve any client: no request state MUST live in the process. | this spec section 3 | none | unheld -- every store is external and the one process-wide object is the fan-out hub, which holds no request, and nothing boots two instances to observe it. The one exception is stated by `ambre-spec-session.md`, `SRV-024`; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated. | `ambre-spec-architecture.md section 2` | none | unheld -- the relay serves the requests and not the page, so the two headers are the deployment's obligation on whatever serves the page and the worker bootstrap, and nothing in continuous integration reads them back; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 A request is classified and limited
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-013` | `FAIL` | A failure of the rate limiter MUST close the sign-in tier, never open it. | audit `M6`; this spec section 3 | `ambre_server::middleware::rate_limit::tests::only_auth_tier_fails_closed` -- the sign-in tier refuses on an outage and the other two stay open, which is the trade the audit asked for | none | verified |
-| `SRV-093` | `POST` | A sign-in request MUST be classified into the sign-in tier. | audit `M6`; this spec section 3 | none | fails -- `rate_limit::tests::classify_auth_path` feeds the classifier `/api/auth/login` and it answers correctly, but the limiter runs inside the nested router, which has already stripped `/api`. The classifier never sees a path it can match, so every sign-in is counted against the ordinary tier and `SRV-013` guards a tier nothing is ever in, section 6 | unverified |
-| `SRV-019` | `POST` | The rate limiter MUST bucket a request by its authenticated caller. | audit `M6` | none | unheld -- no test drives a bucketed request at all: the three `client_ip_*` cases cover reading an address out of a header, not choosing which bucket a request lands in | unverified |
-| `SRV-094` | `POST` | A request with no authenticated caller MUST be bucketed by its socket peer. | audit `M6` | `ambre_server::middleware::rate_limit::tests::client_ip_from_forwarded_header`; `::client_ip_falls_back_to_remote`; `::client_ip_ignores_empty_forwarded` -- the address the fallback reads | partial -- a forwarded address is trusted only where the deployment declares a proxy, and no test drives that switch | unverified |
-| `SRV-095` | `FRAME` | The limiter MUST NOT put two callers in one bucket. | audit `M6`; this spec section 3 | none | unheld -- the bucket key is the tier prefix and the caller, so distinctness follows from the caller being distinct, and nothing asserts it. A forwarded header trusted where no proxy strips it puts every caller behind one address, and one client then exhausts the tier for all of them | unverified |
+| `SRV-093` | `POST` | A sign-in request MUST be classified into the sign-in tier. | audit `M6`; this spec section 3 | none | fails -- `rate_limit::tests::classify_auth_path` feeds the classifier `/api/auth/login` and it answers correctly, but the limiter runs inside the nested router, which has already stripped `/api`. The classifier never sees a path it can match, so every sign-in is counted against the ordinary tier and `SRV-013` guards a tier nothing is ever in, section 6; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | failing |
+| `SRV-019` | `POST` | The rate limiter MUST bucket a request by its authenticated caller. | audit `M6` | none | unheld -- no test drives a bucketed request at all: the three `client_ip_*` cases cover reading an address out of a header, not choosing which bucket a request lands in; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-094` | `POST` | A request with no authenticated caller MUST be bucketed by its socket peer. | audit `M6` | `ambre_server::middleware::rate_limit::tests::client_ip_from_forwarded_header`; `::client_ip_falls_back_to_remote`; `::client_ip_ignores_empty_forwarded` -- the address the fallback reads | partial -- a forwarded address is trusted only where the deployment declares a proxy, and no test drives that switch; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-095` | `FRAME` | The limiter MUST NOT put two callers in one bucket. | audit `M6`; this spec section 3 | none | unheld -- the bucket key is the tier prefix and the caller, so distinctness follows from the caller being distinct, and nothing asserts it. A forwarded header trusted where no proxy strips it puts every caller behind one address, and one client then exhausts the tier for all of them; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 A request is answered
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-020` | `POST` | A failure of a backing service MUST reach the caller as a generic error. | `ZK-006`; this spec section 3 | `ambre_server::error::tests::infrastructure_errors_return_internal_server_error_message` -- four store failures, one status and one message for all of them; `::oidc_error_is_infrastructure_level` -- the provider | none | verified |
-| `SRV-096` | `FRAME` | An error answered to a caller MUST NOT carry the cause behind it. | `ZK-006`; this spec section 3 | `ambre_server::error::tests::infrastructure_errors_return_internal_server_error_message` -- a store's own text is replaced rather than wrapped; `::application_errors_return_their_message` -- the other side, that a real application error keeps its message | partial -- both hold on the request path alone: the socket encodes its own error frames and one of them forwards a store's text verbatim (`ambre-spec-sequencer.md`, `SRV-081`) | unverified |
+| `SRV-096` | `FRAME` | An error answered to a caller MUST NOT carry the cause behind it. | `ZK-006`; this spec section 3 | `ambre_server::error::tests::infrastructure_errors_return_internal_server_error_message` -- a store's own text is replaced rather than wrapped; `::application_errors_return_their_message` -- the other side, that a real application error keeps its message | partial -- both hold on the request path alone: the socket encodes its own error frames and one of them forwards a store's text verbatim (`ambre-spec-sequencer.md`, `SRV-081`); lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-068` | `FAIL` | A cross-origin request MUST be refused unless the deployment names its origin. | audit `M17`; this spec section 3 | `ambre_server::cors_tests::parses_and_trims_multiple_origins`; `::empty_list_yields_no_origins` -- the list the refusal is read off, the permissive fallback being reachable only in development mode and announced at start-up | none | verified |
 | `SRV-005` | `FAIL` | A non-member MUST receive no metadata about a document -- not its owner, not its kind, not its existence. | audit `H2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::get_document_hidden_from_non_member` -- a not-found rather than a forbidden, which is what hides existence; `::create_document_with_foreign_existing_id_is_not_found` -- the same answer on a taken identifier, so a caller cannot probe the namespace | none | verified |
-| `SRV-018` | `POST` | A route that reads a document row MUST require an authenticated caller. | this spec section 3 | none | fails -- the single-document route accepts an anonymous caller, queries the register, and only then answers not-found. The answer is right and the query runs first, so the register is read on behalf of nobody, section 6. Answered by the `A document row is read for an authenticated caller` Story (`ambre-roadmap.md` E7) | unverified |
+| `SRV-018` | `POST` | A route that reads a document row MUST require an authenticated caller. | this spec section 3 | none | fails -- the single-document route accepts an anonymous caller, queries the register, and only then answers not-found. The answer is right and the query runs first, so the register is read on behalf of nobody, section 6; lands with the `A document row is read for an authenticated caller` Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.4 A document is written, shared or deleted
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-007` | `FAIL` | Every update, snapshot and presence frame MUST carry a valid signature by the key the caller's token names; an unsigned or forged frame MUST have no effect. | this spec section 3; `ZK-005` | `ambre_server::ws::handler::message::ed25519_tests::invalid_signature_is_rejected`; `::tampered_ciphertext_rejects_signature`; `::unsigned_ephemeral_is_rejected` -- the refusals; `ephemeral_binding_tests::forged_author_key_writes_no_presence`; `routes::tests::handler_tests::create_snapshot_rejects_forged_author` -- the absence of effect on both paths | none | verified |
-| `SRV-008` | `FAIL` | A member who may only read MUST produce no write. | this spec section 3 | `ambre_server::ws::handler::message::delta_size_cap_tests::viewer_role_delta_writes_no_pending` -- the live path leaves the queue empty; `routes::tests::handler_tests::media_confirm_upload_denied_to_viewer` -- the request path refuses, and a viewer holds the document key and its own signing key, so this check is the only thing between it and an accepted delta | none | verified |
+| `SRV-008` | `FAIL` | A read-only member MUST produce no write. | this spec section 3 | `ambre_server::ws::handler::message::delta_size_cap_tests::viewer_role_delta_writes_no_pending` -- the live path leaves the queue empty; `routes::tests::handler_tests::media_confirm_upload_denied_to_viewer` -- the request path refuses, and a viewer holds the document key and its own signing key, so this check is the only thing between it and an accepted delta | none | verified |
 | `SRV-015` | `FAIL` | Only an owner MUST be able to remove a member or re-key a document. | this spec section 3 | `ambre_server::routes::tests::handler_tests::rotate_key_denied_to_editor`; `::delete_document_only_by_owner` -- the refusals; `::revoke_then_rotate_replaces_owner_key` -- the owner's own path still completes | none | verified |
 | `SRV-016` | `FAIL` | A caller MUST NOT grant a role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::share::tests::editor_cannot_grant_owner` -- the refusal; `::owner_can_grant_any_valid_role`; `::doc_role_rank_ordering` -- the ordering the clamp is read off | none | verified |
 | `SRV-070` | `FAIL` | A caller MUST NOT change a member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::editor_cannot_demote_owner_via_invite` -- the invitation is also the role-change path, so this is the half a clamp on the granted role alone leaves open | none | verified |
-| `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | none | fails -- the delete removes the rows and nothing else, so the document's sequence counter and its per-author clock hash stay in the ephemeral store with no expiry. Answered by the `A deleted document leaves nothing` Story (`ambre-roadmap.md` E7) | unverified |
+| `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | none | fails -- the delete removes the rows and nothing else, so the document's sequence counter and its per-author clock hash stay in the ephemeral store with no expiry; lands with the `A deleted document leaves nothing` Story (`ambre-roadmap.md` E7) | failing |
 
 * **Budget.** the per-operation targets of `ambre-spec-budgets.md section 3`, and the roughly
-  50 KB per open document of `ambre-spec-budgets.md section 6`. Every relay row of that
-  register reads **none exists**: no
-  bench measures the relay today, which is the
-  `The performance budgets given a mechanism` Story (`ambre-roadmap.md` E9).
-* **Boundary.** this document is the relay side of the boundary
-  `ambre-spec-zero-knowledge.md` draws. `SRV-001` keeps the payload out of the process and
-  out of the logs, `SRV-012` refuses the relay the ability to open one, `SRV-005` keeps the
-  routing metadata itself behind the membership check, and `SRV-096` keeps a store's own words out
-  of an answer.
-* **Verification.** 11 `verified`, 10 `unverified`, 1 `human-review`, 0 `unimplemented`. What holds is
-  what a request test can drive: the roles, the rank clamps, the signature gate, the error mapping,
-  the non-member answer and the origin list. What is loose is every rule about the process or the
-  deployment rather than the request -- the state a delete leaves, the claim that two instances are
-  interchangeable, and the two headers the page owes. Two conjunctions came apart and one of them is
-  the worst finding of this pass. `SRV-013` claimed the sign-in tier fails closed, and its test
-  asserts exactly that -- of a tier no request is ever classified into. `classify_auth_path` feeds
-  the classifier `/api/auth/login` and gets the right answer, while the limiter runs inside the
-  nested router that has already stripped `/api`: the function is right, the test is right, and in
-  production the classifier never sees a path it can match. `SRV-093` is that half, and it fails.
-  `SRV-019` claimed two bucketing rules with one mechanism between them, and the three tests cited
-  cover neither -- they read an address out of a header, which is `SRV-094`'s input and not a bucket
-  choice. Two rows are new: `SRV-095` says two callers may not share a bucket, which is what a
-  forwarded header trusted without a proxy in front of it destroys; and `SRV-096` is the ban inside
-  the error mapping, held on the request path and, as the sequencer already states, bypassed on the
-  socket, which encodes its own frames and forwards a store's text verbatim -- which is why it reads
-  `unverified` rather than `verified`, a ban held on one of two paths being no ban.
+  50 KB per open document of `ambre-spec-budgets.md section 6`. Every relay row of that register
+  reads **none exists**: no bench measures the relay today.
+* **Boundary.** this document is the relay side of the boundary `ambre-spec-zero-knowledge.md`
+  draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
+  relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
+  and `SRV-096` keeps a store's words out of an answer.
+* **Verification.** 11 `verified`, 3 `failing`, 7 `untested`, 1 `human-review`. What holds is what a
+  request test can drive: the roles, the rank clamps, the signature gate, the error mapping and the
+  origin list. What is loose is every rule about the process or the deployment, and the three
+  failures sit in the limiter and its bucketing.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -130,9 +114,9 @@ makes a restart of any one of them survivable.
 | one member row per participant | a role, plus the document key sealed for that member |
 | the wrapper of a member's key | the identity whose exchange key seals it, which the client needs to open it |
 
-A document with no name stores nothing rather than a placeholder, and the listing returns each
-sealed name beside the caller's own sealed key, so a client reads its whole list in one answer with
-no document open (`ambre-spec-launcher.md`).
+A document with no name stores nothing rather than a placeholder. The listing returns each sealed
+name beside the caller's own sealed key. A client therefore reads its whole list in one answer,
+with no document open (`ambre-spec-launcher.md`).
 
 **The three roles**, ranked. A rank decides both what a caller may do and what it may grant.
 
@@ -143,7 +127,7 @@ no document open (`ambre-spec-launcher.md`).
 | viewer | yes | no (`SRV-008`) | no | no |
 
 **Why the clamp is on the target too.** An invitation of an existing member is also the role-change
-path, so a clamp on the granted role alone lets an editor re-invite an owner as an editor and
+path. A clamp on the granted role alone lets an editor re-invite an owner as an editor, and
 overwrite that owner's sealed key on the way. The target's current rank is clamped as well
 (`SRV-070`).
 
@@ -175,16 +159,16 @@ infrastructure failure.
 | the content policy | the deployment's own origin alone, which a deployment adjusts for the provider it configures |
 | the allowed origins | the list the deployment names, and nothing when it names none (`SRV-068`) |
 
-The two headers that make the client's shared memory legal -- the opener policy and the embedder
-policy -- belong to whatever serves the page and the worker bootstrap, not to this process
+The two headers that make the client's shared memory legal are the opener policy and the embedder
+policy. Both belong to whatever serves the page and the worker bootstrap, not to this process
 (`SRV-069`, `ambre-spec-architecture.md section 2`). Their cost is that an embedded cross-origin
-resource must carry a policy of its own, which is why a presigned link's target must allow a
+resource must carry a policy of its own. That is why a presigned link's target must allow a
 cross-origin read.
 
 **Where the process is stateless, and where it is not.** Every store is external, so a client
-reaches any instance and the fan-out crosses them (`SRV-021`). Two things are per process and
-neither is per request: the signing key derived from the deployment's seed, which every instance
-must share, and the fan-out hub (`ambre-spec-broadcast.md`).
+reaches any instance and the fan-out crosses them (`SRV-021`). Two things are per process, and
+neither is per request. The first is the signing key derived from the deployment's seed, which
+every instance must share; the second is the fan-out hub (`ambre-spec-broadcast.md`).
 
 **Code.**
 
@@ -242,14 +226,14 @@ declares their tables and nothing serves them (`ambre-spec-broadcast.md`, `SRV-0
 
 * **The sign-in tier of the rate limiter is never selected.** The limiter is a layer of the nested
   router, so the path it classifies has already lost the prefix its own rule matches on. Every
-  sign-in request is therefore counted as an ordinary request -- a limit thirty times looser -- and
+  sign-in request is therefore counted as an ordinary request, a limit thirty times looser. It
   fails open where the rule says it must fail closed. The tests assert the tier's answer and the
   classifier's answer separately, and neither one runs the path the assembled router produces
   (`SRV-013`). The repair is the `The production sign-in path` Story (`ambre-roadmap.md` E7).
 * **A delete removes rows and nothing else.** The register cascades, and the document's sequence
   counter, its per-author clock hash and its pending list stay in the ephemeral store with no
-  expiry, while every sealed blob stays in object storage (`SRV-017`,
-  `ambre-spec-object-store.md`, `SRV-057`).
+  expiry (`SRV-017`). Every sealed blob stays in object storage (`ambre-spec-object-store.md`,
+  `SRV-057`).
 * **One route reads the register before it knows who is asking.** The single-document route takes an
   optional identity, queries the row, and refuses an anonymous caller only afterwards. The anonymous
   branch can never succeed, so it is one query per probe and no capability (`SRV-018`).
@@ -257,13 +241,13 @@ declares their tables and nothing serves them (`ambre-spec-broadcast.md`, `SRV-0
   and meetings exist in the durable schema, and no route and no handler writes any of them
   (`ambre-spec-broadcast.md`).
 * **The declared schema and the migrated schema differ in three places.** The address is unique and
-  case-insensitive, the master material is optional until an account completes its setup, and an
-  address carries whether a provider verified it. All three are rules of
+  case-insensitive, and the master material is optional until an account completes its setup. An
+  address also carries whether a provider verified it. All three are rules of
   `ambre-spec-session.md`, and none of the three was in the shape this document declared.
 * **Nothing measures the relay.** Every row of `ambre-spec-budgets.md section 3` reads "none
   exists", including the two on the write path that the whole design is arranged around.
 * **The request tests build a second route table.** The suite assembles its own router rather than
-  the one the process serves, so a route registered wrongly in the real table is invisible to every
+  the one the process serves. A route registered wrongly in the real table is invisible to every
   test that passes -- which is how the sign-in defect above survived.
 
 ---

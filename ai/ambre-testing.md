@@ -30,7 +30,7 @@ normative in `specs/ambre-spec-template.md`, section 1.
   `convergence_tests::locked_element_ignores_move`. The `Verification` cell then cites the full
   path `crate::module::test_name`, checked against the runner output, never guessed. A cell may
   also name a type-level construction or a lint instead of a test, or state that no mechanism
-  exists: see the template, section 1.
+  exists. See the template, section 1.
 * **A bug found freezes into a named regression test**, never into a property.
 * **Bug-fix workflow.** Write the test that reproduces the bug first, when feasible. Then fix the
   bug. Then confirm the test passes.

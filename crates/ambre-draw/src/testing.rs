@@ -5,8 +5,8 @@
 // `RecordingSurface` is the mock `DrawSurface`: it tessellates nothing and
 // touches no GPU, it just appends every draw call to an ordered log. Tests
 // drive the real application renderers (Trame grid, later Prose/Toile) against
-// it and assert on the recorded `DrawOp` sequence -- geometry, colours, clip
-// balance, glyph-run counts -- entirely off the browser main thread.
+// it, entirely off the browser main thread. They assert on the recorded
+// `DrawOp` sequence: geometry, colours, clip balance, glyph-run counts.
 //
 // `FixedClock` is the matching `Clock` stub: a renderer needs a clock for its
 // sub-phase timings, and on native there is no `performance.now()`. The stub
@@ -19,7 +19,7 @@ use crate::{
 };
 
 /// One recorded drawing operation. Glyph runs are summarised by their glyph
-/// count and transform rather than captured verbatim -- the run borrows from a
+/// count and transform rather than captured verbatim. The run borrows from a
 /// Parley layout owned by the caller, and the count is what tests assert on.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DrawOp {
@@ -115,7 +115,8 @@ impl RecordingSurface {
         self.transform_depth
     }
 
-    /// Count the ops matching `pred` -- e.g. `count(|op| matches!(op, DrawOp::FillRect { .. }))`.
+    /// Count the ops matching `pred`, for example
+    /// `count(|op| matches!(op, DrawOp::FillRect { .. }))`.
     pub fn count(&self, pred: impl Fn(&DrawOp) -> bool) -> usize {
         self.ops.iter().filter(|op| pred(op)).count()
     }

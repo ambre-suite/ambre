@@ -1,29 +1,28 @@
 // ambre-toile/src/chrome/floatbar.rs
-// ============================================================================
-// The content-anchored floating selection toolbar (`toile-styles`),
-// wasm-only. A compact `position: fixed` action bar that follows the selection
-// as the board pans / zooms: the canvas view recomputes its client anchor from
-// the `ViewportTransform` every frame and publishes it (`ui::floatbar::FloatBar`,
-// `None` == hidden); this component only paints the resolved bar at that anchor.
+// ============================================================================ The
+// content-anchored floating selection toolbar (`toile-styles`), wasm-only. A compact
+// `position: fixed` action bar that follows the selection as the board pans / zooms. The
+// canvas view recomputes its client anchor from the `ViewportTransform` every frame and
+// publishes it (`ui::floatbar::FloatBar`, `None` == hidden). This component only paints
+// the resolved bar at that anchor.
 //
-// It offers the highest-frequency actions -- quick fill + text formatting (text
-// colour, font, size, bold, italic), duplicate, delete, group / ungroup, lock /
-// unlock. The command buttons (duplicate / delete / group / lock) are `ui::menu`
-// `CommandId`s routed through the shared `on_command` path, so the bar is a
-// strict subset of the context menu (`toile-menus`) and the two never diverge. The style
-// controls reuse the shared `ambre_chrome` value controls (`ColorPopover` in ARGB
-// mode, `FontPicker`) and emit a single-field `StyleEdit` the view folds into a
-// whole-register `RestyleElements` over the live selection.
+// It offers the highest-frequency actions -- quick fill + text formatting (text colour,
+// font, size, bold, italic), duplicate, delete, group / ungroup, lock / unlock. The
+// command buttons (duplicate / delete / group / lock) are `ui::menu` `CommandId`s routed
+// through the shared `on_command` path. So the bar is a strict subset of the context
+// menu (`toile-menus`), and the two never diverge. The style controls reuse the shared
+// `ambre_chrome` value controls (`ColorPopover` in ARGB mode, `FontPicker`). They emit a
+// single-field `StyleEdit` the view folds into a whole-register `RestyleElements` over
+// the live selection.
 //
 // The style controls seed from the published inspector `StyleModel` (the same
-// common-style model the side inspector reads), so the bar mirrors the selection.
-// Each control emits ONE changed field (`StyleEdit`); the view re-derives the
-// base live, avoiding the inspector's accumulating-working-copy staleness.
+// common-style model the side inspector reads), so the bar mirrors the selection. Each
+// control emits ONE changed field (`StyleEdit`); the view re-derives the base live,
+// avoiding the inspector's accumulating-working-copy staleness.
 //
-// Every control does `on:mousedown prevent_default` to keep DOM focus on the
-// canvas text pipe (the palette / inspector hazard) so a click never clears the
-// selection the bar acts on.
-// ============================================================================
+// Every control does `on:mousedown prevent_default` to keep DOM focus on the canvas text
+// pipe, the palette / inspector hazard. A click then never clears the selection the bar
+// acts on. ============================================================================
 
 use ambre_chrome::commands::{CommandId, Locale};
 
@@ -37,18 +36,18 @@ use crate::ui::menu;
 use crate::ui::style::StyleModel;
 
 /// Map a stored `FontSpec.family` string to the picker's family label (`None` =
-/// Default): only the offered labels round-trip; anything else (e.g. the raw
-/// default "sans-serif") reads as Default. Mirrors the inspector's mapping.
+/// Default): only the offered labels round-trip. Anything else reads as
+/// Default, the raw "sans-serif" included. Mirrors the inspector's mapping.
 fn family_label(family: &str) -> Option<String> {
     matches!(family, "Sans" | "Serif" | "Monospace").then(|| family.to_owned())
 }
 
 /// The floating selection toolbar. `bar` is the per-frame published placement +
-/// flags (`None` hides it); `model` is the selection's common style (seeds the
-/// style controls, the same model the side inspector reads); `on_command` is the
-/// shared command sink (duplicate / delete / group / lock, resolved by the view
-/// against its selection); `on_style` receives a single-field `StyleEdit`
-/// the view turns into a live-based `RestyleElements`.
+/// flags (`None` hides it). `model` is the selection's common style: it seeds
+/// the style controls, and is the same model the side inspector reads.
+/// `on_command` is the shared command sink (duplicate / delete / group / lock,
+/// resolved by the view against its selection). `on_style` receives a
+/// single-field `StyleEdit` the view turns into a live-based `RestyleElements`.
 #[component]
 pub fn SelectionToolbar(
     bar: RwSignal<Option<FloatBar>>,
@@ -56,9 +55,10 @@ pub fn SelectionToolbar(
     on_command: Callback<CommandId>,
     on_style: Callback<StyleEdit>,
 ) -> impl IntoView {
-    // Local working values for the style controls, seeded from the published bar /
-    // model each time the view republishes them and updated on every pick so the
-    // trigger strips track. Reading `bar` / `model` here never re-triggers a picker.
+    // Local working values for the style controls. They are seeded from the
+    // published bar / model each time the view republishes them, and updated on
+    // every pick so the trigger strips track. Reading `bar` / `model` here never
+    // re-triggers a picker.
     let fill = RwSignal::new(None::<u32>);
     let text_color = RwSignal::new(None::<u32>);
     let font_family = RwSignal::new(None::<String>);
@@ -99,7 +99,7 @@ pub fn SelectionToolbar(
         font_family.set(f.clone());
         on_style.run(StyleEdit::Font(f));
     });
-    // Size: the shared dropdown speaks points (`Option<u16>`, `None` = auto); Toile
+    // Size: the shared dropdown speaks points (`Option<u16>`, `None` = auto). Toile
     // stores world px as `f32` with `0.0` = the auto sentinel, so map both ways.
     let size_current = Signal::derive(move || {
         let s = font_size.get();

@@ -1,11 +1,11 @@
 # AMBRE -- FEATURE: PDF EXPORT
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- Toile exports through the shared surface; Trame and Prose do not, and
-exported text is not selectable in any of them.
+**Implementation:** partial -- Toile exports through the shared surface, Trame and Prose do not.
+Exported text is not selectable in any of them.
 
 > A user hands a document to someone who has no Ambre, and the file looks like the screen. This
-> document owns the export flow every editor shares; each application owns how its own content is
+> document owns the export flow every editor shares. Each application owns how its own content is
 > paginated, and `ambre-spec-drawing-surface.md` owns the surface the page is drawn on.
 
 The export is not a conversion of the document: it is the screen renderer aimed at another surface.
@@ -25,12 +25,12 @@ is drawn by, what the bytes owe, and what the export must leave alone.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PDF-001` | `POST` | A page MUST be drawn by the application's own screen walk, retargeted to the shared surface, and by no second PDF-only renderer. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | structural -- `crates/ambre-toile/src/logic/interop/pdf_export.rs` imports `paint_content` from `crates/ambre-toile/src/ui/render.rs` and runs it against a krilla page, so the page walk and the screen walk are one function, and a second renderer would be a second function that does not exist; `ambre_toile::logic::interop::pdf_export::tests::export_yields_a_pdf`; `ambre_trame::render::tests::draw_cells_on_fills_each_and_counts_nonempty_text`; `::draw_grid_lines_on_strokes_with_grid_color`; `::col_headers_draw_bg_separator_and_active_tint` | partial -- Toile alone exports. Trame's primitives are surface-generic and driven through a recording surface, and it aims them at no page yet; Prose is design-only | unverified |
-| `PDF-004` | `POST` | Two exports of one unchanged document MUST produce identical bytes. | this spec section 3 | Toile `ambre_toile::logic::interop::pdf_export::tests::export_is_byte_stable` -- under the `pdf` feature that `just test-native` enables | partial -- Toile alone. Trame and Prose export nothing to be stable about | unverified |
-| `PDF-006` | `POST` | An export MUST be pure vector: it MUST NOT rasterize text, rules or shapes. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | type-level -- the shared surface offers only vector primitives, so text and rules have no raster path | partial -- a picture reaches the page as its own pixels, and no test forbids an application pre-rasterizing one | unverified |
+| `PDF-001` | `POST` | A page MUST be drawn by the application's own screen walk, retargeted to the shared surface, and by no second PDF-only renderer. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | structural -- `crates/ambre-toile/src/logic/interop/pdf_export.rs` imports `paint_content` from `crates/ambre-toile/src/ui/render.rs` and runs it against a krilla page, so the page walk and the screen walk are one function, and a second renderer would be a second function that does not exist; `ambre_toile::logic::interop::pdf_export::tests::export_yields_a_pdf`; `ambre_trame::render::tests::draw_cells_on_fills_each_and_counts_nonempty_text`; `::draw_grid_lines_on_strokes_with_grid_color`; `::col_headers_draw_bg_separator_and_active_tint` | partial -- Toile alone exports. Trame's primitives are surface-generic and driven through a recording surface, and it aims them at no page yet; Prose is design-only; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
+| `PDF-004` | `POST` | Two exports of one unchanged document MUST produce identical bytes. | this spec section 3 | Toile `ambre_toile::logic::interop::pdf_export::tests::export_is_byte_stable` -- under the `pdf` feature that `just test-native` enables | partial -- Toile alone. Trame and Prose export nothing to be stable about; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
+| `PDF-006` | `POST` | An export MUST be pure vector: it MUST NOT rasterize text, rules or shapes. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | type-level -- the shared surface offers only vector primitives, so text and rules have no raster path | partial -- a picture reaches the page as its own pixels, and no test forbids an application pre-rasterizing one; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 | `PDF-005` | `POST` | A word on the page MUST stay selectable and searchable: each glyph run MUST carry its mapping back to characters, not glyph shapes alone. | this spec section 3; `ambre-spec-drawing-surface.md section 5` | not built | unbuilt -- lands with the `One selectable PDF` Story (`ambre-roadmap.md` E8). The shared surface writes no `ToUnicode` mapping, so every export drops the characters (`ambre-spec-drawing-surface.md section 5`) | unimplemented |
-| `PDF-003` | `POST` | After an export, the UI thread MUST do nothing but hand the finished file to the browser. | this spec section 4 | none | unheld -- Toile hands the bytes to a download and Trame and Prose have no driver; no test reads the handoff back | unverified |
-| `PDF-002` | `FRAME` | An export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | none | unheld -- Toile derives every page through a read-only camera pass and no test asserts that no container mutated; Trame and Prose are unbuilt | unverified |
+| `PDF-003` | `POST` | After an export, the UI thread MUST do nothing but hand the finished file to the browser. | this spec section 4 | none | unheld -- Toile hands the bytes to a download and Trame and Prose have no driver; no test reads the handoff back; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
+| `PDF-002` | `FRAME` | An export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | none | unheld -- Toile derives every page through a read-only camera pass and no test asserts that no container mutated; Trame and Prose are unbuilt; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** the per-application export rows of `ambre-spec-budgets.md section 1` (Toile 50 slides,
   Prose 100 pages); the writer's own weight is `ambre-spec-budgets.md section 5`, billed once to the
@@ -38,7 +38,7 @@ is drawn by, what the bytes owe, and what the export must leave alone.
 * **Boundary.** the finished file reaches the browser and nothing else; it leaves the machine only
   when the user sends it. The export runs in the Logic thread (`ambre-spec-drawing-surface.md`,
   `CANVAS-028`), opens no socket and reads no key.
-* **Verification.** 0 `verified`, 5 `unverified`, 1 `unimplemented`. Toile ships the one built export,
+* **Verification.** 0 `verified`, 5 `untested`, 1 `unimplemented`. Toile ships the one built export,
   and it holds the screen walk and the stable bytes for itself alone. Both rows therefore read
   `partial`, and neither reads `verified`. What is loose is what no test reads back: the read-only
   guarantee and the handoff. The one thing built nowhere is the character mapping, which the
@@ -73,12 +73,12 @@ Each application adds the scenarios its own page format turns on, in its own pdf
 4. the UI thread hands the bytes to the browser and changes nothing on screen (`PDF-003`).
 
 **The surface, the writer and the fonts** are `ambre-spec-drawing-surface.md` and
-`ambre-spec-render-assets.md`: the `Surface` trait, the krilla back end, the `ambre-pdf` crate
-behind a feature, and the font database the shaping needs (`CANVAS-025`, `CANVAS-028`). This
+`ambre-spec-render-assets.md`. They are the `Surface` trait, the krilla back end, the `ambre-pdf`
+crate behind a feature, and the font database the shaping needs (`CANVAS-025`, `CANVAS-028`). This
 document adds no primitive of its own.
 
-**What a page is, and how a document is paginated,** is each application's own: a grid cut into
-pages, a deck of slides, a column of pages (section 6).
+**What a page is, and how a document is paginated,** is each application's own. One cuts a grid into
+pages, one a deck of slides, one a column of pages (section 6).
 
 **Code:**
 
@@ -95,8 +95,8 @@ pages, a deck of slides, a column of pages (section 6).
 | an export entry, in a menu | asks the Logic thread to build the pages and assemble the file |
 | the answer | the UI thread wraps the bytes in a browser download (`PDF-003`) |
 
-The gesture that starts an export and the report it raises are each application's own, and no
-editor offers the entry on every path yet (section 6).
+The gesture that starts an export and the report it raises are each application's own. No editor
+offers the entry on every path yet (section 6).
 
 ---
 
@@ -123,7 +123,7 @@ editor offers the entry on every path yet (section 6).
   (`ambre-spec-drawing-surface.md section 5`). It is one repair in the surface, not three in the
   editors.
 * **The writer's lazy loading is a claim, not a mechanism.** The feature flag controls compilation,
-  not loading; splitting the writer out of the client bundle is a build-system slice nobody has
+  not loading. Splitting the writer out of the client bundle is a build-system slice nobody has
   scheduled, and Toile and Prose record the same gap.
 * **No benchmark measures any export.** The figures of `ambre-spec-budgets.md section 1` have no
   `criterion` bench behind them, so nothing goes red when an assembly gets slower.

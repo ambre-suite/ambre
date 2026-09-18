@@ -6,18 +6,18 @@ use crate::oidc::OidcClients;
 
 /// Application state shared across all Axum handlers via `State<Arc<Self>>`.
 ///
-/// Holds handles to the three external services the Blind Relay depends on:
+/// Holds handles to the three external services the Blind Relay depends on.
 /// PostgreSQL for metadata, Valkey/Redis for sessions and real-time state,
-/// S3 for encrypted blobs (snapshots, deltas, media), and OIDC clients for
-/// authentication.
+/// S3 for encrypted blobs (snapshots, deltas, media). It also holds the OIDC
+/// clients for authentication.
 #[derive(Clone)]
 pub struct AppState {
     pub db: PgPool,
     pub redis: rustis::client::Client,
     /// Process-wide PubSub fan-out hub. ONE Redis subscriber per channel,
-    /// fanned out in-process to every WS connection watching it (Redis PubSub
+    /// fanned out in-process to every WS connection watching it. Redis PubSub
     /// subscriptions are connection-global, so a single shared subscriber is
-    /// the only model that supports several connections on the same channel).
+    /// the only model that supports several connections on the same channel.
     pub pubsub: crate::ws::PubSubHub,
     pub s3: S3Client,
     pub s3_bucket: String,
@@ -25,7 +25,7 @@ pub struct AppState {
     /// Server Ed25519 keys for minting/verifying access JWTs. Derived once at
     /// startup from `JWT_SIGNING_SEED` (shared across instances).
     pub jwt: Arc<crate::jwt::JwtKeys>,
-    /// Per-provider OIDC clients ("google" → `OidcProviderState`).
+    /// Per-provider OIDC clients ("google" -> `OidcProviderState`).
     /// Used by `GET /auth/{provider}/login` and `POST /auth/{provider}/callback`.
     pub oidc_clients: OidcClients,
 }
@@ -48,8 +48,8 @@ pub struct Config {
     /// Presigned S3 URL lifetime in seconds (default 15 min).
     pub presigned_url_ttl_secs: u64,
     /// Maximum size in bytes of a single encrypted media blob (default 100 MiB).
-    /// The declared size is validated against this cap and then bound into the
-    /// presigned PUT URL (`Content-Length`), so a member cannot upload an
+    /// The declared size is validated against this cap, and then bound into the
+    /// presigned PUT URL (`Content-Length`). A member cannot upload an
     /// arbitrarily large object to the bucket.
     pub media_max_bytes: u64,
     /// Maximum size in bytes of a single encrypted snapshot blob (default 50 MiB).
@@ -58,11 +58,12 @@ pub struct Config {
     /// Maximum size in bytes of a single encrypted delta (`Update`) ciphertext
     /// carried inline over the WebSocket (default 4 MiB). A CRDT delta is small;
     /// a large blob belongs on the media path. Bounding this stops an authorized
-    /// writer from pushing oversized deltas that are persisted durably (S3 +
-    /// Redis pending) and fanned out to every subscriber -- the same storage/cost
-    /// abuse the media and snapshot caps close, on the hot write path.
+    /// writer from pushing oversized deltas. Such deltas are persisted durably
+    /// (S3 + Redis pending) and fanned out to every subscriber. That is the same
+    /// storage/cost abuse the media and snapshot caps close, on the hot write
+    /// path.
     pub delta_max_bytes: usize,
-    /// Prefix for S3 object keys (e.g. "dev-ambre").
+    /// Prefix for S3 object keys (for example "dev-ambre").
     pub s3_env_prefix: String,
     /// Google OIDC client ID.
     #[allow(dead_code)]
@@ -70,7 +71,7 @@ pub struct Config {
     /// Google OIDC client secret.
     #[allow(dead_code)]
     pub oidc_google_client_secret: String,
-    /// Google OIDC redirect URI (e.g. "http://localhost:3000/api/auth/google/callback").
+    /// Google OIDC redirect URI (for example "http://localhost:3000/api/auth/google/callback").
     #[allow(dead_code)]
     pub oidc_google_redirect_uri: String,
     /// Dev-only switch: when true, the `POST /api/auth/dev/login` endpoint is
@@ -80,24 +81,24 @@ pub struct Config {
     /// Whether to trust the `X-Forwarded-For` header for the client IP used in
     /// rate limiting. MUST stay false unless the server runs behind a reverse
     /// proxy that OVERWRITES `X-Forwarded-For` with the real client address
-    /// (e.g. nginx `proxy_set_header X-Forwarded-For $remote_addr`). When false,
+    /// (for example nginx `proxy_set_header X-Forwarded-For $remote_addr`). When false,
     /// the header is ignored and the socket peer address is used, so a client
     /// cannot spoof its rate-limit bucket by forging the header.
     pub trust_proxy_headers: bool,
     /// Sustained inbound-message rate per WebSocket connection, in messages per
-    /// second (default 60). The WS *upgrade* is rate-limited, but once a socket
-    /// is open each `Update` drives a Postgres INSERT + Redis RPUSH + S3 pending
-    /// write + PubSub fan-out; without a per-connection bound an authorized
-    /// `editor` flooding updates is a storage/cost amplification. Enforced by an
-    /// in-memory token bucket, so it costs no Redis round-trip.
+    /// second (default 60). The WS *upgrade* is rate-limited. But once a socket
+    /// is open, each `Update` drives a Postgres INSERT + Redis RPUSH + S3
+    /// pending write + PubSub fan-out. Without a per-connection bound, an
+    /// authorized `editor` flooding updates is a storage/cost amplification.
+    /// Enforced by an in-memory token bucket, so it costs no Redis round-trip.
     pub ws_msg_rate_per_sec: u32,
     /// Burst allowance for the per-connection message bucket (default 120). Lets a
-    /// client send a short batch (e.g. the initial subscribes plus a rapid edit
-    /// burst) without being throttled, while the sustained rate stays capped.
+    /// client send a short batch without being throttled, such as the initial
+    /// subscribes plus a rapid edit burst. The sustained rate stays capped.
     pub ws_msg_burst: u32,
     /// Maximum size in bytes of an `Ephemeral` (presence/cursor) ciphertext
-    /// carried over the WebSocket (default 64 KiB). A presence blob is tiny (a
-    /// cursor position and a display name); this bounds the fire-and-forget
+    /// carried over the WebSocket (default 64 KiB). A presence blob is tiny: a
+    /// cursor position and a display name. This bounds the fire-and-forget
     /// broadcast + Redis presence-hash write, mirroring `delta_max_bytes` for the
     /// durable `Update` path.
     pub ephemeral_max_bytes: usize,

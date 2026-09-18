@@ -176,7 +176,7 @@ COLUMNS = _columns()
 ID, KIND, STATEMENT, SOURCES, VERIFICATION, GAP, STATUS = COLUMNS
 
 STATUSES = tuple(
-    _token(cells[0], "statuses") for cells in _counted("**The five status values.**")
+    _token(cells[0], "statuses") for cells in _counted("**The six status values.**")
 )
 STATE_KINDS, OPERATION_KINDS = _kinds()
 KINDS = STATE_KINDS + OPERATION_KINDS
@@ -201,6 +201,72 @@ GAP_OPENERS = tuple(
 # and `none` is an answer whole (`ambre-spec-template.md section 1.B`).
 BARE_GAP_OPENERS = tuple(o for o in GAP_OPENERS if not o.endswith(" "))
 CARRIED_GAP_OPENERS = tuple(o for o in GAP_OPENERS if o.endswith(" "))
+
+# What each field of the field table announces a count of. A field is here when
+# its rule says "one of ...": the map resolves that announcement to the set the
+# gates actually enforce, so the two cannot disagree. `Sources` counts in place,
+# because the five forms are written in its own cell and nowhere else -- in that
+# cell the bold run marks a form and marks nothing else.
+FIELD_COUNTS = {
+    "Kind": lambda cell: len(KINDS),
+    "Sources": lambda cell: len(BOLD_RUN.findall(cell)),
+    "Gap": lambda cell: len(GAP_OPENERS),
+    "Status": lambda cell: len(STATUSES),
+}
+
+# "one of the eight below", "in one of five forms". The number is a word, and
+# the phrase is the one a field uses to point at a closed set.
+ANNOUNCED_COUNT = re.compile(r"\bone of (?:the )?([a-z]+)\b")
+BOLD_RUN = re.compile(r"\*\*(.+?)\*\*")
+
+
+def _field_counts() -> None:
+    """Whether each field's announced count matches the set it points at.
+
+    The field table is what a contributor reads before the vocabulary tables
+    sixty lines below it, and it states their sizes a second time. A second
+    statement drifts: splitting `unverified` into three statuses grew the table
+    to six and left the `Status` field announcing five, and no gate saw it
+    because no gate reads prose. This one does, on the two terms the rest of
+    this file already works on -- the count is a word, and the set is the one
+    the gates enforce.
+
+    A field announcing a count `FIELD_COUNTS` does not name fails rather than
+    passing unread: an announcement nothing resolves is the next drift, waiting.
+    """
+    anchor = "**The seven fields.**"
+    for cells in _counted(anchor):
+        field, rule = _token(cells[0], anchor), cells[1]
+        found = ANNOUNCED_COUNT.search(rule)
+        if found is None:
+            if field in FIELD_COUNTS:
+                raise TemplateDrift(
+                    f"{anchor}: the `{field}` field announces no count, and "
+                    f"`FIELD_COUNTS` holds one for it. Restore the announcement, "
+                    f"or drop the entry"
+                )
+            continue
+        word = found.group(1)
+        want = NUMBERS.get(word)
+        if want is None:
+            raise TemplateDrift(
+                f"{anchor}: the `{field}` field says 'one of {word}', and that "
+                f"is no number this file reads"
+            )
+        if field not in FIELD_COUNTS:
+            raise TemplateDrift(
+                f"{anchor}: the `{field}` field announces {want}, and nothing "
+                f"says what it counts. Add it to `FIELD_COUNTS`"
+            )
+        have = FIELD_COUNTS[field](rule)
+        if have != want:
+            raise TemplateDrift(
+                f"{anchor}: the `{field}` field announces {want}, and what it "
+                f"points at carries {have}"
+            )
+
+
+_field_counts()
 
 
 if __name__ == "__main__":

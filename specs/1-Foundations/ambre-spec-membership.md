@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: MEMBERSHIP AND THE WRAPPED KEY
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the wrap, the unwrap, the directory and the role all ship; a
+**Implementation:** partial -- the wrap, the unwrap, the directory and the role all ship. A
 transient failure of the members request opens the document as if it were new.
 
 > Sharing a document hands one person the key to it, sealed for that person alone. The relay stores
@@ -25,8 +25,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-039` | `INV` | No key material MUST cross to the Logic thread on a member row. | `ambre-spec-zero-knowledge.md`, `ZK-002` | type-level -- the member row the bus declares carries an identity, a name, an address and a role, and no key field, so there is no shape for one to travel in | none | verified |
-| `SYNC-092` | `INV` | The wrapped key, the member directory and this client's role MUST come from one answer, never from two fetches. | this spec section 3 | none | unheld -- one request returns all three and the open reads them together, so the rule is held by the request having been written that way. Nothing refuses a second fetch, and a second fetch is exactly how the three drift: a role read after a revocation no longer matches the directory the presence layer resolves against | unverified |
-| `SYNC-038` | `INV` | The member list shown to the user MUST NOT carry an invented identity. | this spec section 3 | none | fails -- a member row whose identifier does not parse is given a freshly generated one, so the list shows a person nothing can act on and a revoke aimed at that row addresses nobody, section 6. The presence directory takes the opposite branch and drops the row, which is `SYNC-015`. Answered by the `The member list shows no invented identity` Story (`ambre-roadmap.md` E7) | unverified |
+| `SYNC-092` | `INV` | The wrapped key, the member directory and this client's role MUST come from one answer, never from two fetches. | this spec section 3 | none | unheld -- one request returns all three and the open reads them together, so the rule is held by the request having been written that way. Nothing refuses a second fetch, and a second fetch is exactly how the three drift: a role read after a revocation no longer matches the directory the presence layer resolves against; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-038` | `INV` | The member list shown to the user MUST NOT carry an invented identity. | this spec section 3 | none | fails -- a member row whose identifier does not parse is given a freshly generated one, so the list shows a person nothing can act on and a revoke aimed at that row addresses nobody, section 6. The presence directory takes the opposite branch and drops the row, which is `SYNC-015`; lands with the `The member list shows no invented identity` Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.2 A document is shared with someone
 
@@ -44,9 +44,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 |---|---|---|---|---|---|---|
 | `SYNC-016` | `POST` | The role carried on the ready signal MUST be this client's own row in the members answer. | this spec section 3; `ambre-spec-message-bus.md`, `BUS-008` | `ambre_sync::sharing::tests::own_role_reads_our_own_row` -- a peer holding owner does not raise ours; `::own_role_reads_writable_roles` -- the writable side; `ambre_sync::updates::tests::document_ready_carries_the_role_on_both_paths` -- both open paths carry it | none | verified |
 | `SYNC-017` | `FAIL` | A role that cannot be resolved MUST default to the read-only one, never to a writable one. | this spec section 3 | `ambre_sync::sharing::tests::own_role_falls_back_to_viewer_when_unresolvable` -- both unresolvable cases, no session identity yet and no row for us in the answer, answer the viewer role | none | verified |
-| `SYNC-034` | `POST` | A recipient MUST unwrap against the exchange key of whoever wrapped, never against its own. | this spec section 3 | `ambre_crypto::tests::ecdh_symmetric`; `::kek_binds_peer_identity` -- the primitive under the rule | partial -- the choice of which key to use is a branch in the client with a fallback for an older relay, and no test takes either side of it | unverified |
-| `SYNC-040` | `FAIL` | A transient failure of the members request MUST NOT be read as a document that does not exist. | this spec section 3 | none | fails -- a network failure and a genuine absence take the same branch, so the open generates a throwaway key, marks the document local and never hydrates, section 6. Answered by the `A failed members request is not an absent document` Story (`ambre-roadmap.md` E7) | unverified |
-| `SYNC-012` | `FRAME` | A failed unwrap of a document key MUST NOT be replaced by a freshly generated one. | derived (audit `H3`) | none | unheld -- the unwrap failure now stops the open and surfaces an authentication error, and no test drives an unwrappable key row to see it: the open path runs only in the browser. A generated key here forks the document in silence, every edit after it unreadable to every other member | unverified |
+| `SYNC-034` | `POST` | A recipient MUST unwrap against the exchange key of whoever wrapped, never against its own. | this spec section 3 | `ambre_crypto::tests::ecdh_symmetric`; `::kek_binds_peer_identity` -- the primitive under the rule | partial -- the choice of which key to use is a branch in the client with a fallback for an older relay, and no test takes either side of it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-040` | `FAIL` | A transient failure of the members request MUST NOT be read as a document that does not exist. | this spec section 3 | none | fails -- a network failure and a genuine absence take the same branch, so the open generates a throwaway key, marks the document local and never hydrates, section 6; lands with the `A failed members request is not an absent document` Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-012` | `FRAME` | A failed unwrap of a document key MUST NOT be replaced by a freshly generated one. | derived (audit `H3`) | none | unheld -- the unwrap failure now stops the open and surfaces an authentication error, and no test drives an unwrappable key row to see it: the open path runs only in the browser. A generated key here forks the document in silence, every edit after it unreadable to every other member; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 An ephemeral frame is attributed
 
@@ -57,27 +57,16 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-015` | `FAIL` | An ephemeral frame whose author key matches no member MUST be dropped, never delivered under a guessed identity. | this spec section 3 | `ambre_sync::ephemeral_tests::unknown_author_key_is_not_resolved`; `ambre_sync::sharing::tests::presence_directory_skips_unparsable_rows_without_inventing_ids` -- three malformed rows vanish and only the sound one survives, a fabricated identity here attributing a cursor to the wrong person | none | verified |
 | `SYNC-094` | `FRAME` | Rebuilding the directory MUST NOT keep an entry the new membership does not carry. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_sync::ephemeral_tests::refreshing_the_directory_drops_revoked_members` -- a key that resolved before the rebuild resolves to nothing after it, where a merge instead of a replacement would leave a revoked member's cursor on the document for as long as the tab stays open | none | verified |
 
-* **Budget.** the key exchange costs one elliptic-curve operation per member at open, about 150 us
-  each on mobile, charged to the crypto rows of `ambre-spec-budgets.md section 1`. The
-  directory and the role are read off an answer the open already fetches, so both are free.
-* **Boundary.** the wrapped key crosses the relay, and the relay can open none of them: `SYNC-010`
-  seals each copy for one exchange key. What the relay learns is who is a member of what, which is
-  the membership metadata `ambre-spec-zero-knowledge.md` accepts. No plaintext key and no
-  private key ever leaves the Sync worker (`SYNC-002`, `SYNC-039`).
-* **Verification.** 12 `verified`, 5 `unverified`, 0 `unimplemented`. What holds is every pure
-  transform: the wrap for one invitee, the identity pair it binds, the refusal of a weak key, the
-  pin comparison, the directory build and the role resolution, all extracted out of the browser and
-  all covered. What is loose is the branches that only run against a live relay -- and two of them
-  are stated as failing. This document had no conjunction to break: it was already one rule per row,
-  which is what ten `verified` rows over pure functions look like. What the pass added is three rows
-  the tests were already holding and no rule claimed. `SYNC-093` is the frame condition of a refused
-  invitation -- the pin test asserts exactly one request left, so nothing was wrapped, and refusing
-  after a wrap has gone out would hand the attacker the key it was meant to protect. `SYNC-094` is
-  the frame condition of the rebuild: the directory is replaced rather than merged, and a merge
-  would leave a revoked member resolving for as long as the tab stays open. `SYNC-092` is the
-  document's own thesis, stated in its opening paragraph and claimed by no row until now: the key,
-  the directory and the role come from one answer, and nothing refuses the second fetch that would
-  let them drift apart.
+* **Budget.** the key exchange costs one elliptic-curve operation per member at open, charged to
+  the crypto rows of `ambre-spec-budgets.md section 1`. The directory and the role are read off an
+  answer the open already fetches, so both are free.
+* **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
+  seals each copy for one exchange key. What it learns is who is a member of what, which is the
+  membership metadata `ambre-spec-zero-knowledge.md` accepts.
+* **Verification.** 12 `verified`, 2 `failing`, 3 `untested`, 0 `unimplemented`. What holds is every
+  pure transform, extracted out of the browser and covered. Those are the wrap, the identity pair
+  it binds, the refusal of a weak key, the pin comparison, the directory build and the role. What
+  is loose is the branches that only run against a live relay.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -97,8 +86,8 @@ Three peers, because sharing needs a third. The last column joins the example to
 
 ## 3. MODEL
 
-**CRDT containers.** none. Membership is the relay's table, not the document's content: putting it
-in the document would make every member's identity part of the encrypted state and unable to change
+**CRDT containers.** none. Membership is the relay's table, not the document's content. Putting it
+in the document would make every member's identity part of the encrypted state, unable to change
 without a delta.
 
 **One answer, three uses.** The members request is issued once at open and again whenever
@@ -147,8 +136,8 @@ trusted-key store's job (`ambre-spec-key-verification.md`), and presence does no
 | the list shown to the user | a fresh identifier, which is the defect | nothing chose it: the list degrades rather than dropping the row (`SYNC-038`) |
 
 **A document the relay does not know is this client's own.** A missing document on open means it
-exists on this client alone and has not been created on the relay yet, so the local user is the only
-party and holds the owning role. That inference is right for an absence and wrong for a failure,
+exists on this client alone and has not been created on the relay yet. The local user is then the
+only party, and holds the owning role. That inference is right for an absence and wrong for a failure,
 which is `SYNC-040`.
 
 **Code.**
@@ -197,22 +186,22 @@ authority: the role here hides what the relay would refuse anyway.
 * **A transient failure of the members request opens the document as new.** The absence and the
   failure take one branch, so a network blip yields a fresh key, a local-only document and no
   hydration. The user edits a document that reaches nobody (`SYNC-040`).
-* **The member list invents an identifier for a row it cannot parse.** The list is display-only,
-  and every action the user takes from it -- a revoke, a role change -- carries that identifier to
-  the relay, where it matches nobody (`SYNC-038`).
+* **The member list invents an identifier for a row it cannot parse.** The list is display-only.
+  Every action the user takes from it, a revoke or a role change, carries that identifier to the
+  relay, where it matches nobody (`SYNC-038`).
 * **The wrapper-key choice has an untested fallback.** A member row with no wrapper recorded falls
   back to the member's own key, for an older relay. Nothing states how long that fallback lives, and
   no test takes either branch.
 * **Nothing states what a role change does to an open document.** The relay answers the request and
-  the list refreshes; the role carried on the ready signal was read at open and is not revisited, so
+  the list refreshes. The role carried on the ready signal was read at open and is not revisited, so
   a demotion takes effect on the next open.
 * **The directory is only rebuilt when someone asks for the list.** An invite or a revoke that this
-  client learns about another way leaves the directory as it was, so a new member's cursor does not
+  client learns about another way leaves the directory as it was. A new member's cursor does not
   appear until something refetches.
-* **No test drives an open.** The whole open path -- the members request, the unwrap, the directory
-  and the role -- runs in a browser, and the host tier reaches its pure transforms alone.
+* **No test drives an open.** The whole open path runs in a browser: the members request, the
+  unwrap, the directory and the role. The host tier reaches its pure transforms alone.
 * **Nothing rules on a member who cannot be reached.** An invitee whose address resolves to no
-  account is refused; an account that exists and never opens the document keeps a wrapped key for
+  account is refused. An account that exists and never opens the document keeps a wrapped key for
   ever, and no rule bounds that.
 
 ---

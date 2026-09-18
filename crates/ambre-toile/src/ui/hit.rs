@@ -128,9 +128,9 @@ pub fn hit_topmost(nodes: &[DisplayNode], world_pt: Point) -> Option<ElementId> 
 }
 
 /// Marquee (rubber-band) selection: every element whose world AABB intersects
-/// `rect`, refined to exact geometry for the partially-covered ones (an element
+/// `rect`, refined to exact geometry for the partially-covered ones. An element
 /// fully inside `rect` is kept without an exact test; one straddling the border
-/// must actually intersect the geometry). Locked elements and groups are skipped.
+/// must actually intersect the geometry. Locked elements and groups are skipped.
 pub fn marquee_hits(nodes: &[DisplayNode], rect: Rect) -> Vec<ElementId> {
     nodes
         .iter()
@@ -145,9 +145,9 @@ pub fn marquee_hits(nodes: &[DisplayNode], rect: Rect) -> Vec<ElementId> {
                 // Fully contained.
                 true
             } else if rect.intersect(b).area() > 0.0 {
-                // Partial cover: refine. Cheap approximation adequate for Phase 0
-                // -- any corner of the AABB-overlap region that lies in the shape,
-                // or the element center inside the rect, counts as a touch.
+                // Partial cover: refine. Cheap approximation adequate for Phase 0:
+                // any corner of the AABB-overlap region that lies in the shape
+                // counts as a touch. So does the element center inside the rect.
                 let c = b.center();
                 rect.contains(c) || exact_hit(e, c)
             } else {

@@ -1,35 +1,37 @@
 //! SVG import (`toile-import-export`).
 //!
 //! `usvg` parses the document into a normalized render tree; we walk it and map
-//! each node to a Toile `CreateElement`. usvg flattens every primitive
-//! (`<rect>`, `<circle>`, `<line>`, ...) into a `Path`, so vector nodes map to
-//! `Shape(Path)` carrying a `kurbo::BezPath`; an axis-aligned rectangle contour
-//! is recognized back into `Shape(Rect)` (the common, safe case). `<image>` maps
-//! to an `Image` element plus a plaintext [`MediaBlob`], and `<g>` becomes
-//! an [`ImportGroup`] rebuilt after apply -- see the note on groups below.
+//! each node to a Toile `CreateElement`. usvg flattens every primitive (`<rect>`,
+//! `<circle>`, `<line>`, ...) into a `Path`. So vector nodes map to `Shape(Path)`
+//! carrying a `kurbo::BezPath`. An axis-aligned rectangle contour is recognized
+//! back into `Shape(Rect)`, the common and safe case. `<image>` maps to an `Image`
+//! element plus a plaintext [`MediaBlob`], and `<g>` becomes an [`ImportGroup`]
+//! rebuilt after apply -- see the note on groups below.
 //!
 //! **Text (why not usvg).** usvg only exposes `<text>` by flattening it to glyph
-//! *paths*, which needs a font database -- impossible in the browser (no system
-//! fonts) and destructive (it would lose the editable string). So the usvg font
-//! stack is disabled and `<text>` is read directly from the SVG source with
-//! `roxmltree`: the raw body plus its `x`/`y` become a `Text` element that Toile
+//! *paths*, which needs a font database. That is impossible in the browser (no
+//! system fonts) and destructive (it would lose the editable string). So the usvg
+//! font stack is disabled and `<text>` is read directly from the SVG source with
+//! `roxmltree`. The raw body plus its `x`/`y` become a `Text` element that Toile
 //! renders through its own Parley stack. Phase 0 reads top-level `x`/`y` only (no
 //! transform / `tspan` offset resolution), noted where it matters.
 //!
-//! **Groups.** The spec maps `<g>` to a Toile `group`. A group is created
-//! only via `GroupElements { ids }`, which needs the `ElementId`s the engine mints
-//! *after* `CreateElement` is applied -- ids an offline converter cannot know. So
-//! the converter speaks in slots: it imports the children as elements (the group's
-//! transform baked into their geometry via `abs_transform` / abs bounds, so
-//! geometry stays world-space) and records an [`ImportGroup`] whose members are the
-//! slots (and nested groups) it contains. Groups are pushed **innermost-first**
-//! (post-order) so a nested member `Group(i)` always refers to an already-resolved
-//! entry. The apply pass mints the ids and issues `GroupElements` in the same undo
-//! group, reconstructing the hierarchy. No group is flattened or reported as lost.
+//! **Groups.** The spec maps `<g>` to a Toile `group`. A group is created only via
+//! `GroupElements { ids }`, which needs the `ElementId`s the engine mints *after*
+//! `CreateElement` is applied -- ids an offline converter cannot know. So the
+//! converter speaks in slots. It imports the children as elements, with the group's
+//! transform baked into their geometry via `abs_transform` / abs bounds so geometry
+//! stays world-space. It then records an [`ImportGroup`] whose members are the
+//! slots (and nested groups) it contains.
+//!
+//! Groups are pushed **innermost-first** (post-order) so a nested member `Group(i)`
+//! always refers to an already-resolved entry. The apply pass mints the ids and
+//! issues `GroupElements` in the same undo group, reconstructing the hierarchy. No
+//! group is flattened or reported as lost.
 //!
 //! All geometry is clamped to the world bound and the element/depth counts are
-//! enforced while walking; any breach aborts the whole import atomically
-//! -- the returned `Err` carries no commands.
+//! enforced while walking. Any breach aborts the whole import atomically: the
+//! returned `Err` carries no commands.
 
 use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
 use usvg::tiny_skia_path::PathSegment;
@@ -42,13 +44,19 @@ use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
 /// Parse SVG `bytes` and convert to an atomic [`ImportBatch`]. Returns
 /// `Err` (and no commands) on a parse failure, an exceeded safety limit, or an
 /// SVG that maps to zero elements (atomicity).
+///
+/// # Errors
+///
+/// [`ImportError::Parse`] when usvg refuses `bytes`, the limit errors of
+/// [`Limits`] when the tree exceeds one, and [`ImportError::Empty`] when the
+/// walk yields no element. No command survives an error: the batch is atomic.
 pub fn import_svg(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, ImportError> {
     let opt = usvg::Options::default();
     let tree = usvg::Tree::from_data(bytes, &opt).map_err(|e| ImportError::Parse(e.to_string()))?;
 
     let mut batch = ImportBatch::default();
     let mut media_counter = 0usize;
-    // The document root is not itself a `<g>`; its direct-member refs are discarded
+    // The document root is not itself a `<g>`; its direct-member refs are dropped
     // (only nested `<g>` become groups). Nested groups are pushed during the walk.
     walk_group(tree.root(), 0, limits, &mut batch, &mut media_counter)?;
 
@@ -123,8 +131,9 @@ fn import_text_nodes(
 /// [`ImportRef`]s of the elements/subgroups that are this group's direct members
 /// (in child order). `depth` guards nesting; `media_counter` mints the placeholder
 /// token for each `<image>`. A nested `<g>` recurses first, then pushes its
-/// [`ImportGroup`] (post-order = innermost-first, so a `Group(i)` member always
-/// refers to an already-pushed entry) and contributes a `Group` ref here.
+/// [`ImportGroup`] and contributes a `Group` ref here. Post-order is
+/// innermost-first, so a `Group(i)` member always refers to an already-pushed
+/// entry.
 fn walk_group(
     group: &usvg::Group,
     depth: usize,
@@ -231,13 +240,13 @@ fn import_image(
 }
 
 /// Append one `CreateElement` for an element occupying `rect`, plus its imported
-/// style (index-aligned into `batch.styles`), and return the slot index the apply
+/// style (index-aligned into `batch.styles`). Return the slot index the apply
 /// pass will resolve to a freshly minted `ElementId`.
 ///
 /// Style rides a separate `styles` slot rather than `CreateElement` because the
-/// CRDT stores `ElementStyle` as an independent LWW register: the apply
-/// pass creates the element, then restyles it inside the same undo group. `None`
-/// keeps the engine default (used for text/image, which import unstyled).
+/// CRDT stores `ElementStyle` as an independent LWW register. The apply pass
+/// creates the element, then restyles it inside the same undo group. `None` keeps
+/// the engine default (used for text/image, which import unstyled).
 fn push_element(
     batch: &mut ImportBatch,
     kind: ElementKind,
@@ -287,9 +296,10 @@ fn to_bezpath(path: &usvg::tiny_skia_path::Path, tf: &usvg::Transform, limits: &
     bez
 }
 
-/// Recognize a closed, axis-aligned rectangle contour (the usvg flattening of a
-/// `<rect>`): a single subpath of straight edges whose corners take exactly two
-/// distinct x and two distinct y values. Returns its bounds, else `None`.
+/// Recognize a closed, axis-aligned rectangle contour, the usvg flattening of a
+/// `<rect>`. It is a single subpath of straight edges whose corners take
+/// exactly two distinct x and two distinct y values. Returns its bounds, else
+/// `None`.
 fn as_axis_aligned_rect(bez: &BezPath) -> Option<Rect> {
     let mut pts: Vec<Point> = Vec::new();
     for el in bez.elements() {

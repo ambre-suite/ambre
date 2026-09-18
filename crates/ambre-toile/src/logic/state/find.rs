@@ -1,6 +1,6 @@
 //! Board text search for [`ToileState`](super::ToileState).
 //!
-//! `Find` is **non-mutating** and runs entirely on the Logic thread: the UI only
+//! `Find` is **non-mutating** and runs entirely on the Logic thread. The UI only
 //! holds the culled `DisplayViewport`, so a match on an off-screen sticky is
 //! invisible to it. The handler walks the text-bearing elements (sticky / text
 //! bodies, frame titles) in z-order and returns their ids plus the next hit to
@@ -33,10 +33,10 @@ impl ToileState {
         ToileOutcome::display_only(vec![ToileEvent::FindResults(FindResults { hits, focus })])
     }
 
-    /// Text-bearing element ids matching `query`, in paint order: the
-    /// `layers` walk first, then any element absent from `layers` appended in
-    /// `ElementId` order (the well-formedness fallback), so a concurrently
-    /// dropped `layers` entry never hides a hit.
+    /// Text-bearing element ids matching `query`, in paint order. The
+    /// `layers` walk comes first, then any element absent from `layers`,
+    /// appended in `ElementId` order (the well-formedness fallback). A
+    /// concurrently dropped `layers` entry therefore never hides a hit.
     fn find_hits(&self, query: &str, options: FindOptions) -> Vec<ElementId> {
         let mut hits = Vec::new();
         let mut seen = std::collections::HashSet::new();
@@ -77,10 +77,10 @@ impl ToileState {
     }
 }
 
-/// The hit to recenter on: the first hit for a fresh search, otherwise the hit
-/// adjacent to `from` in the requested direction (`backward` steps to the
-/// previous hit, else the next), wrapping around. A `from` that is no longer a
-/// hit restarts at the first.
+/// The hit to recenter on. That is the first hit for a fresh search, otherwise
+/// the hit adjacent to `from` in the requested direction, wrapping around.
+/// `backward` steps to the previous hit, else the next. A `from` that is no
+/// longer a hit restarts at the first.
 fn next_focus(hits: &[ElementId], from: Option<&ElementId>, backward: bool) -> Option<ElementId> {
     let first = hits.first().cloned();
     let Some(from) = from else {

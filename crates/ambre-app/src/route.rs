@@ -8,8 +8,8 @@
 //
 // The document type lives in the path so the client knows which engine to boot
 // before resolving the document. Navigation between routes is a CLIENT pushState
-// (see `lib.rs`, `leptos_router`): the wgpu canvas, Logic thread and Sync worker
-// are created once and the active document is swapped in place, so the worker's
+// (see `lib.rs`, `leptos_router`). The wgpu canvas, Logic thread and Sync worker
+// are created once, and the active document is swapped in place. The worker's
 // in-memory session keys survive a route change. This module is reduced to the
 // pure path<->`Route` mapping reused by the router shell.
 // ============================================================================
@@ -91,7 +91,7 @@ pub fn parse(path: &str) -> Route {
     }
 }
 
-/// The canonical path for a document route (e.g. `/trame/<uuid>`).
+/// The canonical path for a document route (for example `/trame/<uuid>`).
 pub fn doc_path(doc_type: DocType, document_id: DocumentId) -> String {
     format!("/{}/{}", type_slug(doc_type), document_id)
 }
@@ -107,17 +107,17 @@ fn is_toile_kind(doc_type: DocType) -> bool {
 /// Whether opening `target` from a page booted with `boot_is_toile` requires a
 /// **full page reload** rather than an in-place `AppView::set_document` swap.
 ///
-/// The booted canvas view is fixed per page load: `set_document` can swap the
-/// document id **within the same app kind**, but cannot switch kinds
-/// (Trame <-> Toile). So a target whose render kind differs from the booted kind
-/// must hard-navigate (`location.set_href`) to re-boot the right `AppView`;
-/// a same-kind target uses a router pushState that keeps the Sync worker/session
+/// The booted canvas view is fixed per page load. `set_document` can swap the
+/// document id **within the same app kind**, but cannot switch kinds (Trame <->
+/// Toile). So a target whose render kind differs from the booted kind must
+/// hard-navigate (`location.set_href`) to re-boot the right `AppView`. A
+/// same-kind target uses a router pushState that keeps the Sync worker/session
 /// (`ambre-spec-launcher.md`, CHROME-039).
 pub fn needs_reload(target: DocType, boot_is_toile: bool) -> bool {
     is_toile_kind(target) != boot_is_toile
 }
 
-// ── Tests (wasm tier) ───────────────────────────────────────────────────────
+// -- Tests (wasm tier) -------------------------------------------------------
 // The crate is `#![cfg(target_arch = "wasm32")]`, so even this pure path<->Route
 // mapping is only reachable on the wasm target. These run under node via the
 // `wasm-bindgen-test-runner` (`wasm-pack test`); no DOM/browser needed.

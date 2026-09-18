@@ -3,9 +3,9 @@
 **Type:** Vertical (feature)
 **Implementation:** design-only
 
-> A reviewer edits without changing the document: what they type is marked as a suggested
-> insertion, what they delete is marked as a suggested deletion, and the author accepts or rejects
-> each change as one unit. A rejected suggestion leaves nothing behind.
+> A reviewer edits without changing the document. What they type is marked as a suggested
+> insertion, what they delete as a suggested deletion. The author accepts or rejects each change
+> as one unit. A rejected suggestion leaves nothing behind.
 
 ---
 
@@ -54,7 +54,7 @@ of this feature: the suggestion converges under one, and it is painted under the
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-267` | `POST` | A delete range MUST be cut into maximal segments by what covers each one before any text is touched. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-087` | `POST` | Deleting text covered by the caller's own pending insertion MUST remove that text outright. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-088` | `POST` | Deleting any other text while suggesting MUST mark it, and MUST NOT remove it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-088` | `POST` | Deleting any other text while suggesting MUST mark it rather than remove it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-268` | `FRAME` | Deleting while suggesting MUST NOT remove or alter a mark another peer owns. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Accept a suggestion
@@ -72,7 +72,7 @@ of this feature: the suggestion converges under one, and it is painted under the
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-004` | `POST` | A rejected suggestion MUST be removed from the CRDT and MUST leave no trace in the final document. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-004` | `POST` | A rejected suggestion MUST be removed from the CRDT, leaving no trace in the final document. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-272` | `POST` | Rejecting a suggested deletion MUST strip the mark and leave the text it covered in place. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-273` | `POST` | Rejecting a suggestion MUST act on every span carrying the identity, whatever the number of blocks it crosses. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-274` | `POST` | Rejecting a suggestion MUST be idempotent. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -85,17 +85,17 @@ of this feature: the suggestion converges under one, and it is painted under the
 | `PROSE-FEAT-276` | `POST` | Accept-all and reject-all MUST resolve every pending identity exactly as the per-suggestion command would resolve it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-277` | `FRAME` | Accept-all and reject-all MUST NOT touch text no pending suggestion covers. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** two rows of `ambre-spec-budgets.md section 1`: the command interception under
-  100 us, because it sits on the path of every mutation while suggesting is on, and accept-all over
-  a hundred suggestions under 5 ms.
-* **Boundary.** none of its own: a suggestion is a mark and an annotation entry in the document, and
+* **Budget.** two rows of `ambre-spec-budgets.md section 1`. The command interception is under
+  100 us, because it sits on the path of every mutation while suggesting is on. Accept-all over
+  a hundred suggestions is under 5 ms.
+* **Boundary.** none of its own: a suggestion is a mark and an annotation entry in the document.
   `ZK-001` seals every payload before it leaves the client.
 * **Verification.** 35 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-FEAT-010` and `PROSE-FEAT-011` are what the planned property covers -- any interleaving of
-  insert and delete suggestions, then an accept-all, leaves a self-consistent document -- and
+  `PROSE-FEAT-010` and `PROSE-FEAT-011` are what the planned property covers: any interleaving of
+  insert and delete suggestions, then an accept-all, leaves a self-consistent document.
   `PROSE-FEAT-011` is the row two peers are needed for. `PROSE-FEAT-085` is the row with no
   mechanism in sight, because the window it names is undefined: section 6. The six frame conditions
-  are rows this document did not state before: nothing said what a command leaves alone.
+  rest on review alone.
 
 ---
 
@@ -119,12 +119,12 @@ rests on.
 
 ## 3. MODEL
 
-**Containers.** Two inline marks carry the suggestion's identity on the text -- one for a suggested
-insertion, one for a suggested deletion -- and one annotation entry carries the kind, the author,
+**Containers.** Two inline marks carry the suggestion's identity on the text, one for a suggested
+insertion and one for a suggested deletion. One annotation entry carries the kind, the author,
 the peer and the stamp. Both are declared in `ambre-spec-prose-schema.md section 3`.
 
-**The text is never two documents.** A suggestion is the real text plus a mark, so a suggested
-insertion is already in the block and a suggested deletion is still in it. That is what makes the
+**The text is never two documents.** A suggestion is the real text plus a mark. A suggested
+insertion is already in the block, and a suggested deletion is still in it. That is what makes the
 four outcomes cheap, and each one is idempotent (`PROSE-FEAT-084`) and reads the record rather than
 the current text (`PROSE-FEAT-010`).
 
@@ -134,12 +134,11 @@ the current text (`PROSE-FEAT-010`).
 | a suggested deletion | remove the covered text | strip the mark, the text stays |
 
 **Grouping, and what a unit is.** An identity groups the marks that accept and reject together. The
-grouping is **per authoring burst**: the engine keeps the current identity per peer and reuses it
-while consecutive edits from that peer stay adjacent to the group's span and fall inside a merge
-window (`PROSE-FEAT-085`). A caret move to a non-adjacent position starts a new one
-(`PROSE-FEAT-086`), and so does an idle gap or a switch between inserting and deleting at disjoint
-ranges. The unit the reviewer accepts is then "the sentence I just typed", rather than one character
-or a whole session.
+grouping is **per authoring burst**. The engine reuses one identity per peer while consecutive
+edits stay adjacent to the group's span and fall inside a merge window (`PROSE-FEAT-085`). A
+non-adjacent caret move starts a new one (`PROSE-FEAT-086`), as does an idle gap or a switch
+between inserting and deleting at disjoint ranges. The unit the reviewer accepts is then "the
+sentence I just typed", rather than one character or a whole session.
 
 **A delete is classified before it is applied.** While suggesting, a delete range is cut into
 maximal segments by what covers each one, and the two kinds are treated in opposite ways:
@@ -149,11 +148,11 @@ maximal segments by what covers each one, and the two kinds are treated in oppos
 | covered by a pending insertion this peer owns | the text is removed outright (`PROSE-FEAT-087`) |
 | original text, or a suggestion any other peer owns | the text is marked as a suggested deletion (`PROSE-FEAT-088`) |
 
-Ownership is read from the annotation entry the mark points at, so a foreign insertion nested inside
+Ownership is read from the annotation entry the mark points at. A foreign insertion nested inside
 this peer's own is split out correctly rather than swallowed.
 
 **One suggestion, several spans.** A change that crossed a block boundary is stored as several
-marked spans sharing one identity, and accept and reject collect all of them and act atomically
+marked spans sharing one identity. Accept and reject collect all of them and act atomically
 (`PROSE-FEAT-083`).
 
 **Turning the mode off decides nothing about what is pending.** The flag stops *new* edits from
@@ -169,8 +168,8 @@ being intercepted, and nothing else (`PROSE-FEAT-089`).
 | `AcceptAllSuggestions` | applies every pending suggestion |
 | `RejectAllSuggestions` | cancels every pending suggestion |
 
-**The three queries the engine answers**, each a pure read of the marks and the entries: the
-segments a delete range cuts into, every span carrying one identity, and the set of identities
+**The three queries the engine answers**, each a pure read of the marks and the entries. They are
+the segments a delete range cuts into, every span carrying one identity, and the set of identities
 currently pending.
 
 **Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
@@ -189,9 +188,9 @@ currently pending.
 | the reject control | that suggestion cancelled, leaving nothing |
 | the accept-all and reject-all controls | every pending suggestion at once |
 
-The two states are read in the text itself and not from an affordance (`PROSE-UI-051`): a suggested
-insertion is underlined on a light ground, a suggested deletion is struck through on a light ground,
-both in theme colours the palette owns
+The two states are read in the text itself and not from an affordance (`PROSE-UI-051`). A suggested
+insertion is underlined on a light ground, and a suggested deletion is struck through on one. Both
+use theme colours the palette owns
 (`features/ambre-spec-prose-page-rendering.md section 3`). Those are canvas content, painted in the
 page pass. The accept and reject affordance is a DOM Leptos popover, transform-synced to the hovered
 suggestion through a signal the view raises (`PROSE-UI-052`).

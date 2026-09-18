@@ -1,11 +1,10 @@
-// ambre-trame/src/logic/find.rs
-// Find & Replace (`trame-find-replace`).
+// ambre-trame/src/logic/find.rs Find & Replace (`trame-find-replace`).
 //
 // The DOM `FindReplace` chrome panel (Leptos, in `trame_chrome`) emits two
-// parameterless-origin commands; the Logic thread -- the sole holder of document
+// parameterless-origin commands. The Logic thread -- the sole holder of document
 // data -- does the scanning and the rewrite here. `FindNext` is read-only and
 // resolves its search origin from the tracked active cell (like the filter/sort
-// intents); `ReplaceAll` mutates every match in a single undo group. Submodule of
+// intents). `ReplaceAll` mutates every match in a single undo group. Submodule of
 // `logic`, so it reaches the parent's private fields/helpers through `use
 // super::*`.
 
@@ -57,10 +56,9 @@ impl TrameState {
 
     /// Replace every match of `query` with `replacement` across the active sheet
     /// (or all sheets when `all_sheets`) in one undo group (`trame-find-replace`).
-    /// A cell
-    /// matches on its **displayed** value (`whole_cell` = exact equality, else
-    /// substring; `match_case` toggles folding); the rewrite edits the **raw**
-    /// cell text -- the whole cell for `whole_cell`, else each occurrence of
+    /// A cell matches on its **displayed** value (`whole_cell` = exact equality,
+    /// else substring; `match_case` toggles folding). The rewrite edits the
+    /// **raw** cell text: the whole cell for `whole_cell`, else each occurrence of
     /// `query` in the raw string. Cells whose raw text is a formula (`=...`) are
     /// skipped unless `in_formulas`. Replies with [`TrameEvent::ReplaceDone`] and
     /// a [`TrameEvent::DataReset`] so the UI re-fetches.
@@ -93,8 +91,8 @@ impl TrameState {
         );
 
         // Other sheets: edit their cells map directly, then reseed the engine so
-        // their formula results recompute (the active write path only tracks the
-        // active sheet's engine state).
+        // their formula results recompute. The active write path only tracks the
+        // active sheet's engine state.
         let mut touched_other = false;
         if all_sheets {
             let others: Vec<String> = self
@@ -212,7 +210,7 @@ impl TrameState {
 
     /// Test and rewrite a single active-sheet cell. A formula cell is eligible
     /// only with `in_formulas`, and then it matches/rewrites on its raw formula
-    /// text ("search within formulas"); a plain cell matches on its displayed
+    /// text ("search within formulas"). A plain cell matches on its displayed
     /// value. Returns whether the cell was actually rewritten.
     #[allow(clippy::too_many_arguments)]
     fn replace_active_cell(
@@ -347,7 +345,7 @@ fn cell_matches(haystack: &str, needle: &str, match_case: bool, whole_cell: bool
 }
 
 /// Produce the rewritten raw text for a matched cell: the whole-cell case swaps
-/// the entire content for `replacement`; the substring case replaces every
+/// the entire content for `replacement`. The substring case replaces every
 /// occurrence of `query` (case-insensitively when `match_case` is off).
 fn rewrite(
     raw: &str,
@@ -370,7 +368,7 @@ fn rewrite(
 /// anchored at the start of `hay`. `None` when `hay` does not start with it.
 ///
 /// Lowercasing is compared character by character rather than on a pre-folded
-/// copy of `hay`, because `to_lowercase` is not length-preserving: `I` (U+0130)
+/// copy of `hay`, because `to_lowercase` is not length-preserving. `I` (U+0130)
 /// grows from 2 bytes to 3, the Kelvin sign `K` (U+212A) shrinks from 3 to 1. An
 /// offset found in the folded text therefore does not address the original.
 fn ci_match_len(hay: &str, needle_lower: &str) -> Option<usize> {
@@ -425,8 +423,9 @@ mod tests {
     fn case_insensitive_replace_survives_a_non_length_preserving_lowercase() {
         // `to_lowercase` grows U+0130 (2 bytes -> 3) and shrinks the Kelvin sign
         // U+212A (3 -> 1). Offsets taken from the folded copy used to index the
-        // original string, which panicked the Logic worker -- out of bounds on the
-        // first, off a char boundary on the second -- and killed the session.
+        // original string, which panicked the Logic worker. That was out of bounds
+        // on the first and off a char boundary on the second, and it killed the
+        // session.
         assert_eq!(replace_ci("\u{0130}x", "x", "Z"), "\u{0130}Z");
         assert_eq!(replace_ci("\u{212A}elvin", "elvin", "Z"), "\u{212A}Z");
         // The match may also start on the offending char itself.

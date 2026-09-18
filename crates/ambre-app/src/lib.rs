@@ -4,12 +4,12 @@
 // page's main JS thread (the UI thread).
 //
 // SPA model (ambre-spec-architecture): the ENGINE is created once and lives for
-// the whole session -- the inter-thread channels, the Logic thread, the Sync
-// worker, the local-persistence store, and the wgpu canvas. A `leptos_router`
-// shell drives a CLIENT-side route (pushState, no full page load); navigating
-// between the document list and a document only swaps the canvas's active
-// document in place (`DocSwitcher`), so the Sync worker keeps its in-memory
-// session keys across a navigation.
+// the whole session. That is the inter-thread channels, the Logic thread, the
+// Sync worker, the local-persistence store, and the wgpu canvas. A
+// `leptos_router` shell drives a CLIENT-side route: pushState, no full page
+// load. Navigating between the document list and a document only swaps the
+// canvas's active document in place (`DocSwitcher`). The Sync worker keeps its
+// in-memory session keys across a navigation.
 //
 //   - UI (this main thread) + Logic (a `wasm_thread` worker) share this Main
 //     wasm instance's memory and talk over `flume` channels.
@@ -19,8 +19,8 @@
 //   - The Leptos shell mounts once: the AppShell chrome (which owns the
 //     `<canvas>`) plus a landing overlay shown on the `/` route.
 //   - One route-independent rAF loop (the canvas host's) runs the per-frame
-//     relay AND the dispatcher, whatever the route -- paused (frozen frame)
-//     while the landing overlay covers the canvas.
+//     relay AND the dispatcher, whatever the route. It is paused, on a frozen
+//     frame, while the landing overlay covers the canvas.
 //
 // Command model (ambre-spec-commands.md): every trigger -- toolbar button,
 // keyboard shortcut, context menu -- produces the SAME `CommandId` ->
@@ -78,28 +78,21 @@ use landing::{DocItem, LandingSignals};
 /// Capacity of every inter-thread channel.
 ///
 /// Deliberately generous: P3 traffic is request/response and never approaches
-/// it, and the hot viewport path is coalesced to <=1 send/frame on the UI side
+/// it. The hot viewport path is coalesced to <=1 send/frame on the UI side
 /// (see `TrameView`). It exists purely as a safety bound so a momentarily-slow
 /// consumer cannot grow an unbounded queue in the shared heap.
 const CHANNEL_CAPACITY: usize = 1024;
 
-/// The handles the Leptos shell needs. Every field is `Send` (a `flume::Sender`,
-/// an `Arc`-backed control, or a Copy `RwSignal`): `leptos_router`'s `<Router>`
-/// requires its subtree be `Send`, so the `!Send` `Rc`-backed handles (the
-/// `CommandStates` store, the `DocSwitcher`) are kept OUT of the view -- the
-/// store is driven by the per-frame relay and the canvas swap by the route poll,
-/// both outside the reactive tree. The shell sees only the toggle signals the
-/// store exposes.
 /// A pending TOFU trust decision for the share dialog
 /// (`ambre-spec-key-verification.md`). Built by the per-frame relay from a
-/// `RestEvent::InviteeKey` (phase 1) once the fetched key has been compared
-/// against the `trusted_keys` store, and
-/// consumed by the confirmation / key-changed dialog in `AppRoot`.
+/// `RestEvent::InviteeKey` (phase 1), once the fetched key has been compared
+/// against the `trusted_keys` store. It is consumed by the confirmation /
+/// key-changed dialog in `AppRoot`.
 ///
-/// Only the states that interrupt the user reach `AppRoot`: a **New** key
-/// (`changed == false`, first invitation) or a **Changed** key
-/// (`changed == true`, a divergence from the pinned value). A **Trusted** key
-/// never becomes a prompt -- the relay proceeds straight to phase 2.
+/// Only the states that interrupt the user reach `AppRoot`. That is a
+/// **New** key (`changed == false`, first invitation) or a **Changed** key
+/// (`changed == true`, a divergence from the pinned value). A **Trusted**
+/// key never becomes a prompt -- the relay proceeds straight to phase 2.
 #[derive(Clone, PartialEq)]
 struct TofuPrompt {
     document_id: DocumentId,
@@ -128,7 +121,7 @@ type ChildBacklog = Rc<RefCell<HashMap<DocumentId, VecDeque<UiEvent>>>>;
 ///
 /// A child is pumped once per frame, so a backlog only forms on a burst larger
 /// than the channel itself. Past this the client is saturated for good and no
-/// amount of memory fixes it; the real answer is the busy signal `BUS-016`
+/// amount of memory fixes it. The real answer is the busy signal `BUS-016`
 /// prescribes, which lands with its own Story. Until then the bound is what
 /// keeps a stalled child from growing without limit, and it says so out loud.
 const CHILD_BACKLOG_LIMIT: usize = CHANNEL_CAPACITY;
@@ -137,12 +130,12 @@ const CHILD_BACKLOG_LIMIT: usize = CHANNEL_CAPACITY;
 /// (`TOILE-UI-340`).
 ///
 /// The old path dropped it: a `Full` fell through the disconnected test and then
-/// past the `continue`, so the event reached neither the child nor the board. It
-/// is a CRDT delta, so the child's view then sat behind its own document until
+/// past the `continue`. The event reached neither the child nor the board. It is
+/// a CRDT delta, so the child's view then sat behind its own document until
 /// something else redrew it from scratch.
 ///
 /// A document with anything already waiting takes the new event straight to the
-/// back of its queue: a child must not see a later delta before an earlier one.
+/// back of its queue. A child must not see a later delta before an earlier one.
 fn send_to_child(routes: &ChildRoutes, backlog: &ChildBacklog, id: DocumentId, ev: UiEvent) {
     if backlog.borrow().get(&id).is_some_and(|q| !q.is_empty()) {
         defer_for_child(backlog, id, ev);
@@ -175,12 +168,12 @@ fn offer_to_child(routes: &ChildRoutes, id: DocumentId, ev: &UiEvent) -> bool {
     });
     // The entry stays even with no sender left in it, and that emptiness is what
     // holds `TOILE-UI-098`. A child view is dropped the frame its embed leaves
-    // the culled set, while its session stays open for the whole close debounce:
-    // an event arriving in that window used to find no route and fall through to
-    // the board's own stream and chrome mirrors -- and a Toile nested in a Toile
-    // emits exactly the event the parent board would then apply to itself. An
-    // empty entry absorbs it instead, and the next view of that document pushes
-    // its sender back into the same slot.
+    // the culled set, while its session stays open for the whole close debounce.
+    // An event arriving in that window used to find no route and fall through to
+    // the board's own stream and chrome mirrors. A Toile nested in a Toile emits
+    // exactly the event the parent board would then apply to itself. An empty
+    // entry absorbs it instead, and the next view of that document pushes its
+    // sender back into the same slot.
     //
     // What is left is a few dozen bytes per document embedded at least once in
     // this session, which nothing reclaims. Bounded by the boards a user opens,
@@ -249,16 +242,16 @@ struct Wiring {
     /// Set by `AppRoot` when the user confirms a TOFU prompt. The relay polls it,
     /// pins the key in `trusted_keys`, and dispatches phase 2 of the invite.
     tofu_confirm: RwSignal<Option<TofuPrompt>>,
-    /// Role selected in the invite form, carried across the two-phase invite (the
-    /// phase-1 `FetchInviteeKey` does not carry it, per) so both the confirm
-    /// path and the auto-proceed (Trusted) path grant the intended role.
+    /// Role selected in the invite form, carried across the two-phase invite. The
+    /// phase-1 `FetchInviteeKey` does not carry it, so both the confirm path and
+    /// the auto-proceed (Trusted) path grant the intended role.
     invite_role: RwSignal<Role>,
     /// Whether the server enables dev login; `None` until `/api/auth/config` answers.
     dev_mode: RwSignal<Option<bool>>,
     /// The currently routed document, or `None` on the landing route. Read by
     /// every command trigger so it targets the active document.
     current_doc: RwSignal<Option<DocumentId>>,
-    /// Formula bar: active cell reference label (e.g. "B2").
+    /// Formula bar: active cell reference label (for example "B2").
     formula_ref: RwSignal<String>,
     /// Formula bar: cell raw text / live edit buffer.
     formula_text: RwSignal<String>,
@@ -306,25 +299,25 @@ struct Wiring {
     following_toile: RwSignal<Option<ambre_bus::UserId>>,
     presenter_peer_toile: RwSignal<Option<ambre_bus::UserId>>,
     /// Toile right-click context-menu scope (`toile-menus`): the canvas view
-    /// publishes it on each right-click; the shell's entry `Memo` reads it to build
+    /// publishes it on each right-click. The shell's entry `Memo` reads it to build
     /// the menu, omitting inapplicable rows.
     toile_ctx_scope: RwSignal<ambre_toile::ui::menu::CtxScope>,
     /// The Toile context-menu command the shell forwards back into the canvas view
-    /// (`toile-menus`): the view drains it and resolves it against its selection
+    /// (`toile-menus`). The view drains it and resolves it against its selection
     /// (the Logic thread never sees the selection).
     toile_menu_cmd: RwSignal<Option<ambre_chrome::commands::CommandId>>,
-    /// Toile active tool (`toile-tools`): the shared source of truth for
-    /// the DOM tool palette and the bare-key tool chords; the canvas view reads it
-    /// each frame and applies it. Tool selection is UI-only, canvas-local state.
+    /// Toile active tool (`toile-tools`): the shared source of truth for the DOM
+    /// tool palette and the bare-key tool chords. The canvas view reads it each
+    /// frame and applies it. Tool selection is UI-only, canvas-local state.
     toile_active_tool: RwSignal<ambre_toile::ui::Tool>,
-    /// Toile canvas cursor (`toile-tools`): the position-dependent CSS
-    /// cursor the view publishes (directional resize on a selection edge / corner,
-    /// grab on the rotate handle, `grabbing` while moving). `None` falls back to
-    /// the tool's base `cursor_css`. Read by the chrome's cursor `Effect`.
+    /// Toile canvas cursor (`toile-tools`). The view publishes the
+    /// position-dependent CSS cursor: directional resize on a selection edge /
+    /// corner, grab on the rotate handle, `grabbing` while moving. `None` falls
+    /// back to the tool's base `cursor_css`. Read by the chrome's cursor `Effect`.
     toile_cursor: RwSignal<Option<std::borrow::Cow<'static, str>>>,
-    /// Toile style-inspector model (`toile-styles`): the selection's
-    /// common `ElementStyle` + mixed-field mask, published by the canvas view; the
-    /// DOM inspector reads it to render values and mixed-state. `None` hides it.
+    /// Toile style-inspector model (`toile-styles`): the selection's common
+    /// `ElementStyle` + mixed-field mask, published by the canvas view. The DOM
+    /// inspector reads it to render values and mixed-state. `None` hides it.
     toile_style_model: RwSignal<Option<toile_chrome::StyleModel>>,
     /// Whole-style edit the inspector emits back (`toile-styles`): the
     /// canvas view drains it into one `RestyleElements` over the live selection.
@@ -333,12 +326,12 @@ struct Wiring {
     /// republished every frame by the canvas view so the bar tracks pan/zoom;
     /// `None` hides it.
     toile_float_bar: RwSignal<Option<toile_chrome::FloatBar>>,
-    /// Single-field style edit the floating bar emits back (`toile-styles`):
-    /// the canvas view applies it on top of the live common style as one
+    /// Single-field style edit the floating bar emits back (`toile-styles`).
+    /// The canvas view applies it on top of the live common style as one
     /// `RestyleElements` over the selection.
     toile_quick_style: RwSignal<Option<toile_chrome::StyleEdit>>,
     /// The comments panel's signals (`toile-comments`): the canvas view writes
-    /// the list, the open thread and the drop composer, and drains the intents
+    /// the list, the open thread and the drop composer. It drains the intents
     /// the panel and the composer emit. The panel holds nothing of its own
     /// (`TOILE-UI-023`).
     toile_comments: toile_chrome::CommentSignals,
@@ -381,8 +374,8 @@ struct Wiring {
     /// context menu's dynamic filter entry (Filter by column XOR Remove filter).
     filter_active: RwSignal<bool>,
     /// Current selection rectangle `(r1, c1, r2, c2)`, published by the canvas
-    /// view on each selection change; read when opening the multi-column sort
-    /// dialog so it offers the selection's columns (`trame-sort`).
+    /// view on each selection change. It is read when opening the multi-column
+    /// sort dialog, so it offers the selection's columns (`trame-sort`).
     sel_bounds: RwSignal<Option<(u32, u32, u32, u32)>>,
     /// Multi-column sort dialog open state (`trame-sort`); `None` = closed.
     sort_dialog: RwSignal<Option<trame_chrome::SortDialogState>>,
@@ -437,10 +430,10 @@ impl ChromeStatus {
 }
 
 // Gated out under `cfg(test)`: the wasm-bindgen-test harness generates its own
-// entry point, which collides with this `#[wasm_bindgen(start)] fn main`
-// ("entry symbol `main` declared multiple times"). The launcher boot path is not
-// what the unit tests exercise (they cover the pure helpers -- route/base64/fps),
-// so dropping `main` from the test build is harmless.
+// entry point, which collides with this `#[wasm_bindgen(start)] fn main` ("entry
+// symbol `main` declared multiple times"). The launcher boot path is not what the
+// unit tests exercise (they cover the pure helpers -- route/base64/fps). Dropping
+// `main` from the test build is harmless.
 #[cfg(not(test))]
 #[wasm_bindgen(start)]
 pub fn main() {
@@ -457,9 +450,9 @@ pub fn main() {
         console_error_panic_hook::hook(info);
         let msg = info.to_string();
         // Latch the canvas fatal screen. Works from any thread sharing this
-        // instance's memory (UI/Logic): a Logic-thread panic has no `window`,
-        // so the JS overlay below cannot fire, but the UI thread's rAF loop is
-        // still alive and will paint the terminal screen from this latch.
+        // instance's memory (UI/Logic). A Logic-thread panic has no `window`,
+        // so the JS overlay below cannot fire. The UI thread's rAF loop is
+        // still alive, and will paint the terminal screen from this latch.
         ambre_canvas::signal_fatal(&msg);
         // Notify the page that the WASM application has suffered an
         // unrecoverable panic (panic=abort, so no graceful shutdown).
@@ -487,7 +480,7 @@ pub fn main() {
     let (sync_to_logic_tx, sync_to_logic_rx) = flume::bounded::<LogicEvent>(CHANNEL_CAPACITY);
     // Logic -> Main, carrying full document snapshots for local persistence. The
     // Main thread owns the IndexedDB store (its callbacks need a live event loop,
-    // which the blocking Logic loop cannot offer) and drains this in `pre_frame`.
+    // which the blocking Logic loop cannot offer). It drains this in `pre_frame`.
     let (logic_to_persist_tx, logic_to_persist_rx) =
         flume::bounded::<(DocumentId, Vec<u8>)>(CHANNEL_CAPACITY);
 
@@ -495,15 +488,15 @@ pub fn main() {
     // dispatcher has mirrored command-state events into the chrome.
     let (view_tx, view_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
 
-    // Per-document Logic->UI fan-out for nested `doc_embed` children. A
-    // child view built by `make_child` (below) registers a demultiplexed sender
-    // here; the relay routes every doc-tagged event whose `document_id` is a live
-    // child to those channels instead of the shared top-level `view_tx`, so a
-    // child's stream never reaches the parent view (which ignores `document_id`).
+    // Per-document Logic->UI fan-out for nested `doc_embed` children. A child
+    // view built by `make_child` (below) registers a demultiplexed sender here.
+    // The relay routes every doc-tagged event whose `document_id` is a live child
+    // to those channels, instead of the shared top-level `view_tx`. So a child's
+    // stream never reaches the parent view (which ignores `document_id`).
     // Dropping a child drops its receiver, so the relay reclaims that slot on its
     // next send to it.
     //
-    // A LIST of senders per document, not one: two embeds of a single document
+    // A LIST of senders per document, not one. Two embeds of a single document
     // are two views (`TOILE-UI-097`), each with its own channel, and both must
     // see the document's events. One slot per document had the second
     // registration evict the first, leaving that embed painting a view nothing
@@ -522,8 +515,8 @@ pub fn main() {
     let raf = ambre_canvas::RafControl::new();
 
     // Canvas->DOM selection anchor: the view publishes the active cell's screen
-    // position, the dispatcher mirrors it into the chrome's `anchor_pos` signal,
-    // and the floating selection toolbar transform-syncs onto it.
+    // position, and the dispatcher mirrors it into the chrome's `anchor_pos`
+    // signal. The floating selection toolbar transform-syncs onto it.
     let anchor_pub = ambre_canvas::AnchorPublisher::new();
 
     // Canvas->DOM perf channel: the view publishes the per-frame perf snapshot
@@ -533,10 +526,10 @@ pub fn main() {
     let perf_pub = ambre_canvas::PerfPublisher::new();
 
     // Canvas->DOM filter-open channel (`trame-shared-filter`): the view raises this
-    // one-shot intent when an in-canvas autofilter button is clicked; the
-    // per-frame relay consumes it (after mirroring the anchor) and opens the DOM
+    // one-shot intent when an in-canvas autofilter button is clicked. The per-frame
+    // relay consumes it (after mirroring the anchor) and opens the DOM
     // FilterPopover through the same path as the context-menu "Filter by column"
-    // entry, so there is one filter code path with two entry points.
+    // entry. So there is one filter code path with two entry points.
     let filter_open_pub = ambre_canvas::FilterOpenPublisher::new();
 
     // Canvas->DOM busy channel (`BUS-016`): the active view raises this level
@@ -559,9 +552,9 @@ pub fn main() {
     let tofu_confirm = RwSignal::new(None::<TofuPrompt>);
     let invite_role = RwSignal::new(Role::Editor);
 
-    // Status-bar signals (`trame-status-bar`): selection aggregates (set from the
-    // `SelectionStats` event / cleared by the view on a single cell) and the live
-    // perf snapshot pumped from `perf_pub` below.
+    // Status-bar signals (`trame-status-bar`): selection aggregates, set from the
+    // `SelectionStats` event and cleared by the view on a single cell. Also the
+    // live perf snapshot pumped from `perf_pub` below.
     let sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
     // Toile selection aggregates (toile-status-bar): element tally + world bounds,
     // mirrored from `ToileEvent::SelectionStats`. Cleared to `None` on an empty
@@ -593,7 +586,7 @@ pub fn main() {
     let zoom = RwSignal::new(1.0_f64);
 
     // Context-menu scope (`trame-context-menu`): the view sets it per right-click
-    // (cell vs header) before the DOM `contextmenu` listener opens the menu; the
+    // (cell vs header) before the DOM `contextmenu` listener opens the menu. The
     // shell derives the menu layout from it. Created here (like the formula
     // signals) so both the view and the Leptos shell share the one signal.
     let ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
@@ -606,8 +599,8 @@ pub fn main() {
     let sel_bounds = RwSignal::new(None::<(u32, u32, u32, u32)>);
 
     // Toile context-menu bridge (`toile-menus`): the canvas view publishes the
-    // selection scope on each right-click; the DOM menu reads it to build its
-    // entries and writes the chosen `CommandId` back for the view to resolve
+    // selection scope on each right-click. The DOM menu reads it to build its
+    // entries. It writes the chosen `CommandId` back for the view to resolve
     // against its (UI-only) selection. Created here so the view and the Leptos
     // shell share the one pair of signals, exactly like Trame's `ctx_scope`.
     let toile_ctx_scope = RwSignal::new(ambre_toile::ui::menu::CtxScope::default());
@@ -618,21 +611,21 @@ pub fn main() {
     let toile_active_tool = RwSignal::new(ambre_toile::ui::Tool::default());
     // Toile canvas cursor (`toile-tools`): the view publishes the
     // position-dependent cursor here (directional resize on a selection edge, grab
-    // on the rotate handle); `None` falls back to the tool's base cursor.
+    // on the rotate handle). `None` falls back to the tool's base cursor.
     let toile_cursor = RwSignal::new(None::<std::borrow::Cow<'static, str>>);
-    // Toile style inspector (`toile-styles`): the view publishes the
-    // selection's common style into `toile_style_model` and drains a whole-style
-    // edit from `toile_restyle`, exactly like the context-menu pair above.
+    // Toile style inspector (`toile-styles`): the view publishes the selection's
+    // common style into `toile_style_model`. It drains a whole-style edit from
+    // `toile_restyle`, exactly like the context-menu pair above.
     let toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
     let toile_restyle = RwSignal::new(None::<ambre_bus::app::toile::ElementStyle>);
-    // Floating selection toolbar (`toile-styles`): the view republishes
-    // its placement into `toile_float_bar` each frame and drains single-field style
-    // edits from `toile_quick_style`, mirroring the inspector's model / restyle pair.
+    // Floating selection toolbar (`toile-styles`): the view republishes its placement
+    // into `toile_float_bar` each frame. It drains single-field style edits from
+    // `toile_quick_style`, mirroring the inspector's model / restyle pair.
     let toile_float_bar = RwSignal::new(None::<toile_chrome::FloatBar>);
     let toile_quick_style = RwSignal::new(None::<toile_chrome::StyleEdit>);
     // Comments (`toile-comments`): the panel and the drop composer read what
-    // the view published and write back one intent at a time, the same seam as
-    // the inspector's model / restyle pair.
+    // the view published. They write back one intent at a time, the same seam
+    // as the inspector's model / restyle pair.
     let toile_comments = toile_chrome::CommentSignals {
         panel: RwSignal::new(false),
         list: RwSignal::new(Vec::new()),
@@ -669,14 +662,14 @@ pub fn main() {
     // route is a CLIENT concern (leptos_router), no longer re-read here.
     let boot_route = route::current();
     // The routed document with its type (`/trame/<id>` -> (Trame, id)), kept for
-    // the local restore which must materialise the doc with the right type if it
-    // wins the startup race against `OpenDocument`.
+    // the local restore. That restore must materialise the doc with the right
+    // type if it wins the startup race against `OpenDocument`.
     let boot_doc_typed = boot_route.doc();
     let boot_doc = boot_doc_typed.map(|(_, id)| id);
     // Cross-type in-session navigation reloads the page (the `DocSwitcher` only
-    // swaps the id within one `AppView`), so the booted app kind is fixed here and
-    // gates both the render view (below) and the app-specific chrome (Find panel,
-    // keymap). Toile binds its own, smaller chord set.
+    // swaps the id within one `AppView`). So the booted app kind is fixed here,
+    // and gates both the render view (below) and the app-specific chrome (Find
+    // panel, keymap). Toile binds its own, smaller chord set.
     let boot_is_toile = matches!(boot_doc_typed, Some((ambre_bus::DocType::Toile, _)));
     if boot_is_toile {
         toile_chrome::bind_keys(&mut keymap);
@@ -684,12 +677,12 @@ pub fn main() {
         trame_chrome::bind_keys(&mut keymap);
     }
     // The canvas needs a document from frame 0. Boot onto the routed one, or a
-    // throwaway id on the landing route (the canvas is hidden there; the route
-    // effect swaps it to the real document on the first navigation).
+    // throwaway id on the landing route. The canvas is hidden there, and the
+    // route effect swaps it to the real document on the first navigation.
     let initial_doc = boot_doc.unwrap_or_else(DocumentId::new);
 
     // Spawn the Logic thread (shares this instance's memory). Owns the UI/Sync
-    // halves of its channels; the Sync-bound half (`logic_to_sync_tx`) is relayed
+    // halves of its channels. The Sync-bound half (`logic_to_sync_tx`) is relayed
     // to the Sync worker by the per-frame loop, and `sync_to_logic_tx` is fed by
     // the worker's onmessage handler.
     wasm_thread::Builder::new()
@@ -706,11 +699,11 @@ pub fn main() {
         .expect("spawn Logic thread");
 
     // Eagerly fetch the base fonts and seed the Logic thread's PDF-export
-    // FontContext (`toile-pdf-export`). The Logic worker cannot fetch -- it
-    // blocks on its inbound selector and has no browser event loop -- so the
-    // Main thread, which has both, fetches on its behalf and ships the raw bytes
-    // across as `LogicCommand::LoadFonts`. Fire-and-forget on a `spawn_local`:
-    // export happens far later, and a slow fetch must not stall boot.
+    // FontContext (`toile-pdf-export`). The Logic worker cannot fetch: it blocks
+    // on its inbound selector and has no browser event loop. So the Main thread,
+    // which has both, fetches on its behalf and ships the raw bytes across as
+    // `LogicCommand::LoadFonts`. Fire-and-forget on a `spawn_local`: export
+    // happens far later, and a slow fetch must not stall boot.
     {
         let fonts_tx = ui_to_logic_tx.clone();
         wasm_bindgen_futures::spawn_local(async move {
@@ -719,15 +712,16 @@ pub fn main() {
         });
     }
 
-    // Dev-only multi-user testing: `?user=<name>` in the page URL authenticates
-    // as that user (created on the fly server-side, keys derived deterministically
+    // Dev-only multi-user testing: `?user=<name>` in the page URL authenticates as
+    // that user (created on the fly server-side, keys derived deterministically
     // from the name). Lets several browser profiles collaborate on one machine
     // without OIDC. A prod server rejects the resulting `DevLogin` (DEV_MODE off).
     // The engine lives once now, so this fires only for the boot URL; the landing
     // dev-login field dispatches `DevLogin` directly thereafter (no reload).
-    // `?user=` wins; otherwise fall back to the dev user remembered from a prior
-    // session (localStorage) so a refresh of a `/trame/<id>` deep-link, which
-    // carries no query string, still re-establishes the session. The dev keys are
+    //
+    // `?user=` wins. Otherwise fall back to the dev user remembered from a prior
+    // session (localStorage). A refresh of a `/trame/<id>` deep-link carries no
+    // query string, and still re-establishes the session. The dev keys are
     // re-derived deterministically from the name, so no key material is stored --
     // only the username. (Real-auth refresh-token persistence is Part D.)
     if let Some(username) = dev_user_from_url().or_else(stored_dev_user) {
@@ -739,17 +733,17 @@ pub fn main() {
         });
     }
 
-    // Spawn the Sync worker: a SEPARATE wasm instance in its own Web Worker.
-    // Its onmessage decodes `LogicEvent`s into `sync_to_logic_tx` (-> Logic).
-    // Kept alive for the whole session by being captured in the relay closure.
+    // Spawn the Sync worker: a SEPARATE wasm instance in its own Web Worker. Its
+    // onmessage decodes `LogicEvent`s into `sync_to_logic_tx` (-> Logic). Kept
+    // alive for the whole session by being captured in the relay closure.
     //
     // `sync_ready` gates the Logic->Sync relay: the worker installs its inbound
-    // onmessage only at the end of its async wasm bootstrap, so any command
-    // posted before then is dropped. The relay buffers commands (they wait in
+    // onmessage only at the end of its async wasm bootstrap. Any command posted
+    // before then is dropped. The relay buffers commands (they wait in
     // `logic_to_sync_rx`) until the worker posts its readiness sentinel, which
-    // flips this flag. Without it the boot `DevLogin` -- enqueued above, before
-    // this spawn -- raced the bootstrap and was lost whenever the worker came up
-    // slowly, leaving the session key unset and the document stuck hydrating.
+    // flips this flag. Without it the boot `DevLogin`, enqueued above before
+    // this spawn, raced the bootstrap and was lost whenever the worker came up
+    // slowly. The session key stayed unset and the document stuck hydrating.
     let sync_ready = Rc::new(Cell::new(false));
     let sync_worker = spawn_sync_worker(sync_to_logic_tx, Rc::clone(&sync_ready));
 
@@ -870,9 +864,9 @@ pub fn main() {
     let current_doc = current_doc_slot
         .borrow()
         .expect("current_doc signal created during mount");
-    // Shared filter popover signals (`trame-shared-filter`), created in the mount owner
-    // and read back here for the per-frame relay (which sets them on
-    // `TrameEvent::ColumnValues` / `FilterApplied` / `FilterCleared`).
+    // Shared filter popover signals (`trame-shared-filter`), created in the mount
+    // owner. They are read back here for the per-frame relay, which sets them on
+    // `TrameEvent::ColumnValues` / `FilterApplied` / `FilterCleared`.
     let filter_popover = filter_popover_slot
         .borrow()
         .expect("filter_popover signal created during mount");
@@ -968,9 +962,10 @@ pub fn main() {
         });
     }
 
-    // The single UI-thread dispatcher, pumped once per frame regardless of route:
-    // persist drain, Logic->Sync relay, Logic->UI fan-out (command state to the
-    // chrome, session/list to the landing, content to the view), anchor mirror.
+    // The single UI-thread dispatcher, pumped once per frame regardless of route.
+    // It runs the persist drain, the Logic->Sync relay and the anchor mirror. It
+    // also runs the Logic->UI fan-out: command state to the chrome, session/list
+    // to the landing, content to the view.
     let anchor_pub_pump = anchor_pub.clone();
     let perf_pub_pump = perf_pub.clone();
     let filter_open_pump = filter_open_pub.clone();
@@ -990,9 +985,10 @@ pub fn main() {
     // canvas handle lives, so it stays OUT of the Leptos tree). The client URL is
     // the single source of truth: `leptos_router` pushState navigations and
     // browser back/forward both land here. On a change we close the previous
-    // document, open the next, point the persistent canvas at it, gate the rAF
-    // render (paint the doc / freeze it behind the landing overlay), and publish
-    // the active document so every command trigger targets it.
+    // document, open the next, and point the persistent canvas at it. We then
+    // gate the rAF render: paint the doc, or freeze it behind the landing
+    // overlay. We publish the active document, so every command trigger targets
+    // it.
     let route_switcher = Rc::clone(&switcher_slot);
     let route_tx = ui_to_logic_tx.clone();
     let route_raf = raf.clone();
@@ -1101,8 +1097,8 @@ pub fn main() {
         // worker (postcard, big payloads transferred zero-copy). `sync_worker` is
         // captured here, which is what keeps the worker alive for the session.
         // Held back until the worker signals readiness (`sync_ready`): commands
-        // stay buffered in `logic_to_sync_rx` so none is posted into the worker's
-        // bootstrap window where onmessage does not yet exist (order preserved).
+        // stay buffered in `logic_to_sync_rx`. None is posted into the worker's
+        // bootstrap window, where onmessage does not yet exist (order preserved).
         if sync_ready.get() {
             while let Ok(cmd) = logic_to_sync_rx.try_recv() {
                 match postcard::to_allocvec(&cmd) {
@@ -1118,8 +1114,8 @@ pub fn main() {
         flush_child_backlog(&child_routes_relay, &child_backlog_relay);
 
         while let Ok(ev) = logic_to_ui_rx.try_recv() {
-            // Fan a nested child's stream out to its own view channels and
-            // skip every top-level chrome mirror below: a child's events must not
+            // Fan a nested child's stream out to its own view channels, and skip
+            // every top-level chrome mirror below. A child's events must not
             // drive the parent's formula bar, zoom chip or status band. Only a
             // document that is a LIVE child is diverted; the top-level document's
             // events (and untagged service events) fall through unchanged.
@@ -1146,9 +1142,9 @@ pub fn main() {
             toile_chrome::notify_event(&toasts, &ev);
             match &ev {
                 // Non-fatal sync warnings surface as a transient warning toast.
-                // They never reach the fatal path: the session keeps running and
-                // the CRDT reconverges (a dropped/quarantined update is re-fetched
-                // via RequestMissing once its parent snapshot lands).
+                // They never reach the fatal path. The session keeps running and
+                // the CRDT reconverges: a dropped/quarantined update is re-fetched
+                // via RequestMissing once its parent snapshot lands.
                 UiEvent::SyncWarning { code, .. } => toasts.warning(sync_warning_message(*code)),
                 // Session bootstrap (dev `?user=` or OIDC): show the user, and
                 // request the document list once for the landing overlay.
@@ -1349,12 +1345,12 @@ pub fn main() {
                         cmd: RestCommand::ListDocuments,
                     });
                 }
-                // Relayed service failures (e.g. unknown invitee) surface as a
+                // Relayed service failures (for example unknown invitee) surface as a
                 // warning toast so the share action gives feedback.
                 UiEvent::ApiError { message, .. } => toasts.warning(message.clone()),
                 // Shared filter popover (`trame-shared-filter`): the distinct values of
-                // the active column landed -> populate the "by values" list and pin
-                // the popover to the real column index.
+                // the active column landed. Populate the "by values" list, and pin the
+                // popover to the real column index.
                 UiEvent::Viewport {
                     event: AppEvent::Trame(ambre_bus::TrameEvent::ColumnValues { col, values }),
                     ..
@@ -1440,10 +1436,10 @@ pub fn main() {
                     event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::FindResults(fr)),
                     ..
                 } => find_result_toile.set(Some(fr.clone())),
-                // Toile status bar: selection aggregates for the band.
-                // The canvas view requests them on each selection change and also
-                // receives this event (forwarded below), consuming it only for a
-                // pending Fit / find-focus recenter; here we mirror count/bounds
+                // Toile status bar: selection aggregates for the band. The canvas
+                // view requests them on each selection change, and also receives
+                // this event (forwarded below). It consumes that event only for a
+                // pending Fit / find-focus recenter. Here we mirror count/bounds
                 // into the status-bar signal.
                 UiEvent::Viewport {
                     event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::SelectionStats(s)),
@@ -1524,12 +1520,12 @@ pub fn main() {
             }
         }
 
-        // Open the shared filter popover when the canvas raised the one-shot
-        // intent (`trame-shared-filter`): a click on an in-canvas autofilter button.
-        // The view already moved the active cell onto the button's column (so the
-        // anchor mirrored just above points at it) and asked nothing else; this
-        // runs the exact body of the context-menu `FILTER_COLUMN` branch, so the
-        // two entry points share one filter code path.
+        // Open the shared filter popover when the canvas raised the one-shot intent
+        // (`trame-shared-filter`): a click on an in-canvas autofilter button. The
+        // view already moved the active cell onto the button's column, so the anchor
+        // mirrored just above points at it. It asked nothing else. This runs the
+        // exact body of the context-menu `FILTER_COLUMN` branch, so the two entry
+        // points share one filter code path.
         if filter_open_pump.take() {
             let (x, y) = client_anchor(anchor_pos.get_untracked());
             // `col` is provisional; the ColumnValues reply carries the real one.
@@ -1544,7 +1540,7 @@ pub fn main() {
         }
 
         // Mirror the view's perf snapshot into the status-bar signal, throttled
-        // to ~2 Hz: the old wgpu HUD refreshed every 500 ms too, and a per-frame
+        // to ~2 Hz. The old wgpu HUD refreshed every 500 ms too, and a per-frame
         // DOM update would be wasteful for a debug read-out.
         let now_ms = web_sys::window()
             .and_then(|w| w.performance())
@@ -1556,19 +1552,19 @@ pub fn main() {
     };
 
     // Boot the canvas (once). It grabs the `<canvas>` the chrome just mounted,
-    // drives the Trame view through the rAF loop, and returns the document-swap
-    // handle the route effect uses on navigation.
+    // and drives the Trame view through the rAF loop. It returns the
+    // document-swap handle the route effect uses on navigation.
     let view_tx_logic = ui_to_logic_tx.clone();
     let formula_ref_tv = formula_ref;
     let formula_text_tv = formula_text;
     let formula_action_tv = formula_action;
 
-    // Child-view factory for nested `doc_embed`s. `FrameHost` cannot build
-    // an `AppView` (it is app-agnostic, and the chrome signals need a reactive
-    // owner it does not have), so the launcher supplies this. Each call registers
-    // a demultiplexed Logic->UI channel and returns a view in embedded mode (it
-    // does not grab the text pipe). The chrome signals below are throwaway: no DOM
-    // reads them, so every child shares one dead set -- created here, in the
+    // Child-view factory for nested `doc_embed`s. `FrameHost` cannot build an
+    // `AppView` (it is app-agnostic, and the chrome signals need a reactive owner
+    // it does not have), so the launcher supplies this. Each call registers a
+    // demultiplexed Logic->UI channel and returns a view in embedded mode (it does
+    // not grab the text pipe). The chrome signals below are throwaway: no DOM
+    // reads them, so every child shares one dead set. It is created here, in the
     // launcher's leptos owner, where `RwSignal::new` is valid.
     let child_to_logic = ui_to_logic_tx.clone();
     let child_routes_factory = Rc::clone(&child_routes);

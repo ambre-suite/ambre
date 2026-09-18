@@ -1,12 +1,12 @@
-//! Closed set of `SyncWarning` codes, carried by both
-//! [`crate::LogicEvent::SyncWarning`] and [`crate::UiEvent::SyncWarning`].
+//! Closed set of `SyncWarning` codes, carried by both [`crate::LogicEvent::SyncWarning`]
+//! and [`crate::UiEvent::SyncWarning`].
 //!
-//! A `SyncWarning` is always **non-fatal**: the Sync thread dropped a message or
-//! relieved memory pressure and the session keeps running. The code is the
-//! contract that lets the UI map an event to a user-facing notice without
-//! parsing the free-text `message` (which stays a developer string). Every
-//! warning the Sync thread can raise is enumerated here, in one crate — so the
-//! consumer's `match` is exhaustive and the compiler flags any new variant.
+//! A `SyncWarning` is always **non-fatal**: the Sync thread dropped a message or relieved
+//! memory pressure and the session keeps running. The code is the contract that lets the UI
+//! map an event to a user-facing notice. It spares the UI from parsing the free-text
+//! `message`, which stays a developer string. Every warning the Sync thread can raise is
+//! enumerated here, in one crate. The consumer's `match` is therefore exhaustive, and the
+//! compiler flags any new variant.
 
 /// Why the Sync thread raised a (non-fatal) warning.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

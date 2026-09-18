@@ -18,7 +18,7 @@ pub use keybinding::{Key, KeyBinding, Modifiers};
 
 use std::collections::HashMap;
 
-/// Stable, namespaced identifier, e.g. `CommandId("prose.format.bold")`.
+/// Stable, namespaced identifier, for example `CommandId("prose.format.bold")`.
 ///
 /// The `&'static str` is the identity: two `CommandId`s are equal iff their
 /// strings are equal, which makes them cheap map keys and trivially `Copy`.
@@ -40,7 +40,7 @@ pub enum Locale {
 pub struct IconId(pub &'static str);
 
 /// Grouping key for the command palette and for ribbon tabs (one category =
-/// one tab), e.g. `CommandCategory("format")`.
+/// one tab), for example `CommandCategory("format")`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct CommandCategory(pub &'static str);
 
@@ -53,7 +53,7 @@ pub struct Command {
     pub title: fn(&Locale) -> String,
     pub icon: Option<IconId>,
     /// Every chord the command answers, the announced one first. A slice and
-    /// not one chord because a command may answer two: Redo takes
+    /// not one chord, because a command may answer two. Redo takes
     /// Ctrl+Shift+Z and Ctrl+Y, and each clipboard intent takes a modern chord
     /// and a legacy one. Empty for a command no chord triggers.
     pub keybindings: &'static [KeyBinding],
@@ -76,7 +76,7 @@ pub mod shared {
 
     /// The clipboard identities. One intent, one identity, in every
     /// application: a menu entry, a toolbar button and the browser's own event
-    /// name the same command, so a paste is one operation whichever raised it.
+    /// name the same command. A paste is one operation whichever raised it.
     /// They carry no application prefix because they belong to no application.
     pub const CUT: CommandId = CommandId("clipboard.cut");
     pub const COPY: CommandId = CommandId("clipboard.copy");
@@ -84,7 +84,7 @@ pub mod shared {
 
     /// The identities the browser services itself. It raises `cut`, `copy` and
     /// `paste` with the clipboard attached, on the modern and the legacy chords
-    /// alike, so a keymap declares those chords and decodes none of them
+    /// alike. A keymap therefore declares those chords and decodes none of them
     /// (`ambre-spec-text-input.md`, `CHROME-021`).
     pub const BROWSER_SERVICED: [CommandId; 3] = [CUT, COPY, PASTE];
 
@@ -133,13 +133,13 @@ impl Default for CommandState {
     }
 }
 
-/// An owner of commands. Each app implements this; the chrome consumes it
+/// An owner of commands. Each app implements this. The chrome consumes it
 /// without knowing which app it is (the same dependency inversion as the
 /// `AppView` enum on the render side).
 ///
 /// `Context` is the app's own state handle. Keeping it an associated type
-/// rather than a concrete `AppContext` preserves this crate as a true leaf:
-/// the app, not `ambre-commands`, decides what state derivation needs.
+/// rather than a concrete `AppContext` preserves this crate as a true leaf.
+/// The app, not `ambre-commands`, decides what state derivation needs.
 pub trait CommandSource {
     type Context;
 
@@ -185,8 +185,8 @@ impl Keymap {
     }
 
     /// Register every chord a table declares, except the chords of the
-    /// identities the browser services itself: the table announces those and
-    /// the keymap never resolves them, so no path decodes a copy twice
+    /// identities the browser services itself. The table announces those and
+    /// the keymap never resolves them. No path decodes a copy twice
     /// (`ambre-spec-commands.md`, `UI-THREAD-011`).
     ///
     /// The one seeding path an application calls, so the exception holds
@@ -264,9 +264,9 @@ mod tests {
         },
     ];
 
-    /// A table shaped like a real application's clipboard and history rows: the
-    /// shared identities and the shared chords, which is what every table
-    /// declares once this crate owns them.
+    /// A table shaped like a real application's clipboard and history rows. It
+    /// holds the shared identities and the shared chords, which is what every
+    /// table declares once this crate owns them.
     const EDITING: &[Command] = &[
         Command {
             id: CommandId("prose.history.redo"),
@@ -339,7 +339,7 @@ mod tests {
     #[test]
     fn the_keymap_binds_no_browser_serviced_chord() {
         // The table declares the four clipboard chords, so a surface announces
-        // them; the keymap resolves none, so the browser's own event stays the
+        // them. The keymap resolves none, so the browser's own event stays the
         // one path (`UI-THREAD-011`, `CHROME-021`).
         let km = Keymap::from_commands([EDITING]);
         for chord in shared::COPY_CHORDS.iter().chain(shared::PASTE_CHORDS) {

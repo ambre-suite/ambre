@@ -2,10 +2,10 @@
 //!
 //! Pure functions (no `SyncState`), host-testable without network or WASM. Each
 //! outbound CRDT payload is compressed (a one-byte version prefix records how),
-//! the version+body plaintext is sealed with `ambre-crypto`, and the parts are
-//! assembled into an `ambre_protocol::{Update,Snapshot,Ephemeral}`. The inbound
-//! path is the exact inverse. The version byte lives **inside** the ciphertext,
-//! so it stays opaque to the Blind Relay.
+//! and the version+body plaintext is sealed with `ambre-crypto`. The parts are
+//! then assembled into an `ambre_protocol::{Update,Snapshot,Ephemeral}`. The
+//! inbound path is the exact inverse. The version byte lives **inside** the
+//! ciphertext, so it stays opaque to the Blind Relay.
 //!
 //! Pipeline reference: `ambre-spec-sealed-envelope.md`.
 
@@ -33,8 +33,8 @@ const COMPRESS_THRESHOLD: usize = 256;
 /// allocates.
 const MAX_DECOMPRESS_RATIO: usize = 200;
 
-/// Floor for the per-message decompression ceiling, so tiny legitimate frames
-/// (a few compressed bytes expanding to a normal delta) are never rejected by
+/// Floor for the per-message decompression ceiling. Tiny legitimate frames (a
+/// few compressed bytes expanding to a normal delta) are never rejected by
 /// the ratio bound alone.
 const MIN_DECOMPRESS_CEILING: usize = 1 << 20; // 1 MiB
 
@@ -67,7 +67,7 @@ pub enum PipelineError {
     Validation(#[from] ambre_protocol::error::ValidationError),
 }
 
-// ── Compression layer ─────────────────────────────────────────────────────────
+// -- Compression layer ---------------------------------------------------------
 
 /// Compresses `data` when it exceeds [`COMPRESS_THRESHOLD`], returning the
 /// version byte and the (possibly compressed) body.
@@ -95,7 +95,7 @@ fn decompress(version: u8, body: &[u8]) -> Result<Vec<u8>, PipelineError> {
 /// is derived from the compressed length and [`MAX_DECOMPRESS_RATIO`], floored
 /// at [`MIN_DECOMPRESS_CEILING`] and capped at [`ABSOLUTE_DECOMPRESS_CAP`]. We
 /// read in bounded chunks and abort as soon as the accumulated output would
-/// exceed the ceiling, so a decompression bomb never allocates the full output.
+/// exceed the ceiling. A decompression bomb never allocates the full output.
 fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     // MIN_DECOMPRESS_CEILING < ABSOLUTE_DECOMPRESS_CAP by construction, so clamp
     // never panics.
@@ -107,7 +107,7 @@ fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     let mut decoder =
         ruzstd::decoding::StreamingDecoder::new(body).map_err(|_| PipelineError::Decompress)?;
 
-    // Never pre-allocate the whole ceiling: grow the buffer as we go, reading
+    // Never pre-allocate the whole ceiling. Grow the buffer as we go, reading
     // one byte past the ceiling to distinguish "exactly at the limit" from
     // "over the limit". `take` caps the reader at `ceiling + 1` bytes.
     let mut out = Vec::new();
@@ -123,7 +123,7 @@ fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     Ok(out)
 }
 
-// ── Generic seal / open over the (version || body) plaintext ──────────────────
+// -- Generic seal / open over the (version || body) plaintext ------------------
 
 fn seal_payload(
     payload: &[u8],
@@ -177,7 +177,7 @@ fn message_parts(sealed: Sealed) -> (Ciphertext, Nonce, CommitmentTag, Signature
     )
 }
 
-// ── Update ────────────────────────────────────────────────────────────────────
+// -- Update --------------------------------------------------------------------
 
 /// Compresses, encrypts and signs `payload` into an [`Update`].
 pub fn seal_update(
@@ -190,7 +190,7 @@ pub fn seal_update(
     let sealed = seal_payload(payload, &aad, doc_key, signing_key)?;
     let (ciphertext, nonce, commitment_tag, signature) = message_parts(sealed);
     tracing::debug!(
-        "[Pipeline] seal_update: {} bytes plaintext → {} bytes ciphertext",
+        "[Pipeline] seal_update: {} bytes plaintext -> {} bytes ciphertext",
         payload.len(),
         ciphertext.0.len(),
     );
@@ -220,14 +220,14 @@ pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<Vec<u8>, Pi
         update.public_data.pub_key.as_array(),
     )?;
     tracing::debug!(
-        "[Pipeline] open_update: {} bytes ciphertext → {} bytes plaintext",
+        "[Pipeline] open_update: {} bytes ciphertext -> {} bytes plaintext",
         update.ciphertext.0.len(),
         plaintext.len(),
     );
     Ok(plaintext)
 }
 
-// ── Snapshot ──────────────────────────────────────────────────────────────────
+// -- Snapshot ------------------------------------------------------------------
 
 /// Compresses, encrypts and signs `payload` into a [`Snapshot`].
 pub fn seal_snapshot(
@@ -272,7 +272,7 @@ pub fn open_snapshot(snapshot: &Snapshot, doc_key: &DocumentKey) -> Result<Vec<u
     )
 }
 
-// ── Ephemeral ─────────────────────────────────────────────────────────────────
+// -- Ephemeral -----------------------------------------------------------------
 
 /// Compresses, encrypts and signs `payload` into an [`Ephemeral`].
 pub fn seal_ephemeral(
@@ -389,8 +389,8 @@ mod tests {
 
     #[test]
     fn decompress_bomb_rejected() {
-        // A few hundred compressed bytes expanding to 8 MiB is well past the
-        // 1 MiB floor with a small body, so the ratio-derived ceiling rejects it.
+        // A few hundred compressed bytes expanding to 8 MiB is well past the 1
+        // MiB floor with a small body. The ratio-derived ceiling rejects it.
         let bomb = vec![0u8; 8 << 20];
         let compressed = compress_to_vec(bomb.as_slice(), CompressionLevel::Fastest);
         assert!(compressed.len() * MAX_DECOMPRESS_RATIO < bomb.len());

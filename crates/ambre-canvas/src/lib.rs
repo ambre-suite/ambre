@@ -4,17 +4,17 @@
 //
 // Scope is the canvas *content* renderer only -- the widget framework was
 // removed in favour of the DOM Leptos chrome (ambre-chrome). The UI chrome
-// (menus, toolbars, dialogs, palette) lives in the DOM; this crate owns the
+// (menus, toolbars, dialogs, palette) lives in the DOM. This crate owns the
 // wgpu surface, the quad/glyph pipeline, the GPU bootstrap + rAF primitives,
 // and the per-frame value types. The frame DRIVER (FrameHost) and the closed
 // AppView registry live in the launcher (ambre-app), downstream of the apps.
 //
-//   render/       -- QuadRenderer, GlyphAtlas, WgpuSurface (wgpu + swash)
-//   text_cache    -- Parley layout cache (parley-dependent)
-//   view          -- per-frame value types (FrameStats/RepaintPlan/InputEvent)
-//   host          -- GPU bootstrap + rAF primitives (wasm). The frame DRIVER
+//   render/       -- QuadRenderer, GlyphAtlas, WgpuSurface (wgpu + swash).
+//   text_cache    -- Parley layout cache (parley-dependent).
+//   view          -- per-frame value types (FrameStats/RepaintPlan/InputEvent).
+//   host          -- GPU bootstrap + rAF primitives (wasm); the frame DRIVER
 //                    (FrameHost) + the AppView registry live in ambre-app.
-//   request_registry -- P3 request/response correlator (ARCH P1)
+//   request_registry -- P3 request/response correlator (ARCH P1).
 // ============================================================================
 
 // -- Rendering pipeline (wgpu + parley + swash) ------------------------------

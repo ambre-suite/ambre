@@ -6,9 +6,9 @@
 // (toile-find). The panel only needs to know where `focus` sits in
 // `hits` for its "k/n" counter -- that is this helper.
 //
-// Kept in the always-compiled `ui` module (not the wasm-only `chrome`) so it is
-// host-unit-tested: the chrome panel is Leptos/DOM and only reachable
-// under the wasm target.
+// Kept in the always-compiled `ui` module, not the wasm-only `chrome`, so it is
+// host-unit-tested. The chrome panel is Leptos/DOM and only reachable under the
+// wasm target.
 // ============================================================================
 
 use ambre_bus::app::toile::ElementId;
@@ -24,7 +24,7 @@ use ambre_commands::CommandId;
 pub const FIND: CommandId = CommandId("toile.find.open");
 
 /// Index of `focus` within `hits`, or `None` when there is no focus or it is no
-/// longer a hit (a query change can drop the previously focused element). The
+/// longer a hit. A query change can drop the previously focused element. The
 /// panel renders `active + 1` / `hits.len()` as its match counter.
 pub fn active_index(hits: &[ElementId], focus: Option<&ElementId>) -> Option<usize> {
     let focus = focus?;

@@ -1,19 +1,19 @@
 //! Toile interop -- import / export converters (`toile-import-export`, Phase 0).
 //!
 //! Pure, host-testable converters between foreign formats and the Toile element
-//! model. Phase 0 covers **SVG import/export** (primitives + paths + text),
-//! **raster import** (PNG/JPG), the **safety limits** that make a foreign file
-//! untrusted-input-safe, and the **media placeholder state machine**. Everything
-//! here runs on the Logic thread and never emits plaintext to the server:
-//! an import is turned into a batch of [`ToileCommand`]s the dispatcher applies in
-//! one undo group (Phase 1 wiring), and media plaintext is handed up for the Sync
-//! thread to encrypt -- interop never hashes or encrypts.
+//! model. Phase 0 covers **SVG import/export** (primitives + paths + text) and
+//! **raster import** (PNG/JPG). It also covers the **safety limits** that make a
+//! foreign file untrusted-input-safe, and the **media placeholder state machine**.
+//! Everything here runs on the Logic thread and never emits plaintext to the
+//! server. An import is turned into a batch of [`ToileCommand`]s the dispatcher
+//! applies in one undo group (Phase 1 wiring). Media plaintext is handed up for
+//! the Sync thread to encrypt: interop never hashes or encrypts.
 //!
-//! **Atomicity.** Each `import_*` entry point is all-or-nothing: it parses
-//! and converts fully in memory and only returns `Ok(ImportBatch)` when the whole
-//! file mapped within limits. Any parse failure or exceeded bound returns `Err`
-//! and yields **no** commands, so a caller applying the batch can never land a
-//! partial board.
+//! **Atomicity.** Each `import_*` entry point is all-or-nothing: it parses and
+//! converts fully in memory and only returns `Ok(ImportBatch)` when the whole file
+//! mapped within limits. Any parse failure or exceeded bound returns `Err` and
+//! yields **no** commands, so a caller applying the batch can never land a partial
+//! board.
 
 use kurbo::{BezPath, Point, Rect};
 
@@ -43,10 +43,10 @@ pub use svg_export::export_svg;
 pub use svg_import::import_svg;
 
 /// A reference to something the apply pass mints, used by converters that cannot
-/// name `ElementId`s (those are minted only when `CreateElement` is applied):
-/// either a `CreateElement` slot (an index into
-/// [`ImportBatch::commands`]) or a group produced by an earlier
-/// [`ImportGroup`] (an index into [`ImportBatch::groups`]).
+/// name `ElementId`s, which are minted only when `CreateElement` is applied. It
+/// is either a `CreateElement` slot (an index into [`ImportBatch::commands`]) or
+/// a group produced by an earlier [`ImportGroup`] (an index into
+/// [`ImportBatch::groups`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportRef {
     Slot(usize),
@@ -74,14 +74,15 @@ pub struct ImportConnector {
     pub arrows: EndCaps,
 }
 
-/// Everything one import produced: the CRDT commands to apply atomically, the
-/// media plaintext blobs the Sync layer will encrypt/upload, and the
-/// human-facing report of what was and was not mapped (import report).
+/// Everything one import produced. That is the CRDT commands to apply
+/// atomically, and the media plaintext blobs the Sync layer will
+/// encrypt/upload. Plus the human-facing report of what was and was not
+/// mapped (import report).
 #[derive(Debug, Default)]
 pub struct ImportBatch {
-    /// The `CreateElement` batch, applied in one undo group by the dispatcher
-    /// Parent-before-child order so a group/frame is created before its
-    /// members (the z-order / membership invariant).
+    /// The `CreateElement` batch, applied in one undo group by the
+    /// dispatcher. Parent-before-child order, so a group/frame is created
+    /// before its members (the z-order / membership invariant).
     pub commands: Vec<ToileCommand>,
     /// Index-aligned with `commands`: the imported style for that slot, or `None`
     /// to keep the default. Style is an independent LWW register, so it cannot
@@ -101,12 +102,12 @@ pub struct ImportBatch {
 
 /// Translate every element of `batch` so the batch's top-left corner sits at
 /// `at` (`TOILE-IO-023`). A file lands where the user dropped it, whatever
-/// coordinates it carried: an SVG drawn around its own origin and a raster that
+/// coordinates it carried. An SVG drawn around its own origin and a raster that
 /// has none both arrive under the pointer.
 ///
-/// Pure and total: a batch that creates nothing is left alone, and the offset is
-/// the same for every slot, so the drawing keeps its internal geometry -- the
-/// groups, the connectors and the media all name slots, never coordinates.
+/// Pure and total: a batch that creates nothing is left alone. The offset is the
+/// same for every slot, so the drawing keeps its internal geometry. The groups,
+/// the connectors and the media all name slots, never coordinates.
 pub fn place_batch_at(batch: &mut ImportBatch, at: Point) {
     let mut origin: Option<Point> = None;
     for cmd in &batch.commands {
@@ -144,8 +145,8 @@ impl ImportReport {
     }
 }
 
-/// One plaintext media blob produced by an import. The `hash` is the
-/// content address (blake2b) the Sync thread computes; Phase 0 leaves it empty
+/// One plaintext media blob produced by an import. The `hash` is the content address
+/// (blake2b) the Sync thread computes. Phase 0 leaves it empty
 /// (`ContentHash::default`-like) unless a caller injects one, since interop never
 /// hashes. `width`/`height` are the native resolution (the media map value), `thumb`
 /// is a small PNG-encoded placeholder for the first paint.

@@ -22,8 +22,8 @@ use leptos::prelude::*;
 use crate::ui::comments::{CommentDraft, CommentIntent, ThreadFilter};
 use crate::ui::presence::short_handle;
 
-/// The comments panel. `state` is the open flag (the View menu, a pin click and
-/// a fresh thread all set it); `list` and `open` are what the view read back
+/// The comments panel. `state` is the open flag; the View menu, a pin click and
+/// a fresh thread all set it. `list` and `open` are what the view read back
 /// from the board; `on_intent` carries every action out.
 #[component]
 pub fn CommentsPanel(

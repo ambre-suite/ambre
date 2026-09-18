@@ -1,15 +1,15 @@
 # AMBRE -- FEATURE: THE TEXT INPUT PIPE
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the pipe, the composition window and the clipboard events ship; no
+**Implementation:** partial -- the pipe, the composition window and the clipboard events ship. No
 test drives any of them, and one label is written for a spreadsheet.
 
 > A text area that shows nothing, sits under the caret, and is the real keyboard focus of the
 > canvas. Every keystroke, every input-method composition and every clipboard event the content
 > receives arrives through this one element.
 
-The canvas cannot take keyboard focus and get an input method with it, so a browser-native editable
-element does the receiving and the canvas does all the showing.
+The canvas cannot take keyboard focus and get an input method with it. A browser-native editable
+element therefore does the receiving, and the canvas does all the showing.
 
 ---
 
@@ -23,9 +23,9 @@ other five documents of the DOM side.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-007` | `INV` | The pipe MUST sit at the caret's real position. | this spec section 2 | none | unheld -- the placement is a transform the view refreshes as the caret moves. If it drifts, the input-method window opens in the wrong corner of the screen, and no test in the wasm tier drives a composition | unverified |
-| `CHROME-059` | `INV` | The pipe MUST display nothing: no visible text, no native caret, no selection highlight. | this spec section 2, the property table | none | unheld -- the rule is four style declarations in the shell stylesheet, and nothing reads them back. A drifting one draws a second caret or a doubled selection under the one the canvas paints | unverified |
-| `CHROME-016` | `INV` | The pipe MUST be moved by a transform, never by an offset that reflows the page. | this spec section 2 | none | unheld -- the placement writes a transform and a height and nothing else, so the element stays off the layout path. Nothing refuses the offset that would put it back on | unverified |
+| `CHROME-007` | `INV` | The pipe MUST sit at the caret's real position. | this spec section 2 | none | unheld -- the placement is a transform the view refreshes as the caret moves. If it drifts, the input-method window opens in the wrong corner of the screen, and no test in the wasm tier drives a composition; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-059` | `INV` | The pipe MUST display nothing: no visible text, no native caret, no selection highlight. | this spec section 2, the property table | none | unheld -- the rule is four style declarations in the shell stylesheet, and nothing reads them back. A drifting one draws a second caret or a doubled selection under the one the canvas paints; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-016` | `INV` | The pipe MUST be moved by a transform, never by an offset that reflows the page. | this spec section 2 | none | unheld -- the placement writes a transform and a height and nothing else, so the element stays off the layout path. Nothing refuses the offset that would put it back on; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Type a character
 
@@ -34,10 +34,10 @@ gets there: it rides the chord path instead.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-061` | `POST` | A typed character MUST reach the view as one committed run. | this spec section 2, the three paths in | none | unheld -- the buffer listener forwards the whole buffer as one run, and no test in the wasm tier types into the pipe | unverified |
-| `CHROME-017` | `POST` | The pipe MUST be emptied after every commit. | this spec section 2 | none | unheld -- the host clears after each committed run and an opening edit clears again. A missed clear repeats the whole buffer into the document on the next keystroke | unverified |
-| `CHROME-062` | `FRAME` | The chord path MUST NOT consume a printable character. | this spec section 2, the three paths in; this spec section 3, row 5 | none | unheld -- every key reaches the view first, and the buffer event fires only for the keys it leaves unconsumed, because a consumed key has its default prevented. A view that consumed a letter would silence typing, and nothing asserts it does not | unverified |
-| `CHROME-020` | `FAIL` | A key aimed at another editable element MUST NOT reach the content. | this spec section 2 | none | unheld -- the document listener tests the event's target against the pipe and against the editable tags, input, textarea, select and contenteditable, and returns early. Nothing refuses a listener added later without that test, which is a formula-bar Enter committing the cell twice | unverified |
+| `CHROME-061` | `POST` | A typed character MUST reach the view as one committed run. | this spec section 2, the three paths in | none | unheld -- the buffer listener forwards the whole buffer as one run, and no test in the wasm tier types into the pipe; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-017` | `POST` | The pipe MUST be emptied after every commit. | this spec section 2 | none | unheld -- the host clears after each committed run and an opening edit clears again. A missed clear repeats the whole buffer into the document on the next keystroke; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-062` | `FRAME` | The chord path MUST NOT consume a printable character. | this spec section 2, the three paths in; this spec section 3, row 5 | none | unheld -- every key reaches the view first, and the buffer event fires only for the keys it leaves unconsumed, because a consumed key has its default prevented. A view that consumed a letter would silence typing, and nothing asserts it does not; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-020` | `FAIL` | A key aimed at another editable element MUST NOT reach the content. | this spec section 2 | none | unheld -- the document listener tests the event's target against the pipe and against the editable tags, input, textarea, select and contenteditable, and returns early. Nothing refuses a listener added later without that test, which is a formula-bar Enter committing the cell twice; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 Compose with an input method
 
@@ -46,10 +46,10 @@ be read.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-063` | `POST` | The preview MUST come from the composition events. | this spec section 2, the composition window | none | unheld -- each update event forwards the running preview and the canvas draws it as unconfirmed text. No test drives an input method, in any tier | unverified |
-| `CHROME-019` | `POST` | A composition MUST end by committing its final text. | this spec section 2; `ambre-spec-text-editor.md`, `CANVAS-040` | none | unheld -- the last composition event forwards the final run and the editing core replaces the preview with it. No test drives an input method, in any tier | unverified |
-| `CHROME-064` | `POST` | A composition MUST end by clearing the preview. | this spec section 2, the composition window | none | unheld -- the last event lowers the flag and clears the buffer, and the editing core drops the preview when the final run replaces it. A preview left behind is text the canvas keeps drawing and the document does not hold | unverified |
-| `CHROME-018` | `FRAME` | While a composition is running, the buffer MUST NOT be read. | this spec section 2 | none | unheld -- a shared flag is raised on the first composition event and lowered on the last, and the buffer listener returns early while it is up. Nothing asserts the two stay in step, and a stuck flag silences typing altogether | unverified |
+| `CHROME-063` | `POST` | The preview MUST come from the composition events. | this spec section 2, the composition window | none | unheld -- each update event forwards the running preview and the canvas draws it as unconfirmed text. No test drives an input method, in any tier; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-019` | `POST` | A composition MUST end by committing its final text. | this spec section 2; `ambre-spec-text-editor.md`, `CANVAS-040` | none | unheld -- the last composition event forwards the final run and the editing core replaces the preview with it. No test drives an input method, in any tier; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-064` | `POST` | A composition MUST end by clearing the preview. | this spec section 2, the composition window | none | unheld -- the last event lowers the flag and clears the buffer, and the editing core drops the preview when the final run replaces it. A preview left behind is text the canvas keeps drawing and the document does not hold; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-018` | `FRAME` | While a composition is running, the buffer MUST NOT be read. | this spec section 2 | none | unheld -- a shared flag is raised on the first composition event and lowered on the last, and the buffer listener returns early while it is up. Nothing asserts the two stay in step, and a stuck flag silences typing altogether; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 Copy, cut or paste
 
@@ -57,22 +57,17 @@ The browser maps every clipboard chord, the legacy set included, onto three even
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-021` | `POST` | A copy, a cut and a paste MUST be serviced as the events the browser already sends. | this spec section 2; `ambre-spec-clipboard.md` | none | unheld -- three listeners sit on the pipe, so the legacy chords work for free. No test in the wasm tier raises one | unverified |
+| `CHROME-021` | `POST` | A copy, a cut and a paste MUST be serviced as the events the browser already sends. | this spec section 2; `ambre-spec-clipboard.md` | none | unheld -- three listeners sit on the pipe, so the legacy chords work for free. No test in the wasm tier raises one; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-060` | `FRAME` | Servicing a clipboard event MUST NOT decode its chord a second time. | this spec section 2; `ambre-spec-commands.md`, `UI-THREAD-011` | `ambre_commands::tests::the_keymap_binds_no_browser_serviced_chord`; `ambre_trame::ui::commands::tests::the_keymap_binds_no_clipboard_chord`; `ambre_toile::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity` -- the seeding refuses the three identities, so a table that declares their chords still binds none of them and a fourth binding fails the belt rather than pasting twice | none | verified |
 * **Budget.** the keystroke-to-draft row of `ambre-spec-budgets.md section 1`. This element
   is the first hop of that path, and the figure is measured nowhere.
 * **Boundary.** the operating system clipboard, and nothing else. What the copy and the paste may
   carry is `UI-THREAD-006`; the pipe opens no socket, holds no key and writes no store.
-* **Verification.** 1 `verified`, 12 `unverified`, 0 `unimplemented`. The one held row is the one
-  that is pure data: `CHROME-060`, which chords a table may bind. The reason the other twelve are
-  loose is one reason: every rule here is a property of a live browser with an input method
-  attached, and the wasm tier drives a document but not an input method
-  (`ambre-spec-testing.md section 8`). The gap is one gap, not twelve. What the pass added is the
-  frame condition of each path. `CHROME-062` is the one the prose states twice and no row held: a
-  printable character has to reach the view and be left unconsumed, because a consumed key has its
-  default prevented and the buffer event then never fires for it. Four conjunctions were split, and
-  each half fails on its own: a pipe at the wrong place and a pipe that draws are two different
-  defects, and so are a composition that commits nothing and one that leaves its preview behind.
+* **Verification.** 1 `verified`, 12 `untested`. The one held row is the one that is pure data:
+  `CHROME-060`, the chords a table may bind. The other twelve are loose for a single reason: every
+  rule here is a property of a live browser with an input method attached. The wasm tier drives a
+  document but not an input method (`ambre-spec-testing.md section 8`). The gap is one gap, not
+  twelve.
 
 ---
 
@@ -81,7 +76,7 @@ The browser maps every clipboard chord, the legacy set included, onto three even
 **CRDT containers.** none. The pipe carries a transient string; what a commit does to the document
 belongs to the editor that consumes it.
 
-**Why an invisible element.** A canvas element takes focus but gets no input method with it: an
+**Why an invisible element.** A canvas element takes focus but gets no input method with it. An
 input-method window anchors to the focused editable element, and reads its position from the layout.
 So the design is not "a hidden field": the element must be at the caret, in the page, and merely
 invisible.
@@ -103,9 +98,9 @@ invisible.
 | ordinary text | a buffer event on the pipe, outside a composition | the whole buffer as one committed run, after which the buffer is cleared |
 | a composition | the three composition events | the running preview, then the final run |
 
-The chord path is deliberately separate from the text path: navigation and editing keys ride the
-document listener even while the pipe holds focus, and a printable character is left unconsumed so
-the buffer event fires for it.
+The chord path is deliberately separate from the text path. Navigation and editing keys ride the
+document listener even while the pipe holds focus. A printable character is left unconsumed, so the
+buffer event fires for it.
 
 **The composition window, in steps.** Latin typing never enters it.
 
@@ -115,8 +110,8 @@ the buffer event fires for it.
 4. the last event forwards the final run (`CHROME-019`), lowers the flag and clears the buffer
    (`CHROME-064`).
 
-**The clipboard.** Three listeners sit on the pipe -- copy, cut and paste -- and the browser is what
-maps every chord onto them, the legacy set included. What the payload holds, how a same-tab paste is
+**The clipboard.** Three listeners sit on the pipe: copy, cut and paste. The browser is what maps
+every chord onto them, the legacy set included. What the payload holds, how a same-tab paste is
 recognised and what a cut means per application are `ambre-spec-clipboard.md`.
 
 **Who owns what.** The element is created and placed by the host; the view decides where and when.
@@ -130,8 +125,8 @@ recognised and what a cut means per application are `ambre-spec-clipboard.md`.
 **One pipe, and a child view reuses it.** A document opened inside another gets the same element,
 constructed in a mode that does not steal focus from the host document.
 
-**Code:** `crates/ambre-canvas/src/text_input.rs` creates and places the element;
-`crates/ambre-app/src/host/run.rs` attaches the six listeners and owns the composition flag;
+**Code:** `crates/ambre-canvas/src/text_input.rs` creates and places the element, and
+`crates/ambre-app/src/host/run.rs` attaches the six listeners and owns the composition flag.
 `crates/ambre-app/src/host/mod.rs` holds the test that keeps a key aimed at another field away from
 the content. The placement callers are `crates/ambre-trame/src/ui/view/lifecycle.rs` and
 `crates/ambre-toile/src/ui/view.rs`, and the style is `crates/ambre-app/styles.css`.
@@ -174,18 +169,18 @@ The user never sees this element. What they see is whether typing lands where th
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **The accessible label is written for a spreadsheet.** The element is created in the shared crate
-  with a fixed label and role description naming a spreadsheet cell, so a board and a page announce
-  themselves as one. It is a defect of `ambre-spec-accessibility.md`'s surface, not of this pipe's
-  behaviour, and it is where the label rule belongs.
+  with a fixed label and role description naming a spreadsheet cell. A board and a page therefore
+  announce themselves as one. It is a defect of `ambre-spec-accessibility.md`'s surface, not of this pipe's
+  behaviour. That is where the label rule belongs.
 * **No test in any tier drives a composition.** Six of the seven rows above describe what happens
-  between the first and last composition event, and the mechanism that would observe it does not
-  exist -- a headless browser sends key events, not input-method events.
+  between the first and last composition event. The mechanism that would observe it does not exist:
+  a headless browser sends key events, not input-method events.
 * **Nothing rules on a composition interrupted by a remote change.** A concurrent edit that moves
-  the text under a running composition has no stated behaviour, and `UI-THREAD-014` names the
-  reanchor as part of the substrate it schedules.
-* **Nothing bounds the buffer.** A paste of a very large run arrives as one committed string, and no
+  the text under a running composition has no stated behaviour. `UI-THREAD-014` names the reanchor
+  as part of the substrate it schedules.
+* **Nothing bounds the buffer.** A paste of a very large run arrives as one committed string. No
   row says what the view does with it before it reaches the document.
-* **The mobile keyboard is unruled.** The element is a text area with wrapping off, and no row says
+* **The mobile keyboard is unruled.** The element is a text area with wrapping off. No row says
   what a soft keyboard's autocorrect, its return key or its selection handles do to it.
 * **A second editable element over the canvas would break the pipe silently.** `UI-THREAD-001` says
   the pipe is the only one, and nothing refuses the second.

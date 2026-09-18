@@ -81,8 +81,8 @@ pub struct CellData {
 
 impl CellData {
     /// Build the renderer's [`CellContent`](crate::render::CellContent) view of
-    /// this cached cell, with `text` supplied by the caller (a merge master draws
-    /// empty body text in the single-cell pass, its real text in the merge pass).
+    /// this cached cell, with `text` supplied by the caller. A merge master draws
+    /// empty body text in the single-cell pass, its real text in the merge pass.
     pub fn content<'a>(&'a self, text: &'a str) -> crate::render::CellContent<'a> {
         crate::render::CellContent {
             text,
@@ -106,13 +106,14 @@ impl CellData {
 /// `ambre_canvas::TextEditor` core (parley `PlainEditor` + font-free `EditIntent`
 /// queue), the same core Toile's element editor drives. All editing actions are
 /// recorded as font-free intents and applied at paint time (`draw_edit`), where a
-/// `FontContext` is live -- so a commit reads the buffer only after that flush.
+/// `FontContext` is live. A commit therefore reads the buffer only after that
+/// flush.
 ///
-/// The wrapper only binds the core to a `(row, col)`; every editing operation
-/// and buffer accessor reaches the core through `Deref`/`DerefMut` (the named
-/// intent constructors -- `insert`, `backspace`, the caret moves -- live on the
-/// core now). Pointer hits push point intents the core resolves against its own
-/// layout (no renderer-side byte-offset resolution).
+/// The wrapper only binds the core to a `(row, col)`. Every editing operation and
+/// buffer accessor reaches the core through `Deref`/`DerefMut`. The named intent
+/// constructors -- `insert`, `backspace`, the caret moves -- live on the core
+/// now. Pointer hits push point intents the core resolves against its own layout
+/// (no renderer-side byte-offset resolution).
 pub struct CellEditor {
     pub row: u32,
     pub col: u32,
@@ -149,9 +150,9 @@ impl CellEditor {
 
 // Every editing operation and buffer accessor lives on the shared core; the
 // wrapper only binds it to a `(row, col)`. Deref exposes `insert`, `backspace`,
-// the caret/selection moves, `text`, `set_text`, `push`, etc. directly on a
-// `CellEditor` (the inherent `selected_text` above shadows the core's for the
-// Trame `String` signature).
+// the caret/selection moves, `text`, `set_text` and `push` directly on a
+// `CellEditor`. The inherent `selected_text` above shadows the core's, for the
+// Trame `String` signature.
 impl std::ops::Deref for CellEditor {
     type Target = TextEditor;
     fn deref(&self) -> &TextEditor {
@@ -207,11 +208,11 @@ pub enum SelKind {
 
 /// Which surface a right-click landed on, choosing the context-menu layout
 /// (`trame-context-menu`). Each header scope drops the cell-only entries (clipboard /
-/// merge) and keeps only the structural + sort/filter ops relevant to the axis
-/// the click already selected: a column header offers column insert/delete, a row
-/// header row insert/delete, and the corner the whole-sheet ops. Lives here
-/// (always compiled) so the host-tested input handler can set it; the chrome
-/// layer re-exports it.
+/// merge). It keeps only the structural + sort/filter ops relevant to the axis the
+/// click already selected. A column header offers column insert/delete, a row header
+/// row insert/delete, and the corner the whole-sheet ops. Lives here (always
+/// compiled) so the host-tested input handler can set it; the chrome layer re-exports
+/// it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum CtxScope {
     /// Right-click on a grid cell: the full menu.
@@ -227,7 +228,7 @@ pub enum CtxScope {
 
 /// A resolved pointer hit inside a header strip (`trame-headers`). The body
 /// zones select a whole column/row; the border zones (a +/- [`RESIZE_BAND`] band
-/// around a boundary) arm a resize; the insert zones host the inline "+"; the
+/// around a boundary) arm a resize. The insert zones host the inline "+"; the
 /// top-left corner selects the whole sheet.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum HeaderHit {
@@ -247,8 +248,8 @@ pub enum HeaderHit {
     Corner,
 }
 
-/// Live guide line shown while dragging a header boundary (`trame-resize`):
-/// a vertical guide at physical x for a column resize, a horizontal guide at y
+/// Live guide line shown while dragging a header boundary (`trame-resize`). A
+/// vertical guide at physical x for a column resize, a horizontal guide at y
 /// for a row resize.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ResizePreview {
@@ -275,7 +276,7 @@ impl Selection {
 
     /// A whole-axis band selection from a header (`trame-selection`): the band
     /// spans columns `anchor.1..=active.1` (`SelKind::Cols`) or rows
-    /// `anchor.0..=active.0` (`SelKind::Rows`); the perpendicular coordinate is
+    /// `anchor.0..=active.0` (`SelKind::Rows`). The perpendicular coordinate is
     /// irrelevant (set to 0). `active` carries the clicked band so Shift extends
     /// and arrow keys still resolve an active cell.
     pub fn axis(kind: SelKind, anchor: u32, active: u32) -> Self {
@@ -409,7 +410,7 @@ pub struct TrameUiState {
     /// Number of full columns visible in the grid area.
     pub viewport_cols: u32,
 
-    /// Canvas physical size (CSS pixels × devicePixelRatio, set by ResizeObserver).
+    /// Canvas physical size (CSS pixels x devicePixelRatio, set by ResizeObserver).
     pub canvas_width: f64,
     pub canvas_height: f64,
 
@@ -433,7 +434,7 @@ pub struct TrameUiState {
     /// the next `ViewportData` carries it. UI-only derived state -- never synced.
     pub dirty_cells: HashSet<(u32, u32)>,
 
-    /// Cells whose formula evaluation failed, keyed to the error string (e.g.
+    /// Cells whose formula evaluation failed, keyed to the error string (for example
     /// `#DIV/0!`). Rendered with a small corner marker. Populated by
     /// `TrameEvent::FormulaError`, cleared when a valid value arrives. UI-only.
     pub formula_errors: HashMap<(u32, u32), String>,
@@ -485,7 +486,7 @@ pub struct TrameUiState {
     pub fill_preview: Option<CellRect>,
 
     /// While a header boundary is being dragged (`trame-resize`), the live
-    /// guide line position: `Col(x)` for a column resize (a vertical guide at
+    /// guide line position. `Col(x)` for a column resize (a vertical guide at
     /// physical x), `Row(y)` for a row resize (a horizontal guide at y). `None`
     /// when no resize is in progress. UI-only view state.
     pub resize_preview: Option<ResizePreview>,
@@ -502,7 +503,7 @@ pub struct TrameUiState {
     pub hover_header: Option<HeaderHit>,
 
     /// While a selected column/row header is being dragged to a new position
-    /// (Excel-style reorder), the target insertion slot: `(Cols, i)` means the
+    /// (Excel-style reorder), the target insertion slot. `(Cols, i)` means the
     /// grabbed column would land left of column `i`, `(Rows, i)` above row `i`.
     /// Drawn as a full-height/width guide line at that boundary. `None` when no
     /// reorder drag is in progress. UI-only view state.

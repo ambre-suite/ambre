@@ -260,6 +260,15 @@ license = "AGPL-3.0-only"
 # the whole tier runs in 3 s. A dependency is compiled once and cached, so this
 # is paid at the first build and refunded on every run after it; our own crates
 # stay unoptimized, which is what keeps an incremental rebuild short.
+# A public item states its contract and its failures
+# (`ai/ambre-writing-style.md`). `clippy` holds the failure half exactly, so no
+# script of `scripts/` repeats it. `deny` and not `warn`: `just lint` runs
+# `-D warnings`, so a warning fails the gate all the same, and the value that
+# reads as the truth is the one written here.
+[workspace.lints.clippy]
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+
 [profile.dev.package."*"]
 opt-level = 3
 # Dependency debug info is never stepped through, and it is most of what makes

@@ -4,24 +4,24 @@
 //
 // This crate owns the chrome components reused across every Ambre app:
 // AppShell, command palette, menus/context menus, dialogs, toolbars, toasts,
-// sidebar, status bar -- each a *view* over the command registry from
+// sidebar, status bar. Each is a *view* over the command registry from
 // `ambre-commands`. App-SPECIFIC chrome (Trame's formula bar, a cell-format
 // dialog) lives in the app crate and is built on top of this toolkit.
 //
 // The toolkit never reaches across the canvas/DOM boundary: it invokes
-// `CommandId`s and reflects state via Leptos signals (ambre-spec-ui.md).
-// It depends on no app crate (dependency inversion, symmetric to `AppView`).
+// `CommandId`s and reflects state via Leptos signals (ambre-spec-ui.md). It
+// depends on no app crate (dependency inversion, symmetric to `AppView`).
 //
 // Module map. What is missing is `ambre-spec-chrome.md`'s own gap list, and the
 // schedule for it is ambre-roadmap.md; neither belongs here.
-//   shortcut     -- keybinding presentation (the <Kbd> component)
-//   app_shell    -- CSS-grid shell: header, command bar, status bar, canvas
-//   command      -- command-state store + keybinding manager
-//   dialog       -- native <dialog> modal (rAF-suspending)
-//   context_menu -- canvas right-click DOM menu (flip, keyboard nav)
-//   palette      -- the command palette: every declared command, filtered
-//   passphrase   -- the passphrase prompt of a sealed `.ambre` file
-//   toast/status/format/font/color/debounce -- the shared controls
+//   - shortcut     -- keybinding presentation (the <Kbd> component)
+//   - app_shell    -- CSS-grid shell: header, command bar, status bar, canvas
+//   - command      -- command-state store + keybinding manager
+//   - dialog       -- native <dialog> modal (rAF-suspending)
+//   - context_menu -- canvas right-click DOM menu (flip, keyboard nav)
+//   - palette      -- the command palette: every declared command, filtered
+//   - passphrase   -- the passphrase prompt of a sealed `.ambre` file
+//   - toast/status/format/font/color/debounce -- the shared controls
 // ============================================================================
 
 // Re-export the registry so app/chrome code has a single `ambre_chrome`-rooted

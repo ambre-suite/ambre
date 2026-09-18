@@ -4,9 +4,9 @@
 //
 // This is the export-time counterpart of `WgpuSurface` (ambre-canvas, screen).
 // The same application render code (Trame grid, Prose page, Toile canvas) draws
-// through `DrawSurface`; on screen it hits wgpu, on export it hits this surface
-// and produces a PDF content stream. Screen and PDF must render identically,
-// so nothing here reinterprets geometry -- it only translates each primitive to
+// through `DrawSurface`. On screen it hits wgpu; on export it hits this surface
+// and produces a PDF content stream. Screen and PDF must render identically, so
+// nothing here reinterprets geometry -- it only translates each primitive to
 // the matching krilla call.
 //
 // Placement: this executes in the Logic thread (not the UI thread) and the
@@ -129,10 +129,10 @@ impl DrawSurface for KrillaSurface<'_, '_> {
         // gives per-glyph advance/offset in pixels at `font_size`, so normalize
         // by dividing by `font_size` (krilla multiplies back by the size).
         //
-        // `text_range` is left empty: we do not thread the source string here,
-        // so the PDF carries no ToUnicode mapping for these glyphs (text is not
-        // selectable/copyable). Glyph shapes render correctly regardless. Wiring
-        // the cluster text is a later refinement.
+        // `text_range` is left empty: we do not thread the source string here.
+        // The PDF therefore carries no ToUnicode mapping for these glyphs (text
+        // is not selectable/copyable). Glyph shapes render correctly regardless.
+        // Wiring the cluster text is a later refinement.
         let glyphs: Vec<KrillaGlyph> = run
             .glyphs()
             .map(|g| {
@@ -178,8 +178,8 @@ impl DrawSurface for KrillaSurface<'_, '_> {
         // Invariant: push_clip MUST emit exactly one push instruction so the
         // matching pop_clip (a bare Surface::pop) stays balanced with the
         // interleaved transform stack. `rect_path` yields None for a degenerate
-        // (zero-area / inverted) rect; in that case we push a valid but
-        // zero-area clip path -- which correctly clips everything out -- so the
+        // (zero-area / inverted) rect. In that case we push a valid but
+        // zero-area clip path -- which correctly clips everything out. The
         // count is preserved without a special case in pop_clip.
         match rect_path(rect) {
             Some(path) => self.surface.push_clip_path(&path, &FillRule::NonZero),
@@ -285,9 +285,9 @@ fn rect_path(rect: Rect) -> Option<krilla::geom::Path> {
 
 /// Build an always-valid, effectively zero-area clip path for a degenerate clip
 /// rectangle. Used only by `push_clip` to preserve the push/pop balance when
-/// `rect_path` rejects the rect. The extent is clamped to a sub-pixel epsilon so
-/// `PathBuilder::finish` never returns `None` (a truly collapsed path would),
-/// while the visible clip region stays negligible -- the intended "clip out
+/// `rect_path` rejects the rect. The extent is clamped to a sub-pixel epsilon,
+/// so `PathBuilder::finish` never returns `None` (a truly collapsed path would).
+/// The visible clip region stays negligible -- the intended "clip out
 /// everything" behavior for a zero-area region.
 fn degenerate_clip_path(rect: Rect) -> krilla::geom::Path {
     const EPS: f32 = 1e-4;

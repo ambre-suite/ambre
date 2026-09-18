@@ -2,7 +2,7 @@
 // ============================================================================
 // Cached Parley text layouts for UI rendering.
 //
-// Re-shaping text every frame is expensive: on a typical viewport with ~200
+// Re-shaping text every frame is expensive. On a typical viewport with ~200
 // visible cells at 60 FPS that would be 12 000 Parley shape calls per second.
 //
 // This cache stores Parley `Layout<Brush>` objects keyed by
@@ -97,8 +97,8 @@ impl TextCache {
     }
 
     /// Register any lazily-fetched font faces that arrived since the last frame
-    /// into `font_cx`, and if any did, clear the layout cache so strings that
-    /// shaped before the face was available (as tofu) re-shape with real glyphs.
+    /// into `font_cx`. If any did, clear the layout cache. Strings that shaped
+    /// before the face was available (as tofu) then re-shape with real glyphs.
     ///
     /// Returns `true` when coverage changed: the caller must then force a full
     /// repaint (the cached GPU layers still hold the tofu pixels).
@@ -132,12 +132,12 @@ impl TextCache {
     /// Evict the least-recently-used entries when the cache exceeds
     /// `max_entries`, keeping the hottest layouts warm across frames.
     ///
-    /// The previous implementation `clear()`ed the entire map on overflow,
-    /// which threw away every still-visible cell's layout and forced a full
-    /// re-shape on the next frame (a visible stall right when the sheet is
-    /// busiest). Instead we drop entries in ascending `last_used` order down to
-    /// a low-water mark (75% of the cap), so a single overflow frame reshapes
-    /// only the coldest quarter rather than everything.
+    /// The previous implementation `clear()`ed the entire map on overflow. That
+    /// threw away every still-visible cell's layout. The next frame paid a full
+    /// re-shape, a visible stall right when the sheet is busiest. Instead we
+    /// drop entries in ascending `last_used` order down to a low-water mark
+    /// (75% of the cap). A single overflow frame then reshapes only the coldest
+    /// quarter rather than everything.
     pub fn evict_if_oversized(&mut self, max_entries: usize) {
         if self.layouts.len() <= max_entries {
             return;
@@ -147,8 +147,8 @@ impl TextCache {
         let target = max_entries - max_entries / 4;
         let to_remove = self.layouts.len() - target;
         // Partial selection of the `to_remove` smallest `last_used` ticks. A
-        // full sort of the keys is O(n log n); collecting the ticks and picking
-        // a threshold is O(n) and enough here since caps are a few thousand.
+        // full sort of the keys is O(n log n). Collecting the ticks and picking
+        // a threshold is O(n), and enough here since caps are a few thousand.
         let mut ticks: Vec<u64> = self.layouts.values().map(|c| c.last_used).collect();
         // `select_nth_unstable` partitions so everything left of `to_remove`
         // is <= the pivot: that pivot is the eviction threshold.
@@ -161,9 +161,9 @@ impl TextCache {
 
     /// Return a shaped `Layout` for `text`, building it on first access.
     ///
-    /// `bold` / `italic` select the matching real face of the family (not faux
-    /// bold/oblique) and are part of the cache key, so each style combination of
-    /// the same string is stored separately.
+    /// `bold` / `italic` select the matching real face of the family, not faux
+    /// bold/oblique. They are part of the cache key, so each style combination
+    /// of the same string is stored separately.
     #[allow(clippy::too_many_arguments)]
     pub fn get_or_build(
         &mut self,
@@ -182,8 +182,8 @@ impl TextCache {
 
     /// Like [`get_or_build`](Self::get_or_build) but selecting a font `family`
     /// (`None` = the grid default). `"Sans"`/`"Default"` map to the bundled sans
-    /// face; `"Serif"`/`"Monospace"` to the matching generic; any other name is
-    /// requested verbatim and falls back to the default if unavailable.
+    /// face, and `"Serif"`/`"Monospace"` to the matching generic. Any other name
+    /// is requested verbatim and falls back to the default if unavailable.
     #[allow(clippy::too_many_arguments)]
     pub fn get_or_build_font(
         &mut self,
@@ -268,14 +268,14 @@ impl TextCache {
         scale: f32,
     ) -> Layout<Brush> {
         let mut builder = layout_cx.ranged_builder(font_cx, text, scale, true);
-        // Resolve every requested family -- a toolbar label ("Sans"/"Serif"/...),
-        // the CSS-generic default ("sans-serif"), or an unknown name -- to an
-        // actually-loaded face through the single family authority (host.rs loads
-        // Noto Sans + DejaVu Serif + DejaVu Sans Mono). Passing a non-label name
-        // straight to `Named` (the old behaviour) matched no loaded face and shaped
-        // zero glyphs, so a sticky whose family was the generic default rendered
-        // invisible text while edit mode -- which already routed through here --
-        // showed it fine.
+        // Resolve every requested family to an actually-loaded face through the
+        // single family authority. A family is a toolbar label
+        // ("Sans"/"Serif"/...), the CSS-generic default ("sans-serif"), or an
+        // unknown name. The authority is host.rs, which loads Noto Sans + DejaVu
+        // Serif + DejaVu Sans Mono. Passing a non-label name straight to `Named`
+        // (the old behaviour) matched no loaded face and shaped zero glyphs. A
+        // sticky whose family was the generic default then rendered invisible text.
+        // Edit mode -- which already routed through here -- showed it fine.
         let font_family = FontFamily::Named(registered_family_name(family).into());
         builder.push_default(StyleProperty::FontStack(FontStack::Single(font_family)));
         builder.push_default(StyleProperty::FontSize(font_size));
@@ -315,16 +315,16 @@ mod tests {
         assert_eq!(registered_family_name(None), "Noto Sans");
         assert_eq!(registered_family_name(Some("Comic Sans")), "Noto Sans");
         // The CSS-generic `FontSpec` default MUST resolve to a loaded face, not be
-        // passed through raw -- otherwise a sticky whose family is the default
-        // shapes zero glyphs and renders invisible text (edit mode, which already
-        // routed through here, showed it fine; the static render bypassed it).
+        // passed through raw. Otherwise a sticky whose family is the default
+        // shapes zero glyphs and renders invisible text. Edit mode already routed
+        // through here and showed it fine. The static render bypassed it.
         assert_eq!(registered_family_name(Some("sans-serif")), "Noto Sans");
     }
 
     #[test]
     fn registered_face_names_pass_through() {
-        // A request that already names a loaded face resolves to itself, so
-        // routing every family through this single authority never demotes a
+        // A request that already names a loaded face resolves to itself.
+        // Routing every family through this single authority never demotes a
         // genuine serif/mono face to the sans fallback.
         assert_eq!(registered_family_name(Some("DejaVu Serif")), "DejaVu Serif");
         assert_eq!(

@@ -1,5 +1,5 @@
 // ============================================================================
-// WebSocket protocol — single multiplexed connection per client session.
+// WebSocket protocol -- single multiplexed connection per client session.
 //
 // Endpoint: GET /api/ws -> upgrade WebSocket
 // One connection carries messages for ALL open documents + channels.
@@ -78,9 +78,9 @@ pub enum WsServerMsg {
     /// (`1-Foundations/ambre-spec-presence.md`, `PRESENCE-014`).
     ///
     /// It carries what the relay already routes on -- a document id and an
-    /// author key -- and nothing else: no content, and no claim about why the
+    /// author key -- and nothing else. No content, and no claim about why the
     /// peer left (`ambre-spec-zero-knowledge.md`). The recipient resolves the
-    /// key to a `UserId` exactly as it does for an ephemeral, so a departure is
+    /// key to a `UserId` exactly as it does for an ephemeral. A departure is
     /// attributed by the same spoof-proof path as a cursor.
     ///
     /// Best-effort, like presence itself: a lost `PeerLeft` leaves the peer to
@@ -96,7 +96,7 @@ pub enum WsServerMsg {
         updates: Vec<SeqUpdate>,
     },
 
-    /// Too many deltas accumulated — client must compact.
+    /// Too many deltas accumulated -- client must compact.
     SnapshotRequired { document_id: DocumentId },
 
     /// New snapshot available for download via S3.
@@ -108,7 +108,7 @@ pub enum WsServerMsg {
     /// The document key was rotated: every REMAINING member must re-fetch its
     /// freshly wrapped `doc_key_enc` from `/members` and swap it in. Broadcast on
     /// the document channel. Carries no user identity: it is not a revocation
-    /// signal, so no recipient can mistake it for "you were revoked" (that is the
+    /// signal. No recipient can mistake it for "you were revoked" (that is the
     /// separate, targeted `DocumentRevoked`). Rotation typically follows a revoke,
     /// but the two are distinct events.
     KeyRotationRequired { document_id: DocumentId },
@@ -153,12 +153,24 @@ pub enum WsServerMsg {
 // ---------------------------------------------------------------------------
 
 /// Encode a client message for the wire.
+///
+/// # Panics
+///
+/// When postcard cannot serialize `msg`. Every field of [`WsClientMsg`] is a
+/// postcard type, so the encoder fails only when the allocator does.
 pub fn encode_client_msg(msg: &WsClientMsg) -> Vec<u8> {
     let buf = vec![0x01]; // wire version
     postcard::to_extend(msg, buf).expect("postcard encode WsClientMsg")
 }
 
 /// Decode a client message from the wire.
+///
+/// # Errors
+///
+/// * [`WireDecodeError::Empty`] on no bytes at all.
+/// * [`WireDecodeError::UnsupportedVersion`] when the first byte is not the
+///   wire version.
+/// * [`WireDecodeError::Postcard`] when the body does not decode.
 pub fn decode_client_msg(data: &[u8]) -> Result<WsClientMsg, WireDecodeError> {
     if data.is_empty() {
         return Err(WireDecodeError::Empty);
@@ -170,12 +182,21 @@ pub fn decode_client_msg(data: &[u8]) -> Result<WsClientMsg, WireDecodeError> {
 }
 
 /// Encode a server message for the wire.
+///
+/// # Panics
+///
+/// When postcard cannot serialize `msg`, for the reason
+/// [`encode_client_msg`] states.
 pub fn encode_server_msg(msg: &WsServerMsg) -> Vec<u8> {
     let buf = vec![0x01];
     postcard::to_extend(msg, buf).expect("postcard encode WsServerMsg")
 }
 
 /// Decode a server message from the wire.
+///
+/// # Errors
+///
+/// The three errors [`decode_client_msg`] raises, on the same three inputs.
 pub fn decode_server_msg(data: &[u8]) -> Result<WsServerMsg, WireDecodeError> {
     if data.is_empty() {
         return Err(WireDecodeError::Empty);

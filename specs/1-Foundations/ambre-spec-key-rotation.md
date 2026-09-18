@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: KEY ROTATION
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the rotation ships and the remaining members re-key; a revoke that
+**Implementation:** partial -- the rotation ships and the remaining members re-key. A revoke that
 fails halfway leaves the key live, and the rotation re-keys the deltas alone.
 
 > Taking someone off a document means they cannot read what is written after it. The document gets
@@ -24,24 +24,24 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-044` | `INV` | The cache of previous keys MUST be bounded. | this spec section 3 | none | unheld -- the bound is a truncation at ten with no test: nothing rotates eleven times and counts what is held | unverified |
+| `SYNC-044` | `INV` | The cache of previous keys MUST be bounded. | this spec section 3 | none | unheld -- the bound is a truncation at ten with no test: nothing rotates eleven times and counts what is held; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-078` | `INV` | A key leaving the cache MUST be wiped. | this spec section 3; `ZK-011` | type-level -- the document key derives `ZeroizeOnDrop`, so truncating the cache wipes what it drops and a key type that did not would be a change to the type rather than to this path | none | verified |
-| `SYNC-045` | `INV` | An inbound frame MUST be opened with the key its parent snapshot names, never by trying every key in turn. | this spec section 3 | none | fails -- the open tries the current key, then every cached key, then the current key again, so a frame nobody can open costs eleven attempts and a frame sealed under a revoked key still opens. Answered by the `A revoked key opens nothing` Story (`ambre-roadmap.md` E7) | unverified |
+| `SYNC-045` | `INV` | An inbound frame MUST be opened with the key its parent snapshot names, never by trying every key in turn. | this spec section 3 | none | fails -- the open tries the current key, then every cached key, then the current key again, so a frame nobody can open costs eleven attempts and a frame sealed under a revoked key still opens; lands with the `A revoked key opens nothing` Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.2 Remove a member
 
-The initiating client asks the relay to drop the member, then generates a key, re-wraps it for
+The initiating client asks the relay to drop the member. It then generates a key, re-wraps it for
 everyone who stays and posts every copy at once.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-041` | `POST` | A revoke MUST rotate the key, so the member removed cannot open what is written after it. | `ZK-001`; this spec section 3 | none | fails -- the removal is posted first, and every later step can fail on its own. The user is told the revoke failed while the member is already out of the list, and nothing retries the rotation. Answered by the "A revoke either completes or changes nothing" Story (`ambre-roadmap.md` E7) | unverified |
-| `SYNC-042` | `POST` | A rotation MUST re-key everything the document key seals, not the deltas alone. | this spec section 3 | none | fails -- the document name and every media blob stay sealed under the previous key and no member can open either again, so a revoke silently blanks the name and every picture. Answered by the "The rotation re-keys the whole document" Story (`ambre-roadmap.md` E7) | unverified |
+| `SYNC-041` | `POST` | A revoke MUST rotate the key, so the member removed cannot open what is written after it. | `ZK-001`; this spec section 3 | none | fails -- the removal is posted first, and every later step can fail on its own. The user is told the revoke failed while the member is already out of the list, and nothing retries the rotation; lands with the "A revoke either completes or changes nothing" Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-042` | `POST` | A rotation MUST re-key everything the document key seals, not the deltas alone. | this spec section 3 | none | fails -- the document name and every media blob stay sealed under the previous key and no member can open either again, so a revoke silently blanks the name and every picture; lands with the "The rotation re-keys the whole document" Story (`ambre-roadmap.md` E7) | failing |
 | `SYNC-046` | `POST` | Whoever rotates MUST become the wrapper of record, so a later unwrap resolves against their key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-034` | `ambre_server::routes::tests::revoke_then_rotate_replaces_owner_key` -- it reads the wrapper recorded after the rotation and fails when the inviter is still named | none | verified |
-| `SYNC-047` | `POST` | The rotation notice MUST reach the other clients only after the new keys are stored. | this spec section 3; `ambre-spec-server.md` | none | unheld -- the relay writes every wrapped copy in one transaction and broadcasts after it commits, and no test asserts the order: a broadcast before the commit would let a client fetch the previous copy and see no error | unverified |
+| `SYNC-047` | `POST` | The rotation notice MUST reach the other clients only after the new keys are stored. | this spec section 3; `ambre-spec-server.md` | none | unheld -- the relay writes every wrapped copy in one transaction and broadcasts after it commits, and no test asserts the order: a broadcast before the commit would let a client fetch the previous copy and see no error; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-048` | `POST` | A rotation MUST seal a fresh snapshot under the new key, so the state after it stands on its own. | this spec section 3 | not built | unbuilt -- lands with the "The rotation re-keys the whole document" Story (`ambre-roadmap.md` E7) | unimplemented |
-| `SYNC-079` | `FRAME` | A revoke MUST NOT change the document's content. | this spec section 3, the opening of the model | none | unheld -- a rotation changes which key opens the document and never what it holds, and no test reads the state back across one. The re-key `SYNC-042` is missing would touch the name and the blobs, which is the one place the two rules meet | unverified |
-| `SYNC-043` | `FAIL` | A member the rotation cannot re-wrap for MUST be reported, never dropped in silence. | this spec section 3 | none | fails -- `ambre_sync::sharing::tests::rotate_entries_cover_valid_members_and_skip_malformed` asserts the skip this rule forbids. A member whose exchange key does not parse keeps a copy of the previous key and loses the document without a message to anyone. Answered by the "A revoke either completes or changes nothing" Story (`ambre-roadmap.md` E7) | unverified |
+| `SYNC-079` | `FRAME` | A revoke MUST NOT change the document's content. | this spec section 3, the opening of the model | none | unheld -- a rotation changes which key opens the document and never what it holds, and no test reads the state back across one. The re-key `SYNC-042` is missing would touch the name and the blobs, which is the one place the two rules meet; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-043` | `FAIL` | A member the rotation cannot re-wrap for MUST be reported, never dropped in silence. | this spec section 3 | none | fails -- `ambre_sync::sharing::tests::rotate_entries_cover_valid_members_and_skip_malformed` asserts the skip this rule forbids. A member whose exchange key does not parse keeps a copy of the previous key and loses the document without a message to anyone; lands with the "A revoke either completes or changes nothing" Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.3 Take on a rotation
 
@@ -49,27 +49,25 @@ Every other client is told the key rotated, fetches its new wrapped copy and swa
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-080` | `POST` | Taking on a rotation MUST install the new key and move the previous one into the cache. | this spec section 3, every other client, step 3 | none | unheld -- the swap and the cache push are one call, and no test drives the notice through to the key a client holds afterwards | unverified |
-| `SYNC-081` | `FRAME` | Taking on a rotation MUST NOT close the document. | this spec section 3, a rotation is not a removal | none | unheld -- being removed is a separate, targeted notice on the user's own channel, and the rotation notice reports no departure. Nothing asserts the two stay apart, and a client that closed on a rotation would drop every member who stayed | unverified |
+| `SYNC-080` | `POST` | Taking on a rotation MUST install the new key and move the previous one into the cache. | this spec section 3, every other client, step 3 | none | unheld -- the swap and the cache push are one call, and no test drives the notice through to the key a client holds afterwards; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-081` | `FRAME` | Taking on a rotation MUST NOT close the document. | this spec section 3, a rotation is not a removal | none | unheld -- being removed is a separate, targeted notice on the user's own channel, and the rotation notice reports no departure. Nothing asserts the two stay apart, and a client that closed on a rotation would drop every member who stayed; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
-* **Budget.** one elliptic-curve operation per remaining member, about 150 us each on mobile, plus
-  one full snapshot seal once `SYNC-048` lands: the crypto rows of
-  `ambre-spec-budgets.md section 1`, and the 100 KB compression row for the snapshot. The
-  cache of previous keys is the `old_keys` holder of `ambre-spec-budgets.md section 6`, ten
-  keys per document.
+* **Budget.** one elliptic-curve operation per remaining member, charged to the crypto rows of
+  `ambre-spec-budgets.md section 1`, which a full snapshot seal joins once `SYNC-048` lands. The
+  cache of previous keys is the `old_keys` holder of `ambre-spec-budgets.md section 6`.
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
-  metadata `ambre-spec-zero-knowledge.md` accepts. The plaintext key stays in the Sync
-  worker on both sides (`SYNC-002`).
-* **Verification.** 2 `verified`, 9 `unverified`, 1 `unimplemented`. What holds is the relay half --
-  the rotator becomes the wrapper of record -- and the wipe of a key leaving the cache, which the
-  key type carries. Everything else on the client side is loose, and four rules are stated as
-  failing: the revoke is not atomic, the rotation reaches the deltas alone, a member can be dropped
-  in silence, and the open tries every key. `SYNC-044` was a conjunction whose halves have different
-  statuses, which is what hid the second one: the wipe is held by the type and the bound is a
-  truncation nothing counts. The two frame conditions are the pass's other find. `SYNC-079` says a
-  revoke moves no content, and `SYNC-081` says taking on a rotation is not being removed -- the
-  document argues both in prose and ruled neither.
+  metadata `ambre-spec-zero-knowledge.md` accepts.
+* **Verification.** 2 `verified`, 4 `failing`, 5 `untested`, 1 `unimplemented`. What holds is the
+  relay half, the rotator becoming the wrapper of record, and the wipe the key type carries. The
+  client side is loose throughout. The revoke is not atomic, the rotation reaches the deltas alone,
+  a member can be dropped in silence, and the open tries every key.
+
+  `SYNC-044` was a conjunction whose halves have different statuses, which is what hid the second
+  one. The wipe is held by the type and the bound is a truncation nothing counts. The two frame
+  conditions are the pass's other find. `SYNC-079` says a revoke moves no content, and `SYNC-081`
+  says taking on a rotation is not being removed. The document argues both in prose and ruled
+  neither.
 
 ---
 
@@ -121,8 +119,8 @@ key never leaves the Sync worker.
 
 **Why the previous key is kept.** A rotation is not instantaneous: a peer's edit can already be in
 flight, sealed under the key it held a moment ago. The cache lets that edit open rather than reading
-as corrupt. It is bounded at ten keys, so a document past its eleventh rotation can no longer open
-its older snapshots locally and re-reads them from object storage (`SYNC-044`), and what leaves the
+as corrupt. It is bounded at ten keys. A document past its eleventh rotation can no longer open
+its older snapshots locally, and re-reads them from object storage (`SYNC-044`). What leaves the
 cache is wiped by the key type itself (`SYNC-078`).
 
 **A rotation is not a removal.** Being taken off a document is a separate, targeted notice on the
@@ -179,17 +177,17 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
   keeps the rest converging -- and nothing reports it (`SYNC-043`).
 * **The open tries every cached key.** An inbound frame is attempted against the current key, then
   each cached key, then the current key again for its error. So an unopenable frame costs eleven
-  attempts, and a frame sealed under a key that was rotated away still opens for as long as it is
+  attempts. A frame sealed under a key that was rotated away still opens for as long as it is
   cached (`SYNC-045`).
 * **No snapshot follows a rotation.** The state after the removal is never sealed on its own, so the
   document's history stays a chain of deltas across the key change (`SYNC-048`).
 * **Nothing bounds how many rotations a document may take.** Past the eleventh, older snapshots stop
   opening locally, and the re-read from object storage that covers it is not driven by any rule.
-* **A rotation is invisible while a document is closed.** The notice is only acted on by a client
-  that has the document open; another one picks the new key up at its next open, which is correct and
-  stated nowhere else.
+* **A rotation is invisible while a document is closed.** Only a client that has the document open acts on
+  the notice. Another one picks the new key up at its next open, which is correct and stated nowhere
+  else.
 * **No test drives a rotation end to end.** The pure transforms are covered on host and the relay
-  half is covered in the database tier; the client's two rotation paths run only in a browser.
+  half in the database tier. The client's two rotation paths run only in a browser.
 
 ---
 

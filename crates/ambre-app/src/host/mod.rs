@@ -5,20 +5,22 @@
 //   AppView      the CLOSED registry of per-app views (one variant per document
 //                type: `Trame(TrameView)`, future `Prose(ProseView)`, ...). It
 //                names the concrete app views, so it must live downstream of the
-//                app crates -- here, in the launcher -- not in `ambre-canvas`,
-//                which is upstream of them (a closed enum naming `TrameView`
-//                upstream would cycle; ambre-spec-architecture.md).
-//   FrameHost    drives one `AppView` across the GPU and the rAF loop: owns the
-//                `ambre_canvas::GpuState`, measures timings, encodes the layers
-//                from the view's `RepaintPlan`, presents the swapchain, and
-//                paints the fatal terminal screen.
+//                app crates: here, in the launcher. Not in `ambre-canvas`, which
+//                is upstream of them. A closed enum naming `TrameView` upstream
+//                would cycle (ambre-spec-architecture.md).
+//
+//   FrameHost    drives one `AppView` across the GPU and the rAF loop. It owns
+//                the `ambre_canvas::GpuState`, measures timings, encodes the
+//                layers from the view's `RepaintPlan`, presents the swapchain,
+//                and paints the fatal terminal screen.
+//
 //   run_with     UI-thread entry: build the view, install GPU, start the rAF
 //                loop, and wire the DOM input/resize listeners to the host.
 //   DocSwitcher  route-driven document swap handle (SPA navigation).
 //
 // `ambre-canvas` keeps the GPU PRIMITIVES (`GpuState`, `bootstrap_gpu`,
 // `RafControl`, `start_raf_loop`, the quad/glyph pipeline) and the GPU-agnostic
-// value types (`RepaintPlan`/`FrameStats`/`InputEvent`); this module composes
+// value types (`RepaintPlan`/`FrameStats`/`InputEvent`). This module composes
 // them around the typed `AppView`.
 //
 // wasm32-only (the whole launcher is): web_sys glue + wgpu surface present.
@@ -72,14 +74,14 @@ const AMBRE_CLIPBOARD_TYPE: &str = "application/x-ambre";
 pub(crate) const AMBRE_CLIPBOARD_WEB_TYPE: &str = "web application/x-ambre";
 
 /// Synchronous same-tab ownership marker (`ambre-spec-clipboard.md`,
-/// `UI-THREAD-007`). Written into the
-/// clipboard event's `DataTransfer` *synchronously* during `copy`/`cut`, so --
-/// unlike the async payload write, which needs a user-activation context Firefox
-/// denies from the rAF loop -- it always reaches the OS clipboard. On `paste`,
-/// a value here equal to this page's token proves the clipboard still holds THIS
-/// tab's own last copy, so the view pastes its in-memory `last_clip` at full
-/// fidelity. Any foreign copy (another app / tab) overwrites the clipboard and
-/// drops the marker, so its absence correctly means "not ours".
+/// `UI-THREAD-007`). Written into the clipboard event's `DataTransfer`
+/// *synchronously* during `copy`/`cut`, it always reaches the OS clipboard. The
+/// async payload write does not: it needs a user-activation context Firefox
+/// denies from the rAF loop. On `paste`, a value here equal to this page's token
+/// proves the clipboard still holds THIS tab's own last copy. The view then
+/// pastes its in-memory `last_clip` at full fidelity. Any foreign copy (another
+/// app / tab) overwrites the clipboard and drops the marker, so its absence
+/// correctly means "not ours".
 const AMBRE_CLIPBOARD_TOKEN_TYPE: &str = "application/x-ambre-token";
 
 /// Base64-encode bytes for transport as a clipboard string (UTF-8 safe).
@@ -93,8 +95,8 @@ pub(crate) fn base64_decode(s: &str) -> Option<Vec<u8>> {
 }
 
 /// Best-effort asynchronous publish of a copied range to the OS clipboard via
-/// `navigator.clipboard.write`, carrying the tab-separated `text/plain` plus the
-/// private `web ` payload type so the async-reading Paste button gets full
+/// `navigator.clipboard.write`. It carries the tab-separated `text/plain` plus
+/// the private `web ` payload type, so the async-reading Paste button gets full
 /// fidelity (styles + formula reindexing). Runs in addition to the synchronous
 /// `setData` (which serves Ctrl+V); any failure is ignored -- Ctrl+V still works.
 pub(crate) fn async_write_clipboard(tsv: String, payload_b64: Option<String>) {
@@ -120,13 +122,13 @@ pub(crate) fn async_write_clipboard(tsv: String, payload_b64: Option<String>) {
 }
 
 // -----------------------------------------------------------------------------
-// AppView — the closed per-app view registry
+// AppView -- the closed per-app view registry
 // -----------------------------------------------------------------------------
 
 /// The active document's view. A closed sum over document types: adding an app
-/// is one variant here plus its inherent driver methods below (no trait object,
-/// no `Box<dyn Any>`, exhaustiveness checked by the compiler -- symmetric to
-/// `AppCommand`/`DocState`). The driver (`FrameHost`) dispatches over it by
+/// is one variant here plus its inherent driver methods below. No trait object,
+/// no `Box<dyn Any>`, exhaustiveness checked by the compiler, symmetric to
+/// `AppCommand`/`DocState`. The driver (`FrameHost`) dispatches over it by
 /// `match`; each variant's view exposes the same inherent method set.
 pub enum AppView {
     /// A Trame (spreadsheet) document.
@@ -197,10 +199,10 @@ impl AppView {
     }
 
     /// Resolve a `copy`/`cut` synchronously inside the native clipboard event
-    /// ([`CopyOutcome`](ambre_bus::CopyOutcome)): `Text` for an in-cell/inline
-    /// selection the view holds, `Deferred` when the authoritative payload is
-    /// being built on the Logic thread (drained a frame later by
-    /// [`poll_clipboard`](Self::poll_clipboard)), or `Nothing` to let the browser
+    /// ([`CopyOutcome`](ambre_bus::CopyOutcome)). `Text` is for an in-cell/inline
+    /// selection the view holds. `Deferred` is for a payload being built on the
+    /// Logic thread, drained a frame later by
+    /// [`poll_clipboard`](Self::poll_clipboard). `Nothing` lets the browser
     /// default proceed. Each app applies its own cut policy behind this call.
     fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
         match self {
@@ -209,8 +211,8 @@ impl AppView {
         }
     }
 
-    /// Drain any clipboard blob built since the last frame (from an authoritative
-    /// `Clipboard` reply), so the host can mirror it to the OS clipboard within
+    /// Drain any clipboard blob built since the last frame, from an authoritative
+    /// `Clipboard` reply. The host can then mirror it to the OS clipboard within
     /// the transient user-activation window. `None` when no copy is pending.
     fn poll_clipboard(&mut self) -> Option<ambre_bus::ClipboardBlob> {
         match self {
@@ -222,8 +224,8 @@ impl AppView {
     /// Service a `paste` from the shared [`ClipboardBlob`](ambre_bus::ClipboardBlob)
     /// transport; each view decodes its own app-specific payload behind the opaque
     /// bytes. `own_copy` is true when the clipboard still carries this tab's
-    /// synchronous ownership token, so the view pastes its in-memory `last_clip`
-    /// at full fidelity rather than trusting the (possibly failed) OS mirror.
+    /// synchronous ownership token. The view then pastes its in-memory `last_clip`
+    /// at full fidelity, rather than trusting the (possibly failed) OS mirror.
     fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
         match self {
             AppView::Trame(v) => v.paste_clipboard(blob, own_copy),
@@ -282,7 +284,7 @@ impl AppView {
 }
 
 // -----------------------------------------------------------------------------
-// FrameHost — per-frame driver over an AppView
+// FrameHost -- per-frame driver over an AppView
 // -----------------------------------------------------------------------------
 
 /// Drives one [`AppView`] across the GPU and the requestAnimationFrame loop.
@@ -330,7 +332,7 @@ fn draw_centered_text(
 }
 
 // -----------------------------------------------------------------------------
-// DocSwitcher — route-driven document swap handle
+// DocSwitcher -- route-driven document swap handle
 // -----------------------------------------------------------------------------
 
 /// A cloneable handle that swaps the active document on the live canvas without
@@ -349,22 +351,6 @@ impl DocSwitcher {
     }
 }
 
-// -----------------------------------------------------------------------------
-// run_with — UI thread entry point
-// -----------------------------------------------------------------------------
-
-/// Run the UI thread: build the application view, drive it through a
-/// [`FrameHost`] on the requestAnimationFrame loop, and forward DOM input and
-/// resize events to it.
-///
-/// `make_view` receives the canvas size in physical pixels plus the transparent
-/// [`TextInput`] pipe (so the view can focus it and follow it to the caret), and
-/// returns the [`AppView`] to drive. It runs on this (UI) thread before the GPU
-/// is ready. `pre_frame` runs once per animation frame immediately before the
-/// view's update -- the launcher pumps its route-independent relay there (the
-/// Logic<->Sync relay, the dispatcher, the SPA route poll), so this driver knows
-/// nothing about commands or Leptos. `raf` gates only the render (a modal /
-/// landing overlay freezes the canvas), never the relay.
 /// True when keydown `target` is an editable DOM element OTHER than the canvas
 /// text `pipe`: an `<input>` / `<textarea>` / `<select>`, or a contenteditable
 /// host. Such elements own their own keyboard, so the grid's document-level
@@ -389,7 +375,7 @@ fn is_other_editable(target: &web_sys::EventTarget, pipe: &web_sys::HtmlTextArea
 /// Set a canvas backing store to its CSS layout size scaled by the device pixel
 /// ratio, so rendering is crisp on HiDPI displays. Returns the new physical
 /// `(width, height)` in device pixels, or `None` if the cell has zero area
-/// (detached / display:none) -- in which case the caller skips the resize.
+/// (detached / display:none). The caller then skips the resize.
 fn size_backing_store(canvas: &HtmlCanvasElement) -> Option<(u32, u32)> {
     let dpr = web_sys::window()
         .map(|w| w.device_pixel_ratio())
@@ -404,7 +390,7 @@ fn size_backing_store(canvas: &HtmlCanvasElement) -> Option<(u32, u32)> {
     Some((w, h))
 }
 
-// ── Tests (wasm tier) ───────────────────────────────────────────────────────
+// -- Tests (wasm tier) -------------------------------------------------------
 // Pure helpers only (base64 transport codec + the FPS sliding window). The crate
 // is `#![cfg(target_arch = "wasm32")]`, so these run under the wasm target via
 // the `wasm-bindgen-test-runner` (node, no DOM). See ambre-spec-testing.md.

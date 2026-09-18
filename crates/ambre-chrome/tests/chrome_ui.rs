@@ -2,9 +2,9 @@
 //! `ambre-spec-testing.md`, "wasm" tier).
 //!
 //! The chrome components are leptos CSR built on `web-sys`/`wasm-bindgen`: the
-//! reactive store and the mounted DOM only exist on the wasm target. So these
-//! run under the `wasm-bindgen-test-runner`, wrapped by
-//! `wasm-pack test --headless --chrome crates/ambre-chrome` (`just test-wasm`).
+//! reactive store and the mounted DOM only exist on the wasm target. So these run
+//! under the `wasm-bindgen-test-runner`, wrapped by `wasm-pack test --headless
+//! --chrome crates/ambre-chrome` (`just test-wasm`).
 //!
 //! Two belts (mirrors the trame chrome suite):
 //!   - the **reactive belt** -- `CommandStates` over real leptos signals, no DOM;
@@ -12,8 +12,8 @@
 //!     through `web-sys` (ARIA roles, the `AppShell` canvas cell, toast text).
 //!
 //! On host the whole file is gated out (the `cfg` below), so `just test-native`
-//! skips it; the pure decision logic (`key_from_dom`, `place_menu`) is covered
-//! by the `#[test]`s in `src/`.
+//! skips it. The pure decision logic (`key_from_dom`, `place_menu`) is covered by
+//! the `#[test]`s in `src/`.
 #![cfg(target_arch = "wasm32")]
 
 use ambre_chrome::{
@@ -31,7 +31,7 @@ wasm_bindgen_test_configure!(run_in_browser);
 const A: CommandId = CommandId("test.a");
 const B: CommandId = CommandId("test.b");
 
-// ── Reactive belt: CommandStates (no DOM) ───────────────────────────────────
+// -- Reactive belt: CommandStates (no DOM) -----------------------------------
 
 #[wasm_bindgen_test]
 fn command_states_defaults() {
@@ -75,7 +75,7 @@ fn command_states_unknown_id_is_noop() {
     store.set_enabled(B, false);
 }
 
-// ── DOM belt ────────────────────────────────────────────────────────────────
+// -- DOM belt ----------------------------------------------------------------
 
 fn document() -> web_sys::Document {
     web_sys::window().unwrap().document().unwrap()
@@ -116,8 +116,8 @@ fn toast_push_renders_message_with_kind_class() {
     owner.set();
     let toasts = Toasts::new();
     // Push before mounting so the initial `<For>` render includes the toast
-    // synchronously (a post-mount push flushes on a later microtask, which a
-    // straight-line assertion would race).
+    // synchronously. A post-mount push flushes on a later microtask, which a
+    // straight-line assertion would race.
     toasts.push(ToastKind::Error, "boom");
     let root = mount_in_container(move || view! { <ToastHost toasts=toasts/> });
 
@@ -151,7 +151,7 @@ fn app_shell_owns_the_named_canvas_cell() {
     root.remove();
 }
 
-// ── Shared status-bar chips (status.rs) ─────────────────────────────────────
+// -- Shared status-bar chips (status.rs) -------------------------------------
 
 #[wasm_bindgen_test]
 fn zoom_chip_renders_readout_from_signal_and_starts_collapsed() {
@@ -200,7 +200,7 @@ fn perf_chip_renders_fps_from_signal_and_starts_collapsed() {
     root.remove();
 }
 
-// ── Shared text-format controls (format.rs) ─────────────────────────────────
+// -- Shared text-format controls (format.rs) ---------------------------------
 
 #[wasm_bindgen_test]
 fn format_toggle_reflects_pressed_and_reports_clicks() {
@@ -261,7 +261,7 @@ fn font_size_select_lists_presets_plus_auto_entry() {
     root.remove();
 }
 
-// ── DOM belt: the command palette (CHROME-008) ──────────────────────────────
+// -- DOM belt: the command palette (CHROME-008) ------------------------------
 
 fn palette_title(l: &ambre_commands::Locale) -> String {
     let _ = l;
@@ -313,8 +313,8 @@ fn palette_labels(root: &web_sys::Element) -> Vec<String> {
 /// DOM test: an opened palette renders one row per command the table declares,
 /// including a command no menu shows (`ambre-spec-chrome.md`, CHROME-008).
 ///
-/// Mounted already open: a reactive re-render flushes on a later microtask, so
-/// only the synchronous initial render is asserted -- the same rule the chip
+/// Mounted already open: a reactive re-render flushes on a later microtask.
+/// Only the synchronous initial render is asserted, the same rule the chip
 /// tests above follow. What a query does to the list is the pure `filter`, and
 /// its assertions are the host tests in `src/palette.rs`.
 #[wasm_bindgen_test]

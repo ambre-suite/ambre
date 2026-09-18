@@ -9,8 +9,9 @@ inventory. Nobody reads it; CI reads it.
 
 The rules it enforces, beyond generating the file:
 
-  * a status must be one of the five declared values;
-  * an `unimplemented` row must name the Story that will build it ("lands with");
+  * a status must be one of the six declared values;
+  * a `failing`, `untested` or `unimplemented` row must name the Story that closes
+    its gap ("lands with");
   * **that Story must resolve to an open row of `ambre-roadmap.md`.** The template
     says "that story is not `[x]` until the row's status has moved", and nothing
     held it: this script looked for the substring "lands with" and never read the
@@ -47,26 +48,23 @@ The rules it enforces, beyond generating the file:
     pillar "Local-First"`, and a citation nobody can resolve is a citation that
     rots; and a `Statement` carrying two rules is two rules with one status, so
     half of it can break in green. The first three are errors here. The fourth
-    is a ceiling, below: the line between a bundle the kind licenses and a
-    conjunction that hides a second rule is a reading, not a parse;
-  * **a `Statement` stating two rules may not grow.** `FAIL` binds "the refusal,
-    the notice, the rollback" and `FRAME` names everything an operation must not
-    touch, so both legitimately carry a list; the other six kinds do not, and 65
-    of their rows state a second MUST after an `and`. Splitting all of them is a
-    reading of each; letting a sixty-sixth arrive unremarked is how the first 65
-    got here. So each document carries a count in `statement_ceilings.json`, on
-    the same terms as the `unverified` ceiling: it may only fall, and a growth is
-    `--ceilings --raise`, one reviewed line of diff;
+    is an error too, below: the line between a bundle the kind licenses and a
+    conjunction that hides a second rule is drawn by the kind, not by a count;
+  * **a `Statement` states one rule.** `FAIL` binds "the refusal, the notice,
+    the rollback" and `FRAME` names everything an operation must not touch, so
+    both legitimately carry a list; the other six kinds do not. A second MUST
+    after an `and` is two rules under one status, and the half nothing tests
+    breaks in green. 65 rows were carrying one when this became an error, and
+    each was split by hand: what a ceiling deferred, a reading settled;
   * an id is never reused, and a prefix has no gap in its numbering;
-  * **a document's `unverified` count may only fall.** An unbuilt row is bound to
-    an open Story and cannot be forgotten; a shipped row nothing would fail on is
-    bound to nothing. It was counted here, rolled into a total of 355, and adding
-    one more cost an author nothing: regenerate, and the ledger reports the
-    larger number in green. So each document carries a ceiling in
-    `contract_ceilings.json`, and a document absent from that file has a ceiling
-    of zero. Growth is still allowed -- `--ceilings --raise` -- as one reviewed
-    line of diff instead of silence. `human-review` and `qa-manual` carry no
-    ceiling: they are decisions, and a ceiling over them would never reach zero;
+  * **every gap that can close names its Story.** A `failing`, `untested` or
+    `unimplemented` row lands with a Story of the roadmap, and that Story must
+    resolve to one open row of it. This replaces a per-document ceiling on
+    `unverified`, which summed three states nobody could compare: a rule the code
+    breaks today read as a missing test, and the whole debt sat in a JSON file
+    under `scripts/` rather than in the one place a schedule lives. A row whose
+    gap cannot close carries `qa-manual` or `human-review`, which owe no Story:
+    they are decisions, not debt;
   * **the counts under a table are the table's own.** The `Verification` answer
     is written by hand, beside a table that is not, so the two drift: nine
     documents were wrong the day this check landed, and `ambre-spec-membership.md`
@@ -81,7 +79,7 @@ test the rule. That is `TRAME-FEAT-004`'s defect, and it needs a probe or
 Run: `just contracts` (fail when the file on disk is not what this would
 write), `just contracts-write` (rewrite it). The check compares the whole text,
 so a spec edited without a regeneration turns CI red instead of leaving a stale
-roll-up behind. `just contracts-ceilings` rewrites the ceilings, lowering only.
+roll-up behind.
 """
 
 import json
@@ -118,10 +116,10 @@ TEMPLATE = "ambre-spec-template.md"  # carries example rows, not real contracts
 LEDGER = "1-Foundations/ambre-contract-ledger.md"  # generated here, nowhere else
 ROADMAP = "ambre-roadmap.md"  # the one schedule: every Story is a row of it
 JOURNAL = "ambre-roadmap-journal.md"  # closed epics, cut there verbatim
-AUDIT = "security-audit.md"  # numbered findings, cited by the rows that close them
-CEILINGS = Path(__file__).resolve().parent / "contract_ceilings.json"
-STATEMENT_CEILINGS = Path(__file__).resolve().parent / "statement_ceilings.json"
-LOOSE = ("unverified", "human-review", "qa-manual")  # built, and no test would fail
+AUDIT = "audits/security-audit.md"  # numbered findings, cited by the rows that close them
+LOOSE = ("failing", "untested", "human-review", "qa-manual")  # built, nothing goes red
+# The three that are debt: each owes an open Story of the roadmap.
+OWES_STORY = ("failing", "untested", "unimplemented")
 APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose")
 
 # An id minted once, then withdrawn because the rule it carried left the
@@ -282,8 +280,8 @@ RFC2119 = re.compile(r"\bMUST(?:\s+NOT)?\b|\bSHOULD(?:\s+NOT)?\b|\bMAY\b")
 
 # A second RFC 2119 keyword, behind an `and`, in a kind that does not license a
 # list: "MUST paint above the content, and MUST follow the gesture" is two rules
-# under one status, so the half nothing tests breaks in green. Counted, not
-# refused: the split is a reading of each row (see the ceiling above).
+# under one status, so the half nothing tests breaks in green. Refused: the
+# corpus is split, and the row that comes back is split before it lands.
 CONJUNCTION = re.compile(
     r"\b(?:MUST(?:\s+NOT)?|SHOULD(?:\s+NOT)?|MAY)\b[^.;:]*?"
     r",?\s+and\s+(?:it\s+)?(?:MUST|SHOULD|MAY)\b"
@@ -532,16 +530,17 @@ def cited_story(cell: str) -> tuple[str, str | None] | None:
 
 def story_defects(
     where: str,
+    status: str,
     cell: str,
     schedule: dict[str, tuple[str, bool, int, str]],
     closed: dict[str, tuple[str, bool, int, str]],
 ) -> list[str]:
-    """Whether one `unimplemented` row lands with an open story of the roadmap."""
+    """Whether one row that owes a Story lands with an open story of the roadmap."""
     cite = cited_story(cell)
     if cite is None:
         return [
-            f"{where}: `unimplemented` without a Story -- the Verification cell "
-            f"must read 'not built -- lands with <Story>'"
+            f"{where}: `{status}` without a Story -- the `Gap` cell must read "
+            f"'... lands with the <Story> Story (`{ROADMAP}` <epic>)'"
         ]
     name, epic = cite
     name = name.strip('`"')  # the delimiters a citation puts around the name
@@ -551,7 +550,7 @@ def story_defects(
         if gone:
             return [
                 f"{where}: lands with {name!r}, which closed under epic `{gone[0]}` "
-                f"in {JOURNAL} -- an unbuilt row cannot wait on work that shipped"
+                f"in {JOURNAL} -- a `{status}` row cannot wait on work that shipped"
             ]
         return [
             f"{where}: lands with {name!r}, and no row of {ROADMAP} carries that "
@@ -562,8 +561,7 @@ def story_defects(
     if done:
         defects.append(
             f"{where}: lands with {real!r}, which {ROADMAP}:{lineno} ticks `[x]` "
-            f"-- a story stays open until every row it builds has left "
-            f"`unimplemented`"
+            f"-- a story stays open until every row bound to it is `verified`"
         )
     if not epic:
         defects.append(
@@ -745,7 +743,7 @@ def audit_coverage_defects(findings: dict[str, int], cited: set[str]) -> list[st
 
 
 # The `Verification` answer under a contract table, and the counts it opens
-# on: `7 `verified`, 1 `unverified`, 1 `unimplemented`.` Both separators the
+# on: `7 `verified`, 1 `untested`, 1 `unimplemented`.` Both separators the
 # corpus uses are read, the comma and the final "and".
 ANSWER = re.compile(r"^\*\s+\*\*Verification\.\*\*\s+(?P<text>.*)$")
 COUNT = re.compile(r"(?P<n>\d+)\s+`(?P<status>[a-z-]+)`")
@@ -807,7 +805,7 @@ def table_defects(spec: str, table: list[tuple[int, str, str]]) -> list[str]:
     if "POST" in kinds and "FRAME" not in kinds:
         defects.append(
             f"{spec}:{lineno}: this operation declares a `POST` and no `FRAME` "
-            f"-- state what it MUST NOT touch, `unverified` when nothing "
+            f"-- state what it MUST NOT touch, `untested` when nothing "
             f"isolates it"
         )
     return defects
@@ -830,7 +828,7 @@ def answer_defects(spec: str, answer: tuple[int, str] | None, counts: Counter) -
         if status not in STATUSES:
             defects.append(
                 f"{where}: the `Verification` answer counts {status!r}, which is "
-                f"no status of the five"
+                f"no status of the six"
             )
         elif stated.get(status, 0) != counts.get(status, 0):
             defects.append(
@@ -863,87 +861,6 @@ def leaning_report(leans: dict[str, list[str]]) -> list[str]:
     return lines
 
 
-def statement_ceiling_defects(
-    per_spec: dict[str, int], ceilings: dict[str, int]
-) -> list[str]:
-    """Whether any document states two rules in one row more often than it may."""
-    defects = []
-    for spec, measured in sorted(per_spec.items()):
-        ceiling = ceilings.get(spec, 0)
-        if measured > ceiling:
-            defects.append(
-                f"{spec}: {measured} row{'s' if measured > 1 else ''} state a "
-                f"second rule after an `and`, "
-                f"ceiling {ceiling} -- it may only fall. Split the row, giving the"
-                " second rule an id and a status of its own, or record the debt"
-                " with `just contracts-ceilings`"
-            )
-    return defects
-
-
-def load_ceilings(path: Path) -> dict[str, int]:
-    """`{spec: n}` -- what a document is still allowed to carry, per document.
-
-    A spec the file does not name has a ceiling of zero, so a document that
-    arrives loose declares it in the same commit rather than inheriting silence.
-    """
-    return json.loads(path.read_text()) if path.exists() else {}
-
-
-def ceiling_defects(per_spec: dict[str, Counter], ceilings: dict[str, int]) -> list[str]:
-    """Whether any document carries more `unverified` rows than it may."""
-    defects = []
-    for spec, counts in sorted(per_spec.items()):
-        ceiling = ceilings.get(spec, 0)
-        if counts["unverified"] > ceiling:
-            defects.append(
-                f"{spec}: {counts['unverified']} `unverified` rows, ceiling {ceiling}"
-                " -- it may only fall. Write the mechanism, or record the debt with"
-                " `just contracts-ceilings`"
-            )
-    return defects
-
-
-def write_ceilings(
-    path: Path,
-    what: str,
-    per_spec: dict[str, int],
-    ceilings: dict[str, int],
-    allow_raise: bool,
-) -> int:
-    """Rewrite one ceiling file from what the corpus holds today, lowering only.
-
-    A ceiling that rises on its own is a ceiling that holds nothing, which is why
-    a growth needs `--raise` and shows up as a line of diff. A document back to
-    zero leaves the file: an entry of zero and no entry are the same ceiling.
-    """
-    out: dict[str, int] = {}
-    refused: list[str] = []
-    for spec, measured in sorted(per_spec.items()):
-        if not measured:
-            continue
-        recorded = ceilings.get(spec, 0)
-        if measured > recorded:
-            refused.append(f"{spec}: {recorded} -> {measured}")
-            if allow_raise:
-                out[spec] = measured
-            elif recorded:
-                out[spec] = recorded
-        else:
-            out[spec] = measured
-    path.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n")
-    print(f"{path.name}: {len(out)} specs, {sum(out.values())} {what}")
-    for line in refused:
-        print(f"{'RAISED' if allow_raise else 'KEPT'} {line}", file=sys.stderr)
-    if refused and not allow_raise:
-        print(
-            f"{len(refused)} ceilings would have risen in {path.name} and were kept:"
-            " a ceiling only falls. Use `--ceilings --raise` for a deliberate growth.",
-            file=sys.stderr,
-        )
-    return 0
-
-
 def app_of(spec: str) -> str:
     """The application a spec belongs to, from the first component of its path."""
     head = spec.split("/", 1)[0]
@@ -972,12 +889,12 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter) -> str:
         "",
         "* **Shipped** counts a row whose code exists. **Unbuilt** counts `unimplemented`, and the",
         "  split is the whole point: one number is a debt, the other is a plan.",
-        "* **Loose** counts a shipped row that nothing would fail on: `unverified`, `human-review`,",
-        "  `qa-manual`. That number is the coverage debt of the product.",
-        "* **`unverified` may only fall.** Each document's count is a ceiling in",
-        "  `scripts/contract_ceilings.json`, and `contracts.py` fails when one grows. A",
-        "  deliberate growth is `just contracts-ceilings-raise`, one line of reviewed diff.",
-        "  `human-review` and `qa-manual` carry no ceiling: they are decisions, not debt.",
+        "* **Loose** counts a shipped row that nothing would fail on: `failing`, `untested`,",
+        "  `human-review`, `qa-manual`. That number is the coverage debt of the product.",
+        "* **Every gap that can close names its Story.** A `failing`, `untested` or",
+        "  `unimplemented` row lands with an open Story of `ambre-roadmap.md`, and",
+        "  `contracts.py` fails when that Story does not resolve. The roadmap is the debt",
+        "  register. `human-review` and `qa-manual` owe none: they are decisions, not debt.",
         "* How each layer is tested is `ambre-spec-testing.md`.",
         "",
         f"**{sum(total.values())} rows: {shipped} shipped, of which {loose} loose. "
@@ -1014,8 +931,6 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter) -> str:
 
 def main() -> int:
     per_spec: dict[str, Counter] = {}
-    # Rows stating a second rule after an `and`, per document, for the ceiling.
-    conjunctions: Counter = Counter()
     seen: dict[str, str] = {}
     errors: list[str] = []
     per_crate, pooled = declared_fns()
@@ -1103,7 +1018,12 @@ def main() -> int:
                 kind = kind_cell.strip("`")
                 table.append((lineno, rid, kind))
                 if kind not in BUNDLING_KINDS and CONJUNCTION.search(statement):
-                    conjunctions[rel] += 1
+                    errors.append(
+                        f"{where}: the `Statement` states a second rule after an "
+                        f"`and`. Two rules under one status means the half "
+                        f"nothing tests breaks in green: split the row, giving "
+                        f"the second rule an id and a status of its own"
+                    )
 
             if status not in STATUSES:
                 errors.append(f"{where}: unknown status {status!r}")
@@ -1129,8 +1049,8 @@ def main() -> int:
             # The mechanism cell by name, never by position. `binding` is the cell
             # the story citation lives in, which the split moved into `Gap`.
             verification = cell.get(VERIFICATION, rest.rsplit("|", 1)[-1])
-            if status == "unimplemented":
-                errors += story_defects(where, binding, schedule, closed)
+            if status in OWES_STORY:
+                errors += story_defects(where, status, binding, schedule, closed)
             if status != "unimplemented" and "not built" in verification:
                 errors.append(f"{where}: says 'not built' but status is {status!r}")
             if status != "unimplemented":
@@ -1151,23 +1071,6 @@ def main() -> int:
         if counts:
             per_spec[str(path.relative_to(SPECS))] = counts
             errors += answer_defects(str(path.relative_to(SPECS)), answer, counts)
-
-    if "--ceilings" in sys.argv:
-        allow_raise = "--raise" in sys.argv
-        loose = {spec: counts["unverified"] for spec, counts in per_spec.items()}
-        return write_ceilings(
-            CEILINGS, "unverified rows", loose, load_ceilings(CEILINGS), allow_raise
-        ) or write_ceilings(
-            STATEMENT_CEILINGS,
-            "rows stating two rules",
-            dict(conjunctions),
-            load_ceilings(STATEMENT_CEILINGS),
-            allow_raise,
-        )
-    errors += ceiling_defects(per_spec, load_ceilings(CEILINGS))
-    errors += statement_ceiling_defects(
-        dict(conjunctions), load_ceilings(STATEMENT_CEILINGS)
-    )
 
     errors += audit_coverage_defects(findings, cited_audit)
 
@@ -1206,10 +1109,13 @@ def main() -> int:
     row = "  ".join(f"{total[s]:>13}" for s in STATUSES)
     print(f"{'TOTAL':<{width}}  {row}   {sum(total.values()):>5}")
 
-    debt = total["verified"] + total["unverified"] + total["human-review"] + total["qa-manual"]
+    # Shipped is every row but the unbuilt one, and a `Counter` answers 0 for a
+    # status nobody has: name the set through `LOOSE`, never one value at a time.
+    shipped = total["verified"] + sum(total[s] for s in LOOSE)
     print(
-        f"\nshipped surface: {debt} contract rows "
-        f"({total['unverified']} unverified, {total['human-review']} human-review)"
+        f"\nshipped surface: {shipped} contract rows ("
+        + ", ".join(f"{total[s]} {s}" for s in LOOSE)
+        + ")"
     )
     print(f"specified, not built: {total['unimplemented']}")
     for line in leaning_report(leans):

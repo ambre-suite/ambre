@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE ZERO-KNOWLEDGE BOUNDARY
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the capability bans, the key hierarchy and the sealed paths ship; the
-whitelist and the log discipline are held by review alone.
+**Implementation:** partial -- the capability bans, the key hierarchy and the sealed paths ship.
+The whitelist and the log discipline are held by review alone.
 
 > What the relay is allowed to learn, and what it must never be able to learn. One line runs through
 > the whole product: the server stores what a user writes and can read none of it.
@@ -20,37 +20,42 @@ that component's prefix instead.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `ZK-001` | `INV` | No CRDT payload MUST leave the client unless it has been AEAD-sealed with a `DocumentKey`. | README pillar "E2EE"; `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_update_small` -- the nominal path | partial -- nothing forbids an unsealed send | unverified |
+| `ZK-001` | `INV` | No CRDT payload MUST leave the client unless it has been AEAD-sealed with a `DocumentKey`. | README pillar "E2EE"; `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_update_small` -- the nominal path | partial -- nothing forbids an unsealed send; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ZK-002` | `INV` | No symmetric key material MUST be nameable in a wire type. | README pillar "Zero-Knowledge" | crate-graph -- `ambre-protocol` depends on `ambre-core` alone; cargo-deny -- `deny.toml` refuses any dependant of `ambre-crypto` outside `ambre-sync` and `ambre-logic`, so the edit that would make a key type nameable fails CI | none | verified |
 | `ZK-003` | `INV` | Passphrase-to-key derivation (Argon2id) MUST run client-side only. | `ambre-spec-session.md`, `SRV-030`; this spec section 2 | cargo-deny -- `deny.toml` bans `argon2` outside `ambre-crypto`, and the CI `deny` job fails the manifest that declares it | none | verified |
 | `ZK-004` | `INV` | The server process MUST NOT link a crate able to decrypt a document payload, derive a shared secret, or reconstruct a split secret. | this spec section 2; `ambre-spec-server.md`, `SRV-012` | cargo-deny -- the capability bans on `chacha20poly1305`, `x25519-dalek`, `argon2`, `ambre-crypto` and `loro`, run by the CI `deny` job. The three unused declarations that violated this were dropped from `ambre-server` | none | verified |
 | `ZK-005` | `INV` | Presence and cursor data MUST be sealed with the `DocumentKey`, exactly like a delta. | `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_ephemeral` -- it seals an ephemeral frame and opens it, so an unsealed one fails the assertion | none | verified |
 | `ZK-006` | `INV` | Logs and tracing spans MUST NOT carry ciphertext or plaintext payloads -- identifiers, lengths and sequence numbers only. | `ambre-spec-server.md`, `SRV-001`; audit `C1` | human-review -- the reviewer reads every log line and span a change adds, against the comment in `s3.rs` | unheld -- no check reads a log line back, so the guarantee is worth what the review is worth | human-review |
-| `ZK-007` | `INV` | What the relay may learn MUST be limited to `{document_id, pub_key, clock, seq, snapshot_id, nonce, blob size, timestamp, source IP}`; anything outside that set is a leak. | this spec section 2, the boundary table and its accepted leak | none | unheld -- a whitelist has no natural test, and the candidate is an `insta` snapshot over the `WsClientMsg` and `WsServerMsg` shapes | unverified |
-| `ZK-008` | `INV` | A presigned S3 URL MUST be issued only after the ACL check. | `ambre-spec-object-store.md`, `SRV-002` | none | unheld -- no test asserts that a non-member asking for a URL is refused one | unverified |
-| `ZK-009` | `INV` | The two key-derivation domains MUST stay frozen at `ambre-sign-v1` and `ambre-exch-v1`, one context each. | this spec section 2; derived | `ambre_crypto::tests::derive_keys_deterministic` -- the derivation is deterministic and the two domains are independent | partial -- it pins no vector, so a renamed domain keeps the test green and gives every existing account a different key pair | unverified |
+| `ZK-007` | `INV` | What the relay learns MUST be limited to `{document_id, pub_key, clock, seq, snapshot_id, nonce, blob size, timestamp, source IP}`; anything outside that set is a leak. | this spec section 2, the boundary table and its accepted leak | none | unheld -- a whitelist has no natural test, and the candidate is an `insta` snapshot over the `WsClientMsg` and `WsServerMsg` shapes; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ZK-008` | `INV` | A presigned S3 URL MUST be issued only after the ACL check. | `ambre-spec-object-store.md`, `SRV-002` | none | unheld -- no test asserts that a non-member asking for a URL is refused one; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ZK-009` | `INV` | The two key-derivation domains MUST stay frozen at `ambre-sign-v1` and `ambre-exch-v1`, one context each. | this spec section 2; derived | `ambre_crypto::tests::derive_keys_deterministic` -- the derivation is deterministic and the two domains are independent | partial -- it pins no vector, so a renamed domain keeps the test green and gives every existing account a different key pair; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ZK-010` | `INV` | A passphrase MUST cross the client bus in a type that wipes its own bytes when it is dropped. | README pillar "Zero-Knowledge"; audit `H4`, `H5` | type-level -- `RestCommand::Unlock`, `SetupAccount`, `ChangePassphrase` and `RecoverAccount` carry `SecretBytes`, a `Zeroizing` newtype, so a plain `Vec<u8>` on that path does not compile | none | verified |
-| `ZK-011` | `INV` | The Master Seed MUST be moved and never copied: no path may leave a second copy behind. | this spec section 2; derived | type-level -- `MasterSeed` derives no `Clone`, so a duplicate is a compile error rather than a review finding | none | verified |
-| `ZK-012` | `INV` | A passphrase MUST NOT appear in a request the client sends to the relay. | README pillar "Zero-Knowledge"; audit `N4` | none | unheld -- neither the client request type nor the relay one declares a passphrase field, so the rule holds by absence, and nothing fails the day a writer adds one back | unverified |
-| `ZK-013` | `INV` | The relay MUST see no field of an ephemeral frame beyond `document_id`, `pub_key` and `counter`. | `ambre-spec-broadcast.md`, `SRV-050` | none | unheld -- `ambre_server::ws::handler::message::ephemeral_binding_tests::forged_author_key_writes_no_presence` holds the author binding, not the field set, and nothing compares what the frame carries to the three fields named here | unverified |
-| `ZK-014` | `INV` | A presigned S3 URL MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-052` | none | unheld -- the lifetime is one operational figure with a 900 s default, and no upper bound is enforced anywhere | unverified |
+| `ZK-011` | `INV` | The Master Seed MUST be moved and never copied: a path MUST NOT leave a second copy behind. | this spec section 2; derived | type-level -- `MasterSeed` derives no `Clone`, so a duplicate is a compile error rather than a review finding | none | verified |
+| `ZK-012` | `INV` | A passphrase MUST NOT appear in a request the client sends to the relay. | README pillar "Zero-Knowledge"; audit `N4` | none | unheld -- neither the client request type nor the relay one declares a passphrase field, so the rule holds by absence, and nothing fails the day a writer adds one back; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ZK-013` | `INV` | The relay MUST see no field of an ephemeral frame beyond `document_id`, `pub_key` and `counter`. | `ambre-spec-broadcast.md`, `SRV-050` | none | unheld -- `ambre_server::ws::handler::message::ephemeral_binding_tests::forged_author_key_writes_no_presence` holds the author binding, not the field set, and nothing compares what the frame carries to the three fields named here; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ZK-014` | `INV` | A presigned S3 URL MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-052` | none | unheld -- the lifetime is one operational figure with a 900 s default, and no upper bound is enforced anywhere; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 
-* **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1` -- the outbound seal, the
-  inbound open, the full round trip and the snapshot compression -- all measured by `criterion` in
+* **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
+  inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   fourteen rows on its own side, or answers `none` and says why.
-* **Verification.** 6 `verified`, 7 `unverified`, 1 `human-review`. Every row is an `INV`: this
+* **Verification.** 6 `verified`, 7 `untested`, 1 `human-review`. Every row is an `INV`. This
   document owns no gesture, so it declares no operation table, and each rule binds the boundary at
-  every instant. What holds is what the crate graph, `deny.toml` and the type system can refuse: a
-  key type nameable on the wire, `argon2` outside `ambre-crypto`, a decrypting crate linked into
-  the relay, an unsealed presence frame, a passphrase in a type that does not wipe itself, a copied
-  seed. What is loose is every rule stated as an absence -- `ZK-001` covers the nominal path and
-  forbids no unsealed send, `ZK-007` is a whitelist with no natural test, `ZK-008` has no test for
-  the refusal a non-member must get, `ZK-009` is a constant no vector pins, `ZK-012` holds by the
-  absence of a field nothing guards, and `ZK-006` is a comment plus reviewer attention. `ZK-013`
-  and `ZK-014` are what the split of two conjunctions exposed: neither half had a mechanism, and
-  the row each sat in read as covered because its other half was.
+  every instant.
+
+  Six rows hold, and they hold because the crate graph, `deny.toml` and the type system can refuse
+  them. No key type is nameable on the wire, no `argon2` sits outside `ambre-crypto`, no decrypting
+  crate is linked into the relay. No presence frame leaves unsealed, no passphrase sits in a type
+  that does not wipe itself, and no seed is copied.
+
+  What is loose is every rule stated as an absence. `ZK-001` covers the nominal path and forbids no
+  unsealed send. `ZK-007` is a whitelist with no natural test. `ZK-008` has no test for the refusal
+  a non-member must get. `ZK-009` is a constant no vector pins. `ZK-012` holds by the absence of a
+  field nothing guards, and `ZK-006` is a comment plus reviewer attention.
+
+  `ZK-013` and `ZK-014` are what the split of two conjunctions exposed. Neither half had a
+  mechanism, and the row each sat in read as covered because its other half was.
 
 ---
 
@@ -79,13 +84,13 @@ that component's prefix instead.
 
 * `DocumentKey` and `MasterSeed` are `ZeroizeOnDrop` and are never serialized into `ambre-protocol`
   or `ambre-bus`.
-* The Logic to Sync `postMessage` hop carries **decrypted** deltas. That internal boundary is
-  accepted: a structured clone stays inside the user's own browser process, and the Main instance
-  compiles no cryptography, so the keys live only in the Sync worker's own memory.
+* The Logic to Sync `postMessage` hop carries **decrypted** deltas. That internal boundary is accepted,
+  because a structured clone stays inside the user's own browser process. The Main instance compiles
+  no cryptography, so the keys live only in the Sync worker's own memory.
 * Presence and cursor frames are sealed before they leave, exactly like a delta (`ZK-005`).
 
-**The primitives**, all executed in the Sync worker, the sole consumer of `ambre-crypto`:
-XChaCha20-Poly1305 for AEAD, Ed25519 for signatures, X25519 for key agreement, BLAKE2b for
+**The primitives** all execute in the Sync worker, the sole consumer of `ambre-crypto`.
+XChaCha20-Poly1305 for AEAD, Ed25519 for signatures, X25519 for key agreement. BLAKE2b for
 derivation and hashing, Argon2id for the passphrase, HMAC-SHA256 for the commitment tag.
 
 **The key hierarchy.** The four Postgres columns it ends in -- `master_key_enc`, `master_key_salt`,
@@ -123,9 +128,9 @@ impl MasterSeed {
 ```
 
 **A document's name is content.** It is sealed under that document's key like any other payload, so
-the relay stores an opaque blob and never a title. The write path seals it in the Sync worker, the
-read path returns it beside the caller's wrapped key so a never-opened document still shows its
-name, and a document created with no name has none rather than a placeholder. The rules are
+the relay stores an opaque blob and never a title. The write path seals it in the Sync worker. The
+read path returns it beside the caller's wrapped key, so a never-opened document still shows its
+name. A document created with no name has none rather than a placeholder. The rules are
 `SYNC-067` and `SYNC-042`; the display is `ambre-spec-launcher.md`.
 
 **Code.** `crates/ambre-crypto/src/keys.rs` for the hierarchy, `crates/ambre-crypto/src/aead.rs`
@@ -153,7 +158,7 @@ The boundary has no control of its own. What a user meets is what it costs them.
 | The relay is blind by capability, not by discipline | a code-review rule stating that the server must not decrypt | a rule a reviewer must remember is a rule that fails on a busy day. `deny.toml` refuses the dependency itself, so re-granting the relay the power to decrypt becomes a reviewable edit of one file instead of one silent line in a manifest |
 | One key per document, wrapped per member | a per-user key index held server-side | it makes the relay the authority on who may read what, which is the property being removed. Wrapping the document key for each member's exchange key keeps the relay a carrier |
 | The plaintext delta crosses the worker boundary | sealing on the Logic thread, so that no plaintext ever crosses a `postMessage` | it means compiling cryptography into the Main instance, which puts the keys in the same memory as the renderer and the page. A structured clone stays in the user's own process, so the hop costs a copy and buys key isolation |
-| The metadata pattern is an accepted leak, written down | claiming the relay learns nothing at all | it would make the pillar unfalsifiable: a relay that routes must know who writes where and when. `ZK-007` exists to bound that set rather than to deny it |
+| The metadata pattern is an accepted leak, written down | claiming the relay learns nothing at all | it would make the pillar unfalsifiable: a relay that routes must know who writes where and when. `ZK-007` exists to bound that set rather than to refuse it |
 | The media address is a defect, not a second accepted leak | widening the whitelist of `ZK-007` to cover the address | the address is a hash of plaintext, so it answers "does this document contain this file" for any file the relay already holds. That is a capability, not metadata, and accepting it would put a capability inside a list that bounds metadata |
 | The escrow is opt-in and organization-scoped | a platform-wide key escrow for account recovery | a recovery path an owner can use without the member's consent is a second key holder, so it may exist only where an organization already claims that authority, and never for a personal account |
 
@@ -166,9 +171,8 @@ The boundary has no control of its own. What a user meets is what it costs them.
 * **The whitelist has no test.** `ZK-007` names nine fields and nothing compares them to what the
   wire types actually carry. A snapshot over `WsClientMsg` and `WsServerMsg` is the candidate
   mechanism and does not exist.
-* **The derivation domains are pinned by nothing.** `ZK-009` is a constant with no golden vector, so
-  the failure it guards against is silent and total: every account keeps its seed and loses its
-  keys.
+* **The derivation domains are pinned by nothing.** `ZK-009` is a constant with no golden vector. The
+  failure it guards against is silent and total: every account keeps its seed and loses its keys.
 * **The passphrase is copied into a transient buffer.** It crosses the bus in a self-wiping type
   (`ZK-010`), and the per-frame relay then postcard-encodes it into an ordinary buffer for
   `postMessage`. That buffer is not wiped, and no type stops it.

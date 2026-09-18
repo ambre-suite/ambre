@@ -4,7 +4,7 @@
 **Implementation:** design-only
 
 > Copy, cut and paste. Copying inside Ambre keeps the formatting and the structure of what was
-> copied; copying out of it leaves readable plain text; pasting from elsewhere brings the text in.
+> copied. Copying out of it leaves readable plain text. Pasting from elsewhere brings the text in.
 
 ---
 
@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-040` | `POST` | The copied payload MUST be built from the whole selection, and MUST NOT be trimmed to what is on screen. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-040` | `POST` | The copied payload MUST be built from the whole selection, never trimmed to what is on screen. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-108` | `POST` | The payload MUST carry a plain-text mirror of the selection, readable by an application that knows nothing of Ambre. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-109` | `FRAME` | A copy MUST NOT write to the document, and MUST NOT move or shrink the selection it read. | derived | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -47,20 +47,17 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-043` | `POST` | The kept payload MUST be used only while the system clipboard's text still matches it; otherwise the pasted content MUST come from the system clipboard. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-112` | `FRAME` | A paste MUST NOT change a block outside the range it replaces, and MUST NOT reformat the text that surrounds it. | derived | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** none: a copy walks the selection once and a paste is an ordinary insertion, and
-  `ambre-spec-budgets.md` budgets neither. What a very large paste costs is named
-  in section 6.
-* **Boundary.** the system clipboard leaves the application, and it is the one path here that
-  does. What is written to it is the user's own selection, already plaintext on their machine;
-  nothing is encrypted, nothing is sent, and the host performs the write (`PROSE-UI-041`). What
-  the browser then does with the clipboard is outside Ambre's control and is the reason the
-  mirror is gated (`ambre-spec-clipboard.md`).
+* **Budget.** none: a copy walks the selection once, a paste is an ordinary insertion, and
+  `ambre-spec-budgets.md` budgets neither. What a very large paste costs is in section 6.
+* **Boundary.** the system clipboard leaves the application, and it is the one path here that does.
+  It carries the user's own selection, already plaintext on their machine; nothing is encrypted,
+  nothing is sent, and the host performs the write (`PROSE-UI-041`). The browser's own handling is
+  outside Ambre's control, and gates the mirror (`ambre-spec-clipboard.md`).
 * **Verification.** 14 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-UI-041` and `PROSE-UI-105` are compiler-held the day the crate exists, because the browser
+  `PROSE-UI-041` and `PROSE-UI-105` are compiler-held the day the crate exists. The browser
   clipboard type cannot be named from a crate that does not depend on the web bindings.
-  `PROSE-UI-042` is the row a test reaches with two fixtures and no browser: a payload with rich
-  bytes and one without. `PROSE-UI-107` is the one a round-trip answers, and it is the row the
-  feature is for.
+  `PROSE-UI-042` is the row two fixtures reach with no browser: a payload with rich bytes and
+  one without. `PROSE-UI-107` is what a round trip answers.
 
 ---
 
@@ -98,7 +95,7 @@ pub struct ClipboardBlob { pub text: String, pub ambre: Option<Vec<u8>> }
 1. The view asks the Logic thread for the payload (`PROSE-UI-040`); it serializes nothing
    (`PROSE-UI-105`).
 2. The Logic thread walks the selection in the document and answers with the two halves.
-3. The host writes both to the system clipboard on the next frame (`PROSE-UI-041`), and the view
+3. The host writes both to the system clipboard on the next frame (`PROSE-UI-041`). The view
    keeps the payload in memory for a paste back into the same tab.
 
 ```rust
@@ -126,11 +123,11 @@ import, not a paste (`features/ambre-spec-prose-import-export.md`).
 
 **Why the mirror is checked.** The kept payload is the only full-fidelity source, and it stays
 valid only while nothing else has taken the clipboard. Comparing it against the plain text the
-host read is what tells the two apart: a copy in another application replaces the text, and the
+host read is what tells the two apart. A copy in another application replaces the text, and the
 kept payload is then stale (`PROSE-UI-043`).
 
 **Cut.** A cut is a copy and then a deletion of the source range, in that order and never the
-other one (`PROSE-UI-044`); a copy that produced nothing deletes nothing (`PROSE-UI-110`). The
+other one (`PROSE-UI-044`). A copy that produced nothing deletes nothing (`PROSE-UI-110`). The
 deletion is the ordinary cross-paragraph one
 (`features/ambre-spec-prose-text-editing.md section 3`).
 
@@ -150,7 +147,7 @@ deletion is the ordinary cross-paragraph one
 | dropping text into the page | not ruled on: see section 6 |
 
 The legacy chords and the fold of `Ctrl` and `Cmd` are decided for every application in
-`1-Foundations/ambre-spec-commands.md section 2`: Prose takes the shared clipboard identities and
+`1-Foundations/ambre-spec-commands.md section 2`. Prose takes the shared clipboard identities and
 their chord lists, and decodes none of the three itself.
 
 ---
@@ -176,7 +173,7 @@ their chord lists, and decodes none of the three itself.
   text. Making that structure survive is the
   "Cross-app rich paste" Story (`ambre-roadmap.md` POST-V1).
 * **Nothing rules on the size of a payload.** A copy of a whole document builds it in memory
-  twice, once as text and once as bytes, and no rule caps it or says what happens when the system
+  twice, once as text and once as bytes. No rule caps it or says what happens when the system
   clipboard refuses it.
 * **Nothing rules on a paste that carries images.** The rich payload is described as runs and
   block structure, and an image is a reference to a blob the receiving document may not have.

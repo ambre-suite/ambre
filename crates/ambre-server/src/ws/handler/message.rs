@@ -21,12 +21,12 @@ pub(crate) async fn handle_subscribe(
             return;
         }
     };
-    // Rehydrate the clock-validation state if Redis is cold but Postgres kept the
-    // delta history (e.g. a Redis restart). Clients replay their persisted deltas
-    // on reconnect and advance their local clock past what a freshly-empty Redis
-    // knows; without reseeding, their next update fails CLOCK_MISMATCH forever.
-    // Done before the client can send any update (subscribe precedes updates), and
-    // idempotent (MAX semantics), so concurrent subscribers cannot lower a value.
+    // Rehydrate the clock-validation state if Redis is cold but Postgres kept the delta
+    // history (for example a Redis restart). Clients replay their persisted deltas on
+    // reconnect, and advance their local clock past what a freshly-empty Redis knows.
+    // Without reseeding, their next update fails CLOCK_MISMATCH forever. Done before the
+    // client can send any update (subscribe precedes updates), and idempotent (MAX
+    // semantics), so concurrent subscribers cannot lower a value.
     match redis_ops::clock_state_is_cold(&state.redis, &document_id).await {
         Ok(true) => match db::get_clock_state(&state.db, &document_id).await {
             Ok(clock_state) => {
@@ -110,9 +110,10 @@ pub(crate) async fn handle_update(
 
     // Cap the inline delta ciphertext before any signature check or durable
     // write. A CRDT delta is small; a large blob belongs on the media path. This
-    // stops an authorized writer from pushing oversized deltas that are persisted
-    // durably (S3 + Redis pending) and fanned out to every subscriber -- the same
-    // storage/cost abuse the media and snapshot caps close, on the hot path.
+    // stops an authorized writer from pushing oversized deltas. Such deltas are
+    // persisted durably (S3 + Redis pending) and fanned out to every subscriber.
+    // That is the same storage/cost abuse the media and snapshot caps close, on
+    // the hot path.
     let cipher_len = update.ciphertext.0.len();
     if cipher_len > state.config.delta_max_bytes {
         let err = encode_server_msg(&WsServerMsg::Error {
@@ -138,7 +139,7 @@ pub(crate) async fn handle_update(
         return;
     }
 
-    // Re-validate membership on a short TTL (H8): the `Subscribe`-time check is
+    // Re-validate membership on a short TTL (H8). The `Subscribe`-time check is
     // stale after a mid-session revoke, so a revoked member could otherwise keep
     // writing accepted, sequenced updates until they disconnect. On failure the
     // helper drops the subscription so subsequent messages are rejected without a
@@ -153,11 +154,11 @@ pub(crate) async fn handle_update(
     }
 
     // Enforce the write role (owner/editor). Every REST write path gates on the
-    // same set; without this the hot WS write path would let a `viewer` -- a
-    // legitimately invited read-only member who holds the doc key and its own
-    // signing key -- author sequenced, persisted, broadcast deltas. The capability
-    // is cached at Subscribe and refreshed by `membership_still_valid` above, so
-    // this is a map lookup, not a DB hit.
+    // same set. Without this the hot WS write path would let a `viewer` author
+    // sequenced, persisted, broadcast deltas. A viewer is a legitimately invited
+    // read-only member who holds the doc key and its own signing key. The
+    // capability is cached at Subscribe and refreshed by `membership_still_valid`
+    // above, so this is a map lookup, not a DB hit.
     if conn.doc_write_allowed.get(&doc_id) != Some(&true) {
         let err = encode_server_msg(&WsServerMsg::Error {
             code: 403,
@@ -169,12 +170,13 @@ pub(crate) async fn handle_update(
 
     let author_pubkey = update.public_data.pub_key.clone();
     // Bind the authored key to the session identity. The current model is one
-    // signing key per user (`users.signing_pubkey`, carried in the token's `spk`
-    // claim), so a member may only author under their own key. Without this a
-    // member could sign valid updates under unlimited self-generated keys, each
-    // adding a field to the never-pruned `doc:{id}:clocks` hash (unbounded Redis
-    // growth) and attributing edits to a forged identity. Reject the mismatch
-    // before the signature check so the clock hash only ever sees known keys.
+    // signing key per user. That key is `users.signing_pubkey`, carried in the
+    // token's `spk` claim, so a member may only author under their own key.
+    // Without this a member could sign valid updates under unlimited
+    // self-generated keys. Each key adds a field to the never-pruned
+    // `doc:{id}:clocks` hash (unbounded Redis growth), and attributes edits to a
+    // forged identity. Reject the mismatch before the signature check so the
+    // clock hash only ever sees known keys.
     if author_pubkey != conn.signing_pubkey {
         let err = encode_server_msg(&WsServerMsg::Error {
             code: 403,
@@ -220,10 +222,10 @@ pub(crate) async fn handle_update(
 
     // Serialize the full sealed Update up front: it is both what we dead-letter on
     // an index-write failure and what we persist for verbatim replay below.
-    // Encoding a just-decoded Update is effectively infallible, but a request-path
+    // Encoding a just-decoded Update is effectively infallible. But a request-path
     // `.expect()` would panic the whole connection task on the off chance it
-    // isn't; log and abort just this update instead (the seq is already assigned,
-    // so a reconnecting client refetches it from the durable index).
+    // isn't. Log and abort just this update instead: the seq is already assigned,
+    // so a reconnecting client refetches it from the durable index.
     let update_wire = match postcard::to_allocvec(&update) {
         Ok(wire) => wire,
         Err(e) => {
@@ -246,12 +248,13 @@ pub(crate) async fn handle_update(
     {
         // The delta index (Postgres) is the ONLY thing `handle_request_missing`
         // reads to replay this seq. The clock was already consumed atomically in
-        // Redis, so we cannot cleanly reject and let the client retry (a retry at
-        // the same clock would fail CLOCK_MISMATCH). If we merely logged, the delta
+        // Redis, so we cannot cleanly reject and let the client retry. A retry at
+        // the same clock would fail CLOCK_MISMATCH. If we merely logged, the delta
         // would still reach S3 via the pending list but no index row would ever
-        // reference it -- an orphaned, unreplayable object, so live subscribers get
-        // it while a reconnecting client misses it forever. Dead-letter the full
-        // wire so an operator can rebuild the index row (H1) instead of losing it.
+        // reference it. That is an orphaned, unreplayable object: live subscribers
+        // get it while a reconnecting client misses it forever. Dead-letter the
+        // full wire so an operator can rebuild the index row (H1) instead of losing
+        // it.
         tracing::error!("insert_update failed doc={doc_id} seq={seq}: {e}");
         if let Err(dl) =
             redis_ops::push_dead_letter(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
@@ -264,8 +267,8 @@ pub(crate) async fn handle_update(
     if let Err(e) =
         redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
     {
-        // The pending list is the only path this sequenced delta takes to S3, so
-        // a failed push loses it durably after the seq was already assigned and
+        // The pending list is the only path this sequenced delta takes to S3. A
+        // failed push loses it durably after the seq was already assigned and
         // will be acknowledged. Log loudly and dead-letter the full wire so an
         // operator can replay it (H1).
         tracing::error!("append_pending_delta failed doc={doc_id} seq={seq}: {e}");
@@ -301,8 +304,8 @@ pub(crate) async fn handle_ephemeral(
     }
 
     // Cap the ephemeral ciphertext before any broadcast or Redis write. A presence
-    // blob is tiny; this mirrors the `handle_update` delta cap for the fire-and-
-    // forget path so an oversized ephemeral cannot be fanned out to every
+    // blob is tiny. This mirrors the `handle_update` delta cap for the
+    // fire-and-forget path. An oversized ephemeral cannot be fanned out to every
     // subscriber and stored in the presence hash. Fire-and-forget: drop silently.
     if eph.ciphertext.0.len() > state.config.ephemeral_max_bytes {
         return;
@@ -324,9 +327,9 @@ pub(crate) async fn handle_ephemeral(
 
     // Check the ephemeral author key against the session identity, like the
     // `handle_update` check. The presence hash `doc:{id}:presence` is indexed by
-    // `pub_key_hex` and each field self-expires via per-field `HEXPIRE`. If a
-    // member could use any key, they could: (a) attribute a cursor to another
-    // member's identity, (b) overwrite that member's presence entry, and (c) add
+    // `pub_key_hex` and each field self-expires via per-field `HEXPIRE`. Suppose
+    // a member could use any key. They could then attribute a cursor to another
+    // member's identity, overwrite that member's presence entry, and add
     // unlimited fields to the presence hash. Each user has one signing key (`spk`
     // claim), so a member may only send presence under their own key. Ephemerals
     // are fire-and-forget (the client expects no reply here), so drop a mismatch
@@ -337,7 +340,7 @@ pub(crate) async fn handle_ephemeral(
 
     // Verify the envelope signature, like `handle_update`. The relay must not
     // broadcast (or record in the presence hash) a ciphertext the author key did
-    // not actually sign; an unsigned blob would be rejected by every recipient on
+    // not actually sign. An unsigned blob would be rejected by every recipient on
     // open. Fire-and-forget: a bad signature is dropped silently.
     if verify_ephemeral_signature(&eph.public_data.pub_key, &eph).is_err() {
         return;
@@ -382,10 +385,10 @@ pub(crate) async fn handle_request_missing(
     }
 
     // Load the still-pending (not-yet-flushed) deltas ONCE as a `seq -> wire` map.
-    // Each replayed seq is resolved from S3 first and falls back to this map; the
+    // Each replayed seq is resolved from S3 first, and falls back to this map. The
     // old per-seq lookup issued a full `LRANGE` of the whole pending list for
-    // every missed seq inside the concurrent fan-out (O(N^2) on the pre-flush
-    // window). A single load makes the fallback a map lookup.
+    // every missed seq inside the concurrent fan-out. That is O(N^2) on the
+    // pre-flush window. A single load makes the fallback a map lookup.
     let pending = match redis_ops::get_pending_deltas_map(&state.redis, &document_id).await {
         Ok(m) => m,
         Err(e) => {
@@ -396,7 +399,7 @@ pub(crate) async fn handle_request_missing(
 
     // Page through the durable delta index in bounded chunks, emitting one
     // `MissingUpdates` per page. A single hard-capped batch silently truncated a
-    // client more than PAGE_SIZE deltas behind: the client applies the batch and
+    // client more than PAGE_SIZE deltas behind. The client applies the batch and
     // declares itself hydrated, never re-requesting the tail. Paging replays the
     // full history in order across several messages instead.
     const PAGE_SIZE: i64 = 1000;
@@ -412,12 +415,13 @@ pub(crate) async fn handle_request_missing(
             }
         };
         if updates.is_empty() {
-            // Nothing left to replay. A later page simply stops here, but an
-            // EMPTY first page (the client's snapshot already covers every
-            // delta -- the common F5-on-an-existing-document case) must still
-            // be answered: the client gates its hydration-complete signal on
-            // receiving a `MissingUpdates`, so silence here leaves its loading
-            // overlay spinning forever. Send an empty page to release it.
+            // Nothing left to replay. A later page simply stops here. But an
+            // EMPTY first page must still be answered: that is the common
+            // F5-on-an-existing-document case, where the client's snapshot
+            // already covers every delta. The client gates its
+            // hydration-complete signal on receiving a `MissingUpdates`, so
+            // silence here leaves its loading overlay spinning forever. Send
+            // an empty page to release it.
             if first_page {
                 let msg = encode_server_msg(&WsServerMsg::MissingUpdates {
                     document_id,
@@ -438,8 +442,8 @@ pub(crate) async fn handle_request_missing(
         // the pending map until then; together they cover every seq. A delta we
         // cannot locate or decode is skipped (logged), not fatal to the page.
         //
-        // The fetches run CONCURRENTLY: a full replay (no snapshot upload yet)
-        // pulls every delta since genesis, and a sequential `.await` per object
+        // The fetches run CONCURRENTLY. A full replay (no snapshot upload yet)
+        // pulls every delta since genesis. A sequential `.await` per object
         // turned the open into N serial S3 round-trips.
         let pending = &pending;
         let fetches = updates.into_iter().map(|row| {
@@ -498,11 +502,12 @@ pub(crate) async fn handle_request_missing(
 // NOTE (Murmure not implemented): the channel handlers below deliberately skip
 // the subscription ACL, signature verification, and clock/seq path that the
 // document handlers enforce. Murmure is unstarted and no channel path is wired
-// to real data, so this is intentional, NOT an oversight -- do not re-flag it in
-// audits. The MANDATORY hardening to apply before Murmure lands (channel_members
-// ACL, `verify_update_signature` on every ChannelUpdate/Ephemeral, and the
-// `verify_clock_and_assign_seq` Lua path per segment) is `SRV-047` and `SRV-048`
-// in `ambre-spec-broadcast.md`, with the channel design in `ambre-murmure.md`.
+// to real data. This is intentional, NOT an oversight: do not re-flag it in
+// audits. The MANDATORY hardening to apply before Murmure lands is `SRV-047` and
+// `SRV-048` in `ambre-spec-broadcast.md`. That is the channel_members ACL,
+// `verify_update_signature` on every ChannelUpdate/Ephemeral, and the
+// `verify_clock_and_assign_seq` Lua path per segment. The channel design is in
+// `ambre-murmure.md`.
 pub(crate) async fn handle_subscribe_channel(
     _state: &Arc<AppState>,
     conn: &mut WsConnectionState,
@@ -553,10 +558,10 @@ pub(crate) async fn handle_channel_ephemeral(
 /// and reports whether the caller still has access to `doc_id`.
 ///
 /// Returns `true` immediately while the cached check is fresh. Once it is stale
-/// it hits `document_members`; on a revoked membership it drops the subscription,
-/// clears the cached timestamp, and unsubscribes the Redis session so every hot
-/// path (update, presence, replay) stops serving a member revoked mid-session.
-/// The caller decides whether to notify the client.
+/// it hits `document_members`. On a revoked membership it drops the subscription,
+/// clears the cached timestamp, and unsubscribes the Redis session. Every hot
+/// path (update, presence, replay) then stops serving a member revoked
+/// mid-session. The caller decides whether to notify the client.
 async fn membership_still_valid(
     state: &Arc<AppState>,
     conn: &mut WsConnectionState,
@@ -573,7 +578,7 @@ async fn membership_still_valid(
         Ok(role) => {
             conn.doc_access_verified_at.insert(doc_id, Instant::now());
             // Refresh the cached write capability too: a mid-session role change
-            // (e.g. editor demoted to viewer) takes effect within the TTL.
+            // (for example editor demoted to viewer) takes effect within the TTL.
             conn.doc_write_allowed.insert(doc_id, role_can_write(&role));
             true
         }
@@ -644,11 +649,11 @@ pub(crate) fn verify_update_signature(
 /// Verifies the Ed25519 signature over an [`ambre_protocol::Ephemeral`] envelope.
 ///
 /// Presence/cursor blobs are relayed and written to the Redis presence hash. The
-/// durable `Update` path is signature-checked; without the same check here the
-/// relay would broadcast an unauthenticated ciphertext under an author key,
-/// which every recipient's client would then reject on open (a presence-display
-/// DoS). The transcript matches `verify_update_signature` byte-for-byte, with the
-/// `aad` being the postcard of the EPHEMERAL public data.
+/// durable `Update` path is signature-checked. Without the same check here the
+/// relay would broadcast an unauthenticated ciphertext under an author key. Every
+/// recipient's client would then reject it on open, a presence-display DoS. The
+/// transcript matches `verify_update_signature` byte-for-byte, with the `aad`
+/// being the postcard of the EPHEMERAL public data.
 pub(crate) fn verify_ephemeral_signature(
     pubkey: &ambre_core::PublicKey,
     ephemeral: &ambre_protocol::Ephemeral,
@@ -947,7 +952,7 @@ mod ephemeral_binding_tests {
             user_id: UserId::new(),
             signing_pubkey: session_key,
             doc_subscriptions,
-            // Seed the membership cache as freshly verified so these unit tests
+            // Seed the membership cache as freshly verified. These unit tests then
             // exercise their own concern (author-key binding / size cap) without
             // the `membership_still_valid` recheck reaching for a real Postgres.
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
@@ -1055,8 +1060,8 @@ mod ephemeral_binding_tests {
     }
 
     /// An ephemeral carrying the correct author key but an invalid signature must
-    /// be dropped before any presence write (the relay must not broadcast an
-    /// unauthenticated blob).
+    /// be dropped before any presence write. The relay must not broadcast an
+    /// unauthenticated blob.
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn bad_signature_writes_no_presence() {
@@ -1164,7 +1169,7 @@ mod delta_size_cap_tests {
             user_id: UserId::new(),
             signing_pubkey: session_key,
             doc_subscriptions,
-            // Seed the membership cache as freshly verified so these unit tests
+            // Seed the membership cache as freshly verified. These unit tests then
             // exercise their own concern (author-key binding / size cap) without
             // the `membership_still_valid` recheck reaching for a real Postgres.
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
@@ -1228,11 +1233,11 @@ mod delta_size_cap_tests {
     }
 
     /// A read-only (`viewer`) member must not be able to author a delta over the
-    /// WS write path: it is rejected with 403 before any durable write, so the
-    /// pending list stays empty. Without the role gate a viewer -- a legitimately
-    /// invited member holding the doc key and its own signing key -- could push
-    /// sequenced, persisted, broadcast updates despite REST write paths refusing
-    /// them.
+    /// WS write path. It is rejected with 403 before any durable write, so the
+    /// pending list stays empty. Without the role gate a viewer could push
+    /// sequenced, persisted, broadcast updates, despite REST write paths refusing
+    /// them. A viewer is a legitimately invited member holding the doc key and
+    /// its own signing key.
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn viewer_role_delta_writes_no_pending() {

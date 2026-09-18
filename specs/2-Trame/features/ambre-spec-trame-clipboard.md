@@ -17,7 +17,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-124` | `CONC` | Two peers MUST converge when one pastes a block over cells the other is editing. | this spec section 2 | none | unheld -- `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` interleaves fourteen operations over two peers, and its operation set holds neither the paste nor the batch clear a cut sends: the gestures this document owns are the ones the property never generates | unverified |
+| `TRAME-UI-124` | `CONC` | Two peers MUST converge when one pastes a block over cells the other is editing. | this spec section 2 | none | unheld -- `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` interleaves fourteen operations over two peers, and its operation set holds neither the paste nor the batch clear a cut sends: the gestures this document owns are the ones the property never generates; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Copy the selection
 
@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-064` | `POST` | A cut MUST clear its source only once the paste lands. | this spec section 4 | none | unheld -- `finish_paste` is the only site that clears, and it runs after the paste command is sent, and nothing drives a cut end to end | unverified |
+| `TRAME-UI-064` | `POST` | A cut MUST clear its source only once the paste lands. | this spec section 4 | none | unheld -- `finish_paste` is the only site that clears, and it runs after the paste command is sent, and nothing drives a cut end to end; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-125` | `FRAME` | A cut MUST NOT clear its source when the paste did not reach the document. | this spec section 5; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), the early return in `grid_paste_payload` that leaves `finish_paste` unreached, plus the branch inside it that keeps the range when the clear is refused. Reached by cutting a range and pasting while the outbox refuses | none | qa-manual |
 
 ### 1.4 Paste
@@ -38,22 +38,20 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-061` | `POST` | A pasted formula MUST have its relative references shifted by the paste offset. | this spec section 3 | `ambre_trame::logic::tests::group5::paste_reindexes_relative_formula` | none | verified |
-| `TRAME-UI-063` | `POST` | A paste MUST be one undo item, whatever the size of the range. | this spec section 3 | none | unheld -- `paste_range` opens one undo group and pre-materializes every cell so the writes collapse into one commit, and the paste test asserts the values, never the undo | unverified |
-| `TRAME-UI-065` | `POST` | A paste MUST prefer this tab's own copy while the clipboard still carries its ownership token. | this spec section 3 | none | unheld -- the token is written synchronously by the host and read back into `own_copy`, and the ladder below it has no test | unverified |
-| `TRAME-UI-062` | `FRAME` | A blank source cell MUST leave its destination untouched. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it counts exactly two cells in a five-hundred-row payload, so the copy side omits the blanks | partial -- the paste side is not asserted: no test pastes over occupied cells and reads back what the blanks did not overwrite | unverified |
+| `TRAME-UI-063` | `POST` | A paste MUST be one undo item, whatever the size of the range. | this spec section 3 | none | unheld -- `paste_range` opens one undo group and pre-materializes every cell so the writes collapse into one commit, and the paste test asserts the values, never the undo; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-065` | `POST` | A paste MUST prefer this tab's own copy while the clipboard still carries its ownership token. | this spec section 3 | none | unheld -- the token is written synchronously by the host and read back into `own_copy`, and the ladder below it has no test; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-062` | `FRAME` | A blank source cell MUST leave its destination untouched. | this spec section 3 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- it counts exactly two cells in a five-hundred-row payload, so the copy side omits the blanks | partial -- the paste side is not asserted: no test pastes over occupied cells and reads back what the blanks did not overwrite; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** none: a copy serialises the selection once, and
   `ambre-spec-budgets.md` budgets no clipboard operation.
 * **Boundary.** the OS clipboard carries the selection out of the application, in plaintext, by the
   user's own gesture. `ambre-spec-clipboard.md` fixes what it may hold and the window it may be
   written in. Nothing here reaches the relay or holds a key.
-* **Verification.** 3 `verified`, 5 `unverified`, 1 `qa-manual`. The three that hold are the three that live in
-  the Logic thread, where a test can reach them, and one of them is stronger than it was written:
-  the copy test asserts the empty delta, so `TRAME-UI-060` no longer rests on the signature alone.
-  Everything above the seam -- the ownership token and the cut -- is browser state, and the gap is
-  the same one the edit session has. Reading the cut end to end found the decision of section 5
-  undone by the code: the source clear is sent whether or not the paste was, which is the one path
-  in this document that loses data outright.
+* **Verification.** 3 `verified`, 5 `untested`, 1 `qa-manual`. What holds is the three rules that
+  live in the Logic thread, where a test can reach them. The copy that writes no delta is among
+  them. What is loose is everything above the seam -- the ownership token and the cut -- browser
+  state, the gap the edit session has. The cut is worse: the source clear is sent
+  whether or not the paste was, against section 5, and it loses data outright.
 
 ---
 
@@ -140,17 +138,17 @@ a cut deletes it. The grid range is only consulted in navigation mode.
 * **The module header contradicts its own file.** `logic/clipboard.rs` opens with "copy and cut are
   pure UI-thread operations", and `copy_range` sits forty lines below it. `TRAME-UI-059` is the rule
   that says which one is true.
-* **A cut across two peers.** The clear is a separate command from the paste, so a cut is two undo
-  items and a concurrent edit inside the source range races with the clear. No rule covers either.
+* **A cut across two peers.** The clear is a separate command from the paste. A cut is two undo
+  items, and a concurrent edit inside the source range races with the clear. No rule covers either.
 * **A paste that lands past the grid.** The destination is clamped for the selection but nothing
   refuses a payload whose extent runs past the last row or column.
 * **No paste is ever refused.** `TrameEvent::PasteRejected` is declared in `ambre-bus` and matched
-  twice in the chrome, and no site in the workspace constructs it: the toast section 4 draws has no
+  twice in the chrome, and no site in the workspace constructs it. The toast section 4 draws has no
   producer, so a paste that cannot land says nothing.
 * **A dropped paste still clears the cut** (`TRAME-UI-125`). The paste and the source clear are two
   commands, and only the second one is guaranteed to be sent. `BUS-018` is the shared rule and it is
   `unimplemented`, so nothing here holds the range.
 * **A cut leaves the formatting of its source behind.** The clear writes empty text through
-  `SetCellsBatch` and touches neither the style register nor the bold and italic sets, so the source
-  keeps its formatting while a copy of a blank-but-styled cell carries none of it. No rule says
+  `SetCellsBatch` and touches neither the style register nor the bold and italic sets. The source
+  keeps its formatting, while a copy of a blank-but-styled cell carries none of it. No rule says
   which of the two is right.

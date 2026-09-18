@@ -79,8 +79,8 @@ fn string_literal(input: &str) -> nom::IResult<&str, String> {
 }
 
 /// `TRUE` / `FALSE`, matched as a whole word only. A bareword that merely starts
-/// with one -- a named range `TRUEVALUE`, a sheet `FALSEY` -- must reach the name
-/// and sheet parsers intact instead of leaving its tail as trailing input.
+/// with one must reach the name and sheet parsers intact. A named range
+/// `TRUEVALUE` or a sheet `FALSEY` must not leave its tail as trailing input.
 fn parse_bool(input: &str) -> nom::IResult<&str, bool> {
     let (rest, b) = alt((value(true, tag("TRUE")), value(false, tag("FALSE")))).parse(input)?;
     if rest.starts_with(|c: char| c.is_alphanumeric() || c == '_') {
@@ -159,7 +159,7 @@ fn sheet_name(input: &str) -> nom::IResult<&str, String> {
 }
 
 /// A stable sheet id token in canonical form: `#` followed by id characters
-/// (hex digits and `_`, e.g. `#s0` or `#00..0_0000002a`). The id may start with
+/// (hex digits and `_`, for example `#s0` or `#00..0_0000002a`). The id may start with
 /// a digit, so a plain `identifier` parser does not fit.
 fn sheet_id_token(input: &str) -> nom::IResult<&str, String> {
     let (input, _) = char('#').parse(input)?;
@@ -191,11 +191,11 @@ fn sheet_qualified(input: &str) -> nom::IResult<&str, Expr> {
     ))
 }
 
-/// An error literal (`#REF!`, `#DIV/0!`, ...). The renderer emits these whenever
-/// a rewrite invalidates a reference: a paste that drives one off the grid
-/// (`shift_formula`), or a sheet qualifier that no longer resolves. That text is
-/// written back to the CRDT and re-parsed, so the grammar has to read back
-/// everything the renderer writes -- otherwise `=#REF!` settles on `#PARSE!`.
+/// An error literal (`#REF!`, `#DIV/0!`, ...). The renderer emits these whenever a
+/// rewrite invalidates a reference. That covers a paste that drives one off the
+/// grid (`shift_formula`), or a sheet qualifier that no longer resolves. That text
+/// is written back to the CRDT and re-parsed. The grammar therefore has to read
+/// back everything the renderer writes, otherwise `=#REF!` settles on `#PARSE!`.
 ///
 /// `#PARSE!(msg)` is deliberately absent: evaluation produces it, no AST holds it.
 fn error_literal(input: &str) -> nom::IResult<&str, FormulaError> {
@@ -433,6 +433,11 @@ fn expr(input: &str) -> nom::IResult<&str, Expr> {
 // -----------------------------------------------------------------------------
 
 /// Parse a formula string (without the leading `=`) into an [`Expr`] AST.
+///
+/// # Errors
+///
+/// A message for an empty formula, and one for trailing input the grammar does
+/// not take. A parse failure names the text it stopped near.
 pub fn parse_formula(input: &str) -> Result<Expr, String> {
     if input.trim().is_empty() {
         return Err("empty formula".into());
@@ -463,6 +468,12 @@ pub fn parse_formula(input: &str) -> Result<Expr, String> {
 /// `default_sheet` is the sheet the formula itself lives on (its unqualified
 /// references resolve there). Returns an error string for an unknown sheet name
 /// or undefined name.
+///
+/// # Errors
+///
+/// A message for a sheet display name that resolves to nothing, and for an
+/// undefined name. A deleted sheet is not an error here: it evaluates to
+/// `#REF!`.
 pub fn resolve_refs(expr: Expr, default_sheet: u16, ctx: &dyn FormulaCtx) -> Result<Expr, String> {
     match expr {
         Expr::CellRef(mut r) => {

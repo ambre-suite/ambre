@@ -1,7 +1,7 @@
 //! Secret key types and master-seed derivation.
 //!
 //! [`MasterSeed`] is the single root secret derived from the user's passphrase
-//! at login; it deterministically yields the Ed25519 signing key and the X25519
+//! at login. It deterministically yields the Ed25519 signing key and the X25519
 //! exchange key via domain-separated BLAKE2b. [`DocumentKey`] is the symmetric
 //! per-document key used for AEAD and the HMAC commitment tag.
 //!
@@ -56,7 +56,7 @@ impl MasterSeed {
         Self(random::bytes::<32>())
     }
 
-    /// Reconstructs a master seed from raw bytes (e.g. after decryption).
+    /// Reconstructs a master seed from raw bytes (for example after decryption).
     pub const fn from_array(bytes: [u8; 32]) -> Self {
         Self(bytes)
     }
@@ -76,7 +76,7 @@ impl MasterSeed {
     }
 
     /// Returns the raw seed bytes for recovery-word encoding. This is the one
-    /// sanctioned escape hatch that exposes the root seed; its name flags that
+    /// sanctioned escape hatch that exposes the root seed. Its name flags that
     /// the caller is handling recovery material and must not retain it.
     pub fn recovery_bytes(&self) -> &[u8; 32] {
         &self.0
@@ -85,6 +85,10 @@ impl MasterSeed {
     /// Seals the raw seed under `key` (the passphrase-derived user key) with the
     /// given `aad`, for storage as the server-side passphrase-wrapped master key.
     /// The raw seed never leaves this crate on this path.
+    ///
+    /// # Errors
+    ///
+    /// [`CryptoError::EncryptionFailed`] from the AEAD.
     pub fn wrap_for_storage(
         &self,
         key: &DocumentKey,
@@ -105,7 +109,7 @@ impl DocumentKey {
         Self(random::bytes::<32>())
     }
 
-    /// Builds a document key from raw bytes (e.g. after X25519 unwrap).
+    /// Builds a document key from raw bytes (for example after X25519 unwrap).
     pub const fn from_array(bytes: [u8; 32]) -> Self {
         Self(bytes)
     }
@@ -147,6 +151,11 @@ impl FileKey {
     /// milliseconds per call. It runs in the Sync worker, which holds an event
     /// loop of its own, so the interface keeps painting while it works
     /// (`ARCH-004`).
+    ///
+    /// # Errors
+    ///
+    /// [`CryptoError::Argon2Failed`] from the first step, on a `salt` Argon2id
+    /// refuses. The BLAKE2b pass is infallible.
     pub fn from_passphrase(passphrase: &[u8], salt: &[u8]) -> Result<Self, CryptoError> {
         let mut intermediate = crate::passphrase::derive_user_key(passphrase, salt)?;
         let key = Self(derive32(FILE_DOMAIN, &intermediate));
@@ -161,6 +170,11 @@ impl FileKey {
     /// Sealing needs a salt no caller may choose, so the draw belongs on this
     /// side of the crate boundary, not behind a public CSPRNG accessor.
     /// The length is [`ambre_core::SALT_LEN`], the header field it fills.
+    ///
+    /// # Errors
+    ///
+    /// [`CryptoError::Argon2Failed`] from [`Self::from_passphrase`]. The salt it
+    /// draws is [`SALT_LEN`] bytes wide, which Argon2id accepts.
     pub fn for_new_file(passphrase: &[u8]) -> Result<(Self, [u8; SALT_LEN]), CryptoError> {
         let salt = random::bytes::<SALT_LEN>();
         let key = Self::from_passphrase(passphrase, &salt)?;

@@ -4,10 +4,10 @@
 // (`ambre-spec-commands.md`, UI-THREAD-019).
 //
 // The registry carries an opaque string handle, so `ambre-commands` keeps an
-// empty dependency table (UI-THREAD-027) and the icon set of one application
-// stays out of the shared crate. This is the one place that maps a handle to
-// the asset, and it is a rendering concern: the icon a command declares is
-// still declared once, in `ui::commands`.
+// empty dependency table (UI-THREAD-027). The icon set of one application stays
+// out of the shared crate. This is the one place that maps a handle to the
+// asset, and it is a rendering concern. The icon a command declares is still
+// declared once, in `ui::commands`.
 // ============================================================================
 
 use ambre_commands::IconId;

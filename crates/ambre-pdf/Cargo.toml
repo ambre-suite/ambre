@@ -14,3 +14,6 @@ peniko = { workspace = true }
 # `KrillaSurface::draw_image` can embed Toile media (`toile-pdf-export`,
 # `toile-media`).
 krilla = { workspace = true, features = ["raster-images"] }
+
+[lints]
+workspace = true

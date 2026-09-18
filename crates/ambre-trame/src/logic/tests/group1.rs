@@ -97,10 +97,10 @@ fn formatting_survives_snapshot_roundtrip() {
     assert!(a1.italic, "A1 must stay italic after reload");
 }
 
-/// `SetCellStyle` applies a [`StylePatch`] over the selection, persists it in
-/// the CRDT (survives a snapshot round-trip), reformats numeric display text
-/// per the number format, and reports the active cell's resolved style for the
-/// toolbar (`trame-cell-styles`).
+/// `SetCellStyle` applies a [`StylePatch`] over the selection and persists it
+/// in the CRDT, which survives a snapshot round-trip. It reformats numeric
+/// display text per the number format, and reports the active cell's resolved
+/// style for the toolbar (`trame-cell-styles`).
 #[test]
 fn set_cell_style_round_trips_and_formats_numbers() {
     use crate::{CellFormat, HAlign, StylePatch};
@@ -221,9 +221,10 @@ fn edited_text_overrides_generated_label() {
     assert_eq!(cells[0].text, "");
 }
 
-/// A value written far down the grid is keyed by its row/column stable ids,
-/// survives a snapshot round-trip, and resolves at the same grid position in
-/// a fresh state -- proving the LID-keyed persistence + `SheetIndex` rebuild.
+/// A value written far down the grid is keyed by its row/column stable ids.
+/// It survives a snapshot round-trip and resolves at the same grid position
+/// in a fresh state. That proves the LID-keyed persistence + `SheetIndex`
+/// rebuild.
 #[test]
 fn far_cell_survives_snapshot_roundtrip() {
     let mut state = TrameState::new();
@@ -361,8 +362,8 @@ fn named_range_defines_resolves_and_deletes() {
     );
 
     // Deleting the name stops it resolving: its consumer no longer computes
-    // the sum (the engine drops the now-unresolvable formula, so the cell
-    // falls back to its raw text rather than the stale 15).
+    // the sum. The engine drops the now-unresolvable formula, so the cell
+    // falls back to its raw text rather than the stale 15.
     restored.handle_command(TrameCommand::DeleteName {
         name: "TOTAL".to_owned(),
     });
@@ -375,9 +376,9 @@ fn named_range_defines_resolves_and_deletes() {
 }
 
 /// End-to-end of the reported bug: plain numeric literals typed into A1/B1
-/// must feed `=SUM(A1:B1)` (display "3"), and the formula cell's `raw` must
-/// carry the formula source (so the in-cell editor reopens on the formula,
-/// not its result).
+/// must feed `=SUM(A1:B1)` (display "3"). The formula cell's `raw` must
+/// carry the formula source, so the in-cell editor reopens on the formula,
+/// not its result.
 #[test]
 fn sum_over_plain_literals_and_formula_raw_in_viewport() {
     let mut state = TrameState::new();
@@ -417,8 +418,8 @@ fn sum_over_plain_literals_and_formula_raw_in_viewport() {
     assert_eq!(c1.raw, "=SUM(A1:B1)", "editor must reopen on the formula");
 }
 
-/// The same scenario after a reseed (the path a remote echo / snapshot
-/// restore takes): plain literals must still feed the formula so the
+/// The same scenario after a reseed, the path a remote echo / snapshot
+/// restore takes. Plain literals must still feed the formula, so the
 /// refreshed viewport shows "3", not the optimistic formula text.
 #[test]
 fn sum_over_plain_literals_survives_reseed() {
@@ -507,8 +508,8 @@ fn multi_sheet_isolation_and_name_lookup() {
 }
 
 /// A cross-sheet formula is stored bound to the stable `sheet_id` (`#id`
-/// form), so a later rename keeps it computing and its formula-bar text
-/// follows the new name; a reorder is inert; deleting the target sheet turns
+/// form). A later rename keeps it computing, and its formula-bar text
+/// follows the new name. A reorder is inert; deleting the target sheet turns
 /// it into `#REF!` (`trame-sheets`).
 #[test]
 fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
@@ -583,8 +584,8 @@ fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
 }
 
 /// Undo reverts the last local edit; redo reapplies it. The `UndoManager`
-/// records one item per command (one commit), so a single undo restores the
-/// cell to its pre-edit (empty) label and a single redo brings the value back.
+/// records one item per command (one commit). A single undo restores the cell
+/// to its pre-edit (empty) label, and a single redo brings the value back.
 #[test]
 fn undo_then_redo_round_trips_a_cell_edit() {
     let mut state = TrameState::new();

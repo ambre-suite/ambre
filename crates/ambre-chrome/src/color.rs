@@ -1,17 +1,18 @@
 // ambre-chrome/src/color.rs
 // ============================================================================
 // Shared, app-agnostic colour control: a single toolbar button toggling a
-// popover that combines a reset entry ("Automatic" / "No fill"), a curated
-// swatch palette, and an embedded native `<input type="color">` for arbitrary
-// colours. Originally Trame's cell fg/bg picker (`trame-cell-styles`); promoted
-// here so Toile's style inspector (`toile-styles`) shares the very same control.
+// popover. The popover combines a reset entry ("Automatic" / "No fill"), a
+// curated swatch palette, and an embedded native `<input type="color">` for
+// arbitrary colours. Originally Trame's cell fg/bg picker (`trame-cell-styles`);
+// promoted here so Toile's style inspector (`toile-styles`) shares the very same
+// control.
 //
 // The value is a packed `u32`. With `alpha = false` (default) it is a plain
 // `0xRRGGBB` (Trame's cells): the native picker covers the whole colour. With
 // `alpha = true` it is a packed `0xAARRGGBB` (Toile's `ElementStyle` fill /
-// stroke): the native `<input type="color">` still drives the RGB channel (the
-// widget has no alpha), and an extra `<input type="range">` drives the top alpha
-// byte -- the two combine into the ARGB the caller stores.
+// stroke). The native `<input type="color">` still drives the RGB channel, since
+// the widget has no alpha. An extra `<input type="range">` drives the top alpha
+// byte, and the two combine into the ARGB the caller stores.
 // ============================================================================
 
 use leptos::html;
