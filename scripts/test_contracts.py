@@ -362,5 +362,32 @@ class Tables(unittest.TestCase):
         self.assertEqual([], contracts.table_defects("spec.md", self.table("RULE")))
 
 
+class IdRanges(unittest.TestCase):
+    """The index that joins an id to the file declaring it."""
+
+    def test_adjacent_numbers_fold_into_one_run(self):
+        self.assertEqual("TRAME-151..154", contracts.id_ranges(
+            ["TRAME-151", "TRAME-152", "TRAME-153", "TRAME-154"]))
+
+    def test_a_hole_opens_a_second_run(self):
+        self.assertEqual("TRAME-017,121", contracts.id_ranges(["TRAME-121", "TRAME-017"]))
+
+    def test_the_three_digits_are_kept(self):
+        """An id is written `TRAME-017` everywhere else, and a run that printed
+        `17` would be a second spelling of the same key."""
+        self.assertEqual("TRAME-017", contracts.id_ranges(["TRAME-017"]))
+
+    def test_two_prefixes_are_two_cells(self):
+        """One document declares from its application's family and from the
+        sub-families beside it, and the runs never cross a prefix."""
+        self.assertEqual(
+            "TRAME-019..020; TRAME-UI-009",
+            contracts.id_ranges(["TRAME-019", "TRAME-UI-009", "TRAME-020"]),
+        )
+
+    def test_a_repeated_id_is_listed_once(self):
+        self.assertEqual("ARCH-001", contracts.id_ranges(["ARCH-001", "ARCH-001"]))
+
+
 if __name__ == "__main__":
     unittest.main()

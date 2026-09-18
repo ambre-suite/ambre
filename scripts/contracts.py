@@ -867,7 +867,32 @@ def app_of(spec: str) -> str:
     return head if head in APPS else "other"
 
 
-def render_ledger(per_spec: dict[str, Counter], total: Counter) -> str:
+def id_ranges(ids: list[str]) -> str:
+    """The ids of one document, as runs: `TRAME-017,121,123..124,151..154`.
+
+    A document declares ids from one prefix family and rarely in one block, so
+    the list is folded into runs per prefix. Whole it would be a ledger of
+    thousands of lines, which is a file nobody opens; folded it is one line per
+    document, and a reader resolves `TRAME-088` by the run it falls in.
+    """
+    runs_by_prefix: dict[str, list[int]] = defaultdict(list)
+    for rid in ids:
+        prefix, number = rid.rsplit("-", 1)
+        runs_by_prefix[prefix].append(int(number))
+    cells = []
+    for prefix, numbers in sorted(runs_by_prefix.items()):
+        runs: list[tuple[int, int]] = []
+        for number in sorted(set(numbers)):
+            if runs and number == runs[-1][1] + 1:
+                runs[-1] = (runs[-1][0], number)
+            else:
+                runs.append((number, number))
+        spans = ",".join(f"{a:03d}" if a == b else f"{a:03d}..{b:03d}" for a, b in runs)
+        cells.append(f"{prefix}-{spans}")
+    return "; ".join(cells)
+
+
+def render_ledger(per_spec: dict[str, Counter], total: Counter, declared: dict[str, str]) -> str:
     """The ledger file, whole. This is the only place its text is written."""
     shipped = sum(total[s] for s in STATUSES if s != "unimplemented")
     loose = sum(total[s] for s in LOOSE)
@@ -925,6 +950,23 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter) -> str:
             f"| `{Path(spec).name}` | {sum(counts.values())} | {built} | "
             f"{counts['verified']} | {slack or ''} | {counts['unimplemented'] or ''} |"
         )
+
+    ids_by_spec: dict[str, list[str]] = defaultdict(list)
+    for rid, spec in declared.items():
+        ids_by_spec[Path(spec).name].append(rid)
+    lines += [
+        "",
+        "## WHICH DOCUMENT DECLARES AN ID",
+        "",
+        "> A citation carries an id and never a path, and the corpus mints an id once. This is the",
+        "> one place the two are joined: find the run the number falls in, and the row names the",
+        "> file. Every document is here, including the ones with nothing shipped.",
+        "",
+        "| Document | Ids |",
+        "| :--- | :--- |",
+    ]
+    for name, ids in sorted(ids_by_spec.items()):
+        lines.append(f"| `{name}` | {id_ranges(ids)} |")
     lines.append("")
     return "\n".join(lines)
 
@@ -1122,7 +1164,7 @@ def main() -> int:
         print(line)
 
     target = SPECS / LEDGER
-    text = render_ledger(per_spec, total)
+    text = render_ledger(per_spec, total, seen)
     if "--write" in sys.argv:
         target.write_text(text)
         print(f"\nwritten {target.relative_to(ROOT)}: {sum(total.values())} rows")
