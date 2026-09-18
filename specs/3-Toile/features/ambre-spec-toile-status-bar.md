@@ -1,4 +1,4 @@
-# AMBRE -- FEATURE: THE STATUS BAR
+# AMBRE -- FEATURE: THE TOILE STATUS BAR
 
 **Type:** Vertical (feature)
 **Implementation:** partial -- the band and the aggregates ship; nothing drives the refresh under test.

@@ -1,4 +1,4 @@
-# AMBRE -- FEATURE: LIVE PRESENCE
+# AMBRE -- FEATURE: LIVE PRESENCE ON THE BOARD
 
 **Type:** Vertical (feature)
 **Implementation:** implemented

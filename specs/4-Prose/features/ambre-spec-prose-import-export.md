@@ -1,4 +1,4 @@
-# AMBRE -- FEATURE: IMPORT AND EXPORT
+# AMBRE -- FEATURE: PROSE IMPORT AND EXPORT
 
 **Type:** Vertical (feature)
 **Implementation:** design-only

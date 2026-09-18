@@ -84,6 +84,18 @@ round trip is not`. Nothing else may follow it, not even a full stop. `implement
 spelling of a three-value vocabulary, and a gate that forgives it reads half the field.
 `spec_shape.py` fails on any other value.
 
+**Each field opens its own line, and the title is unique in the corpus.** Two fields on one line
+read as one field to a gate anchored on the line, and one document spelled its header that way. A
+title is what a search result and a diff hang the document on. Twenty-one documents shared one with
+another: four spelled `UNDO AND REDO`, four `PDF EXPORT`, three `IMPORT AND EXPORT`.
+
+**What disambiguates is free, and the corpus already does it two ways.** A domain word, where one
+exists: `SELECTION ON THE BOARD` against `CARET AND SELECTION`. The application name otherwise,
+which is what `THE TRAME ENGINE` and `TRAME CRDT SCHEMA` already use. A shared behaviour needs it
+too: `TRAME PDF EXPORT` against the horizontal `PDF EXPORT` it is a half of. The horizontal document
+keeps the bare name, because it is the one the others cite. `spec_shape.py` fails on a shared title
+and on a field that shares a line.
+
 ### B. The contract table
 
 **Both templates carry one, and the grammar below is normative.** It is the shape of a spec, so it
@@ -434,9 +446,15 @@ one application has among the framework specs.
 | 4. SURFACE | every trigger, and everything the user touches: menus, keys, selection, rendering, the events that reach them | the machinery it moves through is specified elsewhere and cited, never respecified |
 | 5. REJECTED ALTERNATIVES | one table: the decision, the alternative it refused, and why | **one row per alternative**, not per decision: a decision that refused two shapes states each on its own line, with the `Decision` cell repeated. `Decision` is a short anchor, never a restatement of the rule; `Why not` is uncapped, and it is the only place the measurement behind a refusal is written |
 | 6. NOT BUILT, AND NOT YET RULED | what is broken, what is unbuilt, what no rule covers | a behaviour with no contract row is named here or it is invisible. This section makes a gap findable |
+| 7. WHAT THIS DOCUMENT DOES NOT OWN | one row per question, and the document that owns it | **mandatory in a horizontal document, optional in a vertical one.** A horizontal document is what the corpus routes through, so the question it refuses is what sends a reader to the right file. A vertical document is reached by its feature name and rarely needs one. The rejected table refuses a shape; this refuses a subject |
 
 The Contract is the need, the Model is the design. Two blocks, never two files: splitting them
 re-creates at ninety degrees the fragmentation this shape exists to remove.
+
+**The last section is the cheapest in the corpus.** The reason is the same as in a schema document:
+a question with no owner lands in whichever file mentions it first. Thirty-six horizontal documents
+carried it before this table declared it, which is how a convention becomes a rule here.
+Its number moves down when a document omits the two-peer table, exactly like the five before it.
 
 **Where the prose goes when it leaves.** A spec is verbose less because it explains too much than
 because its rules sit in the wrong place.
@@ -464,7 +482,7 @@ top of the name adds an indirection and buys nothing.
 | :--- | :--- | :--- |
 | Header | the four lines of section 1.A | it owns identity, keys and merge granularity; it owns no gesture, no permission, no event |
 | 0. SCOPE, AND THE MENTION RULE | the mention table below, and the two budgets with their overflow destinations | stated in the document, so the next writer meets it before adding to the file |
-| 1. INVARIANTS | rows about the **format**: identity, key shape, what may never enter the document, the version duty, then the three answers of section 1.B | the prefix is the application's, shared with its other documents: one numbering, no renumbering. Every row is `INV`: a schema owns no gesture, so it owns no operation and declares no `PRE`, `POST`, `FRAME` or `FAIL` |
+| 1. INVARIANTS | rows about the **format**: identity, key shape, what may never enter the document, the version duty, then the three answers of section 1.B | the prefix is the application's, shared with its other documents: one numbering, no renumbering. Every row is `INV` or `CONC`: a schema owns no gesture, so it owns no operation and declares no `PRE`, `POST`, `FRAME` or `FAIL`. A `CONC` row states what two concurrent writers converge on, and a schema carries no two-peer table: the scenario belongs to the feature document that owns the gesture |
 | 2. IDENTITY | the identity type, its rendering, its width, and the key that joins two halves | both halves of the shape are decisions, and what each refused sits in `6. REJECTED ALTERNATIVES` |
 | 3. CONTAINERS | one row per container: name, Loro type, key, value, LWW unit, owning feature, `built` or `design` | the LWW unit is the column a reader comes for: it names what two concurrent writers race for. State what an absent key means |
 | 4. HIERARCHY | the container tree as a **nested bullet list** | never a diagram, never ASCII art (section 0) |
@@ -493,8 +511,13 @@ never restate the format.**
 | :--- | :--- | :--- |
 | `specs/ambre-roadmap.md` | epics, then one row per story: a checkbox, a name, its milestone tag, the features it touches | the only place anything is scheduled, and one file for every application: scheduling is cross-cutting, so a roadmap per application writes each cross-application dependency twice. A ticked story stays while its epic is open, which is what lets a reader say "eight of eleven, these three remain". The checkbox is legitimate here and nowhere else |
 | `specs/ambre-roadmap-journal.md` | closed epics, cut from the roadmap verbatim the day they close | never planning |
-| `specs/<app>/ambre-<app>-inventory.md`, one per application | name, scope, and a state derived from the status of the feature's contract rows | an aggregation with no design content, so it **is** generated, unlike the schema document. Never edited by hand: `feature_inventory.py` writes it, and fails when the file on disk is not what it would write |
+| `specs/<layer>/ambre-<layer>-inventory.md`, one per layer | name, scope, and a state derived from the status of the feature's contract rows | an aggregation with no design content, so it **is** generated, unlike the schema document. Never edited by hand: `feature_inventory.py` writes it, and fails when the file on disk is not what it would write. The three applications carry one, and so does `1-Foundations`: it is the layer every other document routes through, and it was the one with no way to ask which file owns a subject |
 | `specs/1-Foundations/ambre-spec-budgets.md` | one section per class of budget, one row per figure: the operation, the target, the thread, and the mechanism that measures it | the one register every budget of the workspace is a row of, so no spec carries a figure of its own. It states no rule, so it declares no contract table and carries no `Implementation` field. Hand-written, because a target is a decision: nothing can derive it. It is held to the prose cap and to the long-line rule like any document, and it is the reason `ambre-spec-architecture.md` needed no template of its own |
+| `specs/ambre-glossary.md` | one row per term: the gloss, the synonyms it forbids, the document that defines it | a register, not a specification. It states no rule of its own, so it declares no contract table and carries no `Implementation` field. The gloss names an idea and never restates the rule, because a gloss carrying a condition is a second specification. `prose.py` reads the `Forbidden` column and fails on any word it names |
+| `specs/1-Foundations/ambre-contract-ledger.md` | the roll-up of every contract row: the totals per status, then one row per document, then the index that joins an id to the file declaring it, one row per document and the ids folded into runs | generated by `contracts.py`, never edited. It reports state and carries no fact of its own, so no document cites a number from it. The index is the half a reader needs and a roll-up cannot give: an id in a code comment or a citation resolves to one file without a search. One line per id would be a ledger of thousands of lines, which is a file nobody opens |
+| `specs/1-Foundations/ambre-spec-testing.md` | the mechanism ladder, the regime per component shape, the three tiers, the two seams, the belt per crate | **the method, and the only place it lives.** It governs the `Verification` column of every document, so it declares no contract table of its own: a rule about how a rule is held would be held by itself. It is normative, and it wins where this file disagrees with it |
+| `specs/audits/<name>.md` | numbered findings, each dated, each carrying what it costs and what closes it | a dated record, so it is out of the coordinate namespace: `spec_refs.py` reads no section number in it. It is a join target, and `contracts.py` checks the join both ways -- a finding no row cites fails, and a row citing no finding of that number fails. It is never rewritten to match the code; a finding closes, it does not disappear |
+| `specs/Todo/ambre-<app>.md` | a sketch: the vision, the flow, the shape the application would take | **an application that has not started, and a sketch is not a specification.** It carries no contract table, no `Implementation` field and no section of either template, because the grammar costs more than it buys before a single row is falsifiable. Nothing cites it, and no gate reads it. The day the application starts, the sketch is replaced by a schema document and one feature document per feature; it is never migrated in place |
 
 ---
 

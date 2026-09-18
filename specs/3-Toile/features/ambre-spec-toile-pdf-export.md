@@ -1,8 +1,7 @@
-# AMBRE -- FEATURE: PDF EXPORT
+# AMBRE -- FEATURE: TOILE PDF EXPORT
 
-**Type:** Vertical (feature) **Implementation:** partial -- a File menu entry builds the pages, assembles the
-file and hands it to the browser. A picture lands at thumbnail resolution, and the board stops accepting edits
-until the file is out.
+**Type:** Vertical (feature)
+**Implementation:** partial -- the file reaches the browser; a picture lands at thumbnail resolution
 
 > Toile's half of the shared PDF export (`ambre-spec-pdf-export.md`): one page per slide, and the
 > clip that keeps a page to its own frame.

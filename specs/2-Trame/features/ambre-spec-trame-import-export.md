@@ -1,4 +1,4 @@
-# AMBRE -- FEATURE: IMPORT AND EXPORT
+# AMBRE -- FEATURE: TRAME IMPORT AND EXPORT
 
 **Type:** Vertical (feature)
 **Implementation:** partial -- CSV and the native file ship; the two Excel paths are a design.

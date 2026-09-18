@@ -157,6 +157,38 @@ class Header(unittest.TestCase):
         text = doc("**Type:** feature", *([""] * 8), "**Implementation:** implemented")
         self.assertEqual(["header"], kinds(spec_shape.header_issues(text)))
 
+    def test_two_fields_on_one_line_are_one_field(self):
+        """A substring test read both and one document spelled them that way.
+        The second field opens no line, so the reader scanning the left margin
+        finds one field, and this is what the anchored test refuses."""
+        text = doc("**Type:** Vertical (feature) **Implementation:** implemented")
+        self.assertEqual(["header"], kinds(spec_shape.header_issues(text)))
+
+    def test_each_field_on_its_own_line_passes(self):
+        text = doc("**Type:** Vertical (feature)", "**Implementation:** implemented")
+        self.assertEqual([], list(spec_shape.header_issues(text)))
+
+
+class Title(unittest.TestCase):
+    """What a search result and a diff hang a document on."""
+
+    def test_the_title_is_the_first_heading(self):
+        text = doc("# AMBRE -- FEATURE: TRAME PDF EXPORT", "", "**Type:** Vertical (feature)")
+        self.assertEqual("AMBRE -- FEATURE: TRAME PDF EXPORT", spec_shape.title_of(text))
+
+    def test_a_section_heading_is_not_a_title(self):
+        """`## 1. CONTRACT` opens a section, and a document whose first heading
+        is one opens with no title at all."""
+        self.assertIsNone(spec_shape.title_of(doc("## 1. CONTRACT")))
+
+    def test_a_document_with_no_heading_has_no_title(self):
+        self.assertIsNone(spec_shape.title_of(doc("**Type:** Vertical (feature)")))
+
+    def test_a_heading_below_the_opening_lines_is_not_the_title(self):
+        """The search is bounded, so a `#` inside a fence further down the file
+        is never read back as the name of the document."""
+        self.assertIsNone(spec_shape.title_of(doc(*([""] * 8), "# THE TRAME ENGINE")))
+
 
 class Answers(unittest.TestCase):
     def test_a_document_with_no_contract_row_owes_nothing(self):

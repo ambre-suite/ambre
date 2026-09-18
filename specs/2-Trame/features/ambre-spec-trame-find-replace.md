@@ -1,4 +1,4 @@
-# AMBRE -- FEATURE: FIND AND REPLACE
+# AMBRE -- FEATURE: TRAME FIND AND REPLACE
 
 **Type:** Vertical (feature)
 **Implementation:** implemented -- the shared session the

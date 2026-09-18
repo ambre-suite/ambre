@@ -1,4 +1,4 @@
-# AMBRE -- FEATURE: THE CLIPBOARD
+# AMBRE -- FEATURE: THE TRAME CLIPBOARD
 
 **Type:** Vertical (feature)
 **Implementation:** implemented

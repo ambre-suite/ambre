@@ -1,4 +1,4 @@
-# AMBRE -- FEATURE: PDF EXPORT
+# AMBRE -- FEATURE: PROSE PDF EXPORT
 
 **Type:** Vertical (feature)
 **Implementation:** design-only

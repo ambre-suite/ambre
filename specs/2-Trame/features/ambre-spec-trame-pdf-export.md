@@ -1,4 +1,4 @@
-# AMBRE -- FEATURE: PDF EXPORT
+# AMBRE -- FEATURE: TRAME PDF EXPORT
 
 **Type:** Vertical (feature)
 **Implementation:** partial -- the surface-generic render walk ships; nothing drives it onto a page.

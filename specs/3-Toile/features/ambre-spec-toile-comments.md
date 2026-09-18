@@ -1,4 +1,4 @@
-# AMBRE -- FEATURE: COMMENTS
+# AMBRE -- FEATURE: COMMENTS ON THE BOARD
 
 **Type:** Vertical (feature)
 **Implementation:** implemented

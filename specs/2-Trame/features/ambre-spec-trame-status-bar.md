@@ -1,4 +1,4 @@
-# AMBRE -- FEATURE: THE STATUS BAR
+# AMBRE -- FEATURE: THE TRAME STATUS BAR
 
 **Type:** Vertical (feature)
 **Implementation:** partial -- the band ships; a whole-column total covers the visible rows alone.

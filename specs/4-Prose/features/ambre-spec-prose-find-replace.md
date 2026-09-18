@@ -1,4 +1,4 @@
-# AMBRE -- FEATURE: FIND AND REPLACE
+# AMBRE -- FEATURE: PROSE FIND AND REPLACE
 
 **Type:** Vertical (feature)
 **Implementation:** design-only

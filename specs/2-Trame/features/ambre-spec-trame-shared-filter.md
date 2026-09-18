@@ -257,7 +257,7 @@ the filtered column for the glyph, and the chrome relay turns each into a notice
 
 ---
 
-## 6. BROKEN, NOT BUILT, OR NOT RULED
+## 6. NOT BUILT, AND NOT YET RULED
 
 * **The stored value list is unreadable, so a filter by values hides every row after any edit**
   (`TRAME-FEAT-004`, `TRAME-FEAT-009`). The list is a child container of `filters_{sheet}`. The

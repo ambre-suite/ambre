@@ -1,4 +1,4 @@
-# AMBRE -- FEATURE: COMMENTS
+# AMBRE -- FEATURE: COMMENTS ON A DOCUMENT
 
 **Type:** Vertical (feature)
 **Implementation:** design-only

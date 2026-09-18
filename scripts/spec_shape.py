@@ -276,6 +276,14 @@ NO_CODE_DOCS = SCHEDULE_DOCS | {TEMPLATE, BUDGETS, TERM_INDEX}
 # four spellings of it is the `Kind` column's story again. Anything after the
 # value is a clause, so it announces itself with the dash the template writes.
 HEADER_FIELDS = ("Type", "Implementation")
+
+# The title, read off the first heading. It is what a search result and a diff
+# hang the document on, so two documents sharing one make a reader open both.
+# Twenty-one shared a title before the template asked for a unique one: four
+# spelled `UNDO AND REDO`, four `PDF EXPORT`, three `IMPORT AND EXPORT`
+# (`ambre-spec-template.md section 1.A`). The search is bounded to the opening
+# lines, so a `#` inside a later fence is never read as a heading.
+TITLE = re.compile(r"^#\s+(\S.*?)\s*$", re.M)
 IMPLEMENTATION = re.compile(
     r"^\*\*Implementation:\*\* ("
     + "|".join(re.escape(v) for v in IMPLEMENTATION_VALUES)
@@ -441,6 +449,12 @@ def feature_issues(text: str):
                 break
 
 
+def title_of(text: str) -> str | None:
+    """The document's title, or `None` when it opens without a heading."""
+    match = TITLE.search("\n".join(text.splitlines()[:8]))
+    return match.group(1) if match else None
+
+
 def header_issues(text: str):
     """Yield (kind, detail) for a header a reader cannot place in four lines.
 
@@ -449,10 +463,16 @@ def header_issues(text: str):
     stub read like a shipped subsystem, which is the most expensive lie the
     corpus can tell.
     """
-    head = "\n".join(text.splitlines()[:8])
+    head = text.splitlines()[:8]
+    # Each field opens its own line. A substring test let one document spell the
+    # two on one line, where a reader scanning the left margin finds one field
+    # and a gate anchored on the line finds none.
     for field in HEADER_FIELDS:
-        if f"**{field}:**" not in head:
-            yield "header", f"no `{field}` in the first 8 lines"
+        if not any(line.startswith(f"**{field}:**") for line in head):
+            yield "header", (
+                f"no `{field}` opening a line of the first 8"
+                " -- a missing field, or two fields sharing a line"
+            )
     for line in text.splitlines()[:8]:
         if line.startswith("**Implementation:**") and not IMPLEMENTATION.match(line):
             yield "header", (
@@ -611,6 +631,7 @@ LONG_LINES = f"lines over {LONG_LINE_COLS} columns"
 def main() -> int:
     check = "--check" in sys.argv
     errors: list[str] = []
+    titles: dict[str, list[str]] = {}
 
     for path in sorted(SPECS.rglob("*.md")):
         rel = str(path.relative_to(SPECS))
@@ -626,6 +647,11 @@ def main() -> int:
         ):
             continue
         text = path.read_text()
+        title = title_of(text)
+        if title is None:
+            errors.append(f"{rel}: header: no title in the first 8 lines")
+        else:
+            titles.setdefault(title, []).append(rel)
         share = prose_share(text)
         measured = {"prose_words": classify(text).prose_words, "long": long_lines(text)}
 
@@ -672,6 +698,10 @@ def main() -> int:
             f"{flag} {share:>5.1f} %  {measured['prose_words']:>5} prose words"
             f"  {measured['long']:>4} long  {rel}"
         )
+
+    for title, shared in sorted(titles.items()):
+        if len(shared) > 1:
+            errors.append(f"`{title}` is the title of {len(shared)}: {', '.join(shared)}")
 
     for e in errors:
         print(f"ERROR {e}", file=sys.stderr)
