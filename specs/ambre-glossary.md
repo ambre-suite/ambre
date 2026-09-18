@@ -105,6 +105,8 @@
 | zoom | the scale between document space and screen space | | `1-Foundations/ambre-spec-zoom.md` |
 | preset ladder | the ordered zoom stops a gesture steps through | | `1-Foundations/ambre-spec-zoom.md` |
 | undo | taking back the last change of this client | | `1-Foundations/ambre-spec-undo.md` |
+| document locale | the language tag the content is formatted in | | `1-Foundations/ambre-spec-locale.md` |
+| interface language | the language the reader's own menus are in | | `1-Foundations/ambre-spec-locale.md` |
 
 ## 5. THE METHOD
 

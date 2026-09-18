@@ -162,8 +162,10 @@ nothing on the UI thread can disagree with the document. Which chord opens find 
   keystroke, undebounced in the engine. A five-letter word on a large document is therefore five
   full walks. No application caps the match count either.
 * **The case fold and the whole-token match are undefined.** An ASCII fold, a Unicode one and a
-  locale-aware one disagree on ordinary text. What "whole" bounds -- a cell, a word -- is each
-  application's, and no rule pins either across the applications.
+  locale-aware one disagree on ordinary text. Which locale a fold would read is
+  `ambre-spec-locale.md`'s, and which collation a tag selects is open there too. What "whole"
+  bounds -- a cell, a word -- is each application's, and no rule pins either across the
+  applications.
 
 ---
 

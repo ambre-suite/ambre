@@ -221,8 +221,10 @@ changes nothing does not refresh them.
   chords and keep an identity per application, which is the state the two surfaces need today. No
   document says where that line is.
 * **Nothing supplies the active language.** A description carries `title: fn(&Locale) -> String`,
-  and no document says who holds the locale a view passes. Trame's table answers both variants with
-  the English label it shows today, so the function is a shape with one language behind it.
+  and the argument is the reader's own, ruled out of the document by `ambre-spec-locale.md`,
+  `LOCALE-003`. Where the client reads it from is still unwritten. Trame's table answers both
+  variants with the English label it shows today, so the function is a shape with one language
+  behind it.
 * **Nothing rules on a user rebinding.** The table accepts one and reports the displacement. No
   document says where a rebinding is stored, whether it survives a reload, or how a conflict is
   shown.
@@ -244,4 +246,5 @@ changes nothing does not refresh them.
 | The keyboard path a text editor consumes before any chord | `ambre-spec-text-input.md` |
 | The message an invoked command produces, and its transport | `ambre-spec-architecture.md section 2` |
 | What copy, cut and paste actually carry | `ambre-spec-clipboard.md` |
+| Which language a document's content is formatted in | `ambre-spec-locale.md` |
 | The commands each application declares | each application's feature documents |
