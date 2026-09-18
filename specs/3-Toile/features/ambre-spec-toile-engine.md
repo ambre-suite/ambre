@@ -60,8 +60,10 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-090` | `POST` | An export that fails MUST NOT advance the export cursor; the range MUST be offered again. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_toile::logic::state::cursor_tests::a_failed_export_keeps_the_range_for_the_next_flush` -- it hands the cursor a failure and then a success and reads it back after each; `ambre_toile::logic::state::cursor_tests::an_empty_export_is_not_a_failure` -- the other side, where a successful export of nothing still advances | none | verified |
-| `TOILE-217` | `POST` | A second export from the same cursor MUST repeat no operation already broadcast, and an import MUST NOT be broadcast back. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_toile::logic::convergence_tests::an_import_is_not_broadcast_back` -- a peer holding nothing reads the flush that follows an import and finds none of the imported work in it; `ambre_toile::logic::convergence_tests::a_flush_with_nothing_new_exports_nothing` -- the idle case | none | verified |
-| `TOILE-236` | `POST` | Taking the cursor past an import MUST keep this peer's own counter, and a restore from local storage MUST NOT move the cursor at all. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_toile::logic::convergence_tests::an_import_does_not_swallow_our_own_unbroadcast_genesis` -- the peer receiving the next delta can resolve it; `ambre_toile::logic::convergence_tests::a_restore_still_offers_what_this_client_wrote_offline` -- a session written offline still reaches a peer after a reopen | none | verified |
+| `TOILE-217` | `POST` | A second export from the same cursor MUST repeat no operation already broadcast. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_toile::logic::convergence_tests::a_flush_with_nothing_new_exports_nothing` -- the idle case | none | verified |
+| `TOILE-244` | `POST` | An import MUST NOT be broadcast back. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_toile::logic::convergence_tests::an_import_is_not_broadcast_back` -- a peer holding nothing reads the flush that follows an import and finds none of the imported work in it | none | verified |
+| `TOILE-236` | `POST` | Taking the cursor past an import MUST keep this peer's own counter. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_toile::logic::convergence_tests::an_import_does_not_swallow_our_own_unbroadcast_genesis` -- the peer receiving the next delta can resolve it | none | verified |
+| `TOILE-245` | `POST` | A restore from local storage MUST NOT move the export cursor at all. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_toile::logic::convergence_tests::a_restore_still_offers_what_this_client_wrote_offline` -- a session written offline still reaches a peer after a reopen | none | verified |
 | `TOILE-218` | `FRAME` | Exporting MUST NOT write to the board. | this spec section 3 | type-level -- the export reads the document and the stored cursor and commits nothing, and the construction is the proof | none | verified |
 
 ### 1.5 Answer a request for the whole board
@@ -102,7 +104,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the board lives in this thread's CRDT and leaves as bytes the Sync
   worker seals (`ZK-001`). Its one outbound flow of user content is the media path of
   `features/ambre-spec-toile-media.md section 1`.
-* **Verification.** 27 `verified`, 7 `failing`, 4 `untested`. What holds is the pair no other application
+* **Verification.** 29 `verified`, 7 `failing`, 4 `untested`. What holds is the pair no other application
   holds: the index equivalence and the convergence of every derived cache. Both under one property test,
   neither at a culling camera (`TOILE-206`). What is loose is four rules nothing exercises and `TOILE-023`, a
   measurement; ten verified rows are structural.

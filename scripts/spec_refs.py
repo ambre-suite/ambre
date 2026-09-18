@@ -9,7 +9,7 @@ fifteen feature documents left every stale citation silent, and a reader follows
 a name to a document that no longer holds the rule, or to no document at all.
 `prose-engine` named no document for as long as three Prose specs have existed.
 
-Two namespaces, one resolver.
+Three namespaces, one resolver.
 
 **The document name.** Five forms are recognised, and two of them are why this
 file was rewritten. The name and the coordinate sit inside one backtick span more
@@ -60,8 +60,23 @@ fell back on the citing document and found a section 5 that existed and said
 something else. The glue may therefore carry the end of one line, the newline,
 and the comment or quote marker that opens the next.
 
-This resolves two namespaces and checks nothing else. It does not grade a
-citation, rewrite it into a rule id or a code path, or read what the target says.
+**The code path.** A document names a file of the workspace --
+`` `crates/ambre-sync/src/pipeline.rs` `` -- and 329 such paths sit in the corpus
+and in the code. Nothing resolved one: this file used to declare a `crates/` path
+"not a citation", because it is not a *document*, and a rename left the reader
+walking to a file that no longer exists.
+
+The split above holds here unchanged. **The path is a name, and the line range is
+a coordinate.** So a path is resolved everywhere, a record included, and a range
+is refused everywhere but in a record: `rate_limit.rs:131-197` is exact on the day
+an audit is written and wrong at the next edit of the file, which is what
+`ambre-spec-template.md` section 1.D means by `crates/` carrying no section
+number. The range is cut before the path is resolved, so a finding keeps both and
+only the half that rots is reported. A path carrying `*` is a shape rather than a
+file, and it resolves when it matches at least one.
+
+This resolves three namespaces and checks nothing else. It does not grade a
+citation, rewrite it into a rule id, or read what the target says.
 
 `specs/reviews/` is out of the corpus, exactly as in `spec_code.py`. A dated
 record is out of the *coordinate* namespace: `specs/audits/` and its kin state
@@ -96,8 +111,8 @@ APPS = ("trame", "toile", "prose")
 # `` `ai/ambre-writing-style.md` ``, and a name pattern stopping at `/` reads
 # neither as a citation at all -- 311 of them, outside the rule that a citation
 # names a document that exists (finding 68). A path whose last component is not a
-# document still resolves to nothing, so `` `crates/ambre-prose/src/lib.rs` ``
-# stays what it was: not a citation.
+# document still resolves to nothing here, so `` `crates/ambre-prose/src/lib.rs` ``
+# is no document citation; `CODE_PATH` is what resolves it, in its own namespace.
 NAME = re.compile(r"`((?:[a-z0-9][a-z0-9-]*/)*)([a-z0-9][a-z0-9.-]*)(?=[`\s])")
 
 # A prefix that names a crate marks a Cargo feature, never a document path. The
@@ -162,6 +177,46 @@ RECORD_DIRS = ("audits/",)
 def is_record(path: Path) -> bool:
     rel = str(path.relative_to(SPECS)) if SPECS in path.parents else path.name
     return path.name in RECORDS or any(d in rel for d in RECORD_DIRS)
+
+
+# A code path, always backticked and always rooted at `crates/`: the corpus names
+# a file of the workspace and never a path relative to the document. The span may
+# carry more than the path -- a line range, then prose about it -- so it is taken
+# whole here and cut below.
+CODE_PATH = re.compile(r"`(crates/[^`]*)`")
+
+# The line range a path may carry: `rate_limit.rs:131-197`, `sync.rs:210,237`.
+# The colon before a digit is what marks it, and nothing else in a path carries
+# one. This is the coordinate half of a code citation, and the half that rots.
+LINE_RANGE = re.compile(r":\s*\d")
+
+
+def code_citations(text: str):
+    """Yield `(line, cited, path, ranged)` for each code path one file carries.
+
+    `path` is the file alone, with the range and the prose after it cut off, so
+    the name half resolves whatever the coordinate half says. `ranged` is whether
+    the citation carried a range at all, which is the caller's to refuse.
+    """
+    for lineno, line in enumerate(text.splitlines(), 1):
+        for cited in CODE_PATH.findall(line):
+            head = cited.split(" ")[0]
+            found = LINE_RANGE.search(head)
+            path = (head[: found.start()] if found else head).rstrip("/")
+            yield lineno, cited, path, found is not None
+
+
+def code_resolves(path: str) -> bool:
+    """Whether a code path names something the workspace holds.
+
+    A path carrying `*` is a shape and not a file -- `crates/**/*.rs` is how the
+    roadmap names every Rust file there is -- so it resolves when it matches at
+    least one path, and a shape matching nothing is as dead as a dead name.
+    """
+    if "*" in path:
+        return any(ROOT.glob(path))
+    return (ROOT / path).exists()
+
 
 # Documents the corpus deleted. A record naming one is quoting the corpus of the
 # day it was written, exactly as it quotes a since-deleted heading: finding 65 is
@@ -430,18 +485,30 @@ def main() -> int:
 
     dead_names: dict[str, list[str]] = {}
     dead_coords: dict[str, list[str]] = {}
-    names = coords = 0
+    dead_paths: dict[str, list[str]] = {}
+    ranged_paths: dict[str, list[str]] = {}
+    names = coords = paths = 0
     for path in sources():
         rel = path.relative_to(ROOT)
+        text = path.read_text()
+        record = is_record(path)
+        for lineno, cited, target, ranged in code_citations(text):
+            paths += 1
+            if not code_resolves(target):
+                dead_paths.setdefault(target, []).append(f"{rel}:{lineno}")
+            # The range is the coordinate of a code file. A record quotes the
+            # workspace of the day it was written, ranges included.
+            elif ranged and not record:
+                ranged_paths.setdefault(cited, []).append(f"{rel}:{lineno}")
         own = path.name if path.suffix == ".md" else None
-        for kind, lineno, target, value, _ in citations(path.read_text(), own,
+        for kind, lineno, target, value, _ in citations(text, own,
                                                         shorts):
             if kind == "name":
                 names += 1
                 if value not in known:
                     # A record may name a document the corpus deleted, and only
                     # such a document: see `RETIRED`.
-                    if is_record(path) and (
+                    if record and (
                         value in RETIRED or value in RETIRED_SHORTS
                     ):
                         continue
@@ -450,7 +517,7 @@ def main() -> int:
             # The coordinate namespace is the corpus. A `.rs` file cites a name and
             # a contract id, both minted once; a section number is the one part
             # that a renumbering breaks, so the code does not carry it.
-            if path.suffix != ".md" or is_record(path):
+            if path.suffix != ".md" or record:
                 continue
             coords += 1
             if target is None:
@@ -472,13 +539,16 @@ def main() -> int:
 
     report(dead_names, "no document")
     report(dead_coords, "no such section")
+    report(dead_paths, "no such file")
+    report(ranged_paths, "a line range outside a record")
     for name in sorted(shared):
         print(f"\n`{name}` -- one file name, {len(shared[name])} documents")
         for path in shared[name]:
             print(f"  {path.relative_to(ROOT)}")
     print(f"\n{names} document citations, {coords} section coordinates, "
-          f"{len(known)} documents, "
+          f"{paths} code paths, {len(known)} documents, "
           f"{len(dead_names)} dead names, {len(dead_coords)} dead coordinates, "
+          f"{len(dead_paths)} dead paths, {len(ranged_paths)} line ranges, "
           f"{len(shared)} shared file names")
     if check and shared:
         print(
@@ -493,6 +563,23 @@ def main() -> int:
             "\nERROR: a citation names a document, or a section of one, that does "
             "not exist (ambre-spec-template.md section 1.D). Point the citation at "
             "the document and the section that hold the rule today.",
+            file=sys.stderr,
+        )
+        return 1
+    if check and dead_paths:
+        print(
+            "\nERROR: a citation names a file of `crates/` that does not exist "
+            "(ambre-spec-template.md section 1.D). Point it at the file that "
+            "holds the code today, or cut it.",
+            file=sys.stderr,
+        )
+        return 1
+    if check and ranged_paths:
+        print(
+            "\nERROR: a code path carries a line range, and `crates/` carries no "
+            "coordinate (ambre-spec-template.md section 1.D). A range is exact "
+            "the day it is written and wrong at the next edit: name the file, and "
+            "the symbol where the citation needs one.",
             file=sys.stderr,
         )
         return 1

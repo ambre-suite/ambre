@@ -61,14 +61,15 @@ walk may not disturb is Prose's.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-158` | `POST` | Closing the search MUST end the session: the query, the match list and the index MUST be dropped, and no match MUST remain highlighted. | this spec section 4 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-158` | `POST` | Closing the search MUST end the session: the query, the match list and the index MUST be dropped. | this spec section 4 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-289` | `POST` | After the search closes, no match MUST remain highlighted. | this spec section 4 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-159` | `FRAME` | Closing the search MUST NOT write to the document, MUST NOT move the caret and MUST NOT change the selection. | derived | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the search over the document and the replace-all, two rows of
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** none of its own. A search reads the document in the Logic thread and writes
   nothing. A replacement is an ordinary document write sealed by `ZK-001`.
-* **Verification.** 14 `unimplemented`, nothing else, since `crates/ambre-prose` is a `lib.rs`; the
+* **Verification.** 15 `unimplemented`, nothing else, since `crates/ambre-prose` is a `lib.rs`; the
   shared rules and their coverage are `ambre-spec-find.md`. Counted here is what a Prose match is
   and what each gesture may not disturb. `PROSE-FEAT-035` and `PROSE-FEAT-156` are the two with an
   oracle: matching is a pure function of one string and one query. A replace-all is checked

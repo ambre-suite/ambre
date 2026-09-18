@@ -34,7 +34,8 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-052` | `POST` | A group MUST enter the paint order below its lowest member, so the members keep their relative order above it. | this spec section 3 | `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- its second assertion, where the paint order reads group, then the two members in their prior order | none | verified |
 | `TOILE-151` | `POST` | An id the board no longer holds MUST be dropped from the binding. | this spec section 3 | none | unheld -- the filter reads the bounds cache for each requested id, and no test asks to bind an id a peer has just deleted; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-152` | `POST` | A selected element that encloses another selected element MUST be dropped from the binding, and the enclosed ones MUST be bound. | this spec section 3; section 5 | none | unheld -- the filter walks each member's subtree looking for a sibling of the request, and no test selects a group together with one of its own members, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-152` | `POST` | A selected element that encloses another selected element MUST be dropped from the binding. | this spec section 3; section 5 | none | unheld -- the filter walks each member's subtree looking for a sibling of the request, and no test selects a group together with one of its own members, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-246` | `POST` | The enclosed elements of such a selection MUST be bound. | this spec section 3; section 5 | none | unheld -- the same filter keeps the subtree it walked, and no test reads the binding it produces back, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-153` | `FRAME` | Binding a group MUST NOT move any member. | this spec section 3 | none | unheld -- the binding writes a membership list and a paint-order entry, and the binding test reads the group's own box back and never a member's; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-055` | `FAIL` | A binding left with fewer than two distinct members MUST create no group. | this spec section 3 | none | unheld -- the refusal is silent: the handler returns an empty outcome with no notice, so a user pressing the chord on one element sees nothing at all, section 6; lands with the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | untested |
 
@@ -69,7 +70,7 @@ status values are normative in `ambre-spec-template.md`.
   derivation is quadratic in the element count, and no bench measures it.
 * **Boundary.** none of its own: the binding lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). The group box is derived and never persisted.
-* **Verification.** 8 `verified`, 1 `failing`, 14 `untested`. What holds is the happy path of each
+* **Verification.** 8 `verified`, 1 `failing`, 15 `untested`. What holds is the happy path of each
   gesture, on five tests carrying nine assertions between them. One row holds by construction: a
   group has no field a box could be authored into. What is loose is everything around it: every
   refusal, every re-parenting, every frame condition and the whole of the nested case. Two of those

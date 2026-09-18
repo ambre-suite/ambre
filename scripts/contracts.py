@@ -87,6 +87,7 @@ import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
+from typing import NamedTuple
 
 # Every closed vocabulary this file checks against is the template's, read from
 # it. What each one means is stated there, beside the table it is read from, and
@@ -287,18 +288,191 @@ CONJUNCTION = re.compile(
     r",?\s+and\s+(?:it\s+)?(?:MUST|SHOULD|MAY)\b"
 )
 
-# The forms a `Sources` cell may take, and the whole of them. A form off this
-# list is a citation nobody can resolve: `pillar "Local-First"` names a pillar
-# no reader can grep for, and `audit #3` names no finding. The document form
-# accepts a path, so a citation of `1-Foundations/ambre-spec-message-bus.md` is
-# read as the citation it is rather than flagged as prose.
-SOURCE_FORMS = (
-    re.compile(r"\bsection\s+\d"),  # this spec's own section, or a sibling's
-    re.compile(r'\bREADME pillar\s+"'),  # a pillar of the README, by its name
-    re.compile(r"\baudit\s+`"),  # a `security-audit.md` finding, by number
-    re.compile(r"^derived\b"),  # nothing but the design itself
-    re.compile(r"`[\w./-]+\.md`"),  # a named document, with the rule it cites
+# The same shape, with a subject between the `and` and the second keyword: "MUST
+# be dropped, and the others MUST be told" is the rule above with four words in
+# it, and the rule above reads none of them. A report and not a refusal: 40 rows
+# match it, and whether each one is two obligations or one rule stated twice is
+# a reading. The refusal follows once the corpus is split.
+SPLIT_CANDIDATE = re.compile(
+    r"\b(?:MUST(?:\s+NOT)?|SHOULD(?:\s+NOT)?|MAY)\b[^.;:]*?"
+    r",?\s+and\s+[^.;:]{0,40}?\b(?:MUST|SHOULD|MAY)\b"
 )
+
+# The rule id a `Sources` cell cites, on its own or beside the document that
+# declares it. An id is unique in the corpus, so one resolves to one row without
+# a search, which is what the ledger's index exists for. A prefix carries its own
+# dashes -- `PROSE-FEAT-030` -- so the number is the last segment and nothing
+# else.
+SOURCE_ID = re.compile(r"`([A-Z][A-Z0-9]*(?:-[A-Z]+)*-\d{1,4})`")
+
+# The pieces a source is built from. A document is named or pathed, and a short
+# name is a form of its own that `spec_refs.py` resolves against the corpus, so
+# `architecture section 2` is a citation and not prose. A section number may
+# carry a letter, which `spec_refs.py` reads the number of and no more.
+_ID = r"[A-Z][A-Z0-9]*(?:-[A-Z]+)*-\d{1,4}"
+_FINDING = r"[A-Z]\d{1,3}"
+_NAME = r"[\w][\w./-]*"
+_SECTION = r"\d{1,2}(?:\.[A-Z])?"
+_IDS = rf"`{_ID}`(?:,\s+`{_ID}`)*"
+_FINDINGS = rf"`{_FINDING}`(?:,\s+`{_FINDING}`)*"
+# What a source may carry past its target: a parenthesis, a comma clause, or
+# both. The parenthesis holds the rule ids a document citation points at; the
+# clause holds the prose that locates the rule inside the section.
+_TAIL = r"(?:\s*\((?P<paren>[^)]*)\))?(?:,\s+(?P<note>.+))?"
+# A comma clause that is nothing but ids is the citation itself, not prose about
+# it: `` `ambre-spec-zero-knowledge.md`, `ZK-002` `` is how 56 sources name the
+# rule they point at, and reading that clause as a note loses every one of them.
+CITED_CLAUSE = re.compile(rf"^{_IDS}$")
+
+# The grammar of one source, and the whole of it. Six forms, each naming its
+# kind, its target and, where it has one, its locator: what a reader opens, and
+# where in it they land. What this replaces was five `search()` patterns over
+# the cell taken whole, and a cell passed when **any** of its sources matched
+# **any** pattern anywhere inside it. Three things hid in that gap. A bare
+# `` `ZK-001` `` matched none of the five and rode 95 times on the section
+# citation beside it, so the form the corpus writes most after a section was
+# never declared. `` `ambre-spec-ui.md` (design tokens) `` passed on the
+# document and the parenthesis was never read. And `architecture section 2.D`,
+# a citation of another document, was typed as a section of this one, because
+# the pattern that matched it looks for `section` and not for what precedes it.
+#
+# Order matters: `derived` and `audit` are keywords, so they are tried before
+# the forms that would read them as a document name.
+SOURCE_GRAMMAR = (
+    ("derived", re.compile(rf"^derived{_TAIL}$")),
+    ("pillar", re.compile(rf'^README pillar "(?P<target>[^"]+)"{_TAIL}$')),
+    ("audit", re.compile(rf"^audit\s+(?P<target>{_FINDINGS}){_TAIL}$")),
+    ("rule", re.compile(rf"^(?P<target>{_IDS}){_TAIL}$")),
+    (
+        "doc",
+        re.compile(
+            rf"^`(?P<target>{_NAME})(?:\s+section\s+(?P<loc>{_SECTION}))?`"
+            rf"(?:\s+section\s+(?P<loc2>{_SECTION}))?{_TAIL}$"
+        ),
+    ),
+    ("doc", re.compile(rf"^(?P<target>{_NAME})\s+section\s+(?P<loc>{_SECTION}){_TAIL}$")),
+    ("own", re.compile(rf"^(?:this spec\s+)?section\s+(?P<loc>{_SECTION}){_TAIL}$")),
+)
+
+SOURCE_KINDS = tuple(dict.fromkeys(kind for kind, _ in SOURCE_GRAMMAR))
+
+
+class Source(NamedTuple):
+    """One entry of a `Sources` cell, taken apart.
+
+    `target` is what a reader opens -- a document name, a pillar, a finding
+    number -- and is empty for the two forms that name nothing outside the row:
+    `own`, which locates a section of the citing document, and `derived`, which
+    claims no source but the design. `rules` are the contract ids the source
+    cites, whether it cites them bare or in the parenthesis after a document.
+    """
+
+    kind: str
+    target: str
+    locator: str
+    rules: tuple[str, ...]
+    note: str
+
+
+def parse_source(source: str) -> Source | None:
+    """One source read into its kind, its target and its locator, or `None`.
+
+    `None` is a source no form of the grammar accepts, which is the whole of
+    the refusal: a citation a reader cannot follow, and a compiler cannot
+    resolve, whatever it means to the person who wrote it.
+    """
+    for kind, form in SOURCE_GRAMMAR:
+        match = form.match(source.strip())
+        if match is None:
+            continue
+        found = match.groupdict()
+        target = found.get("target") or ""
+        note = found.get("note") or ""
+        rules = SOURCE_ID.findall(found.get("paren") or "")
+        if kind == "rule":
+            rules = SOURCE_ID.findall(target)
+        elif CITED_CLAUSE.match(note):
+            rules += SOURCE_ID.findall(note)
+            note = ""
+        return Source(
+            kind=kind,
+            target=target,
+            locator=found.get("loc") or found.get("loc2") or "",
+            rules=tuple(rules),
+            note=note,
+        )
+    return None
+
+
+def sources_cited(sources: str) -> list[tuple[str, list[str]]]:
+    """One entry per id a `Sources` cell cites, with the documents beside it.
+
+    The documents are the ones of that source alone. An empty list means the
+    source cites the id bare, which resolves through the ledger index and is
+    legitimate. The grammar is what splits them now: an id the note mentions in
+    passing is prose, and pairing an id with the document of the source beside
+    it reads five true citations as lies.
+    """
+    cited = []
+    for source in sources.split(";"):
+        parsed = parse_source(source)
+        if parsed is None:
+            continue  # the grammar refusal names it; one defect per source
+        docs = [parsed.target] if parsed.kind == "doc" else []
+        cited += [(rid, docs) for rid in parsed.rules]
+    return cited
+
+
+def grammar_defects(where: str, sources: str) -> list[str]:
+    """Whether every source of one cell parses, source by source.
+
+    The cell is a `;`-separated list and each entry is a citation on its own,
+    so each one is read on its own. A cell that passed because the entry beside
+    it matched is the looseness this replaced.
+    """
+    defects = []
+    for source in sources.split(";"):
+        if parse_source(source) is None:
+            defects.append(
+                f"{where}: `Sources` reads {source.strip()[:60]!r}, which no "
+                f"form of the grammar accepts -- a source names its kind, its "
+                f"target and, where it has one, its section: `this spec "
+                f"section 3`, `` `ambre-spec-ui.md section 2` ``, `` `ZK-001` "
+                f"``, ``audit `H9` ``, `README pillar \"E2EE\"`, or `derived`"
+            )
+    return defects
+
+
+def source_defects(where: str, sources: str, declared: dict[str, str]) -> list[str]:
+    """Whether every rule a `Sources` cell cites resolves to a row that exists.
+
+    Two questions, one pass. The id must be declared somewhere in the corpus: a
+    row deleted or renumbered leaves its citations pointing at nothing, and the
+    join to the rule that produced the obligation breaks in silence. When the
+    source names a document too, that document must be the one declaring the id,
+    because a citation naming the wrong file sends a reader to a row that is not
+    there.
+    """
+    defects = []
+    for rid, docs in sources_cited(sources):
+        home = declared.get(rid)
+        if home is None:
+            defects.append(
+                f"{where}: `Sources` cites `{rid}`, and no document declares it "
+                f"-- an id is a join key, so a citation of one that is gone "
+                f"points at nothing and nothing said so"
+            )
+        elif docs and not any(
+            home == doc or home.rsplit("/", 1)[-1] == doc.rsplit("/", 1)[-1]
+            for doc in docs
+        ):
+            defects.append(
+                f"{where}: `Sources` cites `{rid}` beside "
+                f"{', '.join(f'`{doc}`' for doc in docs)}, and `{rid}` is "
+                f"declared by `{home}` -- the document named is where the reader "
+                f"goes, so it is the one that holds the row"
+            )
+    return defects
 
 
 # `VERIFICATION_TOKENS` is the template's mechanism table, and every token of it
@@ -415,13 +589,7 @@ def row_defects(where: str, kind_cell: str, statement: str, sources: str) -> lis
             f"reads MUST, MUST NOT, SHOULD, SHOULD NOT or MAY, and a sentence "
             f"without one describes instead of binding"
         )
-    if not any(form.search(sources) for form in SOURCE_FORMS):
-        defects.append(
-            f"{where}: `Sources` reads {sources[:60]!r}, which is none of the "
-            f"declared forms -- a section of this spec or a sibling, a "
-            f'`README pillar "..."`, an ``audit `H9` `` finding, a named '
-            f"`document.md` with the rule it cites, or `derived`"
-        )
+    defects += grammar_defects(where, sources)
     return defects
 
 
@@ -861,6 +1029,23 @@ def leaning_report(leans: dict[str, list[str]]) -> list[str]:
     return lines
 
 
+def split_report(candidates: list[tuple[str, str]]) -> list[str]:
+    """The rows a second keyword reaches that the refusal above does not.
+
+    Not a defect, and for one reason: the measure is exact and the reading is
+    not. "MUST mark it resolved, and resolving it again MUST change nothing" is
+    two obligations. "MUST each get their own thread, and neither MUST lose
+    theirs" is one convergence rule stated from both ends. A script cannot tell
+    them apart, so it prints the list and a reader decides each one.
+    """
+    if not candidates:
+        return []
+    lines = ["", f"two keywords, one status: {len(candidates)} rows to read"]
+    for where, statement in candidates:
+        lines.append(f"  {where}  {statement[:96]}")
+    return lines
+
+
 def app_of(spec: str) -> str:
     """The application a spec belongs to, from the first component of its path."""
     head = spec.split("/", 1)[0]
@@ -983,6 +1168,12 @@ def main() -> int:
     errors += duplicate_stories(SPECS / ROADMAP)
     findings = declared_findings()
     cited_audit: set[str] = set()
+    # The `Sources` cells, held until every id is read. A citation may name a row
+    # declared further down the corpus, so resolving one during the pass would
+    # answer on the half read so far.
+    cited_sources: list[tuple[str, str]] = []
+    # The rows `split_report` prints: a second keyword the refusal does not reach.
+    split_candidates: list[tuple[str, str]] = []
 
     for path in sorted(SPECS.rglob("*.md")):
         if path.name == TEMPLATE:
@@ -1043,6 +1234,7 @@ def main() -> int:
                 kind_cell = cell.get(KIND, "")
                 statement = cell.get(STATEMENT, "")
                 errors += row_defects(where, kind_cell, statement, cell.get(SOURCES, ""))
+                cited_sources.append((where, cell.get(SOURCES, "")))
                 # Both grammars need the two cells apart. A header that declares
                 # no `Gap` states the mechanism and the argument about it in one
                 # cell, which is the shape neither grammar can read.
@@ -1059,6 +1251,12 @@ def main() -> int:
                     errors += gap_defects(where, cell.get(GAP, ""), mechanism, status)
                 kind = kind_cell.strip("`")
                 table.append((lineno, rid, kind))
+                if (
+                    kind not in BUNDLING_KINDS
+                    and not CONJUNCTION.search(statement)
+                    and SPLIT_CANDIDATE.search(statement)
+                ):
+                    split_candidates.append((where, statement))
                 if kind not in BUNDLING_KINDS and CONJUNCTION.search(statement):
                     errors.append(
                         f"{where}: the `Statement` states a second rule after an "
@@ -1115,6 +1313,8 @@ def main() -> int:
             errors += answer_defects(str(path.relative_to(SPECS)), answer, counts)
 
     errors += audit_coverage_defects(findings, cited_audit)
+    for where, sources in cited_sources:
+        errors += source_defects(where, sources, seen)
 
     # gaps in a prefix's numbering: an id that was renumbered or dropped
     by_prefix: dict[str, list[int]] = defaultdict(list)
@@ -1161,6 +1361,8 @@ def main() -> int:
     )
     print(f"specified, not built: {total['unimplemented']}")
     for line in leaning_report(leans):
+        print(line)
+    for line in split_report(split_candidates):
         print(line)
 
     target = SPECS / LEDGER

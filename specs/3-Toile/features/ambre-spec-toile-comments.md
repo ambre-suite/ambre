@@ -60,7 +60,8 @@ machine it belongs to and is not restated. The comment tool drops a thread where
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-FEAT-015` | `POST` | Resolving a thread MUST mark it resolved, and resolving it again MUST change nothing. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_resolves_converge_and_keep_the_messages` -- the assertion that resolves an already resolved thread and reads no change | none | verified |
+| `TOILE-FEAT-015` | `POST` | Resolving a thread MUST mark it resolved. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_resolves_converge_and_keep_the_messages` -- the resolved flag it reads back | none | verified |
+| `TOILE-FEAT-105` | `POST` | Resolving a thread already resolved MUST change nothing. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_resolves_converge_and_keep_the_messages` -- the assertion that resolves an already resolved thread and reads no change | none | verified |
 | `TOILE-FEAT-074` | `FRAME` | Resolving a thread MUST NOT touch its messages: a settled point stays readable. | this spec section 3; section 5 | `ambre_toile::logic::convergence_tests::a_resolve_keeps_every_message_body` -- it reads both bodies back after the resolve, so a resolve that blanked the message it kept fails it | none | verified |
 
 ### 1.5 Open a thread
@@ -77,7 +78,7 @@ machine it belongs to and is not restated. The comment tool drops a thread where
 * **Boundary.** none of its own: a thread is written to the document, and `ZK-001` seals every
   payload before it leaves the client. A message body is document content, so the relay reads none
   of it.
-* **Verification.** 24 `verified`, 5 `untested`. What holds is everything a thread owes: the drop,
+* **Verification.** 25 `verified`, 5 `untested`. What holds is everything a thread owes: the drop,
   the reply order, the correction, the resolve, the seeding at birth, the dangling anchor.
   The pins and the badge rest on it too, pure and host-tested. What is loose is one
   shape: five rules whose failure shows only on a screen. They are a pass order inside

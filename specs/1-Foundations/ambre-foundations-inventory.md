@@ -20,7 +20,7 @@
 | `commands` | Everything the user can ask for has one name. | implemented | 13 | 4 |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 18 | 12 |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 | 5 |
-| `docfile` | The file a user saves a document into, and opens back. | implemented | 16 | 2 |
+| `docfile` | The file a user saves a document into, and opens back. | implemented | 17 | 2 |
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | implemented | 10 | 6 |
 | `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 34 | 5 |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 18 | 13 |
@@ -40,7 +40,7 @@
 | `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | implemented | 14 | 8 |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 | 10 |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 | 7 |
-| `broadcast` | One connection per person, carrying every document they have open. | partial | 18 | 10 |
+| `broadcast` | One connection per person, carrying every document they have open. | partial | 19 | 10 |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 21 | 11 |
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 15 | 4 |
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 17 | 13 |
@@ -55,4 +55,4 @@
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**39 features: 23 implemented, 14 partial, 2 design-only. 585 contract rows, 323 loose.**
+**39 features: 23 implemented, 14 partial, 2 design-only. 587 contract rows, 323 loose.**

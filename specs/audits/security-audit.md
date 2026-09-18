@@ -169,7 +169,7 @@ uploaded bytes rather than trusting the client's hash at all.
 ### H8 -- Revoked member retains write access on a live WebSocket
 
 **Crate:** `ambre-server`
-**File:** `crates/ambre-server/src/ws/handler.rs:271-289 (subscribe), 300-405 (update)`
+**File:** `crates/ambre-server/src/ws/handler/message.rs` (`handle_subscribe`, `handle_update`)
 
 Membership is checked once, at `Subscribe` (`verify_document_access`). After that
 `handle_update` only checks the in-memory `conn.doc_subscriptions.contains(&doc_id)`

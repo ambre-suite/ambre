@@ -82,7 +82,9 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-037` | `POST` | Aligning or distributing a selection MUST be one convergent batch and one undo item. | this spec section 4 | `ambre_toile::logic::state::elements::inner_tests::an_alignment_is_one_undo_item` -- it reads every box back after one `Undo`; proptest -- `ambre_toile::logic::convergence_tests::two_peers_converge` draws an align over every live element, the one operation that rewrites the whole board's coordinates at once | none | verified |
 | `TOILE-204` | `FRAME` | Aligning or distributing MUST NOT move an element the selection does not hold, and MUST NOT move any element on the axis it does not work on. | this spec section 4 | `ambre_toile::logic::state::elements::inner_tests::an_alignment_moves_only_what_it_names` -- it reads back a bystander and the untouched axis of a named box | none | verified |
 | `TOILE-234` | `FRAME` | A locked element MUST take no part in an alignment: it MUST NOT move, and it MUST NOT set the edge the others align to. | this spec section 4 | `ambre_toile::logic::state::elements::inner_tests::a_locked_element_takes_no_part` -- a locked box 500 units to the left neither moves nor drags the others onto its edge | none | verified |
-| `TOILE-235` | `PRE` | An alignment MUST need two boxes and a distribution MUST need three; below that, and where every translation comes out zero, the operation MUST write nothing -- no commit, no undo item, no delta. | this spec section 4 | `ambre_toile::logic::align::tests::a_lone_box_is_already_aligned` -- the two an alignment needs; `ambre_toile::logic::align::tests::a_pair_has_nothing_to_distribute` -- the three a distribution needs; `ambre_toile::logic::state::elements::inner_tests::an_alignment_that_changes_nothing_mints_no_undo_item` -- the silent handler | none | verified |
+| `TOILE-235` | `PRE` | An alignment MUST need two boxes. | this spec section 4 | `ambre_toile::logic::align::tests::a_lone_box_is_already_aligned` -- the lone box an alignment writes nothing for | none | verified |
+| `TOILE-242` | `PRE` | A distribution MUST need three boxes. | this spec section 4 | `ambre_toile::logic::align::tests::a_pair_has_nothing_to_distribute` -- the pair a distribution writes nothing for | none | verified |
+| `TOILE-243` | `PRE` | Below those counts, and where every translation comes out zero, the operation MUST write nothing -- no commit, no undo item, no delta. | this spec section 4 | `ambre_toile::logic::state::elements::inner_tests::an_alignment_that_changes_nothing_mints_no_undo_item` -- the silent handler | none | verified |
 
 * **Budget.** a command that writes one register and re-derives the visible set under 1 ms, the
   transform-command row of `ambre-spec-budgets.md section 1`. No bench measures it. A move over a
@@ -90,7 +92,7 @@ status values are normative in `ambre-spec-template.md`.
   multiplier (`features/ambre-spec-toile-tools.md`).
 * **Boundary.** none of its own: an element lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). No lifecycle command opens a socket or holds a key.
-* **Verification.** 24 `verified`, 2 `failing`, 5 `untested`. What holds best is align and distribute:
+* **Verification.** 26 `verified`, 2 `failing`, 5 `untested`. What holds best is align and distribute:
   nine tests over the pure geometry, five over the handler. A place in the 2-peer property strategy
   lets `TOILE-037` claim convergence rather than assert it. What is loose is the lock,
   across five commands, and a missing id, which is two lines, one refused and one swallowed.

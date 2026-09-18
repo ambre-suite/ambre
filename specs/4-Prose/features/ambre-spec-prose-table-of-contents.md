@@ -36,7 +36,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-117` | `POST` | After the command, the block MUST carry the depth and the numbering asked for, and the next layout MUST list its entries by them. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-117` | `POST` | After the command, the block MUST carry the depth and the numbering asked for. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-291` | `POST` | The next layout MUST list the block's entries by the depth and the numbering it carries. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-118` | `FRAME` | Changing one block's settings MUST NOT touch a heading, nor the settings of another table of contents. | this spec section 5 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Click an entry
@@ -51,7 +52,7 @@ status values are normative in `ambre-spec-template.md`.
   page count is the deferred pass of `features/ambre-spec-prose-pagination.md`, `PROSE-019`.
 * **Boundary.** none of its own: the block carries two settings and no text, and `ZK-001` seals
   every payload before it leaves the client.
-* **Verification.** 12 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line
+* **Verification.** 13 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line
   `lib.rs`, and `ambre-bus` carries no Prose command. The closest thing to a mechanism any row here
   has is the schema, which already agrees on what the block may hold. The `Toc` node carries
   `max_level` and `numbered` and nothing else (`ambre-spec-prose-schema.md section 3`). Six rows are

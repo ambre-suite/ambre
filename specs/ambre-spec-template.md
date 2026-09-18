@@ -130,7 +130,7 @@ carries both:
 | `ID` | `XXX` is the prefix, declared once and **never renumbered**: it joins document, test name and audit finding. A feature spanning two layers carries two prefixes, and the gaps each leaves are the price |
 | `Kind` | one of the eight below, **written in backticks** -- `` `INV` ``, never `INV`. It says what the rule binds: the state, or one step of one operation. The kind is a column and never a part of the id, so a row keeps its number when it moves between tables |
 | `Statement` | RFC 2119 -- MUST, MUST NOT, SHOULD, SHOULD NOT, MAY. **A statement carrying none of them binds nothing**: it describes, and a description cannot be falsified, so it cannot carry a status. One rule per row, no conjunction |
-| `Sources` | where the rule comes from, in one of five forms: **a section**, of this spec or of a named sibling (`this spec section 3`, `` `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) ``); a **`README pillar "Zero-Knowledge"`**, the word `README` included, because a bare `pillar "..."` names something a reader cannot grep for; an **``audit `H9` ``** finding, by its number; a **named `document.md`** with the rule id it cites; or **`derived`**, which claims no source but the design. A row that closes a finding cites it, and the finding stops drifting from the code in silence |
+| `Sources` | where the rule comes from, `;` between one source and the next. Each source names its kind, its target and, where it has one, its section, in one of six forms: **a section** of this spec (`this spec section 3`); a **named `document.md`**, with the section it lands in and the rule ids it cites (`` `1-Foundations/ambre-spec-message-bus.md section 4` (`BUS-018`) ``); a **bare rule id**, which resolves through the ledger without naming the file that declares it (`` `ZK-001` ``); a **`README pillar "Zero-Knowledge"`**, the word `README` included, because a bare `pillar "..."` names something a reader cannot grep for; an **``audit `H9` ``** finding, by its number; or **`derived`**, which claims no source but the design. A source outside the six is refused on its own, whatever the sources beside it read. A row that closes a finding cites it, and the finding stops drifting from the code in silence |
 | `Verification` | the mechanism, and **nothing else**: one or more tokens of the closed set below, separated by `` ; ``. No argument. The cell answers one question -- what turns red when the rule breaks -- and that answer is a fact about CI, so it is finite and countable |
 | `Gap` | what the mechanism does not hold: one of the six openers below, then the argument in prose. The cell answers the other question, which is a judgement and ages with the code. `none` is an answer and the only one that carries no prose |
 | `Status` | one of the six values below. An empty cell fails |
@@ -253,6 +253,11 @@ and the rollback as one outcome, and `FRAME` names everything one operation must
 carry a list by right; the other six kinds do not. A statement of theirs stating a second MUST
 after an `and` is two rules under one status: the half nothing tests breaks in green.
 `contracts.py` refuses one, so a row of the six other kinds carries one rule.
+
+**The refusal reads the keyword after the `and`, and a subject hides the row from it.** "MUST be
+dropped, and the others MUST be told" is the same defect with four words in it. `contracts.py`
+reports those rows instead of refusing them. The measure is exact and the reading is not: a
+convergence rule states what both peers reach, from both ends, and it is one rule.
 
 **Three rules a script cannot hold**, and they are what keeps two kinds from becoming one:
 
@@ -399,11 +404,15 @@ A pillar without a script is decoration. The second column names the script that
 | A cited mechanism exists | `contracts.py` -- every `fn` a built row names must resolve in the workspace, per crate when the crate is named |
 | The mechanism cell is a mechanism | `contracts.py` -- a `Verification` cell is read **whole**: every token of it is one of the closed set, or the row fails. Prose in that cell fails even when the prose is true, which is the point: a cell a gate reads half of is a cell nothing holds |
 | The gap is stated, never implied | `contracts.py` -- a `Gap` cell opens on one of the six openers, and `none` is the only one carrying no prose. A row with no mechanism and no gap fails, and so does a `verified` row whose gap is not `none`: 78 rows read `verified` beside a reservation while the two answers shared one cell. A six-column header fails on every row under it, because neither grammar can read a cell holding both answers |
+| The source cell is a grammar | `contracts.py` -- a `Sources` cell is read **source by source**, each one parsed whole into its kind, its target and its section. What this replaced passed a cell when any one of its sources matched any one of five loose shapes, anywhere inside it: a bare id rode 95 times on the section citation beside it, a parenthesis was never read, and a citation of a sibling was typed as a section of this document |
 | A cited document exists | `spec_refs.py` -- a document is cited by its name, in the corpus and in the code alike, and that name must resolve to a file |
+| A cited rule exists | `contracts.py` -- an id a `Sources` cell cites must be declared by a row, and a document named beside that id must be the one declaring it. The corpus carries 176 such citations, and nothing read one until this row |
 | A cited section exists | `spec_refs.py` -- a citation carrying `section N` must name a section the target document has. The number, never the letter after it. The section sign spells the same coordinate, and `spec_refs.py` reads it |
-| A coordinate is a corpus namespace | `spec_refs.py` -- **`crates/` carries no section number.** A name and a contract id are minted once; a section number is the one part a renumbering breaks, and the code held 906 that named no document at all. A comment cites the document, and the id where the rule has one |
+| A cited code path exists | `spec_refs.py` -- a backticked `crates/` path must name a file the workspace holds, and a path carrying `*` must match at least one. The corpus cites 331, and this resolver used to call each one **not a citation** because it is not a document: `handler.rs` became `handler/` and one finding walked to a file gone for months |
+| A coordinate is a corpus namespace | `spec_refs.py` -- **`crates/` carries no section number, and no line range.** A name and a contract id are minted once; a coordinate is the one part an edit breaks, and the code held 906 that named no document at all. A comment cites the document, and the id where the rule has one. A citation names the file, and the symbol where it needs to be narrower. A dated record keeps its ranges, being a quotation |
 | The numbering has no holes | `spec_shape.py` -- sections run from 0 or 1 upward, one step at a time, and `bis` is not a number. A deletion pays for itself the day it happens |
-| Derived data is generated | `contracts.py` -- `ambre-contract-ledger.md` must match what the script would write. `feature_inventory.py` -- each application's inventory must match what it would write today |
+| Every citation is an edge, and the edge resolves | `contract_index.py` -- every source, mechanism and story a row cites is emitted as one edge, and each edge is resolved against what declares it. Six of the seven kinds a gate holds already; the seventh is the README pillar, cited 16 times and read by nothing until this row. 5 978 edges were a walk of 124 documents away from any reader |
+| Derived data is generated | `contracts.py` -- `ambre-contract-ledger.md` must match what the script would write. `contract_index.py` -- `ambre-contract-index.json` and `ambre-contract-graph.json` likewise. `feature_inventory.py` -- each application's inventory must match what it would write today |
 | Shapes, never bodies | `spec_code.py` -- section 0 |
 | Current state, never the steps | `spec_shape.py` -- a checkbox, a milestone word or a past-tense marker in a feature document fails |
 | One schedule | `spec_shape.py` -- a checkbox list or a roadmap heading **in any spec** fails |
@@ -418,6 +427,37 @@ A pillar without a script is decoration. The second column names the script that
   sentences get cut in half, the counter improves and the reading gets worse.
 * **The table is written before the prose.** Fill the rows, then write only what refused to become
   a row. The other order leaves a wall and a promise to tabulate it later.
+
+### E. The reading order of one row
+
+**Building one rule is a read of seven things, in this order.** It is stated here because it is a
+property of the contract, not of a script. A row that cannot be read this way is a row missing a
+citation. `spec_context.py` compiles the order, and `just spec-context <ID>` prints it.
+
+| Read | What answers it |
+| ---: | :--- |
+| 1. What must be built | the row: its kind, its statement, its status |
+| 2. What it must not change | the `FRAME` rows of its table |
+| 3. The operation it belongs to | the other rows of that table, whole |
+| 4. What design governs it | each section its `Sources` cite, verbatim |
+| 5. What other rules it depends on | each row, pillar and finding its `Sources` cite |
+| 6. How it is verified | the `Verification` cell |
+| 7. What is missing | the `Gap` cell, and the story it lands with |
+
+**The closure carries the sections the row cites, and never guesses one.** A design section reached
+by the document's shape rather than by a citation is a section the next reader will not find. A row
+whose design is unreachable is a defect with an address. 59 rows of the corpus cite no section at
+all. 42 of them read `derived`, which claims none by definition; the other 17 name a rule, a pillar
+or a finding and no design.
+
+**The closure prints the code pointers and never the code.** A path into `crates/` says what to open
+next. Inlining it puts a second copy of the implementation before a reader about to change it, which
+is what section 0 refuses of a spec.
+
+**At the median it is 31 percent of a full read**, against 4 percent at the least and 72 at the
+most. `just spec-context-cost` measures it over the whole corpus. The measure is the closure against
+every document it draws from, so the figure falls as a document grows. The worst case is a small
+document whose one row is most of it.
 
 ---
 
@@ -515,6 +555,7 @@ never restate the format.**
 | `specs/1-Foundations/ambre-spec-budgets.md` | one section per class of budget, one row per figure: the operation, the target, the thread, and the mechanism that measures it | the one register every budget of the workspace is a row of, so no spec carries a figure of its own. It states no rule, so it declares no contract table and carries no `Implementation` field. Hand-written, because a target is a decision: nothing can derive it. It is held to the prose cap and to the long-line rule like any document, and it is the reason `ambre-spec-architecture.md` needed no template of its own |
 | `specs/ambre-glossary.md` | one row per term: the gloss, the synonyms it forbids, the document that defines it | a register, not a specification. It states no rule of its own, so it declares no contract table and carries no `Implementation` field. The gloss names an idea and never restates the rule, because a gloss carrying a condition is a second specification. `prose.py` reads the `Forbidden` column and fails on any word it names |
 | `specs/1-Foundations/ambre-contract-ledger.md` | the roll-up of every contract row: the totals per status, then one row per document, then the index that joins an id to the file declaring it, one row per document and the ids folded into runs | generated by `contracts.py`, never edited. It reports state and carries no fact of its own, so no document cites a number from it. The index is the half a reader needs and a roll-up cannot give: an id in a code comment or a citation resolves to one file without a search. One line per id would be a ledger of thousands of lines, which is a file nobody opens |
+| `specs/1-Foundations/ambre-contract-index.json`, and `ambre-contract-graph.json` beside it | one record per contract row -- every column as written, with the `Sources` cell parsed into its kinds, targets and sections -- then one edge per citation those records make | generated by `contract_index.py`, never edited. The ledger answers how much is verified and nothing else, so every other question about a row re-parsed the corpus; these two answer it from one file. Neither carries a line number: a document and an id locate a row, and a line is the part an edit above it breaks. Neither is authoritative, exactly as the ledger is not: the Markdown is, and a stale artefact fails rather than being read |
 | `specs/1-Foundations/ambre-spec-testing.md` | the mechanism ladder, the regime per component shape, the three tiers, the two seams, the belt per crate | **the method, and the only place it lives.** It governs the `Verification` column of every document, so it declares no contract table of its own: a rule about how a rule is held would be held by itself. It is normative, and it wins where this file disagrees with it |
 | `specs/audits/<name>.md` | numbered findings, each dated, each carrying what it costs and what closes it | a dated record, so it is out of the coordinate namespace: `spec_refs.py` reads no section number in it. It is a join target, and `contracts.py` checks the join both ways -- a finding no row cites fails, and a row citing no finding of that number fails. It is never rewritten to match the code; a finding closes, it does not disappear |
 | `specs/Todo/ambre-<app>.md` | a sketch: the vision, the flow, the shape the application would take | **an application that has not started, and a sketch is not a specification.** It carries no contract table, no `Implementation` field and no section of either template, because the grammar costs more than it buys before a single row is falsifiable. Nothing cites it, and no gate reads it. The day the application starts, the sketch is replaced by a schema document and one feature document per feature; it is never migrated in place |
@@ -540,4 +581,9 @@ so that none is proposed a second time.
 | `PRE` stays, and no rule pairs it with a `FAIL` | cutting `PRE` from the vocabulary | A precondition is the only place an unchecked obligation is written, and dropping the kind loses `SYNC-003`, which no code can check and whose breach is silent |
 | The state kinds keep one table, the operation kinds get one each | a section per kind: `1.3 Concurrent`, `1.4 User-observable`, `1.5 File I/O` | It puts three rows under five headings and separates the two rules that describe one gesture. Grouping by operation is what makes the hole visible: a reader meets `MergeCells` and sees whether it declares what it does not touch |
 | `Sources` stays a column | six columns without `Sources`, the audit joined by a hand-kept list | It is the join to `security-audit.md`, read by `contracts.py`, and the check runs both ways: a finding no row cites fails, and a row citing no finding of that number fails. A contract that drops it silently unbinds eight findings from the rules that close them |
+| A source keeps the form the corpus writes | rewriting every source to `kind:target`, one machine-readable prefix per citation | The parser gains nothing: a full parse of the six prose forms yields the same kind, target and locator, and it yields them today over 3 021 sources with no edit at all. The rewrite costs 3 021 edits, each one unreviewable on its own, to make a reader decode a prefix before reading a citation they already read as English |
+| A pointer keeps the form the corpus writes | a `code:` and a `test:` prefix, one declared kind per pointer | The kind is carried twice already. A `crates/` path is a path and `ambre_sync::pipeline::merge` is a Rust path, so the shapes do not collide; and the column says which promise is made, a `Verification` token naming a test that runs and prose naming a file to open. The prefix adds 776 edits, and a second thing to read before the citation |
+| The `fn` check holds the mechanism cell alone | resolving every Rust path of the corpus, prose included | Prose legitimately names what no `fn` declares: a module (`ambre_toile::logic::state::comments`), a type (`FontConfig::system`), a method of a dependency (`LoroMovableList::mov`). Widened over the 447 Rust paths outside a `Verification` cell, the check reports 14, and all 14 are true citations. What the cell promises is a test that runs, and that promise is what the check holds |
+| The graph joins a row to what the row cites | an edge from a row to the container it constrains | Section 2 refuses it at the source: a Contract row names no container, no type and no function. A container is named by a `3. MODEL` section and belongs to a document, so such an edge has no tail to leave from, and `spec_shape.py` holds that table against the code already |
+| A record locates its row by document and id | a line number per record, so a reader opens the file at the row | It is the coordinate this file refuses everywhere else, and it rots in the same way: an edit anywhere above a row rewrites that row's record while the row itself changes no word, and every such rewrite lands in a diff as a corpus change. An id is unique corpus-wide, and `ambre-contract-ledger.md` joins it to its file |
 | Two templates, one contract | a third template for the schema document | The schema document differs from a feature document by its section order, never by its contract: same header fields, same contract grammar, same ban on implementation. A third copy duplicates all three to change a table of contents. What it needs instead, and has, is its own budgets in `spec_shape.py` |

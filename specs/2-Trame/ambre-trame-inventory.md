@@ -33,7 +33,7 @@
 | `trame-formula-engine` | A user types `=SUM(A1:A3)*2`. | partial | 39 | 8 |
 | `trame-function-library` | The named calls a user may write inside a formula: `SUM`, `VLOOKUP`, `IF`, `TEXT`, `PMT`. | partial | 28 | 11 |
 | `trame-grid-viewport` | A user scrolls a sheet of 100 000 rows. | partial | 19 | 12 |
-| `trame-import-export` | A user opens a table that came from somewhere else, and hands one back to someone who does not use Ambre. | partial | 39 | 12 |
+| `trame-import-export` | A user opens a table that came from somewhere else, and hands one back to someone who does not use Ambre. | partial | 40 | 12 |
 | `trame-number-formats` | A user picks Percent. | partial | 12 | 6 |
 | `trame-pdf-export` | Trame's half of the shared PDF export (`ambre-spec-pdf-export.md`): the persisted page setup, and the pagination that cuts a grid into pages. | partial | 4 |  |
 | `trame-selection` | A user points at a cell, sweeps a rectangle, adds a second one with a modifier, or takes a whole column from its header. | partial | 11 | 4 |
@@ -41,4 +41,4 @@
 | `trame-sheets` | A workbook is several sheets, shown as tabs along the bottom edge. | partial | 18 | 10 |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 8 |  |
 
-**25 features: 11 implemented, 14 partial, 0 design-only. 461 contract rows, 202 loose.**
+**25 features: 11 implemented, 14 partial, 0 design-only. 462 contract rows, 202 loose.**

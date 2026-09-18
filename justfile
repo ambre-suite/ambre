@@ -187,6 +187,20 @@ contracts:
 contracts-write:
     python3 scripts/contracts.py --write
 
+# The corpus parsed once, for a reader that is not a human: one record per
+# contract row, and the edges each row asserts. The ledger is a roll-up and drops
+# the statement, the sources and the mechanism, so everything that needs a row
+# re-parsed 121 documents to get it back. Also resolves every edge -- the pillar
+# of a `Sources` cell was the one form nothing resolved.
+
+# contract index and graph: fail when the files on disk are not what the corpus says.
+index:
+    python3 scripts/contract_index.py
+
+# Rewrite the index and the graph after a contract row changed.
+index-write:
+    python3 scripts/contract_index.py --write
+
 # How a spec is built, not what it quotes: prose share and line length, both
 # capped for every spec, production markers in a feature document, the schema
 # document's budgets, and every container built in the code present in the
@@ -208,6 +222,21 @@ spec-shape:
 # reading view of one spec's contract: the id, the kind, the rule.
 spec-read FILE:
     python3 scripts/spec_read.py {{FILE}}
+
+# Building one rule means reading the rule, the design that produced it, the rows
+# it must not break and the mechanism that would catch it. Today that is the whole
+# document plus every document it cites, and nothing says which paragraph mattered.
+# This compiles the closure of one id from the index and the graph, so only the
+# documents those two name are opened. At the median it is a third of a full read.
+# It writes nothing, for the reason `spec-read` writes nothing.
+
+# everything one contract row needs, and nothing else.
+spec-context ID:
+    python3 scripts/spec_context.py {{ID}}
+
+# What the closure costs over the whole corpus: the least, the median, the most.
+spec-context-cost:
+    python3 scripts/spec_context.py --all
 
 # The three answers under a contract table are one paragraph to a reader, and the
 # corpus let them run to 463 words of which most was the document's own history:

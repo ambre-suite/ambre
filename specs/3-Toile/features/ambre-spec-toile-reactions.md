@@ -32,7 +32,8 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 | `TOILE-UI-299` | `OBS` | A badge row MUST stay legible over whatever it sits on, in edit mode and in presentation alike. | this spec section 4 | none | unheld -- the row is painted after the content and after the presence overlay, and unconditionally on mode, but the order is two call sites and nothing holds it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-FEAT-022` | `OBS` | A user MUST be able to cast a vote. | this spec section 3 | not built | unbuilt -- lands with the `The facilitation layer` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TOILE-FEAT-100` | `OBS` | A vote MUST replace the voter's emoji on that target. | this spec section 3 | not built | unbuilt -- lands with the `The facilitation layer` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `TOILE-FEAT-024` | `CONC` | A shared timer MUST show every participant the same remaining time, and a late joiner MUST see it running. | this spec section 3 | not built | unbuilt -- lands with the `The facilitation layer` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `TOILE-FEAT-024` | `CONC` | A shared timer MUST show every participant the same remaining time. | this spec section 3 | not built | unbuilt -- lands with the `The facilitation layer` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `TOILE-FEAT-106` | `CONC` | A participant joining a running timer MUST see it running. | this spec section 3 | not built | unbuilt -- lands with the `The facilitation layer` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TOILE-FEAT-025` | `INV` | A vote session MUST cap each user's votes. | this spec section 3; `features/ambre-spec-toile-elements.md section 3` | not built | unbuilt -- lands with the `The facilitation layer` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TOILE-FEAT-101` | `INV` | The cap on a vote session MUST be advisory: it MUST NOT be enforced against a peer. | this spec section 3; `features/ambre-spec-toile-elements.md section 3` | not built | unbuilt -- lands with the `The facilitation layer` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
@@ -80,7 +81,7 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
   pass per element. It costs what the board has reacted to and not what it holds.
 * **Boundary.** none of its own: a reaction is written to the document, and `ZK-001` seals every
   payload before it leaves the client. The emoji is document data like any other.
-* **Verification.** 19 `verified`, 1 `failing`, 9 `untested`, 5 `unimplemented`. What holds is the
+* **Verification.** 19 `verified`, 1 `failing`, 9 `untested`, 6 `unimplemented`. What holds is the
   convergence: two devices, two users and a deleted target, the best-covered half of the
   collaboration surface. What is loose is the painting: a chip size nothing measures, an untallied
   element nothing checks, a vote chip nothing can build. An emoji order is loose too, and no test

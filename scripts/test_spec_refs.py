@@ -231,6 +231,73 @@ class Duplicates(unittest.TestCase):
         self.assertEqual(len(spec_refs.corpus_files()), len(spec_refs.documents()))
 
 
+def cited(text: str) -> list[tuple[str, bool]]:
+    return [(path, ranged) for _, _, path, ranged in spec_refs.code_citations(text)]
+
+
+class CodePaths(unittest.TestCase):
+    """The third namespace: a file of the workspace, named by a document.
+
+    329 of them sit in the corpus and this resolver used to declare each one
+    "not a citation", because it is not a document. So a rename left the
+    citation pointing at nothing, and the corpus said nothing: `handler.rs`
+    became `handler/` and one finding of the audit walked to a file that has
+    not existed since.
+    """
+
+    def test_a_path_is_seen(self):
+        self.assertEqual(
+            [("crates/ambre-sync/src/pipeline.rs", False)],
+            cited("held in `crates/ambre-sync/src/pipeline.rs` today"),
+        )
+
+    def test_a_path_outside_backticks_is_not_a_citation(self):
+        """The corpus backticks every path it cites. Prose naming a directory
+        in passing is prose, and a resolver that reads it reports the sentence
+        rather than the citation."""
+        self.assertEqual([], cited("the crates/ambre-sync crate"))
+
+    def test_a_line_range_is_cut_from_the_path(self):
+        """Both halves are kept: the name resolves, and the range is refused on
+        its own. Cutting one loses the other."""
+        self.assertEqual(
+            [("crates/ambre-server/src/s3.rs", True)],
+            cited("`crates/ambre-server/src/s3.rs:66-72`"),
+        )
+
+    def test_the_prose_after_a_range_is_cut_too(self):
+        found = cited("`crates/ambre-server/src/ws/handler.rs:271-289 (subscribe)`")
+        self.assertEqual([("crates/ambre-server/src/ws/handler.rs", True)], found)
+
+    def test_a_comma_range_is_a_range(self):
+        self.assertEqual(
+            [("crates/ambre-server/src/routes/sync.rs", True)],
+            cited("`crates/ambre-server/src/routes/sync.rs:210,237`"),
+        )
+
+    def test_a_trailing_slash_is_dropped(self):
+        self.assertEqual(
+            [("crates/ambre-trame/src/render", False)],
+            cited("`crates/ambre-trame/src/render/`"),
+        )
+
+    def test_a_file_the_workspace_holds_resolves(self):
+        self.assertTrue(spec_refs.code_resolves("crates/ambre-prose/src/lib.rs"))
+
+    def test_a_directory_resolves(self):
+        self.assertTrue(spec_refs.code_resolves("crates/ambre-prose"))
+
+    def test_a_file_the_workspace_lost_does_not(self):
+        self.assertFalse(spec_refs.code_resolves("crates/ambre-server/src/ws/handler.rs"))
+
+    def test_a_shape_resolves_when_it_matches(self):
+        """`crates/**/*.rs` is how the roadmap names every Rust file there is."""
+        self.assertTrue(spec_refs.code_resolves("crates/**/*.rs"))
+
+    def test_a_shape_matching_nothing_is_dead(self):
+        self.assertFalse(spec_refs.code_resolves("crates/ambre-gone/**/*.rs"))
+
+
 class Records(unittest.TestCase):
     """A dated record quotes the corpus of the day it was written."""
 

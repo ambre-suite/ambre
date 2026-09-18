@@ -114,7 +114,10 @@ class Cells(unittest.TestCase):
 
     def test_a_source_nobody_can_resolve_is_refused(self):
         """`pillar "Local-First"` names a pillar no reader can grep for."""
-        self.assertIn("none of the", self.defects(sources='pillar "Local-First"')[0])
+        self.assertIn(
+            "no form of the grammar accepts",
+            self.defects(sources='pillar "Local-First"')[0],
+        )
 
     def test_every_declared_source_form_resolves(self):
         for form in (
@@ -122,6 +125,7 @@ class Cells(unittest.TestCase):
             'README pillar "Security"',
             "audit `H9`",
             "derived",
+            "`ZK-001`",
             "`ambre-spec-sync.md`",
             "`1-Foundations/ambre-spec-message-bus.md section 4`",
         ):
@@ -387,6 +391,234 @@ class IdRanges(unittest.TestCase):
 
     def test_a_repeated_id_is_listed_once(self):
         self.assertEqual("ARCH-001", contracts.id_ranges(["ARCH-001", "ARCH-001"]))
+
+
+DECLARED = {
+    "ZK-001": "1-Foundations/ambre-spec-zero-knowledge.md",
+    "SYNC-050": "1-Foundations/ambre-spec-media.md",
+    "UI-THREAD-001": "1-Foundations/ambre-spec-ui.md",
+    "UI-THREAD-050": "1-Foundations/ambre-spec-ui.md",
+}
+
+
+def cites(cell: str) -> list[str]:
+    return contracts.source_defects(WHERE, cell, DECLARED)
+
+
+class SourceIds(unittest.TestCase):
+    """The rule a `Sources` cell cites, and whether it still exists.
+
+    The corpus carries 174 such citations and nothing resolved one. A row is
+    deleted or its id is renumbered, and every citation of it points at nothing
+    while the cell still reads like a join.
+    """
+
+    def test_an_id_no_document_declares_fails(self):
+        self.assertEqual(1, len(cites("this spec section 3; `ZK-999`")))
+
+    def test_a_declared_id_passes_bare(self):
+        """An id is unique in the corpus, so a bare one resolves through the
+        ledger index without naming its file."""
+        self.assertEqual([], cites("this spec section 3; `ZK-001`"))
+
+    def test_the_named_document_must_declare_the_id(self):
+        defects = cites("`ambre-spec-server.md`, `ZK-001`")
+        self.assertEqual(1, len(defects))
+        self.assertIn("ambre-spec-zero-knowledge.md", defects[0])
+
+    def test_the_right_document_passes(self):
+        self.assertEqual([], cites("`ambre-spec-zero-knowledge.md`, `ZK-001`"))
+
+    def test_a_path_matches_the_bare_name(self):
+        """The corpus writes both `ambre-spec-media.md` and the path to it, and
+        the two name one file."""
+        self.assertEqual([], cites("`1-Foundations/ambre-spec-media.md`, `SYNC-050`"))
+
+    def test_each_source_pairs_with_its_own_document(self):
+        """One cell lists several sources. Pairing an id with the document of
+        the source beside it reads a true citation as a lie, which is what a
+        whole-cell read did to five rows of the corpus."""
+        self.assertEqual([], cites("`ZK-001`; `ambre-spec-media.md`, `SYNC-050`"))
+
+    def test_two_ids_under_one_document_both_resolve(self):
+        self.assertEqual(
+            [], cites("`ambre-spec-ui.md section 2` (`UI-THREAD-001`, `UI-THREAD-050`)")
+        )
+
+    def test_a_cell_citing_no_id_is_silent(self):
+        self.assertEqual([], cites('README pillar "Zero-Knowledge"; audit `H9`'))
+
+
+FIELDS_ANCHOR = "**The seven fields.**"
+
+
+class SourceGrammar(unittest.TestCase):
+    """What a `Sources` cell may say, form by form.
+
+    What this replaced accepted a cell when any one of its sources matched any
+    one of five loose patterns, anywhere inside it. A bare `` `ZK-001` `` rode
+    on the section citation beside it 95 times and no gate read it once.
+    """
+
+    def parsed(self, source: str) -> contracts.Source:
+        found = contracts.parse_source(source)
+        self.assertIsNotNone(found, f"the grammar refused {source!r}")
+        return found
+
+    def test_derived_names_nothing_outside_the_row(self):
+        found = self.parsed("derived")
+        self.assertEqual(("derived", "", ""), (found.kind, found.target, found.locator))
+
+    def test_a_pillar_carries_the_pillar_it_names(self):
+        found = self.parsed('README pillar "Zero-Knowledge"')
+        self.assertEqual(("pillar", "Zero-Knowledge"), (found.kind, found.target))
+
+    def test_an_audit_finding_carries_its_number(self):
+        found = self.parsed("audit `H9`")
+        self.assertEqual(("audit", "`H9`"), (found.kind, found.target))
+
+    def test_several_findings_ride_one_source(self):
+        self.assertEqual("audit", self.parsed("audit `H9`, `H12`").kind)
+
+    def test_a_bare_id_is_a_source_of_its_own(self):
+        """The form the corpus writes most after a section, and the one the
+        shape list never declared."""
+        found = self.parsed("`ZK-001`")
+        self.assertEqual(("rule", ("ZK-001",)), (found.kind, found.rules))
+
+    def test_a_document_carries_its_section_inside_the_ticks(self):
+        found = self.parsed("`ambre-spec-ui.md section 2`")
+        self.assertEqual(
+            ("doc", "ambre-spec-ui.md", "2"), (found.kind, found.target, found.locator)
+        )
+
+    def test_a_document_carries_its_section_outside_the_ticks(self):
+        found = self.parsed("`ambre-spec-ui.md` section 2")
+        self.assertEqual(
+            ("doc", "ambre-spec-ui.md", "2"), (found.kind, found.target, found.locator)
+        )
+
+    def test_a_path_is_a_document_name(self):
+        found = self.parsed("`1-Foundations/ambre-spec-media.md`")
+        self.assertEqual("1-Foundations/ambre-spec-media.md", found.target)
+
+    def test_a_short_name_is_a_citation_and_not_prose(self):
+        """`spec_refs.py` resolves the short name, and reads the number of the
+        section and no more. Twenty sources write it, and the shape list read
+        every one of them as a section of the citing document."""
+        found = self.parsed("architecture section 2.D")
+        self.assertEqual(
+            ("doc", "architecture", "2.D"), (found.kind, found.target, found.locator)
+        )
+
+    def test_this_spec_locates_a_section_of_the_citing_document(self):
+        found = self.parsed("this spec section 3")
+        self.assertEqual(("own", "", "3"), (found.kind, found.target, found.locator))
+
+    def test_the_section_stands_without_this_spec(self):
+        self.assertEqual("own", self.parsed("section 3").kind)
+
+    def test_a_parenthesis_holds_the_rules_a_document_cites(self):
+        found = self.parsed("`ambre-spec-ui.md section 2` (`UI-THREAD-001`, `UI-THREAD-050`)")
+        self.assertEqual(("UI-THREAD-001", "UI-THREAD-050"), found.rules)
+
+    def test_an_ids_only_clause_is_the_citation_and_not_a_note(self):
+        """56 sources name the rule they point at this way, and reading that
+        clause as prose loses every one of them."""
+        found = self.parsed("`ambre-spec-zero-knowledge.md`, `ZK-002`")
+        self.assertEqual((("ZK-002",), ""), (found.rules, found.note))
+
+    def test_a_clause_that_is_prose_stays_a_note(self):
+        found = self.parsed("`ambre-spec-ui.md section 2`, the token table")
+        self.assertEqual(((), "the token table"), (found.rules, found.note))
+
+    def test_an_id_the_note_mentions_in_passing_is_prose(self):
+        """A clause is the citation when it is ids and nothing else. Anything
+        around them is a sentence, and a sentence cites nothing."""
+        found = self.parsed("`ambre-spec-ui.md`, as `ZK-001` requires")
+        self.assertEqual((), found.rules)
+
+    def test_a_source_that_names_nothing_is_refused(self):
+        self.assertIsNone(contracts.parse_source("the design"))
+
+    def test_a_document_named_in_prose_is_refused(self):
+        self.assertIsNone(contracts.parse_source("see ambre-spec-ui.md"))
+
+    def test_a_section_without_a_number_is_refused(self):
+        self.assertIsNone(contracts.parse_source("this spec section"))
+
+    def test_each_source_of_a_cell_is_read_on_its_own(self):
+        """The looseness this replaced: one entry matched and the cell passed,
+        so the entry beside it was never read."""
+        defects = contracts.grammar_defects(WHERE, "this spec section 3; the design")
+        self.assertEqual(1, len(defects))
+        self.assertIn("'the design'", defects[0])
+
+    def test_a_cell_the_grammar_reads_whole_is_silent(self):
+        self.assertEqual(
+            [], contracts.grammar_defects(WHERE, "this spec section 3; `ZK-001`; derived")
+        )
+
+    def test_a_bare_id_names_no_document(self):
+        self.assertEqual([("ZK-001", [])], contracts.sources_cited("`ZK-001`"))
+
+    def test_an_id_pairs_with_the_document_of_its_own_source(self):
+        self.assertEqual(
+            [("ZK-001", []), ("SYNC-050", ["ambre-spec-media.md"])],
+            contracts.sources_cited("`ZK-001`; `ambre-spec-media.md`, `SYNC-050`"),
+        )
+
+    def test_a_source_the_grammar_refuses_cites_nothing(self):
+        """One defect per source: the refusal names it, and the citation check
+        does not name it a second time."""
+        self.assertEqual([], contracts.sources_cited("the design"))
+
+    def test_the_template_announces_one_form_per_kind(self):
+        """The template is what a contributor reads, and `SOURCE_KINDS` is what
+        the gate holds. A form declared in one and missing from the other is
+        the drift the shape list carried for the bare id."""
+        fields = {
+            template_vocabulary._token(cells[0], FIELDS_ANCHOR): cells[1]
+            for cells in template_vocabulary._counted(FIELDS_ANCHOR)
+        }
+        word = template_vocabulary.ANNOUNCED_COUNT.search(fields["Sources"]).group(1)
+        self.assertEqual(len(contracts.SOURCE_KINDS), template_vocabulary.NUMBERS[word])
+
+
+class SplitCandidates(unittest.TestCase):
+    """The second keyword the refusal does not reach.
+
+    `CONJUNCTION` asks for the keyword right after the `and`, so four words of
+    subject hide 40 rows from it. This measure allows the subject and reports
+    what it finds, because the reading is what decides each row.
+    """
+
+    def test_a_subject_between_the_and_and_the_keyword_is_reached(self):
+        self.assertTrue(contracts.SPLIT_CANDIDATE.search(
+            "A departure MUST drop the entry, and the others MUST be told."))
+
+    def test_the_refusal_does_not_reach_it(self):
+        """The reason the report exists: this row passes the gate today."""
+        self.assertIsNone(contracts.CONJUNCTION.search(
+            "A departure MUST drop the entry, and the others MUST be told."))
+
+    def test_a_noun_list_after_the_keyword_is_left_alone(self):
+        self.assertIsNone(contracts.SPLIT_CANDIDATE.search(
+            "A command MUST carry its label, its icon and its chord."))
+
+    def test_a_second_sentence_is_left_alone(self):
+        """A full stop ends the rule. What follows is a second sentence, and the
+        row grammar reads sentences, never paragraphs."""
+        self.assertIsNone(contracts.SPLIT_CANDIDATE.search(
+            "The menu MUST close. A reopened menu MUST start empty."))
+
+    def test_the_report_is_empty_when_nothing_matches(self):
+        self.assertEqual([], contracts.split_report([]))
+
+    def test_the_report_counts_the_rows_it_prints(self):
+        lines = contracts.split_report([(WHERE, "A MUST b, and c MUST d.")])
+        self.assertIn("1 rows to read", lines[1])
+        self.assertIn(WHERE, lines[2])
 
 
 if __name__ == "__main__":

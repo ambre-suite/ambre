@@ -57,7 +57,8 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-072` | `POST` | A presence entry MUST expire on its own. | this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::presence_field_self_expires` -- the field is gone after its own life runs out, on the database tier, so a person who disappears without a clean exit prunes themselves | none | verified |
-| `SRV-097` | `POST` | A person who stops watching a document MUST be dropped from its presence entries, and the others MUST be told, whether they left cleanly or their connection died. | this spec section 3; `1-Foundations/ambre-spec-presence.md`, `PRESENCE-014` | `ambre_server::redis_ops::redis_integration_tests::presence_field_is_dropped_on_departure` -- the entry itself, on the database tier | partial -- the announcement is unread: it is one publish inside the socket handler, and no test drives a socket to its close; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-097` | `POST` | A person who stops watching a document MUST be dropped from its presence entries, whether they left cleanly or their connection died. | this spec section 3; `1-Foundations/ambre-spec-presence.md`, `PRESENCE-014` | `ambre_server::redis_ops::redis_integration_tests::presence_field_is_dropped_on_departure` -- the entry itself, on the database tier | none | verified |
+| `SRV-099` | `POST` | The others watching MUST be told when a person stops watching a document. | this spec section 3; `1-Foundations/ambre-spec-presence.md`, `PRESENCE-014` | none | unheld -- the announcement is one publish inside the socket handler, and no test drives a socket to its close; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-089` | `FRAME` | Recording a presence entry MUST NOT touch the document's history: it MUST take no number and reach no store the replay reads. | this spec section 3; `ambre-spec-sequencer.md`, `SRV-006` | none | unheld -- `handle_ephemeral` calls neither the ordering script nor the delta queue, so the separation is held by the two paths having been written apart; no test asserts the queue is still empty after a presence frame; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.6 A channel frame is relayed
@@ -74,7 +75,7 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 * **Boundary.** every payload is sealed and the relay forwards it unopened. It reads the routing
   metadata of `ZK-007` and a presence entry filed under an opaque author key (`SRV-050`). Who left a
   document is the other fan-out leak, and `SRV-088` holds it to the one person it concerns.
-* **Verification.** 5 `verified`, 10 `untested`, 3 `unimplemented`. What holds is what a handler
+* **Verification.** 6 `verified`, 10 `untested`, 3 `unimplemented`. What holds is what a handler
   test drives: the two caps, the rate bucket, the presence expiry and its removal. What is loose is
   everything about the connection rather than the message, each needing a live socket the suite has
   no way to open (`ambre-spec-testing.md section 9`).

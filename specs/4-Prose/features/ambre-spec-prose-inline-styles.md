@@ -34,7 +34,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-178` | `POST` | The mark MUST cover the given range and no character outside it, and the value stored MUST be the canonical form of the value supplied. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-178` | `POST` | The mark MUST cover the given range and no character outside it. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-290` | `POST` | The value stored MUST be the canonical form of the value supplied. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-022` | `FAIL` | A mark value that fails the grammar of its key MUST be refused before the document is written, and MUST be reported to the author. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-179` | `FRAME` | Applying a mark MUST NOT change the text of the block, any other key of the registry over that range, or the block's paragraph settings. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -66,7 +67,7 @@ status values are normative in `ambre-spec-template.md`.
   pagination path rather than beside it.
 * **Boundary.** none of its own: a mark is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 22 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+* **Verification.** 23 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
   `PROSE-FEAT-023` and `PROSE-FEAT-175` are the two an oracle reaches with one function: a byte
   round trip, and two colour spellings parsing to one value. `PROSE-FEAT-174`
   is decided by a comparison rather than by two arrival orders, so it holds before any peer exists.
