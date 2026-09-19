@@ -37,6 +37,24 @@ def compiled(rid: str) -> list[str]:
     return spec_context.closure(rid, records, graph)
 
 
+def a_story(rows: int) -> tuple[str, list[str]]:
+    """One story of the roadmap landing at least `rows` rows, and those rows.
+
+    A story name written into this file is a name a build ticks, and a ticked
+    story is a test that fails for the one reason a test must never fail. So the
+    corpus picks it, in roadmap order, which keeps the choice the same between
+    two runs of an unchanged tree.
+    """
+    records, graph = spec_context.load()
+    for line in sorted({found[2] for found in spec_context.schedule().values()}):
+        ids = spec_context.landing(line, records, graph)
+        if len(ids) >= rows:
+            name = next(found[3] for found in spec_context.schedule().values()
+                        if found[2] == line)
+            return name, ids
+    raise AssertionError(f"no story of the roadmap lands {rows} rows")
+
+
 class Tables(unittest.TestCase):
     """The unit is the table, never the document."""
 
@@ -152,6 +170,80 @@ class Pointers(unittest.TestCase):
         self.assertNotIn("fn ", "\n".join(out[at:]))
 
 
+class Stories(unittest.TestCase):
+    """A builder is given a name, and the closure starts at an id."""
+
+    def setUp(self):
+        self.records, self.graph = spec_context.load()
+        self.name, self.ids = a_story(2)
+        self.out = spec_context.for_story(self.name, self.records, self.graph)
+        self.text = "\n".join(self.out)
+
+    def test_the_roadmap_row_is_carried_verbatim(self):
+        """The story says what the work is. A closure that summarized it would
+        put a second wording of the row beside the one the roadmap holds."""
+        epic, _, lineno, _ = spec_context.scheduled(self.name)
+        row = spec_context.lines_of(
+            contracts.SPECS / contracts.ROADMAP
+        )[lineno - 1]
+        self.assertIn(row, self.out)
+        self.assertIn(f"Epic {epic}", self.text)
+
+    def test_every_row_landing_with_it_is_compiled(self):
+        for rid in self.ids:
+            self.assertIn(f"# CONTEXT FOR `{rid}`", self.out)
+
+    def test_a_row_landing_with_another_story_is_left_out(self):
+        other = next(rid for rid in self.records if rid not in self.ids)
+        self.assertNotIn(f"# CONTEXT FOR `{other}`", self.out)
+
+    def test_the_phase_code_reaches_the_row_its_name_reaches(self):
+        """`ARCH P2` is a citation key of its own, and two keys that compiled
+        two different closures would make the roadmap ambiguous."""
+        coded = [found for found in spec_context.schedule().values()
+                 if " -- " in found[3]]
+        if not coded:
+            self.skipTest("no story of the roadmap carries a phase code")
+        epic, _, lineno, name = coded[0]
+        del epic
+        self.assertEqual(lineno, spec_context.scheduled(name.split(" -- ")[0])[2])
+
+    def test_a_name_no_row_carries_is_refused(self):
+        with self.assertRaises(spec_context.Missing):
+            spec_context.for_story("no story is named this", self.records,
+                                   self.graph)
+
+    def test_a_story_landing_no_row_is_an_answer_and_not_a_refusal(self):
+        """39 open stories land no row: they write rules the corpus does not
+        carry yet. An empty output would read as a broken tool."""
+        empty = [found for found in spec_context.schedule().values()
+                 if not spec_context.landing(found[2], self.records, self.graph)]
+        if not empty:
+            self.skipTest("every story of the roadmap lands a row")
+        out = spec_context.for_story(empty[0][3], self.records, self.graph)
+        self.assertIn("No contract row lands with this story.", "\n".join(out))
+
+    def test_a_block_quoted_once_is_not_quoted_again(self):
+        """Rows of one story share a table. Quoting it per closure is the full
+        read the compiler exists to replace, once per row."""
+        self.assertIn("printed under `", self.text)
+        alone = spec_context.closure(self.ids[0], self.records, self.graph)
+        self.assertLess(spec_context.words(self.out),
+                        spec_context.words(alone) * len(self.ids))
+
+    def test_a_dropped_block_names_the_id_that_carries_it(self):
+        """What is absent has an address in the same output, or the reader
+        cannot tell a skipped block from a missing one."""
+        for line in self.text.splitlines():
+            if "printed under `" in line:
+                named = line.split("printed under `")[1].split("`")[0]
+                self.assertIn(named, self.ids)
+
+    def test_a_single_id_still_quotes_everything_it_cites(self):
+        """The register is passed in, so the dedup cannot reach the one-id run."""
+        self.assertNotIn("printed under `", "\n".join(compiled(OPERATION)))
+
+
 class Cost(unittest.TestCase):
     """The compiler has to pay for itself, over the corpus and not one row."""
 
@@ -162,6 +254,43 @@ class Cost(unittest.TestCase):
             spec_context.measure(OPERATION, out, records, graph).split(": ")[1].split()[0]
         )
         self.assertLess(share, 100)
+
+    def test_a_grouped_closure_that_costs_more_says_so(self):
+        """A story of 67 rows costs more than its documents do. The compiler is
+        what has to say it: a reader who finds out has already paid."""
+        records, graph = spec_context.load()
+        lines = sorted({found[2] for found in spec_context.schedule().values()})
+        worst = ""
+        for line in lines:
+            ids = spec_context.landing(line, records, graph)
+            if not ids:
+                continue
+            name = next(found[3] for found in spec_context.schedule().values()
+                        if found[2] == line)
+            out = spec_context.for_story(name, records, graph)
+            cost = spec_context.measure_story(ids, out, records, graph)
+            share = int(cost.split(": ")[1].split()[0])
+            if share >= 100:
+                worst = cost
+                break
+        if not worst:
+            self.skipTest("every story is cheaper than a full read today")
+        self.assertIn("cheaper read whole", worst)
+
+    def test_every_story_of_the_roadmap_compiles(self):
+        """The `--all` of the story mode. A story that raises is a name the
+        roadmap carries and this file cannot follow."""
+        records, graph = spec_context.load()
+        refused = []
+        for lineno in sorted({found[2] for found in
+                              spec_context.schedule().values()}):
+            name = next(found[3] for found in spec_context.schedule().values()
+                        if found[2] == lineno)
+            try:
+                spec_context.for_story(name, records, graph)
+            except spec_context.Missing as why:
+                refused.append(f"{name}: {why}")
+        self.assertEqual([], refused)
 
     def test_every_id_of_the_corpus_compiles(self):
         """The one test that reads the whole corpus. A closure that raises is a

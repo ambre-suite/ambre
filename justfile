@@ -238,6 +238,18 @@ spec-context ID:
 spec-context-cost:
     python3 scripts/spec_context.py --all
 
+# Work starts at a story, and the closure above starts at an id. The join is
+# already written: a gap that can close names the Story it lands with, and the
+# graph carries that citation as an edge. This takes the name, by its wording or
+# by its phase code, and compiles every row landing with it. A block two rows
+# share is quoted once and named after. A story landing no row says so: the rules
+# it writes do not exist yet. The cost goes to standard error, and says when the
+# story is cheaper read whole.
+
+# everything one story of the roadmap needs, one closure per row it lands.
+spec-context-story NAME:
+    python3 scripts/spec_context.py --story "{{NAME}}"
+
 # The three answers under a contract table are one paragraph to a reader, and the
 # corpus let them run to 463 words of which most was the document's own history:
 # which conjunction came apart, what the pass added, which row carried which

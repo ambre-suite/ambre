@@ -153,6 +153,10 @@ authoritative: the Markdown is.
 it, its operation, the design sections it cites, the rules it depends on, its mechanism, its gap.
 The order is `ambre-spec-template.md section 1.E`. At the median it is a third of a full read.
 
+`just spec-context-story "<NAME>"` compiles the same closure for every row one story lands, because
+work starts at a story and the closure starts at an id. A block two rows share is quoted once and
+named after. A story landing no row says so: the rules it writes do not exist yet.
+
 The CI `lint` job runs `just contracts`, `just index` and `just spec-code` over the corpus.
 
 `just spec-read <file>` prints one document's rules alone -- the id, the kind and the statement,

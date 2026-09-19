@@ -306,4 +306,5 @@ owns the subsystem.
 ## 9. HOW TO RESUME WITH NO PRIOR CONTEXT
 
 Read section 1, then the epic marked *current core objective*, and work its open rows. Open a spec
-only when you start the row that names it. No other file schedules anything.
+only when you start the row that names it. `just spec-context-story "<NAME>"` prints what the rows
+of one story need, and says when that story is cheaper read whole. No other file schedules anything.

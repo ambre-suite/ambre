@@ -16,6 +16,7 @@ This file is a directory, not a manual. Each row says what a file holds and when
 | [`README.md`](README.md) | At the start of the session. What Ambre is: pillars, performance targets, rejected alternatives, the crate map, the map of the spec corpus. Normative. |
 | [`ai/ambre-engagement.md`](ai/ambre-engagement.md) | At the start of the session. It governs the answer you are about to write, so reading it afterwards is too late. Surgical focus, verbosity budgets, reading discipline. |
 | [`ai/ambre-git-strategy.md`](ai/ambre-git-strategy.md) | At the start of the session, not when a commit comes up. A session that opens with a question ends with a push, and by then you are thinking about the diff. No git write without an explicit authorization, per operation. |
+| [`ai/ambre-story-workflow.md`](ai/ambre-story-workflow.md) | Before the first line of a roadmap story, never after. Which closure to compile, what to read, what a story landing no row means, and what to regenerate at the end. |
 | [`ai/ambre-rust-style.md`](ai/ambre-rust-style.md) | Before writing or modifying Rust, including the type definitions and signatures a spec is allowed to carry. |
 | [`ai/ambre-testing.md`](ai/ambre-testing.md) | Before writing a test, and before writing a contract row: the mechanism decides what the rule may claim. |
 | [`ai/ambre-writing-style.md`](ai/ambre-writing-style.md) | Before writing any English: spec, analysis, rustdoc, comment, commit message. |

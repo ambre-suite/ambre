@@ -36,7 +36,18 @@ It writes to standard output and never to a file, for the reason `spec_read.py`
 gives: a closure checked into the tree is a copy of every rule, free to go
 stale. The measurement goes to standard error, so the closure stays pipeable.
 
-Run: `just spec-context <ID>`.
+**A builder is given a story, not an id.** `ambre-roadmap.md` schedules a name,
+and the closure above starts at an id. The join is already written: a row whose
+gap can close names the Story it lands with, and `contract_index.py` emits that
+citation as a `lands-with` edge. So `--story <NAME>` takes the name, reads the
+edges, and compiles the closure of every row that lands with it.
+
+**A block quoted once is not quoted again.** Rows of one story share a design
+section and an operation table, and a story of 67 rows would quote its three
+documents whole. The later closure names the id that carries the block instead,
+which keeps the border visible: what is absent has an address in the same output.
+
+Run: `just spec-context <ID>`, or `just spec-context-story "<NAME>"`.
 """
 
 from __future__ import annotations
@@ -177,10 +188,9 @@ def section(path: Path, number: str) -> list[str]:
     for line in lines_of(path):
         match = spec_refs.HEADING.match(line)
         if match:
-            found = spec_refs.coordinate(match.group(1), match.group(2))
             if kept:
                 break
-            if found != number:
+            if match.group(1) != number:
                 continue
             kept.append(line)
         elif kept:
@@ -247,7 +257,24 @@ def pointers(blocks: list[str]) -> list[str]:
     return found
 
 
-def closure(rid: str, records: dict[str, dict], graph: list[dict]) -> list[str]:
+def repeated(seen: dict | None, kind: str, key: tuple, rid: str) -> str:
+    """The id that already quoted this block, or an empty string.
+
+    One closure quotes everything it needs. A story compiles several, and the
+    second closure of a table has nothing to add to the first. The register is
+    passed in, so a single id keeps quoting whatever it cites.
+    """
+    if seen is None:
+        return ""
+    held = seen.setdefault(kind, {})
+    if key in held:
+        return held[key]
+    held[key] = rid
+    return ""
+
+
+def closure(rid: str, records: dict[str, dict], graph: list[dict],
+            seen: dict | None = None) -> list[str]:
     """The seven blocks, in the order a builder asks for them."""
     row = records.get(rid)
     if row is None:
@@ -272,7 +299,10 @@ def closure(rid: str, records: dict[str, dict], graph: list[dict]) -> list[str]:
     ]
     out.append("")
 
-    out += [f"{BLOCK} 3 -- THE OPERATION IT BELONGS TO", ""] + table + [""]
+    out += [f"{BLOCK} 3 -- THE OPERATION IT BELONGS TO", ""]
+    carried = repeated(seen, "tables", (row["document"], heading), rid)
+    out += [f"The table is the one printed under `{carried}`."] if carried else table
+    out.append("")
 
     out += [f"{BLOCK} 4 -- WHAT DESIGN GOVERNS IT", ""]
     cited = [edge for edge in mine
@@ -290,6 +320,11 @@ def closure(rid: str, records: dict[str, dict], graph: list[dict]) -> list[str]:
         number = edge.get("section", "")
         if not number:
             out += [f"**`{path.name}`, cited whole, with no section:**", ""]
+            continue
+        carried = repeated(seen, "sections", (path.name, number), rid)
+        if carried:
+            out += [f"**`{path.name}` section {number}:** printed under "
+                    f"`{carried}`.", ""]
             continue
         out += [f"**`{path.name}` section {number}:**", ""]
         out += section(path, number.split(".")[0]) + [""]
@@ -314,7 +349,10 @@ def closure(rid: str, records: dict[str, dict], graph: list[dict]) -> list[str]:
             f"{row['verification'] or 'none'}", ""]
 
     out += [f"{BLOCK} 7 -- WHAT IS MISSING", "", f"{row['gap'] or 'none'}", ""]
-    out += story(row["gap"])
+    told = story(row["gap"])
+    if told:
+        carried = repeated(seen, "stories", (told[-1],), rid)
+        out += [f"The story is the one printed under `{carried}`."] if carried else told
     out.append("")
 
     found = pointers(out)
@@ -329,23 +367,120 @@ def words(lines: list[str]) -> int:
     return len(WORD.findall("\n".join(lines)))
 
 
-def measure(rid: str, out: list[str], records: dict[str, dict],
-            graph: list[dict]) -> str:
-    """The closure against a full read of every document it draws from."""
+def drawn_from(ids: list[str], records: dict[str, dict],
+               graph: list[dict]) -> set[Path]:
+    """Every document the closures of `ids` read, own document included."""
     known, shorts = corpus()
-    touched = {contracts.SPECS / records[rid]["document"]}
+    touched = {contracts.SPECS / records[rid]["document"] for rid in ids}
+    wanted = set(ids)
     for edge in graph:
-        if edge["from"] == rid and edge["edge"] == "cites-document":
+        if edge["from"] in wanted and edge["edge"] == "cites-document":
             try:
                 touched.add(document(edge["to"], shorts, known))
             except Missing:
                 continue
+    return touched
+
+
+def measure(rid: str, out: list[str], records: dict[str, dict],
+            graph: list[dict]) -> str:
+    """The closure against a full read of every document it draws from."""
+    touched = drawn_from([rid], records, graph)
     whole = sum(words(list(lines_of(path))) for path in touched)
     here = words(out)
     share = round(100 * here / whole) if whole else 0
     read = "document" if len(touched) == 1 else "documents"
     return (f"{here} words, against {whole} in the {len(touched)} {read} it "
             f"draws from: {share} percent")
+
+
+def scheduled(name: str) -> tuple[str, bool, int, str]:
+    """The roadmap row one name reaches: its epic, its box, its line, its name.
+
+    `read_schedule` registers a story under its name and under its phase code,
+    so `ARCH P2` and its full wording reach the same row. A name no row carries
+    is refused here rather than compiled into an empty answer.
+    """
+    found = schedule().get(contracts.story_key(name))
+    if found is None:
+        raise Missing(f"`{contracts.ROADMAP}` carries no story named `{name}`")
+    return found
+
+
+def landing(lineno: int, records: dict[str, dict],
+            graph: list[dict]) -> list[str]:
+    """Every row whose gap lands with the story on `lineno`, in corpus order.
+
+    The join is the roadmap line and never the cited text: two rows can name one
+    story by two spellings, the name and the phase code, and both land there.
+    """
+    ids = []
+    for edge in graph:
+        if edge["edge"] != "lands-with" or edge["from"] not in records:
+            continue
+        try:
+            if scheduled(edge["to"])[2] == lineno:
+                ids.append(edge["from"])
+        except Missing:
+            continue
+    return sorted(set(ids), key=lambda rid: (records[rid]["document"], rid))
+
+
+def for_story(name: str, records: dict[str, dict], graph: list[dict]) -> list[str]:
+    """The closure of every row one story lands, under the roadmap row itself.
+
+    A story with no row is an answer, not a refusal: the story writes rules that
+    do not exist yet, or it builds a mechanism no single row owns. Saying so is
+    what stops a reader from taking an empty output for a broken tool.
+    """
+    epic, ticked, lineno, real = scheduled(name)
+    box = "ticked `[x]`" if ticked else "open"
+    out = [f"# CONTEXT FOR THE STORY `{real}`", "", f"Epic {epic}, {box}.", "",
+           lines_of(contracts.SPECS / contracts.ROADMAP)[lineno - 1], ""]
+
+    ids = landing(lineno, records, graph)
+    if not ids:
+        out += ["No contract row lands with this story. Either it writes rules "
+                "the corpus does not carry yet, or it builds a mechanism no "
+                "single row owns. Start from the feature document its "
+                "`Touches` cell names.", ""]
+        return out
+
+    docs = sorted({records[rid]["document"] for rid in ids})
+    read = "document" if len(docs) == 1 else "documents"
+    out += [f"{len(ids)} rows land with it, across {len(docs)} {read}:", ""]
+    out += [f"* `{rid}` (`{records[rid]['kind']}`, {records[rid]['status']}) -- "
+            f"{records[rid]['statement']}" for rid in ids]
+    out += ["", "Each closure follows, in document order. A design section, an "
+            "operation table or a roadmap row quoted once is not quoted again: "
+            "the later closure names the id that carries it.", ""]
+
+    seen: dict = {}
+    for rid in ids:
+        out += ["---", ""] + closure(rid, records, graph, seen) + [""]
+    return out
+
+
+def measure_story(ids: list[str], out: list[str], records: dict[str, dict],
+                  graph: list[dict]) -> str:
+    """The grouped closure against a full read of every document it draws from.
+
+    A story of 67 rows costs more than its documents do, because every closure
+    repeats the five blocks no dedup can share. The measurement says so, and
+    names the documents: a compiler that costs more than the read it replaces
+    has to be the one telling the reader, not the reader finding out.
+    """
+    touched = sorted(drawn_from(ids, records, graph))
+    whole = sum(words(list(lines_of(path))) for path in touched)
+    here = words(out)
+    share = round(100 * here / whole) if whole else 0
+    read = "document" if len(touched) == 1 else "documents"
+    line = (f"{len(ids)} closures, {here} words, against {whole} in the "
+            f"{len(touched)} {read} they draw from: {share} percent")
+    if share < 100:
+        return line
+    named = ", ".join(f"`{path.name}`" for path in touched)
+    return f"{line}. This story is cheaper read whole: {named}"
 
 
 def survey(records: dict[str, dict], graph: list[dict]) -> int:
@@ -378,22 +513,32 @@ def main() -> int:
     parser.add_argument("id", nargs="?", help="a contract id, such as `TRAME-125`")
     parser.add_argument("--all", action="store_true",
                         help="compile every closure and report the cost alone")
+    parser.add_argument("--story", metavar="NAME",
+                        help="a story of `ambre-roadmap.md`, by name or by "
+                             "phase code: compile every row landing with it")
     args = parser.parse_args()
 
     try:
         records, graph = load()
         if args.all:
             return survey(records, graph)
-        if args.id is None:
-            raise Missing("no id given, and `--all` not asked for")
-        rid = args.id.strip("`")
-        out = closure(rid, records, graph)
+        if args.story:
+            out = for_story(args.story, records, graph)
+            ids = landing(scheduled(args.story)[2], records, graph)
+            cost = measure_story(ids, out, records, graph) if ids else ""
+        elif args.id is None:
+            raise Missing("no id given, and neither `--story` nor `--all` asked for")
+        else:
+            rid = args.id.strip("`")
+            out = closure(rid, records, graph)
+            cost = measure(rid, out, records, graph)
     except Missing as refusal:
         print(f"ERROR {refusal}", file=sys.stderr)
         return 1
 
     print("\n".join(out))
-    print(measure(rid, out, records, graph), file=sys.stderr)
+    if cost:
+        print(cost, file=sys.stderr)
     return 0
 
 
