@@ -16,7 +16,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 Drag the fill handle
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-067` | `POST` | A numeric pattern in the source MUST continue across the filled range. | this spec section 3 | `ambre_trame::logic::tests::group5::fill_auto_extrapolates_numeric_series`; `::fill_series_single_cell_increments_by_one`; `group6::fill_merged_series_increments_per_block` | none | verified |
 | `TRAME-UI-068` | `POST` | A source with no numeric pattern MUST be repeated verbatim. | this spec section 3 | `ambre_trame::logic::tests::group6::fill_merged_source_tiles_and_remerges_blocks` -- the only text source in the suite, which takes the merged path | partial -- on the plain path nothing fills text: one test forces `Copy` over numbers, the other fills a formula; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |

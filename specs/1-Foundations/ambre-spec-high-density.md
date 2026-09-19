@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-031` | `INV` | The display density MUST be read by one component. | this spec section 2 | not built | unbuilt -- lands with the `One high-density rule` Story (`ambre-roadmap.md` E8). `ambre-canvas`, the shared surface the rule names, reads it nowhere | unimplemented |
 | `CANVAS-043` | `INV` | An application MUST NOT read the display density. | this spec section 2; section 4, row 4 | not built | unbuilt -- lands with the `One high-density rule` Story (`ambre-roadmap.md` E8). Three crates read `device_pixel_ratio` across eleven call sites, the launcher, Trame and Toile, and two of the three are applications | unimplemented |
@@ -34,7 +34,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 The user drags the window to a screen of another density, or zooms the page. The browser reports it
 through a query that fires once and then stops matching.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-035` | `POST` | A density change MUST resize the drawing buffer, even when the CSS size did not change. | this spec section 2 | none | unheld -- the launcher arms a `matchMedia` watch on the current density, because a `ResizeObserver` does not fire when only the density moves. No test drives the path; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-045` | `POST` | A density change MUST leave a watch armed on the new density. | this spec section 2, the resize path; section 4, row 3 | none | unheld -- the handler re-arms a fresh query for the new density, because the query that just fired no longer matches. The first implementation watched for the existence of the feature instead and fired never, and no test would have caught it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |

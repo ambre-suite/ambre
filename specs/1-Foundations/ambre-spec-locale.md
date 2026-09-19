@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `LOCALE`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `LOCALE-001` | `INV` | A document MUST carry one locale, and one only. | this spec section 3 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
 | `LOCALE-002` | `INV` | The locale MUST be a well-formed BCP 47 language tag. | this spec section 3 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
@@ -35,7 +35,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `LOCALE`.
 
 A user picks the document's language. One register moves, and no stored value with it.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `LOCALE-007` | `PRE` | Setting the locale MUST require the write access an edit requires. | this spec section 4; `ambre-spec-membership.md` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
 | `LOCALE-008` | `POST` | After a locale is set, every view that formats a number, a currency or a date MUST show the new locale's form, on every peer. | this spec section 3; `2-Trame/features/ambre-spec-trame-number-formats.md`, `TRAME-110` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
@@ -46,7 +46,7 @@ A user picks the document's language. One register moves, and no stored value wi
 
 A consumer asks for the language to format in. It may be given one, and the document may have none.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `LOCALE-011` | `POST` | A consumer MUST resolve the locale in one order: the one the request names, then the document's, then none. | this spec section 3; `4-Prose/features/ambre-spec-prose-pdf-export.md`, `PROSE-IO-035` | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8) | unimplemented |
 | `LOCALE-012` | `FRAME` | Resolution MUST NOT read the machine's locale, its clock zone or its region. | this spec section 3 | not built | unbuilt -- lands with the `One document locale` Story (`ambre-roadmap.md` E8). It is the rule the whole register exists for: a machine default is what makes two collaborators read one document two ways, and it is invisible to whoever is not on the second machine | unimplemented |

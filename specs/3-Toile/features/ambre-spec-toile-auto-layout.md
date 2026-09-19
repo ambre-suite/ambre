@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`. The frame this feature 
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-005` | `INV` | Children MUST run along the rule's direction, in the frame's own order, one gap apart. | this spec section 3 | `ambre_toile::logic::autolayout::tests::horizontal_start_fixed_with_gap`; `::vertical_start_fixed_with_gap` -- each reads two boxes back where the second starts one gap past the first. The eleven other tests this row cited hold the eleven rules below, one each | none | verified |
 | `TOILE-FEAT-038` | `INV` | A child MUST keep its size across the direction. | this spec section 3 | `ambre_toile::logic::autolayout::tests::horizontal_start_fixed_with_gap`; `::vertical_start_fixed_with_gap` -- what the row above does not read: a ten-tall and a forty-tall child come back at their own heights | none | verified |
@@ -46,7 +46,7 @@ status values are normative in `ambre-spec-template.md`. The frame this feature 
 
 ### 1.2 Give a frame a layout rule
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-050` | `POST` | After a set the frame MUST carry exactly the rule given. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` -- it reads the rule back after an add and after a change. It is the test `TOILE-FEAT-009` cited for a convergence it never drives | none | verified |
 | `TOILE-FEAT-099` | `POST` | After a clear the frame MUST carry no rule. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` -- its clear step: the frame is read back holding none | none | verified |

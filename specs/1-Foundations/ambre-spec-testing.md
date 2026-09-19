@@ -35,7 +35,7 @@
 
 | Read | Do not read |
 | :--- | :--- |
-| public signatures, property names, mutant reports, snapshot diffs, the `Verification` column | function bodies, and individual assertions a mechanism already covers |
+| public signatures, property names, mutant reports, snapshot diffs, the `Mechanism` column | function bodies, and individual assertions a mechanism already covers |
 
 ---
 
@@ -97,7 +97,7 @@ claims as much as a name that resolves to nothing. `contracts.py` holds the firs
 holds the second, and it went unseen for six months.
 
 The five tests that are the whole
-`Verification` cell of `SRV-006` sat behind `--features test-helpers`, which no CI job enabled.
+`Mechanism` cell of `SRV-006` sat behind `--features test-helpers`, which no CI job enabled.
 Eight `ambre-toile` PDF tests sat behind `--features pdf`. Both features are in `just test-db` and
 `just test-native` now, which is where local and CI parity is defined.
 
@@ -178,7 +178,7 @@ One row per crate: what runs, what stands in for the world, and the belt an incr
 | `ambre-prose`, `ambre-murmure` | -- | -- | -- | none yet: stubs |
 
 **A belt is a floor, not a list.** It says what an increment cannot land without. The tests that
-verify a rule are named in that rule's `Verification` cell and nowhere else. A list of intended
+verify a rule are named in that rule's `Mechanism` cell and nowhere else. A list of intended
 tests has no join to the suite and no way to fail.
 
 **Where an application needs a harness of its own**, that harness is a feature. It gets a document in

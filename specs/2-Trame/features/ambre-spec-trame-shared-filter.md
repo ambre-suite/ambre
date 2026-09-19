@@ -17,7 +17,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-FEAT-002` | `INV` | A hidden row MUST stay hidden when the data moves: a sort or an insert MUST NOT transfer the hidden mark to another row. | this spec section 3 | `ambre_trame::logic::tests::group5::shared_filter_hidden_follows_sort` | none | verified |
 | `TRAME-FEAT-003` | `INV` | A hidden row MUST still count in every formula: a filter changes what a user sees, never what the sheet holds. | this spec section 2, row 5 | `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum` | none | verified |
@@ -38,7 +38,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Filter a column
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-FEAT-034` | `PRE` | The rows MUST be tested on their computed value, never on their text. | this spec section 3 | none | unheld -- `apply_filter` runs `compute_all_dirty` before the pass, so the order holds today, and no test filters a column of formulas, which is the only case that would tell the two apart; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-FEAT-032` | `POST` | Applying a filter MUST replace the previous one, never add to it. | this spec section 3 | none | unheld -- `write_filter_hidden` and `persist_filter_def` each clear their map first, and no test applies a second filter over a first; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -53,7 +53,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Clear the filter
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-FEAT-038` | `POST` | Clearing MUST remove both the definition and the hidden rows. | this spec section 3 | `ambre_trame::logic::tests::group5::clear_filter_unhides_and_noops_when_absent` -- the `unhides` half | none | verified |
 | `TRAME-FEAT-039` | `FRAME` | Clearing MUST NOT change any cell value. | this spec section 5 | none | unheld -- `clear_filter` empties the two filter maps and touches no cell map, and nothing asserts it; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -61,7 +61,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 List the values of a column
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-FEAT-026` | `POST` | The values offered for a column MUST hold each distinct visible value once. | this spec section 4 | `ambre_trame::logic::tests::group4::active_column_values_are_distinct_sorted_and_visible` | none | verified |
 | `TRAME-FEAT-041` | `POST` | The values MUST be ordered as the column reads them, not as text. | this spec section 4 | none | fails -- `active_column_values` sorts the display strings, so a column of numbers lists `10` before `9`. The test asserts the sort the code performs, not the order a user expects; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
@@ -69,7 +69,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.5 Keep a filter of one's own
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-FEAT-015` | `POST` | Activating a personal filter view MUST recompute its hidden rows against the current document, never trust the stored set. | this spec section 3 | not built | unbuilt -- lands with the `Data tools` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-FEAT-014` | `FRAME` | A personal filter view MUST NOT emit any CRDT delta: it is local state, persisted to IndexedDB alone. | this spec section 3 | not built | unbuilt -- lands with the `Data tools` Story (`ambre-roadmap.md` E6) | unimplemented |

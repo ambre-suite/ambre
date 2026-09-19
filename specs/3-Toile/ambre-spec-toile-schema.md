@@ -37,7 +37,7 @@ engine. `TOILE-227` and `TOILE-228` are the halves those two hid. `TOILE-229`, `
 `TOILE-231` state format rules sections 2, 3 and 7 already lean on and no row carried. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-003` | `INV` | Element identity MUST be a minted `ElementId` carried as a value; a positional or slot key MUST NOT be used. | this spec section 2 | structural -- `ElementId::mint` renders the document `PeerID` and a per-session counter (`crates/ambre-bus/src/app/toile.rs`), and every reference (a connector endpoint, a `children` entry, a `layers` entry, a reaction key) carries that string as a value, so no position is a key; `ambre_toile::logic::convergence_tests::copy_does_not_mutate_and_paste_remints_offset` -- a pasted element draws a fresh id; `ambre_toile::logic::convergence_tests::paste_reproduces_selection_on_a_separate_board` -- the minting carried across boards (neither walks a move, which is `TOILE-227`) | none | verified |
 | `TOILE-227` | `INV` | A reference to an element MUST still resolve after a move, a reorder and a regroup. | this spec section 2; this spec section 6 | `ambre_toile::logic::convergence_tests::move_translates_bounds` -- it resolves the id after a translate; `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` -- it reads the `layers` order back after a `mov`, which is the call section 6 rejects the Loro slot id for; `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- it resolves the members after they are regrouped | none | verified |

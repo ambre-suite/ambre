@@ -20,7 +20,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-067` | `INV` | A style edit MUST be sent as one whole value per element, never one per attribute. | this spec section 3; `TOILE-018` | structural -- the only command that changes style carries a whole value, and the format has one register per element, so no attribute has a register of its own | none | verified |
 | `TOILE-163` | `CONC` | Two users restyling the same element MUST both end on one of the two styles, never on a mixture. | this spec section 2; `TOILE-018` | `ambre_toile::logic::convergence_tests::two_peers_converge` -- it drives concurrent edits and reads the two peers in agreement | none | verified |
@@ -43,7 +43,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 
 ### 1.2 Restyle the selection from the panel
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-172` | `POST` | A panel edit MUST leave every field it did not edit as the selection had it. | this spec section 3 | none | unheld -- the panel edits a working copy of the base and sends it whole, and no test drives an edit through the surface; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-173` | `POST` | A field the panel reported as mixed MUST become uniform after any edit. | this spec section 2 | none | unheld -- the whole value goes to every member, so the base's value for a mixed field lands on all of them, and no test reads a second field back after an edit; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -54,7 +54,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 
 ### 1.3 Change one field from the floating bar
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-019` | `POST` | A bar edit MUST overwrite exactly the field it carries. | this spec section 3 | `ambre_toile::ui::floatbar::tests::style_edit_touches_only_its_field` -- a decoration toggle leaves the other three, the fill, the colour and the size intact, and a fill edit leaves the whole text style intact | none | verified |
 | `TOILE-UI-177` | `POST` | The bold toggle MUST write the two weights the renderer reads. | this spec section 3 | `ambre_toile::ui::floatbar::tests::style_edit_field_mappings` -- both weights off the toggle | none | verified |

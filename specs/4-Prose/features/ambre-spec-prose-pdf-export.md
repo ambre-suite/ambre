@@ -16,7 +16,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 
 ### 1.1 The file
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-IO-029` | `IO` | A PDF page MUST carry the pagination the screen shows. | this spec section 3; `ambre-spec-prose-schema.md` (`PROSE-032`) | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-031` | `IO` | Every link the document carries MUST reach the file as a live link: the table of contents, a cross reference and an external address. | this spec section 3 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 walk, is pure vector, keeps its characters, and reaches the browser off the UI thread. What a
 paginated document adds is the layout it must not compute twice.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-IO-033` | `POST` | A user MUST be able to export the document as a PDF. | this spec section 4 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-037` | `POST` | An export MUST write the pages the engine already laid out, never laying the document out again. | this spec section 3 | not built | unbuilt -- lands with the "PDF export" Story (`ambre-roadmap.md` E5) | unimplemented |

@@ -23,7 +23,7 @@ prefix is `SCHEMA`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SCHEMA-001` | `INV` | A styled unit's whole style MUST be one binary register keyed by that unit's identity; a register per attribute is forbidden. | this spec section 2; `features/ambre-spec-trame-cell-styles.md` | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`; `::subset_style_edit_does_not_tear_a_whole_cell_rewrite` | partial -- Toile stores one register per element and no test drives two concurrent restyles of it; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SCHEMA-002` | `INV` | A shared formatting control MUST emit one changed field. | this spec section 2; `ambre-spec-chrome.md` | none | unheld -- the four shared controls each emit one field, and nothing refuses a fifth that emits a whole style; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -37,7 +37,7 @@ prefix is `SCHEMA`.
 A binary opens a stored document. Everything below happens before the caller touches a single
 container, which is the only moment a wrong reading can still be caught.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SCHEMA-006` | `POST` | Every full-state read MUST compare the document's schema version with the binary's before using the document. | this spec section 2 | `ambre_toile::logic::schema::tests::a_board_at_the_current_version_is_handed_back_untouched`; `ambre_trame::logic::schema::tests::a_workbook_at_the_current_version_is_handed_back_untouched`; structural -- the gate is the first statement of every full-state entry point, both engines' `import_snapshot` and both `import_ambre_plaintext`, and the refusal and migration rows below each drive the comparison through a different verdict | none | verified |
 | `SCHEMA-005` | `POST` | A document with no schema version MUST read as version 0. | this spec section 2 | `ambre_core::schema::tests::an_absent_register_reads_as_zero_and_zero_is_older_than_any_release`; `ambre_toile::logic::schema::tests::a_board_written_before_the_register_migrates_to_the_current_version`; `ambre_trame::logic::schema::tests::a_workbook_written_before_the_register_migrates_to_the_current_version` -- end to end, on an input that carries no register at all | none | verified |

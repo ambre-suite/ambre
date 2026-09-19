@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-017` | `INV` | Every font family label MUST resolve to a loaded face before shaping; an unmatched label MUST NOT reach the shaper. | this spec section 2 | `ambre_canvas::text_cache::tests::family_labels_map_to_registered_faces`; `::registered_face_names_pass_through` | none | verified |
 | `CANVAS-018` | `INV` | A font MUST NOT be embedded in a binary. | this spec section 3; `ambre-spec-budgets.md section 5` | none | unheld -- no manifest and no source names a font file, so the rule holds by absence. Nothing refuses the `include_bytes!` that would break it, and the binary budget it would break is read by no check; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -38,7 +38,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 A codepoint the loaded faces cannot cover appears in a string being shaped. The face it needs is
 fetched, and the strings that were shaped without it are dropped.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-006` | `POST` | A script-specific font MUST be fetched only when text needing it appears. | this spec section 2 | `ambre_canvas::fonts::tests::latin_and_symbols_never_trigger` -- every codepoint the base faces cover must classify to no lazy font, so a fetch armed for ordinary text fails | none | verified |
 | `CANVAS-052` | `POST` | A script-specific font MUST be fetched once. | this spec section 2 | `ambre_canvas::fonts::tests::observe_latches_each_script_once` -- it reads the request count back after repeated observations of the same script and asserts it stays at one | none | verified |
@@ -49,7 +49,7 @@ fetched, and the strings that were shaped without it are dropped.
 The working set outgrows its cap. Both stores answer the same way: drop the coldest entries and
 keep the allocation where it is.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-021` | `POST` | The glyph atlas MUST repack by least recent use on overflow, never grow. | this spec section 2; `ambre-spec-budgets.md section 6` | none | unheld -- the compaction retains each glyph's bitmap so a repack re-uploads without re-rasterizing, and no test drives an atlas past its capacity; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-022` | `POST` | The layout cache MUST evict by least recent use on overflow, never clear itself whole. | this spec section 2 | none | unheld -- `evict_if_oversized` keeps the hottest three quarters above a cap the frame passes in, and no test drives the cache past that cap; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |

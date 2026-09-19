@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-001` | `INV` | The render side MUST NOT link the CRDT: it consumes the culled visible set and emits commands. | this spec section 2; `ambre-spec-architecture.md section 2` | structural -- `loro` appears nowhere under `ambre-toile/src/ui/` except in four explanatory comments: no type, no call; cargo-deny -- `deny.toml` bans `loro` outside the four app crates (`SYNC-011`) | none | verified |
 | `TOILE-UI-011` | `INV` | The content walk MUST leave the transform stack as it found it: every push balanced by its pop. | this spec section 2 | `ambre_toile::ui::render::tests::content_walk_balances_transform_and_paints_each_node`; `ambre_toile::ui::render::tests::image_paints_pixels_when_resolved_else_placeholder` -- both read the depth back at zero when the walk returns | none | verified |
@@ -49,7 +49,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Paint one frame
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-021` | `POST` | A frame in which nothing changed MUST plan no draw. | this spec section 2 | none | unheld -- the plan is a pure function of six fields and a tick, and nothing asserts that a clean frame plans neither pass. No bench guards the frame budget of `ambre-spec-budgets.md section 2`; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-271` | `POST` | A content change MUST repaint the content; anything else MUST repaint the overlay alone. | this spec section 2 | none | unheld -- the split is the whole point of the plan: a rule that mistook one for the other would repaint the board on a cursor move and cost the idle budget nothing measures; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -58,7 +58,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Ask for what is on screen
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-020` | `POST` | At most one cull request MUST leave the UI thread per frame. | this spec section 2 | type-level -- the pending request is one `Option<Viewport>` on the view, so a second request in the same frame replaces the first, and the frame flush is its only send site | none | verified |
 | `TOILE-UI-274` | `FRAME` | Asking for the visible set MUST NOT stall the frame. | this spec section 2; `BUS-004` | structural -- the flush is a try-send on a bounded channel and the frame continues on either arm, so no paint waits on the Logic thread | none | verified |

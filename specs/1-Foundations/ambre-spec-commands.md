@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UI-THREAD-011` | `INV` | Copy, cut and paste MUST resolve through shared identities, in every application. | this spec section 2 | `ambre_trame::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity`; `ambre_toile::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity` -- each reads the shared identity off its own application's table; `ambre_commands::tests::the_keymap_binds_no_browser_serviced_chord`; `ambre_trame::ui::commands::tests::the_keymap_binds_no_clipboard_chord` -- the other half, that no chord table decodes them a second time | none | verified |
 | `UI-THREAD-035` | `INV` | The legacy copy, cut and paste chords MUST name the same identities as the modern ones. | this spec section 2; section 4, row 5 | `ambre_trame::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity`; `ambre_toile::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity` -- each asserts both chord families of the three intents against the one shared identity, so a legacy chord naming a second command fails | none | verified |
@@ -36,7 +36,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 
 The user presses a chord. The table answers with a command, or with nothing.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UI-THREAD-038` | `POST` | A chord the table binds MUST resolve to the command it was bound to. | this spec section 2 | `ambre_commands::tests::keymap_resolves_default_bindings` -- it seeds from a command table and asserts the bound chord answers with that command's identity | none | verified |
 | `UI-THREAD-039` | `FRAME` | Resolving a chord MUST NOT change the table. | derived | type-level -- the resolve takes the table by shared reference and the map has no interior mutability, so a resolution that binds, rebinds or drops an entry does not compile | none | verified |
@@ -46,7 +46,7 @@ The user presses a chord. The table answers with a command, or with nothing.
 
 The chord table accepts a new binding for a chord that may already carry one.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UI-THREAD-041` | `POST` | A rebinding MUST report the command it displaced. | this spec section 2 | `ambre_commands::tests::rebinding_reports_the_displaced_command` -- its first assertion reads back the displaced identity, which is what a conflict notice would show | none | verified |
 | `UI-THREAD-042` | `FRAME` | A rebinding MUST NOT change the command any other chord resolves to. | derived | none | unheld -- the rebinding test reads the rebound chord alone, so an insert reaching a neighbouring entry would pass; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |

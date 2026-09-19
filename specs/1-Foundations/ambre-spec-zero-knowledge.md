@@ -18,7 +18,7 @@ The only mandatory read. Grammar and status values are normative in `ambre-spec-
 prefix is `ZK`, and it belongs to this document alone: a rule that constrains one component carries
 that component's prefix instead.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `ZK-001` | `INV` | No CRDT payload MUST leave the client unless it has been AEAD-sealed with a `DocumentKey`. | README pillar "E2EE"; `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_update_small` -- the nominal path | partial -- nothing forbids an unsealed send; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ZK-002` | `INV` | No symmetric key material MUST be nameable in a wire type. | README pillar "Zero-Knowledge" | crate-graph -- `ambre-protocol` depends on `ambre-core` alone; cargo-deny -- `deny.toml` refuses any dependant of `ambre-crypto` outside `ambre-sync` and `ambre-logic`, so the edit that would make a key type nameable fails CI | none | verified |

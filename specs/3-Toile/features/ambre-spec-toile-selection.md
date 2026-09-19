@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-005` | `INV` | A pick MUST test the element's exact geometry over the culled candidate set: the rotation undone first, a fill by its winding, a stroke by the distance to its outline. | this spec section 2 | `ambre_toile::ui::hit::tests::rect_inside_and_outside`; `ambre_toile::ui::hit::tests::rotated_rect_uses_local_frame`; `ambre_toile::ui::hit::tests::ellipse_corner_is_a_miss`; `ambre_toile::ui::hit::tests::triangle_fill`; `ambre_toile::ui::hit::tests::open_path_hits_near_the_stroke_only`; `ambre_toile::ui::hit::tests::stroke_proximity` | none | verified |
 | `TOILE-UI-223` | `INV` | Of the elements a point falls inside, the front-most MUST be the one picked. | this spec section 2 | `ambre_toile::ui::hit::tests::topmost_wins_front_to_back` | none | verified |
@@ -39,7 +39,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Click an element
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-007` | `POST` | A click MUST resolve to the top-most enclosing group unless the user has entered that group's scope. | this spec section 2 | `ambre_toile::ui::tool::tests::click_on_group_member_selects_top_most_group`; `ambre_toile::ui::tool::tests::scoped_click_selects_the_member_inside_the_scope`; `ambre_toile::ui::tool::tests::ungrouped_element_resolves_to_itself`; `ambre_toile::ui::tool::tests::pointer_down_on_a_member_selects_the_group` | none | verified |
 | `TOILE-UI-232` | `POST` | A click on an element already selected MUST keep the whole selection, so a multi-selection drags as one. | this spec section 3 | none | unheld -- no test presses on a member of a selection it did not just make; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -48,7 +48,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Drag over empty board
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-031` | `POST` | A marquee MUST take every element it covers. | this spec section 2 | `ambre_toile::ui::hit::tests::marquee_selects_covered_elements` | none | verified |
 | `TOILE-UI-235` | `POST` | A marquee MUST replace the selection on release, not while it is dragged. | this spec section 3 | `ambre_toile::ui::tool::tests::drag_empty_makes_a_marquee_then_selects` | none | verified |
@@ -58,7 +58,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Enter and leave a group scope
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-032` | `POST` | A double-click MUST enter one nesting level of the group under it. | this spec section 3 | none | unheld -- nothing drives the double-click handler, which lives on the view; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-239` | `POST` | `Escape` MUST leave the scope and clear the selection in one press. | this spec section 3; `features/ambre-spec-toile-tools.md` | none | unheld -- nothing drives the key handler, and section 3 read as two presses until this row; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -66,7 +66,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.5 Select the whole board
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-033` | `POST` | Select-all MUST cover the whole board, not the part the UI thread holds. | this spec section 3; section 4 | none | fails -- the walk is over the culled set, so the rule fails off screen, section 5; lands with the `Toile reads the board, not the screen` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-UI-241` | `POST` | Select-all MUST obey the exclusions a pick obeys: no locked element, no group node. | this spec section 3 | none | fails -- the walk drops connectors and nothing else, so a locked element joins the selection and the next delete takes it, section 5; lands with the `A locked element is locked on every surface` Story (`ambre-roadmap.md` E7) | failing |

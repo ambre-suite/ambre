@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-022` | `INV` | A workbook MUST always hold at least one sheet. | this spec section 2, row 4 | none | partial -- the local guard is a refusal, held by `TRAME-163`, and two peers deleting the last two sheets at once still converge on a workbook with none, which is `TRAME-077`; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-072` | `INV` | A sheet's cells MUST NOT be reachable through another sheet's coordinates. | this spec section 3 | `ambre_trame::logic::tests::group3::create_sheet_lists_and_isolates`; `ambre_trame::logic::tests::group1::multi_sheet_isolation_and_name_lookup` | none | verified |
@@ -32,13 +32,13 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Add a sheet
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-159` | `FRAME` | Adding a sheet MUST NOT change which sheet the reader is on. | this spec section 4 | `ambre_trame::logic::tests::group3::create_sheet_lists_and_isolates` -- it asserts the active id after the create, the new tab never being activated because nothing sends the second command the create leaves to the caller (section 6) | none | verified |
 
 ### 1.3 Rename a sheet
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-160` | `PRE` | The name a rename is given MUST NOT be empty. | this spec section 4 | none | partial -- the strip drops a blank on both its paths, the Enter and the blur, and the engine writes whatever it is handed, so a rename reaching it from anywhere else leaves a tab with no label and no way to click it; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-070` | `POST` | A sheet MUST keep its identity through a rename. | this spec section 3 | `ambre_trame::logic::tests::group3::rename_sheet_keeps_id_and_cells`; `::cross_sheet_reference_converges_across_peers_on_rename` | none | verified |
@@ -46,14 +46,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Drag a tab to another slot
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-073` | `POST` | Reordering the tabs MUST put the sheet at the slot it was dropped on. | this spec section 4 | `ambre_trame::logic::tests::group3::move_sheet_reorders_tabs` | none | verified |
 | `TRAME-162` | `FRAME` | Reordering the tabs MUST NOT change a cell, a style or a formula. | this spec section 4 | none | unheld -- the move writes the order list alone and asks for no recompute, and no test reads the document after one. The list is not left alone either: a diverging order is cleared and pushed back before the move, which is what `TRAME-074` fails on; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.5 Delete a sheet
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-163` | `FAIL` | Deleting the last remaining sheet MUST be refused, with a message and no write. | this spec section 4 | `ambre_trame::logic::tests::group3::delete_last_sheet_rejected` -- it asserts both the error event and the absence of an update | none | verified |
 | `TRAME-075` | `POST` | Deleting the sheet a user is reading MUST leave that user on another one. | this spec section 2, row 3 | `ambre_trame::logic::tests::group3::delete_active_sheet_falls_back` | none | verified |
@@ -62,7 +62,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.6 Switch to another tab
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-165` | `FRAME` | Switching tabs MUST NOT change the document, and MUST reach no collaborator. | this spec section 3 | none | unheld -- the switch answers with display events alone, so it carries no delta to send, and no test asserts it. What it does cost is a full engine reseed, which is the debt of section 6; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 

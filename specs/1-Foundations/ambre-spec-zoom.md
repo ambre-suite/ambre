@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `ZOOM`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `ZOOM-004` | `INV` | `Ctrl` with `=`, `-` or `0`, `Ctrl` with the wheel, and a trackpad pinch MUST zoom in every application. | this spec section 3 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
 | `ZOOM-006` | `INV` | The preset ladder MUST be one ladder for every application, read by the shared chip. | this spec section 2; `ambre-spec-chrome.md`, `CHROME-014` | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `ZOOM`.
 The user presses a chord, turns the wheel under `Ctrl`, or pinches. One factor moves, about one
 point.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `ZOOM-002` | `POST` | A zoom MUST clamp to the application's supported range, away from zero, whatever the input. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
 | `ZOOM-003` | `POST` | A zoom about a point MUST leave that point under the pointer, in the application's own mapping. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
@@ -43,7 +43,7 @@ point.
 
 The user asks for the selection to fill the view. The target may be empty.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `ZOOM-007` | `POST` | A zoom to a selection MUST frame it and clamp. | this spec section 3 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
 | `ZOOM-010` | `FRAME` | A zoom to a selection MUST NOT change the selection. | this spec section 3; derived | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8). The gesture reads a selection to compute a factor, and an application that grew or collapsed it while framing would make the command unrepeatable | unimplemented |

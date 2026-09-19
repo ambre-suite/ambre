@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-001` | `INV` | The workbook CRDT MUST NOT leave the Logic thread; it exits only as bytes. | this spec section 3; architecture section 2.B | cargo-deny -- `deny.toml` bans `loro` outside the four engine crates (`SYNC-011`), so no crate on the other side of the seam can even name the type. `ambre_trame::logic::docfile::export_ambre_plaintext` is a public signature naming `LoroDoc`, but it takes the document and returns bytes, and no accessor hands one out | none | verified |
 | `TRAME-015` | `CONC` | Two peers exchanging the same operations in any interleaving MUST converge to the same document. | audit `H6`; this spec section 2; `ambre-spec-testing.md` | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest over the interleavings; `ambre_trame::logic::tests::group3::two_peers_converge_via_mock_sync` | none | verified |
@@ -37,14 +37,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 A command reaches the engine
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-002` | `POST` | Recomputing what a change made stale MUST finish before the command returns. | this spec section 3 | type-level -- `handle_command` returns `TrameOutcome` by value and the crate has no `async fn`, no `.await` and no spawn, so there is nowhere to defer to. No test separates the two recomputes: the one that reads a formula's new value (`ambre_trame::logic::tests::group1::sum_over_plain_literals_and_formula_raw_in_viewport`) reads it from the viewport that follows, which recomputes again | none | verified |
 | `TRAME-166` | `FRAME` | A command that mutates nothing MUST NOT produce a delta. | this spec section 3 | `ambre_trame::logic::tests::group4::active_column_values_are_distinct_sorted_and_visible` -- a read-only query carries no update; `ambre_trame::logic::tests::group3::merge_selection_single_cell_is_noop` -- the same for a refused mutation | none | verified |
 
 ### 1.3 A remote delta arrives
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-167` | `POST` | A batch of remote operations MUST repaint once, carrying the whole new state. | this spec section 3 | `ambre_trame::logic::tests::group7::apply_remote_batch_emits_single_datareset_with_full_state` -- it counts the resets and reads both cells back | none | verified |
 | `TRAME-168` | `FRAME` | Applying a remote delta MUST NOT re-broadcast it. | this spec section 3 | type-level -- `apply_remote` returns `Vec<TrameEvent>` and no outcome, so it has no shape to broadcast through | none | verified |

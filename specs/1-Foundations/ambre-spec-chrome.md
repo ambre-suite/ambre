@@ -23,7 +23,7 @@ the DOM side produces.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-001` | `INV` | The chrome MUST NOT draw content nor hit-test it. | `ambre-spec-ui.md section 2` (`UI-THREAD-001`, `UI-THREAD-050`) | crate-graph -- `ambre-chrome` declares neither `wgpu` nor `ambre-draw`, so no drawing surface is reachable from it. What it does instead (invoke a command, read a signal) is `UI-THREAD-050`, and is not restated here | none | verified |
 | `CHROME-002` | `INV` | The shared toolkit MUST NOT depend on an application crate. | this spec section 2 | crate-graph -- the manifest names `ambre-commands`, `leptos`, the two icon crates and the DOM bindings, and no application | none | verified |
@@ -33,20 +33,20 @@ the DOM side produces.
 
 ### 1.2 A floating menu is placed
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-003` | `POST` | A floating menu MUST stay inside the viewport: it flips at an edge, and pins to the origin when it is larger than the viewport. | this spec section 2 | `ambre_chrome::context_menu::tests::right_overflow_flips_horizontally`; `::bottom_overflow_flips_vertically`; `::corner_overflow_flips_both_axes` -- each flip; `::menu_larger_than_viewport_pins_to_origin` -- the clamp that would otherwise place it off-screen, over an arithmetic held in a free function, which is why it is testable at all | none | verified |
 | `CHROME-085` | `FRAME` | Placing a menu that already fits MUST NOT move it off the point it was raised from. | this spec section 2 | `ambre_chrome::context_menu::tests::no_overflow_keeps_click_point` -- the placement returns the click point unchanged, which is what keeps the flip from becoming an unconditional offset | none | verified |
 
 ### 1.3 A key event is resolved
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-005` | `FAIL` | A key event MUST resolve to a modelled key or be rejected; an unmodelled key MUST NOT reach a command. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::command::tests::named_keys_map`; `::function_keys_in_range`; `::single_printable_char_maps` -- what resolves; `::function_keys_out_of_range_rejected`; `::unmodelled_keys_rejected` -- the refusal, which is the half that keeps an unknown key from binding a command by accident | none | verified |
 
 ### 1.4 A control renders, and reports a click
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-010` | `POST` | A control MUST show the state the Logic thread reported. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::chrome_ui::command_states_defaults`; `::command_states_single_writer_propagates`; `::command_states_unknown_id_is_noop` -- one writer reaches the right signal and leaves its neighbours alone | none | verified |
 | `CHROME-013` | `POST` | A shared formatting control MUST report a change. | this spec section 2 | `ambre_chrome::chrome_ui::format_toggle_reflects_pressed_and_reports_clicks` -- a real click is dispatched and the callback fires once; `::font_size_select_lists_presets_plus_auto_entry` -- the same shape for a select | none | verified |
@@ -56,7 +56,7 @@ the DOM side produces.
 
 ### 1.5 A modal opens, and closes
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-011` | `POST` | A modal MUST suspend the frame loop while it is open. | this spec section 2; `ambre-spec-frame.md`, `CANVAS-012` | none | unheld -- three modals pass a pause callback and the launcher's own confirmation dialog passes none. Nothing joins opening a modal to the state of the loop; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-012` | `POST` | Setting a modal's open signal MUST show the element. | this spec section 2 | none | unheld -- one effect drives the element from the signal, and no test mounts a modal to watch it open; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -67,7 +67,7 @@ the DOM side produces.
 
 ### 1.6 A drag drives a control
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-015` | `POST` | A control driven by a drag MUST coalesce the burst into one command. | this spec section 2 | none | unheld -- a debouncer reschedules its timer on each call, and each caller decides whether to use it. Nothing refuses a slider wired straight to a command, which is one command per pixel of travel; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-090` | `FRAME` | Coalescing a burst MUST NOT drop its last value. | this spec section 2 | none | unheld -- the debouncer keeps the most recent call and fires it when the timer runs out, so the rule is held by the reschedule being written that way, and nothing drives a burst that ends before the delay. Dropping the tail leaves the control showing one value and the document holding another; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |

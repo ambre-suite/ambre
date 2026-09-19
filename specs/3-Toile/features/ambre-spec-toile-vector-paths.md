@@ -18,7 +18,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-006` | `INV` | Each combinator MUST be area-correct: a union is the two areas minus their overlap, an intersection is the overlap, a subtraction is the subject minus the union of the rest, an exclusion is the symmetric difference. | this spec section 3 | `ambre_toile::logic::boolean::tests::union_area_is_combined_minus_overlap`; `::intersect_area_is_overlap`; `::subtract_removes_the_clip`; `::exclude_is_symmetric_difference`; `::union_of_disjoint_keeps_both` -- a degenerate input; `::intersect_of_disjoint_is_empty` -- another; `::subtract_folds_over_multiple_clips` -- the subject against several clips | none | verified |
 | `TOILE-FEAT-033` | `INV` | A combinator MUST return the same outline for the same inputs. | this spec section 3 | `ambre_toile::logic::boolean::tests::deterministic_across_runs` -- it calls the solver twice in one process and compares the SVG, so it holds one build against itself, which is the rule as stated. Nothing compares two builds or two platforms, which is the wider rule the row once carried | none | verified |
@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Draw a path with the pen
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-057` | `POST` | Finishing a path MUST emit exactly one create. | this spec section 3 | `ambre_toile::ui::tool::tests::pen_clicks_then_double_click_emits_path` -- it reads the one outcome the double-click returns. The two tests this row also cited drive a Shape and a Sticky, never the pen | none | verified |
 | `TOILE-UI-058` | `POST` | A node dragged out MUST make a curved segment. | this spec section 3 | none | unheld -- `pen_bezpath` emits a cubic when either end of a span carries a handle, and the one pen test asserts the kind of the created element rather than the shape of its path; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -37,7 +37,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Combine paths
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-034` | `POST` | Combining MUST write one path element carrying the result and the first source's style, and consume the sources in the same commit unless the caller keeps them. | this spec section 3 | `ambre_toile::logic::state::boolean::tests::union_of_two_rects_makes_one_path_element` -- the single result and the broadcast delta; `::boolean_is_one_undo_item` -- the one commit; `::keep_sources_leaves_inputs` -- the kept sources | partial -- nothing reads the style back, so a result carrying the second source's fill, or none at all, would pass the three; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-FEAT-035` | `FRAME` | Combining MUST NOT delete an element it did not resolve as a source: a locked element and a non-shape are ignored, not consumed. | this spec section 3 | none | unheld -- the handler skips both with a `continue`, so they never enter `sources` and never reach the delete, but no test passes an ineligible id and reads it back; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |

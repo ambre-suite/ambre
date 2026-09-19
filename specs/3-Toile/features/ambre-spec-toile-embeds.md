@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-021` | `INV` | A nested Ambre document MUST be stored as a reference; its content MUST NOT be inlined into this board. | this spec section 3 | `ambre_toile::logic::convergence_tests::doc_embed_reference_survives_the_crdt_round_trip` | none | verified |
 | `TOILE-084` | `INV` | A nested document MUST carry its own permission: what a user can do on the board MUST NOT decide what they can do inside it. | this spec section 3; `ambre-spec-architecture.md section 2` | `ambre_logic::dispatch::tests::an_embedded_child_is_gated_by_its_own_role_not_the_boards`; `ambre_logic::dispatch::tests::owning_the_board_grants_nothing_on_a_document_embedded_in_it` | none | verified |
@@ -37,7 +37,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Put a document or a page on the board
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-086` | `POST` | A user MUST be able to place another Ambre document on the board. | this spec section 4 | `ambre_toile::ui::menu_bar::tests::the_placement_entries_are_shell_intents` -- the entry and its resolution | partial -- the picker that answers the intent is `ambre-app`, which no tier reaches, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-087` | `POST` | A user MUST be able to place a web page on the board. | this spec section 4 | `ambre_toile::ui::menu_bar::tests::the_placement_entries_are_shell_intents` -- the entry and its resolution; `ambre_toile::ui::embed::address_tests::a_bare_host_becomes_an_https_address`; `ambre_toile::ui::embed::address_tests::an_https_address_survives_verbatim`; `ambre_toile::ui::embed::address_tests::a_host_with_a_port_keeps_its_port` | partial -- the entry and the address it normalises, the dialog that asks for it being `ambre-app`, which no tier reaches, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -45,7 +45,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Click into an embed
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-091` | `POST` | A click on an embed MUST enter it, so that moving an embed and editing it stay two gestures. | this spec section 4 | `ambre_toile::ui::embed::tests::a_click_on_an_embed_focuses_it` | none | verified |
 | `TOILE-UI-321` | `POST` | The click MUST enter the topmost embed under the pointer. | this spec section 4 | `ambre_toile::ui::embed::tests::embed_at_picks_the_topmost_and_skips_locked` | none | verified |
@@ -55,14 +55,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Drag an embed across the board
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-324` | `POST` | A press released past the click slop MUST move the embed on the board rather than entering it. | this spec section 4 | `ambre_toile::ui::embed::tests::a_drag_from_an_embed_does_not_focus_it` | none | verified |
 | `TOILE-UI-325` | `FRAME` | A drag starting on another embed MUST leave the current focus where it is. | this spec section 4 | `ambre_toile::ui::embed::tests::a_drag_leaves_an_existing_focus_untouched` | none | verified |
 
 ### 1.5 Point and type inside an entered embed
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-015` | `POST` | A pointer event handed to a child MUST arrive in the child's own pixels, through zoom and rotation. | this spec section 3 | `ambre_toile::ui::embed::tests::a_child_pixel_is_a_screen_pixel`; `ambre_toile::ui::embed::tests::transform_survives_a_rotated_embed`; `ambre_toile::ui::embed::tests::child_size_scales_with_zoom`; `ambre_toile::ui::embed::tests::child_origin_is_the_embeds_top_left`; `ambre_toile::ui::embed::tests::screen_aabb_contains_a_rotated_quad` | none | verified |
 | `TOILE-UI-326` | `POST` | A key, a character, a composition step and a wheel MUST reach the child verbatim. | this spec section 4 | `ambre_toile::ui::embed::routing_tests::typing_follows_focus_not_the_pointer` -- the board's half | partial -- what the launcher does with an event before the child sees it has no test anywhere, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -72,7 +72,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.6 Leave an embed
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-093` | `POST` | `Escape` MUST return focus to the board. | this spec section 4 | `ambre_toile::ui::embed::tests::escape_blurs_only_when_something_is_focused` | none | verified |
 | `TOILE-UI-330` | `POST` | A click outside the entered embed MUST return focus to the board. | this spec section 4 | `ambre_toile::ui::embed::tests::a_click_outside_returns_focus_to_the_board` | none | verified |
@@ -81,7 +81,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.7 Draw one frame of a board carrying embeds
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-333` | `POST` | An embed entering the culled set MUST open its document's session. | this spec section 3 | `ambre_toile::ui::embed::tests::a_visible_embed_opens_once_and_only_once` | none | verified |
 | `TOILE-UI-017` | `POST` | A child's session MUST close only after its embed has stayed out of view for the whole debounce. | this spec section 3 | `ambre_toile::ui::embed::tests::close_waits_the_full_debounce`; `ambre_toile::ui::embed::tests::a_scroll_oscillation_never_thrashes_the_session`; `ambre_toile::ui::embed::tests::returning_before_the_deadline_cancels_the_close` | none | verified |
@@ -95,14 +95,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.8 Leave the board
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-094` | `POST` | Closing the board MUST close every child at once, with no debounce. | this spec section 3 | `ambre_toile::ui::embed::tests::close_all_takes_every_child_immediately` | none | verified |
 | `TOILE-UI-341` | `FRAME` | A second close MUST send nothing. | this spec section 3 | `ambre_toile::ui::embed::tests::close_all_takes_every_child_immediately` -- the second close sends nothing | none | verified |
 
 ### 1.9 Copy an embed
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-085` | `POST` | Copying an embed MUST produce a second reference to the same document. | this spec section 3 | none | unheld -- the copy captures whatever scalar fields the element carries, so the reference rides along by construction, and no test names an embed among them, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-226` | `FRAME` | Copying an embed MUST NOT copy the document it points at. | this spec section 3 | none | unheld -- for the same reason as `TOILE-085`, nothing exercises a copy of an embed at all, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |

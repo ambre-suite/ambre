@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-059` | `INV` | The slash and the text typed after it MUST reach the document like any other text, so a peer reading the block sees what the author typed. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-087` | `INV` | No state of the menu -- its origin, its query, its selection -- MUST be written to the document. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Open the menu
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-058` | `POST` | The menu MUST open only where a block command is legal: at the start of a block, on an empty block or before its first character. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-091` | `POST` | Opening the menu MUST record the block the slash was typed in and the offset of the slash. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -39,7 +39,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Insert the chosen block
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-060` | `POST` | The slash and the query MUST be removed from the block before the chosen block command is sent. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-093` | `POST` | The command the chosen item resolves to MUST be sent once. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -48,7 +48,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Close the menu
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-061` | `POST` | The menu MUST close on the deletion of the slash, on a space, on Escape and on a pointer press outside it. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-095` | `FRAME` | Closing the menu MUST NOT write to the document: the slash and the query stay exactly as the author typed them. | this spec section 5 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |

@@ -21,7 +21,7 @@ other five documents of the DOM side.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-048` | `INV` | A fingerprint MUST be stable for a key. | this spec section 3; `ambre-spec-server.md` | `ambre_crypto::tests::fingerprint_is_stable_grouped_base32` -- the value is frozen for a known key, so any change to the tag, the hash variant, the truncation or the encoding fails | none | verified |
 | `CHROME-071` | `INV` | A fingerprint MUST differ for any other key. | this spec section 3; `ambre-spec-server.md` | `ambre_crypto::tests::fingerprint_distinguishes_keys` -- a one-bit change moves the string | none | verified |
@@ -36,7 +36,7 @@ other five documents of the DOM side.
 The first phase resolves the recipient, fetches their exchange key and computes the fingerprint. It
 shares nothing.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-073` | `POST` | The first phase MUST answer with the recipient's fingerprint. | this spec section 3, the invitation in two phases | none | unheld -- the phase resolves, fetches and formats, and no test in any tier drives it: the mock relay does not model an invitation; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-046` | `FRAME` | A document key MUST NOT be wrapped to a recipient before the trust decision is taken. | this spec section 3; `ambre-spec-zero-knowledge.md` | type-level -- the first phase's parameters carry no document key and no exchange key, so there is nothing in scope to wrap with, the wrap living in the second phase alone | none | verified |
@@ -48,7 +48,7 @@ shares nothing.
 The user has looked at the fingerprint and accepted it. The key is pinned, then the second phase
 wraps.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-052` | `POST` | The confirmed key MUST be stored before the invitation is dispatched. | this spec section 3 | none | unheld -- the store write and the dispatch sit in that order in one block, and a reversal leaves a share sent under a key the next comparison does not know; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-074` | `POST` | The confirmed key MUST be stored under the recipient's own identity. | this spec section 3; this spec section 6 | none | fails -- the first phase falls back to a freshly generated identifier when the server's is malformed, and the pin is filed under that. The recipient then looks new on every invitation, so a substituted key reads as a first contact and the whole comparison is dead; lands with the `A verified key is pinned under its owner` Story (`ambre-roadmap.md` E7) | failing |
@@ -59,7 +59,7 @@ wraps.
 
 Escape, the backdrop and the refusing action are three routes to one outcome.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-055` | `POST` | Refusing MUST store no key. | this spec section 3 | none | unheld -- the three routes clear the pending decision and the store write sits behind the confirming action alone. Nothing asserts the three agree; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-075` | `POST` | Refusing MUST send no invitation. | this spec section 3 | none | unheld -- the dispatch reads the same pending value the three routes clear, so the two halves of the old row rest on one mechanism and neither is driven. This is the half that reaches the relay; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |

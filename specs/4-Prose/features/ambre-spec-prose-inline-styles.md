@@ -16,7 +16,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-007` | `INV` | An inline mark MUST expand or not expand at its boundaries according to the registry alone (`ambre-spec-prose-schema.md section 3`), never according to the applying feature. | this spec section 3; `PROSE-007` | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-020` | `INV` | The value of a property MUST be taken from the first level that carries it, in the order inline mark, paragraph style, block type, document default. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Apply a mark to a range
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-178` | `POST` | The mark MUST cover the given range and no character outside it. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-290` | `POST` | The value stored MUST be the canonical form of the value supplied. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -41,7 +41,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Remove a mark from a range
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-180` | `POST` | After removal the named key MUST cover no character of the range. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-287` | `POST` | After removal the named key MUST still cover every character outside the range that it covered before. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -49,7 +49,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Clear the formatting of a range
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-024` | `POST` | Clearing MUST remove every presentation mark and the link over the range. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-288` | `POST` | Clearing MUST leave the range's text as it was. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -57,7 +57,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.5 Set a paragraph's settings
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-025` | `POST` | Setting a paragraph's settings MUST write only the properties whose value differs from what is stored. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-183` | `FRAME` | Setting a paragraph's settings MUST NOT change the block's text, the inline marks on it, or the settings of any other block. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |

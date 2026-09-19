@@ -18,7 +18,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-149` | `INV` | An element MUST belong to at most one container, a group or a frame. | this spec section 3 | none | unheld -- the binding detaches a member from its current container and the frame handler does the same, and no test puts one element in two lists and reads the second one back; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-009` | `INV` | A group's box MUST be the union of its members' boxes. | this spec section 3 | `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- the union of two corner rects; `ambre_toile::logic::convergence_tests::moving_a_group_translates_its_members` -- the same union again after a translation | none | verified |
@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Bind a selection into a group
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-052` | `POST` | A group MUST enter the paint order below its lowest member, so the members keep their relative order above it. | this spec section 3 | `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- its second assertion, where the paint order reads group, then the two members in their prior order | none | verified |
 | `TOILE-151` | `POST` | An id the board no longer holds MUST be dropped from the binding. | this spec section 3 | none | unheld -- the filter reads the bounds cache for each requested id, and no test asks to bind an id a peer has just deleted; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -41,7 +41,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Move a group
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-154` | `POST` | A transform on a group MUST reach every member. | this spec section 3 | `ambre_toile::logic::convergence_tests::moving_a_group_translates_its_members` -- both members at their translated rects | none | verified |
 | `TOILE-053` | `POST` | A transform on a group MUST reach every leaf of its subtree, however deep the nesting. | this spec section 3 | none | unheld -- the test above nests nothing, and the two-peer property (`TOILE-017`) generates a group of a group but asserts agreement, not correctness: a move that stopped at the first level would leave both peers agreeing on it, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -49,7 +49,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Ungroup
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-010` | `POST` | Ungrouping MUST preserve the surviving children and their relative order. | this spec section 3 | `ambre_toile::logic::convergence_tests::ungroup_keeps_children_and_order` -- its second assertion, where the paint order after the unbind reads the two children in their prior order | none | verified |
 | `TOILE-156` | `POST` | Ungrouping MUST remove the group itself. | this spec section 3 | `ambre_toile::logic::convergence_tests::ungroup_keeps_children_and_order` -- its first assertion, where the group has no box after the unbind | none | verified |
@@ -60,7 +60,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.5 Delete a group
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-161` | `POST` | Deleting a group MUST delete its members. | this spec section 3 | `ambre_toile::logic::convergence_tests::deleting_a_group_cascades_to_members` -- an empty board and an empty paint order after deleting the group of two | none | verified |
 | `TOILE-162` | `FRAME` | Deleting a group MUST NOT remove an element outside its own subtree. | this spec section 3 | none | unheld -- the delete expands the request to the subtree and strips exactly that set, plus the connectors it orphans, and no test puts a bystander on the board and reads it back; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |

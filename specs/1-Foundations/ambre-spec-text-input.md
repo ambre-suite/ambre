@@ -21,7 +21,7 @@ other five documents of the DOM side.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-007` | `INV` | The pipe MUST sit at the caret's real position. | this spec section 2 | none | unheld -- the placement is a transform the view refreshes as the caret moves. If it drifts, the input-method window opens in the wrong corner of the screen, and no test in the wasm tier drives a composition; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-059` | `INV` | The pipe MUST display nothing: no visible text, no native caret, no selection highlight. | this spec section 2, the property table | none | unheld -- the rule is four style declarations in the shell stylesheet, and nothing reads them back. A drifting one draws a second caret or a doubled selection under the one the canvas paints; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -32,7 +32,7 @@ other five documents of the DOM side.
 An ordinary keystroke reaches the buffer, is read whole, and is cleared. A navigation key never
 gets there: it rides the chord path instead.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-061` | `POST` | A typed character MUST reach the view as one committed run. | this spec section 2, the three paths in | none | unheld -- the buffer listener forwards the whole buffer as one run, and no test in the wasm tier types into the pipe; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-017` | `POST` | The pipe MUST be emptied after every commit. | this spec section 2 | none | unheld -- the host clears after each committed run and an opening edit clears again. A missed clear repeats the whole buffer into the document on the next keystroke; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -44,7 +44,7 @@ gets there: it rides the chord path instead.
 The three composition events open a window in which the buffer holds a half-formed run and is not to
 be read.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-063` | `POST` | The preview MUST come from the composition events. | this spec section 2, the composition window | none | unheld -- each update event forwards the running preview and the canvas draws it as unconfirmed text. No test drives an input method, in any tier; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-019` | `POST` | A composition MUST end by committing its final text. | this spec section 2; `ambre-spec-text-editor.md`, `CANVAS-040` | none | unheld -- the last composition event forwards the final run and the editing core replaces the preview with it. No test drives an input method, in any tier; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -55,7 +55,7 @@ be read.
 
 The browser maps every clipboard chord, the legacy set included, onto three events on the pipe.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-021` | `POST` | A copy, a cut and a paste MUST be serviced as the events the browser already sends. | this spec section 2; `ambre-spec-clipboard.md` | none | unheld -- three listeners sit on the pipe, so the legacy chords work for free. No test in the wasm tier raises one; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-060` | `FRAME` | Servicing a clipboard event MUST NOT decode its chord a second time. | this spec section 2; `ambre-spec-commands.md`, `UI-THREAD-011` | `ambre_commands::tests::the_keymap_binds_no_browser_serviced_chord`; `ambre_trame::ui::commands::tests::the_keymap_binds_no_clipboard_chord`; `ambre_toile::ui::commands::tests::the_clipboard_intents_carry_the_shared_identity` -- the seeding refuses the three identities, so a table that declares their chords still binds none of them and a fourth binding fails the belt rather than pasting twice | none | verified |

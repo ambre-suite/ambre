@@ -3,7 +3,7 @@
 
 A contract table is seven columns wide, and four of them answer a question a
 reader asking "what does this document bind" is not asking. `Sources`,
-`Verification`, `Gap` and `Status` are what a review and a gate read: where the
+`Mechanism`, `Gap` and `Status` are what a review and a gate read: where the
 rule comes from, which mechanism holds it, what the mechanism leaves open, and
 where that stands today. They are the reason the table is trustworthy, and they
 are also why a row wraps over four screen widths.
@@ -18,7 +18,7 @@ interpretation of the corpus.
 It writes to standard output and never to a file. There is no `--check` and no
 generated artefact: a reading view checked into the tree is a second copy of
 every rule, free to go stale, and the corpus already refuses that shape for
-facts it generates (`ambre-spec-template.md section 1.B`).
+facts it generates (`ambre-spec-template.md section 1.G`).
 
 Run: `just spec-read <file>`, where `<file>` is a path or a bare file name.
 """

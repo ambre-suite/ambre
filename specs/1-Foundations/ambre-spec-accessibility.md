@@ -19,7 +19,7 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The prefix is `CHROME`, shared with the
 other five documents of the DOM side.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-006` | `INV` | A toast MUST be announced to a screen reader. | this spec section 2 | `ambre_chrome::chrome_ui::toast_host_is_an_aria_live_region` -- it reads the host's role and its politeness back off a real `document`, so a host that stopped being a live region fails | none | verified |
 | `CHROME-065` | `INV` | Announcing a toast MUST NOT move focus. | this spec section 2, the pattern table; this spec section 3, row 4 | none | unheld -- the host is a polite live region, which is the mechanism that makes the rule true, and no test in the belt reads the focused element at all, before or after a toast; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |

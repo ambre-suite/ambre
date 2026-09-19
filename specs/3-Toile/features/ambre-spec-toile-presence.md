@@ -24,7 +24,7 @@ own half: the board anchor, what the overlay paints, and the trail the receiver 
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-016` | `INV` | A cell of presence MUST NOT reach the document, the history or a file: it is relayed and forgotten. | this spec section 3; `SYNC-014` | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` -- the snapshot and the element count are the same after an inbound sample; `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- an outbound one carries no delta | none | verified |
 | `TOILE-177` | `INV` | A sample MUST be keyed by the identity the transport resolved, never by anything the payload carries: no peer can paint under another user's name. | this spec section 3; `SYNC-015` | structural -- the payload declares no identity field at all (section 3); `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` -- it tracks two senders independently under the ids it is handed. The resolution itself is `PRESENCE-002` | none | verified |
@@ -45,7 +45,7 @@ own half: the board anchor, what the overlay paints, and the trail the receiver 
 
 ### 1.2 A peer's sample arrives
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-179` | `POST` | An arriving sample MUST become that peer's latest. | this spec section 3 | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` -- reading the peer back returns the sample | none | verified |
 | `TOILE-241` | `POST` | An arriving sample MUST be announced once to the surface that paints it. | this spec section 3 | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` -- the one event, carrying the sender and the sample | none | verified |
@@ -56,7 +56,7 @@ own half: the board anchor, what the overlay paints, and the trail the receiver 
 
 ### 1.3 Broadcast this peer's gesture
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-182` | `POST` | Broadcasting a gesture MUST produce one ephemeral frame whatever the frame's fate: presence is not acknowledged. | this spec section 3 | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- the frame is there | none | verified |
 | `TOILE-183` | `FRAME` | Broadcasting MUST NOT write a delta, MUST NOT push an undo item, and MUST NOT ask for a repaint: the local pointer is the browser's, not the board's. | this spec section 3 | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- the absent delta and the empty display list | partial -- nothing reads the undo stack, so a handler that pushed an item and wrote nothing else would pass the two assertions; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |

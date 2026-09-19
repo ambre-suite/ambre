@@ -18,7 +18,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-008` | `INV` | Stroke smoothing MUST NOT be persisted: the document stores the raw sampled points only. | this spec section 3 | structural -- the commit serializes the sample vector and writes no outline field, and the smoothing pass runs only at derivation, so a smoothed vector has no field to land in. Nothing executable would catch one written in the samples' place: `ambre_toile::logic::convergence_tests::commit_stroke_creates_drawing` reads the box back and never the samples | none | verified |
 | `TOILE-038` | `INV` | A stroke MUST NOT be mutated after it is committed, so two strokes MUST NOT conflict. | this spec section 3 | structural -- no command names a stroke's sample vector, so a stroke is an insert and nothing else; `ambre_toile::logic::convergence_tests::two_peers_converge` -- it drives concurrent stroke commits | none | verified |
@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Draw a stroke
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-040` | `POST` | Releasing the pointer MUST send one commit carrying every sample of the gesture. | this spec section 4 | `ambre_toile::ui::tool::tests::draw_stream_emits_commit_stroke` -- it walks a press, two moves and a release and reads the one command back, with a sample per event | none | verified |
 | `TOILE-105` | `FRAME` | An in-flight stroke MUST NOT enter the document before release. | this spec section 4 | none | unheld -- sampling appends to view state and the move returns no command, so a create per sample is unreachable by construction, but the pen test drops what each move returned and nothing executable holds it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |

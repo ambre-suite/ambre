@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-007` | `INV` | Hit-testing MUST be the exact inverse of the geometry it walks, under zoom and under variable row and column sizes. | this spec section 2 | `ambre_trame::ui::grid::tests::group1::zoom_scales_metrics_and_round_trips_hit_test`; `::variable_metrics_round_trip_pixel_and_hit_test`; `::axis_pointer_resolution_follows_variable_metrics`; `::filter_button_hit_test_matches_drawn_rect`; `ambre_trame::render::tests::variable_metrics_shift_cells_and_hit_test` -- each holds one modifier, the variable-metric round trips running at 100% and the zoom round trip on default metrics | none | verified |
 | `TRAME-UI-143` | `INV` | The geometry the renderer draws MUST agree with the geometry hit-testing walks. | this spec section 2 | none | unheld -- `ui/grid/geometry.rs` and `render/layout.rs` walk the same sizes twice, and each of the two tests above closes the loop inside one of them. Nothing compares a drawn rect with a hit-tested one (section 5); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 The user scrolls
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-004` | `POST` | A scroll MUST request no more than the visible range plus a bounded padding. | this spec section 2 | none | unheld -- the window is built in `ui/grid/state.rs::scroll_viewport_cmd` and nothing compares the requested bounds with the visible range. The padding is not the constant it reads as: the row window is stretched by the count of every hidden row the cache knows, not by those inside the window; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-144` | `POST` | A scroll MUST request every cell the user can see. | this spec section 2 | none | fails -- on the column axis the window is sized from the uniform metric, and a resized column can be a third of it, so a screen of narrow columns runs past the last one requested. Those columns are never asked for, and the same window evicts them if an earlier one had brought them in (section 5). The row axis survives by margin, not by rule; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
@@ -41,7 +41,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 The wheel turns
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-147` | `POST` | A wheel notch, a line delta or a page delta MUST be applied once and in full, keeping the sub-cell remainder. | this spec section 3 | none | unheld -- `handle_wheel` classifies the sample and feeds the accumulator, and no test drives the wheel path at all (section 5); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-026` | `FRAME` | A single wheel notch MUST NOT start a momentum coast. | this spec section 3 | none | unheld -- `handle_wheel` classifies the sample and zeroes the velocity, and no test drives the wheel path at all; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -49,7 +49,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 An answer arrives
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-005` | `POST` | An answer whose version is lower than the last accepted one MUST be dropped. | this spec section 2 | none | unheld -- the rule is in the code (`ui/grid/state.rs`, `if version < self.accepted_version`) and nothing exercises it; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-148` | `POST` | A row or column an answer reports at the default size MUST read as the default, not as the size it held before. | this spec section 2; `ambre-spec-trame-schema.md section 4` ("absence is a value") | none | unheld -- `on_viewport_data` removes the entry instead of storing the default, and every metric test writes the maps directly: no test sends an answer that carries sizes; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -57,7 +57,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.5 Freeze a band of rows or columns
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-029` | `FRAME` | Freezing rows or columns MUST reach no collaborator: it MUST produce no change to the document. | this spec section 5 | not built | unbuilt -- lands with the `Grid surface` Story (`ambre-roadmap.md` E6) | unimplemented |
 

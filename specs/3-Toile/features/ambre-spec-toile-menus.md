@@ -18,7 +18,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-018` | `INV` | No two menu-bar entries MUST carry the same command id. | this spec section 2 | `ambre_toile::ui::menu_bar::tests::menu_bar_ids_are_distinct` -- it sorts the bar-only id list and reads the deduplicated length back unchanged | none | verified |
 | `TOILE-UI-121` | `INV` | No context-menu entry MUST carry an id the menu bar already carries, except where both name the same command. | this spec section 2 | none | unheld -- the two id lists are declared in two modules and the bar reuses the context ids by name, so a collision would be a silent aliasing. `ambre_toile::ui::menu_bar::tests::menu_bar_ids_are_distinct` reads the bar list alone, never the union; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -37,7 +37,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Right-click over the board
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-048` | `POST` | A right-click whose target is already selected MUST keep the whole selection. | this spec section 3 | none | unheld -- the handler resolves the hit to its group target and re-selects only when the target is absent from the selection, and no test drives a right-click; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-127` | `POST` | A right-click on an element outside the selection MUST collapse the selection to that element. | this spec section 3 | none | unheld -- the same handler as `TOILE-UI-048`, and the same absent test; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -55,7 +55,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Choose a context-menu entry
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-137` | `POST` | Copy MUST carry the whole selection. | this spec section 2 | `ambre_toile::ui::menu::tests::copy_cut_delete_resolve` -- the copy command carrying the selection unchanged | none | verified |
 | `TOILE-UI-138` | `POST` | Cut MUST copy before it deletes. | this spec section 2 | `ambre_toile::ui::menu::tests::copy_cut_delete_resolve` -- the pair in that order, which the channel preserves | none | verified |
@@ -77,7 +77,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Choose a menu-bar entry
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-154` | `POST` | Undo and redo MUST reach the board. | this spec section 2 | `ambre_toile::ui::menu_bar::tests::undo_redo_map_to_edits` -- each id mapping to its board command | none | verified |
 | `TOILE-UI-155` | `POST` | The presentation entry MUST ask to enter presentation mode with focus. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::present_entry_emits_enter_present` -- the command and the focus flag | none | verified |
@@ -85,7 +85,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.5 Zoom from the View menu
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-051` | `FRAME` | A zoom action MUST NOT reach the document. | this spec section 2 | `ambre_toile::ui::menu_bar::tests::zoom_ids_are_view_local` -- the five zoom ids resolving to no board command | none | verified |
 | `TOILE-UI-157` | `POST` | Zoom in, zoom out and zoom to 100 % MUST move the camera and queue a fresh cull. | this spec section 3 | none | unheld -- each writes the camera and queues a viewport request, and the wiring is wasm-only, so no test reads the camera back after an entry; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |

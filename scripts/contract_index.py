@@ -4,8 +4,8 @@
 `ambre-contract-ledger.md` is a reading view. It answers "how much is verified
 today" and it answers nothing else: the rows are rolled up per document and per
 status, and the statement, the sources and the mechanism are gone by the time it
-is written. Anything that needs a row -- a reader, a review, the context compiler
-this migration is for -- re-parses the 124 documents carrying one to get it back.
+is written. Anything that needs a row -- a reader, a review, a context compiler
+-- re-parses every document carrying a table to get it back.
 
 So the parse is emitted, twice.
 
@@ -27,7 +27,7 @@ The graph is where that join is a fact rather than a scan.
 Markdown is authoritative, exactly as it is for the ledger, and a stale artefact
 fails rather than being read. No record carries a line number: a line is the one
 part of a citation an edit above it breaks, which is what
-`ambre-spec-template.md` section 1.D refuses for `crates/`. A document and an id
+`ambre-spec-template.md` section 1.G refuses for `crates/`. A document and an id
 locate a row, and the id is unique corpus-wide.
 
 **A row cites no container.** The plan this file closes asked for that edge too.
@@ -53,9 +53,9 @@ import spec_refs  # noqa: E402  -- the document and section namespaces
 from template_vocabulary import (  # noqa: E402
     GAP,
     KIND,
+    MECHANISM,
     SOURCES,
     STATEMENT,
-    VERIFICATION,
 )
 
 INDEX = contracts.SPECS / "1-Foundations" / "ambre-contract-index.json"
@@ -124,7 +124,7 @@ def record(document: str, rid: str, status: str, cells: dict[str, str]) -> dict:
             for source in parsed
             if source is not None
         ],
-        "verification": cells.get(VERIFICATION, ""),
+        "mechanism": cells.get(MECHANISM, ""),
         "gap": cells.get(GAP, ""),
         "status": status,
     }
@@ -164,7 +164,7 @@ def edges(records: list[dict]) -> list[dict]:
             found += [{"from": rid, "edge": "cites-rule", "to": cited}
                       for cited in source["rules"]]
         found += [{"from": rid, "edge": "verified-by", "to": token}
-                  for token in contracts.CITED.findall(row["verification"])]
+                  for token in contracts.CITED.findall(row["mechanism"])]
         story = contracts.cited_story(row["gap"])
         if story is not None:
             found.append({"from": rid, "edge": "lands-with",
@@ -266,14 +266,14 @@ def main() -> int:
     if stale:
         print(
             "\nERROR: a generated artefact on disk is not what the corpus says "
-            "today (ambre-spec-template.md section 1.D). Run `just index-write`.",
+            "today (ambre-spec-template.md section 1.G). Run `just index-write`.",
             file=sys.stderr,
         )
         return 1
     if defects:
         print(
             "\nERROR: an edge of the graph resolves to nothing "
-            "(ambre-spec-template.md section 1.D). Point the citation at what "
+            "(ambre-spec-template.md section 1.G). Point the citation at what "
             "holds the rule today.",
             file=sys.stderr,
         )

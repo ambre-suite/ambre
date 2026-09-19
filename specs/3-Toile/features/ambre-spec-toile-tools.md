@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-036` | `INV` | Exactly one tool MUST be active on the board. | this spec section 2 | type-level -- the machine holds one `ambre_toile::ui::tool::Tool` and every arm replaces it, so a second active tool has nowhere to live | none | verified |
 | `TOILE-UI-243` | `INV` | The board MUST NOT let the active tool reach the Logic thread: it decides what a pointer event means, and nothing more. | this spec section 4; `UI-THREAD-004` | type-level -- no `ToileCommand` carries a tool, and a tool `CommandId` is absent from the command-to-application map, so the only thing that crosses is the command a gesture produced | none | verified |
@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Pick a tool
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-247` | `POST` | Arming a tool MUST abandon any gesture in flight on the previous one. | this spec section 2 | `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` -- it arms a shape, presses, switches, and reads the machine idle | none | verified |
 | `TOILE-UI-369` | `POST` | Arming a tool MUST emit nothing of the gesture it abandons. | this spec section 2 | `ambre_toile::ui::tool::tests::switching_tools_cancels_in_flight_gesture` -- it reads no preview left after the switch | none | verified |
@@ -39,7 +39,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Drag on the board
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-008` | `POST` | A gesture MUST emit exactly one command, on release. | this spec section 2 | `ambre_toile::ui::tool::tests::resize_preview_then_release_emits_exactly_one_command` -- the one command a move-then-release makes; `ambre_toile::ui::tool::tests::click_selects_then_drag_emits_move` -- the move; `ambre_toile::ui::tool::tests::drag_corner_handle_emits_resize` -- the resize; `ambre_toile::ui::tool::tests::drag_rotate_handle_emits_rotate` -- the rotate | none | verified |
 | `TOILE-UI-037` | `POST` | A creation tool MUST place what the gesture described. | this spec section 2 | `ambre_toile::ui::tool::tests::shape_drag_emits_create_at_drag_rect` -- the drag rectangle; `ambre_toile::ui::tool::tests::pen_clicks_then_double_click_emits_path` -- the path; `ambre_toile::ui::tool::tests::draw_stream_emits_commit_stroke` -- the stroke; `ambre_toile::ui::tool::tests::connector_anchor_to_anchor_emits_create_connector` -- the two anchors | none | verified |
@@ -52,7 +52,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Hold `Space` to pan
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-041` | `POST` | Holding `Space` MUST pan, in any tool. | this spec section 3; `features/ambre-spec-toile-viewport.md section 1` | none | unheld -- the key sets a flag the pointer handler reads before it dispatches to the machine, and no test drives the pair; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-255` | `FRAME` | A space-drag MUST NOT start the active tool's gesture. | this spec section 3 | none | unheld -- the pan branch returns before the machine is reached, so the rule holds by the early return and nothing would go red the day the branch moved; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -60,7 +60,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.5 Cancel a gesture
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-009` | `POST` | `Escape` MUST cancel an in-flight gesture without emitting a command. | this spec section 2 | `ambre_toile::ui::tool::tests::escape_reverts_an_armed_creation_tool_to_select` -- it presses with a note armed, escapes, and reads the machine idle and the next click placing nothing | none | verified |
 | `TOILE-UI-257` | `POST` | `Escape` on a creation tool MUST re-arm Select. | this spec section 2 | `ambre_toile::ui::tool::tests::escape_reverts_an_armed_creation_tool_to_select` -- the revert | none | verified |
@@ -69,7 +69,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.6 Place a note or a text element
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-038` | `POST` | Placing a note or a text element MUST return the board to Select, so the next click does not place another one. | this spec section 3 | none | unheld -- the revert runs on the view where the placement command is sent, and the tool tests drive the machine below it, where the revert does not happen; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-259` | `POST` | Placing a note or a text element MUST open the inline editor on the new element once its id comes back. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 1` | none | unheld -- the view arms a flag and waits for the creation event, and no test drives the pair: the same view seam as the revert of `TOILE-UI-038`; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -77,7 +77,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.7 Drop a comment thread
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-042` | `POST` | The comment tool MUST drop a thread where it clicks, on an element or on empty board. | this spec section 3; `features/ambre-spec-toile-comments.md section 4` | `ambre_toile::ui::tool::tests::the_comment_tool_drops_a_thread_where_it_clicks` -- it reads an element anchor off a click on a note and a point anchor off a click on empty board | none | verified |
 | `TOILE-UI-261` | `FRAME` | Dropping a thread MUST NOT change the board: no element is created, moved or selected. | this spec section 3; `features/ambre-spec-toile-comments.md section 4` | `ambre_toile::ui::tool::tests::the_comment_tool_drops_a_thread_where_it_clicks` -- on the outcome it reads back: the drop yields an anchor and never a command, so nothing reaches the document | none | verified |

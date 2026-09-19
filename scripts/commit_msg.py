@@ -8,7 +8,7 @@ are different.** They ask an author to count characters in text they are writing
 which nobody does, so both are satisfied by estimate and the estimate is wrong
 often enough to matter.
 
-`ambre-spec-template.md section 1.D` states the general case: a pillar without a
+`ambre-spec-template.md section 1.G` states the general case: a pillar without a
 script is decoration. `ai/ambre-writing-style.md` says the same of itself and
 calls the result drift. This file removes the last unguarded rule of the commit
 path.

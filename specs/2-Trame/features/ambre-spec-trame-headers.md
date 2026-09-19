@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-043` | `OBS` | A column MUST be labelled by the spreadsheet convention: A to Z, then AA. | this spec section 3 | `ambre_trame::render::tests::col_label_matches_spreadsheet_convention` -- it runs over the two carries and the three-letter case | none | verified |
 | `TRAME-UI-121` | `OBS` | A row MUST be labelled by its one-based number. | this spec section 3 | none | unheld -- the label is formatted inline in `render/headers.rs` and no recording reads a row header's text, so the strip could number from zero and nothing would fail. The column half had a rule and a test, and this half had neither; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Insert from a boundary
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-048` | `POST` | The inline insert MUST insert at the boundary its affordance sits on. | this spec section 3 | none | unheld -- the affordance resolves to the right boundary (`TRAME-UI-044`), and nothing drives the click through to the insert it fires. The intent also leaves the UI thread as a lossy send (`ui/view/interact.rs`), the one class the bus allows to drop (`ambre-spec-message-bus.md section 2`), while every other document mutation of this crate is sent lossless; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-123` | `FRAME` | An insert fired from a boundary MUST NOT change the size of either axis that boundary separates. | this spec section 4; derived | none | unheld -- the insert and the resize are armed from the same four pixels, split by the half of the band the point falls in, and `::header_boundary_splits_insert_and_resize` covers the split alone: no test fires an insert and reads the widths back; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |

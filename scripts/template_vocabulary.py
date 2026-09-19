@@ -3,13 +3,12 @@
 
 `ambre-spec-template.md` states every one of them in a table a reader is meant
 to consult. A script that declares them again states them twice, and the second
-statement drifts without a sound: 519 rows wrote a bare `Kind` cell for months
-because the gate and the template disagreed about the spelling, and each of the
-two was right about itself. Nothing below is typed out here that the template
-does not say first.
+statement drifts without a sound: a gate and the template disagreeing about a
+spelling are each right about themselves, and every row between them is wrong.
+Nothing below is typed out here that the template does not say first.
 
 **The shape is the contract.** Where a heading counts the members of its table
--- "The five status values", "The eight kinds" -- the count is read with the
+-- "The six status values", "The eight kinds" -- the count is read with the
 table and a mismatch fails here. That is the whole guard: a parse that stops
 matching returns an empty set, and an empty closed set is a gate that accepts
 everything. Failing at import is loud; narrowing to whatever the parse found is
@@ -154,7 +153,7 @@ def _kinds() -> tuple[tuple[str, ...], tuple[str, ...]]:
 
 
 def _mechanism_tokens() -> tuple[str, ...]:
-    """Every token a `Verification` cell may be written in.
+    """Every token a `Mechanism` cell may be written in.
 
     The table's first two rows are the belt -- a test path and its continuation
     -- and a path is not a token: it locates itself, and `MECHANISM_PATH` in
@@ -173,7 +172,7 @@ def _mechanism_tokens() -> tuple[str, ...]:
 
 
 COLUMNS = _columns()
-ID, KIND, STATEMENT, SOURCES, VERIFICATION, GAP, STATUS = COLUMNS
+ID, KIND, STATEMENT, SOURCES, MECHANISM, GAP, STATUS = COLUMNS
 
 STATUSES = tuple(
     _token(cells[0], "statuses") for cells in _counted("**The six status values.**")
@@ -186,7 +185,7 @@ IMPLEMENTATION_VALUES = tuple(
     for cells in _table_after("`Implementation` is about **the code it describes**")
 )
 
-VERIFICATION_TOKENS = _mechanism_tokens()
+MECHANISM_TOKENS = _mechanism_tokens()
 # The tokens a reader cannot grep for, and the two that name no mechanism at
 # all. Both sets are the template's own sentences, which say why each is what it
 # is; neither is a subset a script may widen.
@@ -205,7 +204,7 @@ CARRIED_GAP_OPENERS = tuple(o for o in GAP_OPENERS if o.endswith(" "))
 # What each field of the field table announces a count of. A field is here when
 # its rule says "one of ...": the map resolves that announcement to the set the
 # gates actually enforce, so the two cannot disagree. `Sources` counts in place,
-# because the five forms are written in its own cell and nowhere else -- in that
+# because the six forms are written in its own cell and nowhere else -- in that
 # cell the bold run marks a form and marks nothing else.
 FIELD_COUNTS = {
     "Kind": lambda cell: len(KINDS),

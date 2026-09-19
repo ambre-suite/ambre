@@ -18,7 +18,7 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`. The prefix is `CHROME`, shared with the
 other five documents of the DOM side.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CHROME-030` | `INV` | The chrome MUST adapt at three declared widths. | this spec section 2 | none | unheld -- three width queries sit in one stylesheet, at under 600, from 600 and over 1024. Nothing refuses a fourth added beside them; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-056` | `INV` | Each threshold MUST be written once. | this spec section 2 | none | unheld -- no file outside that stylesheet carries a threshold, so the rule holds by absence. Nothing refuses a second spelling of 600, which is how two components come to disagree about where a phone stops; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |

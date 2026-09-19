@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `DOCFILE-001` | `IO` | A `.ambre` round trip MUST be the identity on document state, leaving nothing a warning list could report: the payload **is** the document. | this spec section 3 | `ambre_core::docfile::tests::round_trip_is_the_identity_on_the_container`; `ambre_trame::logic::docfile::tests::round_trip_preserves_the_document_state`; `::round_trip_is_byte_identical_on_a_bare_document`; `ambre_toile::logic::state::docfile::tests::round_trip_preserves_the_document_state`; `::round_trip_is_byte_identical_on_a_bare_document`; `fixture_determinism::the_round_trip_is_stable_on_every_doc_state_variant` | none | verified |
 | `DOCFILE-006` | `INV` | The container layer MUST NOT compress or encrypt: the two entry points are pure functions over bytes, and protection is a separate stage. | this spec section 5 | crate-graph -- `ambre-core` declares no crypto and no compression dependency, so neither is reachable from the container | none | verified |
@@ -36,7 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 The reader is handed bytes and nothing else. It reads the header, decides what wrote the file, and
 migrates or refuses before an application sees a payload.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `DOCFILE-002` | `POST` | A reader MUST identify the file from `doc_type` and `version`, before any app-specific parsing. | this spec section 3 | `ambre_core::docfile::tests::header_layout_is_the_spec_layout`; `::dispatch_reports_the_type_that_wrote_the_file`; `::an_unknown_doc_type_byte_is_not_a_dispatch_target`; `ambre_trame::logic::docfile::tests::a_toile_file_is_re_dispatched_not_coerced` | none | verified |
 | `DOCFILE-003` | `POST` | A version older than the binary's MUST migrate on read. | this spec section 3 | `ambre_core::docfile::tests::the_walk_applies_one_step_per_version`; `::the_walk_chains_steps_in_order`; `::a_gap_in_the_registry_stops_the_walk_at_the_missing_row`; `::a_failing_step_fails_the_whole_migration` | none | verified |
@@ -50,7 +50,7 @@ migrates or refuses before an application sees a payload.
 Two operations the plaintext lineage does not have. The surface takes the passphrase; the key and
 the cipher never leave the Sync worker (`DOCFILE-014`).
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `DOCFILE-015` | `FRAME` | The seal prompt MUST take the passphrase twice, and MUST NOT seal on a mismatch. | this spec section 4 | `ambre_chrome::passphrase::tests::sealing_needs_the_two_fields_to_agree`; `::nothing_is_submitted_from_an_empty_prompt`; `::opening_asks_once_and_ignores_the_second_field` -- the rule is the prompt's one decision, so it is a pure function of the two fields and tested on host, and the two inputs around it stay DOM glue | none | verified |
 | `DOCFILE-016` | `FAIL` | A file that does not open MUST report the same failure whether the passphrase is wrong or the file was modified. | this spec section 5 | `ambre_sync::integration::a_wrong_passphrase_and_a_tampered_file_fail_the_same_way` -- three inputs, a wrong passphrase, an edited ciphertext and an edited salt, against one variant; type-level -- `RestEvent::DocFileOpenFailed` is a unit variant, so a message that distinguished the two causes would have nothing to read | none | verified |

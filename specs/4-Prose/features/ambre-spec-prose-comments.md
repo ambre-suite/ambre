@@ -29,7 +29,7 @@ Two of the four match, and the two that do not are section 6.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-001` | `INV` | A comment's identity MUST be stable for the document's lifetime: an edit, a reply or a remote delta MUST NOT change it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-075` | `INV` | The live mark on the text, never the stored anchor, MUST decide where a comment sits. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -45,14 +45,14 @@ Two of the four match, and the two that do not are section 6.
 
 ### 1.2 Open a thread on a range
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-188` | `POST` | Opening a thread MUST write one annotation entry and one mark reaching the requested range and no character outside it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-189` | `FRAME` | Opening a thread MUST NOT change the text of the block, or the entry or the span of any other thread. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Reply to a thread
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-190` | `POST` | A reply MUST be appended at the end of the thread's reply list. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-079` | `POST` | A reply to a resolved thread MUST reopen it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -60,7 +60,7 @@ Two of the four match, and the two that do not are section 6.
 
 ### 1.4 Resolve or reopen a thread
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-192` | `POST` | Resolving a thread MUST mark it closed. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-193` | `POST` | Reopening a thread MUST mark it open, with no reply added. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -68,7 +68,7 @@ Two of the four match, and the two that do not are section 6.
 
 ### 1.5 Edit a reply
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-195` | `POST` | Editing a reply MUST replace that reply's text and leave its place in the list. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-080` | `FAIL` | Editing a reply MUST be refused unless the caller wrote it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -76,7 +76,7 @@ Two of the four match, and the two that do not are section 6.
 
 ### 1.6 Delete a reply
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-197` | `POST` | Deleting a reply MUST remove it from the list and leave the order of the replies around it. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-081` | `POST` | Deleting a thread's opening reply MUST delete the thread. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -85,7 +85,7 @@ Two of the four match, and the two that do not are section 6.
 
 ### 1.7 Delete a thread
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-200` | `POST` | Deleting a thread MUST remove its entry and its mark. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-279` | `POST` | Deleting a thread MUST leave the text its mark covered. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -93,7 +93,7 @@ Two of the four match, and the two that do not are section 6.
 
 ### 1.8 Edit the text a thread is anchored to
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-076` | `POST` | The stored anchor MUST be rewritten from the mark on every edit that touches the annotated block. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-202` | `POST` | An edit that deletes the whole marked range MUST keep the entry, with the thread orphaned rather than re-anchored. | this spec section 3 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5) | unimplemented |

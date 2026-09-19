@@ -346,7 +346,7 @@ def closure(rid: str, records: dict[str, dict], graph: list[dict],
     out.append("")
 
     out += [f"{BLOCK} 6 -- HOW IT IS VERIFIED", "",
-            f"{row['verification'] or 'none'}", ""]
+            f"{row['mechanism'] or 'none'}", ""]
 
     out += [f"{BLOCK} 7 -- WHAT IS MISSING", "", f"{row['gap'] or 'none'}", ""]
     told = story(row["gap"])

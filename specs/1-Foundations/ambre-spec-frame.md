@@ -23,7 +23,7 @@ one numbering over the four documents the rendering layer produces.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-001` | `INV` | A GPU resource MUST NOT leave the UI thread. | this spec section 2; `ambre-spec-architecture.md section 2` | type-level -- `wgpu::Device`, `HTMLCanvasElement` and the atlas textures are `!Send`, so moving one to another thread does not compile | none | verified |
 | `CANVAS-008` | `INV` | Rendering code MUST contain no `unsafe`. | README pillar "Security" | none | unheld -- a count gives zero `unsafe` in `ambre-canvas`, `ambre-draw` and `ambre-pdf`, and no crate carries `#![forbid(unsafe_code)]`, so what holds the pillar is a reader counting rather than a build refusing; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -33,7 +33,7 @@ one numbering over the four documents the rendering layer produces.
 
 ### 1.2 The loop runs a frame
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-004` | `PRE` | GPU initialization MUST have completed before the rAF loop is started. | this spec section 2 | none | unheld -- the call order in `host.rs` resolves `bootstrap_gpu` before `start_raf_loop`, and a reversed order compiles and runs. What it costs is silent: Firefox calibrates vsync on the empty frames and the whole loop is paced wrong afterwards; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-005` | `POST` | A frame MUST fit the 16.6 ms budget at 60 FPS on the reference device. | `ambre-spec-budgets.md section 2`, the frame phases | none | unheld -- a developer reads the frame time by hand off the perf chip. No `criterion` threshold holds the budget, and nobody has taken the mobile measurement it is written against; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -43,14 +43,14 @@ one numbering over the four documents the rendering layer produces.
 
 ### 1.3 The loop is paused
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-012` | `POST` | A paused loop MUST hold its last frame on screen. | this spec section 2; `ambre-spec-chrome.md`, `CHROME-011` | none | unheld -- `RafControl` is an `AtomicBool` the frame callback reads before it does any work, and nothing reads a pixel back to see what the surface then shows; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-058` | `FRAME` | A paused loop MUST NOT dispatch and MUST NOT render. | this spec section 2 | none | unheld -- the two halves fail apart: skipping the render and still dispatching drains the inbound queue into a surface nobody repaints, so the events are consumed and their effect is never drawn. Nothing asserts that both are skipped; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 A fatal condition is signalled
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-013` | `POST` | A fatal condition MUST latch: the first message MUST be the one a reader gets. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_canvas::fatal::tests::first_message_wins_and_latches` -- nothing is latched to begin with, and the first of two messages is what reads back | none | verified |
 | `CANVAS-059` | `FRAME` | A later fatal condition MUST NOT overwrite the first. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_canvas::fatal::tests::first_message_wins_and_latches` -- a second signal leaves the first message the one read, and a thread dying takes its neighbours with it, so the last message to arrive is the least informative one | none | verified |
@@ -58,7 +58,7 @@ one numbering over the four documents the rendering layer produces.
 
 ### 1.5 The theme changes
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-015` | `POST` | A theme switch MUST repaint the content. | this spec section 2; `ambre-spec-design-tokens.md` | none | unheld -- each view reads its palette from `ThemeControl` per frame, so a switch is picked up on the next tick; nothing drives a switch and reads what is drawn; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-060` | `FRAME` | The renderer MUST hold no colour of its own. | this spec section 2; `ambre-spec-design-tokens.md` | none | unheld -- the palette is read per frame and the second colour store has nowhere to live today. Nothing refuses the field that would add one, and a cached colour survives exactly one theme switch before it is wrong; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |

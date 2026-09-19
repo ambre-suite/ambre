@@ -22,7 +22,7 @@ editor and not restated here.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-183` | `INV` | At most one editor MUST be open on the board at a time. | this spec section 3 | type-level -- the view holds one `Option<InlineEditor>`, so a second open editor has nowhere to live | none | verified |
 | `TOILE-UI-361` | `INV` | An open editor MUST name exactly one element. | this spec section 3 | type-level -- the wrapper holds one `ElementId`, so an editor over two elements is unrepresentable | none | verified |
@@ -40,7 +40,7 @@ editor and not restated here.
 
 ### 1.2 Place a note or a text element
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-059` | `POST` | Placing a note or a text element MUST open its editor on the element just placed. | this spec section 4 | none | unheld -- the tool arms a deferred open and the view opens it when the element's geometry lands, and no test drives the two halves together. The create half alone is held, by `ambre_toile::ui::tool::tests::sticky_click_creates_sticky_with_empty_text_and_picked_fill`; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-193` | `POST` | Placing a note or a text element MUST return the tool to select, so the next click does not place a second one. | this spec section 4 | none | unheld -- the tool reverts where the placement command is emitted, and no test reads the tool after a placement; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -50,7 +50,7 @@ editor and not restated here.
 
 ### 1.3 Double-click a note, or click one already selected
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-061` | `POST` | A double-click on a note or a text element MUST open its editor with the body kept. | this spec section 4 | none | unheld -- the two entries differ only in what the editor is seeded with, and no test opens either; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-197` | `POST` | A double-click MUST leave the caret at the end of the kept body, not select it. | this spec section 4 | none | unheld -- the shared core seeds the caret at the end on its first flush, and nothing drives the Toile entry; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -61,7 +61,7 @@ editor and not restated here.
 
 ### 1.4 Type over a selected note
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-060` | `POST` | Typing a printable character with one text-bearing element selected and no editor open MUST enter its editor. | this spec section 4 | none | unheld -- nothing drives a keystroke through the view. The old row cited a DOM-tag guard, `ambre_toile::ui::palette::tests::editable_tag_guards_text_entry`, which holds neither the entry nor the kinds; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-202` | `POST` | The character that opened the editor MUST replace the body, not extend it: one gesture means one thing across the suite. | this spec section 4 | none | unheld -- the open queues a select-all and the character is then inserted over it, and nothing drives the keystroke or reads the replacement; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -71,7 +71,7 @@ editor and not restated here.
 
 ### 1.5 Leave the editor
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-062` | `POST` | Leaving the editor MUST commit the body as one whole-body write. | this spec section 4 | none | unheld -- `Escape` closes the editor and the same key clears a selection when none is open, so the two behaviours share one handler and neither is driven; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-206` | `POST` | Leaving the editor MUST keep its element selected, so the next gesture acts on what was just typed into. | this spec section 4 | none | unheld -- the selection is set at the open and the close does not touch it, and no test reads it after a close; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |

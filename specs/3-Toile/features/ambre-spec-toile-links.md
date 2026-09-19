@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-062` | `INV` | A link MUST be its own register on the element, not part of its style. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_link_is_set_and_cleared` -- it writes and clears a register the format holds as its own field beside `style` (`ambre-spec-toile-schema.md section 3`); `::setting_a_link_touches_nothing_else` -- the other direction | none | verified |
 | `TOILE-109` | `INV` | A link MUST outlive its target: deleting the frame a link points at MUST NOT clear the link. | this spec section 3 | `ambre_toile::logic::convergence_tests::deleting_the_target_frame_leaves_the_link` -- it deletes the frame and reads the register back off the painted element | none | verified |
@@ -27,14 +27,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Set or clear a link
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-066` | `POST` | Setting or clearing a link MUST be one undo item. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_link_is_set_and_cleared` -- it asserts one delta per write, and the handler makes one `doc.commit()`, which is what one undo item is (`features/ambre-spec-toile-undo.md`) | partial -- no test walks the undo stack over a link; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-111` | `FRAME` | Setting or clearing a link MUST write the link register alone: the element's style, geometry and lock MUST NOT change. | this spec section 3 | `ambre_toile::logic::convergence_tests::setting_a_link_touches_nothing_else` -- it reads the painted element before and after and compares its bounds, its fill, its stroke and its lock | none | verified |
 
 ### 1.3 Follow a link
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-112` | `PRE` | Following MUST be asked for by a gesture of its own -- a modified click, the link glyph, or a plain click where editing is off -- so a plain click with the select tool selects instead. | this spec section 4 | `ambre_toile::ui::link::tests::a_plain_click_never_follows_while_editing` -- it holds the rule as a function of the two inputs | partial -- what routes the click is the view, which is not host-constructible, so nothing runs the two together; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-113` | `POST` | Following a link to a frame MUST fit the camera to that frame's box. | this spec section 3 | `ambre_toile::ui::link::tests::each_target_means_one_navigation` -- it holds that a frame target resolves to a jump and to nothing else | partial -- the fit itself rides the camera path the zoom-to-selection entry uses, which no test drives; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |

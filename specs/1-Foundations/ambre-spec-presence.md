@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PRESENCE-002` | `INV` | A presence payload MUST NOT carry a user identifier. | this spec section 3; `SYNC-014` | type-level -- no payload in the suite declares the field, so an impersonated sample has no shape to travel in | none | verified |
 | `PRESENCE-003` | `INV` | The author of a presence frame MUST be the `UserId` the Sync thread resolves from the signing key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-014` | `ambre_sync::pipeline::tests::roundtrip_ephemeral`; `ambre_server::ws::handler::message::tests::forged_author_key_writes_no_presence` | none | verified |
@@ -35,7 +35,7 @@ status values are normative in `ambre-spec-template.md`.
 
 The local peer moves. What leaves is one ephemeral frame and nothing else.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PRESENCE-001` | `POST` | A presence sample MUST travel as an ephemeral frame. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- on the assertion that the command produced an ephemeral frame | none | verified |
 | `PRESENCE-011` | `FRAME` | Sending a presence sample MUST NOT write to the document or its history. | this spec section 3; `ZK-005` | `ambre_toile::logic::convergence_tests::presence_command_broadcasts_ephemeral_only` -- on its two other assertions, that the command produced no CRDT delta and no display event, so a sample that reached the document fails | none | verified |
@@ -44,7 +44,7 @@ The local peer moves. What leaves is one ephemeral frame and nothing else.
 
 An inbound frame is opened, its author resolved, and the peer set updated for the view.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PRESENCE-009` | `POST` | The event delivered to the view MUST carry the whole live peer set, so a departed peer is an absent entry. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_peer_who_stops_sending_leaves_the_live_set` -- it reads the set an event carries after a peer ages out; `ambre_toile::ui::presence::tests::a_peer_absent_from_the_set_stops_being_painted` -- the view that adopts it | none | verified |
 | `PRESENCE-010` | `POST` | A remote position MUST snap when its new sample is not adjacent to the previous one. | this spec section 4 | none | claim -- the rule holds today because no application interpolates at all, and an absence of code is not a mechanism: the first smoothing pass breaks it in silence, in whichever application writes one; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |

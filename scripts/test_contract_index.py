@@ -40,7 +40,7 @@ def rows(*cells: str) -> list[dict]:
             f"FRAME-{at:03}",
             "verified",
             {"Kind": "`INV`", "Statement": "The frame MUST land.", "Sources": cell,
-             "Verification": "", "Gap": "none"},
+             "Mechanism": "", "Gap": "none"},
         )
         for at, cell in enumerate(cells, 1)
     ]

@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-066` | `OBS` | The accessible surface MUST carry the text of the block the caret is in, so a screen reader reads what is being edited. | this spec section 3; `CANVAS-009` | not built | unbuilt -- lands with the `CANVAS P2 -- frame quality` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `PROSE-UI-077` | `OBS` | The caret of the accessible surface MUST sit at the offset the document caret sits at, so a screen reader resumes where the author is rather than at the head of the block. | this spec section 3 | not built | unbuilt -- lands with the `CANVAS P2 -- frame quality` Story (`ambre-roadmap.md` E6) | unimplemented |
@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Move the caret
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-067` | `POST` | After a caret move, the block it landed in MUST be announced: what kind of block it is, and the level when it is a heading. | this spec section 3 | not built | unbuilt -- lands with the `CANVAS P2 -- frame quality` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `PROSE-UI-068` | `POST` | A move that enters or leaves a table cell, a footnote, a comment thread or a tracked change MUST announce it. | this spec section 3 | not built | unbuilt -- lands with the `CANVAS P2 -- frame quality` Story (`ambre-roadmap.md` E6) | unimplemented |

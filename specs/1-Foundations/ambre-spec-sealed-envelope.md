@@ -23,7 +23,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-088` | `INV` | The per-document map of remote ephemeral counters MUST be bounded. | this spec section 2; `SYNC-008` | `ambre_sync::ephemeral_tests::author_map_is_bounded` -- a hundred authors past the cap, and the map never exceeds it, and a peer can mint signing keys at will, so without the cap one document's presence state is an unbounded allocation | none | verified |
 | `SYNC-001` | `INV` | The Sync worker MUST NOT hand the socket a payload that has not passed through the sealing pipeline. | `ZK-001`; this spec section 2 | none | unheld -- the rule cannot be stated as a test at all: the wire ciphertext is a public byte vector that accepts any bytes from anywhere, so the fix is a private field with a constructor reachable only from the seal, section 4; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 ### 1.2 A payload is sealed
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-004` | `POST` | A message MUST NOT be replayable into another document: the commitment tag MUST bind the ciphertext to its document. | this spec section 2 | `ambre_sync::pipeline::tests::tampered_document_id_rejected` -- a sealed message whose document is forged on its public metadata fails to open; `ambre_crypto::tests::commitment_tag_wrong_aad_rejected` -- the same one layer down | none | verified |
 | `SYNC-021` | `POST` | A payload at or below the compression threshold MUST NOT be compressed. | this spec section 2 | `ambre_sync::pipeline::tests::compression_threshold` -- a payload exactly at the threshold comes back marked raw, and one byte over comes back compressed and round-trips | none | verified |
@@ -41,7 +41,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 ### 1.3 An inbound frame is opened
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-019` | `POST` | An inbound frame MUST pass three checks -- the signature, the commitment tag and the cipher -- and each MUST refuse on its own. | this spec section 2 | `ambre_crypto::tests::invalid_signature_rejected` -- the signature refusal; `::commitment_tag_wrong_aad_rejected` -- the tag refusal; `::tampered_ciphertext_fails` -- the cipher refusal, so no check can be silently skipped without a test going red | none | verified |
 | `SYNC-005` | `FAIL` | A message sealed under a different document key MUST be rejected, never applied. | this spec section 2 | `ambre_sync::pipeline::tests::wrong_document_key_rejected` -- a sealed update opened under a foreign key answers the error; `ambre_crypto::tests::tampered_ciphertext_fails`; `::prop_single_byte_mutation_fails`; `::invalid_signature_rejected` -- the byte-level refusals under it | none | verified |

@@ -32,7 +32,7 @@ behaviour.
 * **When investigating a failure, read whatever it takes.** Reproduce with a test first: it narrows
   the region to read.
 * **Produce work the user can check without reading bodies:** public signatures, property names,
-  the `Verification` column, snapshot diffs. The user's attention is the scarcest resource on the
+  the `Mechanism` column, snapshot diffs. The user's attention is the scarcest resource on the
   project.
 * **Accepting a generated artefact, a snapshot or a golden file, stays a human act.**
 

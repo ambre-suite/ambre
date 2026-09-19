@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-050` | `INV` | A blob's address MUST NOT be derived from its plaintext. | `ZK-007`; this spec section 3 | none | fails -- the address is a hash of the plaintext bytes and it travels to the relay in clear, so the relay can confirm that a document holds a file it already knows; lands with the `The media address is not the plaintext` Story (`ambre-roadmap.md` E7) | failing |
 | `SYNC-051` | `INV` | A sealed blob MUST be bound to the document it belongs to. | this spec section 3; `SYNC-018` | none | fails -- the seal's additional data is one constant string, shared by every blob of every document, so a blob sealed for one document opens under any other holding the same key; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | failing |
@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 The application hands over the plaintext and waits for an address. The seal, the two requests and
 the put are the Sync worker's.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-075` | `POST` | An upload MUST answer the requesting application with the blob's address. | this spec section 3, the upload steps | none | unheld -- the worker emits the address on the last step and no test drives the leg, which runs only in a browser. `ambre_toile::logic::state::import::tests::seed_media_dedups_repeated_hashes` reads what an application does with two equal addresses, never that the upload produced one; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-049` | `FRAME` | An upload MUST NOT emit a byte of the picture that is not sealed under the document key. | `ZK-001`; this spec section 3 | none | unheld -- the upload seals before it puts, and the crate graph keeps every application out of the cipher (`TOILE-IO-013`). Nothing here refuses a put that skips the seal, which is the same absence as `SYNC-001`; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -43,7 +43,7 @@ the put are the Sync worker's.
 
 The application names an address it does not hold. The worker fetches the object and opens it.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-077` | `POST` | A download MUST answer with the plaintext the address names. | this spec section 3, the download steps | none | unheld -- the leg runs only in a browser and the suite performs no round trip against object storage; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-054` | `FRAME` | A download MUST NOT let a decrypted blob reach persistent storage. | `ZK-004`; this spec section 3 | none | unheld -- the worker opens no storage handle and hands the plaintext straight up, so the rule holds by absence. Nothing would fail the day a writer appeared; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |

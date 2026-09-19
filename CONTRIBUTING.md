@@ -80,7 +80,7 @@ loose. It is not copied here: a copied table goes stale.
 ## 4. THE REVIEW CHECKLIST
 
 `ambre-spec-testing.md section 1` states what a reviewer reads: public signatures, property names,
-mutant reports, snapshot diffs, the `Verification` column. Function bodies are not on the list.
+mutant reports, snapshot diffs, the `Mechanism` column. Function bodies are not on the list.
 
 A contract row with the status `human-review` has no mechanism except the reviewer, by decision. Each
 row lives in the spec of the component it constrains, and the table below is the list of them.

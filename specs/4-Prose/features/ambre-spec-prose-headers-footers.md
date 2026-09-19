@@ -16,7 +16,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-006` | `INV` | A header and a footer MUST be ordinary blocks addressed by a stable identity. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-160` | `INV` | No command MUST carry a band's edits inside another command: the text of a band MUST be edited by the ordinary text commands, against the block the metadata names. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -36,7 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Put a field in a band
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-165` | `POST` | The field's mark MUST be written into the block the insertion's target names, and into no other block of that side. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-068` | `POST` | A field position past the end of its target MUST be clamped to that end. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -45,7 +45,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Show or hide a band
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-167` | `POST` | Showing or hiding one side MUST change that side's own setting. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-284` | `POST` | Showing or hiding one side MUST leave the other side shown or hidden as it was. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -53,14 +53,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Turn the first page's own bands on
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-169` | `POST` | Turning the setting on MUST make the first page, and only the first page, draw its own header and its own footer. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-170` | `FRAME` | The setting MUST NOT change whether a side is shown, and MUST NOT touch the four blocks the bands name. | this spec section 3 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Align a band
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-171` | `POST` | An alignment MUST be written into the configuration of the band the caret is in. | this spec section 3; this spec section 4 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-285` | `POST` | An alignment MUST apply to its band on every page that band is drawn on. | this spec section 3; this spec section 4 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5) | unimplemented |

@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-001` | `INV` | The board CRDT MUST NOT leave the Logic thread; it exits only as bytes. | this spec section 3; `ambre-spec-architecture.md section 2` | type-level -- `ToileState.doc` is private and **no public signature in `ambre-toile` names `LoroDoc`**, and both exits return `Vec<u8>` | none | verified |
 | `TOILE-004` | `INV` | The spatial index MUST be a derived cache: the incrementally maintained index MUST hold the same elements as a from-scratch rebuild. | this spec section 3 | proptest -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` draws an upsert and remove stream and compares the population and the paint set against a rebuild; proptest -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` draws an operation stream and compares the same (neither compares them at a camera that culls, which is `TOILE-206`) | none | verified |
@@ -37,7 +37,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Do one thing to the board
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-209` | `PRE` | A command MUST cull against the last camera the UI reported, or against the default one while no camera has arrived. | this spec section 3 | none | unheld -- the field is seeded with `Viewport::default()` and no caller checks whether the UI has reported yet. Nothing refuses a command on an unreported camera, and nothing reads what it answers; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-002` | `POST` | Derivation MUST finish before the command returns. | this spec section 3 | type-level -- `handle_command` returns `ToileOutcome` by value and the crate has no async path; `ambre_toile::logic::state::derive::tests::derive_viewport_at_uses_the_given_camera` | none | verified |
@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Take in a change from a collaborator
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-092` | `POST` | A remote change MUST rebuild only the derived caches it touched. | this spec section 3 | none | fails -- the remote path calls `rebuild_caches`, which clears the bounds map, bulk-loads the index, re-reads the paint order and re-unions every group to a fixpoint, whatever the change carried; lands with the `Engine and render optimization` Story (`ambre-roadmap.md` E6) | failing |
 | `TOILE-213` | `POST` | A batch of remote deltas MUST repaint once, not once per delta. | this spec section 3 | none | unheld -- `apply_remote_batch` amortizes the rebuild by construction, but no test of `ambre-toile` calls it. Trame holds the same rule with a test (`features/ambre-spec-trame-engine.md`); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -57,7 +57,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Hand a change to the Sync worker
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-090` | `POST` | An export that fails MUST NOT advance the export cursor; the range MUST be offered again. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_toile::logic::state::cursor_tests::a_failed_export_keeps_the_range_for_the_next_flush` -- it hands the cursor a failure and then a success and reads it back after each; `ambre_toile::logic::state::cursor_tests::an_empty_export_is_not_a_failure` -- the other side, where a successful export of nothing still advances | none | verified |
 | `TOILE-217` | `POST` | A second export from the same cursor MUST repeat no operation already broadcast. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_toile::logic::convergence_tests::a_flush_with_nothing_new_exports_nothing` -- the idle case | none | verified |
@@ -68,14 +68,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.5 Answer a request for the whole board
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-093` | `POST` | A snapshot request MUST answer with the board's snapshot. | this spec section 3 | none | fails -- the snapshot command returns an empty outcome, and the dispatcher answers a Sync request from the document state directly instead. No caller sends the command; lands with the `Toile's snapshot command answers` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-219` | `FRAME` | Answering with a snapshot MUST NOT write to the board and MUST NOT move the export cursor. | this spec section 3; `ambre-spec-delta-order.md` | type-level -- `export_snapshot` takes `&self`, so it can write neither the board nor the cursor | none | verified |
 
 ### 1.6 Move one element in the index
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-091` | `POST` | Dropping an element from the spatial index MUST NOT cost a walk of the index. | this spec section 3; `ambre-spec-budgets.md section 1` | none | fails -- `SpatialIndex::remove` scans every leaf to find the one it removes, and `update` is a remove followed by an insert, so one drag step costs a walk of the whole board; lands with the `Engine and render optimization` Story (`ambre-roadmap.md` E6) | failing |
 | `TOILE-220` | `POST` | An element dropped from the index MUST NOT come back in a query. | this spec section 3 | `ambre_toile::logic::index::tests::remove_then_query_is_empty`; proptest -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` draws a removal branch and compares against a rebuild | none | verified |
@@ -83,7 +83,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.7 Send a command from the drawing thread
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-312` | `POST` | A command sent from the drawing thread MUST reach the Logic thread addressed to the document it was drawn on. | this spec section 4; `ambre-spec-message-bus.md` | type-level -- the two board paths wrap the command in `LogicCommand::App` with the view's own document id, the id is not a parameter of the send, and the construction is the proof | none | verified |
 | `TOILE-UI-100` | `FAIL` | A full channel MUST drop an edit rather than block the frame, and MUST say so. | `ambre-spec-architecture.md section 2`; `ambre-spec-ui.md section 1` | type-level -- the edit path and the embed-session path are `try_send` and each handles `TrySendError::Full` with a warning | none | verified |
@@ -92,7 +92,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.8 Fan one answer out to the three threads
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-222` | `POST` | One outcome MUST reach the three destinations it names: the display events to the drawing thread, the delta and the presence frame to the Sync worker, the service requests to the service plane. | this spec section 3; `ambre-spec-message-bus.md` | `ambre_logic::dispatch::tests::toile_upload_request_lowers_with_doc_id_and_records_route` -- the service-request leg alone, the others being held by the dispatcher's own belt (`ambre-spec-architecture.md section 2`) | none | verified |
 | `TOILE-223` | `FRAME` | Fanning an outcome out MUST NOT let a session or a connection event reach the board state, except the canonical user id the session seeds. | this spec section 3; `ambre-spec-membership.md` | type-level -- the only session-shaped entry point on the state is the user-id seed, no connection type appears in any signature of `ToileState`, and the absence is the proof | none | verified |

@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UI-THREAD-029` | `INV` | Every colour, spacing, radius and type size the interface uses MUST be declared in the one token source. | this spec section 2 | none | fails -- the shell stylesheet carries fifty-eight literal colours, twenty-five of them distinct, of which every shadow and every white on a coloured ground, and no check counts them; lands with the `The stylesheet reads the tokens` Story (`ambre-roadmap.md` E6) | failing |
 | `UI-THREAD-030` | `INV` | The stylesheet and the drawing constants MUST both be generated from that source, in one build step. | this spec section 2 | target-build -- the drawing crate includes the generated constants and the generated sheet as files the build step writes, so neither exists unless that step ran and read the source | none | verified |
@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 
 The user flips the theme control. One act must move both halves, and it must move nothing else.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UI-THREAD-032` | `POST` | A theme switch MUST reach the browser half and the drawing half together, from one act. | this spec section 2 | none | unheld -- one control carries the active theme, the launcher sets the document attribute from it and the render loop reads it on the next frame. Nothing drives a switch and observes both halves, and no test in the suite names the theme at all; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-034` | `FRAME` | A theme switch MUST NOT change a spacing, a radius or a type size. | this spec section 2; section 4, row 5 | none | unheld -- the generator emits the scales once, into the unmarked block, and the drawing palette declares twelve colours and no scale field, so a theme-dependent scale takes an edit to the build script, which compiles and which no test reads; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |

@@ -19,14 +19,14 @@ status values are normative in `ambre-spec-template.md`. The transport half is
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-069` | `INV` | A copied payload MUST carry no identity of the board it came from: every element, every arrow end and every membership MUST be named by its rank in the payload alone. | this spec section 3 | `ambre_toile::logic::convergence_tests::paste_reproduces_selection_on_a_separate_board` -- it pastes into a board that has never seen the source, where an identity the payload carried would resolve to nothing. The round-trip test this row also cited holds the row below | none | verified |
 | `TOILE-130` | `IO` | A payload written to the clipboard and read back MUST be the payload that was written. | this spec section 3; `ambre-spec-clipboard.md` | `ambre_toile::logic::convergence_tests::clipboard_payload_postcard_roundtrips` -- it compares the decoded payload with the encoded one, which is what a round trip holds rather than the identity rule above. The payload it drives carries neither a membership nor an arrow, so two of the four parts cross no encoder | none | verified |
 
 ### 1.2 Copy a selection
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-068` | `POST` | A copy MUST read the whole selection, not the part on screen. | this spec section 3 | structural -- the copy runs on the Logic thread over the element maps, and that thread holds no viewport, so nothing exists to cull against. The neighbouring test this row cited walks the aggregates instead (`features/ambre-spec-toile-status-bar.md`) | none | verified |
 | `TOILE-131` | `POST` | A copied group MUST carry its members, however deep the grouping goes. | this spec section 3 | `ambre_toile::logic::convergence_tests::duplicate_a_group_is_one_undo_item` -- on the element count: one copied id lands three elements, so the subtree walk is driven. It is the half `TOILE-071` was carrying, and the half a count can hold | none | verified |
@@ -37,7 +37,7 @@ status values are normative in `ambre-spec-template.md`. The transport half is
 
 ### 1.3 Paste or duplicate
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-013` | `POST` | A paste or a duplicate MUST re-mint every identity, so pasting onto the board that was copied is safe. | this spec section 3 | `ambre_toile::logic::convergence_tests::copy_does_not_mutate_and_paste_remints_offset` -- it pastes onto the source board and reads back an id that differs from the one copied, beside a count that grew. The arrow half is `TOILE-134`, and the round trip it also cited holds `TOILE-130` | none | verified |
 | `TOILE-135` | `POST` | A paste MUST put the copied box at the point it is asked for. | this spec section 3 | `ambre_toile::logic::convergence_tests::copy_does_not_mutate_and_paste_remints_offset` -- it reads the pasted box back at the requested point, two hundred units off the source. Unwritten until now: the offset lived in section 3 as a step, and a paste that ignored the point would still land a fresh element | none | verified |

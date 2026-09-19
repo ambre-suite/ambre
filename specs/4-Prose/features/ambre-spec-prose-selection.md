@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-008` | `INV` | Hit-testing MUST be the exact inverse of the drawn layout, under zoom and scroll. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-031` | `INV` | Hit-testing MUST read the shaped runs alone: a block that was never painted MUST resolve like a painted one. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Press in the text
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-009` | `POST` | A click that lands in no glyph MUST resolve to the nearest valid caret position, never to no position. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-032` | `POST` | A block that holds no text MUST resolve to one of its two edges, chosen by the side the pointer is on. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -46,7 +46,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Walk the caret with the keys
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-036` | `POST` | A caret move without extension MUST collapse the selection to the caret. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-035` | `POST` | Every caret move MUST leave the caret on screen. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -56,7 +56,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Drag to select
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-037` | `POST` | The anchor of a drag MUST be captured when the drag starts. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-161` | `POST` | Extending a drag MUST resolve the moving end at the position under the pointer, leaving the anchor where the drag started. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -64,14 +64,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.5 Hold the drag past the edge of the window
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-038` | `POST` | While a drag holds past the edge of the window, each tick MUST scroll and then re-resolve the pointer, so the selection follows the text being revealed. | this spec section 2 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-163` | `FRAME` | A tick MUST NOT run once the pointer is released: releasing MUST leave nothing armed. | this spec section 2 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Press Escape
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-164` | `POST` | Escape MUST collapse the selection to the caret. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-165` | `POST` | Escape MUST cancel a drag in flight: the release that follows MUST extend nothing. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -79,14 +79,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.7 Select the whole document
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-167` | `POST` | Selecting the whole document MUST set the anchor at the start of the first block and the moving end at the end of the last. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-168` | `FRAME` | Selecting the whole document MUST NOT change the scroll offset: the reader stays on the page they were on. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.8 Press inside a link
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-070` | `POST` | A press inside a link, without the platform's modifier, MUST place the caret. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-169` | `FRAME` | A press inside a link, without the platform's modifier, MUST NOT open the target. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |

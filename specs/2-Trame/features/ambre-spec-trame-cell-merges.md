@@ -15,7 +15,7 @@ eight kinds and the status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-125` | `INV` | Every merge MUST designate the top-left cell of its rectangle as the master. | `ambre-spec-trame-schema.md` section 3 | `ambre_trame::logic::tests::group2::merge_marks_master_span_and_blanks_covered` | none | verified |
 | `TRAME-128` | `INV` | Every merge MUST span at least two cells. | this spec section 4 | `ambre_trame::logic::tests::group3::merge_selection_single_cell_is_noop` -- the local path, which writes no entry | partial -- nothing refuses an entry of one cell arriving from a peer; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -32,7 +32,7 @@ eight kinds and the status values are normative in `ambre-spec-template.md`.
 
 The user joins the selected rectangle into one block.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-130` | `POST` | The rectangle MUST carry exactly one merge entry, keyed by its top-left cell. | this spec section 3 | `ambre_trame::logic::tests::group2::merge_marks_master_span_and_blanks_covered` | none | verified |
 | `TRAME-027` | `FRAME` | A merge MUST NOT remove or change the text of a cell it covers. | this spec section 2, row 1 | `ambre_trame::logic::tests::group3::concurrent_value_under_merge_is_masked_then_restored` | none | verified |
@@ -47,7 +47,7 @@ The user joins the selected rectangle into one block.
 The user splits every block the selection crosses. The gesture carries no geometry: the Logic
 thread resolves it against the selection it tracks, so the active cell may sit outside every block.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-145` | `POST` | Every merge the selection crosses MUST be split, including one the selection only clips. | this spec section 4 | `ambre_trame::logic::tests::group3::unmerge_active_splits_every_merge_in_selection`; `::unmerge_selection_grows_to_cover_straddling_merge` | none | verified |
 | `TRAME-135` | `POST` | The merge entry MUST be gone from the document. | this spec section 3 | `ambre_trame::logic::tests::group2::unmerge_restores_covered_cells` | none | verified |
@@ -61,7 +61,7 @@ thread resolves it against the selection it tracks, so the active cell may sit o
 
 The Logic thread observes a covered cell that carries a value, on the local path and on the remote one.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-138` | `POST` | A merge covering a cell that carries a value MUST emit one conflict notice naming that cell. | this spec section 2, row 1 | `ambre_trame::logic::tests::group3::concurrent_value_under_merge_is_masked_then_restored` | none | verified |
 | `TRAME-031` | `FRAME` | Detecting a merge conflict MUST NOT write to the document. | this spec section 5 | none | unheld -- the detection path only fills an in-memory set. The convergence proptest would catch a corrective write that diverged, and nothing asserts the absence of the write itself; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -70,7 +70,7 @@ The Logic thread observes a covered cell that carries a value, on the local path
 
 The user drags the fill handle from a source tiled by equal merged blocks.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-140` | `POST` | The filled region MUST be tiled by merged blocks the size of the source block. | this spec section 2, row 6 | `ambre_trame::logic::tests::group6::fill_merged_source_tiles_and_remerges_blocks`; `::fill_multi_merged_source_continues_pattern` | none | verified |
 | `TRAME-141` | `POST` | A numeric series MUST progress once per block, never once per cell. | this spec section 4 | `ambre_trame::logic::tests::group6::fill_merged_series_increments_per_block` | none | verified |
@@ -86,7 +86,7 @@ The user drags the fill handle from a source tiled by equal merged blocks.
 The user drags a selection across a block, or steps into one with an arrow key. A block answers as
 one cell to both.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-009` | `POST` | A selection touching a merged block MUST grow to the whole block. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::drag_selection_expands_to_whole_merge`; `::merge_block_selects_as_a_whole_and_nav_steps_over_it` | none | verified |
 | `TRAME-UI-111` | `POST` | An arrow step MUST land past a merged block, never inside it. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::merge_block_selects_as_a_whole_and_nav_steps_over_it` -- its navigation half, which asserts the landing cell beyond the block | none | verified |

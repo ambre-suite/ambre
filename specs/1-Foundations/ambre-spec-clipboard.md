@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UI-THREAD-006` | `INV` | The clipboard MUST carry a `text/plain` mirror plus one app-agnostic private type. | this spec section 2 | none | unheld -- the launcher owns the type names and every application serializes behind them. Nothing reads the written item back to check that both are on it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-043` | `INV` | An application MUST NOT define a clipboard type of its own. | this spec section 2, the three names | none | unheld -- a per-application type would have to be added to the launcher, which owns all of them, so the rule holds by where the names live. Nothing refuses that addition; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 The payload does not exist when the key fires, so the copy is two writes: one on the event, one a
 frame later. What a cut deletes, and when, is each application's own policy.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UI-THREAD-010` | `POST` | A copy MUST be built by the Logic thread from the whole document, never culled to what the viewport holds. | this spec section 2 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- Trame's half | partial -- Toile builds from an id list and nothing asserts that list is the whole selection; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-008` | `POST` | A deferred copy MUST prevent the browser default, so an empty write never clobbers what the clipboard already holds. | this spec section 2 | none | unheld -- the deferred branch prevents the default and writes no `text/plain`, and nothing asserts that the host obeys it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -46,7 +46,7 @@ frame later. What a cut deletes, and when, is each application's own policy.
 
 Four rungs of fidelity, in one order. The first that can answer does.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UI-THREAD-007` | `POST` | A paste MUST decide same-tab full fidelity on the ownership token the copy wrote, never by comparing the `text/plain` mirror. | this spec section 2 | none | fails -- the token is written on the `copy` event and the asynchronous write replaces it a frame later (`UI-THREAD-023`), so the same-tab answer is true only when that write fails; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | failing |
 | `UI-THREAD-022` | `POST` | A paste MUST take the fidelity ladder in one order, first match wins. | this spec section 2 | none | unheld -- each application walks the ladder in its own view, and no test drives a paste with two rungs available to see which one answers; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |

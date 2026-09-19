@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-205` | `INV` | The document MUST hold a picture as an address, never as its pixels. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-206` | `INV` | The address of a picture MUST be the content hash of the plaintext blob, so two copies of one picture resolve to one address. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -36,7 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Insert a picture
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-210` | `POST` | Inserting MUST write one picture block at the named place in the tree, holding the address and the display size the command carried. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-211` | `FAIL` | An insertion naming a parent that is not the document root MUST be refused, and MUST be reported to the author. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -44,7 +44,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Resize a picture
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-058` | `FAIL` | A resize to a width or a height of zero MUST be refused. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-059` | `POST` | A display dimension past the maximum MUST be clamped to the maximum. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -55,28 +55,28 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Align a picture
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-217` | `POST` | Aligning MUST store the alignment the command named, whether or not the layout honours it. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-218` | `FRAME` | Aligning MUST NOT change the picture's display size, its address, or the text around it. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Put text on a picture
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-219` | `POST` | The text such a command carries MUST be stored on the field it names, on that block alone. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-220` | `FRAME` | Setting the alternative text or the caption MUST NOT change the picture's address, its display size or its alignment. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Ask for a failed picture again
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-221` | `POST` | Asking again MUST put the entry back to the unasked state and issue the download once more. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-222` | `FRAME` | Asking again MUST NOT write to the document, and MUST NOT touch the resolution state of another address. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.7 Evict a decoded picture
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-223` | `POST` | Eviction MUST take the least recently painted entries first. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-286` | `POST` | Eviction MUST stop as soon as the total fits the cap. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -86,7 +86,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.8 Export a document holding pictures
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-IO-007` | `POST` | An export MUST take a picture's pixels from the local cache. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-008` | `POST` | A picture the cache does not hold MUST become a placeholder in the file and a line in the report. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -95,7 +95,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.9 Import a file carrying a picture
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-053` | `POST` | An import carrying a picture in an illegal place MUST put it at the nearest legal ancestor, never drop it. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-225` | `POST` | The conversion report MUST carry every picture the import lifted. | this spec section 3 | not built | unbuilt -- lands with the "Images" Story (`ambre-roadmap.md` E5) | unimplemented |

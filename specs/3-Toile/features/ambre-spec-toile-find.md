@@ -17,7 +17,7 @@ match is, and in what order.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-111` | `OBS` | Every match the camera already shows MUST be outlined, one outline per match. | this spec section 4 | `ambre_toile::ui::render::tests::overlay_outlines_visible_find_hits` -- it paints two hits and counts two stroked boxes on an empty selection. The document cited nothing for the highlight at all | none | verified |
 | `TOILE-UI-112` | `OBS` | The current match MUST be outlined differently from the rest, so a user stepping a long list can see where they are. | this spec section 4 | none | unheld -- the painter gives the focus the selection accent at a heavier width and the others a softer tint, and the test above counts the boxes without reading a colour or a width, so a painter that drew all hits alike would pass; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -29,7 +29,7 @@ match is, and in what order.
 The shared walk is `ambre-spec-find.md section 1.1`: that it covers the whole board, that it writes
 nothing, that it wraps and that an empty query clears. This table owns what a Toile match is.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-079` | `POST` | Hits MUST be returned in paint order, so stepping follows the stacking rather than the storage. | this spec section 3 | `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default` -- its one assertion is an ordered vector of two ids, so it falsifies the order as well as the folding below, which is why both rows cite it | none | verified |
 | `TOILE-080` | `POST` | An element the paint order omits MUST still be found, after the ordered hits and in an order every peer computes alike. | this spec section 3 | none | unheld -- the fallback appends the unlisted elements the bounds map holds, sorted by identity, and no test drives an element missing from the order. The paint walk carries no such fallback (`TOILE-058`); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -44,7 +44,7 @@ nothing, that it wraps and that an empty query clears. This table owns what a To
 
 Where the step lands is `ambre-spec-find.md`. What the camera does about it is Toile's.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-115` | `POST` | Stepping MUST bring the camera onto the match it lands on. | this spec section 4 | none | unheld -- the answer carries ids and no geometry, so the view asks for the focus box with the aggregates command and moves the camera when the reply lands, and no test drives either leg; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-117` | `POST` | The camera MUST recentre on the answer to its own request. | this spec section 4 | none | fails -- the aggregates event names no request (`TOILE-UI-108`, `features/ambre-spec-toile-status-bar.md`), and the view spends a pending fit before a pending find focus. A `Fit` in flight when a user steps takes the match box and frames it, and a band refresh in flight takes the find focus and centres the camera on the selection, section 6; lands with the `An answer names the request that asked for it` Story (`ambre-roadmap.md` E7) | failing |

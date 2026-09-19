@@ -18,13 +18,13 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-113` | `CONC` | When two users sort one range at the same moment, every peer MUST end on one row order. | this spec section 2, row 1 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest whose operation set carries `SortRange` | none | verified |
 
 ### 1.2 Order a block of rows
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-004` | `POST` | A sort MUST reorder the rows themselves, so every cell of a row travels with it, inside the range and outside it. | this spec section 3; `features/ambre-spec-trame-rows-and-columns.md` | `ambre_trame::logic::tests::group3::sort_range_ascending_moves_whole_rows` -- it reads a second column back in the new order; `ambre_trame::logic::tests::group4::sort_sheet_sorts_used_range_by_active_column` -- a key column that is not the first | none | verified |
 | `TRAME-178` | `FRAME` | A sort MUST NOT rewrite a cell. | this spec section 3, section 5 | none | unheld -- every sort test reads the values back after the move, which a rewrite producing the same result would satisfy just as well. The rule is held by the shape of `realize_sort`, which emits `mov` alone, and by no assertion; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -46,14 +46,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 The sort dialog
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-101` | `OBS` | The dialog MUST offer exactly the columns the sort will order. | this spec section 4 | none | fails -- `ambre_trame::tests::chrome_ui::sort_dialog_adds_levels_and_emits_on_apply` opens the dialog over a cell rectangle, which is the case that agrees. **The rule fails on a whole-row selection** (section 6); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-UI-150` | `INV` | The dialog MUST always hold at least one level, and never more levels than the range has columns. | this spec section 4 | none | unheld -- both bounds are carried by a disabled button, and the test clicks "Add sort level" once over a three-column range, which reaches neither bound; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 Apply the levels, or give up
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-151` | `PRE` | The selection MUST NOT move while the dialog is open. | this spec section 4 | none | unheld -- the columns the dialog offers are a snapshot taken when it opened, and the range the sort orders is the selection the Logic thread tracks when it applies. Nothing holds the two together (section 6); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-152` | `POST` | Applying MUST emit one key per level the user kept, in the order they are listed, carrying the header toggle as it stands. | this spec section 4 | `ambre_trame::tests::chrome_ui::sort_dialog_adds_levels_and_emits_on_apply` -- it adds a level, toggles the header and reads both back off the emitted request | none | verified |

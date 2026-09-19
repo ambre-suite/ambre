@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-092` | `INV` | A style MUST stay on the cell it was applied to, never following the cursor. | this spec section 3 | `ambre_trame::logic::tests::group1::bold_stays_on_the_cell_not_the_selection` | none | verified |
 | `TRAME-186` | `INV` | A cell the toolbar calls a number MUST be a cell the grid aligns as one. | this spec section 6 | none | fails -- the two sides disagree. The toolbar tests the cell's raw text and the grid tests the text after its number format, so a cell in any format that does not render as plain digits is a number on one side and text on the other; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Format the selected cells
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-189` | `PRE` | A formatting gesture MUST carry at least one attribute the user changed. | this spec section 6 | none | unheld -- nothing reads the patch before running: an empty one still creates every row and column the selection reaches and lands an undo item that changes nothing; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-093` | `POST` | Styling a selection MUST be one undo item, never one per cell. | this spec section 3 | `ambre_trame::logic::tests::group1::selection_style_is_a_single_undo` | none | verified |
@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Recolour a cell from a rule
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-FEAT-017` | `POST` | Conditional formatting MUST apply the first matching rule in ascending priority order, and stop there. | this spec section 3 | not built | unbuilt -- lands with the `Data tools` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-FEAT-018` | `POST` | A conditional format MUST produce a display-time override of the cell's style. | this spec section 3 | not built | unbuilt -- lands with the `Data tools` Story (`ambre-roadmap.md` E6) | unimplemented |

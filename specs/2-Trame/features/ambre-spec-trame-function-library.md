@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The catalogue
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-050` | `INV` | A function MUST receive values, never references. | this spec section 2 | type-level -- `call_builtin(name, args: &[CellValue], ctx)` takes evaluated values, and the machine pops every argument off the stack before the call | none | verified |
 | `TRAME-053` | `INV` | Every clock reading inside one recomputation MUST be the same instant. | this spec section 2 | type-level -- `EvalContext` holds one `now_serial` for the whole pass, and every `FnCtx` the machine builds copies that field | none | verified |
@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Call a function in a formula
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-197` | `PRE` | The key column of an approximate lookup MUST already be ascending. | this spec section 3 | none | unheld -- `vlookup` stops at the first key above the target, so an unsorted column answers whatever row it stopped on: a plausible neighbour, with no notice; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-198` | `PRE` | A recomputation MUST be given its clock before it runs. | this spec section 2 | none | unheld -- `with_now` is an optional builder step, and an `EvalContext` that skips it carries `now_serial: 0.0`, so `TODAY()` answers 1899-12-30: a valid-looking date, not an error; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -54,7 +54,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Spill a result across the cells beside it
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-060` | `POST` | A formula answering many values MUST fill the cells beside it. | this spec section 5 | not built | unbuilt -- lands with the `Engine completion` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-206` | `FAIL` | A spill that meets a cell it cannot have MUST refuse, and MUST say which cell. | this spec section 5 | not built | unbuilt -- lands with the `Engine completion` Story (`ambre-roadmap.md` E6) | unimplemented |

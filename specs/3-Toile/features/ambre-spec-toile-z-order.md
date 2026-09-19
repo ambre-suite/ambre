@@ -18,7 +18,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-060` | `INV` | A node MUST appear at most once in the order. | this spec section 3 | none | unheld -- a create pushes once, so a duplicate can only arrive from a concurrent change, nothing on the write path rejects one, and no test drives it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-123` | `CONC` | Two peers that have exchanged their changes MUST hold the same order. | this spec section 3 | `ambre_toile::logic::convergence_tests::two_peers_converge` -- it reads both orders back after random concurrent op sequences; `::caches_match_a_full_rebuild` -- it reads the incremental order against a rebuild of the same document. The second is what `TOILE-059` cited: it compares two walks, so a hole painted by both would pass it | none | verified |
@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Reorder a node
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-124` | `POST` | A node sent to the back MUST become the first entry of the order. | this spec section 3 | `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` -- it reads the whole order back after sending the top node of two to the back | none | verified |
 | `TOILE-125` | `POST` | The four other targets MUST resolve against the list: front is the last place, forward and backward one step from where the node sits, and an index past the end clamps to the last place. | this spec section 3 | none | unheld -- only the back target is driven, and no surface sends an index at all (section 4), so the clamp is reachable from the command alone; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -42,7 +42,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Remove a node
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-061` | `FRAME` | Removing a node MUST NOT rewrite the rest of the order. | `ambre-spec-budgets.md section 1`; this spec section 6 | none | fails -- the removal deletes the whole list and re-pushes the survivors, so deleting one element sends an operation per surviving node to every peer, section 6; lands with the `Engine and render optimization` Story (`ambre-roadmap.md` E6), which names the paint-order rewrite | failing |
 | `TOILE-129` | `FRAME` | Removing a node MUST NOT drop an entry it was not asked to remove. | this spec section 3 | none | fails -- the rewrite keeps the entries that decode, so an entry whose tag this version cannot read is destroyed by the next unrelated delete. That is the repair section 5 rejects, run on a write rather than on a read, section 6; lands with the `The paint order holds every element` Story (`ambre-roadmap.md` E7) | failing |

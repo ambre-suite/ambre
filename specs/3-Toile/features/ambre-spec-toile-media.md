@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-006` | `INV` | Media MUST be content-addressed: two identical pictures MUST resolve to one entry. | this spec section 3 | `ambre_toile::logic::state::import::tests::seed_media_dedups_repeated_hashes` -- it seeds the same address twice and again later; `ambre_toile::logic::state::import::tests::import_seeds_the_media_map` -- the entry an import mints | none | verified |
 | `TOILE-IO-049` | `INV` | An entry MUST carry the dimensions, the type and a thumbnail. | this spec section 3; `ambre-spec-toile-schema.md section 3` | structural -- `ambre_toile::logic::state::import::seed_media` writes those four fields | none | verified |
@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Bring a picture in
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-052` | `PRE` | The caller MUST hand over bytes whose decoded form fits in memory. | this spec section 3 | none | fails -- the decoder expands the whole picture before `ambre_toile::logic::interop::raster::decode_media` measures it, so the dimension bound protects the document and not the heap, section 6; lands with the `A picture is measured before it is expanded` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-IO-053` | `POST` | An import MUST yield one picture element sized to the decoded resolution and one plaintext blob it names. | this spec section 3 | `ambre_toile::logic::interop::raster::tests::imports_one_image_with_thumbnail` -- the element kind, its size, the blob dimensions, the type and the address they share | none | verified |
@@ -44,7 +44,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Wait for the upload, then land the import
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-008` | `POST` | A picture import MUST wait for its upload: nothing MUST be applied until every blob has the address Sync returned. | this spec section 3 | `ambre_toile::logic::state::import::tests::image_import_defers_until_media_uploads` -- one request issued, no delta and no element while it is outstanding | none | verified |
 | `TOILE-IO-057` | `POST` | The last address to return MUST land the whole batch in one commit, elements and entries together. | this spec section 3 | `ambre_toile::logic::state::import::tests::image_import_defers_until_media_uploads` -- the element, the entry and the single delta once the confirmation arrives | none | verified |
@@ -56,7 +56,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Ask the cache for a picture
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-062` | `POST` | A first request for an address MUST open a slot and order one download. | this spec section 3 | `ambre_toile::logic::interop::media::tests::first_request_fetches_then_dedups` | none | verified |
 | `TOILE-IO-063` | `POST` | A repeat request for the same address MUST order nothing, whatever the slot holds. | this spec section 3 | `ambre_toile::logic::interop::media::tests::first_request_fetches_then_dedups` -- a slot in flight; `ambre_toile::logic::interop::media::tests::loading_to_ready_carries_pixels`; `ambre_toile::logic::interop::media::tests::loading_to_failed` -- the two terminal states | none | verified |

@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-019` | `INV` | The spell check MUST run on the reader's own machine. | this spec section 2; `PROSE-025` | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `PROSE-FEAT-102` | `INV` | The checker MUST NOT send document text out of the client, to a spelling service or to anything else. | this spec section 2; `PROSE-025` | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
@@ -34,7 +34,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Add a word to the dictionary
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-043` | `POST` | After the command, the word MUST be in the reader's own encrypted settings. | this spec section 2 | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `PROSE-FEAT-107` | `POST` | After the command, that word MUST NOT be reported as an error again for this reader, in this document or in another. | this spec section 3 | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
@@ -42,14 +42,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Choose a suggestion
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-109` | `POST` | After the command, the misspelled word MUST read as the suggestion chosen, as an ordinary edit that peers receive. | this spec section 2; this spec section 3 | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `PROSE-FEAT-110` | `FRAME` | Accepting a suggestion MUST NOT touch text outside the error's range, nor the reader's own dictionary. | derived | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.4 Choose the language
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-111` | `POST` | After the language is set, the document MUST be checked again against that language's dictionary. | this spec section 2; this spec section 3 | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `PROSE-FEAT-112` | `FRAME` | Setting the language MUST NOT touch the text of the document. | derived | not built | unbuilt -- lands with the "The spell checker" Story (`ambre-roadmap.md` post-V1) | unimplemented |

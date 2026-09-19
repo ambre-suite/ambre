@@ -23,7 +23,7 @@ rules live beside the design they constrain, rather than in the thread's own doc
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-042` | `INV` | The core MUST hold one style for the whole unit: it MUST NOT carry a per-range style. | this spec section 2 | type-level -- the pinned style is one value with five fields, so a range-addressed style has nowhere to be stored | none | verified |
 | `CANVAS-048` | `INV` | A composition preview MUST be replaceable in place. | this spec section 2; `ambre-spec-text-input.md` | `ambre_canvas::editor::tests::ime_preedit_run_is_underlined` -- after the composition ends, its second assertion reads the buffer back as the composed run alone, so a preview appended beside its own commit fails | none | verified |
@@ -38,7 +38,7 @@ rules live beside the design they constrain, rather than in the thread's own doc
 A key, a pointer or a composition event arrives when no font context is available. The host records
 what was asked for and stops there.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-036` | `POST` | An editing action MUST be recorded without a font. | this spec section 2 | type-level -- an `EditIntent` names no font type and no layout type, so an action that needs a live font context has no shape to be queued in | none | verified |
 | `CANVAS-039` | `PRE` | A pointer position MUST reach the core in the editor's own frame, never in screen space. | this spec section 2 | none | unheld -- the core holds no camera, so a screen point is a valid pair of numbers that lands the caret somewhere else. The host subtracts the text origin before it queues one, and a caller that forgot would corrupt the caret in silence; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -49,7 +49,7 @@ what was asked for and stops there.
 The paint pass has the font context. It re-applies the pinned style and the geometry, then drains
 everything recorded since the last frame.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-047` | `POST` | Every recorded action MUST be applied at paint time. | this spec section 2 | none | unheld -- the flush takes the queue and drives it, and no test records two actions and reads both effects back. It is the half `CANVAS-036` carried and the type system cannot hold; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-050` | `FRAME` | A flush MUST NOT leave a recorded action in the queue. | this spec section 2, the seam; derived | none | unheld -- the drain takes the queue by value and replaces it with an empty one, so the rule holds by one line. An action left behind applies again on the next frame, which is a keystroke typed twice; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -58,7 +58,7 @@ everything recorded since the last frame.
 
 The host compares the body it captured when the edit opened against the one the core holds.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-038` | `FAIL` | Closing an edit that changed nothing MUST commit nothing. | this spec section 2 | none | unheld -- the body at open time is kept and compared on close, and no test drives an open-and-close with no keystroke between them; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 

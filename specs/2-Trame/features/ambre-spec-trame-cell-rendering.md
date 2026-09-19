@@ -18,7 +18,7 @@ how far it may run past its column, and where it is cut. All of it is UI-thread 
 The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-093` | `OBS` | A cell the user did not align MUST put a number right and anything else left. | this spec section 3 | none | fails -- on three formats. `render::content::cell_alignment` parses the text it is handed, and that text is already formatted (`TRAME-157`), so a currency, a percentage and a fraction stop parsing as numbers and align left; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-UI-094` | `OBS` | The alignment control MUST resolve an automatic alignment the way the renderer does. | this spec section 3 | none | fails -- the two copies of the parse read two different texts, `cell_alignment` the formatted text and `style_state_event` the computed value, so a percentage cell reports numeric to the toolbar and draws left in the grid; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |

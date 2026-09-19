@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-031` | `INV` | A cell covered by two selected rectangles MUST be acted on once. | this spec section 3 | `ambre_trame::ui::grid::tests::group1::selected_cells_enumerates_and_dedups` -- it covers the enumeration two paths read, the clear and the `Ctrl`+`Enter` fill, which carry their cells | none | verified |
 | `TRAME-UI-032` | `INV` | A range operation MUST act on the rectangle the user selected, never on the active cell alone. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_selection_resolves_against_tracked_selection` -- a `SetActiveCell` reporting A1:B3, then a parameterless `SortSelectionAsc`, sorts the three rows | none | verified |
@@ -32,14 +32,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Move or extend the selection
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-030` | `POST` | Extending a selection MUST move its active corner alone and leave its fixed corner where the user put it. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::move_with_extend_keeps_anchor`; `::selection_extend_disjoint_and_membership` | none | verified |
 | `TRAME-UI-132` | `FRAME` | A move that does not extend MUST NOT keep a rectangle the modifier committed. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::selection_extend_disjoint_and_membership` -- after two rectangles, a plain `move_to` leaves a single cell; `::single_cell_selection_tracks_active` -- the arrow path | none | verified |
 
 ### 1.3 Take a whole column or row from its header
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-033` | `FRAME` | A whole-column or whole-row selection MUST NOT require the document height from the UI thread. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::axis_selection_spans_the_band` -- the band shape, which carries no extent across its axis | fails -- the band test does not cover the command built from it, and that command reads the extent out of the UI cache (section 6); lands with the `The selection reaches the Logic thread whole` Story (`ambre-roadmap.md` E7) | failing |
 

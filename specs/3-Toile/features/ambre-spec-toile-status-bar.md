@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-053` | `OBS` | The band MUST show how many elements are selected. | this spec section 3 | `ambre_toile::ui::status::tests::multi_element_shows_count_and_bounds` -- the `3 elements` caption; `::single_element_shows_count_only` -- the `1 element` one. The third test this row cited asserts neither caption | none | verified |
 | `TOILE-UI-106` | `OBS` | The combined bounds MUST appear only from two elements up: a lone element MUST show its tally and nothing else. | this spec section 3 | `ambre_toile::ui::status::tests::single_element_shows_count_only` -- it hands the band a one-element reply that does carry a rectangle and asserts the bounds caption is absent. It is the half `TOILE-UI-053` was carrying | none | verified |
@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Ask for the aggregates
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-020` | `POST` | The aggregates MUST cover every selected element, including those outside the viewport. | this spec section 2 | `ambre_toile::logic::convergence_tests::selection_stats_spans_offscreen_elements` -- a union spanning two elements a thousand units apart; structural -- the viewport half is an absence: the Logic thread holds no viewport, so the walk has nothing to cull against. The two other tests this row cited answer a different request | none | verified |
 | `TOILE-116` | `POST` | An empty id list MUST ask for the whole board's extent, which is what a fit reads. | this spec section 2 | `ambre_toile::logic::convergence_tests::selection_stats_empty_ids_span_whole_board` -- an empty list is the one input that does not mean nothing, and the rule lived in the command table alone | none | verified |
@@ -39,7 +39,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Follow the selection
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-055` | `POST` | A change of selection MUST ask for fresh aggregates. | this spec section 2 | none | unheld -- the comparison and the request run once per frame on the view, and no test drives a selection change through it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-109` | `POST` | A selection that becomes empty MUST clear the band without asking for anything. | this spec section 2 | none | unheld -- it is the half `TOILE-UI-055` was carrying. The branch is not a shortcut: passing the empty selection on would read as the whole board (`TOILE-116`) and the band would report a selection of everything. Nothing drives either branch; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |

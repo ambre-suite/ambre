@@ -21,7 +21,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-001` | `INV` | The slide order and the speaker notes MUST be document data: shared by the CRDT, and undoable. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_slide_order_produces_delta_and_is_undoable`; `ambre_toile::logic::convergence_tests::edit_notes_produces_delta_and_is_undoable` | none | verified |
 | `TOILE-FEAT-075` | `INV` | Playback -- the active slide, the mode, the broadcast role and the follow role -- MUST stay local to one viewer, never synced. | this spec section 3 | `ambre_toile::logic::convergence_tests::present_mode_toggle_is_local`; `ambre_toile::logic::convergence_tests::playback_is_not_synced`; `ambre_toile::logic::convergence_tests::follow_state_is_not_synced`; `ambre_toile::logic::convergence_tests::present_broadcast_toggle_is_local` | none | verified |
@@ -41,7 +41,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 
 ### 1.2 Order the deck
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-077` | `POST` | Writing the deck MUST leave the order the caller named, each frame at its first place, as one undo item. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_slide_order_produces_delta_and_is_undoable` -- the order and the undo item; `ambre_toile::logic::convergence_tests::slide_order_dedups_repeated_frames` -- each frame at its first place | none | verified |
 | `TOILE-FEAT-078` | `POST` | Writing the order already held MUST produce neither a commit nor a delta. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_slide_order_unchanged_writes_nothing` | none | verified |
@@ -52,7 +52,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 
 ### 1.3 Move to a slide
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-081` | `POST` | Moving to a slide MUST emit one event carrying the new index, both slides' snapshots, the camera target, the deck length, and the target frame with its notes. | this spec section 3 | type-level -- `SlideChange` carries exactly those seven fields, and `slide_change` fills every one of them on each move | none | verified |
 | `TOILE-FEAT-082` | `POST` | Moving to a slide by hand MUST clear any follow, so the viewer takes control. | this spec section 3 | `ambre_toile::logic::convergence_tests::manual_nav_breaks_follow` | none | verified |
@@ -60,7 +60,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 
 ### 1.4 Follow a presenter
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-003` | `POST` | A follower MUST adopt the presenter's broadcast slide. | this spec section 3 | `ambre_toile::logic::convergence_tests::follower_adopts_presenter_slide`; `ambre_toile::logic::convergence_tests::adopted_slide_is_clamped_to_deck` | none | verified |
 | `TOILE-FEAT-084` | `POST` | Starting to follow MUST snap this viewer to the presenter's last known slide, without waiting for the next broadcast. | this spec section 3 | `ambre_toile::logic::convergence_tests::follow_snaps_to_last_known_slide` | none | verified |
@@ -68,14 +68,14 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 
 ### 1.5 Broadcast this viewer's position
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-086` | `POST` | While this viewer broadcasts, each slide change MUST attach an ephemeral presence frame carrying the active index. | this spec section 3 | `ambre_toile::logic::convergence_tests::broadcast_frame_carries_active_slide` | none | verified |
 | `TOILE-FEAT-087` | `FRAME` | While this viewer does not broadcast, a slide change MUST attach no frame. | this spec section 3 | `ambre_toile::logic::convergence_tests::no_broadcast_frame_when_not_broadcasting` | none | verified |
 
 ### 1.6 Write a speaker note
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-088` | `POST` | A note edit MUST reach the document as the one smallest splice that explains it. | this spec section 4 | `ambre_toile::ui::presenter::tests::delta_none_on_no_change`; `ambre_toile::ui::presenter::tests::delta_pure_append`; `ambre_toile::ui::presenter::tests::delta_pure_prefix_insert`; `ambre_toile::ui::presenter::tests::delta_pure_delete`; `ambre_toile::ui::presenter::tests::delta_mid_string_replace`; `ambre_toile::ui::presenter::tests::delta_from_empty`; `ambre_toile::ui::presenter::tests::delta_to_empty`; `ambre_toile::ui::presenter::tests::delta_multibyte_indices_are_codepoints`; `ambre_toile::ui::presenter::tests::delta_multibyte_mid_replace`; `ambre_toile::ui::presenter::tests::delta_repeated_char_prefers_prefix`; `ambre_toile::tests::chrome_ui::presenter_notes_edit_fires_minimal_delta` | none | verified |
 | `TOILE-FEAT-088` | `PRE` | The caller MUST offer a splice measured against the note the document holds now. | this spec section 4 | none | fails -- nothing checks the precondition and the panel does not honour it, because `ui::presenter::notes_delta` diffs the typed value against a mirror the slide event alone refreshes, so a peer's edit between two keystrokes puts the offsets in the wrong place. `TOILE-FEAT-008` holds the merge, never the offsets, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | failing |
@@ -86,7 +86,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 
 ### 1.7 Draw one frame of a transition
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-004` | `POST` | A transition MUST tween the elements two slides share, fade in the ones only the new slide holds, and fade out the ones only the old one holds. | this spec section 3 | `ambre_toile::logic::animate::tests::shared_id_tweens_at_midpoint`; `ambre_toile::logic::animate::tests::new_element_fades_in`; `ambre_toile::logic::animate::tests::gone_element_fades_out`; `ambre_toile::logic::animate::tests::mixed_membership_classifies_each_id`; `ambre_toile::logic::animate::tests::empty_frames` | none | verified |
 | `TOILE-FEAT-093` | `POST` | A transition MUST reproduce each slide exactly at its own end. | this spec section 3 | `ambre_toile::logic::animate::tests::endpoints_reproduce_source_and_target` | none | verified |
@@ -97,7 +97,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 
 ### 1.8 Enter and leave the presentation
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-087` | `POST` | The Present menu entry MUST enter presentation mode on the first slide. | this spec section 4 | `ambre_toile::ui::menu_bar::tests::present_entry_emits_enter_present` | none | verified |
 | `TOILE-UI-319` | `POST` | Every panel control MUST resolve to the local command it names. | this spec section 4 | `ambre_toile::tests::chrome_ui::presenter_nav_buttons_fire_intents`; `ambre_toile::tests::chrome_ui::presenter_broadcast_button_fires_toggle`; `ambre_toile::tests::chrome_ui::presenter_follow_button_fires_with_peer` | none | verified |

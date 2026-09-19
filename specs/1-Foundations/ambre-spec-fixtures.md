@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `FIXTURE-007` | `INV` | Fixture machinery MUST NOT reach a client build. The three production symbols named in section 2 are the whole exception. | this spec section 2; section 3 | crate-graph -- `ambre-app` names no `fixtures` feature, and Cargo never enables a dependency feature implicitly, so the surface is unreachable from the wasm artifact today | unheld -- nothing refuses the manifest line that would change that; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
 | `FIXTURE-010` | `INV` | Two generators MUST NOT share a name: the name is the artifact's identity on disk. | this spec section 2 | `fixtures_corpus::the_shipping_registry_has_no_duplicate_names` -- over the six shipping generators, and it refuses an empty registry first: the dedup alone passes on nothing at all | none | verified |
@@ -36,7 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 A generator builds a document
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `FIXTURE-001` | `POST` | For a generator and a seed, `build` MUST produce byte-identical output across runs. | this spec section 2 | `fixture_determinism::a_generator_rebuilt_in_the_same_process_is_byte_identical`; `::a_generator_that_ignores_its_seed_is_caught` -- the negative case, so a generator that is stable because it is constant does not pass as deterministic | none | verified |
 | `FIXTURE-027` | `POST` | `build` MUST produce byte-identical output across processes. | this spec section 2 | `fixture_determinism::a_generator_is_byte_identical_across_processes` -- the test binary re-execs and the child's digests are compared with the parent's. It is the half that matters: Rust reseeds hash-map state per process, so an encoder iterating one is stable within a run and unstable between runs, which is the failure an in-process rebuild cannot see | none | verified |
@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 An artifact and its manifest are written
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `FIXTURE-011` | `POST` | A manifest MUST describe the artifact beside it. | this spec section 2 | `fixtures_corpus::the_manifest_describes_the_artifact_beside_it`; `::the_shape_counts_what_the_document_holds`; `::a_solo_document_reports_one_peer_and_a_merged_one_reports_two` -- the description is read off the document rather than declared | none | verified |
 | `FIXTURE-029` | `POST` | A manifest's digest MUST cover the whole file, header included. | this spec section 2; `ambre-spec-docfile.md section 3` | `fixtures_corpus::a_flipped_header_byte_moves_the_digest` -- one byte of the header is flipped and the digest changes. A digest over the payload alone would let the header drift under a gate that reports green | none | verified |
@@ -58,14 +58,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 A document is dumped canonically
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `FIXTURE-017` | `POST` | The canonical dump of a formula cell MUST carry both the stored source and the evaluated result. | this spec section 2 | `fixtures_corpus::the_canonical_dump_carries_both_representations_of_a_formula` | none | verified |
 | `FIXTURE-016` | `FRAME` | The canonical dump MUST be blind to the route a document took to its content. | this spec section 2 | `fixtures_corpus::the_canonical_dump_is_blind_to_the_route_a_document_took`; `::a_toile_dump_names_nodes_by_paint_order_not_by_element_id` -- the one ordering that would otherwise leak insertion history into the comparison | none | verified |
 
 ### 1.5 A fixture is loaded
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `FIXTURE-008` | `POST` | Loading a fixture MUST go through the production importer; no test-only reader MUST read a `.ambre`. | this spec section 2 | `fixtures_corpus::a_written_fixture_loads_back_through_the_production_importer` | none | verified |
 | `FIXTURE-013` | `POST` | A document that has been through the export and import cycle MUST be a fixed point of it, on every document type with an engine. | this spec section 2 | `fixture_determinism::the_round_trip_is_stable_on_every_doc_state_variant`; `::every_variant_reports_its_own_doc_type` -- the second is what keeps a variant added later from silently taking another's path | none | verified |
@@ -74,7 +74,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.6 The gate compares the corpus against the registry
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `FIXTURE-006` | `POST` | A committed fixture whose bytes drift MUST fail CI. | this spec section 3 | `fixtures_gate::a_generator_that_changes_its_output_drifts_against_the_committed_bytes`; `::a_red_gate_leaves_the_committed_tree_untouched` -- the other half, that the gate judges the tree without rewriting it, `just fixtures-check` running the same gate over the committed corpus in the host job | none | verified |
 | `FIXTURE-019` | `POST` | A migrated frozen artifact MUST produce the canonical dump of the live artifact its manifest names. | this spec section 2 | `fixtures_gate::a_frozen_artifact_dumps_like_the_live_one_it_names`; `::a_frozen_artifact_that_no_longer_matches_the_live_one_fails_the_gate` -- the second is the one with teeth, since a comparison that cannot fail holds nothing | none | verified |

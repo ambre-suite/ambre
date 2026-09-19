@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-002` | `INV` | Application render code MUST NOT name a GPU type: it draws through the shared surface alone. | this spec section 2 | crate-graph -- neither `ambre-trame` nor `ambre-toile` declares `wgpu`, and their render tests drive `RecordingSurface` on host | none | verified |
 | `CANVAS-025` | `INV` | The drawing crate MUST declare no GPU and no PDF dependency. | this spec section 2; `ambre-spec-architecture.md section 2` | crate-graph -- `ambre-draw` declares `kurbo`, `peniko`, `parley` and `ambre-core`, and a `wgpu` or `krilla` line added there fails the build of every host-tier render test | none | verified |
@@ -41,7 +41,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 One walk over the document. The surface the caller hands it decides whether the result is a screen
 or a page, and the walk is not told which.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-029` | `POST` | One render walk MUST serve the screen and the page. | this spec section 2 | none | unheld -- the trait declares no screen type, so the rule holds by its signature, and no test walks one document onto both surfaces and compares what each recorded; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-027` | `POST` | Every `push_clip` and `push_transform` MUST be matched by its pop before the surface is finished. | this spec section 2 | `ambre_pdf::tests::zero_area_clip_stays_balanced` -- the degenerate case, where an unbalanced push corrupts the rest of the page | none | verified |

@@ -16,7 +16,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-017` | `INV` | One gesture that writes cells MUST become one undo item, however many times the document is committed to carry it out. | this spec section 3; architecture section 2.D | `ambre_trame::logic::tests::group2::batch_write_is_one_undo_item`; `::filtered_column_edit_is_one_undo_item` -- the two-commit case; `ambre_trame::logic::tests::group1::selection_style_is_a_single_undo`; `ambre_trame::logic::tests::group6::replace_all_rewrites_and_undoes_as_one_group` -- four gestures that write cells, the gesture that deletes lines being outside this row and held by `TRAME-088` | none | verified |
 | `TRAME-121` | `INV` | `Ctrl+Shift+Z` MUST redo. | this spec section 4 | `ambre_trame::ui::commands::tests::the_keymap_binds_both_redo_chords` -- it seeds the keymap from the declared table and reads the three chords back, so a removed `Ctrl+Shift+Z` binding fails it | none | verified |
@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 
 ### 1.2 Restore a named snapshot
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-124` | `POST` | Restoring a snapshot MUST be undoable, like any other change to the document. | this spec section 6 | not built | unbuilt -- lands with the `Version history` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-154` | `FRAME` | Restoring a snapshot MUST NOT remove a snapshot from the list, the restored one included. | derived | not built | unbuilt -- lands with the `Version history` Story (`ambre-roadmap.md` post-V1) | unimplemented |

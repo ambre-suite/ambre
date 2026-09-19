@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-186` | `INV` | Every cache the board derives -- the paint order, the bounds and the spatial index -- MUST equal what a rebuild from the document alone produces. | this spec section 3 | proptest -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` draws a random operation sequence and compares the three caches against a rebuild | none | verified |
 | `TOILE-033` | `INV` | A locked element MUST NOT be changed by any command but the lock itself. | this spec section 3 | `ambre_toile::logic::convergence_tests::locked_element_ignores_move` -- the move alone (`TOILE-012`) | partial -- the resize, the rotate, the restyle and the body overwrite each carry the same early return and no test, the delete and the reorder never read the flag, and the operation strategy the property tests draw from has no lock case, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Place an element on the board
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-188` | `PRE` | The caller MUST hand over a birth rectangle of usable size. | this spec section 3 | none | unheld -- the handler checks the kind and the seed and never measures the rectangle, so a zero-size or negative create is accepted and mints an element nothing can pick, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-031` | `POST` | A newly created element MUST enter the paint order, the bounds cache and the spatial index in the same commit that mints it. | this spec section 3 | `ambre_toile::logic::convergence_tests::create_registers_bounds_and_layer` -- the population, the box and the paint order; proptest -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` is the only one that reaches the index | none | verified |
@@ -40,7 +40,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Move, resize or rotate an element
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-032` | `POST` | A move MUST translate the element's rotation-expanded box, so culling and connector routing stay exact. | this spec section 3; `TOILE-005` | `ambre_toile::logic::convergence_tests::move_translates_bounds` | none | verified |
 | `TOILE-192` | `POST` | A resize MUST record the dragged rectangle normalized, so a negative drag is still a rectangle. | this spec section 3 | `ambre_toile::logic::convergence_tests::resize_updates_bounds` | none | verified |
@@ -51,7 +51,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Overwrite the body of a note
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-195` | `POST` | A body overwrite MUST replace the whole body of the element, never merge into it. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_text_overwrites_sticky_body` | none | verified |
 | `TOILE-196` | `FRAME` | A body overwrite MUST NOT touch the element's geometry, its style or its place in the paint order. | this spec section 3 | structural -- the handler writes one field of one element map | none | verified |
@@ -59,7 +59,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.5 Delete an element
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-034` | `POST` | Deleting an element MUST drop its paint-order entry, its bounds and its index entry in the commit that removes it. | this spec section 3 | `ambre_toile::logic::convergence_tests::delete_drops_owned_connectors` -- it reads the population and the paint order once the removal lands | none | verified |
 | `TOILE-198` | `POST` | Deleting an element MUST remove every connector that touched it at either endpoint. | this spec section 3 | `ambre_toile::logic::convergence_tests::delete_drops_owned_connectors` -- it deletes one of two joined elements and leaves the board with the other alone | none | verified |
@@ -69,7 +69,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.6 Lock and unlock an element
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-202` | `POST` | Locking or unlocking MUST write the flag on every named element. | this spec section 3 | structural -- `lock_elements` walks the named ids and writes the flag on each element map it finds | none | verified |
 | `TOILE-239` | `POST` | Locking or unlocking MUST NOT be refused by the flag it is clearing. | this spec section 3 | structural -- it is the one command over an existing element that does not read the lock before writing, which is what makes an unlock reachable | none | verified |
@@ -77,7 +77,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.7 Align or distribute a selection
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-037` | `POST` | Aligning or distributing a selection MUST be one convergent batch and one undo item. | this spec section 4 | `ambre_toile::logic::state::elements::inner_tests::an_alignment_is_one_undo_item` -- it reads every box back after one `Undo`; proptest -- `ambre_toile::logic::convergence_tests::two_peers_converge` draws an align over every live element, the one operation that rewrites the whole board's coordinates at once | none | verified |
 | `TOILE-204` | `FRAME` | Aligning or distributing MUST NOT move an element the selection does not hold, and MUST NOT move any element on the axis it does not work on. | this spec section 4 | `ambre_toile::logic::state::elements::inner_tests::an_alignment_moves_only_what_it_names` -- it reads back a bystander and the untouched axis of a named box | none | verified |

@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-068` | `INV` | A conversion MUST run on the user's own machine, never reaching the network. | README pillar "E2EE"; this spec section 5 | structural -- no interop module names a network client, and the one blob that leaves rides `ToileRequest::UploadMedia`, which Sync encrypts before it goes | none | verified |
 | `TOILE-IO-010` | `IO` | An `.ambre` export and import round trip MUST preserve the document state, byte for byte on a bare board. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::round_trip_is_byte_identical_on_a_bare_document`; `ambre_toile::logic::state::docfile::tests::round_trip_preserves_the_document_state`; `ambre_toile::logic::state::docfile::tests::the_header_names_toile_and_the_document` | none | verified |
@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Bring a file onto the board
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-020` | `POST` | A user MUST be able to bring a file onto the board, by a drop or by a picker. | this spec section 4 | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), two canvas listeners and one `<input type="file">`, whose every decidable part is a row of its own: what the board reads (`TOILE-IO-098`), where the file lands (`TOILE-IO-023`) and what the user is told (`TOILE-IO-022`) | none | qa-manual |
 | `TOILE-IO-098` | `FAIL` | A file of a type no converter reads MUST be refused with a word, and MUST NOT be read into memory. | this spec section 4 | `ambre_toile::ui::interop::tests::a_format_no_converter_reads_is_refused`; `ambre_toile::ui::interop::tests::every_format_a_converter_reads_is_accepted`; `ambre_toile::ui::interop::tests::the_picker_offers_only_what_the_gate_accepts` -- it holds the picker's filter against the same gate, so a file the dialog offers is never one the board then drops | none | verified |
@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Bring an SVG drawing onto the board
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-003` | `POST` | Every shape the drawing carries MUST land as the same kind of element on the board. | this spec section 3 | `ambre_toile::logic::interop::tests::rect_maps_to_shape_rect`; `ambre_toile::logic::interop::tests::ellipse_maps_to_shape_path`; `ambre_toile::logic::interop::tests::path_maps_to_shape_path_with_geometry` | none | verified |
 | `TOILE-IO-075` | `POST` | A text node MUST land as text the user can still edit, never as a picture of a word. | this spec section 3 | `ambre_toile::logic::interop::tests::text_maps_to_text_element_preserving_body` | none | verified |
@@ -63,7 +63,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Take the board out as a file
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-021` | `POST` | A user MUST be able to take the board out as a file. | this spec section 4 | `ambre_toile::logic::state::export::tests::the_board_exports_as_an_svg_document` -- it walks the board into the serializer and reads the element back out of the file; `ambre_toile::logic::state::export::tests::an_empty_board_exports_an_empty_document`; `ambre_toile::tests::chrome_ui::a_finished_export_names_its_file` -- it holds the confirmation | none | verified |
 | `TOILE-IO-085` | `POST` | The exported bytes MUST reach the browser's download path. | this spec section 4 | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), a `Blob` behind an object URL, clicked through a detached anchor. The bytes it is handed are `TOILE-IO-021` | none | qa-manual |
@@ -79,7 +79,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.5 Open an `.ambre` file
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-090` | `POST` | Opening a file MUST repaint the board once, not once per element it carries. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::round_trip_preserves_the_document_state` -- it reads one repaint event, the rebuilt paint order and the element count | none | verified |
 | `TOILE-IO-011` | `FRAME` | A rejected file MUST leave both the input bytes and the current board untouched. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::a_rejected_file_leaves_both_the_input_and_the_state_alone` -- it walks five rejection shapes and reads the bytes and the open board back after each | none | verified |
@@ -88,7 +88,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.6 Import a Figma or a Miro document
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-014` | `POST` | A Figma or Miro import MUST map every construct it recognises. | this spec section 3 | not built | unbuilt -- lands with the `Figma and Miro import` Story (`ambre-roadmap.md` E6). `ambre-toile` declares no JSON parser | unimplemented |
 | `TOILE-IO-091` | `POST` | A Figma or Miro import MUST list every construct it drops. | this spec section 3 | not built | unbuilt -- lands with the `Figma and Miro import` Story (`ambre-roadmap.md` E6) | unimplemented |
@@ -100,7 +100,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.7 Export a showcase bundle
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-018` | `POST` | A showcase bundle MUST embed its board snapshot. | this spec section 3 | not built | unbuilt -- lands with the `The standalone showcase bundle` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TOILE-IO-019` | `POST` | A showcase bundle MUST carry plaintext content. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the `The standalone showcase bundle` Story (`ambre-roadmap.md` E6) | unimplemented |

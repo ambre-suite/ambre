@@ -38,7 +38,7 @@ them state what two peers reach rather than what one peer holds. `PROSE-085` to 
 `-095` and `-096` state format rules sections 2 to 5 already lean on and no row carried. Grammar and
 status values are normative in `ambre-spec-template.md`.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-085` | `INV` | A block's identity MUST be the `TreeID` the tree mints; a position among siblings MUST NOT be used as a key. | this spec section 2 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-086` | `INV` | A reference to a block MUST still resolve after a move, an indent and a move into a table cell. | this spec section 2 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |

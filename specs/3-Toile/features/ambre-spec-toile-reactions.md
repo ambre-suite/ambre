@@ -18,7 +18,7 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-007` | `CONC` | A reaction MUST be keyed by the person, not the session: the same user reacting from two devices MUST count once. | this spec section 3; section 5 | `ambre_toile::logic::convergence_tests::same_user_two_devices_is_one_entry` -- it reacts from two states carrying one identity, syncs both ways and reads a single voter on each | none | verified |
 | `TOILE-FEAT-055` | `CONC` | Two users reacting at once on the same target MUST both keep their reaction, however fresh the target is. | this spec section 3; section 5 | `ambre_toile::logic::convergence_tests::concurrent_reactions_distinct_users_converge` -- it syncs two identities both ways and reads one chip counting two on each | none | verified |
@@ -39,7 +39,7 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 
 ### 1.2 React to an element
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-060` | `PRE` | The caller MUST name a target the board still holds. | this spec section 3 | none | unheld -- nothing checks it: the write takes no existence check, so a reaction on a target that is already gone is stored and never rendered by either derivation; lands with the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | untested |
 | `TOILE-FEAT-061` | `POST` | Reacting again MUST replace the user's own reaction, so a count stays a count of people. | this spec section 3 | `ambre_toile::logic::convergence_tests::react_add_change_remove_updates_tally` -- it places an emoji, replaces it with a vote and reads the emoji gone and one vote standing, then removes it and reads nothing left | none | verified |
@@ -53,14 +53,14 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 
 ### 1.3 Undo a reaction
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-023` | `POST` | Undoing a reaction MUST remove that user's own entry. | this spec section 3; `TOILE-014` | `ambre_toile::logic::convergence_tests::react_broadcasts_delta_and_is_undoable` -- it undoes the reaction and reads the tally empty again | none | verified |
 | `TOILE-FEAT-066` | `FRAME` | Undoing a reaction MUST NOT touch every other entry on that target. | this spec section 3 | structural -- one reaction is one commit over one key, so the history has one key to put back | none | verified |
 
 ### 1.4 Pick an emoji from the menu
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-081` | `POST` | One reaction gesture MUST apply to every element of the selection. | this spec section 4 | `ambre_toile::ui::menu::tests::react_emoji_resolves_to_one_react_per_target` -- it resolves one entry against two selected elements and reads one command per element, each carrying the picker's glyph | none | verified |
 | `TOILE-UI-300` | `POST` | The clear entry MUST remove this user's own reaction from every selected element, and only their own. | this spec section 4 | `ambre_toile::ui::menu::tests::react_clear_resolves_to_none_reaction` -- it holds the resolution, over one element only, and the per-user half is held by `TOILE-FEAT-065` | none | verified |
@@ -68,7 +68,7 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 
 ### 1.5 Paint the badge row
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-079` | `POST` | Every visible target carrying a tally MUST paint a badge row. | this spec section 4 | `ambre_toile::ui::reactions::tests::chip_row_paints_only_tallied_elements` -- it paints a tallied element and reads a filled chip pill | none | verified |
 | `TOILE-UI-302` | `POST` | A visible target with no tally MUST paint nothing, so an untouched element stays untouched. | this spec section 4 | none | unheld -- `ambre_toile::ui::reactions::tests::chip_row_paints_only_tallied_elements` puts a tallied and an untallied element on one board and then reads only that at least one pill was filled: it never counts them, so the untallied half is unheld; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |

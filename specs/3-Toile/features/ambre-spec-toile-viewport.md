@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-002` | `INV` | A screen point and a world point MUST map to each other exactly, in both directions. | this spec section 2 | `ambre_toile::ui::viewport::tests::round_trip_is_identity` -- it walks three points out and back; `ambre_toile::ui::viewport::tests::center_maps_to_screen_center` -- it pins the one point the mapping is built around | none | verified |
 | `TOILE-UI-003` | `INV` | The zoom MUST stay inside 0.1x..10x, whatever the input asks for. | this spec section 2 | `ambre_toile::ui::viewport::tests::zoom_clamps_to_range` -- it drives a hundred doublings and two hundred halvings into both stops; `ambre_toile::ui::viewport::tests::fit_bounds_clamps_tiny_rect_to_max_zoom` -- it holds the stop a fit would blow past | none | verified |
@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Drag the board around
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-026` | `POST` | A pan MUST move the content by the pointer's own displacement, at every zoom. | this spec section 2 | `ambre_toile::ui::viewport::tests::pan_moves_content_with_the_drag` -- it reads the screen displacement of a painted world point equal to the drag, at 2x, the one zoom that exercises the division at all | none | verified |
 | `TOILE-UI-282` | `FRAME` | A pan MUST NOT change the zoom, and MUST NOT change what is selected. | this spec section 2 | none | unheld -- the pan touches one field of the camera and the pointer handler returns before the tool machine sees the move, but no test reads the zoom back after a pan; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -41,7 +41,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Zoom in and out
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-284` | `POST` | A zoom about a point MUST leave the world point under that point fixed on screen. | this spec section 2 | `ambre_toile::ui::viewport::tests::zoom_about_keeps_anchor_world_point_fixed` -- it maps the anchor to world before and after and reads it unmoved | none | verified |
 | `TOILE-UI-285` | `POST` | A zoom that hits a stop MUST still hold its anchor, rather than drift while the zoom refuses to change. | this spec section 2 | none | unheld -- `ambre_toile::ui::viewport::tests::zoom_clamps_to_range` drives three hundred events into both stops and reads the zoom alone, and the anchor it passes is never mapped back; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -51,7 +51,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Turn the wheel
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-027` | `POST` | An automatic pointer mode MUST classify each wheel event from that event's own signature. | this spec section 3 | `ambre_toile::ui::view::wheel_tests::line_or_page_delta_mode_is_a_mouse` -- the strongest signal, a line or page unit; `ambre_toile::ui::view::wheel_tests::horizontal_component_is_a_trackpad` -- the second, a two-axis glide; `ambre_toile::ui::view::wheel_tests::large_vertical_notch_is_a_mouse` -- the third, a discrete notch | none | verified |
 | `TOILE-UI-288` | `POST` | An ambiguous wheel event MUST leave the latched guess unchanged, so one gesture does not alternate between panning and zooming. | this spec section 3; section 4 | `ambre_toile::ui::view::wheel_tests::fine_vertical_glide_is_ambiguous` -- it holds the pure classifier returning nothing | partial -- the latch is a field the handler writes, and no test sets it, sends an ambiguous event and reads it back; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -61,7 +61,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.5 Fit the board or the selection
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-004` | `POST` | A fit MUST centre the target and scale it to the tighter axis, with padding, so the content never touches the edge. | this spec section 2 | `ambre_toile::ui::viewport::tests::fit_bounds_centers_and_scales_with_padding` -- it reads the centre, the governing axis and the padded fit on both axes; `ambre_toile::ui::viewport::tests::fit_target_matches_fit_bounds` -- it holds the pure solver to the same answer | none | verified |
 | `TOILE-UI-290` | `FAIL` | A fit over a rectangle with no area MUST leave the camera exactly as it was, rather than invent one. | this spec section 2; section 4 | `ambre_toile::ui::viewport::tests::fit_bounds_ignores_empty_rect` -- it compares the whole camera before and after; `ambre_toile::ui::viewport::tests::fit_target_matches_fit_bounds` -- it reads the solver answering nothing | none | verified |
@@ -71,14 +71,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.6 Glide to a slide
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-294` | `POST` | A camera glide MUST reproduce where it started at the start, land exactly on its target at the end, and interpolate both the centre and the zoom between. | this spec section 2; `features/ambre-spec-toile-presentation.md section 4` | `ambre_toile::ui::viewport::tests::glide_interpolates_center_and_zoom` -- it reads the two endpoints exactly and the linear midpoint of each field | none | verified |
 | `TOILE-UI-295` | `FRAME` | A glide MUST NOT change the canvas: it moves the camera through it. | this spec section 2 | `ambre_toile::ui::viewport::tests::glide_interpolates_center_and_zoom` -- it reads the size carried through unchanged; type-level -- the glide takes a camera and returns a new one rather than mutating it | none | verified |
 
 ### 1.7 Resize the canvas
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-296` | `POST` | A canvas resize MUST ask for the visible set of the new canvas, so an element the new edge uncovers arrives. | this spec section 3 | none | unheld -- the resize entry is three statements and no test calls it, section 5; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-297` | `FRAME` | A resize MUST NOT move the camera: the same world point stays under the screen centre, at the same scale. | this spec section 3 | none | unheld -- the entry writes the size alone, and nothing reads the centre or the zoom back across a resize; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |

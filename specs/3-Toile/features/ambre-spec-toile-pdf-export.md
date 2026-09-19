@@ -16,7 +16,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 
 ### 1.1 The file
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-038` | `IO` | The bytes an export hands back MUST be a PDF document. | this spec section 3 | `ambre_toile::logic::interop::pdf_export::tests::export_yields_a_pdf` -- it asserts the `%PDF` header. Its second assertion, a length over 400 bytes, holds no row: a page with no content clears it too, section 6 | none | verified |
 | `TOILE-IO-030` | `IO` | A page MUST carry its own slide alone: content outside the frame MUST NOT reach it. | this spec section 3 | none | unheld -- the clip is what would hold it: two rows assert that a page carries a clip or does not (`TOILE-IO-042`, `TOILE-IO-044`), and nothing asserts that the clip removes a neighbouring element, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 That a page is drawn by the screen's own walk, is byte-stable, changes nothing and keeps its
 characters is `ambre-spec-pdf-export.md section 1.1`. What a deck adds is the pagination.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-039` | `POST` | An export MUST produce one page per slide the deck still resolves. | this spec section 3 | `ambre_toile::logic::state::presentation::pdf_tests::one_page_per_slide` -- it asserts two pages for a deck of two slides | none | verified |
 | `TOILE-IO-040` | `POST` | The pages MUST follow the deck's playback order. | this spec section 3 | none | unheld -- the test above builds its deck in creation order and reads no page back, so a walk sorting by id would pass it unchanged, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |

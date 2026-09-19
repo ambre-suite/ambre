@@ -18,7 +18,7 @@ match, and the replace-all is one undo item. Trame's own turn is what a cell mat
 
 ### 1.1 What counts as a match
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-077` | `INV` | Case sensitivity and whole-cell matching MUST apply to a search as to a replace. | this spec section 4 | `ambre_trame::logic::tests::group6::find_next_honors_case_and_whole_cell` -- both options reach both gestures through one predicate | none | verified |
 | `TRAME-UI-078` | `INV` | A plain cell MUST be matched on its displayed value. | this spec section 3 | none | fails -- the scan reads the **computed** value, not the formatted one: a cell shown as `50.0%` is matched by `0.5` and not by what the user reads (`TRAME-108`). The tests carry no format, so they never separate the two; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
@@ -29,7 +29,7 @@ match, and the replace-all is one undo item. Trame's own turn is what a cell mat
 The scope toggle is Trame's own: `ambre-spec-find.md` owns the replace, this table owns what a
 workbook scope reaches and what it leaves alone.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-083` | `POST` | A workbook-scoped replace MUST reach every sheet, whichever tab is active. | this spec section 4 | `ambre_trame::logic::tests::group6::replace_all_spans_sheets` -- it rewrites a match on an inactive sheet and reads it back | none | verified |
 | `TRAME-UI-080` | `POST` | A case-insensitive replace MUST leave the rest of the cell byte for byte. | this spec section 3 | `ambre_trame::logic::find::tests::case_insensitive_replace_survives_a_non_length_preserving_lowercase`; `::case_insensitive_replace_handles_the_ordinary_cases`; `::whole_cell_rewrite_swaps_the_entire_content` -- one rewrite serves both gestures | none | verified |

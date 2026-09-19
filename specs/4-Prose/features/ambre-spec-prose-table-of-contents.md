@@ -16,7 +16,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-003` | `OBS` | The table of contents MUST list the document's headings, in document order, each reading the heading's own text. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-060` | `OBS` | An entry's page number MUST be the page its heading starts on in the layout being drawn. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -27,14 +27,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Insert a table of contents
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-115` | `POST` | After the command, a table of contents MUST sit at the place in the tree the command named, showing the depth and the numbering it carried. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-116` | `FRAME` | Inserting one MUST NOT touch a heading, and MUST NOT write an entry anywhere. | derived | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Change what it shows
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-117` | `POST` | After the command, the block MUST carry the depth and the numbering asked for. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-291` | `POST` | The next layout MUST list the block's entries by the depth and the numbering it carries. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -42,7 +42,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Click an entry
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-082` | `POST` | A click on an entry MUST bring the heading it reads into view. | this spec section 4 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-083` | `FRAME` | Following an entry MUST NOT write to the document: where this reader looks is not a change a peer receives. | derived | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |

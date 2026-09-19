@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-062` | `INV` | A name MUST resolve to the same cells for every reader. | this spec section 2, row 3 | none | fails -- an unqualified definition binds to engine sheet 0, which is whichever sheet the reader is looking at. The same `=SUM(TOTAL)` therefore totals a different sheet per open tab; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-066` | `INV` | A name MUST NOT be defined in terms of another name. | this spec section 3 | type-level -- the rebuild resolves every stored reference against an empty name table, and a bareword absent from it is a hard error, so the definition is dropped | none | verified |
@@ -31,14 +31,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Give a range a name
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-069` | `FAIL` | A definition that is not a reference MUST be refused when it is made. | this spec section 5 | none | fails -- an unparseable reference is stored, then silently dropped at each rebuild, so the name exists in the document and resolves nowhere; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-155` | `FAIL` | A definition whose name no formula can read MUST be refused when it is made. | this spec section 4 | none | fails -- the command writes whatever key it is given, so `A1` or `1TOTAL` becomes a name the grammar of section 4 can never reach, and nothing checks the key against it; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 
 ### 1.3 Remove a name
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-156` | `FRAME` | Removing a name that was never defined MUST change nothing. | this spec section 3 | none | unheld -- the command returns before the write when the key is absent, emitting no event and no delta, and no test drives an unknown name; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 

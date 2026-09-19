@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-006` | `INV` | A connector MUST store what it joins and never where it runs: its geometry is recomputed on read. | this spec section 3 | `ambre_toile::logic::connector::tests::straight_endpoints_are_the_anchors` -- the straight case; `ambre_toile::logic::connector::tests::every_path_type_routes` -- every path kind; structural -- the format stores endpoints and a path kind, no geometry (`ambre-spec-toile-schema.md section 3`) | none | verified |
 | `TOILE-164` | `INV` | Moving an element MUST NOT write a change to the connectors that touch it: a drag costs one register write, whatever hangs off it. | this spec section 3 | structural -- no path from a move reaches the connector map, and the routing runs inside the read-only derivation | none | verified |
@@ -39,7 +39,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Drag an arrow from one shape to another
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-211` | `POST` | A drag from one element released over another MUST send one connector between the two. | this spec section 4 | `ambre_toile::ui::tool::tests::connector_anchor_to_anchor_emits_create_connector` -- it reads both endpoints and the caps of the emitted command | none | verified |
 | `TOILE-UI-212` | `POST` | The anchor at each end MUST be the side of the element nearest the pointer, so an arrow leaves where the user aimed it. | this spec section 4 | `ambre_toile::ui::tool::tests::nearest_anchor_picks_closest_edge` -- it reads all four sides | none | verified |
@@ -52,7 +52,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Re-aim an arrow at another shape
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-171` | `POST` | Re-aiming an arrow MUST move the endpoint named. | this spec section 3 | `ambre_toile::logic::convergence_tests::retarget_rebinds_endpoint_without_dangling` -- it holds that the arrow still routes afterwards | partial -- nothing reads the new binding back; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-238` | `POST` | Re-aiming an arrow MUST leave the endpoint it does not name where it was. | this spec section 3 | none | unheld -- nothing reads the untouched end back; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -62,7 +62,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Caption an arrow
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-344` | `POST` | A double-click on an arrow MUST open an editor on its caption, in place on the arrow. | this spec section 4 | `ambre_toile::ui::label::tests::a_click_on_the_line_picks_the_arrow` -- which arrow a point lands on; `ambre_toile::ui::label::tests::the_top_most_arrow_wins` -- which one wins where two answer | partial -- the geometry half only: nothing drives the gesture, because the view is not host-constructible; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-345` | `POST` | Leaving the editor MUST send the caption. | this spec section 4 | none | unheld -- nothing drives the close path itself; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -74,7 +74,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.5 Select an arrow
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-350` | `POST` | A click on an arrow with nothing else under the pointer MUST select it. | this spec section 4 | `ambre_toile::ui::label::tests::a_click_on_the_line_picks_the_arrow` -- which arrow a point lands on; `ambre_toile::ui::label::tests::the_top_most_arrow_wins` -- which one wins where two answer | partial -- the geometry half only: nothing drives the gesture, because the view is not host-constructible; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-359` | `POST` | A click that lands on an element MUST NOT take the arrow under it: what the user sees on top is what the click takes. | this spec section 4 | none | unheld -- the hit test runs the elements before the arrows, and no test puts an arrow under an element and reads back which one the click took; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -87,7 +87,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.6 Delete a shape an arrow touches
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-042` | `POST` | A local delete of an element MUST take the connectors it owns with it, in the same commit. | this spec section 3 | `ambre_toile::logic::convergence_tests::delete_drops_owned_connectors` -- it reads both the element count and the paint order after the delete | none | verified |
 | `TOILE-175` | `FRAME` | A delete MUST NOT touch a connector neither of whose ends it removes. | this spec section 3 | `ambre_toile::logic::convergence_tests::deleting_an_endpoint_makes_the_connector_dangle` -- it deletes an unrelated element first and reads the connector surviving it | none | verified |

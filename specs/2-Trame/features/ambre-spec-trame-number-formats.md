@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-102` | `INV` | A format MUST NOT change what a cell holds. | this spec section 2 | type-level -- `format_display` takes `&self` and returns a `String`, and its one call site is the viewport packing loop, so no formatted text can reach `cells_{sheet}` | none | verified |
 | `TRAME-157` | `OBS` | A formatted cell MUST show the text its family renders for the value it holds. | this spec section 2 | `ambre_trame::logic::tests::group1::set_cell_style_round_trips_and_formats_numbers` -- it reads `314.2%` off the packed viewport for a cell holding `3.14159` under Percent with one decimal, one family of the nine and the only test that reaches `format_display` at all | none | verified |
@@ -35,7 +35,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Change the decimal count
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-105` | `POST` | Increasing the decimals MUST add one place to the count the cell already carries. | this spec section 3 | none | fails -- the two buttons write the constants `0` and `2`, so the control is a two-value switch, not a step; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-158` | `FRAME` | Changing the decimal count MUST NOT change a computed value. | this spec section 3 | none | unheld -- the restyle writes the style containers alone and drives no engine pass, the viewport re-packs from the values it already held, and no test asserts that it re-packs the same ones; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |

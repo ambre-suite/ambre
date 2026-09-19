@@ -36,7 +36,7 @@ Prefix `TRAME`, shared with `trame-engine`: one prefix, one numbering, no renumb
 not of the engine. `TRAME-221` and `TRAME-222` are the halves those last two hid, and each states
 what two peers reach, not what one holds. Grammar and status values are normative in `ambre-spec-template.md`.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-003` | `INV` | A row's or column's identity MUST be a minted `Uid` carried as the `LoroMovableList` element's **value**, never its position. | this spec section 2 | `ambre_trame::model::sheet_index::tests::build_maps_positions_to_stable_ids`; `::apply_move_row_permutes_order_and_reindexes`; `::cell_key_is_fixed_length_and_stable` -- the index; `ambre_trame::logic::tests::group4::sort_range_formulas_follow_data` -- the one that walks a real move on the `LoroMovableList` and reads the cells back under their unchanged keys, which is the hazard section 6 rejects the slot id for | none | verified |
 | `TRAME-010` | `INV` | Computed values MUST NOT enter the CRDT: a container MUST hold the raw text alone. | this spec section 3 | `ambre_trame::logic::tests::group1::sum_over_plain_literals_survives_reseed` -- it reads the raw text back after a snapshot round trip | partial -- a computed value **overwriting** the raw text goes red. A computed value stored **beside** it, the `t` of the declared, unbuilt `{v, t, s}` sub-map of section 5, leaves every test green and costs every peer the bandwidth; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |

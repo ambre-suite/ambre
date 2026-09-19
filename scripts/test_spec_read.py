@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import spec_read  # noqa: E402  -- the module under test
 
-HEAD = "| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |"
+HEAD = "| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |"
 RULE = "|---|---|---|---|---|---|---|"
 
 

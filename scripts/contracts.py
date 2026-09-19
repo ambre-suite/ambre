@@ -3,9 +3,9 @@
 
 `ambre-contract-ledger.md` is the roll-up of every per-spec contract table. A
 hand-maintained roll-up is the same failure mode as a hand-maintained test list:
-it is believed, and it is wrong (it was, by one, for a week). So the file is
-written by this script and by nothing else, like each application's feature
-inventory. Nobody reads it; CI reads it.
+it is believed, and it is wrong. So the file is written by this script and by
+nothing else, like each application's feature inventory. Nobody reads it; CI
+reads it.
 
 The rules it enforces, beyond generating the file:
 
@@ -13,68 +13,60 @@ The rules it enforces, beyond generating the file:
   * a `failing`, `untested` or `unimplemented` row must name the Story that closes
     its gap ("lands with");
   * **that Story must resolve to an open row of `ambre-roadmap.md`.** The template
-    says "that story is not `[x]` until the row's status has moved", and nothing
-    held it: this script looked for the substring "lands with" and never read the
-    roadmap. So a story could be ticked, renamed or moved under another epic and
-    373 rows would keep pointing at nothing. The name is the join key, hence
+    says "that story is not `[x]` until the row's status has moved". Reading the
+    substring "lands with" and never the roadmap leaves a story free to be
+    ticked, renamed or moved under another epic while every row aimed at it
+    points at nothing. The name is the join key, hence
     three failures: a name no row carries, a name two rows carry, and a name on a
     row that is `[x]` or that closed into `ambre-roadmap-journal.md`. The epic in
     the citation is checked too when it is there, so a moved story cannot leave a
     stale key behind;
   * **every mechanism a built row cites must resolve to a `fn` in the workspace.**
     The corpus demands it -- "a test name that resolves to a `fn` behind a Cargo
-    feature no job enables is the same claim as a name that resolves to nothing"
-    -- and nothing held it. The corpus once cited 82 test names of which 23
-    resolved; that was cleaned by hand, so it was free to come back. It had:
-    `TRAME-UI-011` cited `::editor_preview_display`, which never existed, under
-    status `verified`. An `unimplemented` row is exempt: its Verification cell
-    names a Story, not a test;
+    feature no job enables is the same claim as a name that resolves to nothing".
+    A batch cleaned by hand is free to come back, and a `verified` row citing a
+    `fn` that never existed reads exactly like one citing a test that runs. An
+    `unimplemented` row is exempt: its `Mechanism` cell reads `not built`, and
+    the Story it lands with is in `Gap`;
   * **every audit finding a row cites must exist, and every finding must be
     cited.** The template makes the citation the join between a finding and the
-    rule that closes it -- "the finding stops drifting from the code in silence"
-    -- and nothing held either end. Both rotted: `SRV-029` cited `audit #3`,
-    which is not a finding id, and eight findings that a remediation wave closed
-    had no rule at all, so nothing would go red the day the fix was reverted. A
-    finding with no rule to state is declared in `NO_RULE` below, with its
-    reason;
-  * **the grammar of a row's own cells**, which a review held and nothing else
-    did. Four drifts reached the corpus that way and each was found by reading,
-    long after it landed: 519 rows across sixteen documents wrote a bare `INV`
-    where the template writes `` `INV` `` -- this script stripped the backticks
-    before comparing, so the vocabulary check passed and the corpus split into
-    two spellings of one column; six rows stated no RFC 2119 keyword at all, so
-    they read as description and bound nothing; twelve `Sources` cells cited a
-    form the template does not declare, `pillar "Local-First"` for `README
-    pillar "Local-First"`, and a citation nobody can resolve is a citation that
-    rots; and a `Statement` carrying two rules is two rules with one status, so
-    half of it can break in green. The first three are errors here. The fourth
-    is an error too, below: the line between a bundle the kind licenses and a
+    rule that closes it -- "the finding stops drifting from the code in silence".
+    Both ends rot unheld: a row cites `audit #3`, which is not a finding id, and
+    a finding a remediation wave closed carries no rule, so nothing goes red the
+    day the fix is reverted. A finding with no rule to state is declared in
+    `NO_RULE` below, with its reason;
+  * **the grammar of a row's own cells**, which a review holds and nothing else
+    does. A kind written bare where the template writes it in backticks splits
+    one column into two spellings, and a check comparing stripped text passes on
+    both. A `Statement` with no RFC 2119 keyword reads as description and binds
+    nothing. A `Sources` cell citing a form the template does not declare --
+    `pillar "Local-First"` for `README pillar "Local-First"` -- is a citation
+    nobody can resolve. Those three are errors here. A `Statement` carrying two
+    rules is the fourth, below: the line between a bundle the kind licenses and a
     conjunction that hides a second rule is drawn by the kind, not by a count;
   * **a `Statement` states one rule.** `FAIL` binds "the refusal, the notice,
     the rollback" and `FRAME` names everything an operation must not touch, so
     both legitimately carry a list; the other six kinds do not. A second MUST
     after an `and` is two rules under one status, and the half nothing tests
-    breaks in green. 65 rows were carrying one when this became an error, and
-    each was split by hand: what a ceiling deferred, a reading settled;
+    breaks in green;
   * an id is never reused, and a prefix has no gap in its numbering;
   * **every gap that can close names its Story.** A `failing`, `untested` or
     `unimplemented` row lands with a Story of the roadmap, and that Story must
-    resolve to one open row of it. This replaces a per-document ceiling on
-    `unverified`, which summed three states nobody could compare: a rule the code
-    breaks today read as a missing test, and the whole debt sat in a JSON file
-    under `scripts/` rather than in the one place a schedule lives. A row whose
+    resolve to one open row of it. A per-document ceiling on `unverified` sums
+    three states nobody can compare: a rule the code breaks today reads as a
+    missing test, and the debt sits in a JSON file under `scripts/` rather than
+    in the one place a schedule lives. A row whose
     gap cannot close carries `qa-manual` or `human-review`, which owe no Story:
     they are decisions, not debt;
   * **the counts under a table are the table's own.** The `Verification` answer
-    is written by hand, beside a table that is not, so the two drift: nine
-    documents were wrong the day this check landed, and `ambre-spec-membership.md`
-    claimed one `verified` row fewer than it carries. A status the answer leaves
-    out claims zero, so an omission is compared like a figure. The presence of
-    the label stays `spec_shape.py`, which holds the three answers together.
+    is written by hand, beside a table that is not, so the two drift: a document
+    claiming one `verified` row fewer than it carries claims it in prose nobody
+    recounts. A status the answer leaves out claims zero, so an omission is
+    compared like a figure. The presence of the label stays `spec_shape.py`,
+    which holds the three answers together.
 
 What this still cannot see: a row citing a test that runs, passes, and does not
-test the rule. That is `TRAME-FEAT-004`'s defect, and it needs a probe or
-`cargo-mutants`, not a parser.
+test the rule. That needs a probe or `cargo-mutants`, not a parser.
 
 Run: `just contracts` (fail when the file on disk is not what this would
 write), `just contracts-write` (rewrite it). The check compares the whole text,
@@ -91,7 +83,7 @@ from typing import NamedTuple
 
 # Every closed vocabulary this file checks against is the template's, read from
 # it. What each one means is stated there, beside the table it is read from, and
-# is not repeated here (`ambre-spec-template.md section 1.B`).
+# is not repeated here (`ambre-spec-template.md section 1`).
 from template_vocabulary import (  # noqa: F401  -- re-exported to the other gates
     BARE_GAP_OPENERS,
     BARE_TOKENS,
@@ -101,13 +93,13 @@ from template_vocabulary import (  # noqa: F401  -- re-exported to the other gat
     KIND,
     KINDS,
     LOCATED_TOKENS,
+    MECHANISM,
+    MECHANISM_TOKENS,
     OPERATION_KINDS,
     SOURCES,
     STATE_KINDS,
     STATEMENT,
     STATUSES,
-    VERIFICATION,
-    VERIFICATION_TOKENS,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -184,9 +176,9 @@ RETIRED = {
     "PROSE-FEAT-015": "FIND-006",
     "PROSE-FEAT-016": "FIND-001",
     "PROSE-FEAT-037": "FIND-004",
-    # Withdrawn by the migration that gave `ambre-spec-find.md` its operation
-    # tables: each restated a rule the shared document now states for every
-    # application, which is the second reason this register admits.
+    # Withdrawn to `ambre-spec-find.md`: each restated a rule the shared document
+    # states for every application, which is the second reason this register
+    # admits.
     "TRAME-UI-137": "FIND-008",
     "TOILE-141": "FIND-010",
     "TOILE-146": "FIND-005",
@@ -246,10 +238,10 @@ def header_cells(header: str) -> list[str]:
 def row_cells(columns: list[str] | None, rest: str) -> dict[str, str]:
     """One row's cells, keyed by the name its own header declares.
 
-    `rest` starts after the `ID` cell, so a header index shifts by one. Reading a
-    cell by its position is what a seventh column breaks in silence: the
-    `Verification` cell was "the last one before the status" everywhere below,
-    and `Gap` took that place (`ambre-spec-template.md section 1.B`).
+    `rest` starts after the `ID` cell, so a header index shifts by one. A cell
+    read by its position is what a new column breaks in silence: "the last one
+    before the status" names a different cell the day a column is inserted
+    there, and no check sees the shift (`ambre-spec-template.md section 1.B`).
     """
     if not columns:
         return {}
@@ -270,8 +262,8 @@ def row_cells(columns: list[str] | None, rest: str) -> dict[str, str]:
 BUNDLING_KINDS = ("FAIL", "FRAME")
 
 # How the template writes a `Kind` cell: the word, in backticks, and nothing
-# else. Comparing the word alone is what let 519 rows drop the backticks and
-# pass -- a vocabulary check that forgives the spelling checks half a column.
+# else. Comparing the word alone lets a row drop the backticks and pass -- a
+# vocabulary check that forgives the spelling checks half a column.
 KIND_CELL = re.compile(r"^`([A-Z]+)`$")
 
 # What a `Statement` must carry to bind anything: one of the RFC 2119 keywords
@@ -290,9 +282,9 @@ CONJUNCTION = re.compile(
 
 # The same shape, with a subject between the `and` and the second keyword: "MUST
 # be dropped, and the others MUST be told" is the rule above with four words in
-# it, and the rule above reads none of them. A report and not a refusal: 40 rows
-# match it, and whether each one is two obligations or one rule stated twice is
-# a reading. The refusal follows once the corpus is split.
+# it, and the rule above reads none of them. A report and not a refusal: whether
+# a match is two obligations or one rule stated twice is a reading, and a gate
+# that guesses it refuses rows that are right.
 SPLIT_CANDIDATE = re.compile(
     r"\b(?:MUST(?:\s+NOT)?|SHOULD(?:\s+NOT)?|MAY)\b[^.;:]*?"
     r",?\s+and\s+[^.;:]{0,40}?\b(?:MUST|SHOULD|MAY)\b"
@@ -320,8 +312,8 @@ _FINDINGS = rf"`{_FINDING}`(?:,\s+`{_FINDING}`)*"
 # clause holds the prose that locates the rule inside the section.
 _TAIL = r"(?:\s*\((?P<paren>[^)]*)\))?(?:,\s+(?P<note>.+))?"
 # A comma clause that is nothing but ids is the citation itself, not prose about
-# it: `` `ambre-spec-zero-knowledge.md`, `ZK-002` `` is how 56 sources name the
-# rule they point at, and reading that clause as a note loses every one of them.
+# it: `` `ambre-spec-zero-knowledge.md`, `ZK-002` `` is how a source names the
+# rule it points at, and reading that clause as a note loses the ids in it.
 CITED_CLAUSE = re.compile(rf"^{_IDS}$")
 
 # The grammar of one source, and the whole of it. Six forms, each naming its
@@ -475,7 +467,7 @@ def source_defects(where: str, sources: str, declared: dict[str, str]) -> list[s
     return defects
 
 
-# `VERIFICATION_TOKENS` is the template's mechanism table, and every token of it
+# `MECHANISM_TOKENS` is the template's mechanism table, and every token of it
 # names a rung of the ladder `1-Foundations/ambre-spec-testing.md section 2`
 # owns. The cell is read whole: one token off that list fails the row, whatever
 # the prose around it says, because a cell a gate reads half of is a cell
@@ -497,48 +489,48 @@ MECHANISM_PATH = re.compile(
 # belongs.
 
 
-def verification_defects(where: str, cell: str) -> list[str]:
-    """Whether a `Verification` cell is a mechanism, and nothing else.
+def mechanism_defects(where: str, cell: str) -> list[str]:
+    """Whether a `Mechanism` cell is a mechanism, and nothing else.
 
     A total read. The cell is a `;`-separated list, and every item of it must be
     a token or a path. Prose fails here even when the prose is true: what it
     says belongs in `Gap`, where a reader and a script can both find it.
     """
     if not cell:
-        return [f"{where}: the `Verification` cell is empty -- write `none`, which claims nothing"]
+        return [f"{where}: the `Mechanism` cell is empty -- write `none`, which claims nothing"]
     defects = []
     for item in cell.split(";"):
         item = item.strip()
         token, _, clause = item.partition(" -- ")
         if MECHANISM_PATH.match(token):
             continue
-        if token not in VERIFICATION_TOKENS:
+        if token not in MECHANISM_TOKENS:
             defects.append(
-                f"{where}: `Verification` carries {item[:60]!r}, which is no mechanism -- "
+                f"{where}: `Mechanism` carries {item[:60]!r}, which is no mechanism -- "
                 f"the cell is a `;`-separated list of the closed set, and an argument "
                 f"about what it does not hold belongs in `Gap`"
             )
         elif clause and token in BARE_TOKENS:
             defects.append(
-                f"{where}: `Verification` reads {item[:60]!r} -- {token!r} names no "
+                f"{where}: `Mechanism` reads {item[:60]!r} -- {token!r} names no "
                 f"mechanism for a clause to locate, so what follows it is an "
                 f"argument, and an argument belongs in `Gap`"
             )
         elif token in LOCATED_TOKENS and not clause:
             defects.append(
-                f"{where}: `Verification` is {token!r} on its own -- a reader cannot "
+                f"{where}: `Mechanism` is {token!r} on its own -- a reader cannot "
                 f"find what it names, so write `{token} -- ` and then the construction "
                 f"that holds the rule"
             )
     return defects
 
 
-def gap_defects(where: str, cell: str, verification: str, status: str) -> list[str]:
+def gap_defects(where: str, cell: str, mechanism: str, status: str) -> list[str]:
     """Whether a `Gap` cell states what the mechanism leaves open.
 
     The opener is read whole; what follows it is prose and is read by nobody.
     The two rules across the columns are here because neither can be asked of
-    one cell: they compare `Gap` against `Verification` and against `Status`.
+    one cell: they compare `Gap` against `Mechanism` and against `Status`.
     """
     defects = []
     bare = cell in BARE_GAP_OPENERS
@@ -550,9 +542,9 @@ def gap_defects(where: str, cell: str, verification: str, status: str) -> list[s
             f"and then the argument"
         )
         return defects
-    if verification in BARE_TOKENS and bare:
+    if mechanism in BARE_TOKENS and bare:
         defects.append(
-            f"{where}: `Verification` is {verification!r} and `Gap` is {cell!r} -- a row "
+            f"{where}: `Mechanism` is {mechanism!r} and `Gap` is {cell!r} -- a row "
             f"with no mechanism and no gap claims a coverage it does not have"
         )
     if status == "verified" and not bare:
@@ -593,7 +585,7 @@ def row_defects(where: str, kind_cell: str, statement: str, sources: str) -> lis
     return defects
 
 
-# A backticked Rust path in a Verification cell: `crate::module::name`, or the
+# A backticked Rust path in a `Mechanism` cell: `crate::module::name`, or the
 # `::name` shorthand for "same module as the path just before it". A single
 # segment is prose, and a CamelCase last segment is a type or an enum variant,
 # not something `fn` declares.
@@ -606,7 +598,7 @@ FN = re.compile(r"\bfn\s+([a-z_]\w*)")
 # journal; a story is the first cell of a row, behind its checkbox.
 EPIC_HEAD = re.compile(r"^##\s+(?:\d+\.\s+)?(?P<key>[A-Z][A-Z0-9-]*)\b")
 STORY_ROW = re.compile(r"^\|\s*`\[(?P<done>[ x])\]`\s*(?P<name>[^|]+?)\s*\|")
-# What a Verification cell says after "lands with": the story, then an optional
+# What a `Gap` cell says after "lands with": the story, then an optional
 # parenthesis naming the epic, then whatever note the cell adds. No story name
 # carries a parenthesis or a sentence break, so the name ends at the first of
 # either.
@@ -681,7 +673,7 @@ def duplicate_stories(path: Path) -> list[str]:
 
 
 def cited_story(cell: str) -> tuple[str, str | None] | None:
-    """The story a Verification cell lands with, and the epic it claims."""
+    """The story a `Gap` cell lands with, and the epic it claims."""
     if "lands with" not in cell:
         return None
     text = NOTE.split(cell.split("lands with", 1)[1])[0].strip()
@@ -752,11 +744,11 @@ CITED_STORY = re.compile(
     r"\(`ambre-roadmap\.md`\s*(?P<epic>[^),]*)"
 )
 # The same citation with the parenthesis left off. It reads as a citation and
-# resolves to nothing: 41 of them named a story no gate then held, and one named
-# a story that had closed into the journal while the sentence still said
-# "the roadmap's". The name is on the line the word `Story` is on, so a citation
-# wrapped across two lines is this defect too, and is rewrapped rather than
-# excused.
+# resolves to nothing: no gate holds a name it cannot join, so the story behind
+# it is free to be renamed, or to close into the journal while the sentence
+# still says "the roadmap's". The name is on the line the word `Story` is on, so
+# a citation wrapped across two lines is this defect too, and is rewrapped rather
+# than excused.
 BARE_STORY = re.compile(r"(?P<name>`[^`]+`|\"[^\"]+\")\s*[Ss]tory\b")
 
 
@@ -939,7 +931,7 @@ def stated_counts(text: str) -> dict[str, int]:
 
 
 def table_defects(spec: str, table: list[tuple[int, str, str]]) -> list[str]:
-    """Whether one table that declares `Kind` obeys the grammar of section 1.B.
+    """Whether one table that declares `Kind` obeys the grammar of section 1.C.
 
     Two rules about the table as a whole; the cells of one row are
     `row_defects`. A table mixing a state kind with an operation kind
@@ -951,9 +943,8 @@ def table_defects(spec: str, table: list[tuple[int, str, str]]) -> list[str]:
     What no rule here holds is the line between `PRE` and `FAIL`, because it is
     semantic: a `PRE` binds an obligation nothing checks, a `FAIL` states a
     refusal the operation performs. Writing both for one condition states one
-    guard twice, which four rows of `trame-cell-merges` did, and doubles one
-    test into two `verified` rows. The template carries the test that separates
-    them; a reader applies it.
+    guard twice, and doubles one test into two `verified` rows. The template
+    carries the test that separates them; a reader applies it.
     """
     defects = []
     # An unknown kind is reported once, by `row_defects`, which reads the cell
@@ -1246,8 +1237,8 @@ def main() -> int:
                         f"seventh column exists to take apart"
                     )
                 else:
-                    mechanism = cell.get(VERIFICATION, "")
-                    errors += verification_defects(where, mechanism)
+                    mechanism = cell.get(MECHANISM, "")
+                    errors += mechanism_defects(where, mechanism)
                     errors += gap_defects(where, cell.get(GAP, ""), mechanism, status)
                 kind = kind_cell.strip("`")
                 table.append((lineno, rid, kind))
@@ -1288,19 +1279,19 @@ def main() -> int:
 
             # The mechanism cell by name, never by position. `binding` is the cell
             # the story citation lives in, which the split moved into `Gap`.
-            verification = cell.get(VERIFICATION, rest.rsplit("|", 1)[-1])
+            held_by = cell.get(MECHANISM, rest.rsplit("|", 1)[-1])
             if status in OWES_STORY:
                 errors += story_defects(where, status, binding, schedule, closed)
-            if status != "unimplemented" and "not built" in verification:
+            if status != "unimplemented" and "not built" in held_by:
                 errors.append(f"{where}: says 'not built' but status is {status!r}")
             if status != "unimplemented":
                 # A `Gap` names a test too -- "the half that is held is `::name`" --
                 # so both cells are read for a path the workspace does not carry.
-                cited_in = f"{verification} | {cell.get(GAP, '')}"
+                cited_in = f"{held_by} | {cell.get(GAP, '')}"
                 for defect in unresolved_citations(cited_in, per_crate, pooled):
                     errors.append(f"{where}: {defect}")
             if status == "verified":
-                for token in CITED.findall(verification):
+                for token in CITED.findall(held_by):
                     name = token.lstrip(":").split("::")[-1]
                     if not name[:1].isupper():
                         leans[name].append(rid)

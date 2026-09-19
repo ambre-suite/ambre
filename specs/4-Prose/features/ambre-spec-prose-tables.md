@@ -16,7 +16,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-009` | `INV` | A merged region MUST be held as its two corner cells alone: a row count, a column count and a grid position MUST NOT be stored, and the span MUST be worked out from the grid the table has now. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-227` | `INV` | Every row of a table MUST hold one cell per column. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Insert a row or a column
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-231` | `POST` | A column insert MUST splice the matching width entry in the same operation that writes the cells. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-232` | `POST` | A column insert carrying no width MUST take the document's default width. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -39,7 +39,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Delete a row or a column
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-235` | `POST` | A column delete MUST remove the matching width entry in the same operation that removes the cells. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-049` | `POST` | A merged region MUST be dropped when either of its corners is deleted. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -50,14 +50,14 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Resize a column
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-239` | `POST` | A resize MUST rewrite the width entry of the column it names. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-240` | `FRAME` | A resize MUST NOT change the number of width entries, the width of another column, or the text of any cell. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Merge cells
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-047` | `FAIL` | A merge whose covered cells are not a solid rectangle MUST be refused. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-046` | `FAIL` | A merge MUST be refused while any covered cell holds text, and nothing MUST be written. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -69,7 +69,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.6 Unmerge a region
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-245` | `POST` | An unmerge MUST remove the region the named cell anchors, or the one covering it. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-246` | `POST` | A covered cell's text MUST reappear verbatim when the region is unmerged. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -77,28 +77,28 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.7 Style a cell
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-248` | `POST` | A cell style MUST be written on the cell the command names, and on no other. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-249` | `FRAME` | Styling a cell MUST NOT change its text, the column widths, or the merge map. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.8 Move the caret to another cell
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-250` | `POST` | Traversal MUST land on a region's anchor and skip the cells it covers. | this spec section 4 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-051` | `FRAME` | Moving the caret between cells MUST NOT change the document. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.9 Move the caret past the last cell
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-251` | `POST` | Moving past the last cell MUST append a row and put the caret in its first cell. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-252` | `FRAME` | Appending that row MUST NOT change the text of an existing cell, the column widths, or the merge map. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.10 Validate the table after a remote change
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-253` | `POST` | Each region whose anchor or extent no longer resolves to a live cell MUST be dropped. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-FEAT-254` | `POST` | Two regions covering one cell MUST resolve to the later of the two, and the other MUST be dropped. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -107,7 +107,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.11 Insert or move a block
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-040` | `FAIL` | An insert or a move whose result breaks the nesting rules of the document MUST be refused, and the refusal MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
 

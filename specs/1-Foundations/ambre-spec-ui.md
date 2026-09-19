@@ -23,7 +23,7 @@ This thread owns no gesture: it is a place, and every row below binds it at ever
 gestures it hosts belong to `ambre-spec-frame.md`, to `ambre-spec-chrome.md` and to each
 application.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UI-THREAD-049` | `INV` | The UI thread MUST NOT open a cryptography path. | `ambre-spec-zero-knowledge.md` (`ZK-002`); `ambre-spec-architecture.md`, `ARCH-004` | cargo-deny -- `deny.toml` grants `ambre-crypto` to `ambre-sync` and, for one host-only fixture hash, to `ambre-logic`. Every interface crate fails the job on the line that would add it, and the cipher, the passphrase derivation and the key agreement each carry a ban of their own | none | verified |
 | `UI-THREAD-021` | `INV` | A document snapshot the launcher carries to the local store MUST stay opaque bytes: the launcher MUST NOT decode one. | this spec section 2; `SYNC-011` | cargo-deny -- `deny.toml` allows `loro` in the four application crates alone, so `ambre-app`, which is the crate that carries a snapshot to the browser database, has no way to read it | none | verified |

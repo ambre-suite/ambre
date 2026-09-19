@@ -21,7 +21,7 @@ is normative in `ambre-spec-message-bus.md`. The prefix is `UNDO`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UNDO-004` | `INV` | The history MUST NOT survive the document being closed. | this spec section 3 | Trame `ambre_trame::logic::tests::group2::undo_stack_cleared_on_doc_close`; Toile `ambre_logic::dispatch::tests::close_document_drops_state_and_forwards` | none | verified |
 | `UNDO-009` | `INV` | A command that changes nothing MUST NOT refresh the undo affordances. | this spec section 4 | none | unheld -- it is the half `UNDO-006` was carrying, and it binds every mutating command rather than the undo itself, so no test of this feature reaches it. In Toile the question does not arise: twenty-eight handlers of thirty emit no availability at all; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -31,7 +31,7 @@ is normative in `ambre-spec-message-bus.md`. The prefix is `UNDO`.
 One gesture with two directions and one set of rules. The five steps are the same whichever way the
 history moves, so the two share a table rather than repeating one.
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UNDO-001` | `POST` | An undo MUST revert this peer's own last operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the peer's own edit back as reverted; Toile `ambre_toile::logic::convergence_tests::undo_reverts_create_and_redo_restores` | partial -- Prose is design-only; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UNDO-007` | `FRAME` | An undo MUST NOT revert a remote peer's operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the remote value back unchanged | partial -- Toile drives no remote change at all, so nothing there holds the half that matters: an undo that reached a collaborator's work; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |

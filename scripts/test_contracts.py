@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """What `contracts.py` reads, and what it refuses.
 
-This gate holds the row grammar of the whole corpus, and every rule it carries
-was written after a drift it could not see: 519 rows dropped the backticks
-around their `Kind` and passed a vocabulary check; a seventh column moved the
-`Verification` cell and every position-based read followed the wrong cell in
-silence; a status renamed under a `Counter` returned 0 and under-reported the
-shipped surface by 826 rows.
+This gate holds the row grammar of the whole corpus, and each way it goes wrong
+is quiet. A row dropping the backticks around its `Kind` passes a vocabulary
+check that compares the stripped word. A new column moves every cell a
+position-based read follows. A status renamed under a `Counter` returns 0 and
+under-reports the surface it counts.
 
-The pattern is the same each time. The gate answered, the answer was wrong, and
-nothing in the repository disagreed with it. These tests are what disagrees.
+The pattern is the same each time. The gate answers, the answer is wrong, and
+nothing in the repository disagrees with it. These tests are what disagrees.
 
 Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
 """
@@ -71,16 +70,16 @@ class Header(unittest.TestCase):
     """A cell is read by the name its own header declares, never by position."""
 
     def test_the_columns_are_read_in_the_order_the_header_writes_them(self):
-        header = "| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |"
+        header = "| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |"
         self.assertEqual("Gap", contracts.header_cells(header)[5])
 
     def test_a_reordered_header_moves_the_cell_with_it(self):
-        """Pinning a column to its place is what a seventh column broke in
-        silence: `Verification` was 'the last one before the status'."""
-        columns = contracts.header_cells("| ID | Kind | Statement | Sources | Gap | Verification | Status |")
+        """Pinning a column to its place is what a new column breaks in
+        silence: 'the last one before the status' names a different cell."""
+        columns = contracts.header_cells("| ID | Kind | Statement | Sources | Gap | Mechanism | Status |")
         rest = " `INV` | The frame MUST land. | derived | none | `insta` | verified |"
         cells = contracts.row_cells(columns, rest)
-        self.assertEqual("`insta`", cells["Verification"])
+        self.assertEqual("`insta`", cells["Mechanism"])
         self.assertEqual("none", cells["Gap"])
 
     def test_a_table_with_no_header_yields_no_cells(self):
@@ -156,11 +155,11 @@ class Conjunction(unittest.TestCase):
         self.assertEqual(("FAIL", "FRAME"), contracts.BUNDLING_KINDS)
 
 
-class Verification(unittest.TestCase):
+class Mechanism(unittest.TestCase):
     """A total read: the cell is a mechanism, and nothing else."""
 
     def defects(self, cell):
-        return contracts.verification_defects(WHERE, cell)
+        return contracts.mechanism_defects(WHERE, cell)
 
     def test_an_empty_cell_is_refused(self):
         self.assertIn("write `none`", self.defects("")[0])
@@ -201,8 +200,8 @@ class Verification(unittest.TestCase):
 class Gap(unittest.TestCase):
     """What the mechanism leaves open, and the two rules across the columns."""
 
-    def defects(self, cell, verification="`insta`", status="untested"):
-        return contracts.gap_defects(WHERE, cell, verification, status)
+    def defects(self, cell, mechanism="`insta`", status="untested"):
+        return contracts.gap_defects(WHERE, cell, mechanism, status)
 
     def test_an_opener_off_the_closed_set_is_refused(self):
         self.assertIn("`Gap` opens on", self.defects("nothing holds it yet")[0])
@@ -216,7 +215,7 @@ class Gap(unittest.TestCase):
                 self.assertEqual([], self.defects(f"{opener}the belt is not written"))
 
     def test_no_mechanism_and_no_gap_is_a_coverage_the_row_does_not_have(self):
-        self.assertIn("claims a coverage", self.defects("none", verification="none")[0])
+        self.assertIn("claims a coverage", self.defects("none", mechanism="none")[0])
 
     def test_verified_beside_an_open_gap_is_two_answers_to_one_question(self):
         found = self.defects("partial -- the belt holds half", status="verified")

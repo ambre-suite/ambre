@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-010` | `INV` | Pagination MUST run in the Logic thread. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-064` | `INV` | The layout the Logic thread produces MUST be the single source of truth for both the screen and PDF export: a second layout computation MUST NOT exist beside it. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -50,7 +50,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.2 Lay the whole document out again
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-076` | `POST` | A full recomputation MUST measure both bands and assign every footnote ordinal before it places its first block. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-077` | `POST` | A full recomputation MUST place blocks in the order of a depth-first walk of the block tree: that walk is the document flow. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -59,7 +59,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.3 Reflow after an edit
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-080` | `POST` | A partial reflow MUST produce the layout a full recomputation of the same document would have produced. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-081` | `POST` | A partial reflow MUST resume placement at the edited block. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -70,7 +70,7 @@ status values are normative in `ambre-spec-template.md`.
 
 ### 1.4 Settle the table of contents
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-019` | `POST` | Table-of-contents stabilization MUST run as a bounded multi-pass step. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-084` | `FRAME` | Settling the table of contents MUST NOT run on the path that answers a keystroke. | this spec section 2 | not built | unbuilt -- lands with the "Pagination" Story (`ambre-roadmap.md` E5) | unimplemented |

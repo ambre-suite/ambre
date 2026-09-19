@@ -20,7 +20,7 @@ machine it belongs to and is not restated. The comment tool drops a thread where
 
 ### 1.1 The state
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-024` | `INV` | A pin MUST stay on the thing it is about: an element, or a place on the board, never a place in the current view. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_thread_anchors_to_an_element_or_to_a_world_point` -- it reads back a thread anchored to an element and one anchored to a world point, and no anchor carries a viewport coordinate at all | none | verified |
 | `TOILE-025` | `OBS` | A pin whose element is gone MUST NOT be painted. | this spec section 3; `features/ambre-spec-toile-connectors.md section 3` | `ambre_toile::logic::convergence_tests::a_pin_leaves_the_board_with_its_anchor_element` -- it deletes the anchor element and reads no pin out of the derived viewport | none | verified |
@@ -40,7 +40,7 @@ machine it belongs to and is not restated. The comment tool drops a thread where
 
 ### 1.2 Drop a comment on the board
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-070` | `POST` | Dropping a comment MUST leave a thread that is open, anchored where it was dropped, and carrying its first message. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_fresh_thread_is_open_anchored_and_carries_its_first_message` -- it reads the three clauses (the open flag, the anchor and the first body) off a freshly dropped thread | none | verified |
 | `TOILE-UI-307` | `POST` | Dropping a comment MUST open its composer, so the user types where they clicked. | this spec section 4 | none | unheld -- `ambre_toile::ui::tool::tests::the_comment_tool_drops_a_thread_where_it_clicks` holds that the drop writes nothing and hands the view an anchor, but the composer itself, the field that opens at the click, is wasm-only Leptos mounted by no test; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -48,7 +48,7 @@ machine it belongs to and is not restated. The comment tool drops a thread where
 
 ### 1.3 Write in a thread
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-071` | `POST` | A reply MUST land at the end of the thread, after every message already in it. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_reply_lands_at_the_end_of_the_thread` -- it reads three bodies back in the order they were written, so a reply inserted before an earlier one fails it | none | verified |
 | `TOILE-FEAT-072` | `POST` | Correcting a message MUST change that message and leave the rest of the thread as it reads. | this spec section 3 | `ambre_toile::logic::convergence_tests::correcting_a_message_leaves_its_neighbours_as_they_read` -- it corrects the middle of three messages and reads all three back | none | verified |
@@ -58,7 +58,7 @@ machine it belongs to and is not restated. The comment tool drops a thread where
 
 ### 1.4 Resolve a thread
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-FEAT-015` | `POST` | Resolving a thread MUST mark it resolved. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_resolves_converge_and_keep_the_messages` -- the resolved flag it reads back | none | verified |
 | `TOILE-FEAT-105` | `POST` | Resolving a thread already resolved MUST change nothing. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_resolves_converge_and_keep_the_messages` -- the assertion that resolves an already resolved thread and reads no change | none | verified |
@@ -66,7 +66,7 @@ machine it belongs to and is not restated. The comment tool drops a thread where
 
 ### 1.5 Open a thread
 
-| ID | Kind | Statement (RFC 2119) | Sources | Verification | Gap | Status |
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-082` | `POST` | Clicking a pin MUST open that pin's thread. | this spec section 4; `features/ambre-spec-toile-selection.md section 3` | `ambre_toile::ui::comments::tests::a_click_on_a_pin_names_its_thread_and_a_miss_names_none` -- it names the thread a press on the marker resolves to, and none for a press beside it | none | verified |
 | `TOILE-UI-309` | `POST` | Clicking a thread in the board-wide list MUST bring the camera to that thread's anchor. | this spec section 4 | none | unheld -- the recentre is `ToileView::focus_thread`, which needs the wasm-only panel signals to be reached at all: no host test drives it, and it is the seam a point anchor and an element anchor take differently; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
