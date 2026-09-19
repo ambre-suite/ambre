@@ -151,7 +151,7 @@ authoritative: the Markdown is.
 
 `just spec-context <ID>` compiles what building one rule takes. The row, the frame conditions beside
 it, its operation, the design sections it cites, the rules it depends on, its mechanism, its gap.
-The order is `ambre-spec-template.md section 1.E`. At the median it is a third of a full read.
+The order is `ambre-spec-template.md section 1.H`. At the median it is a third of a full read.
 
 `just spec-context-story "<NAME>"` compiles the same closure for every row one story lands, because
 work starts at a story and the closure starts at an id. A block two rows share is quoted once and

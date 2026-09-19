@@ -24,13 +24,12 @@ lint:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets -- -D warnings
 
-# **One invocation for the whole tier.** The native tier used to run four
-# `cargo test` lines under four feature sets. Cargo caches a build per set, so
-# the tier compiled the workspace four times over and kept all four: 21 min from
-# a clean tree and a `target/` of 18 GB, past the 10 GB the shared CI cache
-# holds, so the job's cache was evicted about as often as it was restored. The
-# union of the four sets runs every test the four ran, from one build: 10 min
-# 40 s cold, 4.9 GB on disk.
+# **One invocation for the whole tier.** Cargo caches a build per feature set, so
+# four `cargo test` lines under four sets compile the workspace four times over
+# and keep all four: 21 min from a clean tree and a `target/` of 18 GB, past the
+# 10 GB the shared CI cache holds, so the job's cache is evicted about as often
+# as it is restored. The union of the four sets runs every test they run, from
+# one build: 10 min 40 s cold, 4.9 GB on disk.
 #
 # `--workspace` reaches `ambre-server` too: the package is excluded from
 # `default-members` (a native target that would break a wasm32 build), which
@@ -169,13 +168,14 @@ cov:
 
 # no implementation in the specs: fails on any function body in a ```rust fence,
 # on Rust shapes left in a non-rust fence, on a disallowed fence tag (lua, ...),
-# and on an unterminated fence (ambre-spec-template.md sec.0, Fences rule).
+# and on an unterminated fence (ambre-spec-template.md section 0, Fences rule).
 spec-code:
     python3 scripts/spec_code.py --check
 
 # Ledger of the per-spec contract tables (`ambre-contract-ledger.md`), written
 # by the script and by nothing else -- a hand-maintained roll-up is the same
-# failure mode as a hand-maintained test list, and it was already wrong by one.
+# failure mode as a hand-maintained test list: it is wrong the first time a row
+# lands without it.
 # Also enforces the rules that keep `unimplemented` honest: a declared status
 # value, a Story citation on every unbuilt row, and a cited `fn` that resolves.
 
@@ -189,9 +189,10 @@ contracts-write:
 
 # The corpus parsed once, for a reader that is not a human: one record per
 # contract row, and the edges each row asserts. The ledger is a roll-up and drops
-# the statement, the sources and the mechanism, so everything that needs a row
-# re-parsed 121 documents to get it back. Also resolves every edge -- the pillar
-# of a `Sources` cell was the one form nothing resolved.
+# the statement, the sources and the mechanism, so a tool needing a row whole
+# parses the corpus again to get it back. This holds it parsed, and resolves
+# every edge -- the README pillar of a `Sources` cell included, which is the one
+# form no other gate reads.
 
 # contract index and graph: fail when the files on disk are not what the corpus says.
 index:
@@ -250,11 +251,11 @@ spec-context-cost:
 spec-context-story NAME:
     python3 scripts/spec_context.py --story "{{NAME}}"
 
-# The three answers under a contract table are one paragraph to a reader, and the
-# corpus let them run to 463 words of which most was the document's own history:
-# which conjunction came apart, what the pass added, which row carried which
-# half. That is a commit message. The cap is 150 words, six sentences under the
-# 25-word cap, and every document is under it.
+# The three answers under a contract table are one paragraph to a reader, so the
+# cap is 150 words: six sentences under the 25-word cap. What fills them when
+# nothing holds them is the document's own history -- which conjunction came
+# apart, what the pass added, which row carried which half. That is a commit
+# message, and the second metric refuses it.
 
 # the answers under a contract table: how many words they spend, and whether any
 # line writes the document's own history.
