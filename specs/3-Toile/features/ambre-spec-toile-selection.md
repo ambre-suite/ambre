@@ -52,8 +52,8 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-UI-031` | `POST` | A marquee MUST take every element it covers. | this spec section 2 | `ambre_toile::ui::hit::tests::marquee_selects_covered_elements` | none | verified |
 | `TOILE-UI-235` | `POST` | A marquee MUST replace the selection on release, not while it is dragged. | this spec section 3 | `ambre_toile::ui::tool::tests::drag_empty_makes_a_marquee_then_selects` | none | verified |
-| `TOILE-UI-236` | `POST` | A marquee MUST return the same target a click on the same element would return. | this spec section 2; section 4 | none | fails -- the marquee returns raw members and never climbs the group chain, so one gesture selects a group and the other its parts, section 5; lands with the `A marquee takes what it was drawn around` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-UI-237` | `POST` | A rotated element MUST be judged by the shape the user sees, not by the upright box around it. | this spec section 2 | none | fails -- containment is read on the unrotated bounds, so a tilted shape is taken by a rectangle that does not cover it, section 5; lands with the `A marquee takes what it was drawn around` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-236` | `POST` | A marquee MUST return the same target a click on the same element would return. | this spec section 2; section 4 | `ambre_toile::ui::tool::tests::marquee_resolves_a_member_to_its_group` -- a marquee over a member resolves to the top-most group, the target a click returns | none | verified |
+| `TOILE-UI-237` | `POST` | A rotated element MUST be judged by the shape the user sees, not by the upright box around it. | this spec section 2 | `ambre_toile::ui::hit::tests::marquee_judges_a_rotated_element_by_its_rotated_box` -- a marquee over the unrotated tip of a rotated long rect misses, and one over the rotated shape takes it | none | verified |
 | `TOILE-UI-238` | `FRAME` | A marquee MUST NOT take a locked element or a group node. | this spec section 2 | none | unheld -- `ambre_toile::ui::hit::tests::marquee_selects_covered_elements` covers one element inside and one outside, and neither is locked nor a group; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 Enter and leave a group scope
@@ -79,10 +79,9 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: a selection is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It leaves the client only as presence, sealed like any other
   frame (`ZK-005`).
-* **Verification.** 19 `verified`, 3 `failing`, 7 `untested`. What holds is the geometry, select-all
-  covering the whole board (`TOILE-UI-033`) with the pick's exclusions, and a locked element wearing no box.
-  What is loose is the gestures: the scope is entered and left by handlers no test drives. The failures are
-  the hairline, the marquee and its rotated containment.
+* **Verification.** 21 `verified`, 1 `failing`, 7 `untested`. What holds is the geometry and select-all with
+  the pick's exclusions. A locked element wears no box, and a marquee returns a click's target and judges the
+  rotated shape as drawn. What is loose is the gestures. The one failure is the hairline.
 
 ---
 
@@ -117,11 +116,9 @@ sub-group. A hit outside the scope falls back to the top-most group.
 that straddles the border, keep it when the rectangle holds its centre or when its geometry contains
 that centre. Skip a locked element and a group (`TOILE-UI-031`, `TOILE-UI-238`).
 
-The containment test reads the upright bounds, not the rotated geometry. A long shape turned
-forty-five degrees is judged by a box larger than itself, so a rectangle that covers it misses it
-(`TOILE-UI-237`). The marquee also stops at the raw hits: it does not climb the group chain the way
-a click does. The same two elements come back as their group under a click and as themselves under a
-rectangle (`TOILE-UI-236`).
+The containment test reads the rotated box, the shape the user sees, not the unrotated bounds
+(`TOILE-UI-237`). The marquee resolves each hit the way a click does: up the group chain to the
+top-most group (`TOILE-UI-236`).
 
 **Handles.** For a single selection the box is four rotated edges with a square at each rotated
 corner. A rotated rectangle drawn as a rectangle would degrade to its upright bounding box on the
@@ -181,9 +178,6 @@ ghost outline, never as this box (`features/ambre-spec-toile-presence.md section
 * **A connector cannot be picked** (`TOILE-UI-035`). The pick walk drops every connector node before
   testing, so an arrow cannot be selected, styled, deleted on its own or double-clicked to caption
   it. The captioning half is a Story; the selection half has no owner today.
-* **A marquee and a click do not select the same thing** (`TOILE-UI-236`). A click on a grouped
-  element selects its top-most group; a rectangle over that same group selects its members. Two
-  gestures for one job, and the group behaves as one object under only one of them.
 * **The pick radius is in world units** (`TOILE-UI-225`). The floor that keeps a hairline clickable
   is four board units, not four pixels. It is four pixels at one zoom and a fortieth of one at
   forty. Zoomed out, a thin line cannot be hit; zoomed in, a stroke grabs from far away.

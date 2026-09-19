@@ -127,10 +127,37 @@ pub fn hit_topmost(nodes: &[DisplayNode], world_pt: Point) -> Option<ElementId> 
         .map(|e| e.id.clone())
 }
 
+/// The world-space upright box of an element's **rotated** shape, for marquee
+/// containment (`TOILE-UI-237`). `bounds` is the unrotated rect and `transform`
+/// rotates it about its center; the box the user sees is the rotated one.
+fn rotated_aabb(e: &DisplayElement) -> Rect {
+    let b = e.bounds;
+    let corners = [
+        Point::new(b.x0, b.y0),
+        Point::new(b.x1, b.y0),
+        Point::new(b.x1, b.y1),
+        Point::new(b.x0, b.y1),
+    ];
+    let mut min_x = f64::INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    for c in corners {
+        let p = e.transform * c;
+        min_x = min_x.min(p.x);
+        min_y = min_y.min(p.y);
+        max_x = max_x.max(p.x);
+        max_y = max_y.max(p.y);
+    }
+    Rect::new(min_x, min_y, max_x, max_y)
+}
+
 /// Marquee (rubber-band) selection: every element whose world AABB intersects
 /// `rect`, refined to exact geometry for the partially-covered ones. An element
 /// fully inside `rect` is kept without an exact test; one straddling the border
 /// must actually intersect the geometry. Locked elements and groups are skipped.
+/// Containment reads the **rotated** box, the shape the user sees
+/// (`TOILE-UI-237`), not the unrotated `bounds`.
 pub fn marquee_hits(nodes: &[DisplayNode], rect: Rect) -> Vec<ElementId> {
     nodes
         .iter()
@@ -140,7 +167,7 @@ pub fn marquee_hits(nodes: &[DisplayNode], rect: Rect) -> Vec<ElementId> {
         })
         .filter(|e| !e.locked && !matches!(e.geom, DisplayGeom::Group))
         .filter(|e| {
-            let b = e.bounds;
+            let b = rotated_aabb(e);
             if rect.union(b) == rect {
                 // Fully contained.
                 true
@@ -322,5 +349,33 @@ mod tests {
         });
         let hits = marquee_hits(&[a, b], Rect::new(0.0, 0.0, 100.0, 100.0));
         assert_eq!(hits, vec![ElementId("a".to_owned())]);
+    }
+
+    /// `TOILE-UI-237`: a rotated element is judged by the shape the user sees,
+    /// not by the unrotated bounds. A long rect rotated 90 degrees is tall and
+    /// thin, so a marquee over the unrotated tip must miss it.
+    #[test]
+    fn marquee_judges_a_rotated_element_by_its_rotated_box() {
+        let tilted = DisplayNode::Element({
+            let mut e = elem(
+                DisplayGeom::Rect,
+                Rect::new(-50.0, -5.0, 50.0, 5.0),
+                Affine::rotate(std::f64::consts::FRAC_PI_2),
+            );
+            e.id = ElementId("tilted".to_owned());
+            e
+        });
+        // Over the unrotated tip (x 40..55): off the rotated shape, a miss.
+        let miss = marquee_hits(
+            std::slice::from_ref(&tilted),
+            Rect::new(40.0, -1.0, 55.0, 1.0),
+        );
+        assert!(miss.is_empty(), "the rotated shape is not there");
+        // Covering the rotated shape (now tall) takes it.
+        let hit = marquee_hits(
+            std::slice::from_ref(&tilted),
+            Rect::new(-10.0, -60.0, 10.0, 60.0),
+        );
+        assert_eq!(hit, vec![ElementId("tilted".to_owned())]);
     }
 }

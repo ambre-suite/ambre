@@ -133,6 +133,9 @@ enum Drag {
     Marquee {
         start: Point,
         current: Point,
+        /// The group scope at press time, so release resolves each hit the way a
+        /// click would (`TOILE-UI-236`).
+        scope: Option<ElementId>,
     },
 }
 
@@ -231,6 +234,7 @@ impl SelectTool {
                 self.drag = Some(Drag::Marquee {
                     start: world,
                     current: world,
+                    scope: scope.cloned(),
                 });
                 SelectOutcome::None
             }
@@ -254,7 +258,7 @@ impl SelectTool {
                 *last_angle = (world - *center).atan2();
                 SelectOutcome::None
             }
-            Some(Drag::Marquee { start, current }) => {
+            Some(Drag::Marquee { start, current, .. }) => {
                 *current = world;
                 SelectOutcome::Marquee(Rect::from_points(*start, *current))
             }
@@ -297,9 +301,22 @@ impl SelectTool {
                 let radians = base_rot + (now - start_angle);
                 SelectOutcome::Command(ToileCommand::RotateElement { id, radians })
             }
-            Drag::Marquee { start, current } => {
+            Drag::Marquee {
+                start,
+                current,
+                scope,
+            } => {
                 let rect = Rect::from_points(start, current);
-                SelectOutcome::SelectionChanged(marquee_hits(&display.nodes, rect))
+                // Each covered element resolves to the target a click would
+                // return: the top-most group, or itself (`TOILE-UI-236`).
+                let mut targets = Vec::new();
+                for hit in marquee_hits(&display.nodes, rect) {
+                    let target = resolve_group_target(hit, display, scope.as_ref());
+                    if !targets.contains(&target) {
+                        targets.push(target);
+                    }
+                }
+                SelectOutcome::SelectionChanged(targets)
             }
         }
     }
@@ -314,7 +331,7 @@ impl SelectTool {
     /// outcome round-trip.
     pub fn marquee(&self) -> Option<Rect> {
         match &self.drag {
-            Some(Drag::Marquee { start, current }) => Some(Rect::from_points(*start, *current)),
+            Some(Drag::Marquee { start, current, .. }) => Some(Rect::from_points(*start, *current)),
             _ => None,
         }
     }
@@ -1397,6 +1414,28 @@ mod tests {
         let up = tool.pointer_up(Point::new(200.0, 200.0), &disp);
         assert!(
             matches!(up, SelectOutcome::SelectionChanged(ref ids) if ids == &[ElementId("a".into())])
+        );
+    }
+
+    /// `TOILE-UI-236`: a marquee resolves a covered member to its top-most group,
+    /// the target a click on it would return.
+    #[test]
+    fn marquee_resolves_a_member_to_its_group() {
+        let disp = viewport(vec![
+            member_elem("m", Rect::new(0.0, 0.0, 100.0, 100.0), "g"),
+            group_node("g", Rect::new(0.0, 0.0, 100.0, 100.0), None),
+        ]);
+        let cam = cam();
+        let mut tool = SelectTool::new();
+        let w0 = Point::new(-200.0, -200.0);
+        assert!(matches!(
+            tool.pointer_down(w0, to_screen(&cam, w0), &[], &disp, &cam, None),
+            SelectOutcome::None
+        ));
+        let _ = tool.pointer_move(Point::new(200.0, 200.0));
+        let up = tool.pointer_up(Point::new(200.0, 200.0), &disp);
+        assert!(
+            matches!(up, SelectOutcome::SelectionChanged(ref ids) if ids == &[ElementId("g".into())])
         );
     }
 
