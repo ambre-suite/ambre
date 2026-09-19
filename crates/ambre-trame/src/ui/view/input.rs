@@ -512,7 +512,8 @@ impl TrameView {
         self.scroll_accum_y -= dr as f64 * step_y;
         if self.state.scroll_by(dr, dc) {
             self.viewport_changed = true;
-            self.pending_viewport = Some(self.state.scroll_viewport_cmd());
+            self.pending_viewport
+                .coalesce(self.state.scroll_viewport_cmd());
             ScrollOutcome::Moved
         } else {
             // Pinned against a grid border: the motion had nowhere to go.
@@ -642,7 +643,7 @@ impl TrameView {
                 tracing::error!("Trame: the outbox is full, the cursor move was dropped");
             }
             if let Some(scroll) = mv.scroll {
-                self.pending_viewport = Some(scroll);
+                self.pending_viewport.coalesce(scroll);
             }
             self.park_input_on(self.state.active_row(), self.state.active_col());
             self.announce_active();

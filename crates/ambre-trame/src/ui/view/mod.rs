@@ -38,6 +38,31 @@ use crate::render::{CommitDirection, FormulaAction};
 /// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
 const BLINK_MS: f64 = 530.0;
 
+/// The one-slot viewport queue (`TRAME-UI-025`). Every request source writes
+/// through [`coalesce`](Self::coalesce), so the slot holds at most one request
+/// and the newest wins. The frame flush drains it once.
+#[derive(Default)]
+struct ViewportQueue {
+    pending: Option<TrameCommand>,
+}
+
+impl ViewportQueue {
+    /// Replace the pending request with `cmd`; the newest request wins.
+    fn coalesce(&mut self, cmd: TrameCommand) {
+        self.pending = Some(cmd);
+    }
+
+    /// Take the one pending request, if any, leaving the slot empty.
+    fn take(&mut self) -> Option<TrameCommand> {
+        self.pending.take()
+    }
+
+    /// Restore a request the channel just dropped (`BUS-024`).
+    fn re_offer(&mut self, cmd: TrameCommand) {
+        self.pending = Some(cmd);
+    }
+}
+
 /// Compute the autofill destination rectangle from the source selection `src`
 /// and the cell `(row, col)` under the dragged handle (`trame-autofill`). The
 /// fill handle locks to a single axis: whichever direction the pointer extends
@@ -357,7 +382,7 @@ pub struct TrameView {
     /// fast key-repeat can't outrun the Logic thread. Set in `handle_input`,
     /// flushed in `update`. Only the newest is kept (it carries the highest
     /// `version`, which supersedes any it replaces).
-    pending_viewport: Option<TrameCommand>,
+    pending_viewport: ViewportQueue,
     /// Set once the inbound Logic channel disconnects (Logic thread gone) or a
     /// [`UiEvent::FatalError`] arrives. Halts all further sends; logged once.
     fatal: bool,
@@ -414,3 +439,49 @@ mod frame;
 mod input;
 mod interact;
 mod lifecycle;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scroll_cmd(version: u64) -> TrameCommand {
+        TrameCommand::ScrollViewport {
+            version,
+            row_start: 0,
+            row_end: 0,
+            col_start: 0,
+            col_end: 0,
+        }
+    }
+
+    /// Many request sources in one frame leave one request: the newest wins, and
+    /// one drain sends exactly one (`TRAME-UI-025`).
+    #[test]
+    fn the_viewport_queue_coalesces_to_one_request() {
+        let mut q = ViewportQueue::default();
+        assert!(q.take().is_none(), "an empty queue sends nothing");
+        q.coalesce(scroll_cmd(1));
+        q.coalesce(scroll_cmd(2));
+        let sent = q.take().expect("one pending request");
+        assert!(
+            matches!(sent, TrameCommand::ScrollViewport { version: 2, .. }),
+            "the newest request wins"
+        );
+        assert!(q.take().is_none(), "one drain sends exactly one request");
+    }
+
+    /// A request the channel dropped is re-offered, never doubled (`BUS-024`).
+    #[test]
+    fn a_dropped_request_is_re_offered_not_doubled() {
+        let mut q = ViewportQueue::default();
+        q.coalesce(scroll_cmd(3));
+        let sent = q.take().expect("pending");
+        q.re_offer(sent);
+        let again = q.take().expect("re-offered");
+        assert!(matches!(
+            again,
+            TrameCommand::ScrollViewport { version: 3, .. }
+        ));
+        assert!(q.take().is_none());
+    }
+}

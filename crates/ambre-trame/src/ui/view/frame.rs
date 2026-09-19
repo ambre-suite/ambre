@@ -18,7 +18,7 @@ impl TrameView {
         self.editor = None;
         self.edit_dirty = false;
         self.initial_viewport_sent = false;
-        self.pending_viewport = None;
+        self.pending_viewport = ViewportQueue::default();
         self.needs_full = true;
         self.viewport_changed = false;
         self.data_dirty = false;
@@ -124,7 +124,8 @@ impl TrameView {
                 // it and re-offers it when the channel is full (`BUS-024`). A
                 // dropped re-fetch would leave the cache showing the content
                 // this event just invalidated.
-                self.pending_viewport = Some(self.state.scroll_viewport_cmd());
+                self.pending_viewport
+                    .coalesce(self.state.scroll_viewport_cmd());
             }
             // Logic asks the canvas to adopt a selection it cannot derive locally.
             // An unmerge is the case: the freed cells stay selected, though the
@@ -235,7 +236,8 @@ impl TrameView {
         if !self.initial_viewport_sent {
             self.initial_viewport_sent = true;
             self.needs_full = true;
-            self.pending_viewport = Some(self.state.scroll_viewport_cmd());
+            self.pending_viewport
+                .coalesce(self.state.scroll_viewport_cmd());
         }
 
         // Flush the coalesced viewport request: at most one ScrollViewport per
@@ -245,7 +247,7 @@ impl TrameView {
         if let Some(cmd) = self.pending_viewport.take()
             && !self.send_command_lossy(cmd.clone())
         {
-            self.pending_viewport = Some(cmd);
+            self.pending_viewport.re_offer(cmd);
         }
 
         // Pick up a theme switch (chrome toggled it): repaint everything with
@@ -588,7 +590,8 @@ impl TrameView {
         }
         self.needs_full = true;
         self.viewport_changed = true;
-        self.pending_viewport = Some(self.state.scroll_viewport_cmd());
+        self.pending_viewport
+            .coalesce(self.state.scroll_viewport_cmd());
         true
     }
 

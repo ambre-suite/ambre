@@ -36,7 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-UI-004` | `POST` | A scroll MUST request no more than the visible range plus a bounded padding. | this spec section 2 | none | unheld -- the window is built in `ui/grid/state.rs::scroll_viewport_cmd` and nothing compares the requested bounds with the visible range. The padding is not the constant it reads as: the row window is stretched by the count of every hidden row the cache knows, not by those inside the window; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-144` | `POST` | A scroll MUST request every cell the user can see. | this spec section 2 | none | fails -- on the column axis the window is sized from the uniform metric, and a resized column can be a third of it, so a screen of narrow columns runs past the last one requested. Those columns are never asked for, and the same window evicts them if an earlier one had brought them in (section 5). The row axis survives by margin, not by rule; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
-| `TRAME-UI-025` | `POST` | At most one viewport request MUST leave the UI thread per frame. | this spec section 2 | none | fails -- the one-slot queue coalesces the scroll path alone: `ui/view/frame.rs` sends a request past it twice, on a `DataReset` or `CondFormatsUpdated` event and on a document's first frame. A keystroke answered by a `DataReset` in the same frame as a scroll sends two; lands with the `One viewport request per frame` Story (`ambre-roadmap.md` E7) | failing |
+| `TRAME-UI-025` | `POST` | At most one viewport request MUST leave the UI thread per frame. | this spec section 2 | `ambre_trame::ui::view::tests::the_viewport_queue_coalesces_to_one_request` -- every request source collapses to one drain; `::a_dropped_request_is_re_offered_not_doubled` -- a dropped request is re-offered, never doubled | none | verified |
 | `TRAME-UI-145` | `FRAME` | A scroll MUST NOT change which cell is active or which range is selected. | this spec section 2 | none | unheld -- `scroll_by` writes the origin and reads nothing else, but no test drives it: `scroll_by`, `scroll_viewport_cmd` and `accepted_version` are named by no test in the crate; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 The wheel turns
@@ -67,11 +67,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the viewport is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What crosses is a request and a display slice, never
   document data (`TRAME-UI-001`).
-* **Verification.** 5 `verified`, 2 `failing`, 10 `untested`, 2 `unimplemented`. What holds is what is
-  drawn or hit-tested. What is loose is every state machine: the window, the version guard, the
-  eviction, the wheel, the metric adoption. No test names `scroll_by`, `scroll_viewport_cmd` or
-  `accepted_version`. The failures are rules the code contradicts, one of them
-  naming a single send site where there are three.
+* **Verification.** 6 `verified`, 1 `failing`, 10 `untested`, 2 `unimplemented`. What holds is what is
+  drawn or hit-tested, and the one-slot queue that caps a frame at one request (`TRAME-UI-025`).
+  What is loose is every state machine: the window, the version guard, the eviction, the wheel, the
+  metric adoption. The one failure is the narrow-column window (`TRAME-UI-144`).
 
 ---
 
@@ -205,11 +204,6 @@ painter never leaves it (`TRAME-UI-013`). Every fill comes from the theme palett
   same shape but survives, its one-screen padding covering the ratio between the default height and
   its floor. The fix is to size the window by walking the metrics the grid draws -- the walk
   `TRAME-UI-143` already asks the two implementations to share.
-* **A viewport request leaves outside the queue** (`TRAME-UI-025`). `ui/view/frame.rs` sends one on
-  a `DataReset` and on a document's first frame without passing through the one slot. The
-  per-frame bound is then a convention of the scroll path rather than a property of the code. It costs a
-  round trip per keystroke today, because a cell write answers with a bare `DataReset`
-  (`features/ambre-spec-trame-engine.md`), and each answer carries the whole window.
 * **The padding grows with the filter, not with the window** (`TRAME-UI-004`). The row window is
   extended by the count of every hidden row in the cache. The name and the comment say the hidden
   rows in the window. The two agree only while the cache holds one window. The eviction makes that

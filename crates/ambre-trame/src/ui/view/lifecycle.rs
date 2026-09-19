@@ -93,7 +93,7 @@ impl TrameView {
             text_enabled: true,
             draw_stats: DrawStats::default(),
             initial_viewport_sent: false,
-            pending_viewport: None,
+            pending_viewport: ViewportQueue::default(),
             fatal: false,
             needs_full: true,
             viewport_changed: false,

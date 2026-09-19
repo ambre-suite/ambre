@@ -19,12 +19,12 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2487 rows: 1737 shipped, of which 834 loose. 750 unbuilt.**
+**2487 rows: 1737 shipped, of which 833 loose. 750 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 212 | 218 | 473 |  | 903 |
-| `failing` | 39 | 47 | 80 |  | 166 |
+| `verified` | 212 | 219 | 473 |  | 904 |
+| `failing` | 39 | 46 | 80 |  | 165 |
 | `untested` | 274 | 144 | 234 |  | 652 |
 | `human-review` | 7 |  |  |  | 7 |
 | `qa-manual` | 3 | 4 | 2 |  | 9 |
@@ -85,7 +85,7 @@
 | `ambre-spec-trame-find-replace.md` | 6 | 6 | 4 | 2 |  |
 | `ambre-spec-trame-formula-engine.md` | 39 | 38 | 30 | 8 | 1 |
 | `ambre-spec-trame-function-library.md` | 28 | 21 | 10 | 11 | 7 |
-| `ambre-spec-trame-grid-viewport.md` | 19 | 17 | 5 | 12 | 2 |
+| `ambre-spec-trame-grid-viewport.md` | 19 | 17 | 6 | 11 | 2 |
 | `ambre-spec-trame-headers.md` | 9 | 9 | 4 | 5 |  |
 | `ambre-spec-trame-import-export.md` | 40 | 27 | 15 | 12 | 13 |
 | `ambre-spec-trame-named-ranges.md` | 10 | 10 | 3 | 7 |  |
