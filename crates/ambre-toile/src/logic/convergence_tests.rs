@@ -4072,3 +4072,40 @@ fn a_reaction_on_a_missing_target_answers_an_error() {
         [ToileEvent::Error(ToileError::NoSuchElement(_))]
     ));
 }
+
+/// `TOILE-214`: a remote change that cannot be imported reports a distinct
+/// import failure, never a `NoSuchElement` with an empty id.
+#[test]
+fn a_remote_change_that_cannot_import_reports_an_import_failure() {
+    let mut st = ToileState::new();
+    let events = st.apply_remote(b"not a loro delta");
+    assert!(matches!(
+        events.as_slice(),
+        [ToileEvent::Error(ToileError::RemoteImportFailed)]
+    ));
+}
+
+/// `TOILE-215`: one failed delta of a batch reports the failure while the
+/// surviving deltas still merge.
+#[test]
+fn a_batch_with_one_failed_delta_reports_the_failure() {
+    let mut src = ToileState::new();
+    let out = src.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::Shape(ShapeKind::Rect),
+        at: Point::ZERO,
+        size: Size::new(10.0, 10.0),
+        content: InitContent::None,
+        fill: None,
+        correlate: 0,
+    });
+    let good = out.update.expect("a create carries a delta");
+
+    let mut st = ToileState::new();
+    let events = st.apply_remote_batch(&[good, b"garbage".to_vec()]);
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, ToileEvent::Error(ToileError::RemoteImportFailed)))
+    );
+    assert_eq!(st.element_count(), 1, "the surviving delta still merges");
+}

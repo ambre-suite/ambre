@@ -1454,6 +1454,8 @@ pub enum ToileError {
     GroupNeedsTwo,
     #[error("element {0} is not a group")]
     NotAGroup(String),
+    #[error("a collaborator's change could not be applied; the board may be behind")]
+    RemoteImportFailed,
     #[error("boolean op needs at least two eligible shape / path elements")]
     BooleanNeedsTwo,
     #[error("boolean op produced an empty result")]

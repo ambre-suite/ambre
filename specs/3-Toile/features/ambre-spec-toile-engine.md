@@ -51,8 +51,8 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-092` | `POST` | A remote change MUST rebuild only the derived caches it touched. | this spec section 3 | none | fails -- the remote path calls `rebuild_caches`, which clears the bounds map, bulk-loads the index, re-reads the paint order and re-unions every group to a fixpoint, whatever the change carried; lands with the `Engine and render optimization` Story (`ambre-roadmap.md` E6) | failing |
 | `TOILE-213` | `POST` | A batch of remote deltas MUST repaint once, not once per delta. | this spec section 3 | none | unheld -- `apply_remote_batch` amortizes the rebuild by construction, but no test of `ambre-toile` calls it. Trame holds the same rule with a test (`features/ambre-spec-trame-engine.md`); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-214` | `FAIL` | A remote change that cannot be imported MUST tell the user their board is behind. | this spec section 3 | none | fails -- the failure is reported as `ToileEvent::Error` carrying an empty element id, and the canvas logs that variant without surfacing it, so a board silently stops receiving a collaborator's work; lands with the `A remote change the board cannot apply is announced` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-215` | `FAIL` | One delta of a batch that fails to import MUST NOT leave the board silently behind the rest. | this spec section 3 | none | fails -- the batch path logs the failed delta, keeps merging the others and reports success as long as one import succeeded, so the board is short a change nobody is told about; lands with the `A remote change the board cannot apply is announced` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-214` | `FAIL` | A remote change that cannot be imported MUST tell the user their board is behind. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_remote_change_that_cannot_import_reports_an_import_failure` -- a refused delta answers a distinct `RemoteImportFailed`, never an empty-id error | none | verified |
+| `TOILE-215` | `FAIL` | One delta of a batch that fails to import MUST NOT leave the board silently behind the rest. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_batch_with_one_failed_delta_reports_the_failure` -- one bad delta of two reports the failure while the survivor still merges | none | verified |
 | `TOILE-216` | `FRAME` | A remote change MUST NOT be re-broadcast. | this spec section 3; `ambre-spec-delta-order.md` | type-level -- the remote path returns `Vec<ToileEvent>` and not an outcome, so it has nowhere to put a delta | none | verified |
 
 ### 1.4 Hand a change to the Sync worker
@@ -104,9 +104,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the board lives in this thread's CRDT and leaves as bytes the Sync
   worker seals (`ZK-001`). Its one outbound flow of user content is the media path of
   `features/ambre-spec-toile-media.md section 1`.
-* **Verification.** 29 `verified`, 7 `failing`, 4 `untested`. What holds is the pair no other application
+* **Verification.** 31 `verified`, 5 `failing`, 4 `untested`. What holds is the pair no other application
   holds: the index equivalence and the convergence of every derived cache. Both under one property test,
-  neither at a culling camera (`TOILE-206`). What is loose is four rules nothing exercises and `TOILE-023`, a
+  neither at a culling camera (`TOILE-206`). A remote change that will not import now answers a distinct
+  error, alone and in a batch. What is loose is four rules nothing exercises and `TOILE-023`, a
   measurement; ten verified rows are structural.
 
 ---
@@ -283,11 +284,11 @@ to the UI, the delta and the presence frame to Sync, the requests to the service
 routing is normative in `ambre-spec-message-bus.md`. A session or a connection event never reaches the state,
 except that the session seeds the canonical user id (`TOILE-223`).
 
-**An import that fails is not reported.** A remote delta the document refuses answers with an error event
-carrying an empty element id, which the canvas logs and never surfaces. So the board stops taking a
-collaborator's work with nothing on screen to say so (`TOILE-214`). In a batch the failed delta is logged and
-skipped, and the batch reports success as long as one import succeeds (`TOILE-215`). The batch path itself has
-no test in this crate, so the one repaint it exists for is a claim about its construction (`TOILE-213`).
+**An import that fails is reported.** A remote delta the document refuses answers with a distinct
+`RemoteImportFailed` error, so the board tells the user it is behind (`TOILE-214`). In a batch a failed
+delta is skipped and the batch reports the failure alongside the survivors it merged (`TOILE-215`). The
+batch path still has no other test in this crate, so the one repaint it exists for is a claim about its
+construction (`TOILE-213`).
 
 **A second constructor pins the identity.** A fresh board draws a random peer, and every minted id carries
 that peer, so the same command sequence produces two different boards. `ToileState::with_peer` pins the peer
@@ -451,10 +452,6 @@ error rather than a silent drop (`TOILE-UI-101`).
   walked whole. So a board of a thousand arrows pays for all of them at every camera. The one test that names
   the cull filters connectors out of what it asserts on, so the belt cannot see it. Answered by the "Engine
   and render optimization" Story (`ambre-roadmap.md` E6).
-* **A failed import is silent** (`TOILE-214`, `TOILE-215`). A remote delta that will not import is reported as
-  an error with an empty element id, which the canvas logs and drops. Inside a batch it is logged and skipped,
-  and the batch still reports success. Either way the board is behind and the user is not told. No Story is
-  bound to it yet.
 * **A full camera channel drops without a trace** (`TOILE-UI-313`). The camera sender matches a
   disconnected channel alone, so a full one drops the request silently. The drop is right -- the
   next coalesced camera supersedes it -- but a board that stops re-culling leaves nothing to read.

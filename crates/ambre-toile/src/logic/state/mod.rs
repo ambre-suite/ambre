@@ -488,7 +488,7 @@ impl ToileState {
     pub fn apply_remote(&mut self, update: &[u8]) -> Vec<ToileEvent> {
         if let Err(e) = self.doc.import(update) {
             tracing::warn!("Toile: remote import failed: {e}");
-            return vec![ToileEvent::Error(ToileError::NoSuchElement(String::new()))];
+            return vec![ToileEvent::Error(ToileError::RemoteImportFailed)];
         }
         let deck_before = self.slide_order();
         self.absorb_imported();
@@ -505,27 +505,35 @@ impl ToileState {
     /// `import` sweep plus a single cache rebuild. The UI therefore repaints
     /// once instead of once per delta. Mirrors
     /// [`apply_remote`](Self::apply_remote) but amortizes the derived-cache
-    /// rebuild over the whole batch. A delta that fails to import earns a log
-    /// line and a skip; the surviving deltas still merge.
+    /// rebuild over the whole batch. A delta that fails to import is skipped,
+    /// and the batch then reports the failure instead of answering success
+    /// (`TOILE-215`).
     pub fn apply_remote_batch(&mut self, updates: &[Vec<u8>]) -> Vec<ToileEvent> {
         if updates.is_empty() {
             return Vec::new();
         }
         let deck_before = self.slide_order();
         let mut any_ok = false;
+        let mut any_failed = false;
         for update in updates {
             match self.doc.import(update) {
                 Ok(_) => any_ok = true,
-                Err(e) => tracing::warn!("Toile: remote batch import failed: {e}"),
+                Err(e) => {
+                    tracing::warn!("Toile: remote batch import failed: {e}");
+                    any_failed = true;
+                }
             }
         }
         if !any_ok {
-            return vec![ToileEvent::Error(ToileError::NoSuchElement(String::new()))];
+            return vec![ToileEvent::Error(ToileError::RemoteImportFailed)];
         }
         self.absorb_imported();
         self.rebuild_caches();
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
+        if any_failed {
+            events.push(ToileEvent::Error(ToileError::RemoteImportFailed));
+        }
         events.extend(self.undecodable_notice());
         events
     }
