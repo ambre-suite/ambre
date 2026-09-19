@@ -39,6 +39,8 @@ fn style() -> TextEditorStyle {
         family: "Sans".to_owned(),
         base_size: 16.0,
         color: Color::from_rgba8(0, 0, 0, 255),
+        underline: false,
+        strikethrough: false,
     }
 }
 

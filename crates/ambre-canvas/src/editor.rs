@@ -102,6 +102,11 @@ pub struct TextEditorStyle {
     pub family: String,
     pub base_size: f32,
     pub color: Color,
+    /// Draw a 1px underline under the body (`TOILE-UI-187`). Pinned from the
+    /// host element's style so the in-edit body matches the committed look.
+    pub underline: bool,
+    /// Draw a 1px strikethrough through the body (`TOILE-UI-187`).
+    pub strikethrough: bool,
 }
 
 /// A shared inline text edit over one text unit (a Toile element body or a Trame
@@ -153,6 +158,11 @@ impl TextEditor {
     /// size change). Applied at the next [`flush`](Self::flush).
     pub fn set_style(&mut self, style: TextEditorStyle) {
         self.style = style;
+    }
+
+    /// The pinned style, for the host and for tests.
+    pub fn style(&self) -> &TextEditorStyle {
+        &self.style
     }
 
     /// Record an action to apply at the next paint-time flush.
@@ -486,6 +496,24 @@ impl TextEditor {
                         let bar = Rect::new(tx, uy, tx + adv, uy + 1.0);
                         surface.fill_path(&rect_path(bar), &brush);
                     }
+                    // Pinned decorations from the host's own style
+                    // (`TOILE-UI-187`): the committed body's underline and
+                    // strikethrough, drawn in the body ink. Entering edit does
+                    // not drop them.
+                    if self.style.underline || self.style.strikethrough {
+                        let adv = run.advance() as f64;
+                        let font_size = run.run().font_size() as f64;
+                        let mut bar_at = |ay: f64| {
+                            let bar = Rect::new(tx, ay, tx + adv, ay + 1.0);
+                            surface.fill_path(&rect_path(bar), &brush);
+                        };
+                        if self.style.underline {
+                            bar_at(ty + 2.0);
+                        }
+                        if self.style.strikethrough {
+                            bar_at(ty - font_size * 0.3);
+                        }
+                    }
                 }
             }
         }
@@ -525,6 +553,8 @@ mod tests {
             family: "Sans".to_owned(),
             base_size: 16.0,
             color: Color::from_rgba8(0, 0, 0, 255),
+            underline: false,
+            strikethrough: false,
         }
     }
 

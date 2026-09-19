@@ -197,6 +197,7 @@ mod tests {
             size: Size::new(30.0, 40.0),
             content: InitContent::None,
             fill: None,
+            correlate: 0,
         });
         st
     }

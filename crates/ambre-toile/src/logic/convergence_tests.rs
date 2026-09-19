@@ -31,7 +31,7 @@ fn created_id(out: &crate::logic::command::ToileOutcome) -> ElementId {
     out.display
         .iter()
         .find_map(|e| match e {
-            ToileEvent::ElementCreated(id) => Some(id.clone()),
+            ToileEvent::ElementCreated { id, .. } => Some(id.clone()),
             _ => None,
         })
         .expect("expected an ElementCreated event")
@@ -44,6 +44,7 @@ fn create_rect(st: &mut ToileState, at: Point, size: Size) -> ElementId {
         size,
         content: InitContent::None,
         fill: None,
+        correlate: 0,
     });
     assert!(out.update.is_some(), "a create must produce a CRDT delta");
     created_id(&out)
@@ -80,6 +81,7 @@ fn set_text_overwrites_sticky_body() {
         size: Size::new(120.0, 80.0),
         content: InitContent::Text("hello".to_owned()),
         fill: None,
+        correlate: 0,
     });
     let id = created_id(&out);
     assert_eq!(body_of(&st, &id).as_deref(), Some("hello"));
@@ -495,6 +497,7 @@ fn group_and_drawing_are_not_creatable() {
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
             fill: None,
+            correlate: 0,
         });
         assert!(matches!(
             out.display.first(),
@@ -517,6 +520,7 @@ fn create_sticky(st: &mut ToileState, at: Point, body: &str) -> ElementId {
         size: Size::new(80.0, 80.0),
         content: InitContent::Text(body.to_owned()),
         fill: None,
+        correlate: 0,
     });
     created_id(&out)
 }
@@ -918,6 +922,7 @@ fn an_import_is_not_broadcast_back() {
         size: Size::new(10.0, 10.0),
         content: InitContent::None,
         fill: None,
+        correlate: 0,
     });
     let delta = out.update.expect("a create must produce a delta");
 
@@ -959,6 +964,7 @@ fn an_import_does_not_swallow_our_own_unbroadcast_genesis() {
         size: Size::new(10.0, 10.0),
         content: InitContent::None,
         fill: None,
+        correlate: 0,
     });
     let delta = out.update.expect("a create must produce a delta");
 
@@ -1116,6 +1122,7 @@ fn create_frame(st: &mut ToileState, at: Point, size: Size) -> ElementId {
         size,
         content: InitContent::None,
         fill: None,
+        correlate: 0,
     }))
 }
 
@@ -1397,7 +1404,7 @@ fn created_ids(out: &crate::logic::command::ToileOutcome) -> Vec<ElementId> {
     out.display
         .iter()
         .filter_map(|e| match e {
-            ToileEvent::ElementCreated(id) => Some(id.clone()),
+            ToileEvent::ElementCreated { id, .. } => Some(id.clone()),
             _ => None,
         })
         .collect()
@@ -2676,6 +2683,7 @@ fn doc_embed_reference_survives_the_crdt_round_trip() {
             doc_type: ambre_core::DocType::Trame,
         },
         fill: None,
+        correlate: 0,
     });
 
     let geom = only_doc_embed(&st).expect("the embed must derive as DocEmbed");
@@ -2707,6 +2715,7 @@ fn doc_embed_with_an_unreadable_reference_falls_back_to_a_frame() {
             document_id: ambre_core::DocumentId::new(),
             doc_type: ambre_core::DocType::Toile,
         },
+        correlate: 0,
     });
     let id = st
         .debug_viewport()
@@ -3664,6 +3673,7 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
             size: Size::new(20.0, 20.0),
             content: InitContent::None,
             fill: None,
+            correlate: 0,
         }),
         PeerOp::MoveNth { nth: n, dx, dy } => match nth(*n) {
             Some(id) => st.handle_command(ToileCommand::MoveElements {
@@ -3757,6 +3767,7 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<Vec<u8>> {
             size: Size::new(200.0, 200.0),
             content: InitContent::None,
             fill: None,
+            correlate: 0,
         }),
         PeerOp::SetSlideOrderRot { by } => {
             // Rotate the current live-id set to build a permutation, so concurrent

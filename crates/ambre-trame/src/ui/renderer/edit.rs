@@ -38,6 +38,8 @@ pub fn draw_edit<S: DrawSurface>(
         family: "Sans".to_owned(),
         base_size: BODY_SIZE,
         color: palette.cell_text,
+        underline: false,
+        strikethrough: false,
     });
 
     // Apply queued intents against this frame's layout. The text wraps to the

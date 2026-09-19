@@ -132,6 +132,8 @@ impl CellEditor {
             family: "Sans".to_owned(),
             base_size: BODY_SIZE,
             color: Color::from_rgba8(0, 0, 0, 255),
+            underline: false,
+            strikethrough: false,
         };
         Self {
             row,

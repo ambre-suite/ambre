@@ -30,7 +30,10 @@ impl ToileState {
         self.rematerialize_layers();
         // Seed the group's derived bounds from its members, then feed the R-tree.
         self.recompute_groups();
-        self.emit_with_update(vec![ToileEvent::ElementCreated(id), self.viewport_event()])
+        self.emit_with_update(vec![
+            ToileEvent::ElementCreated { id, correlate: 0 },
+            self.viewport_event(),
+        ])
     }
 
     /// Bind `ids` into a fresh group element **without** committing, returning the

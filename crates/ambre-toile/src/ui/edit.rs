@@ -68,20 +68,25 @@ impl InlineEditor {
     pub fn open(elem: &DisplayElement, text: &str, palette: &Palette, is_sticky: bool) -> Self {
         let font = &elem.style.font;
         // Text colour: same precedence as the static render so the in-edit
-        // body matches its committed look.
+        // body matches its committed look. The element opacity is baked into
+        // the alpha, as the committed pass does (`TOILE-UI-186`).
         let color =
             super::render::resolved_text_ink(is_sticky, elem.style.text_color, elem.style.fill)
-                .map(argb_text)
+                .map(|c| argb_text(c, elem.style.opacity))
                 .unwrap_or(palette.cell_text);
-        // Size: sticky auto-sizes from bounds unless overridden.
+        // Size: sticky auto-sizes from bounds unless overridden. A zero size is
+        // kept, not floored, so an invisible body stays invisible under edit
+        // (`TOILE-UI-188`).
         let base_size =
-            super::render::sticky_or_style_font_size(is_sticky, &elem.style, elem.bounds).max(1.0);
+            super::render::sticky_or_style_font_size(is_sticky, &elem.style, elem.bounds);
         let style = TextEditorStyle {
             weight: font.weight,
             italic: font.italic,
             family: font.family.clone(),
             base_size,
             color,
+            underline: font.underline,
+            strikethrough: font.strikethrough,
         };
         Self {
             target: EditTarget::Element(elem.id.clone()),
@@ -102,6 +107,8 @@ impl InlineEditor {
             family: font.family,
             base_size: super::label::LABEL_FONT_SIZE,
             color: palette.cell_text,
+            underline: false,
+            strikethrough: false,
         };
         let mut core = TextEditor::new(text, style);
         core.set_alignment(Alignment::Center);
@@ -114,6 +121,11 @@ impl InlineEditor {
     /// What is currently under edit.
     pub fn target(&self) -> &EditTarget {
         &self.target
+    }
+
+    /// The pinned style the editor applies, for tests.
+    pub fn style(&self) -> &TextEditorStyle {
+        self.core.style()
     }
 
     /// Inner padding in screen pixels at the given zoom.
@@ -168,10 +180,78 @@ impl InlineEditor {
     }
 }
 
-/// ARGB `u32` text color to an opaque `Color` (text ignores element opacity).
-fn argb_text(v: u32) -> Color {
+/// ARGB `u32` text color to a `Color`, pre-multiplying the element `opacity`
+/// into the alpha channel (`TOILE-UI-186`), as the committed pass does.
+fn argb_text(v: u32, opacity: f32) -> Color {
+    let a = ((v >> 24) & 0xff) as f32 / 255.0;
     let r = ((v >> 16) & 0xff) as u8;
     let g = ((v >> 8) & 0xff) as u8;
     let b = (v & 0xff) as u8;
-    Color::from_rgba8(r, g, b, 255)
+    let alpha = (a * opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
+    Color::from_rgba8(r, g, b, alpha)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ambre_bus::app::toile::{DisplayGeom, ElementKind, FontSpec};
+    use ambre_canvas::Theme;
+    use kurbo::Affine;
+
+    fn elem(style: ElementStyle, kind: ElementKind) -> DisplayElement {
+        DisplayElement {
+            id: ElementId("a".to_owned()),
+            kind,
+            transform: Affine::IDENTITY,
+            bounds: kurbo::Rect::new(0.0, 0.0, 120.0, 80.0),
+            locked: false,
+            style,
+            geom: DisplayGeom::Text("hi".to_owned()),
+            link: None,
+            group: None,
+        }
+    }
+
+    fn palette() -> &'static Palette {
+        Theme::Light.palette()
+    }
+
+    /// `TOILE-UI-186` / `TOILE-UI-187`: the pinned style carries the committed
+    /// opacity, underline and strikethrough, so entering edit drops none of them.
+    #[test]
+    fn the_pinned_style_carries_opacity_and_decorations() {
+        let style = ElementStyle {
+            text_color: Some(0xffff_0000),
+            opacity: 0.5,
+            font: FontSpec {
+                underline: true,
+                strikethrough: true,
+                ..Default::default()
+            },
+            ..ElementStyle::default()
+        };
+        let e = elem(style, ElementKind::Text);
+        let editor = InlineEditor::open(&e, "hi", palette(), false);
+        let pinned = editor.style();
+        assert!(pinned.underline);
+        assert!(pinned.strikethrough);
+        // Opacity is baked into the ink alpha: opaque red at 0.5 -> alpha 128.
+        assert_eq!(pinned.color.to_rgba8().a, 128);
+    }
+
+    /// `TOILE-UI-188`: a zero-size text element keeps zero under edit, matching
+    /// the committed (invisible) body rather than flooring to one pixel.
+    #[test]
+    fn a_zero_size_element_keeps_zero_under_edit() {
+        let style = ElementStyle {
+            font: FontSpec {
+                size: 0.0,
+                ..Default::default()
+            },
+            ..ElementStyle::default()
+        };
+        let e = elem(style, ElementKind::Text);
+        let editor = InlineEditor::open(&e, "hi", palette(), false);
+        assert_eq!(editor.style().base_size, 0.0);
+    }
 }

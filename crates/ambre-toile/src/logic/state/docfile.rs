@@ -92,6 +92,7 @@ mod tests {
                 size: Size::new(100.0, 50.0),
                 content: InitContent::None,
                 fill: None,
+                correlate: 0,
             });
         }
         state

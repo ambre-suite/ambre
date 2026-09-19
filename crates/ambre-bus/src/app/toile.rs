@@ -914,6 +914,10 @@ pub enum ToileCommand {
         /// note in the picked palette colour atomically (one element, one undo
         /// item). `None` keeps the per-kind default. See `toile-styles`.
         fill: Option<u32>,
+        /// A request token the UI echoes in `ElementCreated`, so a deferred
+        /// open claims the element this command created and no other
+        /// (`TOILE-UI-194`). Zero means no deferred open is pending.
+        correlate: u64,
     },
     MoveElements {
         ids: Vec<ElementId>,
@@ -1498,7 +1502,13 @@ pub enum ToileEvent {
         height: u32,
         pixels: Vec<u8>,
     },
-    ElementCreated(ElementId),
+    /// A freshly-created element, with the `correlate` token its `CreateElement`
+    /// carried (`TOILE-UI-194`). Zero means the create requested no deferred
+    /// open.
+    ElementCreated {
+        id: ElementId,
+        correlate: u64,
+    },
     /// Result of `CopyElements`: the UI stashes it and may mirror it to the OS
     /// clipboard for cross-tab paste (`toile-clipboard`).
     Clipboard(ClipboardPayload),

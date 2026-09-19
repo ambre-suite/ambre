@@ -274,9 +274,12 @@ pub struct ToileView {
     /// the matching `DisplayViewport` has landed (nothing knows its geometry
     /// before then). Consumed at the end of `update`.
     edit_pending_open: Option<ElementId>,
-    /// Set when the Sticky / Text tool just emitted a `CreateElement`, so the
-    /// view captures the next `ElementCreated` id into `edit_pending_open`.
-    edit_open_on_create: bool,
+    /// The `correlate` token the Sticky / Text tool's `CreateElement` carried,
+    /// so the deferred open claims that element and no other (`TOILE-UI-194`).
+    /// `None` when no placement awaits its reply.
+    edit_open_on_create: Option<u64>,
+    /// Monotonic source of `CreateElement.correlate` tokens.
+    next_create_token: u64,
     /// Deferred close: the editor commits its buffer as `SetText` and closes on
     /// the next paint (so any intents typed since the last paint flush first).
     edit_closing: bool,
@@ -604,7 +607,8 @@ impl ToileView {
             pending_find_focus: None,
             editor: None,
             edit_pending_open: None,
-            edit_open_on_create: false,
+            edit_open_on_create: None,
+            next_create_token: 1,
             edit_closing: false,
             edit_dirty: false,
             edit_pointer_down: false,
@@ -863,9 +867,9 @@ impl ToileView {
             // A Sticky / Text tool just created an element: capture its id so the
             // inline editor opens on it once its `DisplayViewport` lands
             // (`toile-text-editing`).
-            ToileEvent::ElementCreated(id) => {
-                if self.edit_open_on_create {
-                    self.edit_open_on_create = false;
+            ToileEvent::ElementCreated { id, correlate } => {
+                if self.edit_open_on_create == Some(correlate) {
+                    self.edit_open_on_create = None;
                     self.edit_pending_open = Some(id);
                 }
             }
@@ -1110,16 +1114,21 @@ impl ToileView {
                 self.selection = ids;
                 self.needs_full = true;
             }
-            ToolOutcome::Command(cmd) => {
+            ToolOutcome::Command(mut cmd) => {
                 // A Sticky / Text placement opens the inline editor on the new
                 // element once its id comes back via `ElementCreated`
-                // (`toile-text-editing`).
+                // (`toile-text-editing`). The token ties the reply to this
+                // command, so no other create can claim it (`TOILE-UI-194`).
                 if let ToileCommand::CreateElement {
                     kind: ElementKind::Sticky | ElementKind::Text,
+                    correlate,
                     ..
-                } = &cmd
+                } = &mut cmd
                 {
-                    self.edit_open_on_create = true;
+                    let token = self.next_create_token;
+                    self.next_create_token += 1;
+                    *correlate = token;
+                    self.edit_open_on_create = Some(token);
                     // A placement is a one-shot action. Revert to Select. The
                     // just-created note then carries the selection and is ready
                     // to edit, rather than the next click dropping another note
@@ -2834,7 +2843,13 @@ impl ToileView {
                 // incoming viewport carries the same text.
                 match target {
                     EditTarget::Element(id) => {
-                        self.patch_element_text(&id, &text);
+                        // A locked element's write is refused (`TOILE-033`). The
+                        // local echo must not paint a body the write will refuse
+                        // (`TOILE-UI-209`): the screen keeps the committed body.
+                        let locked = self.find_element(&id).is_some_and(|e| e.locked);
+                        if !locked {
+                            self.patch_element_text(&id, &text);
+                        }
                         self.send_edit(ToileCommand::SetText { id, text });
                     }
                     EditTarget::ConnectorLabel(id) => {
@@ -3312,6 +3327,7 @@ impl ToileView {
             size,
             content,
             fill: None,
+            correlate: 0,
         });
     }
     #[cfg(not(target_arch = "wasm32"))]
@@ -3493,7 +3509,7 @@ impl ToileView {
         self.clear_deck();
         self.editor = None;
         self.edit_pending_open = None;
-        self.edit_open_on_create = false;
+        self.edit_open_on_create = None;
         self.edit_closing = false;
         self.edit_dirty = false;
         self.edit_pointer_down = false;

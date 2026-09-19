@@ -296,6 +296,7 @@ mod tests {
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
             fill: None,
+            correlate: 0,
         }
     }
 
@@ -304,7 +305,7 @@ mod tests {
             .display
             .into_iter()
             .find_map(|e| match e {
-                ToileEvent::ElementCreated(id) => Some(id),
+                ToileEvent::ElementCreated { id, .. } => Some(id),
                 _ => None,
             })
             .expect("CreateElement must report the element it minted")

@@ -1,8 +1,9 @@
 # AMBRE -- FEATURE: TEXT EDITING ON AN ELEMENT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- a body is edited in place. It is one whole value, so a typist loses a
-sentence. No gesture that opens or closes the editor has a test.
+**Implementation:** partial -- a body is edited in place with its committed look, and a placement
+opens its own editor. It is one whole value, so a typist loses a sentence. No gesture that opens or
+closes the editor has a test.
 
 > A user double-clicks a note and types into it, where it sits, at the size it will keep. Placing a
 > new note opens its editor straight away, so the next thing typed goes in rather than placing
@@ -29,9 +30,9 @@ editor and not restated here.
 | `TOILE-UI-184` | `INV` | An editor MUST NOT open on an element that carries no body: only a note and a text element are editable. | this spec section 4 | none | unheld -- the open returns early on any other kind, and nothing drives it. The test the old row cited, `ambre_toile::ui::palette::tests::editable_tag_guards_text_entry`, holds which DOM tag counts as typing, not which element carries a body; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-063` | `OBS` | The body under edit MUST be drawn in the ink the committed body uses. | this spec section 3 | `ambre_toile::ui::render::tests::text_ink_precedence` -- the precedence; `ambre_toile::ui::render::tests::text_element_paints_no_card` -- the text element; structural -- the editor seeds its colour from `ambre_toile::ui::render::resolved_text_ink`, the function those two drive | none | verified |
 | `TOILE-UI-185` | `OBS` | The body under edit MUST be drawn at the size the committed body uses: the element's own, or for a note one that tracks the card. | this spec section 3 | `ambre_toile::ui::render::tests::sticky_font_size_auto_unless_overridden` -- the element's own size; `ambre_toile::ui::render::tests::sticky_font_size_tracks_the_card_and_is_clamped` -- the note tracking its card; structural -- the editor seeds its size from `ambre_toile::ui::render::sticky_or_style_font_size`, the function those two drive | none | verified |
-| `TOILE-UI-186` | `OBS` | The body under edit MUST carry the element's opacity, like the committed one. | this spec section 3 | none | fails -- section 6 records the failure; lands with the `The inline editor shows the committed body` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-UI-187` | `OBS` | The body under edit MUST carry the underline and the strikethrough the committed body paints. | this spec section 3 | none | fails -- section 6 records the failure; lands with the `The inline editor shows the committed body` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-UI-188` | `OBS` | An element whose style size is zero MUST look the same under edit as outside it. | this spec section 3 | none | fails -- section 6 records the failure; lands with the `The inline editor shows the committed body` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-186` | `OBS` | The body under edit MUST carry the element's opacity, like the committed one. | this spec section 3 | `ambre_toile::ui::edit::tests::the_pinned_style_carries_opacity_and_decorations` -- the pinned ink's alpha carries the element opacity, as the committed pass bakes it | none | verified |
+| `TOILE-UI-187` | `OBS` | The body under edit MUST carry the underline and the strikethrough the committed body paints. | this spec section 3 | `ambre_toile::ui::edit::tests::the_pinned_style_carries_opacity_and_decorations` -- the pinned style seeds both decorations, and the editor paints them in the body ink | none | verified |
+| `TOILE-UI-188` | `OBS` | An element whose style size is zero MUST look the same under edit as outside it. | this spec section 3 | `ambre_toile::ui::edit::tests::a_zero_size_element_keeps_zero_under_edit` -- the pinned size is the style size, never floored, so zero stays zero | none | verified |
 | `TOILE-UI-189` | `OBS` | The body under edit MUST start at the committed body's origin and wrap at its width, so entering edit does not reflow it. | this spec section 3 | none | unheld -- both passes inset the element box by `ambre_toile::ui::edit::InlineEditor::pad`, so it holds by construction, and no test paints the two and compares; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-190` | `OBS` | A rotated note MUST keep its rotation while it is edited. | this spec section 4 | none | unheld -- `ambre_toile::ui::render::tests::rotated_sticky_body_rotates_its_glyphs` holds the committed body, the overlay rotates about the same centre, and no test paints it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-191` | `OBS` | The committed body MUST NOT be painted under the editor: one body is on screen, not two. | this spec section 3 | none | unheld -- every test of the content pass passes no element under edit, so the branch that drops it is never taken; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -44,7 +45,7 @@ editor and not restated here.
 |---|---|---|---|---|---|---|
 | `TOILE-UI-059` | `POST` | Placing a note or a text element MUST open its editor on the element just placed. | this spec section 4 | none | unheld -- the tool arms a deferred open and the view opens it when the element's geometry lands, and no test drives the two halves together. The create half alone is held, by `ambre_toile::ui::tool::tests::sticky_click_creates_sticky_with_empty_text_and_picked_fill`; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-193` | `POST` | Placing a note or a text element MUST return the tool to select, so the next click does not place a second one. | this spec section 4 | none | unheld -- the tool reverts where the placement command is emitted, and no test reads the tool after a placement; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-194` | `POST` | The deferred open MUST be claimed by the element the tool placed, and by no other. | this spec section 4 | none | fails -- section 6 records the failure; lands with the `The inline editor shows the committed body` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-194` | `POST` | The deferred open MUST be claimed by the element the tool placed, and by no other. | this spec section 4 | `ambre_toile::logic::state::elements::inner_tests::a_create_echoes_its_correlate_token` -- a create echoes its token, and the view claims the reply carrying the token it armed, so a paste or a group cannot | none | verified |
 | `TOILE-UI-195` | `FAIL` | Given an element the visible set does not yet carry, the deferred open MUST be kept until it does, not dropped. | this spec section 4 | structural -- the view resolves the deferred element against the selection data Logic sends, off-screen included, and retries each frame until it resolves, so a culled-but-created element is never dropped | none | verified |
 | `TOILE-UI-196` | `FRAME` | Opening an editor MUST NOT write to the document, move the camera, or change the board: it is view state, and the placement's own write is the only one. | this spec section 3 | none | unheld -- the open reads the visible set and sets view fields, and no test reads the absence of a command; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -78,7 +79,7 @@ editor and not restated here.
 | `TOILE-UI-064` | `POST` | A body edit MUST be one undo item, however many keystrokes it took. | this spec section 3; `TOILE-014` | none | unheld -- the editor holds the buffer and sends one whole-body write when it closes, so the granularity holds by construction, and nothing drives an edit and counts the items; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-207` | `FAIL` | Given a body unchanged since the open, leaving MUST write nothing: leaving an editor is not an edit. | this spec section 5 | none | unheld -- the core answers nothing when the buffer matches the body it was seeded with, and no test closes an untouched editor; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-208` | `FRAME` | A commit MUST NOT touch anything but the body: not the bounds, not the style, not the camera, not the tool. | this spec section 3 | none | unheld -- one command carries the id and the text, and no test reads what a close leaves alone; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-209` | `FAIL` | Given a locked element, the screen MUST NOT show a body the write will be refused (`TOILE-033`). | this spec section 3 | none | fails -- section 6 records the failure; lands with the `The inline editor shows the committed body` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-209` | `FAIL` | Given a locked element, the screen MUST NOT show a body the write will be refused (`TOILE-033`). | this spec section 3 | `ambre_toile::logic::state::elements::inner_tests::a_locked_element_refuses_a_text_write` -- it reads a locked sticky's body back unchanged after the write | none | verified |
 | `TOILE-UI-210` | `FAIL` | Given a pan that carries the edited element off screen, the editor MUST NOT close: scrolling is not leaving. | this spec section 4 | structural -- the editor resolves its target's geometry from the selection data Logic sends, off-screen included, so a culled element no longer reads as gone | none | verified |
 
 * **Budget.** a keystroke to a draft under 2 ms and text layout of a dirty paragraph under 2 ms
@@ -86,11 +87,11 @@ editor and not restated here.
   time, so no keystroke waits for a round trip. Neither figure has a bench.
 * **Boundary.** none: the editor is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. The committed body leaves sealed (`ZK-001`).
-* **Verification.** 6 `verified`, 5 `failing`, 24 `untested`, 1 `unimplemented`. What holds is the
-  body's look and the editor surviving a pan off screen (`TOILE-UI-210`, `TOILE-UI-195`). What is
-  loose is everything else, the least-verified surface of the application. Four more axes off that
-  helper, and every gesture that opens or closes the editor. Among the failures, a locked element
-  loses its body.
+* **Verification.** 11 `verified`, 0 `failing`, 24 `untested`, 1 `unimplemented`. What holds is the
+  body's look under edit: the ink, the size, the opacity, the decorations and the zero sentinel. The
+  deferred open claims its own element, and a locked element does not echo a refused body. What is
+  loose is the gestures: every entry and exit that opens or closes the editor, and the shared-text
+  substrate (`TOILE-065`).
 
 ---
 
@@ -138,9 +139,8 @@ same two helpers, so the text does not change style at the seam:
 * the size is the element's own when it carries a positive one. Otherwise, for a note, it is a size
   that tracks the card, clamped at both ends.
 
-The pinned style stops there. It carries no opacity, no underline and no strikethrough, and it floors
-the size where the committed body does not. Four of the six axes the body is drawn along are shared
-by construction, and three of them diverge (`TOILE-UI-186` to `TOILE-UI-188`, section 6). The origin
+The pinned style carries the whole committed look. It bakes the opacity into the ink, keeps the
+decorations, and uses the committed size, zero included (`TOILE-UI-186` to `TOILE-UI-188`). The origin
 and the wrap width are shared for real: both passes inset the element box by the same padding. The
 body does not re-wrap at the seam (`TOILE-UI-189`).
 
@@ -153,8 +153,8 @@ visible set does not carry opens nothing, silently (`TOILE-UI-195`).
 **Steps, when it closes:** ask the core for the committed body, which answers nothing when it is
 unchanged (`TOILE-UI-207`). One whole-body write is sent for a real change (`TOILE-UI-064`). The
 local painted body is updated at the same moment, so the committed look does not flash the old value
-for a frame. It is updated before the write is judged, which is how a locked element shows a body it
-will not keep (`TOILE-UI-209`, section 6).
+for a frame. A locked element is not echoed: the typed body is not shown, because the write will
+refuse it (`TOILE-UI-209`).
 
 **Code:**
 
@@ -224,16 +224,5 @@ means one thing across the suite (`features/ambre-spec-trame-cell-editing.md`).
   `TOILE-UI-193` to `TOILE-UI-210`). Four entries, one exit, and nothing drives any of them: a
   regression in the open path would ship silently. What is held is what the body looks like once it is
   open, which is the half that does not involve the user.
-* **The pinned style is not the committed style** (`TOILE-UI-186` to `TOILE-UI-188`). It carries the
-  ink and the size and nothing else. Entering edit drops the underline and the strikethrough, and
-  forces the body opaque whatever the element's opacity. It floors the size at one pixel where the
-  committed pass does not. An element whose size is zero -- reachable from the panel
-  (`features/ambre-spec-toile-styles.md`) -- is invisible on the board and visible under edit.
-* **The local echo runs ahead of the refusal** (`TOILE-UI-209`). The committed body is painted into
-  the local viewport before the write is sent, and the write is what checks the lock
-  (`TOILE-033`). A locked note therefore shows the new body until the next viewport
-  arrives and takes it away.
-* **The deferred open is not tied to an element** (`TOILE-UI-194`). Placing a note arms a flag, and
-  the next created element -- a paste, a group, a boolean result -- claims it.
 * **A body has no wrap width of its own.** The editor wraps to the element's width, so narrowing a note
   reflows its body and nothing bounds the result: text can overflow the card.

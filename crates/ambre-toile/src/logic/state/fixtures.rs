@@ -381,12 +381,13 @@ fn create(
         size,
         content,
         fill: None,
+        correlate: 0,
     });
     outcome
         .display
         .iter()
         .find_map(|event| match event {
-            ToileEvent::ElementCreated(id) => Some(id.clone()),
+            ToileEvent::ElementCreated { id, .. } => Some(id.clone()),
             _ => None,
         })
         .unwrap_or_else(|| panic!("CreateElement must report the element it minted: {kind:?}"))

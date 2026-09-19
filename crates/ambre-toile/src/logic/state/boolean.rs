@@ -95,7 +95,10 @@ impl ToileState {
         self.doc.commit();
 
         self.rebuild_caches();
-        self.emit_with_update(vec![ToileEvent::ElementCreated(id), self.viewport_event()])
+        self.emit_with_update(vec![
+            ToileEvent::ElementCreated { id, correlate: 0 },
+            self.viewport_event(),
+        ])
     }
 }
 
@@ -157,9 +160,10 @@ mod tests {
             size: Size::new(w, h),
             content: InitContent::None,
             fill: None,
+            correlate: 0,
         });
         match out.display.into_iter().find_map(|e| match e {
-            ToileEvent::ElementCreated(id) => Some(id),
+            ToileEvent::ElementCreated { id, .. } => Some(id),
             _ => None,
         }) {
             Some(id) => id,

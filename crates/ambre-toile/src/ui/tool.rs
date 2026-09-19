@@ -727,6 +727,7 @@ impl ToolMachine {
                         size: rect.size(),
                         content: InitContent::None,
                         fill: None,
+                        correlate: 0,
                     })
                 }
                 Draft::Connector {
@@ -782,6 +783,7 @@ impl ToolMachine {
                         size,
                         content: InitContent::Text(String::new()),
                         fill,
+                        correlate: 0,
                     })
                 }
             };
@@ -827,6 +829,7 @@ impl ToolMachine {
             size: bb.size(),
             content: InitContent::Path(path),
             fill: None,
+            correlate: 0,
         })
     }
 
@@ -1761,6 +1764,7 @@ mod tests {
                 size,
                 content,
                 fill,
+                ..
             }) => {
                 assert_eq!(kind, ElementKind::Sticky);
                 assert_eq!(a, at);

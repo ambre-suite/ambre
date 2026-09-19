@@ -539,11 +539,12 @@ mod pdf_tests {
             size: Size::new(w, h),
             content: InitContent::None,
             fill: None,
+            correlate: 0,
         });
         out.display
             .into_iter()
             .find_map(|e| match e {
-                ToileEvent::ElementCreated(id) => Some(id),
+                ToileEvent::ElementCreated { id, .. } => Some(id),
                 _ => None,
             })
             .expect("frame creation yields an id")

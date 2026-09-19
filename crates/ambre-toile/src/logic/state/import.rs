@@ -221,6 +221,7 @@ impl ToileState {
                     size,
                     content,
                     fill,
+                    ..
                 } => match self.create_element_inner(kind, at, size, content, fill) {
                     Ok(id) => slot_ids.push(Some(id)),
                     Err(_) => {
@@ -390,6 +391,7 @@ mod tests {
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
             fill: None,
+            correlate: 0,
         }
     }
 

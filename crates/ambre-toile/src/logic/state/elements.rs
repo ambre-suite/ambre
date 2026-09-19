@@ -26,13 +26,17 @@ impl ToileState {
         size: kurbo::Size,
         content: InitContent,
         fill: Option<u32>,
+        correlate: u64,
     ) -> ToileOutcome {
         let id = match self.create_element_inner(kind, at, size, content, fill) {
             Ok(id) => id,
             Err(e) => return ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
         };
         self.doc.commit();
-        self.emit_with_update(vec![ToileEvent::ElementCreated(id), self.viewport_event()])
+        self.emit_with_update(vec![
+            ToileEvent::ElementCreated { id, correlate },
+            self.viewport_event(),
+        ])
     }
 
     /// Create one element and update the incremental caches, **without**
@@ -514,7 +518,10 @@ impl ToileState {
         self.index
             .insert(ElementBounds::from_rect(id.clone(), rect));
         self.layers.push(NodeId::Element(id.clone()));
-        self.emit_with_update(vec![ToileEvent::ElementCreated(id), self.viewport_event()])
+        self.emit_with_update(vec![
+            ToileEvent::ElementCreated { id, correlate: 0 },
+            self.viewport_event(),
+        ])
     }
 }
 
@@ -527,7 +534,7 @@ mod inner_tests {
     use kurbo::{Point, Size};
 
     use crate::logic::align::AlignOp;
-    use crate::logic::command::{InitContent, ToileCommand};
+    use crate::logic::command::{DisplayGeom, DisplayNode, InitContent, ToileCommand, ToileEvent};
     use crate::logic::model::{ElementKind, ElementStyle, NodeId, ShapeKind};
     use crate::logic::state::ToileState;
 
@@ -788,5 +795,63 @@ mod inner_tests {
         assert_eq!(st.style_of(&b).font.weight, 400);
         assert_eq!(st.style_of(&a).fill, Some(0xff00_00ff));
         assert_eq!(st.style_of(&b).fill, Some(0xff00_00ff));
+    }
+
+    /// `TOILE-UI-194`: a create echoes its correlate token, so a deferred open
+    /// can match this reply and no other create's.
+    #[test]
+    fn a_create_echoes_its_correlate_token() {
+        let mut st = ToileState::new();
+        let out = st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Rect),
+            at: Point::new(0.0, 0.0),
+            size: Size::new(10.0, 10.0),
+            content: InitContent::None,
+            fill: None,
+            correlate: 7,
+        });
+        assert!(
+            out.display
+                .iter()
+                .any(|e| matches!(e, ToileEvent::ElementCreated { correlate: 7, .. }))
+        );
+    }
+
+    /// `TOILE-UI-209`: a locked element refuses the text write, so the screen
+    /// must not echo a body the write will not take.
+    #[test]
+    fn a_locked_element_refuses_a_text_write() {
+        let mut st = ToileState::new();
+        let id = st
+            .create_element_inner(
+                ElementKind::Sticky,
+                Point::new(0.0, 0.0),
+                Size::new(120.0, 80.0),
+                InitContent::Text("hello".to_owned()),
+                None,
+            )
+            .expect("create");
+        st.doc.commit();
+        st.handle_command(ToileCommand::LockElements {
+            ids: vec![id.clone()],
+            locked: true,
+        });
+        st.handle_command(ToileCommand::SetText {
+            id: id.clone(),
+            text: "changed".to_owned(),
+        });
+        let body = st
+            .debug_viewport()
+            .nodes
+            .into_iter()
+            .find_map(|n| match n {
+                DisplayNode::Element(e) if e.id == id => match e.geom {
+                    DisplayGeom::Sticky(t) => Some(t),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .expect("the sticky is on the board");
+        assert_eq!(body, "hello", "the refused write leaves the body unchanged");
     }
 }

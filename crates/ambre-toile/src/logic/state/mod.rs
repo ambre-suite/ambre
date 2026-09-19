@@ -344,7 +344,8 @@ impl ToileState {
                 size,
                 content,
                 fill,
-            } => self.create_element(kind, at, size, content, fill),
+                correlate,
+            } => self.create_element(kind, at, size, content, fill, correlate),
             ToileCommand::MoveElements { ids, delta } => self.move_elements(&ids, delta),
             ToileCommand::AlignElements { ids, op } => self.align_elements(&ids, op),
             ToileCommand::ResizeElement { id, new } => self.resize_element(&id, new),
@@ -951,6 +952,7 @@ mod schema_tests {
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
             fill: None,
+            correlate: 0,
         });
         st
     }
@@ -1125,6 +1127,7 @@ mod undo_state_tests {
             size: Size::new(10.0, 10.0),
             content: InitContent::None,
             fill: None,
+            correlate: 0,
         });
         assert!(
             matches!(
