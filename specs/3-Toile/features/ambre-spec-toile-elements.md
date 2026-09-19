@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-193` | `POST` | A rotate MUST grow the recorded box to the corners the angle sweeps. | this spec section 3 | `ambre_toile::logic::convergence_tests::rotate_expands_the_aabb` -- it reads the four bounds against the sweep | none | verified |
 | `TOILE-012` | `FRAME` | A move MUST NOT touch a locked element. | this spec section 3 | `ambre_toile::logic::convergence_tests::locked_element_ignores_move` | none | verified |
 | `TOILE-036` | `FAIL` | A resize, a rotate or a body overwrite naming an element the board does not hold MUST answer an error and MUST leave the document unchanged. | this spec section 3 | none | unheld -- the three handlers share one error helper, `ambre_toile::logic::state::err_no_element`, and no test drives a missing id into them. The connector half has one (`TOILE-007`); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-194` | `FAIL` | A move or a restyle naming an element the board does not hold MUST answer an error too. | this spec section 3 | none | fails -- both handlers skip an id that does not resolve and answer as though it had, section 6; lands with the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-194` | `FAIL` | A move or a restyle naming an element the board does not hold MUST answer an error too. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_move_naming_a_missing_element_answers_an_error`; `::a_restyle_naming_a_missing_element_answers_an_error` -- each names a ghost id and reads a `NoSuchElement` error back | none | verified |
 
 ### 1.4 Overwrite the body of a note
 
@@ -65,7 +65,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-198` | `POST` | Deleting an element MUST remove every connector that touched it at either endpoint. | this spec section 3 | `ambre_toile::logic::convergence_tests::delete_drops_owned_connectors` -- it deletes one of two joined elements and leaves the board with the other alone | none | verified |
 | `TOILE-199` | `POST` | Deleting a container MUST take its members with it, drop each removed id from its membership list, and prune what the removal emptied. | this spec section 3 | `ambre_toile::logic::convergence_tests::deleting_a_group_cascades_to_members` | none | verified |
 | `TOILE-200` | `FRAME` | A delete MUST NOT remove an element that is neither named nor a member of one that is. | this spec section 3 | structural -- the handler expands the named ids to their subtrees once and walks that set alone | none | verified |
-| `TOILE-201` | `FAIL` | A delete naming an element the board does not hold MUST answer an error. | this spec section 3 | none | fails -- the handler removes what resolves and answers as though the rest had, section 6; lands with the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-201` | `FAIL` | A delete naming an element the board does not hold MUST answer an error. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_delete_naming_a_missing_element_answers_an_error` -- it names a ghost id and reads a `NoSuchElement` error back | none | verified |
 
 ### 1.6 Lock and unlock an element
 
@@ -92,10 +92,10 @@ status values are normative in `ambre-spec-template.md`.
   multiplier (`features/ambre-spec-toile-tools.md`).
 * **Boundary.** none of its own: an element lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). No lifecycle command opens a socket or holds a key.
-* **Verification.** 26 `verified`, 2 `failing`, 5 `untested`. What holds best is align and distribute:
+* **Verification.** 28 `verified`, 0 `failing`, 5 `untested`. What holds best is align and distribute:
   nine tests over the pure geometry, five over the handler. A place in the 2-peer property strategy
-  lets `TOILE-037` claim convergence rather than assert it. What is loose is the lock,
-  across five commands, and a missing id, which is two lines, one refused and one swallowed.
+  lets `TOILE-037` claim convergence rather than assert it. A missing id now answers an error across
+  move, restyle and delete. What is loose is the lock, across five commands.
 
 ---
 
@@ -237,10 +237,6 @@ selection toolbar carries style, not geometry.
 * **A refusal says nothing to anyone** (`TOILE-033`). Every handler that honours the lock returns an
   empty change list, not an error. No notice, no cursor, no log, and the same silence for the user
   who attempted the write as for the peers who did not.
-* **Half the commands accept an id nobody minted** (`TOILE-194`, `TOILE-201`). The resize, the
-  rotate and the body overwrite answer an error (`TOILE-036`). The move, the restyle, the lock and
-  the delete skip what does not resolve and answer as though it had. A command over a stale
-  selection reports the success of a write that never happened.
 * **The property tests never lock** (`TOILE-033`). The operation strategy the two of them draw from
   carries no lock case and no body overwrite. Neither convergence nor cache equivalence has ever
   been exercised against a locked element.

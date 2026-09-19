@@ -194,6 +194,13 @@ impl ToileState {
     }
 
     pub(super) fn move_elements(&mut self, ids: &[ElementId], delta: Vec2) -> ToileOutcome {
+        // An id the board does not hold answers an error, not a silent skip
+        // (`TOILE-194`).
+        for id in ids {
+            if self.element_map(id).is_none() {
+                return self.err_no_element(id);
+            }
+        }
         // A group transforms as one: expand every selected group to its leaf
         // descendants so translating a group moves its whole subtree.
         let mut leaves = HashSet::new();
@@ -321,6 +328,13 @@ impl ToileState {
         ids: &[ElementId],
         style: ElementStyle,
     ) -> ToileOutcome {
+        // An id the board does not hold answers an error, not a silent skip
+        // (`TOILE-194`).
+        for id in ids {
+            if self.element_map(id).is_none() {
+                return self.err_no_element(id);
+            }
+        }
         if !self.restyle_merge_inner(ids, &style) {
             return ToileOutcome::display_only(Vec::new());
         }
@@ -389,6 +403,13 @@ impl ToileState {
     }
 
     pub(super) fn delete_elements(&mut self, ids: &[ElementId]) -> ToileOutcome {
+        // An id the board does not hold answers an error, not a silent skip
+        // (`TOILE-201`).
+        for id in ids {
+            if self.element_map(id).is_none() {
+                return self.err_no_element(id);
+            }
+        }
         let deck_before = self.slide_order();
         if !self.delete_from_doc(ids) {
             return ToileOutcome::display_only(Vec::new());

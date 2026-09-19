@@ -359,17 +359,19 @@ pub fn context_menu_ids(scope: &CtxScope) -> Vec<Option<CommandId>> {
 /// Translate a menu `CommandId` into the `ToileCommand`(s) to emit against the
 /// current selection. The single place a Toile menu id becomes command(s); pure
 /// and host-tested (`toile-menus`). `PASTE` and `SELECT_ALL` are UI-only intents
-/// handled in the view (clipboard / local selection), so they return `vec![]`.
+/// handled in the view, so they return `Some(vec![])`. An id the resolver does
+/// not know returns `None`, refused rather than passing as a view-only intent
+/// (`TOILE-UI-152`).
 pub fn resolve_menu_command(
     id: CommandId,
     selection: &[ElementId],
     _group_scope: Option<&ElementId>,
     selected: &[DisplayElement],
     display: &DisplayViewport,
-) -> Vec<ToileCommand> {
+) -> Option<Vec<ToileCommand>> {
     let ids = || selection.to_vec();
 
-    match id {
+    Some(match id {
         COPY => vec![ToileCommand::CopyElements { ids: ids() }],
         // Cut = copy then delete; the channel preserves order, so the copy
         // captures the selection before the delete removes it (`toile-clipboard`).
@@ -439,8 +441,9 @@ pub fn resolve_menu_command(
         }
         // UI-only intents handled in the view.
         PASTE | SELECT_ALL => Vec::new(),
-        _ => Vec::new(),
-    }
+        // An id the resolver does not know is refused (`TOILE-UI-152`).
+        _ => return None,
+    })
 }
 
 /// One `React` command per selected element, setting (`Some`) or clearing
@@ -569,7 +572,8 @@ mod tests {
             elem("b", ElementKind::Sticky, r(0.0, 0.0, 10.0, 10.0), false),
         ]);
         let cmds =
-            resolve_menu_command(REACT_THUMBSUP, &[eid("a"), eid("b")], None, &els(&dv), &dv);
+            resolve_menu_command(REACT_THUMBSUP, &[eid("a"), eid("b")], None, &els(&dv), &dv)
+                .unwrap();
         assert_eq!(cmds.len(), 2);
         for (cmd, want) in cmds.iter().zip(["a", "b"]) {
             match cmd {
@@ -593,7 +597,7 @@ mod tests {
             r(0.0, 0.0, 10.0, 10.0),
             false,
         )]);
-        let cmds = resolve_menu_command(REACT_CLEAR, &[eid("a")], None, &els(&dv), &dv);
+        let cmds = resolve_menu_command(REACT_CLEAR, &[eid("a")], None, &els(&dv), &dv).unwrap();
         assert_eq!(cmds.len(), 1);
         assert!(matches!(
             &cmds[0],
@@ -711,18 +715,20 @@ mod tests {
         )]);
         let sel = vec![eid("a")];
         assert!(matches!(
-            resolve_menu_command(COPY, &sel, None, &els(&dv), &dv).as_slice(),
+            resolve_menu_command(COPY, &sel, None, &els(&dv), &dv).unwrap().as_slice(),
             [ToileCommand::CopyElements { ids }] if ids == &sel
         ));
         assert!(matches!(
-            resolve_menu_command(CUT, &sel, None, &els(&dv), &dv).as_slice(),
+            resolve_menu_command(CUT, &sel, None, &els(&dv), &dv)
+                .unwrap()
+                .as_slice(),
             [
                 ToileCommand::CopyElements { .. },
                 ToileCommand::DeleteElements { .. }
             ]
         ));
         assert!(matches!(
-            resolve_menu_command(DELETE, &sel, None, &els(&dv), &dv).as_slice(),
+            resolve_menu_command(DELETE, &sel, None, &els(&dv), &dv).unwrap().as_slice(),
             [ToileCommand::DeleteElements { ids }] if ids == &sel
         ));
     }
@@ -735,7 +741,7 @@ mod tests {
             r(0.0, 0.0, 10.0, 10.0),
             false,
         )]);
-        let out = resolve_menu_command(DUPLICATE, &[eid("a")], None, &els(&dv), &dv);
+        let out = resolve_menu_command(DUPLICATE, &[eid("a")], None, &els(&dv), &dv).unwrap();
         assert!(matches!(
             out.as_slice(),
             [ToileCommand::DuplicateElements { delta, .. }]
@@ -750,11 +756,14 @@ mod tests {
             elem("a", ElementKind::Sticky, r(0.0, 0.0, 5.0, 5.0), false),
         ]);
         assert!(matches!(
-            resolve_menu_command(GROUP, &[eid("a"), eid("g")], None, &els(&dv), &dv).as_slice(),
+            resolve_menu_command(GROUP, &[eid("a"), eid("g")], None, &els(&dv), &dv)
+                .unwrap()
+                .as_slice(),
             [ToileCommand::GroupElements { .. }]
         ));
         // Ungroup emits only for the group node, not the plain sticky.
-        let out = resolve_menu_command(UNGROUP, &[eid("a"), eid("g")], None, &els(&dv), &dv);
+        let out =
+            resolve_menu_command(UNGROUP, &[eid("a"), eid("g")], None, &els(&dv), &dv).unwrap();
         assert!(matches!(
             out.as_slice(),
             [ToileCommand::UngroupElements { group }] if group == &eid("g")
@@ -767,7 +776,8 @@ mod tests {
             elem("a", ElementKind::Sticky, r(0.0, 0.0, 5.0, 5.0), false),
             elem("b", ElementKind::Sticky, r(6.0, 0.0, 10.0, 5.0), false),
         ]);
-        let out = resolve_menu_command(BRING_FRONT, &[eid("a"), eid("b")], None, &els(&dv), &dv);
+        let out =
+            resolve_menu_command(BRING_FRONT, &[eid("a"), eid("b")], None, &els(&dv), &dv).unwrap();
         assert_eq!(out.len(), 2);
         assert!(out.iter().all(|c| matches!(
             c,
@@ -787,11 +797,15 @@ mod tests {
             false,
         )]);
         assert!(matches!(
-            resolve_menu_command(LOCK, &[eid("a")], None, &els(&dv), &dv).as_slice(),
+            resolve_menu_command(LOCK, &[eid("a")], None, &els(&dv), &dv)
+                .unwrap()
+                .as_slice(),
             [ToileCommand::LockElements { locked: true, .. }]
         ));
         assert!(matches!(
-            resolve_menu_command(UNLOCK, &[eid("a")], None, &els(&dv), &dv).as_slice(),
+            resolve_menu_command(UNLOCK, &[eid("a")], None, &els(&dv), &dv)
+                .unwrap()
+                .as_slice(),
             [ToileCommand::LockElements { locked: false, .. }]
         ));
     }
@@ -802,7 +816,7 @@ mod tests {
             elem("f", ElementKind::Frame, r(0.0, 0.0, 100.0, 100.0), false),
             elem("a", ElementKind::Sticky, r(10.0, 10.0, 20.0, 20.0), false),
         ]);
-        let out = resolve_menu_command(ADD_TO_FRAME, &[eid("a")], None, &els(&dv), &dv);
+        let out = resolve_menu_command(ADD_TO_FRAME, &[eid("a")], None, &els(&dv), &dv).unwrap();
         assert!(matches!(
             out.as_slice(),
             [ToileCommand::SetFrameChildren { frame, add, remove }]
@@ -813,8 +827,26 @@ mod tests {
     #[test]
     fn paste_and_select_all_are_ui_only() {
         let dv = viewport(vec![]);
-        assert!(resolve_menu_command(PASTE, &[], None, &els(&dv), &dv).is_empty());
-        assert!(resolve_menu_command(SELECT_ALL, &[], None, &els(&dv), &dv).is_empty());
+        assert!(
+            resolve_menu_command(PASTE, &[], None, &els(&dv), &dv)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            resolve_menu_command(SELECT_ALL, &[], None, &els(&dv), &dv)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    /// `TOILE-UI-152`: an id the resolver does not know is refused, never passed
+    /// as a view-only intent.
+    #[test]
+    fn an_unknown_id_is_refused_not_ui_only() {
+        let dv = viewport(vec![]);
+        assert!(
+            resolve_menu_command(CommandId("toile.unknown"), &[], None, &els(&dv), &dv).is_none()
+        );
     }
 
     /// Every align id resolves to one batch over the whole selection. The
@@ -837,7 +869,7 @@ mod tests {
             (DISTRIBUTE_H, AlignOp::DistributeH),
             (DISTRIBUTE_V, AlignOp::DistributeV),
         ] {
-            let out = resolve_menu_command(id, &sel, None, &els(&dv), &dv);
+            let out = resolve_menu_command(id, &sel, None, &els(&dv), &dv).unwrap();
             assert!(
                 matches!(
                     out.as_slice(),

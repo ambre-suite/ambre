@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use kurbo::Rect;
 use loro::{LoroMap, LoroMovableList, LoroValue};
 
-use crate::logic::command::{ToileEvent, ToileOutcome};
+use crate::logic::command::{ToileError, ToileEvent, ToileOutcome};
 use crate::logic::index::ElementBounds;
 use crate::logic::model::{ElementId, NodeId};
 
@@ -24,7 +24,9 @@ impl ToileState {
     /// members keep painting above it in their current relative order.
     pub(super) fn group_elements(&mut self, ids: &[ElementId]) -> ToileOutcome {
         let Some(id) = self.group_inner(ids) else {
-            return ToileOutcome::display_only(Vec::new());
+            // Fewer than two distinct members: refuse loudly, not in silence
+            // (`TOILE-055`).
+            return ToileOutcome::display_only(vec![ToileEvent::Error(ToileError::GroupNeedsTwo)]);
         };
         self.doc.commit();
         self.rematerialize_layers();
@@ -117,7 +119,10 @@ impl ToileState {
             return self.err_no_element(group);
         };
         if str_of(&gm, "type") != "group" {
-            return ToileOutcome::display_only(Vec::new());
+            // An id that is not a group refuses loudly (`TOILE-159`).
+            return ToileOutcome::display_only(vec![ToileEvent::Error(ToileError::NotAGroup(
+                group.0.clone(),
+            ))]);
         }
         let children = self.children_of(group);
         let parent = self.enclosing_group(group);

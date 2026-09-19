@@ -41,7 +41,7 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-FEAT-060` | `PRE` | The caller MUST name a target the board still holds. | this spec section 3 | none | unheld -- nothing checks it: the write takes no existence check, so a reaction on a target that is already gone is stored and never rendered by either derivation; lands with the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | untested |
+| `TOILE-FEAT-060` | `PRE` | The caller MUST name a target the board still holds. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_reaction_on_a_missing_target_answers_an_error` -- reacting on a ghost target reads a `NoSuchElement` error back and writes nothing | none | verified |
 | `TOILE-FEAT-061` | `POST` | Reacting again MUST replace the user's own reaction, so a count stays a count of people. | this spec section 3 | `ambre_toile::logic::convergence_tests::react_add_change_remove_updates_tally` -- it places an emoji, replaces it with a vote and reads the emoji gone and one vote standing, then removes it and reads nothing left | none | verified |
 | `TOILE-FEAT-062` | `POST` | A reaction that changes something MUST reach the other users. | this spec section 3 | `ambre_toile::logic::convergence_tests::react_broadcasts_delta_and_is_undoable` -- it reads an outcome carrying an update | none | verified |
 | `TOILE-FEAT-067` | `POST` | A reaction that changes something MUST repaint the badges of that target, on this screen too. | this spec section 4 | `ambre_toile::logic::convergence_tests::react_broadcasts_delta_and_is_undoable` -- it reads an outcome announcing that target, and the view queues a fresh board for an announced target | none | verified |
@@ -81,11 +81,10 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
   pass per element. It costs what the board has reacted to and not what it holds.
 * **Boundary.** none of its own: a reaction is written to the document, and `ZK-001` seals every
   payload before it leaves the client. The emoji is document data like any other.
-* **Verification.** 19 `verified`, 1 `failing`, 9 `untested`, 6 `unimplemented`. What holds is the
-  convergence: two devices, two users and a deleted target, the best-covered half of the
-  collaboration surface. What is loose is the painting: a chip size nothing measures, an untallied
-  element nothing checks, a vote chip nothing can build. An emoji order is loose too, and no test
-  can shuffle it because no test ever places two.
+* **Verification.** 20 `verified`, 1 `failing`, 8 `untested`, 6 `unimplemented`. What holds is the
+  convergence: two devices, two users and a deleted target, and a reaction on a deleted target
+  answering an error. What is loose is the painting: a chip size nothing measures, a vote chip nothing
+  can build. An emoji order is loose too, and no test can shuffle it because no test ever places two.
 
 ---
 
@@ -132,8 +131,8 @@ own entry. One commit, so one undo item (`TOILE-FEAT-023`).
 **Steps, when a user reacts:**
 
 1. stop when no canonical identity is known: there is no key to write under (`TOILE-FEAT-021`);
-2. build the key from the target and that identity, and take the target on trust. A target that is
-   already gone is written to, and skipped only at derivation (`TOILE-FEAT-060`);
+2. refuse a target the board no longer holds, so nothing is written for a deleted element
+   (`TOILE-FEAT-060`);
 3. stop when the write would change nothing, so an unchanged reaction is not an undo item. That is
    a clear with no entry to clear (`TOILE-FEAT-020`), or a byte-identical re-write
    (`TOILE-FEAT-063`);

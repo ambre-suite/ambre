@@ -37,7 +37,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-152` | `POST` | A selected element that encloses another selected element MUST be dropped from the binding. | this spec section 3; section 5 | none | unheld -- the filter walks each member's subtree looking for a sibling of the request, and no test selects a group together with one of its own members, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-246` | `POST` | The enclosed elements of such a selection MUST be bound. | this spec section 3; section 5 | none | unheld -- the same filter keeps the subtree it walked, and no test reads the binding it produces back, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-153` | `FRAME` | Binding a group MUST NOT move any member. | this spec section 3 | none | unheld -- the binding writes a membership list and a paint-order entry, and the binding test reads the group's own box back and never a member's; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-055` | `FAIL` | A binding left with fewer than two distinct members MUST create no group. | this spec section 3 | none | unheld -- the refusal is silent: the handler returns an empty outcome with no notice, so a user pressing the chord on one element sees nothing at all, section 6; lands with the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | untested |
+| `TOILE-055` | `FAIL` | A binding left with fewer than two distinct members MUST create no group. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_group_of_one_answers_an_error` -- one member yields a `GroupNeedsTwo` error and no group | none | verified |
 
 ### 1.3 Move a group
 
@@ -55,7 +55,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-156` | `POST` | Ungrouping MUST remove the group itself. | this spec section 3 | `ambre_toile::logic::convergence_tests::ungroup_keeps_children_and_order` -- its first assertion, where the group has no box after the unbind | none | verified |
 | `TOILE-157` | `POST` | The children MUST be re-parented to the group's own container. | this spec section 3 | none | unheld -- the test ungroups a top-level group, where the container is the board and the re-parenting is a no-op. The nested case, where the children join the enclosing group's list, is driven by nothing; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-158` | `FRAME` | Ungrouping MUST NOT move any element. | this spec section 3 | none | unheld -- the unbind writes a membership list and a paint-order entry, and the test reads the order back, never a position; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-159` | `FAIL` | Ungrouping an id that is not a group MUST change nothing. | this spec section 3 | none | unheld -- the refusal is silent: the handler returns an empty outcome, which is what makes ungrouping a mixed selection a partial success nobody is told about, section 6; lands with the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | untested |
+| `TOILE-159` | `FAIL` | Ungrouping an id that is not a group MUST change nothing. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_ungroup_of_a_non_group_answers_an_error` -- a plain rect yields a `NotAGroup` error and nothing moves | none | verified |
 | `TOILE-160` | `FAIL` | Ungrouping an id the board does not hold MUST tell the user. | this spec section 3 | none | unheld -- the handler returns the missing-element error, and no test reads that notice back for this command; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.5 Delete a group
@@ -70,11 +70,11 @@ status values are normative in `ambre-spec-template.md`.
   derivation is quadratic in the element count, and no bench measures it.
 * **Boundary.** none of its own: the binding lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). The group box is derived and never persisted.
-* **Verification.** 8 `verified`, 1 `failing`, 15 `untested`. What holds is the happy path of each
-  gesture, on five tests carrying nine assertions between them. One row holds by construction: a
-  group has no field a box could be authored into. What is loose is everything around it: every
-  refusal, every re-parenting, every frame condition and the whole of the nested case. Two of those
-  refusals are silent besides.
+* **Verification.** 10 `verified`, 1 `failing`, 13 `untested`. What holds is the happy path of each
+  gesture, on five tests carrying nine assertions between them. The two refusals a chord over a
+  single element or a non-group answers hold too. One row holds by construction: a group has no field
+  a box could be authored into. What is loose is the re-parenting, the frame conditions and the nested
+  case.
 
 ---
 
@@ -179,11 +179,7 @@ the user sees is one selection box around the union of the members, with the han
   (`ambre-roadmap.md`, "Engine and render optimization").
 * **Ungrouping a multi-selection is one command per id** (`TOILE-010`). The chord and the menu entry
   send one unbind per selected id, each committing separately, so ungrouping three groups takes three
-  undos. The ids that are not groups are rejected no-ops (`TOILE-159`).
-* **Both refusals are silent** (`TOILE-055`, `TOILE-159`). A binding of fewer than two distinct
-  members and an unbind of something that is not a group both return an empty outcome. No error, no
-  notice, no cursor change. A user who presses the chord on a single element sees the same nothing
-  as a user who presses it on a mixed selection. The second one got a partial result.
+  undos. The ids that are not groups answer an error each.
 * **The nested transform rests on a property that cannot fail on it** (`TOILE-053`). The two-peer
   property generates a group of a group and asserts that the two peers agree. A move that reached
   only the first level of a subtree would leave both peers agreeing on the same wrong positions. The

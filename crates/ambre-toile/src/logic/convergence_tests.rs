@@ -3986,3 +3986,89 @@ proptest! {
         );
     }
 }
+
+// -----------------------------------------------------------------------------
+// A command that names nothing answers an error
+// -----------------------------------------------------------------------------
+
+/// `TOILE-194`: a move naming an element the board does not hold answers an
+/// error, not a silent skip.
+#[test]
+fn a_move_naming_a_missing_element_answers_an_error() {
+    let mut st = ToileState::new();
+    let out = st.handle_command(ToileCommand::MoveElements {
+        ids: vec![ElementId("ghost".to_owned())],
+        delta: Vec2::new(1.0, 1.0),
+    });
+    assert!(matches!(
+        out.display.as_slice(),
+        [ToileEvent::Error(ToileError::NoSuchElement(_))]
+    ));
+}
+
+/// `TOILE-194`: a restyle naming a missing element answers an error.
+#[test]
+fn a_restyle_naming_a_missing_element_answers_an_error() {
+    let mut st = ToileState::new();
+    let out = st.handle_command(ToileCommand::RestyleElements {
+        ids: vec![ElementId("ghost".to_owned())],
+        style: ElementStyle::default(),
+    });
+    assert!(matches!(
+        out.display.as_slice(),
+        [ToileEvent::Error(ToileError::NoSuchElement(_))]
+    ));
+}
+
+/// `TOILE-201`: a delete naming a missing element answers an error.
+#[test]
+fn a_delete_naming_a_missing_element_answers_an_error() {
+    let mut st = ToileState::new();
+    let out = st.handle_command(ToileCommand::DeleteElements {
+        ids: vec![ElementId("ghost".to_owned())],
+    });
+    assert!(matches!(
+        out.display.as_slice(),
+        [ToileEvent::Error(ToileError::NoSuchElement(_))]
+    ));
+}
+
+/// `TOILE-055`: a group of one refuses loudly, not in silence.
+#[test]
+fn a_group_of_one_answers_an_error() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let out = st.handle_command(ToileCommand::GroupElements { ids: vec![a] });
+    assert!(matches!(
+        out.display.as_slice(),
+        [ToileEvent::Error(ToileError::GroupNeedsTwo)]
+    ));
+}
+
+/// `TOILE-159`: ungrouping an id that is not a group refuses loudly.
+#[test]
+fn an_ungroup_of_a_non_group_answers_an_error() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let out = st.handle_command(ToileCommand::UngroupElements { group: a });
+    assert!(matches!(
+        out.display.as_slice(),
+        [ToileEvent::Error(ToileError::NotAGroup(_))]
+    ));
+}
+
+/// `TOILE-FEAT-060`: a reaction on a target the board no longer holds answers
+/// an error instead of storing an entry nothing will render.
+#[test]
+fn a_reaction_on_a_missing_target_answers_an_error() {
+    let mut st = ToileState::new();
+    st.set_user_id(UserId::new());
+    let out = st.handle_command(ToileCommand::React {
+        target: ElementId("ghost".to_owned()),
+        reaction: Some(emoji("thumbsup")),
+    });
+    assert!(matches!(
+        out.display.as_slice(),
+        [ToileEvent::Error(ToileError::NoSuchElement(_))]
+    ));
+}

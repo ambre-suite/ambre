@@ -19,13 +19,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2487 rows: 1737 shipped, of which 808 loose. 750 unbuilt.**
+**2487 rows: 1737 shipped, of which 802 loose. 750 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 212 | 219 | 498 |  | 929 |
-| `failing` | 39 | 46 | 55 |  | 140 |
-| `untested` | 274 | 144 | 234 |  | 652 |
+| `verified` | 212 | 219 | 504 |  | 935 |
+| `failing` | 39 | 46 | 52 |  | 137 |
+| `untested` | 274 | 144 | 231 |  | 649 |
 | `human-review` | 7 |  |  |  | 7 |
 | `qa-manual` | 3 | 4 | 2 |  | 9 |
 | `unimplemented` | 54 | 56 | 23 | 617 | 750 |
@@ -105,21 +105,21 @@
 | `ambre-spec-toile-clipboard.md` | 17 | 17 | 11 | 6 |  |
 | `ambre-spec-toile-comments.md` | 30 | 30 | 25 | 5 |  |
 | `ambre-spec-toile-connectors.md` | 45 | 45 | 21 | 24 |  |
-| `ambre-spec-toile-elements.md` | 33 | 33 | 26 | 7 |  |
+| `ambre-spec-toile-elements.md` | 33 | 33 | 28 | 5 |  |
 | `ambre-spec-toile-embeds.md` | 44 | 44 | 31 | 13 |  |
 | `ambre-spec-toile-engine.md` | 40 | 40 | 29 | 11 |  |
 | `ambre-spec-toile-find.md` | 15 | 15 | 8 | 7 |  |
 | `ambre-spec-toile-frames.md` | 10 | 10 | 5 | 5 |  |
 | `ambre-spec-toile-freehand.md` | 11 | 11 | 5 | 6 |  |
-| `ambre-spec-toile-groups.md` | 24 | 24 | 8 | 16 |  |
+| `ambre-spec-toile-groups.md` | 24 | 24 | 10 | 14 |  |
 | `ambre-spec-toile-import-export.md` | 53 | 41 | 25 | 16 | 12 |
 | `ambre-spec-toile-links.md` | 12 | 12 | 5 | 7 |  |
 | `ambre-spec-toile-media.md` | 29 | 29 | 24 | 5 |  |
-| `ambre-spec-toile-menus.md` | 52 | 52 | 36 | 16 |  |
+| `ambre-spec-toile-menus.md` | 52 | 52 | 37 | 15 |  |
 | `ambre-spec-toile-pdf-export.md` | 16 | 14 | 10 | 4 | 2 |
 | `ambre-spec-toile-presence.md` | 28 | 28 | 22 | 6 |  |
 | `ambre-spec-toile-presentation.md` | 45 | 45 | 36 | 9 |  |
-| `ambre-spec-toile-reactions.md` | 35 | 29 | 19 | 10 | 6 |
+| `ambre-spec-toile-reactions.md` | 35 | 29 | 20 | 9 | 6 |
 | `ambre-spec-toile-selection.md` | 29 | 29 | 21 | 8 |  |
 | `ambre-spec-toile-status-bar.md` | 13 | 13 | 8 | 5 |  |
 | `ambre-spec-toile-styles.md` | 30 | 30 | 22 | 8 |  |

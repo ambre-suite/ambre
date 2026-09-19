@@ -2122,13 +2122,21 @@ impl ToileView {
         // (`toile-connectors`).
         let cmds = match self.arrow.as_ref() {
             Some(c) if self.selection.is_empty() => arrow::arrow_command_for(id, c),
-            _ => super::menu::resolve_menu_command(
+            _ => match super::menu::resolve_menu_command(
                 id,
                 &self.selection,
                 self.group_scope.as_ref(),
                 &self.selection_data,
                 &self.display,
-            ),
+            ) {
+                Some(cmds) => cmds,
+                // An id the resolver does not know is refused, never treated as
+                // a view-only intent (`TOILE-UI-152`).
+                None => {
+                    tracing::warn!("Toile: unknown menu command id {id:?}");
+                    return;
+                }
+            },
         };
         for cmd in cmds {
             self.send_edit(cmd);

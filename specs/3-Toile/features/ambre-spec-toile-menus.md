@@ -72,7 +72,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-149` | `POST` | Remove-from-frame MUST target that same frame. | this spec section 3 | none | fails -- the removal reuses the geometric lookup, so an element whose real parent is another frame is removed from the wrong one and nothing changes. Only the add half is covered; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TOILE-UI-150` | `POST` | Where frames overlap, the frame the entries target MUST be the front-most one that contains the selection. | this spec section 2 | none | unheld -- the lookup scans the painted order backwards and takes the first container, and the frame test holds one frame, so the choice is never exercised; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-151` | `FRAME` | Resolving an entry MUST NOT change the selection. | this spec section 2 | type-level -- the resolver borrows the selection immutably and returns commands, so it has no way to write it back | none | verified |
-| `TOILE-UI-152` | `FAIL` | An id the resolver does not know MUST be refused, and MUST NOT pass as a view-only intent. | this spec section 5 | none | fails -- the resolver falls through to an empty command list, which is exactly what paste and select-all return, so an unknown id is indistinguishable from a handled one and nobody is told; lands with the `A Toile command that names nothing answers an error` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-152` | `FAIL` | An id the resolver does not know MUST be refused, and MUST NOT pass as a view-only intent. | this spec section 5 | `ambre_toile::ui::menu::tests::an_unknown_id_is_refused_not_ui_only` -- an unknown id resolves to `None`, never the empty list a view-only intent returns | none | verified |
 | `TOILE-UI-153` | `FAIL` | With no enclosing frame, the two frame entries MUST tell the user why nothing happened. | this spec section 5 | none | fails -- both return an empty command list when the lookup finds no container, and no notice is raised. The entries are omitted in that scope, so this is reached only through the bar; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | failing |
 
 ### 1.4 Choose a menu-bar entry
@@ -98,10 +98,11 @@ status values are normative in `ambre-spec-template.md`.
   by the feature that owns the command.
 * **Boundary.** none: a menu is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. What an entry commits leaves as a command.
-* **Verification.** 36 `verified`, 4 `failing`, 12 `untested`. What holds is the entry set, the omission
-  of a locked element's move entries, and a scope read from the whole selection (`TOILE-UI-134`). What is
-  loose is the pointer: which scope a right-click means, and what it does to the selection. The failures are
-  the frame-removal lookup, the unknown id, the frame notice, and the zoom rule its test only half proves.
+* **Verification.** 37 `verified`, 3 `failing`, 12 `untested`. What holds is the entry set, the omission
+  of a locked element's move entries, and a scope read from the whole selection (`TOILE-UI-134`). An unknown
+  id is refused rather than passed as a view-only intent. What is loose is the pointer: which scope a
+  right-click means, and what it does to the selection. The failures are the frame-removal lookup, the frame
+  notice, and the zoom rule its test only half proves.
 
 ---
 
@@ -232,9 +233,9 @@ This one restates none of them.
   no context-menu entry drops a thread on the element under the cursor. The tool and the pin are the only ways
   in (`features/ambre-spec-toile-comments.md section 4`).
 * **A refused command answers with nothing.** The board refuses some commands: a locked element ignores a
-  move. No rule states what the user is told when an entry produces no change. Three refusals here are already
-  silent: an id the resolver does not know (`TOILE-UI-152`) and a frame entry with no enclosing frame
-  (`TOILE-UI-153`). The third is a fit to the selection with nothing selected (`TOILE-UI-160`).
+  move. No rule states what the user is told when an entry produces no change. Two refusals here are still
+  silent: a frame entry with no enclosing frame (`TOILE-UI-153`) and a fit to the selection with nothing
+  selected (`TOILE-UI-160`).
 * **The frame the entries target is geometric, not the real parent.** The lookup takes the front-most frame
   whose box contains the selection, and no test holds two (`TOILE-UI-150`). Removal reuses it, so an element
   whose parent is another frame is removed from the wrong one and nothing happens (`TOILE-UI-149`).

@@ -72,6 +72,10 @@ impl ToileState {
         let Some(user_id) = self.my_user_id else {
             return ToileOutcome::display_only(Vec::new());
         };
+        // The caller MUST name a target the board still holds (`TOILE-FEAT-060`).
+        if self.element_map(target).is_none() {
+            return self.err_no_element(target);
+        }
         let key = reaction_key(target, &user_id);
         let map = self.doc.get_map(REACTIONS);
 
