@@ -21,6 +21,7 @@ use app_root::AppRoot;
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn mount_shell(
     to_logic: flume::Sender<LogicCommand>,
+    clipboard_paste: flume::Sender<ClipboardPaste>,
     raf: ambre_canvas::RafControl,
     theme_ctl: ambre_canvas::ThemeControl,
     boot_doc: Option<DocumentId>,
@@ -135,6 +136,7 @@ pub(crate) fn mount_shell(
         // consume a moved `wiring`. `AppRoot` clones it back out of context.
         provide_context(Wiring {
             to_logic,
+            clipboard_paste,
             raf,
             theme_ctl,
             toggles,

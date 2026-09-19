@@ -29,6 +29,7 @@ pub fn run_with<F, C, P>(
     make_child_fn: C,
     mut pre_frame: P,
     raf: RafControl,
+    paste_rx: flume::Receiver<ClipboardPaste>,
 ) -> DocSwitcher
 where
     F: FnOnce(f64, f64, TextInput) -> AppView,
@@ -82,7 +83,19 @@ where
         let child_pipe = text_input.clone();
         Rc::new(move |id, doc_type, size| make_child_fn(id, doc_type, size, child_pipe.clone()))
     };
-    let host = Rc::new(RefCell::new(FrameHost::new(view, perf, Some(make_child))));
+    // Per-page-load token proving a same-tab copy. It is written synchronously
+    // into the clipboard on `copy`/`cut` and read back on `paste`. A match means
+    // the OS clipboard still holds this tab's own copy. The async publish
+    // re-writes it (`UI-THREAD-023`), and the Paste-button path compares it in
+    // `FrameHost` (`UI-THREAD-007`).
+    let clip_token = format!("ambre-{:x}", (js_sys::Math::random() * 1e18) as u64);
+    let host = Rc::new(RefCell::new(FrameHost::new(
+        view,
+        perf,
+        Some(make_child),
+        clip_token,
+        paste_rx,
+    )));
 
     // -- Async GPU init, then start the rAF loop. -----------------------------
     {
@@ -184,20 +197,11 @@ where
     // a base64 postcard `ClipboardPayload` under a private type
     // (`ambre-spec-clipboard.md`), so a round-trip preserves styles and reindexes
     // formulas.
-    // Per-page-load token proving a same-tab copy. Written synchronously into the
-    // clipboard on `copy`/`cut` and read back on `paste`; a match means the OS
-    // clipboard still holds this tab's own copy (see `AMBRE_CLIPBOARD_TOKEN_TYPE`).
-    let clip_token: Rc<str> = Rc::from(format!(
-        "ambre-{:x}",
-        (js_sys::Math::random() * 1e18) as u64
-    ));
     {
         let ta = text_input.element().clone();
         let host_c = Rc::clone(&host);
-        let token = Rc::clone(&clip_token);
         for cut in [false, true] {
             let host_e = Rc::clone(&host_c);
-            let token_e = Rc::clone(&token);
             let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
                 move |event: web_sys::ClipboardEvent| {
                     match host_e.borrow_mut().clipboard_write(cut) {
@@ -221,8 +225,9 @@ where
                         // clipboard. Prevent the default so the browser does not
                         // clobber the clipboard with the empty textarea.
                         ambre_bus::CopyOutcome::Deferred => {
+                            let token = host_e.borrow().clip_token().to_owned();
                             if let Some(data) = event.clipboard_data() {
-                                let _ = data.set_data(AMBRE_CLIPBOARD_TOKEN_TYPE, &token_e);
+                                let _ = data.set_data(AMBRE_CLIPBOARD_TOKEN_TYPE, &token);
                             }
                             event.prevent_default();
                         }
@@ -240,7 +245,6 @@ where
     {
         let ta = text_input.element().clone();
         let host_c = Rc::clone(&host);
-        let token = Rc::clone(&clip_token);
         let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
             move |event: web_sys::ClipboardEvent| {
                 let Some(data) = event.clipboard_data() else {
@@ -260,9 +264,11 @@ where
                 // Same-tab ownership: the synchronous token survives even when the
                 // async payload write failed (Firefox). So a match means paste our
                 // own in-memory copy at full fidelity.
-                let own_copy = data
-                    .get_data(AMBRE_CLIPBOARD_TOKEN_TYPE)
-                    .is_ok_and(|t| !t.is_empty() && t.as_str() == &*token);
+                let own_copy = {
+                    let token = host_c.borrow().clip_token().to_owned();
+                    data.get_data(AMBRE_CLIPBOARD_TOKEN_TYPE)
+                        .is_ok_and(|t| !t.is_empty() && t == token)
+                };
                 if ambre.is_none() && text.is_empty() && !own_copy {
                     return;
                 }

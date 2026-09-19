@@ -91,6 +91,13 @@ pub struct FrameHost {
     gpu: Option<GpuState>,
     view: AppView,
     perf: web_sys::Performance,
+    /// The per-page-load clipboard ownership token (`UI-THREAD-007`). Written on
+    /// `copy`/`cut`, re-published by the async write (`UI-THREAD-023`), and read
+    /// back to answer rung 2 of the Paste-button path.
+    clip_token: String,
+    /// Clipboard reads the Paste button hands over, already decoded by the shell.
+    /// Drained once per frame and routed to the active view (`UI-THREAD-024`).
+    paste_rx: flume::Receiver<ClipboardPaste>,
 
     /// The live child views behind the top-level document's visible `doc_embed`s,
     /// keyed by the **board element** that carries each reference. Reconciled
@@ -136,11 +143,19 @@ impl FrameHost {
     /// [`install_gpu`] once async bootstrap completes.
     ///
     /// [`install_gpu`]: FrameHost::install_gpu
-    pub fn new(view: AppView, perf: web_sys::Performance, make_child: Option<MakeChild>) -> Self {
+    pub fn new(
+        view: AppView,
+        perf: web_sys::Performance,
+        make_child: Option<MakeChild>,
+        clip_token: String,
+        paste_rx: flume::Receiver<ClipboardPaste>,
+    ) -> Self {
         Self {
             gpu: None,
             view,
             perf,
+            clip_token,
+            paste_rx,
             children: HashMap::new(),
             child_sizes: HashMap::new(),
             make_child,
@@ -160,6 +175,12 @@ impl FrameHost {
     /// Hand the host its GPU resources once `bootstrap_gpu` has resolved.
     pub fn install_gpu(&mut self, gpu: GpuState) {
         self.gpu = Some(gpu);
+    }
+
+    /// The per-page-load clipboard ownership token (`UI-THREAD-007`). The
+    /// clipboard event listeners in `run` read it back to decide a same-tab copy.
+    pub(crate) fn clip_token(&self) -> &str {
+        &self.clip_token
     }
 
     /// Forward an input event to the view. Returns `true` if the caller should
@@ -366,6 +387,15 @@ impl FrameHost {
         self.view.update();
         let t_after_drain = self.perf.now();
 
+        // Service any Paste-button read the shell decoded. The shell read the
+        // clipboard inside the click gesture. The host answers rung 2 by
+        // comparing the token, then hands the blob to the active view
+        // (`UI-THREAD-024`, `UI-THREAD-025`).
+        while let Ok(paste) = self.paste_rx.try_recv() {
+            let own_copy = paste.token.as_deref() == Some(&self.clip_token);
+            self.view.paste_clipboard(paste.blob, own_copy);
+        }
+
         // A `Deferred` copy earlier this frame, or the previous one, had its
         // authoritative payload built on the Logic thread. `update()` above
         // drained it into the view. Mirror it to the OS clipboard now: this runs
@@ -375,7 +405,7 @@ impl FrameHost {
         // opaque Ambre bytes for a full-fidelity internal round-trip.
         if let Some(blob) = self.view.poll_clipboard() {
             let payload_b64 = blob.ambre.as_deref().map(base64_encode);
-            async_write_clipboard(blob.text, payload_b64);
+            async_write_clipboard(blob.text, payload_b64, self.clip_token.clone());
         }
 
         // Deliver any lazily-fetched font faces (CJK/Arabic/Devanagari) that

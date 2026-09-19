@@ -71,7 +71,7 @@ mod route;
 #[cfg(test)]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
-use host::{AppView, DocSwitcher};
+use host::{AppView, ClipboardPaste, DocSwitcher};
 
 use landing::{DocItem, LandingSignals};
 
@@ -215,6 +215,10 @@ fn flush_child_backlog(routes: &ChildRoutes, backlog: &ChildBacklog) {
 #[derive(Clone)]
 struct Wiring {
     to_logic: flume::Sender<LogicCommand>,
+    /// Clipboard reads the Paste button decoded, handed to the host so the
+    /// active view services the paste (`UI-THREAD-024`). `Send`: it crosses the
+    /// Router's Send boundary.
+    clipboard_paste: flume::Sender<ClipboardPaste>,
     raf: ambre_canvas::RafControl,
     theme_ctl: ambre_canvas::ThemeControl,
     /// The active app's command toggle signals (the store's reactive view,
@@ -780,8 +784,14 @@ pub fn main() {
     let chrome_status_slot: Rc<RefCell<Option<RwSignal<ChromeStatus>>>> =
         Rc::new(RefCell::new(None));
 
+    // The Paste-button channel: the shell decodes an async clipboard read and
+    // hands the transport to the host, which routes it to the active view
+    // (`UI-THREAD-024`). `Send`, so it crosses the Router's Send boundary.
+    let (paste_tx, paste_rx) = flume::unbounded::<ClipboardPaste>();
+
     mount_shell(
         ui_to_logic_tx.clone(),
+        paste_tx,
         raf.clone(),
         theme_ctl.clone(),
         boot_doc,
@@ -1735,6 +1745,7 @@ pub fn main() {
         make_child_fn,
         pre_frame,
         raf,
+        paste_rx,
     );
     // Publish the canvas swap handle for the per-frame route poll. The poll
     // reruns every frame, so it binds the routed document as soon as this lands.

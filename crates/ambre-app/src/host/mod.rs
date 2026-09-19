@@ -73,6 +73,12 @@ const AMBRE_CLIPBOARD_TYPE: &str = "application/x-ambre";
 /// `paste` event (`ambre-spec-clipboard.md`).
 pub(crate) const AMBRE_CLIPBOARD_WEB_TYPE: &str = "web application/x-ambre";
 
+/// The ownership token under the `web ` prefix the asynchronous Clipboard API
+/// demands. The async publish writes it beside the payload so the whole-clipboard
+/// `write` never removes the token the copy event established (`UI-THREAD-023`).
+/// The Paste button reads it back to answer rung 2 of the fidelity ladder.
+pub(crate) const AMBRE_CLIPBOARD_WEB_TOKEN_TYPE: &str = "web application/x-ambre-token";
+
 /// Synchronous same-tab ownership marker (`ambre-spec-clipboard.md`,
 /// `UI-THREAD-007`). Written into the clipboard event's `DataTransfer`
 /// *synchronously* during `copy`/`cut`, it always reaches the OS clipboard. The
@@ -95,11 +101,13 @@ pub(crate) fn base64_decode(s: &str) -> Option<Vec<u8>> {
 }
 
 /// Best-effort asynchronous publish of a copied range to the OS clipboard via
-/// `navigator.clipboard.write`. It carries the tab-separated `text/plain` plus
-/// the private `web ` payload type, so the async-reading Paste button gets full
-/// fidelity (styles + formula reindexing). Runs in addition to the synchronous
-/// `setData` (which serves Ctrl+V); any failure is ignored -- Ctrl+V still works.
-pub(crate) fn async_write_clipboard(tsv: String, payload_b64: Option<String>) {
+/// `navigator.clipboard.write`. It carries the tab-separated `text/plain`, the
+/// private `web ` payload type and the `web ` ownership token. The write replaces
+/// the whole clipboard, so it re-publishes everything the copy event established
+/// rather than dropping the token a frame after the copy (`UI-THREAD-023`). Runs
+/// in addition to the synchronous `setData` (which serves Ctrl+V); any failure
+/// is ignored -- Ctrl+V still works.
+pub(crate) fn async_write_clipboard(tsv: String, payload_b64: Option<String>, token: String) {
     let Some(clipboard) = web_sys::window().map(|w| w.navigator().clipboard()) else {
         return;
     };
@@ -112,6 +120,12 @@ pub(crate) fn async_write_clipboard(tsv: String, payload_b64: Option<String>) {
             let p = js_sys::Promise::resolve(&JsValue::from_str(&b64));
             let _ = js_sys::Reflect::set(&record, &JsValue::from_str(AMBRE_CLIPBOARD_WEB_TYPE), &p);
         }
+        let token_promise = js_sys::Promise::resolve(&JsValue::from_str(&token));
+        let _ = js_sys::Reflect::set(
+            &record,
+            &JsValue::from_str(AMBRE_CLIPBOARD_WEB_TOKEN_TYPE),
+            &token_promise,
+        );
         let Ok(item) = web_sys::ClipboardItem::new_with_record_from_str_to_str_promise(&record)
         else {
             return;
@@ -119,6 +133,17 @@ pub(crate) fn async_write_clipboard(tsv: String, payload_b64: Option<String>) {
         let items = js_sys::Array::of1(&item);
         let _ = wasm_bindgen_futures::JsFuture::from(clipboard.write(&items)).await;
     });
+}
+
+/// The decoded result of an async clipboard read. The shell sends it to the
+/// host, which routes it to the active view through the same ladder as the
+/// native `paste` event (`UI-THREAD-024`). `token` is the ownership marker
+/// read back; the host compares it against this page's token to answer rung 2
+/// (`UI-THREAD-007`). The host names no application: it addresses the active
+/// view (`UI-THREAD-025`).
+pub(crate) struct ClipboardPaste {
+    pub(crate) blob: ambre_bus::ClipboardBlob,
+    pub(crate) token: Option<String>,
 }
 
 // -----------------------------------------------------------------------------

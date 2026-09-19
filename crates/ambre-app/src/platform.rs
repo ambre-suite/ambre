@@ -98,35 +98,26 @@ pub(crate) fn open_csv_picker(
 }
 
 /// Service the toolbar/menu Paste button by reading the OS clipboard with the
-/// async Clipboard API. `read()` recovers the private Ambre payload (full
-/// styled / formula-reindexed paste) when present, else the plain text. On a
-/// browser without `read()` it falls back to `readText()`. Best-effort: a
-/// clipboard the browser will not surface (permission denied, unsupported)
-/// earns a log line, not a failure -- Ctrl+V still works.
-///
-/// **This is a second paste path and it is a known defect**
-/// (`ambre-spec-clipboard.md`, `UI-THREAD-024`, `UI-THREAD-025`).
-///
-/// * It takes neither the ownership token nor the view's in-memory copy, so it
-///   cannot reach the two best rungs of the fidelity ladder.
-/// * It names Trame inside the launcher, so the button does nothing in any
-///   other application.
+/// async Clipboard API. `read()` recovers the private Ambre payload, the
+/// ownership token and the plain text; the click handler started `read_promise`
+/// synchronously, so the read keeps the gesture. On a browser without `read()`
+/// it falls back to `readText()`. The host routes the decoded transport to the
+/// active view through the same ladder as the native `paste` event
+/// (`UI-THREAD-024`). Best-effort: a clipboard the browser will not surface
+/// (permission denied, unsupported) earns a log line, not a failure -- Ctrl+V
+/// still works.
 pub(crate) async fn paste_from_clipboard(
     read_promise: js_sys::Promise,
     clipboard: web_sys::Clipboard,
-    document_id: DocumentId,
-    tx: flume::Sender<LogicCommand>,
+    paste_tx: flume::Sender<host::ClipboardPaste>,
     toasts: Toasts,
 ) {
-    let send = |cmd: TrameCommand| {
-        let _ = tx.try_send(LogicCommand::App {
-            document_id,
-            command: AppCommand::Trame(cmd),
-        });
-    };
+    let mut blob = ambre_bus::ClipboardBlob::default();
+    let mut token: Option<String> = None;
+    let mut found = false;
 
-    // Structured read: rich Ambre type first, then plain text. The click
-    // handler started `read_promise` synchronously, which keeps the gesture.
+    // Structured read: the private type, the ownership token and the plain text,
+    // in whatever order the browser lists them.
     if let Ok(val) = wasm_bindgen_futures::JsFuture::from(read_promise).await
         && let Ok(items) = val.dyn_into::<js_sys::Array>()
     {
@@ -137,34 +128,45 @@ pub(crate) async fn paste_from_clipboard(
             let types = item.types();
             let has = |t: &str| types.iter().any(|v| v.as_string().as_deref() == Some(t));
             if has(host::AMBRE_CLIPBOARD_WEB_TYPE)
-                && let Some(payload) = read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TYPE)
-                    .await
-                    .and_then(|b64| host::base64_decode(&b64))
-                    .and_then(|bytes| {
-                        postcard::from_bytes::<ambre_bus::ClipboardPayload>(&bytes).ok()
-                    })
+                && let Some(b64) = read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TYPE).await
             {
-                send(TrameCommand::PasteClipboardAtActive { payload });
-                return;
+                blob.ambre = host::base64_decode(&b64);
+                found = true;
+            }
+            if has(host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE)
+                && let Some(t) =
+                    read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE).await
+            {
+                token = Some(t);
+                found = true;
             }
             if has("text/plain")
                 && let Some(text) = read_clipboard_item(&item, "text/plain").await
             {
-                send(TrameCommand::PasteText { text });
-                return;
+                blob.text = text;
+                found = true;
             }
         }
     }
 
     // Fallback for browsers without structured `read()`.
-    if let Ok(val) = wasm_bindgen_futures::JsFuture::from(clipboard.read_text()).await
+    if !found
+        && let Ok(val) = wasm_bindgen_futures::JsFuture::from(clipboard.read_text()).await
         && let Some(text) = val.as_string().filter(|t| !t.is_empty())
     {
-        send(TrameCommand::PasteText { text });
+        blob.text = text;
+        found = true;
+    }
+
+    if !found {
+        tracing::warn!("clipboard read unavailable for the Paste button (use Ctrl+V)");
+        toasts.warning("Could not read the clipboard; use Ctrl+V to paste");
         return;
     }
-    tracing::warn!("Trame: clipboard read unavailable for the Paste button (use Ctrl+V)");
-    toasts.warning("Could not read the clipboard; use Ctrl+V to paste");
+
+    // The host compares the token and pastes through the active view
+    // (`UI-THREAD-024`, `UI-THREAD-025`).
+    let _ = paste_tx.try_send(host::ClipboardPaste { blob, token });
 }
 
 /// Read one MIME entry of a [`web_sys::ClipboardItem`] as a string (its blob

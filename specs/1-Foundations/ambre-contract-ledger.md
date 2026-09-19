@@ -24,8 +24,8 @@
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `verified` | 211 | 210 | 473 |  | 894 |
-| `failing` | 44 | 54 | 80 |  | 178 |
-| `untested` | 270 | 145 | 234 |  | 649 |
+| `failing` | 40 | 54 | 80 |  | 174 |
+| `untested` | 274 | 145 | 234 |  | 653 |
 | `human-review` | 7 |  |  |  | 7 |
 | `qa-manual` | 3 | 4 | 2 |  | 9 |
 | `unimplemented` | 54 | 56 | 23 | 617 | 750 |

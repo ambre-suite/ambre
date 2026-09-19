@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: THE CLIPBOARD
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the host path ships for two applications. The ownership token it
-rests on is removed one frame after it is written.
+**Implementation:** partial -- the host path ships for two applications. No tier drives a
+clipboard event, so the host half is held by reading it.
 
 > Copy, cut and paste, the same way in every editor. What crosses to another application is
 > readable text; what comes back into Ambre keeps everything the user copied.
@@ -25,8 +25,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 |---|---|---|---|---|---|---|
 | `UI-THREAD-006` | `INV` | The clipboard MUST carry a `text/plain` mirror plus one app-agnostic private type. | this spec section 2 | none | unheld -- the launcher owns the type names and every application serializes behind them. Nothing reads the written item back to check that both are on it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-043` | `INV` | An application MUST NOT define a clipboard type of its own. | this spec section 2, the three names | none | unheld -- a per-application type would have to be added to the launcher, which owns all of them, so the rule holds by where the names live. Nothing refuses that addition; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
-| `UI-THREAD-024` | `INV` | Every paste affordance MUST reach the view through one path, whatever the gesture that raised it. | this spec section 3 | none | fails -- the paste event goes through the view, and the toolbar button sends a command straight to the Logic thread without the token, the in-memory copy or the ladder; lands with the `One clipboard host` Story (`ambre-roadmap.md` E7) | failing |
-| `UI-THREAD-025` | `INV` | The host MUST NOT name an application on a clipboard path: it MUST address the active view. | this spec section 2 | none | fails -- the button path builds a `TrameCommand`, so the affordance is dead in every other application; lands with the `One clipboard host` Story (`ambre-roadmap.md` E7) | failing |
+| `UI-THREAD-024` | `INV` | Every paste affordance MUST reach the view through one path, whatever the gesture that raised it. | this spec section 3 | none | unheld -- the paste event and the Paste button both hand the decoded transport to the host, and no test drives a paste with two rungs available to see which one answers; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `UI-THREAD-025` | `INV` | The host MUST NOT name an application on a clipboard path: it MUST address the active view. | this spec section 2 | none | unheld -- the button path builds no application command, and nothing drives a paste in a second application to see the affordance answer; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Copy or cut the selection
 
@@ -38,7 +38,7 @@ frame later. What a cut deletes, and when, is each application's own policy.
 | `UI-THREAD-010` | `POST` | A copy MUST be built by the Logic thread from the whole document, never culled to what the viewport holds. | this spec section 2 | `ambre_trame::logic::tests::group7::copy_range_covers_the_full_selection_not_a_viewport` -- Trame's half | partial -- Toile builds from an id list and nothing asserts that list is the whole selection; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-008` | `POST` | A deferred copy MUST prevent the browser default, so an empty write never clobbers what the clipboard already holds. | this spec section 2 | none | unheld -- the deferred branch prevents the default and writes no `text/plain`, and nothing asserts that the host obeys it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-009` | `POST` | The clipboard write MUST happen inside the user activation window the copy opened. | this spec section 2 | none | fails -- the window is a browser property, so nothing on host can read it, and the write runs one frame after the keypress, from the render loop, which Firefox refuses; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | failing |
-| `UI-THREAD-023` | `POST` | The asynchronous write MUST publish everything the copy event published, so it never removes what the copy established. | this spec section 2 | none | fails -- the asynchronous item carries the mirror and the prefixed private type, and `write` replaces the whole clipboard, so the ownership token and the bare private type are dropped; lands with the `One clipboard host` Story (`ambre-roadmap.md` E7) | failing |
+| `UI-THREAD-023` | `POST` | The asynchronous write MUST publish everything the copy event published, so it never removes what the copy established. | this spec section 2 | none | unheld -- the asynchronous item now carries the mirror, the prefixed private type and the ownership token, and nothing reads the written item back to check that all three are on it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-044` | `FRAME` | A copy MUST NOT change the document. | this spec section 2, the opening of the model; derived | none | unheld -- a copy reads the selection and writes the clipboard, and no test reads the document back across one. A cut does change it, and it does so through the ordinary delete command afterwards, never as part of the copy; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-045` | `FAIL` | A cut whose copy fails MUST delete nothing. | this spec section 2, cut is each application's own policy | none | unheld -- the order is what the two applications share, the copy is asked for first, and neither drives a failing copy to see what the delete does. One of the two deletes right after the copy command, without waiting for an answer; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -48,7 +48,7 @@ Four rungs of fidelity, in one order. The first that can answer does.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `UI-THREAD-007` | `POST` | A paste MUST decide same-tab full fidelity on the ownership token the copy wrote, never by comparing the `text/plain` mirror. | this spec section 2 | none | fails -- the token is written on the `copy` event and the asynchronous write replaces it a frame later (`UI-THREAD-023`), so the same-tab answer is true only when that write fails; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | failing |
+| `UI-THREAD-007` | `POST` | A paste MUST decide same-tab full fidelity on the ownership token the copy wrote, never by comparing the `text/plain` mirror. | this spec section 2 | none | unheld -- the paste reads the ownership token the copy wrote, and no test drives a paste with the token present to see which rung answers; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-022` | `POST` | A paste MUST take the fidelity ladder in one order, first match wins. | this spec section 2 | none | unheld -- each application walks the ladder in its own view, and no test drives a paste with two rungs available to see which one answers; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-046` | `POST` | A paste MUST NOT skip a rung it can serve. | this spec section 2, the ladder | none | unheld -- falling past a rung that could have answered is what turns a full-fidelity paste into plain text, silently, and it is the failure `UI-THREAD-023` already produces at rung 2. Nothing asserts which rung answered; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-047` | `FRAME` | A paste MUST NOT change what the clipboard holds. | derived | none | unheld -- nothing on the paste path writes the clipboard, so the rule holds by absence. A paste that rewrote it would make the second paste of one copy differ from the first; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -59,10 +59,10 @@ Four rungs of fidelity, in one order. The first that can answer does.
   outside the sealed path of `ambre-spec-zero-knowledge.md` and it is the only outbound
   surface the UI thread has besides the font fetch (`UI-THREAD-004`). Nothing here reaches the
   relay, holds a key or opens a socket.
-* **Verification.** 0 `verified`, 5 `failing`, 9 `untested`, 0 `unimplemented`. One row is held in part, by
+* **Verification.** 0 `verified`, 1 `failing`, 13 `untested`, 0 `unimplemented`. One row is held in part, by
   one application's test, and it is the one rule that lives below the seam. Everything above the
-  seam is browser state. No tier drives a `copy` event, an activation window or a second tab. Four
-  rules are stated as failing on a reading of the host, and none of the four goes red.
+  seam is browser state. No tier drives a `copy` event, an activation window or a second tab. One
+  rule is stated as failing on a reading of the host, and it never goes red.
 ---
 
 ## 2. MODEL
@@ -88,6 +88,7 @@ pub struct ClipboardBlob { pub text: String, pub ambre: Option<Vec<u8>> }
 | `application/x-ambre` | the synchronous copy event | the application's bytes, base64 |
 | `web application/x-ambre` | the asynchronous write | the same bytes, under the prefix that API demands |
 | `application/x-ambre-token` | the synchronous copy event | one random value per page load, proving a same-tab copy |
+| `web application/x-ambre-token` | the asynchronous write | the same token, under the prefix that API demands |
 
 **A copy, in steps.** The payload does not exist when the key fires, which is what forces the two
 writes.
@@ -101,8 +102,9 @@ writes.
 4. `Nothing` means no selection: the browser default proceeds;
 5. the Logic thread builds the payload from the whole document (`UI-THREAD-010`) and answers;
 6. the view drains the answer, keeps it in memory and hands the blob to the host;
-7. the host writes the mirror and the prefixed private type asynchronously, one frame later, still
-   inside the activation window the key opened (`UI-THREAD-009`).
+7. the host writes the mirror, the prefixed private type and the ownership token
+   asynchronously, one frame later, still inside the activation window
+   (`UI-THREAD-009`).
 
 **A paste, in steps.** The ladder is one order and the first rung that can answer does
 (`UI-THREAD-022`).
@@ -163,14 +165,6 @@ what they copied, and whether pasting into another application yields readable t
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The asynchronous write removes the token it depends on.** `write` replaces the clipboard, and
-  the item it publishes carries the mirror and the prefixed private type alone. So on the path where
-  everything succeeds, the ownership token and the bare private type are gone a frame after the
-  copy. A same-tab paste then falls to the mirror, the worst rung. A browser that refuses the write
-  gets the best one (`UI-THREAD-023`, `UI-THREAD-007`).
-* **The paste event and the paste button are two paths.** The button reads the clipboard
-  asynchronously and sends a command straight to the Logic thread. No token, no in-memory copy, no
-  ladder, and the command it builds is Trame's (`UI-THREAD-024`, `UI-THREAD-025`).
 * **No tier drives a clipboard event.** The wasm tier mounts components in a document and never
   raises `copy`, `cut` or `paste`. The host half of every row here is held by reading it.
 * **Nothing caps a payload.** A copy of a whole document builds it twice in memory, once as text

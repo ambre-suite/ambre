@@ -96,6 +96,7 @@ fn follow_shell_nav(
 pub(crate) fn AppRoot() -> impl IntoView {
     let Wiring {
         to_logic,
+        clipboard_paste,
         raf,
         theme_ctl,
         toggles,
@@ -447,39 +448,34 @@ pub(crate) fn AppRoot() -> impl IntoView {
             } else if id == trame_chrome::PASTE {
                 // Paste (`trame-clipboard`): `execCommand("paste")` is blocked by browsers,
                 // so read the OS clipboard via the async Clipboard API (allowed in this
-                // click gesture). `read()` recovers the private Ambre payload (full styled
-                // / formula-reindexed paste, like Ctrl+V) when present, else the plain
-                // text. The Logic thread resolves the target from the tracked active cell.
-                if let Some(document_id) = current_doc.get_untracked() {
-                    let clipboard = web_sys::window().map(|w| w.navigator().clipboard());
-                    // `navigator.clipboard` is undefined outside a secure context, such as
-                    // http:// on a LAN IP. There the button cannot read at all, so tell
-                    // the user instead of failing silently.
-                    let available = clipboard
-                        .as_ref()
-                        .map(|c| {
-                            let v: &wasm_bindgen::JsValue = c.as_ref();
-                            !v.is_undefined() && !v.is_null()
-                        })
-                        .unwrap_or(false);
-                    if let Some(clipboard) = clipboard.filter(|_| available) {
-                        let tx = tx.clone();
-                        // Call `read()` synchronously, still inside the click's user
-                        // gesture: Firefox shows its mandatory "paste" confirmation
-                        // right away instead of deferring it to the next click.
-                        let read_promise = clipboard.read();
-                        wasm_bindgen_futures::spawn_local(paste_from_clipboard(
-                            read_promise,
-                            clipboard,
-                            document_id,
-                            tx,
-                            toasts,
-                        ));
-                    } else {
-                        toasts.warning(
-                            "Clipboard unavailable here (needs HTTPS); use Ctrl+V to paste",
-                        );
-                    }
+                // click gesture). The read is decoded and handed to the host, which
+                // routes it to the active view through the same ladder as Ctrl+V
+                // (`UI-THREAD-024`, `UI-THREAD-025`).
+                let clipboard = web_sys::window().map(|w| w.navigator().clipboard());
+                // `navigator.clipboard` is undefined outside a secure context, such as
+                // http:// on a LAN IP. There the button cannot read at all, so tell
+                // the user instead of failing silently.
+                let available = clipboard
+                    .as_ref()
+                    .map(|c| {
+                        let v: &wasm_bindgen::JsValue = c.as_ref();
+                        !v.is_undefined() && !v.is_null()
+                    })
+                    .unwrap_or(false);
+                if let Some(clipboard) = clipboard.filter(|_| available) {
+                    let paste_tx = clipboard_paste.clone();
+                    // Call `read()` synchronously, still inside the click's user
+                    // gesture: Firefox shows its mandatory "paste" confirmation
+                    // right away instead of deferring it to the next click.
+                    let read_promise = clipboard.read();
+                    wasm_bindgen_futures::spawn_local(paste_from_clipboard(
+                        read_promise,
+                        clipboard,
+                        paste_tx,
+                        toasts,
+                    ));
+                } else {
+                    toasts.warning("Clipboard unavailable here (needs HTTPS); use Ctrl+V to paste");
                 }
             } else if id == trame_chrome::IMPORT_CSV {
                 // Interop (`trame-import-export`): open a file picker, read the chosen
