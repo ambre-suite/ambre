@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: ELEMENT STYLES
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- editing ships; a restyle overwrites what no control shows.
+**Implementation:** partial -- editing ships; the bar reports mixed, a restyle keeps hidden fields.
 
 > A user picks a colour, a border, a thickness, a font, and the selection takes it. A panel at the
 > side has everything; a small bar above the selection has what is used most.
@@ -29,7 +29,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 | `TOILE-UI-161` | `OBS` | The panel MUST report a field that agrees across the selection as a value, never as mixed. | this spec section 3 | `ambre_toile::ui::style::tests::differing_fill_flags_only_fill_mixed` -- the three fields that agree stay unflagged; `ambre_toile::ui::style::tests::identical_elements_are_not_mixed` -- no flag at all on a uniform pair | none | verified |
 | `TOILE-UI-162` | `OBS` | A selection of one MUST show that element's style with nothing mixed. | this spec section 3 | `ambre_toile::ui::style::tests::single_element_shows_its_style_with_no_mixed` -- the base is the element's own style and no flag is raised | none | verified |
 | `TOILE-UI-163` | `OBS` | The panel MUST show nothing when no selected element resolves. | this spec section 3 | `ambre_toile::ui::style::tests::empty_selection_has_no_model` -- no model for an empty selection; `ambre_toile::ui::style::tests::unresolved_selection_has_no_model` -- none for an id the painted set does not hold | none | verified |
-| `TOILE-UI-164` | `OBS` | The bar MUST report every field it edits as mixed when it differs across the selection. | this spec section 6 | none | fails -- the bar folds a common fill and nothing else, so the text colour, the family, the size and the four decorations are shown as though they agreed, section 6; lands with the `The style bar says what it does not know` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-164` | `OBS` | The bar MUST report every field it edits as mixed when it differs across the selection. | this spec section 6 | `ambre_toile::ui::floatbar::tests::bar_reports_every_edited_field_mixed` -- it folds two elements differing on the colour, the family, the size and the four decorations and reads every flag back set | none | verified |
 | `TOILE-UI-165` | `OBS` | The bar MUST show the selection's fill when every member shares it. | this spec section 4 | `ambre_toile::ui::floatbar::tests::common_fill_survives_when_shared` -- the shared colour reaches the swatch | none | verified |
 | `TOILE-UI-166` | `OBS` | The bar MUST show no fill when the selection's fills differ. | this spec section 4 | `ambre_toile::ui::floatbar::tests::common_fill_is_none_when_mixed` -- the swatch is empty for two different fills | none | verified |
 | `TOILE-UI-068` | `OBS` | The bar MUST sit at the midpoint of the selection's top edge. | this spec section 4 | `ambre_toile::ui::floatbar::tests::anchor_is_top_edge_midpoint_in_screen_space` -- both coordinates against a hand-computed midpoint | none | verified |
@@ -47,7 +47,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 |---|---|---|---|---|---|---|
 | `TOILE-UI-172` | `POST` | A panel edit MUST leave every field it did not edit as the selection had it. | this spec section 3 | none | unheld -- the panel edits a working copy of the base and sends it whole, and no test drives an edit through the surface; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-173` | `POST` | A field the panel reported as mixed MUST become uniform after any edit. | this spec section 2 | none | unheld -- the whole value goes to every member, so the base's value for a mixed field lands on all of them, and no test reads a second field back after an edit; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-174` | `POST` | A restyle MUST NOT overwrite an attribute the surface does not show. | this spec section 6 | none | fails -- the corner radius, the shadow and the exact weight are carried by the value but tracked by no flag and offered by no control, so restyling a mixed selection silently gives every member the first one's; lands with the `The style bar says what it does not know` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-174` | `POST` | A restyle MUST NOT overwrite an attribute the surface does not show. | this spec section 6 | `ambre_toile::logic::state::elements::inner_tests::a_restyle_preserves_the_fields_no_surface_shows` -- it restyles two members seeded with differing corner, shadow and weight and reads each back keeping its own | none | verified |
 | `TOILE-UI-175` | `POST` | A restyle over a whole selection MUST undo as one step. | this spec section 3 | none | unheld -- one command carries the ids and the value and the undo document owns the grouping, and no test restyles a selection and undoes it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-176` | `FRAME` | A restyle MUST NOT change what is selected. | this spec section 3 | none | unheld -- the command carries ids and a value and the selection is local to the view, and no test reads the selection back after a restyle; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-182` | `FRAME` | A restyle MUST NOT drop the locked members before it is sent: the refusal belongs to the write (`TOILE-033`). | this spec section 5 | none | unheld -- the panel's model never reads the lock, so it has nothing to filter on, but the surface that builds the command is wasm-only and reached by no test; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -60,7 +60,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 | `TOILE-UI-177` | `POST` | The bold toggle MUST write the two weights the renderer reads. | this spec section 3 | `ambre_toile::ui::floatbar::tests::style_edit_field_mappings` -- both weights off the toggle | none | verified |
 | `TOILE-UI-178` | `POST` | Resetting the family MUST write the default face, not an absent one. | this spec section 3 | `ambre_toile::ui::floatbar::tests::style_edit_field_mappings` -- the reset writes the default label, and a chosen family writes its own | none | verified |
 | `TOILE-UI-179` | `POST` | Each bar edit MUST start from the selection's style as it stands, so two quick edits compose. | this spec section 3 | none | unheld -- the view re-derives the common style at apply time and that seam is wasm-only, and no test applies two edits in sequence and reads both back; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-180` | `FAIL` | A size the control cannot mean MUST be refused, not turned into the auto sentinel. | this spec section 6 | none | fails -- a negative size is clamped to zero, which is the sentinel that sizes the body to the card, so a bad number silently becomes a different feature; lands with the `The style bar says what it does not know` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-180` | `FAIL` | A size the control cannot mean MUST be refused, not turned into the auto sentinel. | this spec section 6 | `ambre_toile::ui::floatbar::tests::style_edit_field_mappings` -- a negative size changes nothing, and zero still lands as the auto sentinel | none | verified |
 | `TOILE-UI-181` | `FRAME` | A bar edit MUST NOT change what is selected. | this spec section 3 | none | unheld -- the edit carries one field and the view attaches the live ids, and no test reads the selection back after an edit; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** the view-state update under 0.5 ms, one row of `ambre-spec-budgets.md section 2`. Both models
@@ -69,11 +69,11 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 * **Boundary.** none: both surfaces are chrome on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The value they emit enters the document and leaves as bytes the Sync
   worker seals (`ZK-001`).
-* **Verification.** 18 `verified`, 4 `failing`, 8 `untested`. What holds is the read: the base value, the
+* **Verification.** 21 `verified`, 1 `failing`, 8 `untested`. What holds is the read: the base value, the
   difference flags, the anchor, the one-field mapping, and a selection read whole, off-screen included
-  (`TOILE-UI-070`). What is loose is every write, untested through either surface: the panel rows and
-  the composition rule rest on reading the code. The four failures are rules the code answers
-  otherwise, one losing user data on an upgrade. The lock itself is `TOILE-033`.
+  (`TOILE-UI-070`). The write now holds too: a restyle preserves what no surface shows, and the bar reports
+  every field it edits. What is loose is the remaining write paths, untested through either surface. The one
+  failure loses user data on an upgrade (`TOILE-UI-071`), and the lock itself is `TOILE-033`.
 
 ---
 
@@ -85,7 +85,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 | makes a shape bold from the bar | changes its fill from the bar at the same moment | both edits, each having touched its own field | both changes, because each edit re-derived the rest live (`TOILE-UI-019`) | `ui::floatbar::tests::style_edit_touches_only_its_field` |
 | selects two shapes of different colours | watches | nothing: a selection is not shared | a mixed indicator on the fill, and the shared fields as values (`TOILE-UI-066`) | `ui::style::tests::differing_fill_flags_only_fill_mixed` |
 | restyles a selection whose members differ | watches | one style on every member | every selected element identical afterwards, including the fields she did not touch (`TOILE-UI-173`) | none: no test drives an edit through either surface |
-| restyles two cards differing only in corner radius | watches | one style on every member | both cards squared off, on an attribute no control offered (`TOILE-UI-174`) | none, and the rule fails today -- section 6 |
+| restyles two cards differing only in corner radius | watches | one style on every member, the corner kept | each card keeps its own corner radius (`TOILE-UI-174`) | `elements::inner_tests::a_restyle_preserves_the_fields_no_surface_shows` |
 
 ---
 
@@ -125,8 +125,9 @@ style -- plus one difference flag per tracked field. They differ in the write:
 | the bar | each control emits one field, re-derived live | two quick edits compose instead of clobbering (`TOILE-UI-019`) |
 
 **The flags cover what a surface offers, not what the value holds.** `corner` and `shadow` are tracked by no
-flag, and the weight is folded to bold-or-not rather than compared. A selection that differs on those three is
-silently made uniform by any edit (`TOILE-UI-174`).
+flag, and the weight is folded to bold-or-not rather than compared. The write preserves those three: it
+merges the shown fields over each element, keeping the element's own corner radius, shadow and non-bold
+weight (`TOILE-UI-174`).
 
 **Steps, when either surface edits a field:**
 
@@ -162,13 +163,13 @@ makes its body track the card (`features/ambre-spec-toile-elements.md`,
 from the camera every frame. So it tracks a pan and a zoom without lag. A multi-selection anchors to the union
 box (`TOILE-UI-068`, `TOILE-UI-167`).
 
-**What the bar folds.** The fill alone: a colour every member shares reaches the swatch, and a
-divergence empties it (`TOILE-UI-165`, `TOILE-UI-166`). The seven other editable fields carry no
-flag of their own, so the bar shows them as though the selection agreed (`TOILE-UI-164`).
+**What the bar folds.** Every field it edits: a colour every member shares reaches the swatch, and a
+divergence empties it (`TOILE-UI-165`, `TOILE-UI-166`). A field that differs across the selection carries
+a mixed flag (`TOILE-UI-164`), so the bar never shows one member's value as the selection's.
 
 **The size control's "Auto" entry** maps to the note sentinel, and choosing a number sets an explicit
-size that overrides it (`features/ambre-spec-toile-text-editing.md`). The sentinel is zero, which is
-also what a negative number clamps to (`TOILE-UI-180`).
+size that overrides it (`features/ambre-spec-toile-text-editing.md`). The sentinel is zero, and a
+negative number is refused, not clamped to it (`TOILE-UI-180`).
 
 **The two surfaces overlap on purpose**, and the bar is a subset. Every action on it exists in the panel or
 the menus, so the three can never offer different behaviour for the same name
@@ -203,18 +204,7 @@ the menus, so the three can never offer different behaviour for the same name
 * **The bar's hide during a gesture has no test** (`TOILE-UI-170`). It hides while a drag, a resize or a
   rotate is in flight, so it does not follow the preview. The view decides that at publish time, and that seam
   is wasm-only, so only the empty and unresolved halves are driven.
-* **The bar reports one field of eight** (`TOILE-UI-164`). It folds a common fill and nothing else. The text
-  colour, the family, the size and the four decorations are drawn from the first resolved member, as though
-  the whole selection carried them. The panel, which folds all eleven, is the only honest surface.
-* **A restyle overwrites attributes no surface shows** (`TOILE-UI-174`). The corner radius, the shadow and the
-  exact weight ride in the value, tracked by no flag and offered by no control. Restyling a mixed selection
-  gives every member the first one's. Either the flags cover the whole value, or the write covers only the
-  fields a surface can show.
-* **A negative size becomes a different feature** (`TOILE-UI-180`). The bar clamps a size to zero, and zero is
-  the sentinel that makes a note's body track the card. A number the control cannot mean turns into "fit to
-  the card" rather than being refused.
-* **No test drives an edit through either surface.** The fold is covered eleven ways; the write is covered by
-  the one-field mapping alone. Four things are read from the code (`TOILE-UI-172`, `TOILE-UI-173`,
+* **Four write rules are still read from the code** (`TOILE-UI-172`, `TOILE-UI-173`,
   `TOILE-UI-175`, `TOILE-UI-179`): what a panel edit leaves alone, and what a mixed field becomes. Also
   whether a restyle undoes as one step, and whether two bar edits compose.
 * **Nothing bounds a thickness or a shadow.** The panel accepts what the control offers, and no rule

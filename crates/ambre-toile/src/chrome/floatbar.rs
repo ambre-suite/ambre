@@ -151,6 +151,12 @@ pub fn SelectionToolbar(
         }
     };
 
+    // A "Mixed" hint shown beside a control whose value differs across the
+    // selection (`TOILE-UI-164`), the same hint the inspector uses.
+    let mixed_hint = move |differs: bool| {
+        differs.then(|| view! { <span class="ambre-inspector-mixed">"Mixed"</span> })
+    };
+
     view! {
         {move || {
             bar.get()
@@ -192,8 +198,14 @@ pub fn SelectionToolbar(
                                 pressed=strikethrough.into()
                                 on_toggle=on_strike
                             />
+                            {mixed_hint(
+                                b.mixed.bold || b.mixed.italic || b.mixed.underline
+                                    || b.mixed.strikethrough,
+                            )}
                             <FontPicker current=font_family.into() on_pick=on_font />
+                            {mixed_hint(b.mixed.font_family)}
                             <FontSizeSelect current=size_current on_pick=on_size auto_label="Auto" />
+                            {mixed_hint(b.mixed.font_size)}
                             <ColorPopover
                                 title="Text colour"
                                 icon=icondata::MdiFormatColorText
@@ -203,6 +215,7 @@ pub fn SelectionToolbar(
                                 on_pick=on_text_color
                                 alpha=true
                             />
+                            {mixed_hint(b.mixed.text_color)}
                             <ColorPopover
                                 title="Fill"
                                 icon=icondata::MdiFormatColorFill
@@ -212,6 +225,7 @@ pub fn SelectionToolbar(
                                 on_pick=on_fill
                                 alpha=true
                             />
+                            {mixed_hint(b.mixed.fill)}
                             // -- Structural actions (strict subset of the context menu) --
                             {cmd_button(menu::DUPLICATE)}
                             {cmd_button(menu::DELETE)}

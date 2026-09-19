@@ -15,7 +15,7 @@ use crate::logic::model::{
     ElementId, ElementKind, ElementStyle, LinkTarget, NodeId, ShapeKind, StrokePoint,
 };
 
-use super::codec::{bool_of, content_matches, expanded_aabb, f64_of, stroke_aabb};
+use super::codec::{bin_of, bool_of, content_matches, expanded_aabb, f64_of, stroke_aabb};
 use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, NOTES, ToileState};
 
 impl ToileState {
@@ -317,11 +317,34 @@ impl ToileState {
         ids: &[ElementId],
         style: ElementStyle,
     ) -> ToileOutcome {
-        if !self.restyle_inner(ids, &style) {
+        if !self.restyle_merge_inner(ids, &style) {
             return ToileOutcome::display_only(Vec::new());
         }
         self.doc.commit();
         self.emit_with_update(vec![self.viewport_event()])
+    }
+
+    /// Overwrite the shown style fields of every unlocked element in `ids`,
+    /// **without** committing. Returns whether anything changed. The caller owns
+    /// the `doc.commit()`. The surface's whole-selection restyle uses this; the
+    /// import path uses [`restyle_inner`](Self::restyle_inner), which overwrites
+    /// whole. Each element keeps its own corner radius, shadow and non-bold
+    /// weight (`TOILE-UI-174`).
+    pub(super) fn restyle_merge_inner(&mut self, ids: &[ElementId], style: &ElementStyle) -> bool {
+        let mut touched = false;
+        for id in ids {
+            let Some(em) = self.element_map(id) else {
+                continue;
+            };
+            if bool_of(&em, "locked") {
+                continue;
+            }
+            let existing = self.style_read(&bin_of(&em, "style"));
+            let merged = existing.merged_over(style);
+            let _ = em.insert("style", LoroValue::Binary(merged.to_bytes().into()));
+            touched = true;
+        }
+        touched
     }
 
     /// Overwrite the style register of every unlocked element in `ids`, **without**
@@ -706,5 +729,64 @@ mod inner_tests {
             !raw.iter().any(|s| s == &a_entry),
             "the deleted entry is gone"
         );
+    }
+
+    /// `TOILE-UI-174`: a whole-selection restyle overwrites only the fields a
+    /// surface shows; each member keeps its own corner radius, shadow and
+    /// non-bold weight.
+    #[test]
+    fn a_restyle_preserves_the_fields_no_surface_shows() {
+        let mut st = ToileState::new();
+        let a = rect(&mut st, 0.0, 0.0, 10.0);
+        let b = rect(&mut st, 40.0, 0.0, 10.0);
+        // Seed two members with differing hidden fields, whole (the import path).
+        let shadow = ambre_bus::app::toile::Shadow {
+            color: 0,
+            dx: 1.0,
+            dy: 1.0,
+            blur: 2.0,
+        };
+        let style_a = ElementStyle {
+            fill: Some(0xffff_0000),
+            corner: 12.0,
+            shadow: Some(shadow),
+            font: ambre_bus::app::toile::FontSpec {
+                weight: 600,
+                ..Default::default()
+            },
+            ..ElementStyle::default()
+        };
+        let style_b = ElementStyle {
+            fill: Some(0xff00_ff00),
+            corner: 0.0,
+            shadow: None,
+            font: ambre_bus::app::toile::FontSpec {
+                weight: 400,
+                ..Default::default()
+            },
+            ..ElementStyle::default()
+        };
+        st.restyle_inner(std::slice::from_ref(&a), &style_a);
+        st.restyle_inner(std::slice::from_ref(&b), &style_b);
+        st.doc.commit();
+
+        // Restyle both with a shared fill change.
+        st.handle_command(ToileCommand::RestyleElements {
+            ids: vec![a.clone(), b.clone()],
+            style: ElementStyle {
+                fill: Some(0xff00_00ff),
+                ..ElementStyle::default()
+            },
+        });
+
+        // The hidden fields survive; the shown fill changes on both.
+        assert_eq!(st.style_of(&a).corner, 12.0);
+        assert!(st.style_of(&a).shadow.is_some());
+        assert_eq!(st.style_of(&a).font.weight, 600);
+        assert_eq!(st.style_of(&b).corner, 0.0);
+        assert!(st.style_of(&b).shadow.is_none());
+        assert_eq!(st.style_of(&b).font.weight, 400);
+        assert_eq!(st.style_of(&a).fill, Some(0xff00_00ff));
+        assert_eq!(st.style_of(&b).fill, Some(0xff00_00ff));
     }
 }

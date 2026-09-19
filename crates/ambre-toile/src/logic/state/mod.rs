@@ -66,7 +66,7 @@ use crate::logic::command::{
     ToileOutcome,
 };
 use crate::logic::index::{SpatialIndex, Viewport};
-use crate::logic::model::{ConnectorId, ElementId, FrameId, NodeId, PlaybackState};
+use crate::logic::model::{ConnectorId, ElementId, ElementStyle, FrameId, NodeId, PlaybackState};
 use crate::logic::schema;
 
 // Root container names.
@@ -840,6 +840,14 @@ impl ToileState {
     /// Derived world AABB of an element. Test helper.
     pub fn bounds_of(&self, id: &ElementId) -> Option<Rect> {
         self.bounds.get(id).copied()
+    }
+
+    /// The decoded style register of an element, or the default when absent.
+    /// Test helper.
+    pub fn style_of(&self, id: &ElementId) -> ElementStyle {
+        self.element_map(id)
+            .map(|em| self.style_read(&codec::bin_of(&em, "style")))
+            .unwrap_or_default()
     }
 
     /// Membership of a frame / group, in `children` order. Test helper.

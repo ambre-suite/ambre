@@ -22,15 +22,17 @@
 use ambre_bus::app::toile::{DisplayElement, ElementId, ElementKind, ElementStyle};
 use ambre_draw::{Point, Rect};
 
+use super::style::MixedFlags;
 use super::viewport::ViewportTransform;
 
-/// The floating selection toolbar's published model (`toile-styles`). `x` / `y`
-/// are the client (viewport) CSS-pixel position of the selection's top-edge
-/// midpoint. The bar is `position: fixed` there and lifted above the selection
-/// with a CSS gap ("air", like Miro). The flags gate the applicable buttons,
-/// mirroring the context-menu scope (`ui::menu::CtxScope`). `fill` is the
-/// selection's common fill for the quick-colour swatch (`None` when unset or
-/// mixed). Published only for a resolved, visible selection (`None` == hidden).
+/// The floating selection toolbar's published model (`toile-styles`): `x` / `y`
+/// are the client CSS-pixel position of the selection's top-edge midpoint. The
+/// bar is `position: fixed` there and lifted above the selection with a CSS gap
+/// ("air", like Miro). The flags gate the applicable buttons, mirroring the
+/// context-menu scope (`ui::menu::CtxScope`). `fill` is the selection's common
+/// fill for the quick-colour swatch (`None` when unset or mixed). `mixed` marks
+/// every field the bar edits that differs across the selection (`TOILE-UI-164`).
+/// Published only for a resolved, visible selection (`None` == hidden).
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct FloatBar {
     /// Client CSS-pixel x of the selection's top-edge midpoint.
@@ -48,6 +50,9 @@ pub struct FloatBar {
     /// The selection's common fill (`ElementStyle` ARGB), or `None` when unset or
     /// diverging across the selection -- the quick-colour swatch seed.
     pub fill: Option<u32>,
+    /// The fields the bar edits that differ across the selection. A set flag
+    /// means the bar shows a mixed state for that control, not a value.
+    pub mixed: MixedFlags,
 }
 
 /// A single-field style edit the floating bar emits back (`toile-styles`). Unlike the
@@ -93,7 +98,13 @@ impl StyleEdit {
             StyleEdit::Fill(c) => style.fill = c,
             StyleEdit::TextColor(c) => style.text_color = c,
             StyleEdit::Font(f) => style.font.family = f.unwrap_or_else(|| "Sans".to_owned()),
-            StyleEdit::Size(s) => style.font.size = s.max(0.0),
+            // A negative size is refused, never clamped to the zero sentinel:
+            // the control cannot mean a negative number (`TOILE-UI-180`).
+            StyleEdit::Size(s) => {
+                if s >= 0.0 {
+                    style.font.size = s;
+                }
+            }
             StyleEdit::Bold(b) => style.font.weight = if b { 700 } else { 400 },
             StyleEdit::Italic(i) => style.font.italic = i,
             StyleEdit::Underline(u) => style.font.underline = u,
@@ -140,10 +151,10 @@ pub fn build_floatbar(
     let mut has_group = false;
     let mut any_locked = false;
     let mut any_unlocked = false;
-    // Common-fill fold: track the first fill and whether any diverges (mixed).
-    let mut fill: Option<u32> = None;
-    let mut fill_seen = false;
-    let mut fill_mixed = false;
+    // The bar's own fold: a base style plus one difference flag per field it
+    // edits (`TOILE-UI-164`).
+    let mut base: Option<&ElementStyle> = None;
+    let mut mixed = MixedFlags::default();
 
     for id in selection {
         let Some(e) = find_element(selected, id) else {
@@ -162,17 +173,26 @@ pub fn build_floatbar(
             Some(u) => u.union(e.bounds),
             None => e.bounds,
         });
-        if !fill_seen {
-            fill = e.style.fill;
-            fill_seen = true;
-        } else if fill != e.style.fill {
-            fill_mixed = true;
+        let s = &e.style;
+        match base {
+            None => base = Some(s),
+            Some(b) => {
+                mixed.fill |= s.fill != b.fill;
+                mixed.text_color |= s.text_color != b.text_color;
+                mixed.font_family |= s.font.family != b.font.family;
+                mixed.font_size |= s.font.size != b.font.size;
+                mixed.bold |= (s.font.weight >= 700) != (b.font.weight >= 700);
+                mixed.italic |= s.font.italic != b.font.italic;
+                mixed.underline |= s.font.underline != b.font.underline;
+                mixed.strikethrough |= s.font.strikethrough != b.font.strikethrough;
+            }
         }
     }
 
     // Nothing in the selection is present in the culled set: hide the bar.
     let union = union?;
     let (x, y) = top_center_anchor(union, cam, dpr, offset);
+    let fill = base.and_then(|b| if mixed.fill { None } else { b.fill });
     Some(FloatBar {
         x,
         y,
@@ -180,7 +200,8 @@ pub fn build_floatbar(
         has_group,
         any_locked,
         any_unlocked,
-        fill: if fill_mixed { None } else { fill },
+        fill,
+        mixed,
     })
 }
 
@@ -193,8 +214,8 @@ fn find_element<'a>(elements: &'a [DisplayElement], id: &ElementId) -> Option<&'
 mod tests {
     use super::*;
     use ambre_bus::app::toile::{
-        DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementStyle, ShapeKind,
-        Viewport,
+        DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementStyle, FontSpec,
+        ShapeKind, Viewport,
     };
     use ambre_draw::Size;
     use kurbo::Affine;
@@ -224,6 +245,21 @@ mod tests {
                 ElementKind::Group => DisplayGeom::Group,
                 _ => DisplayGeom::Rect,
             },
+            link: None,
+            group: None,
+        })
+    }
+
+    /// An element carrying a whole `style`, for the mixed-field fold.
+    fn styled_elem(id: &str, style: ElementStyle) -> DisplayNode {
+        DisplayNode::Element(DisplayElement {
+            id: eid(id),
+            kind: ElementKind::Sticky,
+            transform: Affine::IDENTITY,
+            bounds: Rect::new(0.0, 0.0, 10.0, 10.0),
+            locked: false,
+            style,
+            geom: DisplayGeom::Rect,
             link: None,
             group: None,
         })
@@ -464,22 +500,76 @@ mod tests {
     }
 
     // Bold / size map onto the underlying representation (weight 700/400, size
-    // sentinel clamped to >= 0); a `None` family resets to the default sans label.
+    // sentinel); a `None` family resets to the default sans label.
     #[test]
     fn style_edit_field_mappings() {
-        let mut s = ElementStyle::default();
+        let mut s = ElementStyle {
+            font: FontSpec {
+                size: 18.0,
+                ..Default::default()
+            },
+            ..ElementStyle::default()
+        };
         StyleEdit::Bold(false).apply_to(&mut s);
         assert_eq!(s.font.weight, 400);
         StyleEdit::Bold(true).apply_to(&mut s);
         assert_eq!(s.font.weight, 700);
+        // A negative size is refused, never clamped to the auto sentinel.
         StyleEdit::Size(-3.0).apply_to(&mut s);
-        assert_eq!(
-            s.font.size, 0.0,
-            "negative size clamps to the auto sentinel"
-        );
+        assert_eq!(s.font.size, 18.0, "a negative size is refused");
+        // Zero is the auto sentinel, and it is a meaning the control has.
+        StyleEdit::Size(0.0).apply_to(&mut s);
+        assert_eq!(s.font.size, 0.0, "zero stays the auto sentinel");
         StyleEdit::Font(None).apply_to(&mut s);
         assert_eq!(s.font.family, "Sans");
         StyleEdit::Font(Some("Serif".to_owned())).apply_to(&mut s);
         assert_eq!(s.font.family, "Serif");
+    }
+
+    /// `TOILE-UI-164`: the bar folds every field it edits. A field that
+    /// differs across the selection reads as mixed, not as the first
+    /// member's value.
+    #[test]
+    fn bar_reports_every_edited_field_mixed() {
+        let a = ElementStyle {
+            fill: Some(0xff11_2233),
+            text_color: Some(0xff00_0000),
+            font: FontSpec {
+                family: "Sans".to_owned(),
+                size: 12.0,
+                weight: 400,
+                italic: false,
+                underline: false,
+                strikethrough: false,
+            },
+            ..ElementStyle::default()
+        };
+        let b = ElementStyle {
+            fill: Some(0xff11_2233),
+            text_color: Some(0xffff_ffff),
+            font: FontSpec {
+                family: "Serif".to_owned(),
+                size: 24.0,
+                weight: 700,
+                italic: true,
+                underline: true,
+                strikethrough: true,
+            },
+            ..ElementStyle::default()
+        };
+        let shared_fill = a.fill;
+        let dv = viewport(vec![styled_elem("a", a), styled_elem("b", b)]);
+        let bar =
+            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), 1.0, (0.0, 0.0)).expect("bar");
+        assert!(bar.mixed.text_color);
+        assert!(bar.mixed.font_family);
+        assert!(bar.mixed.font_size);
+        assert!(bar.mixed.bold);
+        assert!(bar.mixed.italic);
+        assert!(bar.mixed.underline);
+        assert!(bar.mixed.strikethrough);
+        // The shared fill is not mixed, and it reaches the swatch.
+        assert!(!bar.mixed.fill);
+        assert_eq!(bar.fill, shared_fill);
     }
 }

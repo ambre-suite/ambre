@@ -324,6 +324,24 @@ impl ElementStyle {
         }
         postcard::from_bytes(bytes).ok()
     }
+
+    /// Merge a whole-register restyle value over one element's own style
+    /// (`TOILE-UI-174`). The fields a surface shows come from `sent`. The
+    /// fields no surface shows -- the corner radius, the shadow, a non-bold
+    /// exact weight -- come from `self`. A restyle of a mixed selection then
+    /// cannot square off one member's corner or drop its shadow.
+    pub fn merged_over(&self, sent: &Self) -> Self {
+        let mut out = sent.clone();
+        out.corner = self.corner;
+        out.shadow = self.shadow;
+        // The bold toggle writes 700 or 400. A sent non-bold weight must not
+        // collapse an element's own non-bold weight (500, 600), which the
+        // surface folds to "not bold" and never shows exactly.
+        if sent.font.weight < 700 && self.font.weight < 700 {
+            out.font.weight = self.font.weight;
+        }
+        out
+    }
 }
 
 // =============================================================================
