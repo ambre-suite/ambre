@@ -100,6 +100,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         raf,
         theme_ctl,
         toggles,
+        toile_toggles,
         style_state,
         anchor_pos,
         toasts,
@@ -1431,7 +1432,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // uses. The zoom readout mirrors the `zoom` signal the canvas view
         // publishes each frame.
         {boot_is_toile.then(|| view! {
-            <toile_chrome::TopMenuBar zoom=zoom on_command=on_command />
+            <toile_chrome::TopMenuBar zoom=zoom on_command=on_command toggles=toile_toggles />
         })}
         // Toile style / property inspector (toile-styles): a side panel shown only for
         // a non-empty selection. It reads the common style the canvas view publishes.

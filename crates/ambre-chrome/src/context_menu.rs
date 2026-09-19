@@ -30,11 +30,14 @@ use wasm_bindgen::closure::Closure;
 pub enum MenuEntry {
     /// A selectable command, with an optional leading icon and an optional
     /// trailing keybinding chip (shown right-aligned, for example a menu-bar accelerator).
+    /// `disabled` entries render inert: they announce `aria-disabled` and fire no
+    /// command (`UNDO-006`).
     Item {
         command: CommandId,
         label: String,
         icon: Option<icondata::Icon>,
         shortcut: Option<KeyBinding>,
+        disabled: bool,
     },
     /// A horizontal divider between two groups of items.
     Separator,
@@ -48,6 +51,7 @@ impl MenuEntry {
             label: label.into(),
             icon: None,
             shortcut: None,
+            disabled: false,
         }
     }
 
@@ -58,6 +62,7 @@ impl MenuEntry {
             label: label.into(),
             icon: Some(icon),
             shortcut: None,
+            disabled: false,
         }
     }
 
@@ -67,6 +72,15 @@ impl MenuEntry {
     pub fn shortcut(mut self, binding: KeyBinding) -> Self {
         if let Self::Item { shortcut, .. } = &mut self {
             *shortcut = Some(binding);
+        }
+        self
+    }
+
+    /// Mark an `Item` inert: it renders with `aria-disabled`, fires no command
+    /// and answers no keyboard selection (`UNDO-006`). No-op on a separator.
+    pub fn disabled(mut self) -> Self {
+        if let Self::Item { disabled, .. } = &mut self {
+            *disabled = true;
         }
         self
     }
@@ -178,6 +192,15 @@ pub fn ContextMenu(
                 MenuEntry::Separator => None,
             })
             .collect();
+        // The inert flag for each item, parallel to `cmds`, so Enter/Space can
+        // refuse a disabled row the same way a click does (`UNDO-006`).
+        let disabled: Vec<bool> = rows
+            .iter()
+            .filter_map(|e| match e {
+                MenuEntry::Item { disabled, .. } => Some(*disabled),
+                MenuEntry::Separator => None,
+            })
+            .collect();
         // Lowercased first chars for first-letter typeahead (WAI-ARIA menu pattern).
         let initials: Vec<char> = rows
             .iter()
@@ -222,7 +245,11 @@ pub fn ContextMenu(
                 "Escape" => pos.set(None),
                 "Enter" | " " => {
                     ev.prevent_default();
-                    if let Some(&cmd) = cmds.get(focused.get_untracked()) {
+                    let i = focused.get_untracked();
+                    if disabled.get(i).copied().unwrap_or(false) {
+                        return;
+                    }
+                    if let Some(&cmd) = cmds.get(i) {
                         on_command.run(cmd);
                     }
                     pos.set(None);
@@ -258,16 +285,22 @@ pub fn ContextMenu(
                     label,
                     icon,
                     shortcut,
+                    disabled: is_disabled,
                 } => {
                     let i = focus_idx;
                     focus_idx += 1;
                     view! {
                         <li
                             class="ambre-ctx-item"
+                            class:ambre-ctx-disabled=is_disabled
                             role="menuitem"
+                            aria-disabled=is_disabled.then_some("true")
                             tabindex="-1"
                             data-idx=i.to_string()
                             on:click=move |_| {
+                                if is_disabled {
+                                    return;
+                                }
                                 on_command.run(command);
                                 pos.set(None);
                             }

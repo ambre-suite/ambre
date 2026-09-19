@@ -36,7 +36,7 @@
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 16 | 9 |
 | `sync` | The one part of the client that talks to the network. | implemented | 25 | 22 |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 13 | 12 |
-| `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 9 | 7 |
+| `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 9 | 6 |
 | `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | implemented | 14 | 8 |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 | 10 |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 | 7 |
@@ -55,4 +55,4 @@
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**39 features: 23 implemented, 14 partial, 2 design-only. 589 contract rows, 324 loose.**
+**39 features: 23 implemented, 14 partial, 2 design-only. 589 contract rows, 323 loose.**

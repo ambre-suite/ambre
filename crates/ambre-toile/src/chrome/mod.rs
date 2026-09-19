@@ -11,6 +11,7 @@
 // (`ui::find`) stay in the always-compiled `ui` module so they are host-tested.
 // ============================================================================
 
+mod commands;
 mod comments;
 mod deck;
 mod find;
@@ -23,6 +24,8 @@ mod palette;
 mod presenter;
 mod status;
 mod style;
+
+pub use commands::{COMMANDS, Toggles, init_command_states, mirror_event};
 
 pub use comments::{CommentComposer, CommentsPanel};
 pub use deck::DeckPanel;
@@ -84,7 +87,7 @@ use ambre_chrome::commands::{CommandId, KeyBinding, Keymap};
 pub use crate::ui::commands::PALETTE;
 pub use crate::ui::find::FIND;
 pub use crate::ui::menu_bar::{
-    EMBED_DOC, EMBED_WEB, IMPORT_FILE, LINK_CLEAR, LINK_SET, SAVE_SEALED_FILE,
+    EMBED_DOC, EMBED_WEB, IMPORT_FILE, LINK_CLEAR, LINK_SET, REDO, SAVE_SEALED_FILE, UNDO,
 };
 
 /// The document type Toile's landing "new document" button creates.

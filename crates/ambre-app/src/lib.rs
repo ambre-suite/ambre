@@ -224,6 +224,10 @@ struct Wiring {
     /// The active app's command toggle signals (the store's reactive view,
     /// chrome side). Opaque to the launcher -- the app's chrome reads its own.
     toggles: trame_chrome::Toggles,
+    /// Toile's Undo/Redo availability signals, resolved from its own store so the
+    /// menu bar disables the two rows from the Logic thread's `UndoState` alone
+    /// (`UNDO-006`).
+    toile_toggles: toile_chrome::Toggles,
     /// The active cell's rich formatting, driving the formatting toolbar's
     /// font/size selects, colour pickers, alignment, number format, borders, wrap
     /// and underline controls (`trame-cell-styles`). Fed by `TrameEvent::StyleApplied`.
@@ -758,6 +762,7 @@ pub fn main() {
     // ---- Mount the Leptos shell (once). Reactive state is created inside the
     // mount owner and pulled back out via slots for the imperative relay below. -
     let store_slot: Rc<RefCell<Option<CommandStates>>> = Rc::new(RefCell::new(None));
+    let toile_store_slot: Rc<RefCell<Option<CommandStates>>> = Rc::new(RefCell::new(None));
     let anchor_slot: Rc<RefCell<Option<RwSignal<Option<(f64, f64)>>>>> =
         Rc::new(RefCell::new(None));
     let toasts_slot: Rc<RefCell<Option<Toasts>>> = Rc::new(RefCell::new(None));
@@ -796,6 +801,7 @@ pub fn main() {
         theme_ctl.clone(),
         boot_doc,
         Rc::clone(&store_slot),
+        Rc::clone(&toile_store_slot),
         Rc::clone(&anchor_slot),
         Rc::clone(&toasts_slot),
         Rc::clone(&user_slot),
@@ -855,6 +861,10 @@ pub fn main() {
         .borrow()
         .clone()
         .expect("store created during mount");
+    let toile_store = toile_store_slot
+        .borrow()
+        .clone()
+        .expect("Toile store created during mount");
     let anchor_pos = anchor_slot
         .borrow()
         .expect("anchor signal created during mount");
@@ -1139,6 +1149,10 @@ pub fn main() {
             // The active app owns the event->toggle mapping; the launcher names
             // no content event variant.
             trame_chrome::mirror_event(&store, &ev);
+            // Mirror Toile's Undo/Redo availability into its own command store,
+            // so the menu bar disables the two rows from the Logic thread's
+            // `UndoState` alone (`UNDO-006`).
+            toile_chrome::mirror_event(&toile_store, &ev);
             // Mirror the active cell's rich style into the formatting toolbar
             // (`trame-cell-styles`). A no-op for non-style events.
             trame_chrome::apply_style_event(&style_state, &ev);

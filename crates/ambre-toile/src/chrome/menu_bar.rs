@@ -27,28 +27,35 @@ use wasm_bindgen::JsCast;
 
 use crate::ui::commands as registry;
 use crate::ui::menu_bar::{
-    MenuId, MenuRow, TOP_MENUS, ZOOM_FIT, ZOOM_IN, ZOOM_OUT, ZOOM_RESET, ZOOM_TO_SELECTION,
-    menu_layout,
+    MenuId, MenuRow, REDO, TOP_MENUS, UNDO, ZOOM_FIT, ZOOM_IN, ZOOM_OUT, ZOOM_RESET,
+    ZOOM_TO_SELECTION, menu_layout,
 };
 
+use super::Toggles;
 use super::icons;
 
 /// Map the pure `MenuRow` layout to the chrome `MenuEntry` rows `ContextMenu`
 /// renders. The label and the accelerator chip come from the registry
 /// (`UI-THREAD-019`); the menu bar shows no leading icons, keeping the dropdowns
-/// text-first. A row the registry does not describe contributes nothing, which
-/// no layout produces.
-fn entries_for(id: MenuId) -> Vec<MenuEntry> {
+/// text-first. An Undo/Redo row the command store holds as disabled is rendered
+/// inert (`UNDO-006`). A row the registry does not describe contributes nothing,
+/// which no layout produces.
+fn entries_for(id: MenuId, toggles: Toggles) -> Vec<MenuEntry> {
     menu_layout(id)
         .into_iter()
         .filter_map(|row| match row {
             MenuRow::Separator => Some(MenuEntry::separator()),
             MenuRow::Command(command) => {
                 let entry = MenuEntry::new(command, registry::title(command, &Locale::En)?);
-                Some(match registry::chord(command) {
+                let entry = match registry::chord(command) {
                     Some(kb) => entry.shortcut(kb),
                     None => entry,
-                })
+                };
+                // The Undo/Redo affordances are disabled from the Logic thread's
+                // `UndoState` alone; the chrome counts nothing (`UNDO-006`).
+                let disabled = (command == UNDO && !toggles.undo_enabled.get())
+                    || (command == REDO && !toggles.redo_enabled.get());
+                Some(if disabled { entry.disabled() } else { entry })
             }
         })
         .collect()
@@ -74,9 +81,14 @@ fn zoom_button(on_command: Callback<CommandId>, command: CommandId) -> impl Into
 
 /// The Toile top menu bar + zoom control. `zoom` is the shared live zoom factor
 /// (`1.0` = 100%) the canvas view publishes. `on_command` is the shared command
-/// sink, the same `Callback` the context menu uses.
+/// sink, the same `Callback` the context menu uses. `toggles` carries the
+/// authoritative Undo/Redo availability the menu rows read (`UNDO-006`).
 #[component]
-pub fn TopMenuBar(zoom: RwSignal<f64>, on_command: Callback<CommandId>) -> impl IntoView {
+pub fn TopMenuBar(
+    zoom: RwSignal<f64>,
+    on_command: Callback<CommandId>,
+    toggles: Toggles,
+) -> impl IntoView {
     // Which menu is open (drives the pressed title) and where its dropdown sits.
     // `ContextMenu` clears `pos` on select / Escape / click-outside; an effect
     // then clears `open_menu` so the title un-presses.
@@ -89,7 +101,13 @@ pub fn TopMenuBar(zoom: RwSignal<f64>, on_command: Callback<CommandId>) -> impl 
     });
 
     // The rows of the currently open menu (empty when closed -> nothing renders).
-    let entries = Memo::new(move |_| open_menu.get().map(entries_for).unwrap_or_default());
+    // Reads the Undo/Redo signals so a disabled row updates reactively.
+    let entries = Memo::new(move |_| {
+        open_menu
+            .get()
+            .map(|id| entries_for(id, toggles))
+            .unwrap_or_default()
+    });
 
     // One title button per top-level menu. Clicking opens (or, when already open,
     // closes) its dropdown anchored at the title's bottom-left.

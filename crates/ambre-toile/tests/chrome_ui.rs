@@ -24,12 +24,13 @@ use ambre_bus::app::toile::TextDelta;
 use ambre_bus::app::toile::{DeckFrame, DeckView, ElementId, ToileEvent};
 use ambre_bus::{AppEvent, UiEvent};
 use ambre_canvas::PerfSnapshot;
+use ambre_chrome::CommandStates;
 use ambre_chrome::ContextMenu;
 use ambre_chrome::{ToastHost, Toasts};
 use ambre_commands::CommandId;
 use ambre_toile::chrome::{
-    DeckIntent, DeckMove, DeckPanel, FloatBar, PresenterIntent, PresenterPanel, SelStats,
-    SelectionToolbar, StatusBar, StyleEdit, StyleModel, ToolPalette, TopMenuBar,
+    DeckIntent, DeckMove, DeckPanel, FloatBar, PresenterIntent, PresenterPanel, REDO, SelStats,
+    SelectionToolbar, StatusBar, StyleEdit, StyleModel, Toggles, ToolPalette, TopMenuBar, UNDO,
 };
 use ambre_toile::ui::Tool;
 use ambre_toile::ui::menu::{self, CtxScope};
@@ -348,12 +349,43 @@ fn top_menu_bar_zoom_in_fires_command() {
     let zoom = RwSignal::new(1.0);
     let fired = RwSignal::new(None::<CommandId>);
     let on_command = Callback::new(move |id: CommandId| fired.set(Some(id)));
-    let root = mount_in_container(move || view! { <TopMenuBar zoom=zoom on_command=on_command /> });
+    let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
+    ambre_toile::chrome::init_command_states(&store);
+    let toggles = Toggles::from_store(&store);
+    let root = mount_in_container(move || {
+        view! { <TopMenuBar zoom=zoom on_command=on_command toggles=toggles /> }
+    });
 
     assert!(click_by_aria(&root, "Zoom in"));
     assert_eq!(fired.get_untracked(), Some(ZOOM_IN));
 
     root.remove();
+}
+
+/// `mirror_event` projects the authoritative Undo/Redo availability from
+/// `ToileEvent::UndoState` into the command store the menu bar reads for its
+/// `disabled` state (`UNDO-006`).
+#[wasm_bindgen_test]
+fn undo_state_mirrors_into_command_store() {
+    let owner = Owner::new();
+    owner.set();
+
+    let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
+    ambre_toile::chrome::init_command_states(&store);
+    // A fresh board starts with an empty history.
+    assert!(!store.enabled_signal(UNDO).unwrap().get());
+    assert!(!store.enabled_signal(REDO).unwrap().get());
+
+    let ev = UiEvent::Viewport {
+        document_id: ambre_core::DocumentId::new(),
+        event: AppEvent::Toile(ToileEvent::UndoState {
+            can_undo: true,
+            can_redo: false,
+        }),
+    };
+    ambre_toile::chrome::mirror_event(&store, &ev);
+    assert!(store.enabled_signal(UNDO).unwrap().get());
+    assert!(!store.enabled_signal(REDO).unwrap().get());
 }
 
 // -- Floating selection toolbar, input ------------------------

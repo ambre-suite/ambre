@@ -317,7 +317,25 @@ impl ToileState {
 
     // -- command dispatch ------------------------------------------------------
 
+    /// Handle a UI command and return a typed outcome.
+    ///
+    /// Any command that produced a CRDT delta also moved the `UndoManager`
+    /// stacks, so the chrome's Undo/Redo affordances must be refreshed
+    /// (`UNDO-006`). Undo and Redo already append their own `UndoState`; skip
+    /// the duplicate.
     pub fn handle_command(&mut self, cmd: ToileCommand) -> ToileOutcome {
+        let mut outcome = self.dispatch_command(cmd);
+        let already_reported = matches!(outcome.display.last(), Some(ToileEvent::UndoState { .. }));
+        if outcome.update.is_some() && !already_reported {
+            outcome.display.push(self.undo_state_event());
+        }
+        outcome
+    }
+
+    /// Execute one command and return its raw outcome, before the central
+    /// [`UndoState`](ToileEvent::UndoState) refresh applied by
+    /// [`handle_command`](Self::handle_command).
+    fn dispatch_command(&mut self, cmd: ToileCommand) -> ToileOutcome {
         match cmd {
             ToileCommand::CreateElement {
                 kind,
@@ -617,8 +635,11 @@ impl ToileState {
         }
         let deck_before = self.slide_order();
         self.rebuild_caches();
-        let mut events = vec![self.viewport_event(), self.undo_state_event()];
+        // `undo_state_event` last, so the central refresh in `handle_command`
+        // sees it and skips the duplicate (`UNDO-006`).
+        let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
+        events.push(self.undo_state_event());
         self.emit_with_update(events)
     }
 
@@ -994,5 +1015,57 @@ mod cursor_tests {
             "the scaffolding is ours to send"
         );
         assert!(st.flush_delta().is_none(), "and it is sent only once");
+    }
+}
+
+#[cfg(test)]
+mod undo_state_tests {
+    //! `UNDO-006`: every mutating command refreshes the Undo/Redo availability,
+    //! and a read-only command does not.
+
+    use kurbo::{Point, Size};
+
+    use ambre_bus::app::toile::ToileEvent;
+
+    use crate::logic::command::{InitContent, ToileCommand};
+    use crate::logic::model::{ElementKind, ShapeKind};
+    use crate::logic::state::ToileState;
+
+    /// Every mutating command refreshes the Undo/Redo availability, so the
+    /// chrome enables the Undo button right after the first edit. It does not
+    /// wait for the user to trigger an undo. A read-only command emits no
+    /// `UndoState`.
+    #[test]
+    fn mutating_command_reports_undo_state() {
+        let mut st = ToileState::new();
+
+        let evts = st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Rect),
+            at: Point::ZERO,
+            size: Size::new(10.0, 10.0),
+            content: InitContent::None,
+            fill: None,
+        });
+        assert!(
+            matches!(
+                evts.display.last(),
+                Some(ToileEvent::UndoState {
+                    can_undo: true,
+                    can_redo: false
+                }),
+            ),
+            "an edit enables Undo: {:?}",
+            evts.display.last(),
+        );
+
+        // A read-only command produces no CRDT delta -> no UndoState refresh.
+        let evts = st.handle_command(ToileCommand::ReadDeck);
+        assert!(
+            !evts
+                .display
+                .iter()
+                .any(|e| matches!(e, ToileEvent::UndoState { .. })),
+            "a read-only command does not touch the history stacks",
+        );
     }
 }

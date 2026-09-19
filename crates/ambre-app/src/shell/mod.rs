@@ -26,6 +26,7 @@ pub(crate) fn mount_shell(
     theme_ctl: ambre_canvas::ThemeControl,
     boot_doc: Option<DocumentId>,
     store_slot: Rc<RefCell<Option<CommandStates>>>,
+    toile_store_slot: Rc<RefCell<Option<CommandStates>>>,
     anchor_slot: Rc<RefCell<Option<RwSignal<Option<(f64, f64)>>>>>,
     toasts_slot: Rc<RefCell<Option<Toasts>>>,
     user_slot: Rc<RefCell<Option<RwSignal<Option<String>>>>>,
@@ -91,6 +92,12 @@ pub(crate) fn mount_shell(
         trame_chrome::init_command_states(&store);
         let toggles = trame_chrome::Toggles::from_store(&store);
         *store_slot.borrow_mut() = Some(store);
+        // Toile's own store: the two Undo/Redo rows read its enabled signals,
+        // fed by `ToileEvent::UndoState` through the launcher's relay.
+        let toile_store = CommandStates::new(toile_chrome::COMMANDS.iter().map(|c| c.id));
+        toile_chrome::init_command_states(&toile_store);
+        let toile_toggles = toile_chrome::Toggles::from_store(&toile_store);
+        *toile_store_slot.borrow_mut() = Some(toile_store);
         let anchor_pos = RwSignal::new(None::<(f64, f64)>);
         *anchor_slot.borrow_mut() = Some(anchor_pos);
         let toasts = Toasts::new();
@@ -140,6 +147,7 @@ pub(crate) fn mount_shell(
             raf,
             theme_ctl,
             toggles,
+            toile_toggles,
             style_state,
             anchor_pos,
             toasts,

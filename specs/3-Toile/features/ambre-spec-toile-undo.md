@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: TOILE UNDO AND REDO
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- undo and redo ship; the buttons are never told what is available.
+**Implementation:** partial -- undo and redo ship, and the buttons read the availability.
 
 > Toile's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a board, and
 > which caches an undo reseeds.
@@ -77,7 +77,8 @@ The engine field is the shared `undo_manager` (`ambre-spec-undo.md section 3`).
 
 * `crates/ambre-toile/src/logic/state/mod.rs` -- the revert and replay handler, and the event;
 * `logic/state/caches.rs` -- the reseed step 3 runs;
-* `ui/menu_bar.rs` -- the two entries and their chords.
+* `ui/menu_bar.rs` -- the two entries and their chords;
+* `chrome/commands.rs` -- the mirror from `UndoState` into the command store the menu bar reads.
 
 ---
 
@@ -90,8 +91,8 @@ The engine field is the shared `undo_manager` (`ambre-spec-undo.md section 3`).
 | `Ctrl+Y` | `Redo`, the second binding users of other applications reach for |
 | Undo and Redo, in the edit menu | the same two intents |
 
-The two entries are never disabled, because the availability never reaches them (`UNDO-006`,
-section 5).
+The two entries are disabled from `UndoState` alone, which the chrome reads from its command store
+(`UNDO-006`).
 
 ---
 
@@ -114,9 +115,6 @@ inverse, the whole reseed, the stack that dies with the document. Toile's own:
 
 The shared gaps are in `ambre-spec-undo.md section 6`. Toile's own:
 
-* **The buttons are never told anything** (`UNDO-006`). The availability event is emitted by two
-  handlers of thirty and dropped by the view, so a fresh board always offers Undo. Trame's
-  counterpart is `verified` on two tests.
 * **Local-only is asserted nowhere** (`UNDO-001`). No test drives a remote change and presses undo.
   It is the cheapest gap here to close: the Trame test (`undo_local_only_not_remote`) transposes.
 * **The three chords are decoded by a function no test calls** (`TOILE-095` through `TOILE-097`).
