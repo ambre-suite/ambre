@@ -309,6 +309,17 @@ impl Selection {
         self.active = (row, col);
     }
 
+    /// Extend a whole-axis band to column/row `idx`, keeping the anchor
+    /// (`trame-selection`). The band kind is the caller's; a `Cells` selection
+    /// has no band to extend and is left untouched.
+    pub fn extend_axis(&mut self, kind: SelKind, idx: u32) {
+        match kind {
+            SelKind::Cols => self.active = (0, idx),
+            SelKind::Rows => self.active = (idx, 0),
+            SelKind::Cells => {}
+        }
+    }
+
     /// Commit the live rectangle and start a fresh single-cell one at
     /// `(row, col)` (Ctrl+click: disjoint selection).
     pub fn add_disjoint(&mut self, row: u32, col: u32) {

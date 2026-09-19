@@ -220,6 +220,34 @@ fn axis_report_carries_the_band_not_the_cache() {
     }
 }
 
+/// `Selection::extend_axis` keeps the anchor and moves the band's active edge,
+/// so a single-column band swept to the right becomes a multi-cell selection.
+/// That is the state the status band reads after a header drag, and the trigger
+/// the aggregates refresh must not miss (`TRAME-UI-109`).
+#[test]
+fn extending_a_header_band_makes_the_selection_multi() {
+    let mut cols = Selection::axis(SelKind::Cols, 0, 0);
+    assert!(
+        !cols.is_multi(),
+        "a single column is not a multi-cell selection"
+    );
+    cols.extend_axis(SelKind::Cols, 3);
+    assert_eq!(cols.live_rect(), (0, 0, 0, 3));
+    assert!(
+        cols.is_multi(),
+        "sweeping columns A to D is a multi-cell band"
+    );
+
+    let mut rows = Selection::axis(SelKind::Rows, 5, 5);
+    assert!(
+        !rows.is_multi(),
+        "a single row is not a multi-cell selection"
+    );
+    rows.extend_axis(SelKind::Rows, 2);
+    assert_eq!(rows.live_rect(), (2, 0, 5, 0));
+    assert!(rows.is_multi(), "sweeping rows is a multi-cell band");
+}
+
 /// A resized column / row shifts the pixel mapping: `cell_at` and
 /// `cell_pixel_rect` must agree on the variable geometry (`trame-resize`).
 #[test]

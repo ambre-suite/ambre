@@ -377,18 +377,20 @@ impl TrameView {
     }
 
     /// Extend the active whole-axis band to column/row `idx` (Shift+click or a
-    /// header drag), keeping the anchor.
+    /// header drag), keeping the anchor. A band extension changes the selection,
+    /// so it refreshes the aggregates like every other selection path
+    /// (`TRAME-UI-109`).
     pub(crate) fn extend_axis(&mut self, idx: u32) {
-        let sel = &mut self.state.selection;
-        match sel.kind {
-            crate::ui::grid::SelKind::Cols => sel.active = (0, idx),
-            crate::ui::grid::SelKind::Rows => sel.active = (idx, 0),
-            crate::ui::grid::SelKind::Cells => return,
+        let kind = self.state.selection.kind;
+        if kind == crate::ui::grid::SelKind::Cells {
+            return;
         }
+        self.state.selection.extend_axis(kind, idx);
         self.viewport_changed = true;
         if let Err(SendError::Refused) = self.send_command_lossless(self.axis_active_cmd()) {
             tracing::error!("Trame: the outbox is full, the axis extend was dropped");
         }
+        self.announce_active();
     }
 
     /// Select the whole sheet from the header corner (`trame-selection`): a column band

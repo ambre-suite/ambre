@@ -35,7 +35,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-109` | `POST` | A change to the selection MUST refresh the aggregates. | this spec section 2 | none | fails -- the refresh is called from the active-cell announcement alone, which extending a header band does not reach (section 5); lands with the `Every selection change refreshes the aggregates` Story (`ambre-roadmap.md` E7) | failing |
+| `TRAME-UI-109` | `POST` | A change to the selection MUST refresh the aggregates. | this spec section 2 | `ambre_trame::ui::grid::tests::group1::extending_a_header_band_makes_the_selection_multi` -- the extend path yields a multi-cell band; `ambre_trame::ui::view::lifecycle::tests::a_sent_request_keeps_the_last_answer` -- a multi-cell band sends the request | none | verified |
 | `TRAME-UI-136` | `FRAME` | A refresh whose request did not reach the Logic thread MUST NOT leave the band showing the totals of another selection. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | `ambre_trame::ui::view::lifecycle::tests::a_dropped_request_clears_the_band` -- the clear decision in `stats_band_clears`; `::a_single_cell_clears_and_sends_nothing`; `::a_sent_request_keeps_the_last_answer` -- the other two sides | none | verified |
 
 * **Budget.** none: the tallies are one walk over the selection, and
@@ -43,10 +43,9 @@ status values are normative in `ambre-spec-template.md`.
   phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the band reads and shows. It writes nothing to the document, opens no path,
   and `UI-THREAD-004` bans a network, crypto or persistence path on the thread it paints on.
-* **Verification.** 6 `verified`, 1 `failing`, 4 `untested`. The walk, the tallies, the read-only
-  guarantee, the whole-selection coverage and the clear decision all have a host test. The five gaps
-  are the UI half -- what the band shows, how it reads, when it refreshes, and which rows it covers.
-  Two of them are rules the code answers with something else, listed in section 5. The count and the
+* **Verification.** 7 `verified`, 4 `untested`. The walk, the tallies, the read-only
+  guarantee, the whole-selection coverage, the refresh on a selection change and the clear decision
+  each have a host test. The four gaps are the UI half, listed in section 5. The count and the
   numeric aggregates are two rows (`TRAME-UI-105`, `TRAME-UI-172`) over one test.
 
 ---
@@ -134,10 +133,6 @@ value (`TRAME-UI-108`).
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Extending a header band does not refresh the aggregates** (`TRAME-UI-109`). The refresh hangs
-  off the active-cell announcement. `extend_axis` -- Shift+click on a header, or a header drag
-  -- is the one selection path that does not announce. So sweeping columns A to D leaves the total
-  of A on screen, with no sign it is stale.
 * **The band has no host test.** Six rows say `none`. The band itself is a pure function of one
   `SelStats` value, so the wasm tier can reach it. `fmt_num` is a free function the host tier can
   call today; only the signal write stays on the browser.
