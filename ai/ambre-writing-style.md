@@ -32,5 +32,6 @@
 * **A Rust comment explains why, never what.** A public item states its contract and its failure
   modes.
 
-No script checks this file, unlike `just contracts` and `just spec-code`. It is a review rule, and
-review rules drift.
+`just prose` holds the half a script can hold: printable ASCII, Latin abbreviations, sentence and
+paragraph length, the banned terms and the empty openers. The metaphor, the ambiguous pronoun, the
+undated figure and "why, never what" stay a human read, and a review rule drifts.

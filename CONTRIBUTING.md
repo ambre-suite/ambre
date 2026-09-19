@@ -70,6 +70,11 @@ The table holds what no gate sees. Read it before you commit.
 | Every mermaid block you touched renders locally first | `just spec-code` checks the fence tag, not the diagram. A broken diagram fails on the forge |
 | A benchmark figure names what it measures, and never a frame rate (`FIXTURE-024`) | the claim is made in a pull request, not in a test |
 
+**A commit that touches `specs/` has a second such list.** `ambre-spec-template.md section 1.G`
+names, beside each pillar, the script that holds it and what it leaves to a reader. Three examples:
+whether a kind is the right one, whether a frame names the right state, whether a gap says what is
+loose. It is not copied here: a copied table goes stale.
+
 ---
 
 ## 4. THE REVIEW CHECKLIST

@@ -19,9 +19,9 @@
   `.rs` file.
 * **BE DECISIVE.** One recommendation, never "it depends". Reject a bad idea with a technical
   argument instead of listing options. Never re-propose a rejected alternative: `README.md` lists
-  the broad orientations, and most specs list the detailed ones in a
-  `REJECTED ARCHITECTURAL DECISIONS` section. A spec without one has rejected nothing in writing,
-  which is not the same as having rejected nothing.
+  the broad orientations, and nearly every spec lists the detailed ones under a
+  `REJECTED ALTERNATIVES` section. A spec without one has rejected nothing in writing, which is not
+  the same as having rejected nothing.
 
 ## Reading discipline
 

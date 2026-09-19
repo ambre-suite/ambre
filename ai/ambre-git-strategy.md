@@ -18,7 +18,11 @@
 * **Pre-commit, mandatory when the commit touches Rust.** Run `cargo fmt --all`, then clear every
   compilation warning, then every `cargo clippy` warning. Commit only once the tree is clean.
   `./run_tests.sh lint` checks it.
-* **A commit that touches only `specs/`** runs `just contracts` and `just spec-code` instead.
+* **A commit that touches `specs/`** runs seven more gates. The seven are `just contracts`,
+  `just spec-code`, `just spec-refs`, `just spec-shape`, `just spec-answers`, `just index` and
+  `just inventory`. No recipe runs them together, and the seven take under six seconds.
+* **A commit that touches `scripts/`** runs `just test-scripts`, plus the gate that the script
+  holds.
 * **Every commit runs `just prose`**, whatever it touched: the gate reads Rust comments and
   Markdown alike. Every metric is a hard error, so the gate is green on the tree and a commit
   leaves it green.
