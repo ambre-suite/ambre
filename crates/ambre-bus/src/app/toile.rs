@@ -280,6 +280,11 @@ pub const STICKY_CORNER: f32 = 0.0;
 /// it.
 pub const STICKY_AUTO_FONT_SIZE: f32 = 0.0;
 
+/// The style register's own layout version, its first byte (`TOILE-UI-071`). A
+/// later layout change bumps it and adds a migration row, so an older build's
+/// style survives instead of resetting to the default.
+pub const STYLE_VERSION: u8 = 1;
+
 impl ElementStyle {
     /// The style seeded at element birth (`toile-styles`, "Per-kind
     /// defaults"). Every kind uses [`ElementStyle::default`] EXCEPT `sticky`. A
@@ -307,8 +312,14 @@ impl ElementStyle {
     /// Serialize for the element's `"style"` binary register. Infallible in
     /// practice (a fixed, all-owned struct); a failure logs a line and yields an
     /// empty blob, which decodes back to `default()`.
+    ///
+    /// The first byte is [`STYLE_VERSION`], the register's own layout version
+    /// (`TOILE-UI-071`). It lets a later layout change add a migration instead
+    /// of resetting every element an older build drew.
     pub fn to_bytes(&self) -> Vec<u8> {
-        postcard::to_allocvec(self).unwrap_or_default()
+        let mut out = vec![STYLE_VERSION];
+        out.extend_from_slice(&postcard::to_allocvec(self).unwrap_or_default());
+        out
     }
 
     /// Decode a `"style"` register, saying so when the bytes will not decode.
@@ -318,11 +329,18 @@ impl ElementStyle {
     /// (`SCHEMA-003`). An **empty** register is not that case. An element with
     /// no style carries no bytes and reads as the default, so it comes back as
     /// `Some(default)`.
+    ///
+    /// The first byte selects the layout (`TOILE-UI-071`). A version this build
+    /// does not know is reported, never silently reset. A later layout change
+    /// then adds a migration row that decodes the older version.
     pub fn try_from_bytes(bytes: &[u8]) -> Option<Self> {
         if bytes.is_empty() {
             return Some(Self::default());
         }
-        postcard::from_bytes(bytes).ok()
+        if bytes[0] != STYLE_VERSION {
+            return None;
+        }
+        postcard::from_bytes(&bytes[1..]).ok()
     }
 
     /// Merge a whole-register restyle value over one element's own style
@@ -1703,4 +1721,55 @@ pub struct DisplayConnector {
     /// The edge caption, empty when the arrow carries none. Read from the
     /// connector's `label` char-CRDT (`toile-connectors`).
     pub label: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `TOILE-UI-071`: the register carries its layout version, and a style
+    /// written under the current layout reads back whole.
+    #[test]
+    fn a_style_round_trips_through_its_version() {
+        let style = ElementStyle {
+            fill: Some(0xffaa_bbcc),
+            corner: 8.0,
+            shadow: Some(Shadow {
+                color: 0xff00_0000,
+                dx: 1.0,
+                dy: 2.0,
+                blur: 3.0,
+            }),
+            font: FontSpec {
+                family: "Serif".to_owned(),
+                size: 24.0,
+                weight: 600,
+                italic: true,
+                underline: false,
+                strikethrough: true,
+            },
+            ..ElementStyle::default()
+        };
+        let bytes = style.to_bytes();
+        assert_eq!(bytes[0], STYLE_VERSION);
+        assert_eq!(ElementStyle::try_from_bytes(&bytes), Some(style));
+    }
+
+    /// `TOILE-UI-071`: a register carrying a layout this build does not know is
+    /// reported, never silently reset to the default.
+    #[test]
+    fn a_style_from_an_unknown_layout_is_reported() {
+        let mut bytes = vec![STYLE_VERSION + 1];
+        bytes.extend_from_slice(&postcard::to_allocvec(&ElementStyle::default()).unwrap());
+        assert_eq!(ElementStyle::try_from_bytes(&bytes), None);
+    }
+
+    /// An empty register is a style never written, and it reads as the default.
+    #[test]
+    fn an_empty_register_reads_as_the_default() {
+        assert_eq!(
+            ElementStyle::try_from_bytes(&[]),
+            Some(ElementStyle::default())
+        );
+    }
 }

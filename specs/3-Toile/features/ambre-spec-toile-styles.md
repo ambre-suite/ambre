@@ -39,7 +39,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 | `TOILE-UI-170` | `OBS` | The bar MUST hide while a move, a resize or a rotate is in flight, so it does not follow the preview. | this spec section 6 | none | unheld -- the view decides the transient hiding at publish time and that seam is wasm-only, so only the empty and unresolved halves are driven; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-171` | `OBS` | The bar MUST offer group, ungroup, lock and unlock according to what is selected. | this spec section 4 | `ambre_toile::ui::floatbar::tests::flags_track_group_and_lock_state` -- the group flag and both lock flags on a mixed pair | none | verified |
 | `TOILE-UI-070` | `OBS` | Both surfaces MUST read the whole selection, not the part on screen. | this spec section 6 | `ambre_toile::ui::style::tests::off_screen_selection_contributes_its_style` -- an off-screen member's differing fill still flags mixed; `ambre_toile::logic::convergence_tests::selection_data_includes_offscreen_elements` -- Logic answers the whole selection | none | verified |
-| `TOILE-UI-071` | `IO` | A style written by an older build MUST survive a change to the value's layout. | this spec section 6; `TOILE-028` | none | fails -- the value is decoded whole and a decode failure falls back to the default, so any layout change silently resets the style of every element already drawn, section 6; lands with the `A style survives a change to its layout` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-071` | `IO` | A style written by an older build MUST survive a change to the value's layout. | this spec section 6; `TOILE-028` | `ambre_bus::app::toile::tests::a_style_round_trips_through_its_version` -- the register carries its layout version and a style reads back whole; `::a_style_from_an_unknown_layout_is_reported` -- a layout this build does not know is reported, never reset | none | verified |
 
 ### 1.2 Restyle the selection from the panel
 
@@ -69,11 +69,11 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 * **Boundary.** none: both surfaces are chrome on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The value they emit enters the document and leaves as bytes the Sync
   worker seals (`ZK-001`).
-* **Verification.** 21 `verified`, 1 `failing`, 8 `untested`. What holds is the read: the base value, the
-  difference flags, the anchor, the one-field mapping, and a selection read whole, off-screen included
-  (`TOILE-UI-070`). The write now holds too: a restyle preserves what no surface shows, and the bar reports
-  every field it edits. What is loose is the remaining write paths, untested through either surface. The one
-  failure loses user data on an upgrade (`TOILE-UI-071`), and the lock itself is `TOILE-033`.
+* **Verification.** 22 `verified`, 0 `failing`, 8 `untested`. What holds is the read: the base value, the
+  flags, the anchor, the one-field mapping, and a selection read whole (`TOILE-UI-070`). The write now
+  holds too: a restyle preserves what no surface shows, and the bar reports every field it edits. A style
+  also carries its own layout version (`TOILE-UI-071`). What is loose is the remaining write paths, and the
+  lock itself is `TOILE-033`.
 
 ---
 
@@ -193,10 +193,6 @@ the menus, so the three can never offer different behaviour for the same name
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A layout change resets every style** (`TOILE-UI-071`). The value is decoded whole, and a decode failure
-  falls back to the default. Adding or removing a field makes every element already drawn go white. The
-  format's answer is the schema version the application does not carry (`TOILE-027`, `TOILE-028`). This
-  document's answer is that the value needs a version of its own before a first release.
 * **Formatting is per element, never per range.** The text controls on both surfaces look like a text toolbar,
   and they write the element's style. So a word inside a sentence cannot be emphasized (`TOILE-UI-065`).
 * **A connector has no style to edit** (`TOILE-046`). Both surfaces address elements only, and a

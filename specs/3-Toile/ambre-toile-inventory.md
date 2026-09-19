@@ -34,7 +34,7 @@
 | `toile-presentation` | A user orders a few frames into a deck and presents them. | implemented | 45 | 9 |
 | `toile-selection` | A user clicks an element and gets it, not the one behind it. | implemented | 29 | 12 |
 | `toile-status-bar` | A user selects a handful of elements and reads how many there are and what box they occupy, without drawing a rectangle to find out. | implemented | 13 | 5 |
-| `toile-styles` | A user picks a colour, a border, a thickness, a font, and the selection takes it. | implemented | 30 | 9 |
+| `toile-styles` | A user picks a colour, a border, a thickness, a font, and the selection takes it. | implemented | 30 | 8 |
 | `toile-tools` | A user picks a tool and the board obeys one rule: the gesture shows what it will make, and the release makes it once. | implemented | 30 | 8 |
 | `toile-undo` | Toile's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a board, and which caches an undo reseeds. | implemented | 6 | 5 |
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | implemented | 13 | 9 |
@@ -45,4 +45,4 @@
 | `toile-text-editing` | A user double-clicks a note and types into it, where it sits, at the size it will keep. | partial | 36 | 29 |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 32 | 14 |
 
-**29 features: 24 implemented, 5 partial, 0 design-only. 801 contract rows, 298 loose.**
+**29 features: 24 implemented, 5 partial, 0 design-only. 801 contract rows, 297 loose.**
