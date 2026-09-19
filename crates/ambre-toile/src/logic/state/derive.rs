@@ -44,9 +44,13 @@ impl ToileState {
     pub(super) fn derive_viewport_at(&self, vp: Viewport) -> DisplayViewport {
         let visible: HashSet<ElementId> = self.index.query_visible(&vp).collect();
         let mut nodes = Vec::new();
+        // Every visible element the order lists, so the omitted remainder is the
+        // difference, not a second pass over the element map (`TOILE-058`).
+        let mut listed = HashSet::new();
         for node in &self.layers {
             match node {
                 crate::logic::model::NodeId::Element(id) if visible.contains(id) => {
+                    listed.insert(id.clone());
                     if let Some(de) = self.display_element(id) {
                         nodes.push(DisplayNode::Element(de));
                     }
@@ -57,6 +61,16 @@ impl ToileState {
                     }
                 }
                 crate::logic::model::NodeId::Element(_) => {} // culled
+            }
+        }
+        // An element the document holds but the order omits still paints, last,
+        // in an order every peer computes alike: by id (`TOILE-058`, `TOILE-121`).
+        let mut omitted: Vec<&ElementId> =
+            visible.iter().filter(|id| !listed.contains(*id)).collect();
+        omitted.sort();
+        for id in omitted {
+            if let Some(de) = self.display_element(id) {
+                nodes.push(DisplayNode::Element(de));
             }
         }
         DisplayViewport {
@@ -269,8 +283,10 @@ impl ToileState {
 mod tests {
     use kurbo::{Point, Size};
 
-    use crate::logic::command::{InitContent, ToileCommand, Viewport};
-    use crate::logic::model::{ElementKind, ShapeKind};
+    use crate::logic::command::{
+        DisplayNode, DisplayViewport, InitContent, ToileCommand, ToileEvent, Viewport,
+    };
+    use crate::logic::model::{ElementId, ElementKind, NodeId, ShapeKind};
     use crate::logic::state::ToileState;
 
     fn rect_at(x: f64, y: f64) -> ToileCommand {
@@ -281,6 +297,27 @@ mod tests {
             content: InitContent::None,
             fill: None,
         }
+    }
+
+    fn create_rect(st: &mut ToileState, x: f64) -> ElementId {
+        st.handle_command(rect_at(x, 0.0))
+            .display
+            .into_iter()
+            .find_map(|e| match e {
+                ToileEvent::ElementCreated(id) => Some(id),
+                _ => None,
+            })
+            .expect("CreateElement must report the element it minted")
+    }
+
+    fn painted_elements(vp: &DisplayViewport) -> Vec<ElementId> {
+        vp.nodes
+            .iter()
+            .filter_map(|n| match n {
+                DisplayNode::Element(de) => Some(de.id.clone()),
+                DisplayNode::Connector(_) => None,
+            })
+            .collect()
     }
 
     /// `derive_viewport_at` culls against the camera it is handed, not
@@ -309,5 +346,28 @@ mod tests {
 
         // The live viewport is unchanged: no mutate-then-restore.
         assert_eq!(st.derive_viewport().viewport, here.viewport);
+    }
+
+    /// `TOILE-058` / `TOILE-121`: an element the document holds but the order
+    /// omits still paints, last, in an order every peer computes alike (by id).
+    #[test]
+    fn an_omitted_element_paints_last_in_id_order() {
+        let mut st = ToileState::new();
+        let listed = create_rect(&mut st, 0.0);
+        let omitted: Vec<ElementId> = (1..=4)
+            .map(|i| create_rect(&mut st, f64::from(i) * 40.0))
+            .collect();
+        for id in &omitted {
+            st.debug_remove_layer_entry(&NodeId::Element(id.clone()));
+        }
+
+        let painted = painted_elements(&st.debug_viewport());
+        assert_eq!(painted.len(), 5, "the omitted elements still paint");
+        assert_eq!(painted[0], listed, "the listed element keeps its place");
+        // The omitted tail is sorted by id: the fallback is deterministic rather
+        // than the element map's iteration order (`TOILE-121`).
+        let mut tail = painted[1..].to_vec();
+        tail.sort();
+        assert_eq!(&painted[1..], &tail[..], "the omitted tail is in id order");
     }
 }

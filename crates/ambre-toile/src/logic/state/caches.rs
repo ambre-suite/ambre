@@ -81,18 +81,21 @@ impl ToileState {
     }
 
     /// Rewrite `layers` keeping only nodes for which `keep` holds. Used by
-    /// deletion cleanup. Rebuilds the list in place.
+    /// deletion cleanup. Rebuilds the list in place. An entry whose tag this
+    /// build cannot decode is never named by a deletion. It is preserved
+    /// verbatim (`TOILE-129`), not destroyed by an unrelated delete.
     pub(super) fn strip_layers(&self, keep: impl Fn(&NodeId) -> bool) {
         let list = self.doc.get_movable_list(LAYERS);
         // Collect survivors from the current list value, then rewrite.
-        let mut survivors = Vec::new();
+        let mut survivors: Vec<String> = Vec::new();
         if let LoroValue::List(cur) = list.get_deep_value() {
             for v in cur.iter() {
-                if let LoroValue::String(s) = v
-                    && let Some(node) = NodeId::decode(s)
-                    && keep(&node)
-                {
-                    survivors.push(node.encode());
+                if let LoroValue::String(s) = v {
+                    match NodeId::decode(s) {
+                        Some(node) if keep(&node) => survivors.push(s.as_str().to_owned()),
+                        Some(_) => {} // a node the deletion named
+                        None => survivors.push(s.as_str().to_owned()), // unreadable: not ours
+                    }
                 }
             }
         }

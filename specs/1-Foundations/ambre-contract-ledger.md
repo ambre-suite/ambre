@@ -19,12 +19,12 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2487 rows: 1737 shipped, of which 825 loose. 750 unbuilt.**
+**2487 rows: 1737 shipped, of which 822 loose. 750 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 212 | 219 | 481 |  | 912 |
-| `failing` | 39 | 46 | 72 |  | 157 |
+| `verified` | 212 | 219 | 484 |  | 915 |
+| `failing` | 39 | 46 | 69 |  | 154 |
 | `untested` | 274 | 144 | 234 |  | 652 |
 | `human-review` | 7 |  |  |  | 7 |
 | `qa-manual` | 3 | 4 | 2 |  | 9 |
@@ -128,7 +128,7 @@
 | `ambre-spec-toile-undo.md` | 6 | 6 | 1 | 5 |  |
 | `ambre-spec-toile-vector-paths.md` | 13 | 13 | 4 | 9 |  |
 | `ambre-spec-toile-viewport.md` | 32 | 30 | 16 | 14 | 2 |
-| `ambre-spec-toile-z-order.md` | 16 | 16 | 4 | 12 |  |
+| `ambre-spec-toile-z-order.md` | 16 | 16 | 7 | 9 |  |
 
 ## WHICH DOCUMENT DECLARES AN ID
 

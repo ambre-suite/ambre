@@ -505,7 +505,7 @@ mod inner_tests {
 
     use crate::logic::align::AlignOp;
     use crate::logic::command::{InitContent, ToileCommand};
-    use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
+    use crate::logic::model::{ElementKind, ElementStyle, NodeId, ShapeKind};
     use crate::logic::state::ToileState;
 
     fn rect_at(st: &mut ToileState, x: f64) -> crate::logic::model::ElementId {
@@ -676,5 +676,35 @@ mod inner_tests {
         st.handle_command(ToileCommand::Undo);
         assert_eq!(st.element_count(), 1);
         assert!(st.bounds_of(&a).is_some());
+    }
+
+    /// `TOILE-129`: a delete that names one node preserves an entry this build
+    /// cannot decode, instead of destroying it on an unrelated write.
+    #[test]
+    fn a_delete_preserves_an_undecodable_layer_entry() {
+        let mut st = ToileState::new();
+        let a = rect(&mut st, 0.0, 0.0, 10.0);
+        let b = rect(&mut st, 40.0, 0.0, 10.0);
+        st.debug_push_layer_raw("X:future_tag");
+
+        st.handle_command(ToileCommand::DeleteElements {
+            ids: vec![a.clone()],
+        });
+
+        let raw = st.debug_raw_layers();
+        let a_entry = NodeId::Element(a).encode();
+        let b_entry = NodeId::Element(b).encode();
+        assert!(
+            raw.iter().any(|s| s == "X:future_tag"),
+            "the undecodable entry survives the unrelated delete"
+        );
+        assert!(
+            raw.iter().any(|s| s == &b_entry),
+            "the untouched entry survives"
+        );
+        assert!(
+            !raw.iter().any(|s| s == &a_entry),
+            "the deleted entry is gone"
+        );
     }
 }

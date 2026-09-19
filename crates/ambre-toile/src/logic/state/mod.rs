@@ -863,6 +863,47 @@ impl ToileState {
         self.doc.commit();
     }
 
+    /// The raw strings of the `layers` list, decode-or-not. Test helper: the
+    /// only way to assert an entry this build cannot decode survives a delete
+    /// (`TOILE-129`).
+    pub fn debug_raw_layers(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        if let LoroValue::List(cur) = self.doc.get_movable_list(LAYERS).get_deep_value() {
+            for v in cur.iter() {
+                if let LoroValue::String(s) = v {
+                    out.push(s.as_str().to_owned());
+                }
+            }
+        }
+        out
+    }
+
+    /// Push one raw string onto the `layers` list, decode-or-not. Test helper:
+    /// it forges an entry a future version wrote and this build cannot read
+    /// (`TOILE-129`).
+    pub fn debug_push_layer_raw(&mut self, s: &str) {
+        let _ = self.doc.get_movable_list(LAYERS).push(s);
+        self.rematerialize_layers();
+    }
+
+    /// Remove one node's entry from the `layers` list, leaving the node in the
+    /// document. Test helper: it forges the concurrent drop `TOILE-058` names, a
+    /// state no command of ours can produce.
+    pub fn debug_remove_layer_entry(&mut self, node: &NodeId) {
+        let list = self.doc.get_movable_list(LAYERS);
+        if let LoroValue::List(cur) = list.get_deep_value() {
+            for (i, v) in cur.iter().enumerate() {
+                if let LoroValue::String(s) = v
+                    && NodeId::decode(s).as_ref().is_some_and(|n| n == node)
+                {
+                    let _ = list.delete(i, 1);
+                    break;
+                }
+            }
+        }
+        self.rematerialize_layers();
+    }
+
     /// Connector ids currently in the CRDT, sorted. Test helper.
     pub fn connector_ids(&self) -> Vec<ConnectorId> {
         let mut ids = Vec::new();
