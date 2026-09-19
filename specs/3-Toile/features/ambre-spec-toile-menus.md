@@ -49,7 +49,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-366` | `POST` | The scope MUST report both lock states separately. | this spec section 2 | `ambre_toile::ui::menu::tests::group_and_locked_flags` -- both lock flags on a mixed pair; `ambre_toile::ui::menu::tests::single_unlocked_element_scope` -- the unlocked-only case | none | verified |
 | `TOILE-UI-132` | `POST` | The scope MUST name the frame that contains the whole selection. | this spec section 2 | `ambre_toile::ui::menu::tests::containing_frame_detected` -- it reads the frame enclosing a sticky as the one named | none | verified |
 | `TOILE-UI-133` | `POST` | The scope MUST name no frame when the selection falls outside every frame. | this spec section 2 | `ambre_toile::ui::menu::tests::no_frame_when_selection_outside` -- no frame for a sticky placed beyond one | none | verified |
-| `TOILE-UI-134` | `POST` | The scope MUST describe the whole selection, not the part of it the viewport holds. | this spec section 5 | none | fails -- the classifier looks each selected id up in the culled set, so an element scrolled off screen is skipped, leaving the count, the flags and the union it feeds. Every scope test builds a viewport holding the whole selection; lands with the `Toile reads the board, not the screen` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-134` | `POST` | The scope MUST describe the whole selection, not the part of it the viewport holds. | this spec section 5 | `ambre_toile::ui::menu::tests::off_screen_selection_counts_in_scope` -- a selected element the culled set omits still counts and flags; `ambre_toile::logic::convergence_tests::selection_data_includes_offscreen_elements` -- Logic answers the whole selection | none | verified |
 | `TOILE-UI-135` | `FRAME` | A right-click MUST NOT emit a board command. | this spec section 3 | none | unheld -- the handler writes the local selection and publishes the scope, and no test drives a right-click and reads the outgoing channel; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-136` | `FRAME` | A right-click MUST NOT move the camera. | this spec section 3 | none | unheld -- the handler reads the camera to map the point and never writes it, and no test drives a right-click; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -98,10 +98,9 @@ status values are normative in `ambre-spec-template.md`.
   by the feature that owns the command.
 * **Boundary.** none: a menu is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. What an entry commits leaves as a command.
-* **Verification.** 34 `verified`, 6 `failing`, 12 `untested`, against 25 distinct mechanisms. What holds is
-  the entry set: what each entry says, and which command it carries. The bar's own ids are distinct too, four
-  of them by construction. What is loose is the pointer: which scope a right-click means, and what it does to
-  the selection. The failures are the omission rule, whose builder is wasm-only and reached by nothing, and
+* **Verification.** 35 `verified`, 5 `failing`, 12 `untested`, against 26 distinct mechanisms. What holds is
+  the entry set and a scope read from the whole selection (`TOILE-UI-134`). What is loose is the pointer:
+  which scope a right-click means, and what it does to the selection. The failures are the omission rule and
   the zoom rule its test only half proves.
 
 ---
@@ -239,10 +238,6 @@ This one restates none of them.
 * **A locked element is offered every entry that would move it** (`TOILE-UI-126`). The builder gates group,
   ungroup, lock, unlock and the frame pair on the scope. Cut, delete, duplicate and the four z-order rows are
   pushed whatever the lock state. The scope carries the flag, so the fix is a condition, not a new signal.
-* **The scope describes the visible selection, not the selection** (`TOILE-UI-134`). Each selected id is
-  looked up in the culled set. An element scrolled off screen leaves the count, the lock flags and the union
-  that finds the enclosing frame. Two entries resolve through the same lookup, so an off-screen group is not
-  ungrouped and an off-screen element is not added to its frame.
 * **The frame the entries target is geometric, not the real parent.** The lookup takes the front-most frame
   whose box contains the selection, and no test holds two (`TOILE-UI-150`). Removal reuses it, so an element
   whose parent is another frame is removed from the wrong one and nothing happens (`TOILE-UI-149`).

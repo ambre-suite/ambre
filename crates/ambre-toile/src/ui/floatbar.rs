@@ -19,9 +19,7 @@
 // selection into an anchored [`FloatBar`].
 // ============================================================================
 
-use ambre_bus::app::toile::{
-    DisplayElement, DisplayNode, DisplayViewport, ElementId, ElementKind, ElementStyle,
-};
+use ambre_bus::app::toile::{DisplayElement, ElementId, ElementKind, ElementStyle};
 use ambre_draw::{Point, Rect};
 
 use super::viewport::ViewportTransform;
@@ -128,7 +126,7 @@ pub fn top_center_anchor(
 /// not addressed by the bar, so only `DisplayElement`s contribute.
 pub fn build_floatbar(
     selection: &[ElementId],
-    display: &DisplayViewport,
+    selected: &[DisplayElement],
     cam: &ViewportTransform,
     dpr: f64,
     offset: (f64, f64),
@@ -148,7 +146,7 @@ pub fn build_floatbar(
     let mut fill_mixed = false;
 
     for id in selection {
-        let Some(e) = find_element(display, id) else {
+        let Some(e) = find_element(selected, id) else {
             continue;
         };
         count += 1;
@@ -186,18 +184,18 @@ pub fn build_floatbar(
     })
 }
 
-/// Find a displayed element by id (linear over the culled set, which is small).
-fn find_element<'a>(display: &'a DisplayViewport, id: &ElementId) -> Option<&'a DisplayElement> {
-    display.nodes.iter().find_map(|n| match n {
-        DisplayNode::Element(e) if &e.id == id => Some(e),
-        _ => None,
-    })
+/// Find a selected element by id (linear over the selection's data from Logic).
+fn find_element<'a>(elements: &'a [DisplayElement], id: &ElementId) -> Option<&'a DisplayElement> {
+    elements.iter().find(|e| &e.id == id)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::{DisplayElement, DisplayGeom, ElementStyle, ShapeKind, Viewport};
+    use ambre_bus::app::toile::{
+        DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementStyle, ShapeKind,
+        Viewport,
+    };
     use ambre_draw::Size;
     use kurbo::Affine;
 
@@ -240,6 +238,17 @@ mod tests {
         }
     }
 
+    /// The selection's whole display data, as Logic sends it.
+    fn els(dv: &DisplayViewport) -> Vec<DisplayElement> {
+        dv.nodes
+            .iter()
+            .filter_map(|n| match n {
+                DisplayNode::Element(e) => Some(e.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// An identity camera (zoom 1, centered on origin) with a known size, so
     /// world->screen is a pure translate by half the size.
     fn cam() -> ViewportTransform {
@@ -259,7 +268,10 @@ mod tests {
             false,
             None,
         )]);
-        assert_eq!(build_floatbar(&[], &dv, &cam(), 1.0, (0.0, 0.0)), None);
+        assert_eq!(
+            build_floatbar(&[], &els(&dv), &cam(), 1.0, (0.0, 0.0)),
+            None
+        );
     }
 
     #[test]
@@ -272,7 +284,7 @@ mod tests {
             None,
         )]);
         assert_eq!(
-            build_floatbar(&[eid("ghost")], &dv, &cam(), 1.0, (0.0, 0.0)),
+            build_floatbar(&[eid("ghost")], &els(&dv), &cam(), 1.0, (0.0, 0.0)),
             None
         );
     }
@@ -289,7 +301,7 @@ mod tests {
             false,
             Some(0xff00_ff00),
         )]);
-        let bar = build_floatbar(&[eid("a")], &dv, &cam(), 1.0, (0.0, 0.0)).expect("bar");
+        let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), 1.0, (0.0, 0.0)).expect("bar");
         assert!((bar.x - 520.0).abs() < 1e-9);
         assert!((bar.y - 420.0).abs() < 1e-9);
         assert!(!bar.multi);
@@ -308,7 +320,7 @@ mod tests {
             false,
             None,
         )]);
-        let bar = build_floatbar(&[eid("a")], &dv, &cam(), 2.0, (40.0, 96.0)).expect("bar");
+        let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), 2.0, (40.0, 96.0)).expect("bar");
         assert!((bar.x - 300.0).abs() < 1e-9);
         assert!((bar.y - 306.0).abs() < 1e-9);
     }
@@ -333,7 +345,8 @@ mod tests {
                 None,
             ),
         ]);
-        let bar = build_floatbar(&[eid("a"), eid("b")], &dv, &cam(), 1.0, (0.0, 0.0)).expect("bar");
+        let bar =
+            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), 1.0, (0.0, 0.0)).expect("bar");
         assert!((bar.x - 540.0).abs() < 1e-9);
         assert!((bar.y - 410.0).abs() < 1e-9);
         assert!(bar.multi);
@@ -357,7 +370,8 @@ mod tests {
                 None,
             ),
         ]);
-        let bar = build_floatbar(&[eid("g"), eid("l")], &dv, &cam(), 1.0, (0.0, 0.0)).expect("bar");
+        let bar =
+            build_floatbar(&[eid("g"), eid("l")], &els(&dv), &cam(), 1.0, (0.0, 0.0)).expect("bar");
         assert!(bar.has_group);
         assert!(bar.any_locked);
         assert!(bar.any_unlocked);
@@ -382,7 +396,8 @@ mod tests {
                 Some(0xff00_00ff),
             ),
         ]);
-        let bar = build_floatbar(&[eid("a"), eid("b")], &dv, &cam(), 1.0, (0.0, 0.0)).expect("bar");
+        let bar =
+            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), 1.0, (0.0, 0.0)).expect("bar");
         assert_eq!(bar.fill, None);
     }
 
@@ -404,7 +419,8 @@ mod tests {
                 Some(0xff11_2233),
             ),
         ]);
-        let bar = build_floatbar(&[eid("a"), eid("b")], &dv, &cam(), 1.0, (0.0, 0.0)).expect("bar");
+        let bar =
+            build_floatbar(&[eid("a"), eid("b")], &els(&dv), &cam(), 1.0, (0.0, 0.0)).expect("bar");
         assert_eq!(bar.fill, Some(0xff11_2233));
     }
 

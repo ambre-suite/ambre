@@ -68,7 +68,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-033` | `POST` | Select-all MUST cover the whole board, not the part the UI thread holds. | this spec section 3; section 4 | none | fails -- the walk is over the culled set, so the rule fails off screen, section 5; lands with the `Toile reads the board, not the screen` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-033` | `POST` | Select-all MUST cover the whole board, not the part the UI thread holds. | this spec section 3; section 4 | `ambre_toile::logic::convergence_tests::board_ids_returns_every_element` -- Logic answers every element id, off-screen included, and select-all selects that list | none | verified |
 | `TOILE-UI-241` | `POST` | Select-all MUST obey the exclusions a pick obeys: no locked element, no group node. | this spec section 3 | none | fails -- the walk drops connectors and nothing else, so a locked element joins the selection and the next delete takes it, section 5; lands with the `A locked element is locked on every surface` Story (`ambre-roadmap.md` E7) | failing |
 | `TOILE-UI-242` | `FRAME` | Select-all MUST NOT alter the group scope the user has entered. | this spec section 3 | structural -- the walk writes the id list and the redraw flag, and no other field | none | verified |
 
@@ -79,10 +79,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: a selection is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It leaves the client only as presence, sealed like any other
   frame (`ZK-005`).
-* **Verification.** 16 `verified`, 6 `failing`, 7 `untested`. What holds is the geometry: twenty-two
-  mechanisms cover the hit tests, the box and the caption a click on an arrow now names. What is
-  loose is the gestures: the scope is entered and left by handlers no test drives. The failures are
-  on the marquee and select-all.
+* **Verification.** 17 `verified`, 5 `failing`, 7 `untested`. What holds is the geometry and
+  select-all covering the whole board (`TOILE-UI-033`). What is loose is the gestures: the scope is
+  entered and left by handlers no test drives. The failures are the marquee, the locked box and
+  select-all's lock exclusions.
 
 ---
 
@@ -179,11 +179,6 @@ ghost outline, never as this box (`features/ambre-spec-toile-presence.md section
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Select-all covers the visible board** (`TOILE-UI-033`). The walk reads the culled set, which is
-  the viewport plus what the cull carries. A board larger than the screen selects its visible part.
-  The following command -- a delete, a style, a group -- applies to that part alone. The Logic
-  thread already answers a whole-board aggregate for a fit, so the extent is reachable; the id list
-  is not.
 * **A connector cannot be picked** (`TOILE-UI-035`). The pick walk drops every connector node before
   testing, so an arrow cannot be selected, styled, deleted on its own or double-clicked to caption
   it. The captioning half is a Story; the selection half has no owner today.

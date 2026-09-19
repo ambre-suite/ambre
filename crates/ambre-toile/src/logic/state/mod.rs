@@ -440,6 +440,8 @@ impl ToileState {
                 backward,
             } => self.find(&query, options, from.as_ref(), backward),
             ToileCommand::RequestSelectionStats { ids, kind } => self.selection_stats(&ids, kind),
+            ToileCommand::RequestSelectionData { ids } => self.selection_data(&ids),
+            ToileCommand::RequestBoardIds => self.board_ids(),
             ToileCommand::ImportSvg { bytes, at } => self.import_svg_bytes(&bytes, at),
             ToileCommand::ImportImage { bytes, mime: _, at } => self.import_image_bytes(&bytes, at),
             ToileCommand::ExportSvg => self.export_svg_document(),
@@ -697,6 +699,32 @@ impl ToileState {
             bounds: union,
             kind,
         })])
+    }
+
+    /// The full display data of the requested ids, off-screen included
+    /// (`toile-menus`, `toile-styles`). The UI thread asks here because the
+    /// culled viewport omits the selection past the edge (`TOILE-UI-070`,
+    /// `TOILE-UI-134`).
+    fn selection_data(&self, ids: &[ElementId]) -> ToileOutcome {
+        let elements = ids
+            .iter()
+            .filter_map(|id| self.display_element(id))
+            .collect();
+        ToileOutcome::display_only(vec![ToileEvent::SelectionData(elements)])
+    }
+
+    /// Every element id on the board, off-screen included, for select-all
+    /// (`toile-selection`, `TOILE-UI-033`).
+    fn board_ids(&self) -> ToileOutcome {
+        let ids = self
+            .layers
+            .iter()
+            .filter_map(|node| match node {
+                crate::logic::model::NodeId::Element(id) => Some(id.clone()),
+                crate::logic::model::NodeId::Connector(_) => None,
+            })
+            .collect();
+        ToileOutcome::display_only(vec![ToileEvent::BoardIds(ids)])
     }
 
     // -- outcome plumbing ------------------------------------------------------

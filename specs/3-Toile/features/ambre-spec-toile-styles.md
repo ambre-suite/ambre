@@ -38,7 +38,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 | `TOILE-UI-169` | `OBS` | The bar MUST hide when no selected element resolves. | this spec section 4 | `ambre_toile::ui::floatbar::tests::empty_selection_hides_bar` -- nothing is published for an empty selection; `ambre_toile::ui::floatbar::tests::unresolved_selection_hides_bar` -- none for an id the painted set does not hold | none | verified |
 | `TOILE-UI-170` | `OBS` | The bar MUST hide while a move, a resize or a rotate is in flight, so it does not follow the preview. | this spec section 6 | none | unheld -- the view decides the transient hiding at publish time and that seam is wasm-only, so only the empty and unresolved halves are driven; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-171` | `OBS` | The bar MUST offer group, ungroup, lock and unlock according to what is selected. | this spec section 4 | `ambre_toile::ui::floatbar::tests::flags_track_group_and_lock_state` -- the group flag and both lock flags on a mixed pair | none | verified |
-| `TOILE-UI-070` | `OBS` | Both surfaces MUST read the whole selection, not the part on screen. | this spec section 6 | none | fails -- both models resolve the selected identities against the culled visible set, so a selected element beyond the edge contributes neither its value nor its difference, section 6; lands with the `Toile reads the board, not the screen` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-070` | `OBS` | Both surfaces MUST read the whole selection, not the part on screen. | this spec section 6 | `ambre_toile::ui::style::tests::off_screen_selection_contributes_its_style` -- an off-screen member's differing fill still flags mixed; `ambre_toile::logic::convergence_tests::selection_data_includes_offscreen_elements` -- Logic answers the whole selection | none | verified |
 | `TOILE-UI-071` | `IO` | A style written by an older build MUST survive a change to the value's layout. | this spec section 6; `TOILE-028` | none | fails -- the value is decoded whole and a decode failure falls back to the default, so any layout change silently resets the style of every element already drawn, section 6; lands with the `A style survives a change to its layout` Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.2 Restyle the selection from the panel
@@ -69,10 +69,11 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 * **Boundary.** none: both surfaces are chrome on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The value they emit enters the document and leaves as bytes the Sync
   worker seals (`ZK-001`).
-* **Verification.** 17 `verified`, 5 `failing`, 8 `untested`. What holds is the read: the base value, the
-  difference flags, the anchor and the one-field mapping. What is loose is every write, untested through
-  either surface: the panel rows and the composition rule rest on reading the code. The five failures are
-  rules the code answers otherwise, one losing user data on an upgrade. The lock itself is `TOILE-033`.
+* **Verification.** 18 `verified`, 4 `failing`, 8 `untested`. What holds is the read: the base value, the
+  difference flags, the anchor, the one-field mapping, and a selection read whole, off-screen included
+  (`TOILE-UI-070`). What is loose is every write, untested through either surface: the panel rows and
+  the composition rule rest on reading the code. The four failures are rules the code answers
+  otherwise, one losing user data on an upgrade. The lock itself is `TOILE-033`.
 
 ---
 
@@ -191,10 +192,6 @@ the menus, so the three can never offer different behaviour for the same name
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A selection past the edge of the screen is read wrong** (`TOILE-UI-070`). Both models resolve the selected
-  identities against the culled visible set, so an off-screen member contributes neither its value nor its
-  difference. The panel can show a fill as shared when it is not, and an edit then makes it shared for real.
-  Same class as the select-all defect (`TOILE-UI-033`), same fix -- the value has to come from the engine.
 * **A layout change resets every style** (`TOILE-UI-071`). The value is decoded whole, and a decode failure
   falls back to the default. Adding or removing a field makes every element already drawn go white. The
   format's answer is the schema version the application does not carry (`TOILE-027`, `TOILE-028`). This

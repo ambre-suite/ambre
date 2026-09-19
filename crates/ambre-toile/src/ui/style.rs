@@ -19,7 +19,9 @@
 // one `RestyleElements`.
 // ============================================================================
 
-use ambre_bus::app::toile::{ConnectorId, DisplayNode, DisplayViewport, ElementId, ElementStyle};
+use ambre_bus::app::toile::{
+    ConnectorId, DisplayElement, DisplayNode, DisplayViewport, ElementId, ElementStyle,
+};
 
 /// Which style attributes differ across the current selection. A set flag means
 /// the inspector shows a mixed-state indicator for that field rather than a value.
@@ -86,14 +88,13 @@ pub fn arrow_style_scope(id: &ConnectorId, display: &DisplayViewport) -> Option<
     })
 }
 
-pub fn style_scope_for(selection: &[ElementId], display: &DisplayViewport) -> Option<StyleModel> {
-    // Resolve the selected ids to their displayed styles, in selection order.
-    let mut styles = selection.iter().filter_map(|id| {
-        display.nodes.iter().find_map(|n| match n {
-            DisplayNode::Element(e) if &e.id == id => Some(&e.style),
-            _ => None,
-        })
-    });
+pub fn style_scope_for(selection: &[ElementId], selected: &[DisplayElement]) -> Option<StyleModel> {
+    // Resolve the selected ids to their styles, in selection order. `selected`
+    // is the whole selection's data from Logic, off-screen included
+    // (`TOILE-UI-070`).
+    let mut styles = selection
+        .iter()
+        .filter_map(|id| selected.iter().find(|e| &e.id == id).map(|e| &e.style));
 
     // The first resolved element seeds the base; an empty (or all-unresolved)
     // selection yields no model, so the inspector stays hidden.
@@ -156,17 +157,28 @@ mod tests {
         }
     }
 
+    /// The selection's whole display data, as Logic sends it.
+    fn els(dv: &DisplayViewport) -> Vec<DisplayElement> {
+        dv.nodes
+            .iter()
+            .filter_map(|n| match n {
+                DisplayNode::Element(e) => Some(e.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
     #[test]
     fn empty_selection_has_no_model() {
         let dv = viewport(vec![elem("a", ElementStyle::default())]);
-        assert_eq!(style_scope_for(&[], &dv), None);
+        assert_eq!(style_scope_for(&[], &els(&dv)), None);
     }
 
     #[test]
     fn unresolved_selection_has_no_model() {
         // A selected id not present in the culled viewport contributes nothing.
         let dv = viewport(vec![elem("a", ElementStyle::default())]);
-        assert_eq!(style_scope_for(&[eid("ghost")], &dv), None);
+        assert_eq!(style_scope_for(&[eid("ghost")], &els(&dv)), None);
     }
 
     #[test]
@@ -176,10 +188,34 @@ mod tests {
             ..ElementStyle::default()
         };
         let dv = viewport(vec![elem("a", s.clone())]);
-        let model = style_scope_for(&[eid("a")], &dv).expect("model");
+        let model = style_scope_for(&[eid("a")], &els(&dv)).expect("model");
         assert_eq!(model.base, s);
         assert_eq!(model.mixed, MixedFlags::default());
         assert!(!model.mixed.any());
+    }
+
+    /// The culled viewport holds only `a`; `b` is off-screen but in the
+    /// selection data Logic sent. Its differing fill must still flag mixed
+    /// (`TOILE-UI-070`).
+    #[test]
+    fn off_screen_selection_contributes_its_style() {
+        let a = ElementStyle {
+            fill: Some(0xffff_0000),
+            ..ElementStyle::default()
+        };
+        let b = ElementStyle {
+            fill: Some(0xff00_00ff),
+            ..ElementStyle::default()
+        };
+        let selected: Vec<DisplayElement> = [elem("a", a.clone()), elem("b", b.clone())]
+            .into_iter()
+            .map(|n| match n {
+                DisplayNode::Element(e) => e,
+                _ => unreachable!(),
+            })
+            .collect();
+        let model = style_scope_for(&[eid("a"), eid("b")], &selected).expect("model");
+        assert!(model.mixed.fill, "off-screen b's fill differs");
     }
 
     #[test]
@@ -193,7 +229,7 @@ mod tests {
             ..ElementStyle::default()
         };
         let dv = viewport(vec![elem("a", a.clone()), elem("b", b)]);
-        let model = style_scope_for(&[eid("a"), eid("b")], &dv).expect("model");
+        let model = style_scope_for(&[eid("a"), eid("b")], &els(&dv)).expect("model");
         // Base is the first element's style; only fill diverges.
         assert_eq!(model.base, a);
         assert!(model.mixed.fill);
@@ -207,7 +243,7 @@ mod tests {
     fn identical_elements_are_not_mixed() {
         let s = ElementStyle::default();
         let dv = viewport(vec![elem("a", s.clone()), elem("b", s.clone())]);
-        let model = style_scope_for(&[eid("a"), eid("b")], &dv).expect("model");
+        let model = style_scope_for(&[eid("a"), eid("b")], &els(&dv)).expect("model");
         assert_eq!(model.mixed, MixedFlags::default());
     }
 
@@ -224,7 +260,7 @@ mod tests {
             ..ElementStyle::default()
         };
         let dv = viewport(vec![elem("a", a), elem("b", b)]);
-        let model = style_scope_for(&[eid("a"), eid("b")], &dv).expect("model");
+        let model = style_scope_for(&[eid("a"), eid("b")], &els(&dv)).expect("model");
         assert!(model.mixed.stroke_w);
         assert!(model.mixed.opacity);
         assert!(!model.mixed.fill);
@@ -247,7 +283,7 @@ mod tests {
             ..ElementStyle::default()
         };
         let dv = viewport(vec![elem("a", a), elem("b", b)]);
-        let model = style_scope_for(&[eid("a"), eid("b")], &dv).expect("model");
+        let model = style_scope_for(&[eid("a"), eid("b")], &els(&dv)).expect("model");
         assert!(model.mixed.underline);
         assert!(model.mixed.strikethrough);
         // The base is the first element; its decorations are off.

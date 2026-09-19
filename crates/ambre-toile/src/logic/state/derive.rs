@@ -127,7 +127,7 @@ impl ToileState {
         }
     }
 
-    fn display_element(&self, id: &ElementId) -> Option<DisplayElement> {
+    pub(super) fn display_element(&self, id: &ElementId) -> Option<DisplayElement> {
         let em = self.element_map(id)?;
         // A group has no stored geometry: its bounds are the derived member union
         // Read them from the derived cache.

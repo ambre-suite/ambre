@@ -45,7 +45,7 @@ editor and not restated here.
 | `TOILE-UI-059` | `POST` | Placing a note or a text element MUST open its editor on the element just placed. | this spec section 4 | none | unheld -- the tool arms a deferred open and the view opens it when the element's geometry lands, and no test drives the two halves together. The create half alone is held, by `ambre_toile::ui::tool::tests::sticky_click_creates_sticky_with_empty_text_and_picked_fill`; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-193` | `POST` | Placing a note or a text element MUST return the tool to select, so the next click does not place a second one. | this spec section 4 | none | unheld -- the tool reverts where the placement command is emitted, and no test reads the tool after a placement; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-194` | `POST` | The deferred open MUST be claimed by the element the tool placed, and by no other. | this spec section 4 | none | fails -- section 6 records the failure; lands with the `The inline editor shows the committed body` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-UI-195` | `FAIL` | Given an element the visible set does not yet carry, the deferred open MUST be kept until it does, not dropped. | this spec section 4 | none | fails -- section 6 records the failure; lands with the `Toile reads the board, not the screen` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-195` | `FAIL` | Given an element the visible set does not yet carry, the deferred open MUST be kept until it does, not dropped. | this spec section 4 | structural -- the view resolves the deferred element against the selection data Logic sends, off-screen included, and retries each frame until it resolves, so a culled-but-created element is never dropped | none | verified |
 | `TOILE-UI-196` | `FRAME` | Opening an editor MUST NOT write to the document, move the camera, or change the board: it is view state, and the placement's own write is the only one. | this spec section 3 | none | unheld -- the open reads the visible set and sets view fields, and no test reads the absence of a command; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 Double-click a note, or click one already selected
@@ -79,18 +79,18 @@ editor and not restated here.
 | `TOILE-UI-207` | `FAIL` | Given a body unchanged since the open, leaving MUST write nothing: leaving an editor is not an edit. | this spec section 5 | none | unheld -- the core answers nothing when the buffer matches the body it was seeded with, and no test closes an untouched editor; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-208` | `FRAME` | A commit MUST NOT touch anything but the body: not the bounds, not the style, not the camera, not the tool. | this spec section 3 | none | unheld -- one command carries the id and the text, and no test reads what a close leaves alone; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-209` | `FAIL` | Given a locked element, the screen MUST NOT show a body the write will be refused (`TOILE-033`). | this spec section 3 | none | fails -- section 6 records the failure; lands with the `The inline editor shows the committed body` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-UI-210` | `FAIL` | Given a pan that carries the edited element off screen, the editor MUST NOT close: scrolling is not leaving. | this spec section 4 | none | fails -- section 6 records the failure; lands with the `Toile reads the board, not the screen` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-210` | `FAIL` | Given a pan that carries the edited element off screen, the editor MUST NOT close: scrolling is not leaving. | this spec section 4 | structural -- the editor resolves its target's geometry from the selection data Logic sends, off-screen included, so a culled element no longer reads as gone | none | verified |
 
 * **Budget.** a keystroke to a draft under 2 ms and text layout of a dirty paragraph under 2 ms
   (`ambre-spec-budgets.md section 1` and section 5.B). The editor echoes locally and shapes at paint
   time, so no keystroke waits for a round trip. Neither figure has a bench.
 * **Boundary.** none: the editor is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. The committed body leaves sealed (`ZK-001`).
-* **Verification.** 4 `verified`, 7 `failing`, 24 `untested`, 1 `unimplemented`. What holds is what
-  the body looks like, along the two axes a shared helper gives the editor and the renderer: ink and
-  size. What is loose is everything else, the least-verified surface of the application. Four more
-  axes off that helper, and every gesture that opens or closes the editor. Among the failures, a
-  locked element loses its body.
+* **Verification.** 6 `verified`, 5 `failing`, 24 `untested`, 1 `unimplemented`. What holds is the
+  body's look and the editor surviving a pan off screen (`TOILE-UI-210`, `TOILE-UI-195`). What is
+  loose is everything else, the least-verified surface of the application. Four more axes off that
+  helper, and every gesture that opens or closes the editor. Among the failures, a locked element
+  loses its body.
 
 ---
 
@@ -233,13 +233,7 @@ means one thing across the suite (`features/ambre-spec-trame-cell-editing.md`).
   the local viewport before the write is sent, and the write is what checks the lock
   (`TOILE-033`). A locked note therefore shows the new body until the next viewport
   arrives and takes it away.
-* **A pan closes the editor** (`TOILE-UI-210`). The editor is driven from the culled set, and an
-  element the set no longer carries is treated as gone: the editor commits and closes. Scrolling the
-  board mid-sentence ends the sentence. The deleted-elsewhere case runs through the same branch, so
-  it commits into a hole rather than leaving an editor over one.
-* **The deferred open is not tied to an element** (`TOILE-UI-194`, `TOILE-UI-195`). Placing a note
-  arms a flag, and the next created element -- a paste, a group, a boolean result -- claims it. The
-  same open is dropped without trace when the placed element falls outside the visible set, which is
-  the only reason the flag exists.
+* **The deferred open is not tied to an element** (`TOILE-UI-194`). Placing a note arms a flag, and
+  the next created element -- a paste, a group, a boolean result -- claims it.
 * **A body has no wrap width of its own.** The editor wraps to the element's width, so narrowing a note
   reflows its body and nothing bounds the result: text can overflow the card.

@@ -449,6 +449,42 @@ fn selection_stats_echoes_the_request_kind() {
     }
 }
 
+/// `RequestSelectionData` answers for the whole selection, off-screen included
+/// (`TOILE-UI-070`, `TOILE-UI-134`).
+#[test]
+fn selection_data_includes_offscreen_elements() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(1000.0, 1000.0), Size::new(10.0, 10.0));
+    let out = st.handle_command(ToileCommand::RequestSelectionData {
+        ids: vec![a.clone(), b.clone()],
+    });
+    match &out.display[0] {
+        ToileEvent::SelectionData(elements) => {
+            let ids: Vec<_> = elements.iter().map(|e| e.id.clone()).collect();
+            assert!(
+                ids.contains(&a) && ids.contains(&b),
+                "off-screen b included"
+            );
+        }
+        other => panic!("expected SelectionData, got {other:?}"),
+    }
+}
+
+/// `RequestBoardIds` returns every element id, off-screen included, which is the
+/// whole board select-all must cover (`TOILE-UI-033`).
+#[test]
+fn board_ids_returns_every_element() {
+    let mut st = ToileState::new();
+    create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    create_rect(&mut st, Point::new(1000.0, 1000.0), Size::new(10.0, 10.0));
+    let out = st.handle_command(ToileCommand::RequestBoardIds);
+    match &out.display[0] {
+        ToileEvent::BoardIds(ids) => assert_eq!(ids.len(), 2),
+        other => panic!("expected BoardIds, got {other:?}"),
+    }
+}
+
 #[test]
 fn group_and_drawing_are_not_creatable() {
     let mut st = ToileState::new();

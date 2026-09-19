@@ -1190,6 +1190,18 @@ pub enum ToileCommand {
         ids: Vec<ElementId>,
         kind: StatsRequestKind,
     },
+    /// Ask Logic for the full display data of these ids, off-screen included
+    /// (`toile-menus`, `toile-styles`, `toile-text-editing`). The UI thread's
+    /// culled set omits the selection past the edge. The menu scope, the style
+    /// surfaces and the inline editor read this instead of the viewport
+    /// (`TOILE-UI-070`, `TOILE-UI-134`).
+    RequestSelectionData {
+        ids: Vec<ElementId>,
+    },
+    /// Ask Logic for every element id on the board, off-screen included, which
+    /// select-all needs because the UI thread holds the culled set alone
+    /// (`toile-selection`, `TOILE-UI-033`).
+    RequestBoardIds,
 
     // -- Interop import (`toile-import-export`) --
     /// Import an SVG document dropped onto the board. The bytes are converted to
@@ -1313,6 +1325,8 @@ impl ToileCommand {
                 | Self::SetViewport(_)
                 | Self::Find { .. }
                 | Self::RequestSelectionStats { .. }
+                | Self::RequestSelectionData { .. }
+                | Self::RequestBoardIds
                 | Self::RequestSnapshot
                 | Self::CopyElements { .. }
                 | Self::ExportSvg
@@ -1453,6 +1467,11 @@ pub enum ToileEvent {
     /// clipboard for cross-tab paste (`toile-clipboard`).
     Clipboard(ClipboardPayload),
     SelectionStats(SelectionStats),
+    /// Full display data for the requested ids, off-screen included
+    /// (`TOILE-UI-070`, `TOILE-UI-134`).
+    SelectionData(Vec<DisplayElement>),
+    /// Every element id on the board, for select-all (`TOILE-UI-033`).
+    BoardIds(Vec<ElementId>),
     /// Text-search hits + recenter target (`toile-find`). Local view
     /// state, never synced and never an undo item.
     FindResults(FindResults),

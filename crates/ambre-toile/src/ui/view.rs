@@ -227,6 +227,14 @@ pub struct ToileView {
     /// Local selection (never persisted; a peer's selection is presence,
     /// `toile-selection`).
     selection: Vec<ElementId>,
+    /// Full display data of the current selection, off-screen included, fetched
+    /// from Logic via `RequestSelectionData` (`TOILE-UI-070`, `TOILE-UI-134`).
+    /// The culled [`display`](Self::display) omits the selection past the edge,
+    /// so the menu scope, the style surfaces and the inline editor read this.
+    selection_data: Vec<DisplayElement>,
+    /// Every element id on the board, off-screen included, fetched from Logic via
+    /// `RequestBoardIds` for select-all (`TOILE-UI-033`).
+    board_ids: Vec<ElementId>,
     /// The selected arrow (`toile-connectors`). Exclusive with
     /// [`selection`](Self::selection): an arrow has no box, so it never joins a
     /// marquee, a group or a transform, and selecting one clears the other.
@@ -585,6 +593,8 @@ impl ToileView {
             },
             machine: ToolMachine::new(),
             selection: Vec::new(),
+            selection_data: Vec::new(),
+            board_ids: Vec::new(),
             arrow: None,
             arrow_drag: None,
             group_scope: None,
@@ -915,6 +925,17 @@ impl ToileView {
                 // does nothing with it.
                 StatsRequestKind::Band => {}
             },
+            // Full display data of the selection, off-screen included
+            // (`TOILE-UI-070`, `TOILE-UI-134`): cache it for the menu scope, the
+            // style surfaces and the inline editor.
+            ToileEvent::SelectionData(elements) => {
+                self.selection_data = elements;
+                self.needs_full = true;
+            }
+            // Every element id on the board, for select-all (`TOILE-UI-033`).
+            ToileEvent::BoardIds(ids) => {
+                self.board_ids = ids;
+            }
             // Remote presence (`toile-presence`): adopt the whole live set, so
             // the overlay drops a peer absent from it with no departure signal
             // (`PRESENCE-009`, `TOILE-UI-075`). The sender's canonical `UserId`
@@ -1528,17 +1549,21 @@ impl ToileView {
     /// the input path `cfg`-agnostic.
     #[cfg(target_arch = "wasm32")]
     fn publish_ctx_scope(&self) {
-        let scope =
-            super::menu::ctx_scope_for(&self.selection, self.group_scope.as_ref(), &self.display);
+        let scope = super::menu::ctx_scope_for(
+            &self.selection,
+            self.group_scope.as_ref(),
+            &self.selection_data,
+            &self.display,
+        );
         self.ctx_scope.set(scope);
         // The style inspector shares the same publish point
         // (`toile-menus`): both are pure functions of the
-        // selection x the current display.
+        // selection x its whole data from Logic.
         self.style_model.set(match self.arrow.as_ref() {
             Some(c) if self.selection.is_empty() => {
                 super::style::arrow_style_scope(c, &self.display)
             }
-            _ => super::style::style_scope_for(&self.selection, &self.display),
+            _ => super::style::style_scope_for(&self.selection, &self.selection_data),
         });
     }
     #[cfg(not(target_arch = "wasm32"))]
@@ -1615,7 +1640,7 @@ impl ToileView {
         } else {
             super::floatbar::build_floatbar(
                 &self.selection,
-                &self.display,
+                &self.selection_data,
                 &self.cam,
                 device_pixel_ratio(),
                 canvas_client_offset(),
@@ -1652,7 +1677,7 @@ impl ToileView {
             }
             return;
         }
-        let mut style = super::style::style_scope_for(&self.selection, &self.display)
+        let mut style = super::style::style_scope_for(&self.selection, &self.selection_data)
             .map(|m| m.base)
             .unwrap_or_default();
         // Overwrite only the one field the bar changed, on the freshly-derived
@@ -2092,6 +2117,7 @@ impl ToileView {
                 id,
                 &self.selection,
                 self.group_scope.as_ref(),
+                &self.selection_data,
                 &self.display,
             ),
         };
@@ -2105,15 +2131,8 @@ impl ToileView {
     /// and the context-menu "Select all" entry (`toile-selection`).
     fn select_all(&mut self) {
         self.arrow = None;
-        self.selection = self
-            .display
-            .nodes
-            .iter()
-            .filter_map(|n| match n {
-                DisplayNode::Element(e) => Some(e.id.clone()),
-                DisplayNode::Connector(_) => None,
-            })
-            .collect();
+        // The whole board, not the culled viewport (`TOILE-UI-033`).
+        self.selection = self.board_ids.clone();
         self.needs_full = true;
     }
 
@@ -2443,13 +2462,20 @@ impl ToileView {
 
     // -- Inline text editor (`toile-text-editing`) -----------------------------
 
-    /// Find a displayed element by id, linear over the culled set. The set is
-    /// small and this runs only on edit open / paint of the edited element).
+    /// Find an element by id, in the selection's whole data first (off-screen
+    /// included) and then the culled set. The editor and the single-selection
+    /// shortcuts read the selection data, which survives a pan off screen
+    /// (`TOILE-UI-070`, `TOILE-UI-210`).
     fn find_element(&self, id: &ElementId) -> Option<&DisplayElement> {
-        self.display.nodes.iter().find_map(|n| match n {
-            DisplayNode::Element(e) if &e.id == id => Some(e),
-            _ => None,
-        })
+        self.selection_data
+            .iter()
+            .find(|e| &e.id == id)
+            .or_else(|| {
+                self.display.nodes.iter().find_map(|n| match n {
+                    DisplayNode::Element(e) if &e.id == id => Some(e),
+                    _ => None,
+                })
+            })
     }
 
     /// Optimistically set an element's body text in the local display. The
@@ -2503,7 +2529,11 @@ impl ToileView {
             EditTarget::Element(id) => {
                 let e = self.find_element(id)?;
                 let (origin, wrap_w, sb) = self.edit_geometry(e);
-                let rot = super::tool::element_rotation(&self.display, id);
+                // Rotation from the element's own transform, not the culled
+                // display, so a pan off screen keeps the editor open
+                // (`TOILE-UI-210`).
+                let c = e.transform.as_coeffs();
+                let rot = c[1].atan2(c[0]);
                 Some((origin, wrap_w, sb, rot))
             }
             EditTarget::ConnectorLabel(id) => {
@@ -2882,17 +2912,23 @@ impl ToileView {
         // (`toile-styles`).
         self.publish_float_bar();
 
-        // A freshly-created Sticky / Text element: open its editor now that its
-        // geometry has landed in `display` (`toile-text-editing`).
-        if let Some(id) = self.edit_pending_open.take() {
+        // A freshly-created Sticky / Text element: open its editor once its
+        // geometry has landed, keeping the deferred open until it does
+        // (`TOILE-UI-195`). A culled-but-created element is not dropped.
+        if let Some(id) = self.edit_pending_open.clone()
+            && self.find_element(&id).is_some()
+        {
+            self.edit_pending_open = None;
             self.open_editor(id);
         }
 
-        // First frame: request the initial culled viewport for the boot camera.
+        // First frame: request the initial culled viewport for the boot camera,
+        // and the whole board's element ids for select-all (`TOILE-UI-033`).
         if !self.initial_viewport_sent {
             self.initial_viewport_sent = true;
             self.needs_full = true;
             self.pending_viewport = Some(self.cam.to_bus_viewport());
+            self.send_edit(ToileCommand::RequestBoardIds);
         }
 
         // Flush the coalesced viewport request (at most one per frame).
@@ -2956,10 +2992,17 @@ impl ToileView {
                 // Empty selection: clear the band directly. An empty-ids request
                 // means "whole board" to Logic (used by Fit), never "nothing".
                 self.clear_sel_stats();
+                self.selection_data.clear();
             } else {
                 self.send_edit(ToileCommand::RequestSelectionStats {
                     ids: self.selection.clone(),
                     kind: StatsRequestKind::Band,
+                });
+                // Fetch the whole selection's display data, off-screen included
+                // (`TOILE-UI-070`, `TOILE-UI-134`). The menu scope, the style
+                // surfaces and the inline editor read this, not the culled set.
+                self.send_edit(ToileCommand::RequestSelectionData {
+                    ids: self.selection.clone(),
                 });
             }
         }

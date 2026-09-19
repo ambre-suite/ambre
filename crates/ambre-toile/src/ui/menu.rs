@@ -175,12 +175,10 @@ pub struct CtxScope {
     pub containing_frame: Option<ElementId>,
 }
 
-/// Find a displayed element by id (linear over the culled set, which is small).
-fn find_element<'a>(display: &'a DisplayViewport, id: &ElementId) -> Option<&'a DisplayElement> {
-    display.nodes.iter().find_map(|n| match n {
-        DisplayNode::Element(e) if &e.id == id => Some(e),
-        _ => None,
-    })
+/// Find a selected element by id (linear over the selection's data, which the
+/// Logic thread sends whole, off-screen included -- `TOILE-UI-134`).
+fn find_element<'a>(elements: &'a [DisplayElement], id: &ElementId) -> Option<&'a DisplayElement> {
+    elements.iter().find(|e| &e.id == id)
 }
 
 /// True if `outer` fully contains `inner` (edges inclusive).
@@ -189,12 +187,14 @@ fn rect_contains_rect(outer: Rect, inner: Rect) -> bool {
 }
 
 /// Classify the current selection into a [`CtxScope`] the entry builder consumes.
-/// Pure: reads only the culled `DisplayViewport` and the UI selection. `group_scope`
-/// is accepted for symmetry with the rest of the resolution path (frame lookups may
+/// Pure: reads the selection's whole data (`selected`, off-screen included) and
+/// the culled `DisplayViewport` for the enclosing-frame scan. `group_scope` is
+/// accepted for symmetry with the rest of the resolution path (frame lookups may
 /// later honor it); the empty-canvas case ignores everything else.
 pub fn ctx_scope_for(
     selection: &[ElementId],
     _group_scope: Option<&ElementId>,
+    selected: &[DisplayElement],
     display: &DisplayViewport,
 ) -> CtxScope {
     if selection.is_empty() {
@@ -209,7 +209,7 @@ pub fn ctx_scope_for(
     let mut union: Option<Rect> = None;
 
     for id in selection {
-        let Some(elem) = find_element(display, id) else {
+        let Some(elem) = find_element(selected, id) else {
             continue;
         };
         count += 1;
@@ -268,6 +268,7 @@ pub fn resolve_menu_command(
     id: CommandId,
     selection: &[ElementId],
     _group_scope: Option<&ElementId>,
+    selected: &[DisplayElement],
     display: &DisplayViewport,
 ) -> Vec<ToileCommand> {
     let ids = || selection.to_vec();
@@ -290,7 +291,7 @@ pub fn resolve_menu_command(
         // not left for Logic to reject).
         UNGROUP => selection
             .iter()
-            .filter(|id| find_element(display, id).is_some_and(|e| e.kind == ElementKind::Group))
+            .filter(|id| find_element(selected, id).is_some_and(|e| e.kind == ElementKind::Group))
             .map(|id| ToileCommand::UngroupElements { group: id.clone() })
             .collect(),
         // One Reorder per selected element over the unified NodeId layer list.
@@ -320,8 +321,8 @@ pub fn resolve_menu_command(
         // Frame membership: the frame is the geometric container of the selection.
         // Logic stays authoritative on membership (the display exposes no
         // parent-frame edge), so Remove is a best-effort against that container.
-        ADD_TO_FRAME => frame_children(selection, display, true),
-        REMOVE_FROM_FRAME => frame_children(selection, display, false),
+        ADD_TO_FRAME => frame_children(selection, selected, display, true),
+        REMOVE_FROM_FRAME => frame_children(selection, selected, display, false),
         // Reactions: set / clear the local user's reaction on each
         // selected target. One `React` per element; the emoji glyph is looked up
         // from the fixed picker set.
@@ -383,12 +384,13 @@ fn reorder_each(selection: &[ElementId], to: ZTarget) -> Vec<ToileCommand> {
 /// containing frame; empty when no enclosing frame exists.
 fn frame_children(
     selection: &[ElementId],
+    selected: &[DisplayElement],
     display: &DisplayViewport,
     add: bool,
 ) -> Vec<ToileCommand> {
     let union = selection
         .iter()
-        .filter_map(|id| find_element(display, id).map(|e| e.bounds))
+        .filter_map(|id| find_element(selected, id).map(|e| e.bounds))
         .reduce(|a, b| a.union(b));
     let Some(union) = union else {
         return Vec::new();
@@ -447,6 +449,19 @@ mod tests {
         }
     }
 
+    /// The selection's whole display data, as Logic sends it (off-screen
+    /// included). The tests build a viewport holding the whole selection, so the
+    /// extracted elements are the same set.
+    fn els(dv: &DisplayViewport) -> Vec<DisplayElement> {
+        dv.nodes
+            .iter()
+            .filter_map(|n| match n {
+                DisplayNode::Element(e) => Some(e.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
     fn r(x0: f64, y0: f64, x1: f64, y1: f64) -> Rect {
         Rect::new(x0, y0, x1, y1)
     }
@@ -457,7 +472,8 @@ mod tests {
             elem("a", ElementKind::Sticky, r(0.0, 0.0, 10.0, 10.0), false),
             elem("b", ElementKind::Sticky, r(0.0, 0.0, 10.0, 10.0), false),
         ]);
-        let cmds = resolve_menu_command(REACT_THUMBSUP, &[eid("a"), eid("b")], None, &dv);
+        let cmds =
+            resolve_menu_command(REACT_THUMBSUP, &[eid("a"), eid("b")], None, &els(&dv), &dv);
         assert_eq!(cmds.len(), 2);
         for (cmd, want) in cmds.iter().zip(["a", "b"]) {
             match cmd {
@@ -481,7 +497,7 @@ mod tests {
             r(0.0, 0.0, 10.0, 10.0),
             false,
         )]);
-        let cmds = resolve_menu_command(REACT_CLEAR, &[eid("a")], None, &dv);
+        let cmds = resolve_menu_command(REACT_CLEAR, &[eid("a")], None, &els(&dv), &dv);
         assert_eq!(cmds.len(), 1);
         assert!(matches!(
             &cmds[0],
@@ -492,7 +508,7 @@ mod tests {
     #[test]
     fn empty_selection_is_empty_canvas_scope() {
         let dv = viewport(vec![]);
-        let scope = ctx_scope_for(&[], None, &dv);
+        let scope = ctx_scope_for(&[], None, &els(&dv), &dv);
         assert_eq!(scope, CtxScope::default());
         assert!(!scope.over_selection);
     }
@@ -505,7 +521,7 @@ mod tests {
             r(0.0, 0.0, 10.0, 10.0),
             false,
         )]);
-        let scope = ctx_scope_for(&[eid("a")], None, &dv);
+        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &dv);
         assert!(scope.over_selection);
         assert_eq!(scope.count, 1);
         assert!(!scope.multi);
@@ -520,7 +536,7 @@ mod tests {
             elem("a", ElementKind::Sticky, r(0.0, 0.0, 10.0, 10.0), false),
             elem("b", ElementKind::Sticky, r(20.0, 0.0, 30.0, 10.0), false),
         ]);
-        let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &dv);
+        let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &els(&dv), &dv);
         assert!(scope.multi);
         assert_eq!(scope.count, 2);
     }
@@ -531,7 +547,7 @@ mod tests {
             elem("g", ElementKind::Group, r(0.0, 0.0, 10.0, 10.0), false),
             elem("l", ElementKind::Sticky, r(0.0, 0.0, 5.0, 5.0), true),
         ]);
-        let scope = ctx_scope_for(&[eid("g"), eid("l")], None, &dv);
+        let scope = ctx_scope_for(&[eid("g"), eid("l")], None, &els(&dv), &dv);
         assert!(scope.has_group);
         assert!(scope.any_locked);
         assert!(scope.any_unlocked);
@@ -543,7 +559,7 @@ mod tests {
             elem("f", ElementKind::Frame, r(0.0, 0.0, 100.0, 100.0), false),
             elem("a", ElementKind::Sticky, r(10.0, 10.0, 20.0, 20.0), false),
         ]);
-        let scope = ctx_scope_for(&[eid("a")], None, &dv);
+        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &dv);
         assert_eq!(scope.containing_frame, Some(eid("f")));
     }
 
@@ -558,8 +574,35 @@ mod tests {
                 false,
             ),
         ]);
-        let scope = ctx_scope_for(&[eid("a")], None, &dv);
+        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &dv);
         assert_eq!(scope.containing_frame, None);
+    }
+
+    /// The culled viewport holds only `a`; `b` is off-screen but in the
+    /// selection data Logic sent. The scope counts and flags both
+    /// (`TOILE-UI-134`).
+    #[test]
+    fn off_screen_selection_counts_in_scope() {
+        let dv = viewport(vec![elem(
+            "a",
+            ElementKind::Sticky,
+            r(0.0, 0.0, 10.0, 10.0),
+            false,
+        )]);
+        let selected = vec![
+            elem("a", ElementKind::Sticky, r(0.0, 0.0, 10.0, 10.0), false),
+            elem(
+                "b",
+                ElementKind::Sticky,
+                r(1000.0, 1000.0, 1010.0, 1010.0),
+                true,
+            ),
+        ];
+        let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &selected, &dv);
+        assert_eq!(scope.count, 2);
+        assert!(scope.multi);
+        assert!(scope.any_locked);
+        assert!(scope.any_unlocked);
     }
 
     #[test]
@@ -572,18 +615,18 @@ mod tests {
         )]);
         let sel = vec![eid("a")];
         assert!(matches!(
-            resolve_menu_command(COPY, &sel, None, &dv).as_slice(),
+            resolve_menu_command(COPY, &sel, None, &els(&dv), &dv).as_slice(),
             [ToileCommand::CopyElements { ids }] if ids == &sel
         ));
         assert!(matches!(
-            resolve_menu_command(CUT, &sel, None, &dv).as_slice(),
+            resolve_menu_command(CUT, &sel, None, &els(&dv), &dv).as_slice(),
             [
                 ToileCommand::CopyElements { .. },
                 ToileCommand::DeleteElements { .. }
             ]
         ));
         assert!(matches!(
-            resolve_menu_command(DELETE, &sel, None, &dv).as_slice(),
+            resolve_menu_command(DELETE, &sel, None, &els(&dv), &dv).as_slice(),
             [ToileCommand::DeleteElements { ids }] if ids == &sel
         ));
     }
@@ -596,7 +639,7 @@ mod tests {
             r(0.0, 0.0, 10.0, 10.0),
             false,
         )]);
-        let out = resolve_menu_command(DUPLICATE, &[eid("a")], None, &dv);
+        let out = resolve_menu_command(DUPLICATE, &[eid("a")], None, &els(&dv), &dv);
         assert!(matches!(
             out.as_slice(),
             [ToileCommand::DuplicateElements { delta, .. }]
@@ -611,11 +654,11 @@ mod tests {
             elem("a", ElementKind::Sticky, r(0.0, 0.0, 5.0, 5.0), false),
         ]);
         assert!(matches!(
-            resolve_menu_command(GROUP, &[eid("a"), eid("g")], None, &dv).as_slice(),
+            resolve_menu_command(GROUP, &[eid("a"), eid("g")], None, &els(&dv), &dv).as_slice(),
             [ToileCommand::GroupElements { .. }]
         ));
         // Ungroup emits only for the group node, not the plain sticky.
-        let out = resolve_menu_command(UNGROUP, &[eid("a"), eid("g")], None, &dv);
+        let out = resolve_menu_command(UNGROUP, &[eid("a"), eid("g")], None, &els(&dv), &dv);
         assert!(matches!(
             out.as_slice(),
             [ToileCommand::UngroupElements { group }] if group == &eid("g")
@@ -628,7 +671,7 @@ mod tests {
             elem("a", ElementKind::Sticky, r(0.0, 0.0, 5.0, 5.0), false),
             elem("b", ElementKind::Sticky, r(6.0, 0.0, 10.0, 5.0), false),
         ]);
-        let out = resolve_menu_command(BRING_FRONT, &[eid("a"), eid("b")], None, &dv);
+        let out = resolve_menu_command(BRING_FRONT, &[eid("a"), eid("b")], None, &els(&dv), &dv);
         assert_eq!(out.len(), 2);
         assert!(out.iter().all(|c| matches!(
             c,
@@ -648,11 +691,11 @@ mod tests {
             false,
         )]);
         assert!(matches!(
-            resolve_menu_command(LOCK, &[eid("a")], None, &dv).as_slice(),
+            resolve_menu_command(LOCK, &[eid("a")], None, &els(&dv), &dv).as_slice(),
             [ToileCommand::LockElements { locked: true, .. }]
         ));
         assert!(matches!(
-            resolve_menu_command(UNLOCK, &[eid("a")], None, &dv).as_slice(),
+            resolve_menu_command(UNLOCK, &[eid("a")], None, &els(&dv), &dv).as_slice(),
             [ToileCommand::LockElements { locked: false, .. }]
         ));
     }
@@ -663,7 +706,7 @@ mod tests {
             elem("f", ElementKind::Frame, r(0.0, 0.0, 100.0, 100.0), false),
             elem("a", ElementKind::Sticky, r(10.0, 10.0, 20.0, 20.0), false),
         ]);
-        let out = resolve_menu_command(ADD_TO_FRAME, &[eid("a")], None, &dv);
+        let out = resolve_menu_command(ADD_TO_FRAME, &[eid("a")], None, &els(&dv), &dv);
         assert!(matches!(
             out.as_slice(),
             [ToileCommand::SetFrameChildren { frame, add, remove }]
@@ -674,8 +717,8 @@ mod tests {
     #[test]
     fn paste_and_select_all_are_ui_only() {
         let dv = viewport(vec![]);
-        assert!(resolve_menu_command(PASTE, &[], None, &dv).is_empty());
-        assert!(resolve_menu_command(SELECT_ALL, &[], None, &dv).is_empty());
+        assert!(resolve_menu_command(PASTE, &[], None, &els(&dv), &dv).is_empty());
+        assert!(resolve_menu_command(SELECT_ALL, &[], None, &els(&dv), &dv).is_empty());
     }
 
     /// Every align id resolves to one batch over the whole selection. The
@@ -698,7 +741,7 @@ mod tests {
             (DISTRIBUTE_H, AlignOp::DistributeH),
             (DISTRIBUTE_V, AlignOp::DistributeV),
         ] {
-            let out = resolve_menu_command(id, &sel, None, &dv);
+            let out = resolve_menu_command(id, &sel, None, &els(&dv), &dv);
             assert!(
                 matches!(
                     out.as_slice(),
