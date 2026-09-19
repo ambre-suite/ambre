@@ -1188,6 +1188,7 @@ pub enum ToileCommand {
     // -- Selection aggregates for the status bar (`toile-status-bar`) --
     RequestSelectionStats {
         ids: Vec<ElementId>,
+        kind: StatsRequestKind,
     },
 
     // -- Interop import (`toile-import-export`) --
@@ -1405,12 +1406,30 @@ pub enum ToileError {
 // Events (ToileState -> UI)
 // =============================================================================
 
+/// Which surface asked for a selection aggregate, so the reply can name the
+/// request it answers (`TOILE-UI-108`). The Logic thread echoes it back, so the
+/// shell and the view each spend only the reply that matches the question they
+/// asked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StatsRequestKind {
+    /// The status bar asked for the selection's count and bounds.
+    #[default]
+    Band,
+    /// A fit / zoom-to-selection / frame link asked for bounds to frame.
+    Fit,
+    /// A find step asked for the focus element's bounds.
+    FindFocus,
+    /// A comment thread asked for its anchor element's bounds.
+    CommentFocus,
+}
+
 /// Selection aggregates (`toile-status-bar`): element tally + union AABB
 /// (world).
 #[derive(Clone, Debug, PartialEq)]
 pub struct SelectionStats {
     pub count: u32,
     pub bounds: Option<Rect>,
+    pub kind: StatsRequestKind,
 }
 
 #[derive(Clone, Debug)]

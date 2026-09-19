@@ -20,7 +20,7 @@ use ambre_bus::app::toile::CommentAnchor;
 use ambre_bus::app::toile::{
     ClipboardPayload as ToileClipboardPayload, ConnectorId, DisplayConnector, DisplayElement,
     DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, End, LinkTarget,
-    PresencePayload, ThreadId, ToileCommand, ToileEvent, Viewport,
+    PresencePayload, StatsRequestKind, ThreadId, ToileCommand, ToileEvent, Viewport,
 };
 use ambre_bus::{
     AppCommand, AppEvent, DocumentId, LogicCommand, LossyOutcome, Outbox, SendOutcome, UiEvent,
@@ -867,37 +867,54 @@ impl ToileView {
                 self.find_focus = fr.focus.clone();
                 if let Some(focus) = fr.focus {
                     self.pending_find_focus = Some(focus.clone());
-                    self.send_edit(ToileCommand::RequestSelectionStats { ids: vec![focus] });
+                    self.send_edit(ToileCommand::RequestSelectionStats {
+                        ids: vec![focus],
+                        kind: StatsRequestKind::FindFocus,
+                    });
                 }
                 self.needs_full = true;
             }
-            // A `SelectionStats` reply we asked for to recenter on a find focus
-            // (`toile-find`). Move the camera center onto the
-            // element's bounds center and re-cull; ignore replies not tied to a
-            // pending find focus (a future status-bar request,
-            // `toile-find`).
-            ToileEvent::SelectionStats(stats) => {
-                // A pending Fit / Zoom-to-selection consumes the reply first
-                // (`toile-viewport`): frame the returned bounds
-                // (center + scale).
-                if std::mem::take(&mut self.pending_fit) {
-                    if let Some(bounds) = stats.bounds {
+            // A `SelectionStats` reply names the request it answers
+            // (`TOILE-UI-108`). A band refresh never consumes a pending fit,
+            // and a fit never centres on a find focus.
+            ToileEvent::SelectionStats(stats) => match stats.kind {
+                // A pending Fit / Zoom-to-selection consumes the reply and frames
+                // the returned bounds (`toile-viewport`).
+                StatsRequestKind::Fit => {
+                    if std::mem::take(&mut self.pending_fit)
+                        && let Some(bounds) = stats.bounds
+                    {
                         self.cam.fit_bounds(bounds, super::viewport::FIT_PAD);
                         self.needs_full = true;
                         self.queue_viewport();
                     }
-                } else if (self.pending_find_focus.take().is_some()
-                    || self.pending_comment_focus.take().is_some())
-                    && let Some(bounds) = stats.bounds
-                {
-                    // The same channel serves the find focus and a thread the
-                    // panel opened, whose anchor element may sit off-screen
-                    // (`TOILE-UI-309`).
-                    self.cam.center = bounds.center();
-                    self.needs_full = true;
-                    self.queue_viewport();
                 }
-            }
+                // A find step recenters on its focus element, possibly off-screen
+                // (`toile-find`).
+                StatsRequestKind::FindFocus => {
+                    if self.pending_find_focus.take().is_some()
+                        && let Some(bounds) = stats.bounds
+                    {
+                        self.cam.center = bounds.center();
+                        self.needs_full = true;
+                        self.queue_viewport();
+                    }
+                }
+                // A thread the panel opened recenters on its anchor element
+                // (`TOILE-UI-309`).
+                StatsRequestKind::CommentFocus => {
+                    if self.pending_comment_focus.take().is_some()
+                        && let Some(bounds) = stats.bounds
+                    {
+                        self.cam.center = bounds.center();
+                        self.needs_full = true;
+                        self.queue_viewport();
+                    }
+                }
+                // The status bar mirrors the band reply in the shell; the view
+                // does nothing with it.
+                StatsRequestKind::Band => {}
+            },
             // Remote presence (`toile-presence`): adopt the whole live set, so
             // the overlay drops a peer absent from it with no departure signal
             // (`PRESENCE-009`, `TOILE-UI-075`). The sender's canonical `UserId`
@@ -1907,6 +1924,7 @@ impl ToileView {
                 self.pending_comment_focus = Some(id.clone());
                 self.send_edit(ToileCommand::RequestSelectionStats {
                     ids: vec![id.clone()],
+                    kind: StatsRequestKind::CommentFocus,
                 });
             }
         }
@@ -2005,7 +2023,10 @@ impl ToileView {
                 // Fit the whole board: ask Logic for the union of every element's
                 // bounds (empty ids = whole-board extent) and frame it on reply.
                 self.pending_fit = true;
-                self.send_edit(ToileCommand::RequestSelectionStats { ids: Vec::new() });
+                self.send_edit(ToileCommand::RequestSelectionStats {
+                    ids: Vec::new(),
+                    kind: StatsRequestKind::Fit,
+                });
                 return;
             }
             mb::ZOOM_TO_SELECTION => {
@@ -2013,6 +2034,7 @@ impl ToileView {
                     self.pending_fit = true;
                     self.send_edit(ToileCommand::RequestSelectionStats {
                         ids: self.selection.clone(),
+                        kind: StatsRequestKind::Fit,
                     });
                 }
                 return;
@@ -2937,6 +2959,7 @@ impl ToileView {
             } else {
                 self.send_edit(ToileCommand::RequestSelectionStats {
                     ids: self.selection.clone(),
+                    kind: StatsRequestKind::Band,
                 });
             }
         }
@@ -3296,7 +3319,10 @@ impl ToileView {
         match action {
             LinkAction::GoToFrame(frame) => {
                 self.pending_fit = true;
-                self.send_edit(ToileCommand::RequestSelectionStats { ids: vec![frame] });
+                self.send_edit(ToileCommand::RequestSelectionStats {
+                    ids: vec![frame],
+                    kind: StatsRequestKind::Fit,
+                });
             }
             other => {
                 if let Some(nav) = other.shell_nav() {

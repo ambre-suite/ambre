@@ -15,7 +15,7 @@ use crate::logic::align::AlignOp;
 use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
 use crate::logic::command::{
     CommentAnchor, DisplayGeom, DisplayNode, End, InitContent, PresencePayload, Reaction,
-    ReactionKind, TextDelta, ToileCommand, ToileError, ToileEvent, ZTarget,
+    ReactionKind, StatsRequestKind, TextDelta, ToileCommand, ToileError, ToileEvent, ZTarget,
 };
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, LinkTarget, NodeId,
@@ -380,7 +380,10 @@ fn selection_stats_spans_offscreen_elements() {
     let mut st = ToileState::new();
     let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
     let b = create_rect(&mut st, Point::new(1000.0, 1000.0), Size::new(10.0, 10.0));
-    let out = st.handle_command(ToileCommand::RequestSelectionStats { ids: vec![a, b] });
+    let out = st.handle_command(ToileCommand::RequestSelectionStats {
+        ids: vec![a, b],
+        kind: StatsRequestKind::Band,
+    });
     match &out.display[0] {
         ToileEvent::SelectionStats(s) => {
             assert_eq!(s.count, 2);
@@ -397,7 +400,10 @@ fn selection_stats_empty_ids_span_whole_board() {
     let mut st = ToileState::new();
     let _a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
     let _b = create_rect(&mut st, Point::new(500.0, 300.0), Size::new(40.0, 20.0));
-    let out = st.handle_command(ToileCommand::RequestSelectionStats { ids: vec![] });
+    let out = st.handle_command(ToileCommand::RequestSelectionStats {
+        ids: vec![],
+        kind: StatsRequestKind::Fit,
+    });
     match &out.display[0] {
         ToileEvent::SelectionStats(s) => {
             assert_eq!(s.count, 2);
@@ -410,13 +416,36 @@ fn selection_stats_empty_ids_span_whole_board() {
 #[test]
 fn selection_stats_empty_ids_on_empty_board_is_none() {
     let mut st = ToileState::new();
-    let out = st.handle_command(ToileCommand::RequestSelectionStats { ids: vec![] });
+    let out = st.handle_command(ToileCommand::RequestSelectionStats {
+        ids: vec![],
+        kind: StatsRequestKind::Fit,
+    });
     match &out.display[0] {
         ToileEvent::SelectionStats(s) => {
             assert_eq!(s.count, 0);
             assert_eq!(s.bounds, None);
         }
         other => panic!("expected SelectionStats, got {other:?}"),
+    }
+}
+
+/// The reply names the request it answers. The Logic thread echoes the kind
+/// token back, so a surface spends only its own answer (`TOILE-UI-108`).
+#[test]
+fn selection_stats_echoes_the_request_kind() {
+    let mut st = ToileState::new();
+    create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    for kind in [
+        StatsRequestKind::Band,
+        StatsRequestKind::Fit,
+        StatsRequestKind::FindFocus,
+        StatsRequestKind::CommentFocus,
+    ] {
+        let out = st.handle_command(ToileCommand::RequestSelectionStats { ids: vec![], kind });
+        match &out.display[0] {
+            ToileEvent::SelectionStats(s) => assert_eq!(s.kind, kind),
+            other => panic!("expected SelectionStats, got {other:?}"),
+        }
     }
 }
 

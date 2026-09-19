@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-020` | `POST` | The aggregates MUST cover every selected element, including those outside the viewport. | this spec section 2 | `ambre_toile::logic::convergence_tests::selection_stats_spans_offscreen_elements` -- a union spanning two elements a thousand units apart; structural -- the viewport half is an absence: the Logic thread holds no viewport, so the walk has nothing to cull against. The two other tests this row cited answer a different request | none | verified |
 | `TOILE-116` | `POST` | An empty id list MUST ask for the whole board's extent, which is what a fit reads. | this spec section 2 | `ambre_toile::logic::convergence_tests::selection_stats_empty_ids_span_whole_board` -- an empty list is the one input that does not mean nothing, and the rule lived in the command table alone | none | verified |
 | `TOILE-117` | `POST` | A tally of zero MUST come back with no rectangle. | this spec section 2 | none | unheld -- `ambre_toile::logic::convergence_tests::selection_stats_empty_ids_on_empty_board_is_none` drives the empty board alone, where the walk takes the whole-board branch. A selection whose every id the board has dropped tallies zero down the other branch, and nothing drives it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-108` | `POST` | An answer MUST reach the request that asked for it. | this spec section 2 | none | fails -- the event carries no token, and four surfaces ask: the band on every selection change, `Fit`, zoom-to-selection and the find focus. The view spends a pending fit on whichever answer lands first, so a band refresh in flight when a user hits `Fit` frames the selection instead of the board, section 5; lands with the `An answer names the request that asked for it` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-108` | `POST` | An answer MUST reach the request that asked for it. | this spec section 2 | `ambre_toile::logic::convergence_tests::selection_stats_echoes_the_request_kind` -- the Logic thread echoes the kind token back, so the band and a pending fit each spend only their own answer | none | verified |
 | `TOILE-118` | `FRAME` | An id the board no longer holds MUST NOT stop the walk: the tally answers for the elements that remain. | this spec section 2 | none | unheld -- the walk skips an id the bounds cache misses, and no test mixes a live id with a stale one, so a walk that stopped at the miss or counted it would pass; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-056` | `FRAME` | A request for the aggregates MUST emit no delta. | this spec section 2 | type-level -- the handler returns a display-only outcome, whose sync half is empty by construction, so no path exists for a delta to leave | none | verified |
 
@@ -50,11 +50,9 @@ status values are normative in `ambre-spec-template.md`.
   the frame phases of section 5.B of that document.
 * **Boundary.** none: the band reads and shows. It writes nothing to the document, opens no path, and
   `UI-THREAD-004` bans a network, crypto or persistence path on the thread it paints on.
-* **Verification.** 7 `verified`, 1 `failing`, 5 `untested`. What holds is the tally itself: the walk
-  over a selection, the two-element threshold and the refresh the seven cited tests drive. What is
-  loose is every branch beside it: the whole board an empty id list asks for, the zero tally with no
-  rectangle. The stale id the walk skips and the frame that asks for nothing are loose too. The
-  failure is the answer reaching whoever asked (`TOILE-UI-108`).
+* **Verification.** 8 `verified`, 5 `untested`. What holds is the tally and the kind token that
+  names the answer's request (`TOILE-UI-108`). What is loose is the whole board an empty id list
+  asks for, the zero tally, the stale id and the idle frame.
 
 ---
 
@@ -66,8 +64,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `ToileCommand::RequestSelectionStats { ids }` | UI to Logic | the selected ids. An empty list asks for the whole board, which is what a fit reads (`TOILE-116`, `features/ambre-spec-toile-viewport.md`) |
-| `ToileEvent::SelectionStats { count, bounds }` | Logic to UI | the tally and the union rectangle, in world units; the rectangle is absent at a tally of zero (`TOILE-117`), and nothing on the event says which request it answers (`TOILE-UI-108`) |
+| `ToileCommand::RequestSelectionStats { ids, kind }` | UI to Logic | the selected ids and the kind of surface that asked. An empty list asks for the whole board, which is what a fit reads (`TOILE-116`, `features/ambre-spec-toile-viewport.md`) |
+| `ToileEvent::SelectionStats { count, bounds, kind }` | Logic to UI | the tally and the union rectangle, in world units; the rectangle is absent at a tally of zero (`TOILE-117`). The kind is echoed back, so the answer names the request it answers (`TOILE-UI-108`) |
 
 **Display shape** (`ambre-toile`, the chrome side):
 
@@ -93,7 +91,7 @@ pub struct SelStats {
 2. on a change, clear the band when the selection is empty (`TOILE-UI-109`), and ask for fresh
    aggregates otherwise (`TOILE-UI-055`);
 3. the reply is mirrored into one signal the band reads, and into the pending fit when one is
-   waiting. The request that reply came back from does not matter (`TOILE-UI-108`).
+   waiting. The kind the reply echoes decides which surface spends it (`TOILE-UI-108`).
 
 **Code:**
 
@@ -146,15 +144,6 @@ zero (`TOILE-UI-107`).
   on the frame hook, and the two branches under it -- clear, or ask -- are reached by nothing. The
   walk below and the captions above are both covered. It is a comparison of two lists on the
   view, so the host tier reaches it.
-* **Any answer satisfies any request** (`TOILE-UI-108`). Four surfaces send the same command: the
-  band on every selection change, `Fit`, zoom-to-selection and the find focus. The event that comes
-  back names neither the ids nor the sender. The view spends a pending fit on the first reply to
-  land. A band refresh still in flight when the user hits `Fit` frames the selection, and the
-  board's own extent, which arrives next, is dropped.
-
-  The band pays the mirror image: a fit's answer for the whole board is mirrored into it as though
-  it were the selection. A request id on the command, echoed on the event, is the fix, and nothing
-  in the workspace carries one.
 * **A request per selection change is unbounded.** A marquee that grows element by element asks once
   per frame it changes in, each answer a walk over the whole selection. Nothing debounces it and no
   budget covers it.

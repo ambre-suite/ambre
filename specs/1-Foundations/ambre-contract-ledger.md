@@ -19,12 +19,12 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2487 rows: 1737 shipped, of which 833 loose. 750 unbuilt.**
+**2487 rows: 1737 shipped, of which 830 loose. 750 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 212 | 219 | 473 |  | 904 |
-| `failing` | 39 | 46 | 80 |  | 165 |
+| `verified` | 212 | 219 | 476 |  | 907 |
+| `failing` | 39 | 46 | 77 |  | 162 |
 | `untested` | 274 | 144 | 234 |  | 652 |
 | `human-review` | 7 |  |  |  | 7 |
 | `qa-manual` | 3 | 4 | 2 |  | 9 |
@@ -108,7 +108,7 @@
 | `ambre-spec-toile-elements.md` | 33 | 33 | 26 | 7 |  |
 | `ambre-spec-toile-embeds.md` | 44 | 44 | 31 | 13 |  |
 | `ambre-spec-toile-engine.md` | 40 | 40 | 29 | 11 |  |
-| `ambre-spec-toile-find.md` | 15 | 15 | 7 | 8 |  |
+| `ambre-spec-toile-find.md` | 15 | 15 | 8 | 7 |  |
 | `ambre-spec-toile-frames.md` | 10 | 10 | 5 | 5 |  |
 | `ambre-spec-toile-freehand.md` | 11 | 11 | 5 | 6 |  |
 | `ambre-spec-toile-groups.md` | 24 | 24 | 8 | 16 |  |
@@ -121,13 +121,13 @@
 | `ambre-spec-toile-presentation.md` | 45 | 45 | 36 | 9 |  |
 | `ambre-spec-toile-reactions.md` | 35 | 29 | 19 | 10 | 6 |
 | `ambre-spec-toile-selection.md` | 29 | 29 | 16 | 13 |  |
-| `ambre-spec-toile-status-bar.md` | 13 | 13 | 7 | 6 |  |
+| `ambre-spec-toile-status-bar.md` | 13 | 13 | 8 | 5 |  |
 | `ambre-spec-toile-styles.md` | 30 | 30 | 17 | 13 |  |
 | `ambre-spec-toile-text-editing.md` | 36 | 35 | 4 | 31 | 1 |
 | `ambre-spec-toile-tools.md` | 30 | 30 | 22 | 8 |  |
 | `ambre-spec-toile-undo.md` | 6 | 6 | 1 | 5 |  |
 | `ambre-spec-toile-vector-paths.md` | 13 | 13 | 4 | 9 |  |
-| `ambre-spec-toile-viewport.md` | 32 | 30 | 15 | 15 | 2 |
+| `ambre-spec-toile-viewport.md` | 32 | 30 | 16 | 14 | 2 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 4 | 12 |  |
 
 ## WHICH DOCUMENT DECLARES AN ID

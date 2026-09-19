@@ -47,7 +47,7 @@ Where the step lands is `ambre-spec-find.md`. What the camera does about it is T
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-115` | `POST` | Stepping MUST bring the camera onto the match it lands on. | this spec section 4 | none | unheld -- the answer carries ids and no geometry, so the view asks for the focus box with the aggregates command and moves the camera when the reply lands, and no test drives either leg; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-117` | `POST` | The camera MUST recentre on the answer to its own request. | this spec section 4 | none | fails -- the aggregates event names no request (`TOILE-UI-108`, `features/ambre-spec-toile-status-bar.md`), and the view spends a pending fit before a pending find focus. A `Fit` in flight when a user steps takes the match box and frames it, and a band refresh in flight takes the find focus and centres the camera on the selection, section 6; lands with the `An answer names the request that asked for it` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-117` | `POST` | The camera MUST recentre on the answer to its own request. | this spec section 4 | `ambre_toile::logic::convergence_tests::selection_stats_echoes_the_request_kind` -- the find focus tags its request, and the view recentres only on the reply that echoes that tag | none | verified |
 | `TOILE-UI-116` | `FRAME` | Recentring MUST NOT change the zoom: a match found far out MUST NOT change how much of the board is visible. | this spec section 4 | none | unheld -- the find path writes the camera centre alone where a fit writes the centre and the scale, and nothing reads the zoom back across a step; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** none of its own: `ambre-spec-budgets.md` budgets no search on a board. The walk is
@@ -55,11 +55,11 @@ Where the step lands is `ambre-spec-find.md`. What the camera does about it is T
   fifty thousand elements.
 * **Boundary.** none: the query never leaves the client and the results never enter the document. The
   panel is chrome on the UI thread, where `UI-THREAD-004` bans a network, crypto or persistence path.
-* **Verification.** 7 `verified`, 2 `failing`, 6 `untested`. The shared rules are `ambre-spec-find.md`;
+* **Verification.** 8 `verified`, 1 `failing`, 6 `untested`. The shared rules are `ambre-spec-find.md`;
   what is counted here is what a Toile match is. What holds is the walk over element bodies, on seven
-  tests carrying eleven assertions. What is loose is its two edges and the whole camera half, where
-  nothing drives the recentre and no test reads the zoom back. The two failures are the frame title
-  no command writes and the unnamed recentre request (`TOILE-082`, `TOILE-UI-117`).
+  tests carrying eleven assertions, and the token naming the recentre request (`TOILE-UI-117`). What
+  is loose is its two edges and the whole camera half, where nothing drives the recentre and no test
+  reads the zoom back. The failure is the unwritten frame title (`TOILE-082`).
 
 ---
 
@@ -160,11 +160,6 @@ The shared gaps -- the live shared session, the undebounced walk -- are in
 * **A match inside a group is not revealed.** The recentre moves the camera and enters no group scope,
   so a hit inside a group is outlined and not selectable
   (`features/ambre-spec-toile-selection.md`).
-* **Any answer satisfies any request** (`TOILE-UI-117`). The recentre asks for the match's box with
-  the aggregates command, which four surfaces share and whose answer names no request
-  (`TOILE-UI-108`, `features/ambre-spec-toile-status-bar.md`). A pending fit is spent first, so a
-  `Fit` in flight when the user steps frames the match instead of the board. A band refresh in
-  flight moves the camera onto the selection instead of the match.
 * **A fresh search backward lands on the first hit** (`ambre-spec-find.md`, `FIND-010`). With no
   resume point the direction is not read. `Shift+Enter` before a first answer walks forward from the
   top rather than to the last match. That last match is where a user asking for the previous one

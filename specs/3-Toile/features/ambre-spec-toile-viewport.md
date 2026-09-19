@@ -67,7 +67,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-290` | `FAIL` | A fit over a rectangle with no area MUST leave the camera exactly as it was, rather than invent one. | this spec section 2; section 4 | `ambre_toile::ui::viewport::tests::fit_bounds_ignores_empty_rect` -- it compares the whole camera before and after; `ambre_toile::ui::viewport::tests::fit_target_matches_fit_bounds` -- it reads the solver answering nothing | none | verified |
 | `TOILE-UI-291` | `FAIL` | A fit over a rectangle whose extent is not finite MUST refuse the same way. | this spec section 2 | none | unheld -- the guard tests both extents for finiteness and no test passes an infinite or undefined one, so the half of the refusal that protects against a computed rectangle is unheld; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-292` | `FRAME` | A fit MUST NOT change the canvas it fits into. | this spec section 2 | structural -- the fit assigns the centre and the zoom and reads the size, so the rectangle it solves against cannot be the one it moves | none | verified |
-| `TOILE-UI-293` | `POST` | A fit over the whole board MUST frame the extent it asked for, and not the answer to somebody else's question. | this spec section 2; section 5 | none | fails -- the request carries no correlator and the reply carries none either, so a pending fit consumes whichever extent lands first (including the one the status bar asked for) and a reply with no extent drops the fit without a notice; lands with the `An answer names the request that asked for it` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-293` | `POST` | A fit over the whole board MUST frame the extent it asked for, and not the answer to somebody else's question. | this spec section 2; section 5 | `ambre_toile::logic::convergence_tests::selection_stats_echoes_the_request_kind` -- the fit tags its request, and the view frames only the reply that echoes that tag | none | verified |
 
 ### 1.6 Glide to a slide
 
@@ -90,10 +90,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the camera is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What crosses to the Logic thread is a rectangle to cull
   against, never document data (`TOILE-UI-001`).
-* **Verification.** 15 `verified`, 2 `failing`, 13 `untested`, 2 `unimplemented`. What holds is the geometry:
-  the pure functions of the camera, covered over eighteen tests. What is loose is the handler layer above
-  them: the wheel, the drag, the fit round trip and the resize. Loose too are every frame condition, the
-  anchor at a clamp stop and a refused non-finite extent.
+* **Verification.** 16 `verified`, 1 `failing`, 13 `untested`, 2 `unimplemented`. What holds is the geometry:
+  the pure functions of the camera, covered over eighteen tests, and the kind token that names a fit's
+  reply (`TOILE-UI-293`). What is loose is the handler layer above them: the wheel, the drag, the fit
+  round trip and the resize. Loose too are every frame condition, the anchor at a clamp stop and a
+  refused non-finite extent.
 
 ---
 
@@ -142,8 +143,8 @@ public fields, and the one thing the Logic thread does with it divides by the zo
 3. take the smaller of the two axis fits, clamped, and centre on the rectangle.
 
 A fit over the whole board asks the Logic thread for the extent, because the UI holds the culled set alone.
-The reply is the same aggregate the status bar consumes (`features/ambre-spec-toile-status-bar.md`). Neither
-the question nor the answer carries a correlator, and a pending fit takes the first reply that arrives
+The reply is the same aggregate the status bar consumes (`features/ambre-spec-toile-status-bar.md`). The
+request carries a kind token the reply echoes, so a pending fit spends only its own answer
 (`TOILE-UI-293`).
 
 **Code:**
@@ -213,10 +214,6 @@ pixel wide at every zoom (`features/ambre-spec-toile-board-rendering.md`).
   together: the latch a wheel event must not disturb (`TOILE-UI-288`, `TOILE-UI-029`) and the direction a
   trackpad glide pans (`TOILE-UI-289`). The third is the cull request each of them queues (`TOILE-UI-283`,
   `TOILE-UI-296`).
-* **A fit trusts the wrong reply** (`TOILE-UI-293`). The request for a board extent carries no correlator, and
-  the reply carries none. The flag a pending fit sets is consumed by whichever aggregate lands first, and the
-  status bar re-asks for one on every selection change. A reply with no extent clears the flag and moves
-  nothing, so the fit is simply lost.
 * **The clamp is claimed on both sides and written on one** (`TOILE-UI-281`). The camera clamps its
   zoom and a comment says the culling type matches; it does not. That type is a public struct with a
   default and one method, and the method divides by the zoom. Today the only producer in the app is

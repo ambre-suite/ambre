@@ -1469,7 +1469,12 @@ pub fn main() {
                     event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::SelectionStats(s)),
                     ..
                 } => {
-                    sel_stats_toile.set(Some(toile_chrome::SelStats::from_reply(s.count, s.bounds)))
+                    // Only the band's own request updates the band: a fit or a
+                    // find focus also answers `SelectionStats`, and its bounds
+                    // belong to that request (`TOILE-UI-108`).
+                    if s.kind == ambre_bus::app::toile::StatsRequestKind::Band {
+                        sel_stats_toile.set(Some(toile_chrome::SelStats::from_reply(s.count, s.bounds)))
+                    }
                 }
                 // Presenter overlay panel: show / hide it with focus mode,
                 // and mirror the enriched slide payload into the panel signals.

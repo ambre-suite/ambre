@@ -62,7 +62,8 @@ use ambre_bus::UserId;
 use ambre_core::schema::SchemaError;
 
 use crate::logic::command::{
-    PresencePayload, SelectionStats, ToileCommand, ToileError, ToileEvent, ToileOutcome,
+    PresencePayload, SelectionStats, StatsRequestKind, ToileCommand, ToileError, ToileEvent,
+    ToileOutcome,
 };
 use crate::logic::index::{SpatialIndex, Viewport};
 use crate::logic::model::{ConnectorId, ElementId, FrameId, NodeId, PlaybackState};
@@ -438,7 +439,7 @@ impl ToileState {
                 from,
                 backward,
             } => self.find(&query, options, from.as_ref(), backward),
-            ToileCommand::RequestSelectionStats { ids } => self.selection_stats(&ids),
+            ToileCommand::RequestSelectionStats { ids, kind } => self.selection_stats(&ids, kind),
             ToileCommand::ImportSvg { bytes, at } => self.import_svg_bytes(&bytes, at),
             ToileCommand::ImportImage { bytes, mime: _, at } => self.import_image_bytes(&bytes, at),
             ToileCommand::ExportSvg => self.export_svg_document(),
@@ -660,7 +661,7 @@ impl ToileState {
 
     // -- selection aggregates -----------------------------------
 
-    fn selection_stats(&self, ids: &[ElementId]) -> ToileOutcome {
+    fn selection_stats(&self, ids: &[ElementId], kind: StatsRequestKind) -> ToileOutcome {
         let mut union: Option<Rect> = None;
         let mut count = 0u32;
         // Empty ids = whole-board extent: the union of every element's bounds.
@@ -679,6 +680,7 @@ impl ToileState {
             return ToileOutcome::display_only(vec![ToileEvent::SelectionStats(SelectionStats {
                 count,
                 bounds: union,
+                kind,
             })]);
         }
         for id in ids {
@@ -693,6 +695,7 @@ impl ToileState {
         ToileOutcome::display_only(vec![ToileEvent::SelectionStats(SelectionStats {
             count,
             bounds: union,
+            kind,
         })])
     }
 
