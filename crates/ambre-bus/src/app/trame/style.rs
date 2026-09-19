@@ -11,7 +11,11 @@ use serde::{Deserialize, Serialize};
 /// How a shared filter decides whether a row's value in the filtered column is
 /// kept (visible) or hidden (`trame-shared-filter`). MVP covers
 /// the "by values" and "by condition" modes; colour filters are Phase 2.
-#[derive(Debug, Clone)]
+///
+/// `Serialize` / `Deserialize` back the one whole register the Logic thread
+/// persists (`TRAME-FEAT-025`). Column and kind encode together, so two
+/// concurrent filters race once, never field by field.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum FilterKind {
     /// Keep only rows whose filtered-column display text is one of these values
     /// (Google Sheets "filter by values": the listed values are the *checked*,
@@ -29,7 +33,7 @@ pub enum FilterKind {
 
 /// Condition operators for a [`FilterKind::Condition`]
 /// (`trame-shared-filter`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FilterOp {
     Eq,
     Ne,

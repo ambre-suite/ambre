@@ -14,11 +14,16 @@
 use std::borrow::Cow;
 
 use loro::{ExportMode, LoroDoc, LoroValue};
+use serde::{Deserialize, Serialize};
 
+use ambre_bus::FilterKind;
 use ambre_core::schema::{
     SCHEMA_META_MAP, SCHEMA_VERSION_ABSENT, SCHEMA_VERSION_KEY, SchemaError, SchemaMigration,
     SchemaVerdict, migrate_schema, verdict,
 };
+
+use super::op_from_str;
+use crate::model::Uid;
 
 /// Stable id of the implicit default sheet created by [`TrameState::new`].
 ///
@@ -99,10 +104,28 @@ pub(crate) fn merges_map_name(sheet: &str) -> String {
 }
 
 /// Per-sheet shared-filter definition map (`filters_{sheet}`): the active filter
-/// (column uid + kind), stored flat so it converges via LWW
-/// (`trame-shared-filter`). Empty map = no filter.
+/// held whole as one register under [`FILTER_KEY`], so it converges as one LWW
+/// unit (`trame-shared-filter`, `TRAME-FEAT-025`). Empty map = no filter.
 pub(crate) fn filters_map_name(sheet: &str) -> String {
     format!("filters_{sheet}")
+}
+
+/// Key of the single register inside [`filters_map_name`]: the whole filter
+/// definition, postcard-encoded as [`FilterRecord`] (`TRAME-FEAT-025`).
+pub(crate) const FILTER_KEY: &str = "active";
+
+/// The whole shared-filter definition as one CRDT record
+/// (`trame-shared-filter`). postcard-encoded into the single `filters_{sheet}`
+/// register under [`FILTER_KEY`], mirroring `cellstyle_{sheet}` (`TRAME-016`).
+///
+/// Column and kind travel together, so two concurrent filters race exactly once.
+/// The winner is one writer's whole definition, never a blend of one peer's
+/// column and the other's operator (`TRAME-FEAT-025`).
+#[derive(Serialize, Deserialize)]
+pub(crate) struct FilterRecord {
+    /// The filtered column's stable id, rendered as its 25-char key part.
+    pub col: String,
+    pub kind: FilterKind,
 }
 
 /// Per-sheet hidden-row set (`filter_hidden_{sheet}`): `{row_uid -> true}` for
@@ -153,10 +176,10 @@ pub(crate) enum Axis {
 /// (`SCHEMA-004`).
 ///
 /// Raising it is not a decision about this constant. It is a layout change to a
-/// persisted record, and the packed [`StyleRecord`](super::StyleRecord) above
-/// is the one most likely to move. Such a change obliges a [`MIGRATIONS`] row
-/// which carries an existing workbook across it (`SCHEMA-009`).
-pub const SCHEMA_VERSION: u32 = 1;
+/// persisted record. `1 -> 2` folds the flat filter keys into one register
+/// ([`FilterRecord`]), which obliges the [`MIGRATIONS`] row carrying an existing
+/// workbook across it (`SCHEMA-009`).
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Write the current version into a workbook's `meta` register.
 ///
@@ -204,17 +227,104 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 /// existed reads as version 0, and its layout is identical to a version 1
 /// workbook. The step therefore stamps the number and changes nothing else,
 /// which is what makes it a migration rather than a rewrite.
-const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
-    from: 0,
-    to: 1,
-    apply: stamp_step,
-}];
+///
+/// `1 -> 2` folds `filters_{sheet}` from five flat keys into the one whole
+/// register ([`FILTER_KEY`] holding a [`FilterRecord`]).
+const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
+    SchemaMigration {
+        from: 0,
+        to: 1,
+        apply: stamp_step,
+    },
+    SchemaMigration {
+        from: 1,
+        to: 2,
+        apply: filter_register_step,
+    },
+];
 
 /// The `0 -> 1` step. A free function rather than a closure because a registry
 /// row holds a plain `fn`.
 fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
     stamp(doc);
     doc.commit();
+    Ok(())
+}
+
+/// The `1 -> 2` step: fold each sheet's flat filter keys into one register.
+///
+/// Version 1 stored `filters_{sheet}` as five keys plus a child `values` list.
+/// Two concurrent filters elected field by field and could converge torn
+/// (`TRAME-FEAT-025`). Version 2 stores the whole
+/// definition as one `Binary(postcard(FilterRecord))` under [`FILTER_KEY`].
+fn filter_register_step(doc: &LoroDoc) -> Result<(), String> {
+    if let LoroValue::Map(sheets) = doc.get_map(SHEETS_MAP).get_value() {
+        for sheet in sheets.keys() {
+            fold_filter_keys(doc, sheet)?;
+        }
+    }
+    // Stamp the new version inside the same commit as the shape change
+    // (`TRAME-026`).
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
+
+/// Convert one sheet's flat filter shape into the single register. A sheet with
+/// no filter (an empty or absent map) is left untouched.
+fn fold_filter_keys(doc: &LoroDoc, sheet: &str) -> Result<(), String> {
+    let map = doc.get_map(filters_map_name(sheet));
+    // `get_deep_value` resolves the `values` child list, which the shallow read
+    // in `load_active_filter` could not (`TRAME-FEAT-004`).
+    let LoroValue::Map(fields) = map.get_deep_value() else {
+        return Ok(());
+    };
+    // The old shape carries a flat `col` key; a version-2 register does not.
+    let Some(LoroValue::String(col)) = fields.get("col") else {
+        return Ok(());
+    };
+    let col_uid = Uid::parse(col.as_str())
+        .ok_or_else(|| format!("an unreadable filter column {}", col.as_str()))?;
+    let kind = match fields.get("kind") {
+        Some(LoroValue::String(kind)) if kind.as_str() == "values" => {
+            let values = match fields.get("values") {
+                Some(LoroValue::List(items)) => items
+                    .iter()
+                    .filter_map(|v| match v {
+                        LoroValue::String(s) => Some(s.to_string()),
+                        _ => None,
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            };
+            FilterKind::Values(values)
+        }
+        Some(LoroValue::String(kind)) if kind.as_str() == "condition" => {
+            let op = match fields.get("op") {
+                Some(LoroValue::String(s)) => op_from_str(s.as_str())
+                    .ok_or_else(|| format!("an unreadable filter operator {}", s.as_str()))?,
+                _ => return Err("a condition filter with no operator".to_owned()),
+            };
+            let value = match fields.get("value") {
+                Some(LoroValue::String(s)) => s.to_string(),
+                _ => String::new(),
+            };
+            FilterKind::Condition { op, value }
+        }
+        _ => return Err("a filter with no readable kind".to_owned()),
+    };
+    let record = FilterRecord {
+        col: col_uid.to_key_part(),
+        kind,
+    };
+    let bytes = postcard::to_allocvec(&record)
+        .map_err(|e| format!("encoding the filter register failed: {e}"))?;
+    // Replace the flat keys with the one register.
+    let old_keys: Vec<String> = fields.keys().cloned().collect();
+    for key in &old_keys {
+        let _ = map.delete(key.as_str());
+    }
+    let _ = map.insert(FILTER_KEY, bytes);
     Ok(())
 }
 
@@ -459,6 +569,52 @@ mod tests {
         assert_eq!(
             gate(b"not a loro snapshot").expect_err("rejected"),
             SchemaError::PayloadRejected
+        );
+    }
+
+    /// `1 -> 2` folds a version-1 flat filter into one register. The five keys
+    /// collapse into one binary [`FilterRecord`] (`TRAME-FEAT-025`,
+    /// `TRAME-FEAT-004`).
+    #[test]
+    fn a_flat_filter_migrates_to_one_register() {
+        use ambre_bus::FilterOp;
+
+        // A version-1 workbook holding the old flat condition shape.
+        let doc = LoroDoc::new();
+        doc.get_map(SCHEMA_META_MAP)
+            .insert(SCHEMA_VERSION_KEY, i64::from(1))
+            .expect("stamp");
+        doc.get_map(SHEETS_MAP)
+            .insert(DEFAULT_SHEET, "Sheet1")
+            .expect("sheet");
+        let filters = doc.get_map(filters_map_name(DEFAULT_SHEET));
+        filters.insert("col", "0000000000000001_00000000").unwrap();
+        filters.insert("kind", "condition").unwrap();
+        filters.insert("op", "gt").unwrap();
+        filters.insert("value", "1").unwrap();
+        doc.commit();
+        let payload = doc.export(ExportMode::Snapshot).expect("snapshot");
+
+        let gated = gate(&payload).expect("version 1 migrates");
+        let migrated = LoroDoc::new();
+        migrated.import(&gated).expect("migrated snapshot imports");
+        assert_eq!(read_version(&migrated).expect("reads"), SCHEMA_VERSION);
+
+        let LoroValue::Map(fields) = migrated
+            .get_map(filters_map_name(DEFAULT_SHEET))
+            .get_deep_value()
+        else {
+            panic!("the filters map survives");
+        };
+        assert!(fields.get("col").is_none(), "the flat keys are gone");
+        let LoroValue::Binary(bytes) = fields.get(FILTER_KEY).expect("one register") else {
+            panic!("the register is binary");
+        };
+        let record: FilterRecord = postcard::from_bytes(bytes).expect("decodes");
+        assert_eq!(record.col, "0000000000000001_00000000");
+        assert!(
+            matches!(record.kind, FilterKind::Condition { op: FilterOp::Gt, value } if value == "1"),
+            "the whole condition survived the fold"
         );
     }
 }

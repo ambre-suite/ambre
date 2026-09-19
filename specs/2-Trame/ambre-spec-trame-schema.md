@@ -92,7 +92,7 @@ race: the last writer takes that whole unit.
 | `merges_{sheet}` | Map | master `"{row_uid}:{col_uid}"` | bottom-right `"{row_uid}:{col_uid}"` | the merge | `trame-cell-merges` | built |
 | `col_widths_{sheet}` | Map | `col_uid` | width in px (`f64`) | the column | `trame-resize` | built |
 | `row_heights_{sheet}` | Map | `row_uid` | height in px (`f64`) | the row | `trame-resize` | built |
-| `filters_{sheet}` | Map | `col`, `kind`, `op`, `value`; child list `values` | String, and a list of String under `values` | **the key, not the filter** | `trame-shared-filter` | built |
+| `filters_{sheet}` | Map | `active` | `Binary(postcard(FilterRecord))` | the whole filter | `trame-shared-filter` | built |
 | `filter_hidden_{sheet}` | Map | `row_uid` | `true` | the row | `trame-shared-filter` | built |
 | `named_ranges` | Map | range name | A1 reference (String) | the name | `trame-named-ranges` | built |
 | `styles` | Map | `style_id` | style attribute map | the style entry | `trame-cell-styles` | design |
@@ -147,9 +147,9 @@ Only where a schema decision needs a reason. 40 words each.
   layout change is a schema change (`TRAME-026`).
 * **`merges_{sheet}`.** Keyed by the master corner, so a merge follows its cells through an insert
   or a delete of a line above it.
-* **`filters_{sheet}`.** Fields are separate keys. Two peers filtering at the same moment elect
-  each field on its own and can converge on a definition neither wrote. One register would hold the
-  definition whole, as `cellstyle_{sheet}` does (`TRAME-FEAT-025`).
+* **`filters_{sheet}`.** One register holds the definition whole, as `cellstyle_{sheet}` does. Two
+  peers filtering at the same moment race exactly once, so the winner is one writer's, never a field
+  blend (`TRAME-FEAT-025`).
 * **`filter_hidden_{sheet}`.** Kept out of `rows_{sheet}` so a hidden flag never disturbs the order
   list, and keyed by `row_uid` so it follows the data through a sort.
 * **`media`.** The entry holds the content hash and the placement, never the pixels. The bytes travel
@@ -179,7 +179,7 @@ stops the eventual container being keyed positionally by whoever writes it first
 | One binary register for a whole cell style | one register per attribute (the old `format_` / `style_` / `fgcolor_` fan-out) | cheap only with a server that orders content; on a blind relay, per-register LWW has no cross-register atomicity, so a whole-cell edit tears (border presence against border colour) and a colour-only or font-only cell was lost on reload. A finer model, if ever justified, is a nested per-cell map, never a flat fan-out |
 | Raw text only, never a computed value | storing the computed value beside the raw text | it is derived from the raw text, so replicating it costs bandwidth and can disagree with a peer's own recompute |
 | A shared `styles` dictionary, declared and deferred | building the `s` indirection now | a lookup paid before its benchmark: deduplication is a size optimization and the size is unmeasured |
-| The filter definition sits flat in `filters_{sheet}` | a nested `active` sub-map | **neither shape holds the definition together**: the fields race one by one and converge torn (`TRAME-FEAT-025`), so the open choice is one register against five keys, not flat against nested. Flat costs one container fewer to merge, for the same LWW granularity |
+| One binary register for the whole filter definition | five flat keys, or a nested `active` sub-map | the fields race one by one and converge torn (`TRAME-FEAT-025`); one register holds column and kind together, so the winner is one writer's whole filter |
 | A container name as the primary key | a numeric container id | one more indirection, no new information: `merges_{sheet}` is already unique, stable, meaningful and verbatim in the code |
 | No anchored-comment container, and the anchor already decided | a positional `R{row}C{col}` anchor | every insert above the note re-points it, the same failure the row uid exists to answer |
 | No anchored-comment container, and the anchor already decided | a Trame-private orphan model | one gesture, two behaviours across the suite, and two rules to keep in step |

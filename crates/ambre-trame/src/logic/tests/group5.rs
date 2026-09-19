@@ -205,6 +205,84 @@ fn concurrent_filters_converge_lww() {
     );
 }
 
+/// A concurrent race elects one user's whole definition, never a blend of one
+/// peer's operator and the other's operand (`TRAME-FEAT-025`). The definition is
+/// one register, so the winner is `gt/1` or `lt/3`, never `gt/3`.
+#[test]
+fn concurrent_filters_elect_a_whole_definition() {
+    let mut base = TrameState::new();
+    seed_col_a(&mut base, &["1", "2", "3"]);
+    let base_snap = base.export_snapshot();
+
+    let mut a = TrameState::new();
+    a.import_snapshot(&base_snap).expect("a reads the base");
+    let mut b = TrameState::new();
+    b.import_snapshot(&base_snap).expect("b reads the base");
+
+    let gt = FilterKind::Condition {
+        op: FilterOp::Gt,
+        value: "1".to_owned(),
+    };
+    let lt = FilterKind::Condition {
+        op: FilterOp::Lt,
+        value: "3".to_owned(),
+    };
+    a.handle_command(TrameCommand::ApplyFilter {
+        sheet_id: "s0".to_owned(),
+        col: 0,
+        kind: gt.clone(),
+    });
+    b.handle_command(TrameCommand::ApplyFilter {
+        sheet_id: "s0".to_owned(),
+        col: 0,
+        kind: lt.clone(),
+    });
+
+    let a_snap = a.export_snapshot();
+    let b_snap = b.export_snapshot();
+    a.apply_remote(&b_snap);
+    b.apply_remote(&a_snap);
+
+    let (_, a_kind) = a.load_active_filter().expect("a keeps a filter");
+    let (_, b_kind) = b.load_active_filter().expect("b keeps a filter");
+    assert!(
+        a_kind == gt || a_kind == lt,
+        "the winner must be one user's whole filter, got {a_kind:?}"
+    );
+    assert_eq!(a_kind, b_kind, "both peers elect the same whole definition");
+}
+
+/// A values filter reads back whole from the register. A reload keeps the same
+/// hidden rows, and an edit re-tests against the real list (`TRAME-FEAT-004`,
+/// `TRAME-FEAT-031`).
+#[test]
+fn filter_by_values_survives_a_reload() {
+    let mut author = TrameState::new();
+    seed_col_a(&mut author, &["a", "b", "c"]);
+    author.handle_command(TrameCommand::ApplyFilter {
+        sheet_id: "s0".to_owned(),
+        col: 0,
+        kind: FilterKind::Values(vec!["a".to_owned(), "c".to_owned()]),
+    });
+    assert!(is_filtered(&mut author, 1, 0), "b hidden");
+
+    let snapshot = author.export_snapshot();
+    let mut peer = TrameState::new();
+    peer.import_snapshot(&snapshot).expect("reload");
+    assert!(is_filtered(&mut peer, 1, 0), "b still hidden after reload");
+
+    // An edit re-tests against the stored list, which reads back whole.
+    peer.handle_command(TrameCommand::SetCellText {
+        row: 1,
+        col: 0,
+        text: "c".to_owned(),
+    });
+    assert!(
+        !is_filtered(&mut peer, 1, 0),
+        "b's new value c is in the list"
+    );
+}
+
 /// A filter is a plain CRDT mutation, so Ctrl+Z removes it (`trame-undo`).
 #[test]
 fn shared_filter_is_undoable() {
@@ -282,29 +360,31 @@ fn condition_pass_covers_every_operator() {
     assert!(!condition_pass(FilterOp::IsNotEmpty, &empty, ""));
 }
 
-/// `filter_pass` for the values mode, and the operator string round-trip.
+/// `filter_pass` for the values mode, and the operator string parse
+/// (the legacy spelling the migration reads back).
 #[test]
 fn filter_pass_values_and_op_string_roundtrip() {
-    use super::super::{filter_pass, op_from_str, op_to_str};
+    use super::super::{filter_pass, op_from_str};
     use crate::formula::types::CellValue;
     let kind = FilterKind::Values(vec!["keep".to_owned()]);
     assert!(filter_pass(&kind, &CellValue::Text("keep".to_owned())));
     assert!(!filter_pass(&kind, &CellValue::Text("drop".to_owned())));
 
-    for op in [
-        FilterOp::Eq,
-        FilterOp::Ne,
-        FilterOp::Gt,
-        FilterOp::Lt,
-        FilterOp::Gte,
-        FilterOp::Lte,
-        FilterOp::Contains,
-        FilterOp::NotContains,
-        FilterOp::StartsWith,
-        FilterOp::IsEmpty,
-        FilterOp::IsNotEmpty,
-    ] {
-        assert_eq!(op_from_str(op_to_str(op)), Some(op), "round-trips {op:?}");
+    let spellings: &[(FilterOp, &str)] = &[
+        (FilterOp::Eq, "eq"),
+        (FilterOp::Ne, "ne"),
+        (FilterOp::Gt, "gt"),
+        (FilterOp::Lt, "lt"),
+        (FilterOp::Gte, "gte"),
+        (FilterOp::Lte, "lte"),
+        (FilterOp::Contains, "contains"),
+        (FilterOp::NotContains, "not_contains"),
+        (FilterOp::StartsWith, "starts_with"),
+        (FilterOp::IsEmpty, "is_empty"),
+        (FilterOp::IsNotEmpty, "is_not_empty"),
+    ];
+    for &(op, spelling) in spellings {
+        assert_eq!(op_from_str(spelling), Some(op), "parses {spelling:?}");
     }
     assert_eq!(op_from_str("garbage"), None);
 }

@@ -100,25 +100,9 @@ pub(crate) fn condition_pass(op: FilterOp, value: &CellValue, operand: &str) -> 
     }
 }
 
-/// Canonical CRDT string for a [`FilterOp`] (persisted in `filters_{sheet}`).
-pub(crate) fn op_to_str(op: FilterOp) -> &'static str {
-    match op {
-        FilterOp::Eq => "eq",
-        FilterOp::Ne => "ne",
-        FilterOp::Gt => "gt",
-        FilterOp::Lt => "lt",
-        FilterOp::Gte => "gte",
-        FilterOp::Lte => "lte",
-        FilterOp::Contains => "contains",
-        FilterOp::NotContains => "not_contains",
-        FilterOp::StartsWith => "starts_with",
-        FilterOp::IsEmpty => "is_empty",
-        FilterOp::IsNotEmpty => "is_not_empty",
-    }
-}
-
-/// Inverse of [`op_to_str`]: parse a persisted operator string. `None` on an
-/// unknown token (defensive against a corrupt or future entry).
+/// Parse a persisted operator string (the legacy `filters_{sheet}` spelling the
+/// `1 -> 2` migration reads back). `None` on an unknown token (defensive against
+/// a corrupt or future entry).
 pub(crate) fn op_from_str(s: &str) -> Option<FilterOp> {
     Some(match s {
         "eq" => FilterOp::Eq,

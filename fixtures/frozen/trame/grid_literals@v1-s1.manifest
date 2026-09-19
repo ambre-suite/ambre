@@ -1,0 +1,19 @@
+{
+  "generator": "trame/grid_literals",
+  "generator_version": 1,
+  "seed": 6840257678313259009,
+  "doc_type": "Trame",
+  "ambre_version": 1,
+  "schema_version": 1,
+  "digest": "c4ac13561b9f0c596d16ae30df1f5d8668d7041c39e07c6c46bc21fe14da5fd3",
+  "shape": {
+    "peers": 1,
+    "body": {
+      "Trame": {
+        "cells": 141,
+        "sheets": 1,
+        "formulas": 0
+      }
+    }
+  }
+}

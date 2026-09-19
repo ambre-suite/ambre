@@ -217,31 +217,21 @@ impl TrameState {
         count
     }
 
-    /// Persist the active filter definition into `filters_{sheet}` (flat keys plus
-    /// a child `values` list), replacing any prior one. Stored so concurrent
-    /// filters converge via LWW and so [`recompute_active_filter`] can re-evaluate
-    /// after a data change.
+    /// Persist the active filter definition into `filters_{sheet}` as one whole
+    /// register ([`FilterRecord`]), replacing any prior one. Stored so concurrent
+    /// filters race exactly once and converge whole (`TRAME-FEAT-025`), and so
+    /// [`recompute_active_filter`] can re-evaluate after a data change.
     ///
     /// [`recompute_active_filter`]: Self::recompute_active_filter
     pub(super) fn persist_filter_def(&self, col_uid: Uid, kind: &FilterKind) {
         let filters = self.doc.get_map(filters_map_name(&self.active_sheet));
         clear_loro_map(&filters);
-        let _ = filters.insert("col", col_uid.to_key_part().as_str());
-        match kind {
-            FilterKind::Values(values) => {
-                let _ = filters.insert("kind", "values");
-                if let Ok(list) = filters.ensure_mergeable_list("values") {
-                    for v in values {
-                        let _ = list.push(v.as_str());
-                    }
-                }
-            }
-            FilterKind::Condition { op, value } => {
-                let _ = filters.insert("kind", "condition");
-                let _ = filters.insert("op", op_to_str(*op));
-                let _ = filters.insert("value", value.as_str());
-            }
-        }
+        let record = FilterRecord {
+            col: col_uid.to_key_part(),
+            kind: kind.clone(),
+        };
+        let bytes = postcard::to_allocvec(&record).unwrap_or_default();
+        let _ = filters.insert(FILTER_KEY, bytes);
     }
 
     /// Read the active filter definition back from `filters_{sheet}`. Returns the
@@ -255,41 +245,17 @@ impl TrameState {
         else {
             return None;
         };
-        let LoroValue::String(col) = filters.get("col")? else {
+        let Some(LoroValue::Binary(bytes)) = filters.get(FILTER_KEY) else {
             return None;
         };
-        let col_uid = Uid::parse(col.as_str())?;
-        let LoroValue::String(kind) = filters.get("kind")? else {
+        let Ok(record) = postcard::from_bytes::<FilterRecord>(bytes) else {
+            // A register a newer client wrote is skipped, not silently read as
+            // no filter (`SCHEMA-003`).
+            self.note_undecodable(bytes);
             return None;
         };
-        let kind = match kind.as_str() {
-            "values" => {
-                let values = match filters.get("values") {
-                    Some(LoroValue::List(items)) => items
-                        .iter()
-                        .filter_map(|v| match v {
-                            LoroValue::String(s) => Some(s.to_string()),
-                            _ => None,
-                        })
-                        .collect(),
-                    _ => Vec::new(),
-                };
-                FilterKind::Values(values)
-            }
-            "condition" => {
-                let op = match filters.get("op") {
-                    Some(LoroValue::String(s)) => op_from_str(s.as_str())?,
-                    _ => return None,
-                };
-                let value = match filters.get("value") {
-                    Some(LoroValue::String(s)) => s.to_string(),
-                    _ => String::new(),
-                };
-                FilterKind::Condition { op, value }
-            }
-            _ => return None,
-        };
-        Some((col_uid, kind))
+        let col_uid = Uid::parse(&record.col)?;
+        Some((col_uid, record.kind))
     }
 
     /// Rebuild [`Self::hidden_rows`] (grid positions) from the active sheet's

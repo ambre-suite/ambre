@@ -22,10 +22,10 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-FEAT-002` | `INV` | A hidden row MUST stay hidden when the data moves: a sort or an insert MUST NOT transfer the hidden mark to another row. | this spec section 3 | `ambre_trame::logic::tests::group5::shared_filter_hidden_follows_sort` | none | verified |
 | `TRAME-FEAT-003` | `INV` | A hidden row MUST still count in every formula: a filter changes what a user sees, never what the sheet holds. | this spec section 2, row 5 | `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum` | none | verified |
 | `TRAME-FEAT-005` | `INV` | Every collaborator MUST see the same hidden rows as the user who applied the filter. | this spec section 2, row 3 | `ambre_trame::logic::tests::group5::shared_filter_applies_on_remote_import` | none | verified |
-| `TRAME-FEAT-031` | `INV` | The hidden rows MUST agree with the data: an edit to a filtered column MUST re-test that row. | this spec section 2, row 1 | `ambre_trame::logic::tests::group5::shared_filter_recomputes_on_edit` -- it drives the condition kind alone | fails -- **the values kind fails this rule today**: the stored list reads back empty, so the first edit after a filter by values hides every row (section 6); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
+| `TRAME-FEAT-031` | `INV` | The hidden rows MUST agree with the data: an edit to a filtered column MUST re-test that row. | this spec section 2, row 1 | `ambre_trame::logic::tests::group5::shared_filter_recomputes_on_edit` -- it drives the condition kind; `::filter_by_values_survives_a_reload` -- the values kind reads back and re-tests | none | verified |
 | `TRAME-FEAT-030` | `INV` | A filter MUST NOT outlive the column it tests. | this spec section 3 | none | fails -- `write_filter_hidden` returns 0 when the column uid no longer resolves, having already emptied the hidden set, while `filters_{sheet}` keeps the definition, so the funnel stays lit on a column that is gone and no row is hidden; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-FEAT-006` | `CONC` | When two users filter one sheet at the same moment, every peer MUST end on one filter and one hidden set. | this spec section 2, row 4 | `ambre_trame::logic::tests::group5::concurrent_filters_converge_lww`; `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest that drives `ApplyFilter` and `ClearFilter` and asserts the elected hidden set | none | verified |
-| `TRAME-FEAT-025` | `CONC` | A filter that wins a concurrent race MUST be one a user applied, whole: no peer MUST see one user's column joined to another user's operator or operand. | this spec section 2, row 7; section 6 | none | fails -- `concurrent_filters_converge_lww` asserts that the two peers agree, not that the winner is intact, so a mixed definition passes it (section 6); lands with the `A filter converges as one definition` Story (`ambre-roadmap.md` E7) | failing |
+| `TRAME-FEAT-025` | `CONC` | A filter that wins a concurrent race MUST be one a user applied, whole: no peer MUST see one user's column joined to another user's operator or operand. | this spec section 2, row 7; section 6 | `ambre_trame::logic::tests::group5::concurrent_filters_elect_a_whole_definition` -- two peers filter at once and the elected definition is one of the two whole ones, on both peers | none | verified |
 | `TRAME-UI-008` | `OBS` | A hidden row MUST occupy no height. | this spec section 4 | `ambre_trame::render::tests::cell_rect_collapses_over_hidden_rows` -- it reads the rectangle of a cell below a hidden row and finds it risen by that row's height | none | verified |
 | `TRAME-UI-173` | `OBS` | A click MUST land on the row the user sees, never on the one the collapse moved out of the way. | this spec section 4 | `ambre_trame::ui::grid::tests::group2::filtered_rows_collapse_geometry_and_nav` -- it hit-tests a point over the collapsed range and reads back the visible row | none | verified |
 | `TRAME-UI-154` | `OBS` | Arrow-key navigation MUST step over a hidden row. | this spec section 4 | `ambre_trame::ui::grid::tests::group2::filtered_rows_collapse_geometry_and_nav` -- the `nav` half of the same case | none | verified |
@@ -33,8 +33,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-FEAT-043` | `OBS` | The button MUST show whether a filter is active on its column. | this spec section 4 | `ambre_trame::ui::renderer::tests::autofilter_button_shows_funnel_on_filtered_column` | none | verified |
 | `TRAME-FEAT-046` | `OBS` | The user MUST be told how many rows a filter hid. | this spec section 4 | none | unheld -- `chrome::commands` turns `FilterApplied` into an info toast, and no test reads a toast, so the count is held up to the event and no further; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-FEAT-029` | `OBS` | What the status bar totals MUST be what a formula over the same cells totals. | this spec section 4 | none | fails -- `selection_stats` skips every row in `hidden_rows`, while `TRAME-FEAT-003` keeps those rows in `SUM`. One column then reads two different totals, one in the bar and one in a cell, with nothing to explain the difference; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
-| `TRAME-FEAT-004` | `IO` | A filter MUST read back from the document as the filter the user applied. | this spec section 2, row 1 | none | fails -- the values kind fails it: `persist_filter_def` writes the list as a child container, `load_active_filter` reads the map's flat value where that child is a handle, and falls back to an empty list (section 6); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
-| `TRAME-FEAT-009` | `IO` | A filter MUST hide the same rows after a reload as before it, for every operator it offers. | this spec section 3 | `ambre_trame::logic::tests::group5::condition_pass_covers_every_operator`; `::filter_pass_values_and_op_string_roundtrip` -- both exercise the predicate and the operator spelling in memory | partial -- neither reads a definition back from the document, which is the half the rule is about; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-FEAT-004` | `IO` | A filter MUST read back from the document as the filter the user applied. | this spec section 2, row 1 | `ambre_trame::logic::tests::group5::filter_by_values_survives_a_reload` -- a values filter exports, reloads and still hides the same row | none | verified |
+| `TRAME-FEAT-009` | `IO` | A filter MUST hide the same rows after a reload as before it, for every operator it offers. | this spec section 3 | `ambre_trame::logic::tests::group5::condition_pass_covers_every_operator`; `::filter_pass_values_and_op_string_roundtrip` -- the predicate and the operator spelling; `::filter_by_values_survives_a_reload` -- the definition reads back from the document | none | verified |
 
 ### 1.2 Filter a column
 
@@ -79,12 +79,10 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md` budgets no filter.
 * **Boundary.** none of its own: the filter is shared, so its definition is a document write, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 18 `verified`, 8 `failing`, 6 `untested`, 3 `unimplemented`. The rows went 15 to 35 and
-  the mechanisms they cite went 21 to 23: the split manufactured no coverage. Every new `verified`
-  is one half of a conjunction the tests already carried whole -- `collapse_geometry_and_nav`,
-  `unhides_and_noops_when_absent`, `noop_guards` each name their two halves. The `unverified` rows
-  are where the split found the other half: four of them state a rule the code contradicts
-  today. Section 6 states each once.
+* **Verification.** 22 `verified`, 5 `failing`, 5 `untested`, 3 `unimplemented`. The definition is one
+  register, so a concurrent race converges whole (`TRAME-FEAT-025`) and a filter by values reads
+  back and re-tests correctly (`TRAME-FEAT-004`, `TRAME-FEAT-009`, `TRAME-FEAT-031`). The remaining
+  gaps are stated once in section 6.
 
 ---
 
@@ -97,10 +95,10 @@ Two peers, one sheet. The last column joins the example to the test that holds i
 | filters column A to show `a` alone | writes `a` into a row Alice's filter hides | the filter and Bob's text | the row returns, for both users | `logic::tests::group5::shared_filter_recomputes_on_edit` |
 | filters column A | sorts the same range | the filter and the new row order | the same rows hidden, at their new positions | `logic::tests::group5::shared_filter_hidden_follows_sort` |
 | filters column A | opens the sheet after her | one filter, one hidden set | the same collapsed grid; Bob's client applies the set, it does not re-test the rows | `logic::tests::group5::shared_filter_applies_on_remote_import` |
-| filters column A on "greater than 1" | filters column A on "less than 3" at the same moment | one operator and one operand, each elected on its own | the same rows hidden for both, from a test that may join one user's operator to the other's operand (`TRAME-FEAT-025`) | `logic::tests::group5::concurrent_filters_converge_lww` |
+| filters column A on "greater than 1" | filters column A on "less than 3" at the same moment | one whole definition, elected as one register | the same rows hidden for both, from a test that proves the winner is one of the two whole filters (`TRAME-FEAT-025`) | `logic::tests::group5::concurrent_filters_elect_a_whole_definition` |
 | filters column A | sums column A | the filter alone | a total over every row, hidden ones included | `logic::tests::group5::shared_filter_does_not_affect_sum` |
 | filters column A, then undoes | -- | no filter | every row visible again, for both | `logic::tests::group5::shared_filter_is_undoable` |
-| filters column A by values | filters column C by condition at the same moment | all five keys at once, from both users | every row hidden, on both peers: a filter neither user applied | none -- see section 6 |
+| filters column A by values | filters column C by condition at the same moment | one whole definition, column and kind together | every peer sees one of the two filters, whole: never a column joined to another's kind | `logic::tests::group5::concurrent_filters_elect_a_whole_definition` |
 
 ---
 
@@ -108,8 +106,8 @@ Two peers, one sheet. The last column joins the example to the test that holds i
 
 **Containers**, both declared in `ambre-spec-trame-schema.md section 3`:
 
-* `filters_{sheet}` holds the definition over five keys: the column, the kind, and the operator,
-  the operand or the value list the kind selects. An empty map is no filter.
+* `filters_{sheet}` holds the definition as one register: the column and the kind together,
+  postcard-encoded whole. An empty map is no filter.
 * `filter_hidden_{sheet}` holds one entry per hidden row, keyed by the row identity. The mark
   follows its row through a sort, an insert or a delete (`TRAME-FEAT-002`).
 
@@ -126,7 +124,7 @@ Two peers, one sheet. The last column joins the example to the test that holds i
 | `TrameEvent::FilterApplied { hidden_row_count, col }` | Logic to UI | the count for the notice, the column for the button glyph |
 | `TrameEvent::FilterCleared` | Logic to UI | the clearing, surfaced as a notice |
 
-**Definition shape**, typed in `ambre-bus` and stored under the keys above:
+**Definition shape**, typed in `ambre-bus` and postcard-encoded whole into the register above:
 
 * `FilterKind::Values(Vec<String>)` -- the listed values are the visible ones;
 * `FilterKind::Condition { op: FilterOp, value }` -- one operator over one operand;
@@ -259,17 +257,6 @@ the filtered column for the glyph, and the chrome relay turns each into a notice
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The stored value list is unreadable, so a filter by values hides every row after any edit**
-  (`TRAME-FEAT-004`, `TRAME-FEAT-009`). The list is a child container of `filters_{sheet}`. The
-  reader takes the map's flat value, where that child reads as a handle, and falls back to an empty
-  list. No value matches it. The first evaluation is right, because it uses the definition the user
-  just sent. The next edit re-reads the stored one and hides every row, on one peer, with no
-  collaborator.
-* **A concurrent race tears the definition** (`TRAME-FEAT-025`). The five keys are elected one by
-  one. Two users filtering different columns at the same moment converge on one user's column
-  joined to the other's operator and operand. Neither user applied that filter, and both peers agree
-  on it. One register would hold the definition whole, which `ambre-spec-trame-schema.md section 6`
-  already called for a cell style.
 * **An edit outside the filtered column rewrites the whole hidden set** (`TRAME-FEAT-036`).
   `finish_cell_writes` calls `recompute_active_filter` after every cell write, whatever its column,
   and that call empties `filter_hidden_{sheet}` and refills it. One keystroke on a filtered sheet
