@@ -487,6 +487,35 @@ fn board_ids_returns_every_element() {
     }
 }
 
+/// `TOILE-UI-241`: select-all obeys the exclusions a pick obeys -- a locked
+/// element and a group node never join the board's id list.
+#[test]
+fn board_ids_excludes_locked_and_group_nodes() {
+    let mut st = ToileState::new();
+    let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let b = create_rect(&mut st, Point::new(40.0, 0.0), Size::new(10.0, 10.0));
+    let c = create_rect(&mut st, Point::new(80.0, 0.0), Size::new(10.0, 10.0));
+    st.handle_command(ToileCommand::LockElements {
+        ids: vec![a.clone()],
+        locked: true,
+    });
+    st.handle_command(ToileCommand::GroupElements {
+        ids: vec![b.clone(), c.clone()],
+    });
+
+    let out = st.handle_command(ToileCommand::RequestBoardIds);
+    match &out.display[0] {
+        ToileEvent::BoardIds(ids) => {
+            // The locked rect and the group node are gone; the members stay.
+            assert!(!ids.contains(&a));
+            assert!(ids.contains(&b));
+            assert!(ids.contains(&c));
+            assert_eq!(ids.len(), 2, "locked + group nodes are excluded");
+        }
+        other => panic!("expected BoardIds, got {other:?}"),
+    }
+}
+
 #[test]
 fn group_and_drawing_are_not_creatable() {
     let mut st = ToileState::new();

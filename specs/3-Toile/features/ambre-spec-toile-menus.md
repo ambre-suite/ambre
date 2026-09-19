@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-355` | `OBS` | The Object menu MUST carry the six alignments and the two distributions. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::the_align_entries_sit_under_object` -- it reads the eight ids in the layout | none | verified |
 | `TOILE-UI-375` | `OBS` | Each alignment and distribution entry MUST resolve against the selection rather than to a board command of its own. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::the_align_entries_sit_under_object` -- none of the eight resolves through `menu_bar_edit`; `ambre_toile::ui::menu::tests::an_align_id_resolves_to_one_batch_over_the_selection` -- what each one becomes | none | verified |
 | `TOILE-UI-047` | `OBS` | A context-menu entry MUST be left out when it does not apply to the selection under the cursor. | this spec section 3 | none | unheld -- the entry builder is wasm-only and reached by no test. What is covered is the scope the builder reads (section 1.2), not the omission it performs; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-126` | `OBS` | An entry that would move or remove a locked element MUST be left out when the selection is locked. | this spec section 3 | none | fails -- the builder gates only group, ungroup, lock, unlock and the frame pair, while cut, delete, duplicate and the four z-order rows are pushed unconditionally, so a locked element is offered every one of them; lands with the `A locked element is locked on every surface` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-126` | `OBS` | An entry that would move or remove a locked element MUST be left out when the selection is locked. | this spec section 3 | `ambre_toile::ui::menu::tests::a_locked_selection_omits_move_and_remove_entries` -- cut, delete, duplicate and the four z-order ids are absent from a locked scope; `::an_unlocked_selection_keeps_the_full_set` -- the same ids stay when nothing is locked | none | verified |
 | `TOILE-UI-052` | `OBS` | A shortcut shown beside an entry MUST be the one the keymap binds. | this spec section 3 | none | unheld -- `ambre_toile::ui::menu_bar::tests::shortcuts_render_canonically` covers how a binding renders, not that the rendered binding is the one bound, because the canvas decodes most board chords itself, outside the keymap the bar reads; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Right-click over the board
@@ -98,10 +98,10 @@ status values are normative in `ambre-spec-template.md`.
   by the feature that owns the command.
 * **Boundary.** none: a menu is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. What an entry commits leaves as a command.
-* **Verification.** 35 `verified`, 5 `failing`, 12 `untested`, against 26 distinct mechanisms. What holds is
-  the entry set and a scope read from the whole selection (`TOILE-UI-134`). What is loose is the pointer:
-  which scope a right-click means, and what it does to the selection. The failures are the omission rule and
-  the zoom rule its test only half proves.
+* **Verification.** 36 `verified`, 4 `failing`, 12 `untested`. What holds is the entry set, the omission
+  of a locked element's move entries, and a scope read from the whole selection (`TOILE-UI-134`). What is
+  loose is the pointer: which scope a right-click means, and what it does to the selection. The failures are
+  the frame-removal lookup, the unknown id, the frame notice, and the zoom rule its test only half proves.
 
 ---
 
@@ -162,7 +162,7 @@ which is why that map is a pure function.
 | several elements | the same, plus group and the six alignments |
 | three or more elements | the same, plus the two distributions |
 | a group | the same, plus ungroup |
-| a locked element | unlock -- and, today, every entry that would move or remove it as well (`TOILE-UI-126`) |
+| a locked element | unlock, and copy and paste -- every entry that would move or remove it is left out (`TOILE-UI-126`) |
 
 **What a right-click does to the selection.** The press resolves the hit through the group scope, so the
 target is the enclosing group and not the node under the cursor. A click whose target is already selected
@@ -226,8 +226,8 @@ This one restates none of them.
 * **The context menu hides the align rows by count alone.** The six alignments appear from two selected
   elements and the two distributions from three, and neither gate reads the lock. A pair where one element is
   locked is still offered every alignment. The operation then moves one box and refuses the other
-  (`TOILE-234`, `features/ambre-spec-toile-elements.md`). It is the same hole as `TOILE-UI-126`, in a newer
-  row.
+  (`TOILE-234`, `features/ambre-spec-toile-elements.md`). It is the same hole `TOILE-UI-126` closed for cut,
+  delete, duplicate and the z-order rows, left open in the align rows.
 * **The comment entry opens the panel and comments on nothing.** The View menu opens the board-wide list, and
   no context-menu entry drops a thread on the element under the cursor. The tool and the pin are the only ways
   in (`features/ambre-spec-toile-comments.md section 4`).
@@ -235,9 +235,6 @@ This one restates none of them.
   move. No rule states what the user is told when an entry produces no change. Three refusals here are already
   silent: an id the resolver does not know (`TOILE-UI-152`) and a frame entry with no enclosing frame
   (`TOILE-UI-153`). The third is a fit to the selection with nothing selected (`TOILE-UI-160`).
-* **A locked element is offered every entry that would move it** (`TOILE-UI-126`). The builder gates group,
-  ungroup, lock, unlock and the frame pair on the scope. Cut, delete, duplicate and the four z-order rows are
-  pushed whatever the lock state. The scope carries the flag, so the fix is a condition, not a new signal.
 * **The frame the entries target is geometric, not the real parent.** The lookup takes the front-most frame
   whose box contains the selection, and no test holds two (`TOILE-UI-150`). Removal reuses it, so an element
   whose parent is another frame is removed from the wrong one and nothing happens (`TOILE-UI-149`).

@@ -260,6 +260,102 @@ fn containing_frame(
     })
 }
 
+/// The context-menu rows for `scope`, as an ordered id list. A `None` is a
+/// separator. Pure and host-tested; the wasm entry builder maps each id to an
+/// iconed `MenuEntry`. A locked selection omits the entries that would move or
+/// remove it (`TOILE-UI-126`): cut, delete, duplicate and the four z-order moves.
+pub fn context_menu_ids(scope: &CtxScope) -> Vec<Option<CommandId>> {
+    let mut ids: Vec<Option<CommandId>> = Vec::new();
+
+    if !scope.over_selection {
+        // Empty canvas: Paste + Select-All only.
+        ids.extend([Some(PASTE), Some(SELECT_ALL)]);
+        return ids;
+    }
+
+    // Clipboard: a locked selection keeps copy and paste, and drops the three
+    // that move or remove (`TOILE-UI-126`).
+    if scope.any_locked {
+        ids.extend([Some(COPY), Some(PASTE)]);
+    } else {
+        ids.extend([
+            Some(CUT),
+            Some(COPY),
+            Some(PASTE),
+            Some(DUPLICATE),
+            Some(DELETE),
+        ]);
+    }
+
+    // Reactions.
+    ids.push(None);
+    ids.extend([
+        Some(REACT_THUMBSUP),
+        Some(REACT_HEART),
+        Some(REACT_CHECK),
+        Some(REACT_PARTY),
+        Some(REACT_CLEAR),
+    ]);
+
+    // Grouping (only the applicable side).
+    if scope.multi || scope.has_group {
+        ids.push(None);
+        if scope.multi {
+            ids.push(Some(GROUP));
+        }
+        if scope.has_group {
+            ids.push(Some(UNGROUP));
+        }
+    }
+
+    // Z-order: a locked selection omits all four (`TOILE-UI-126`).
+    if !scope.any_locked {
+        ids.push(None);
+        ids.extend([
+            Some(BRING_FRONT),
+            Some(FORWARD),
+            Some(BACKWARD),
+            Some(SEND_BACK),
+        ]);
+    }
+
+    // Lock / unlock (only the applicable side).
+    if scope.any_unlocked || scope.any_locked {
+        ids.push(None);
+        if scope.any_unlocked {
+            ids.push(Some(LOCK));
+        }
+        if scope.any_locked {
+            ids.push(Some(UNLOCK));
+        }
+    }
+
+    // Align and distribute: below two boxes there is no reference edge, below
+    // three no interior gap.
+    if scope.count >= 2 {
+        ids.push(None);
+        ids.extend([
+            Some(ALIGN_LEFT),
+            Some(ALIGN_HCENTER),
+            Some(ALIGN_RIGHT),
+            Some(ALIGN_TOP),
+            Some(ALIGN_VCENTER),
+            Some(ALIGN_BOTTOM),
+        ]);
+        if scope.count >= 3 {
+            ids.extend([Some(DISTRIBUTE_H), Some(DISTRIBUTE_V)]);
+        }
+    }
+
+    // Frame membership (only when a containing frame exists).
+    if scope.containing_frame.is_some() {
+        ids.push(None);
+        ids.extend([Some(ADD_TO_FRAME), Some(REMOVE_FROM_FRAME)]);
+    }
+
+    ids
+}
+
 /// Translate a menu `CommandId` into the `ToileCommand`(s) to emit against the
 /// current selection. The single place a Toile menu id becomes command(s); pure
 /// and host-tested (`toile-menus`). `PASTE` and `SELECT_ALL` are UI-only intents
@@ -750,6 +846,64 @@ mod tests {
                 ),
                 "{id:?} resolved to {out:?}"
             );
+        }
+    }
+
+    /// `TOILE-UI-126`: a locked selection omits the entries that would move or
+    /// remove it. Cut, delete, duplicate and the four z-order moves go; copy,
+    /// paste and unlock stay.
+    #[test]
+    fn a_locked_selection_omits_move_and_remove_entries() {
+        let dv = viewport(vec![elem(
+            "a",
+            ElementKind::Sticky,
+            r(0.0, 0.0, 10.0, 10.0),
+            true,
+        )]);
+        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &dv);
+        let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
+        for omitted in [
+            CUT,
+            DELETE,
+            DUPLICATE,
+            BRING_FRONT,
+            FORWARD,
+            BACKWARD,
+            SEND_BACK,
+        ] {
+            assert!(
+                !ids.contains(&omitted),
+                "{omitted:?} must be omitted when locked"
+            );
+        }
+        for kept in [COPY, PASTE, UNLOCK] {
+            assert!(ids.contains(&kept), "{kept:?} must stay when locked");
+        }
+    }
+
+    /// An unlocked selection keeps the full clipboard and z-order sets.
+    #[test]
+    fn an_unlocked_selection_keeps_the_full_set() {
+        let dv = viewport(vec![elem(
+            "a",
+            ElementKind::Sticky,
+            r(0.0, 0.0, 10.0, 10.0),
+            false,
+        )]);
+        let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &dv);
+        let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
+        for kept in [
+            CUT,
+            COPY,
+            PASTE,
+            DUPLICATE,
+            DELETE,
+            BRING_FRONT,
+            FORWARD,
+            BACKWARD,
+            SEND_BACK,
+        ] {
+            assert!(ids.contains(&kept), "{kept:?} must stay when unlocked");
         }
     }
 }

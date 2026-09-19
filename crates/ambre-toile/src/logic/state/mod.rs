@@ -715,13 +715,22 @@ impl ToileState {
     }
 
     /// Every element id on the board, off-screen included, for select-all
-    /// (`toile-selection`, `TOILE-UI-033`).
+    /// (`toile-selection`, `TOILE-UI-033`). A pick excludes a locked element
+    /// and a group node (`TOILE-UI-006`, `TOILE-UI-224`); select-all obeys the
+    /// same exclusions (`TOILE-UI-241`).
     fn board_ids(&self) -> ToileOutcome {
         let ids = self
             .layers
             .iter()
             .filter_map(|node| match node {
-                crate::logic::model::NodeId::Element(id) => Some(id.clone()),
+                crate::logic::model::NodeId::Element(id) => {
+                    let em = self.element_map(id)?;
+                    if codec::bool_of(&em, "locked") || codec::str_of(&em, "type") == "group" {
+                        None
+                    } else {
+                        Some(id.clone())
+                    }
+                }
                 crate::logic::model::NodeId::Connector(_) => None,
             })
             .collect();

@@ -99,7 +99,7 @@ impl FixtureGen for ToileGen {
                 size: Size::new(40.0, 30.0),
                 content: InitContent::None,
                 fill: None,
-            correlate: 0,
+                correlate: 0,
             });
         }
         state.handle_command(ToileCommand::CreateElement {
@@ -108,7 +108,7 @@ impl FixtureGen for ToileGen {
             size: Size::new(300.0, 200.0),
             content: InitContent::None,
             fill: None,
-        correlate: 0,
+            correlate: 0,
         });
         state.export_ambre_plaintext(seeded_document_id(self.seed))
     }
@@ -636,7 +636,7 @@ fn a_toile_dump_names_nodes_by_paint_order_not_by_element_id() {
                 size: Size::new(10.0, 10.0),
                 content: InitContent::None,
                 fill: None,
-            correlate: 0,
+                correlate: 0,
             });
         }
         DocState::Toile(Box::new(state))

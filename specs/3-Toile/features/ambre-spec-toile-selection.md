@@ -35,7 +35,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-034` | `OBS` | The selection box and its handles MUST follow a single element's rotation. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_rotates_box_and_handles_for_a_rotated_element`; `ambre_toile::ui::tool::tests::hover_handle_follows_the_element_rotation` | none | verified |
 | `TOILE-UI-229` | `OBS` | A single selection MUST wear four corner squares and a rotate handle above the top edge. | this spec section 3 | `ambre_toile::ui::render::tests::overlay_draws_box_and_handles_for_single_selection` | none | verified |
 | `TOILE-UI-230` | `OBS` | A multi-selection MUST wear an upright union box and no resize handle, having no shared angle to resize along. | this spec section 3; section 4 | none | unheld -- no test paints a two-element selection; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-231` | `OBS` | A locked element MUST NOT wear a selection box. | this spec section 3 | none | fails -- the overlay reads the id list and never the lock, and select-all puts a locked element in that list, section 5; lands with the `A locked element is locked on every surface` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-231` | `OBS` | A locked element MUST NOT wear a selection box. | this spec section 3 | `ambre_toile::ui::tool::tests::selection_bounds_skips_a_locked_element` -- a locked-only selection has no box, and a mixed selection's box covers the unlocked element alone | none | verified |
 
 ### 1.2 Click an element
 
@@ -69,7 +69,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-033` | `POST` | Select-all MUST cover the whole board, not the part the UI thread holds. | this spec section 3; section 4 | `ambre_toile::logic::convergence_tests::board_ids_returns_every_element` -- Logic answers every element id, off-screen included, and select-all selects that list | none | verified |
-| `TOILE-UI-241` | `POST` | Select-all MUST obey the exclusions a pick obeys: no locked element, no group node. | this spec section 3 | none | fails -- the walk drops connectors and nothing else, so a locked element joins the selection and the next delete takes it, section 5; lands with the `A locked element is locked on every surface` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-241` | `POST` | Select-all MUST obey the exclusions a pick obeys: no locked element, no group node. | this spec section 3 | `ambre_toile::logic::convergence_tests::board_ids_excludes_locked_and_group_nodes` -- the board's id list carries the unlocked members and neither a locked element nor a group node | none | verified |
 | `TOILE-UI-242` | `FRAME` | Select-all MUST NOT alter the group scope the user has entered. | this spec section 3 | structural -- the walk writes the id list and the redraw flag, and no other field | none | verified |
 
 * **Budget.** the content hit-test and input dispatch under 0.2 ms, one row of
@@ -79,10 +79,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: a selection is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It leaves the client only as presence, sealed like any other
   frame (`ZK-005`).
-* **Verification.** 17 `verified`, 5 `failing`, 7 `untested`. What holds is the geometry and
-  select-all covering the whole board (`TOILE-UI-033`). What is loose is the gestures: the scope is
-  entered and left by handlers no test drives. The failures are the marquee, the locked box and
-  select-all's lock exclusions.
+* **Verification.** 19 `verified`, 3 `failing`, 7 `untested`. What holds is the geometry, select-all
+  covering the whole board (`TOILE-UI-033`) with the pick's exclusions, and a locked element wearing no box.
+  What is loose is the gestures: the scope is entered and left by handlers no test drives. The failures are
+  the hairline, the marquee and its rotated containment.
 
 ---
 
@@ -148,15 +148,14 @@ square (`TOILE-UI-034`). A multi-selection keeps an upright union box.
 | a drag from empty board | draws a marquee and takes what it covers on release (`TOILE-UI-031`) |
 | a double-click on a group | enters its scope, one level per press (`TOILE-UI-032`) |
 | `Escape` | leaves the scope and clears the selection, both in one press (`TOILE-UI-239`) |
-| `Ctrl/Cmd+A` | selects the board, lock and groups included (`TOILE-UI-033`, `TOILE-UI-241`) |
+| `Ctrl/Cmd+A` | selects the board, lock and groups excluded (`TOILE-UI-033`, `TOILE-UI-241`) |
 | a right-click | keeps a selection it lands in, and collapses to the hit otherwise (`features/ambre-spec-toile-menus.md`) |
 
 **What a selection looks like.** A box with four corner squares and a rotate handle above the top
 edge (`TOILE-UI-229`). A single element tilts the whole set with it (`TOILE-UI-034`); a
 multi-selection stays upright and drops the corner squares, keeping the rotate handle alone
-(`TOILE-UI-230`). A locked element is not picked, and wears no handles because it cannot be a
-single selection through the pick. But select-all can put one in the box (`TOILE-UI-231`). The
-hovered handle drives the cursor (`features/ambre-spec-toile-tools.md`).
+(`TOILE-UI-230`). A locked element is not picked, and wears no box on any surface, select-all
+included (`TOILE-UI-231`). The hovered handle drives the cursor (`features/ambre-spec-toile-tools.md`).
 
 **What the user does not see.** A collaborator's selection: it travels as presence and paints as a
 ghost outline, never as this box (`features/ambre-spec-toile-presence.md section 4`).
@@ -182,10 +181,6 @@ ghost outline, never as this box (`features/ambre-spec-toile-presence.md section
 * **A connector cannot be picked** (`TOILE-UI-035`). The pick walk drops every connector node before
   testing, so an arrow cannot be selected, styled, deleted on its own or double-clicked to caption
   it. The captioning half is a Story; the selection half has no owner today.
-* **Select-all takes what a click may not** (`TOILE-UI-241`, `TOILE-UI-231`). The walk drops
-  connectors and keeps everything else. `Ctrl/Cmd+A` selects locked elements and group nodes that no
-  pick would return, and wraps a locked element in a selection box. The whole list goes to the next
-  delete. The lock stops the pointer and nothing else.
 * **A marquee and a click do not select the same thing** (`TOILE-UI-236`). A click on a grouped
   element selects its top-most group; a rectangle over that same group selects its members. Two
   gestures for one job, and the group behaves as one object under only one of them.

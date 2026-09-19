@@ -1033,11 +1033,14 @@ fn pen_bezpath(nodes: &[PenNode]) -> BezPath {
 }
 
 /// World union AABB of the selected elements (`None` if empty / unresolved).
+/// A locked element is skipped, so it never wears the selection box
+/// (`TOILE-UI-231`) even when select-all or a stale id put it in the list.
 pub fn selection_bounds(selection: &[ElementId], display: &DisplayViewport) -> Option<Rect> {
     let mut acc: Option<Rect> = None;
     for node in &display.nodes {
         if let ambre_bus::app::toile::DisplayNode::Element(e) = node
             && selection.contains(&e.id)
+            && !e.locked
         {
             acc = Some(match acc {
                 Some(r) => r.union(e.bounds),
@@ -1940,5 +1943,25 @@ mod tests {
             }
             other => panic!("expected RotateElement, got {other:?}"),
         }
+    }
+
+    /// `TOILE-UI-231`: a locked element never contributes to the selection box,
+    /// even when an id list puts it there (select-all).
+    #[test]
+    fn selection_bounds_skips_a_locked_element() {
+        let mut disp = viewport(vec![
+            rect_elem("a", Rect::new(0.0, 0.0, 10.0, 10.0)),
+            rect_elem("b", Rect::new(40.0, 0.0, 50.0, 10.0)),
+        ]);
+        if let DisplayNode::Element(e) = &mut disp.nodes[0] {
+            e.locked = true;
+        }
+
+        // A locked-only selection wears no box.
+        assert_eq!(selection_bounds(&[ElementId("a".into())], &disp), None);
+        // A mixed selection's box covers the unlocked element alone.
+        let both =
+            selection_bounds(&[ElementId("a".into()), ElementId("b".into())], &disp).expect("box");
+        assert_eq!(both, Rect::new(40.0, 0.0, 50.0, 10.0));
     }
 }
