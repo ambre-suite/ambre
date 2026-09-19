@@ -67,9 +67,9 @@ import sys
 from collections import namedtuple
 from pathlib import Path
 
-# The `Implementation` vocabulary is the template's, read from it, and the other
-# two gates read it from the same place (`scripts/template_vocabulary.py`).
-from template_vocabulary import IMPLEMENTATION_VALUES
+# Both vocabularies are the template's, read from it, and the other gates read
+# them from the same place (`scripts/template_vocabulary.py`).
+from template_vocabulary import ANSWER_LABELS, IMPLEMENTATION_VALUES
 
 
 # What `classify` returns: the same partition counted twice, in lines and in
@@ -211,12 +211,13 @@ RFC2119_LOWER = re.compile(
 # The `Statement (RFC 2119)` column, third in every contract table.
 STATEMENT_CELL = 3
 
-# The three answers a contract table owes, directly under it. Matched as a
-# **bullet**, so naming a label inside a table cell is not an answer --
-# `ambre-spec-template.md` names all three to define them.
+# The three answers a contract table owes, directly under it, read from the
+# template that names them. Matched as a **bullet**, so naming a label inside a
+# table cell is not an answer -- `ambre-spec-template.md` names all three to
+# define them.
 ANSWERS = {
     label: re.compile(rf"^\*\s+\*\*{label}\.\*\*(?P<body>.*)$")
-    for label in ("Budget", "Boundary", "Verification")
+    for label in ANSWER_LABELS
 }
 
 # A numbered section heading, `## 11 bis.` and `## 4bis.` included. This is the

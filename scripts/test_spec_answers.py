@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import spec_answers  # noqa: E402  -- the module under test
+import template_vocabulary  # noqa: E402  -- the labels it reads from the template
 
 
 def doc(*lines: str) -> str:
@@ -61,6 +62,12 @@ class AnswerWords(unittest.TestCase):
 
     def test_a_bullet_that_is_not_one_of_the_three_is_not_an_answer(self):
         self.assertEqual(0, spec_answers.answer_words(doc("* **Scope.** the bus alone")))
+
+    def test_the_three_are_the_templates_own(self):
+        """A second list here is a list that drifts: the table states them."""
+        for label in template_vocabulary.ANSWER_LABELS:
+            with self.subTest(label=label):
+                self.assertTrue(spec_answers.ANSWER.match(f"* **{label}.** none"))
 
     def test_the_cap_is_a_refusal_not_a_target(self):
         """`ANSWER_WORDS_TARGET` is what the template states and what the gate

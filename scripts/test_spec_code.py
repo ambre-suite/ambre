@@ -23,6 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import spec_code  # noqa: E402  -- the module under test
+import template_vocabulary  # noqa: E402  -- the tags it reads from the template
 
 
 def doc(*lines: str) -> str:
@@ -135,6 +136,12 @@ class Fences(unittest.TestCase):
     def test_the_tag_is_the_base_language_token(self):
         self.assertEqual("rust", spec_code.fence_tag("```rust,ignore"))
         self.assertEqual("", spec_code.fence_tag("```"))
+
+    def test_the_allowed_tags_are_the_templates_own(self):
+        """A second list here is a list that drifts: the table states them."""
+        self.assertEqual(
+            frozenset(template_vocabulary.FENCE_TAGS), spec_code.ALLOWED_TAGS
+        )
 
 
 class LooseImplementation(unittest.TestCase):

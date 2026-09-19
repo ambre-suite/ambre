@@ -17,6 +17,11 @@ import re
 import sys
 from pathlib import Path
 
+# The fence tags are the template's vocabulary, read from it. What each one
+# holds is stated there, beside the table it is read from, and is not repeated
+# here (`ambre-spec-template.md section 0`).
+from template_vocabulary import FENCE_TAGS
+
 SPECS = Path(__file__).resolve().parent.parent / "specs"
 
 # `specs/audits/` holds the non-normative analysis documents that live under
@@ -37,13 +42,13 @@ SIGNATURE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+\w+")
 # once had -- a single ```text desynchronised every fence after it).
 FENCE = re.compile(r"^```(.*)$")
 
-# Fence tags allowed in the spec corpus. `rust` carries Rust shapes (checked for
-# bodies below); `text` and the untagged fence carry diagrams / pseudo-code;
-# `mermaid` carries a rendered diagram (sequence, flowchart); the rest are
-# genuine non-Rust artefacts (schemas, configs, styles). `lua` is NOT allowed:
-# an embedded script is implementation and belongs in the source, shown here as
-# `text` if a reference is truly needed (ambre-spec-template.md section 0).
-ALLOWED_TAGS = {"", "rust", "text", "json", "toml", "yaml", "sql", "css", "html", "bash", "sh", "ron", "mermaid"}
+# Fence tags allowed in the spec corpus, read from the table that states them.
+# `rust` carries Rust shapes (checked for bodies below); `text` and the untagged
+# fence carry diagrams / pseudo-code; `mermaid` carries a rendered diagram; the
+# rest are genuine non-Rust artefacts. A tag off the table is refused, `lua`
+# included: an embedded script is implementation and belongs in the source,
+# shown here as `text` if a reference is truly needed.
+ALLOWED_TAGS = frozenset(FENCE_TAGS)
 
 # Lines that betray Rust living outside a ```rust fence -- the tag is wrong and
 # the body checker would never see them.

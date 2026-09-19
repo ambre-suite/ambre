@@ -25,6 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import spec_shape  # noqa: E402  -- the module under test
+import template_vocabulary  # noqa: E402  -- the vocabularies it reads
 
 
 def doc(*lines: str) -> str:
@@ -191,6 +192,12 @@ class Title(unittest.TestCase):
 
 
 class Answers(unittest.TestCase):
+    def test_the_labels_are_the_templates_own(self):
+        """A second list here is a list that drifts: the table states them."""
+        self.assertEqual(
+            list(template_vocabulary.ANSWER_LABELS), list(spec_shape.ANSWERS)
+        )
+
     def test_a_document_with_no_contract_row_owes_nothing(self):
         self.assertEqual([], list(spec_shape.answer_issues(doc("The bus drops the frame."))))
 

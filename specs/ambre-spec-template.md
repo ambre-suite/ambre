@@ -12,12 +12,13 @@ a writer do something, or does it only explain? What breaks if it is deleted? Is
 how the corpus got here, which section 1.F sends to git? And what is missing, the one question a
 reader of the diff cannot ask. Section 5 holds the roads already refused.
 
-**Nine scripts parse this file at import.** `scripts/template_vocabulary.py` reads the vocabularies
-out of the tables below: the kinds, the statuses, the gap openers, the mechanism tokens and the
-fields. Every gate reads them from it, so none declares a vocabulary of its own. It is anchored on
-the bold phrase opening each table, and it fails at import on a phrase reworded, duplicated or
-counting wrong. A vocabulary table is therefore edited whole, heading included: the heading counts
-its rows, and the count is checked.
+**No gate declares a vocabulary of its own.** `scripts/template_vocabulary.py` parses this file at
+import and hands out every closed set a gate reads. They are the vocabularies of a contract row: its
+columns, its fields, the kinds, the statuses, the gap openers and the mechanism tokens. The three
+answer labels, the `Implementation` values and the fence tags belong to the document around it. The
+parser is anchored on the bold phrase opening each table, and it fails at import on a phrase
+reworded, duplicated or counting wrong. A vocabulary table is therefore edited whole, heading
+included: the heading counts its rows, and the count is checked.
 
 ---
 
@@ -43,7 +44,7 @@ words, is not.
 | `rust` | Rust shapes and signatures, never a body |
 | none, or `text` | a wire layout, pseudo-code, numbered steps |
 | `mermaid` | a flow or a relationship, which the forge renders as a figure |
-| `sql` `toml` `yaml` `css` `json` `html` `bash` | a genuine artefact of that language |
+| `sql` `toml` `yaml` `css` `json` `html` `ron` `bash` `sh` | a genuine artefact of that language |
 
 A runnable script (`lua`) is implementation, not a shape: state its algorithm in a `text` fence and
 point to the source. A Rust shape in an untagged fence is a tagging bug, not an exemption.
@@ -339,8 +340,8 @@ What makes a row a rule at all, and where it lives.
 
 ### E. The three answers under the table
 
-A table states rules; it asks nothing. The three bullets ask, and they sit directly under the table
-in every document that carries one.
+**The three answers.** A table states rules; it asks nothing. The three bullets ask, and they sit
+directly under the table in every document that carries one.
 
 | Label | Answers | An accepted answer |
 | :--- | :--- | :--- |

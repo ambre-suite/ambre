@@ -39,6 +39,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# The three labels are the template's, read from it, exactly as the gate that
+# holds each one present reads them (`scripts/template_vocabulary.py`).
+from template_vocabulary import ANSWER_LABELS  # noqa: E402  -- after the path
+
 ROOT = Path(__file__).resolve().parent.parent
 SPECS = ROOT / "specs"
 
@@ -54,7 +58,7 @@ NON_NORMATIVE = {"ambre-roadmap-journal.md"}
 HISTORY_EXEMPT = {"ambre-spec-template.md"}
 GENERATED = re.compile(r"-(inventory|ledger)\.md$")
 
-ANSWER = re.compile(r"^\*\s+\*\*(?:Budget|Boundary|Verification)\.\*\*")
+ANSWER = re.compile(rf"^\*\s+\*\*(?:{'|'.join(ANSWER_LABELS)})\.\*\*")
 CONTRACT_ROW = re.compile(r"^\|\s*`[A-Z][A-Z0-9-]*-\d+`\s*\|")
 
 # The document writing about itself. Each pattern pairs a subject that could be

@@ -152,6 +152,25 @@ def _kinds() -> tuple[tuple[str, ...], tuple[str, ...]]:
     return tuple(state), tuple(operation)
 
 
+def _fence_tags() -> tuple[str, ...]:
+    """Every tag a fence may carry, the untagged fence included.
+
+    One row names the artefact languages together, so the cell is read for every
+    backticked value and not for one. The untagged fence is the tag no cell can
+    spell: the row allowing it says `none` in words, and the empty string joins
+    the set here rather than in the gate that reads it.
+    """
+    anchor = "**Fences.**"
+    tags: list[str] = []
+    for cells in _table_after(anchor):
+        tags += [t for t in BACKTICKED.findall(cells[0]) if t.strip()]
+        if cells[0].lower().startswith("none"):
+            tags.append("")
+    if "" not in tags:
+        raise TemplateDrift(f"{anchor}: no row allows the untagged fence")
+    return tuple(tags)
+
+
 def _mechanism_tokens() -> tuple[str, ...]:
     """Every token a `Mechanism` cell may be written in.
 
@@ -185,12 +204,21 @@ IMPLEMENTATION_VALUES = tuple(
     for cells in _table_after("`Implementation` is about **the code it describes**")
 )
 
+FENCE_TAGS = _fence_tags()
+
 MECHANISM_TOKENS = _mechanism_tokens()
 # The tokens a reader cannot grep for, and the two that name no mechanism at
 # all. Both sets are the template's own sentences, which say why each is what it
 # is; neither is a subset a script may widen.
 LOCATED_TOKENS = _sentence_tokens("**Seven tokens must carry one**")
 BARE_TOKENS = _sentence_tokens("**Two tokens must not**")
+
+# The three questions a contract table does not answer, in the order the
+# template asks them. Two gates read them: one holds every document to all
+# three, the other holds the three to a word budget.
+ANSWER_LABELS = tuple(
+    _token(cells[0], "answers") for cells in _counted("**The three answers.**")
+)
 
 GAP_OPENERS = tuple(
     _token(cells[0], "gap openers") for cells in _counted("**The six gap openers.**")
