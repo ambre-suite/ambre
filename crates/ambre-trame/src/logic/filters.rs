@@ -99,7 +99,6 @@ impl TrameState {
     /// numeric cells additionally feed `count_num`/`sum`/`min`/`max`. A read-only
     /// query: no CRDT delta.
     pub(super) fn selection_stats(&mut self) -> TrameOutcome {
-        let (r1, c1, r2, c2) = self.selection;
         // Make sure evaluated values are current before reading them.
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
@@ -109,26 +108,25 @@ impl TrameState {
         let mut sum = 0.0_f64;
         let mut min = f64::INFINITY;
         let mut max = f64::NEG_INFINITY;
-        for row in r1..=r2 {
+        // The whole selection, deduplicated across every rectangle (`TRAME-UI-104`).
+        for (row, col) in self.selected_cells() {
             if self.hidden_rows.contains(&row) {
                 continue;
             }
-            for col in c1..=c2 {
-                let v = self
-                    .engine
-                    .evaluated_value(self.active_cell_id(row, col))
-                    .unwrap_or(CellValue::Empty);
-                match v {
-                    CellValue::Empty => {}
-                    CellValue::Number(n) => {
-                        count += 1;
-                        count_num += 1;
-                        sum += n;
-                        min = min.min(n);
-                        max = max.max(n);
-                    }
-                    _ => count += 1,
+            let v = self
+                .engine
+                .evaluated_value(self.active_cell_id(row, col))
+                .unwrap_or(CellValue::Empty);
+            match v {
+                CellValue::Empty => {}
+                CellValue::Number(n) => {
+                    count += 1;
+                    count_num += 1;
+                    sum += n;
+                    min = min.min(n);
+                    max = max.max(n);
                 }
+                _ => count += 1,
             }
         }
         let avg = if count_num > 0 {

@@ -119,24 +119,25 @@ impl TrameState {
     /// therefore survive the round-trip. Non-mutating: emits a display-only
     /// outcome with the single clipboard event.
     pub(super) fn copy_range(&self) -> TrameOutcome {
-        let (r1, c1, r2, c2) = self.selection;
+        // The whole selection: the bounding box is the payload shape, and every
+        // deduplicated cell fills it (`TRAME-UI-129`). Gaps in a disjoint
+        // selection stay blank, which paste leaves untouched.
+        let (r1, c1, r2, c2) = self.selection_bounds();
         let mut cells = Vec::new();
-        for row in r1..=r2 {
-            for col in c1..=c2 {
-                let raw = self.cell_raw(row, col);
-                if raw.is_empty() {
-                    continue;
-                }
-                let pos = (row, col);
-                cells.push(ClipboardCell {
-                    dr: row - r1,
-                    dc: col - c1,
-                    raw,
-                    bold: self.bold.contains(&pos),
-                    italic: self.italic.contains(&pos),
-                    style: self.styles.get(&pos).cloned().unwrap_or_default(),
-                });
+        for (row, col) in self.selected_cells() {
+            let raw = self.cell_raw(row, col);
+            if raw.is_empty() {
+                continue;
             }
+            let pos = (row, col);
+            cells.push(ClipboardCell {
+                dr: row - r1,
+                dc: col - c1,
+                raw,
+                bold: self.bold.contains(&pos),
+                italic: self.italic.contains(&pos),
+                style: self.styles.get(&pos).cloned().unwrap_or_default(),
+            });
         }
         let payload = ClipboardPayload {
             src_row: r1,

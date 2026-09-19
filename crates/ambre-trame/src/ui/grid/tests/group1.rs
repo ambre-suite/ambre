@@ -179,6 +179,47 @@ fn axis_selection_spans_the_band() {
     assert_eq!((r1, r2), (3, 5));
 }
 
+/// `Selection::report` carries a whole-axis band as its kind, with no extent
+/// across the other axis. The Logic thread resolves that extent from the used
+/// range (`TRAME-UI-033`).
+#[test]
+fn axis_report_carries_the_band_not_the_cache() {
+    let cols = Selection::axis(SelKind::Cols, 2, 4).report();
+    match cols {
+        crate::TrameCommand::SetActiveCell {
+            row,
+            col,
+            anchor_row,
+            anchor_col,
+            extra,
+            kind,
+        } => {
+            assert_eq!((row, col), (0, 4), "active is the clicked column");
+            assert_eq!((anchor_row, anchor_col), (0, 2), "anchor is the band start");
+            assert!(extra.is_empty(), "a band commits no disjoint rectangles");
+            assert_eq!(kind, crate::SelectionKind::Cols);
+        }
+        other => panic!("expected SetActiveCell, got {other:?}"),
+    }
+
+    let rows = Selection::axis(SelKind::Rows, 5, 3).report();
+    match rows {
+        crate::TrameCommand::SetActiveCell {
+            row,
+            col,
+            anchor_row,
+            anchor_col,
+            kind,
+            ..
+        } => {
+            assert_eq!((row, col), (3, 0));
+            assert_eq!((anchor_row, anchor_col), (5, 0));
+            assert_eq!(kind, crate::SelectionKind::Rows);
+        }
+        other => panic!("expected SetActiveCell, got {other:?}"),
+    }
+}
+
 /// A resized column / row shifts the pixel mapping: `cell_at` and
 /// `cell_pixel_rect` must agree on the variable geometry (`trame-resize`).
 #[test]

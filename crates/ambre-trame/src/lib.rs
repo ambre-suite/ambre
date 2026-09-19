@@ -43,8 +43,8 @@ pub mod test_support;
 pub use ambre_bus::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellStyle,
     ClipboardCell, ClipboardPayload, CondFormatKind, CondStyle, DisplayCell, FillMode, FilterKind,
-    FilterOp, GridRange, HAlign, SortKey, StylePatch, TrameCommand, TrameEvent, VAlign,
-    ValidationKind, ValidationOnInvalid,
+    FilterOp, GridRange, HAlign, SelectionKind, SortKey, StylePatch, TrameCommand, TrameEvent,
+    VAlign, ValidationKind, ValidationOnInvalid,
 };
 pub use logic::docfile::{export_ambre_plaintext, import_ambre_plaintext};
 pub use logic::{TrameOutcome, TrameState};

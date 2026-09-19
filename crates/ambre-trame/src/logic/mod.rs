@@ -25,7 +25,7 @@ use crate::model::{SheetIndex, Uid, cell_key, parse_cell_key};
 use crate::{DisplayCell, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 use ambre_bus::{
     BorderPreset, CellBorder, CellFormat, CellStyle, ClipboardCell, ClipboardPayload, FilterKind,
-    FilterOp, SortKey, StylePatch,
+    FilterOp, SelectionKind, SortKey, StylePatch,
 };
 
 // -----------------------------------------------------------------------------
@@ -94,6 +94,17 @@ impl TrameOutcome {
 // TrameState
 // -----------------------------------------------------------------------------
 
+/// The Logic thread's copy of the whole selection (`trame-selection`). `anchor`
+/// is the live rectangle's fixed corner; `extra` holds the rectangles a modifier
+/// committed, each normalized `(r1, c1, r2, c2)`; `kind` is the band shape. The
+/// active cell lives beside it in [`TrameState::active`]. The two corners
+/// normalize into the live rectangle on read.
+struct TrackedSelection {
+    anchor: (u32, u32),
+    extra: Vec<(u32, u32, u32, u32)>,
+    kind: SelectionKind,
+}
+
 /// Per-document state for a Trame (spreadsheet) document.
 ///
 /// One instance per open document, owned by the Logic thread's `DocState`
@@ -102,14 +113,14 @@ pub struct TrameState {
     /// Active cell (selection), kept in sync by the UI via
     /// [`TrameCommand::SetActiveCell`]. Formatting toggles target this cell.
     active: (u32, u32),
-    /// Current selection rectangle, normalized to `(row_start, col_start,
-    /// row_end, col_end)` with `start <= end`. Kept in sync by the UI alongside
-    /// [`active`](Self::active) via [`TrameCommand::SetActiveCell`]; the
-    /// parameterless structural intents (`MergeSelection`, `DeleteSelectedRows`,
+    /// The whole selection reported by the UI via [`TrameCommand::SetActiveCell`]:
+    /// the live rectangle's anchor corner, every committed disjoint rectangle,
+    /// and the band kind. Kept in sync by the UI alongside [`active`](Self::active);
+    /// the parameterless structural intents (`MergeSelection`, `DeleteSelectedRows`,
     /// ...) resolve their geometry against it. Like [`active`](Self::active) it
     /// is ephemeral, in-memory only, never in Loro, never synced (a local view
     /// state, `trame-selection`). Defaults to the single active cell.
-    selection: (u32, u32, u32, u32),
+    selection: TrackedSelection,
     /// Id of the sheet the UI is currently looking at. Step 1 always holds the
     /// implicit [`DEFAULT_SHEET`]; multi-sheet switching arrives with the tabs.
     active_sheet: String,
@@ -290,7 +301,11 @@ impl TrameState {
         undo_manager.add_exclude_origin_prefix(MATERIALIZE_ORIGIN);
         let mut state = Self {
             active: (0, 0),
-            selection: (0, 0, 0, 0),
+            selection: TrackedSelection {
+                anchor: (0, 0),
+                extra: Vec::new(),
+                kind: SelectionKind::Cells,
+            },
             active_sheet: DEFAULT_SHEET.to_owned(),
             bold: HashSet::new(),
             italic: HashSet::new(),
@@ -325,6 +340,66 @@ impl TrameState {
 impl Default for TrameState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl TrameState {
+    /// The live rectangle (the anchor corner and the active cell), normalized to
+    /// `(r1, c1, r2, c2)`. The primary range of the tracked selection.
+    fn live_selection_rect(&self) -> (u32, u32, u32, u32) {
+        let (ar, ac) = self.active;
+        let (br, bc) = self.selection.anchor;
+        (ar.min(br), ac.min(bc), ar.max(br), ac.max(bc))
+    }
+
+    /// Every rectangle a range intent acts on, resolved from the tracked
+    /// selection (`TRAME-UI-129`). A `Cells` selection returns the live rectangle
+    /// plus the committed disjoint ones; a `Cols`/`Rows` band expands to the
+    /// materialized used range across its axis (`TRAME-UI-033`).
+    fn selection_rects(&self) -> Vec<(u32, u32, u32, u32)> {
+        match self.selection.kind {
+            SelectionKind::Cells => {
+                let mut rects = self.selection.extra.clone();
+                rects.push(self.live_selection_rect());
+                rects
+            }
+            SelectionKind::Cols => {
+                let (_, c1, _, c2) = self.live_selection_rect();
+                let row_end = self.index.row_len().saturating_sub(1) as u32;
+                vec![(0, c1, row_end, c2)]
+            }
+            SelectionKind::Rows => {
+                let (r1, _, r2, _) = self.live_selection_rect();
+                let col_end = self.index.col_len().saturating_sub(1) as u32;
+                vec![(r1, 0, r2, col_end)]
+            }
+        }
+    }
+
+    /// The bounding box of [`selection_rects`](Self::selection_rects): the single
+    /// rectangle that covers every selected rectangle. A band resolves to its
+    /// used-range rectangle first.
+    fn selection_bounds(&self) -> (u32, u32, u32, u32) {
+        self.selection_rects().into_iter().fold(
+            (u32::MAX, u32::MAX, 0, 0),
+            |(a1, b1, a2, b2), (x1, y1, x2, y2)| (a1.min(x1), b1.min(y1), a2.max(x2), b2.max(y2)),
+        )
+    }
+
+    /// Every distinct cell covered by the tracked selection, deduplicated across
+    /// rectangles (`TRAME-UI-031`). A whole-axis band resolves to the used range
+    /// first. Backs the style, the aggregate and the copy paths.
+    fn selected_cells(&self) -> Vec<(u32, u32)> {
+        let mut cells: Vec<(u32, u32)> = self
+            .selection_rects()
+            .into_iter()
+            .flat_map(|(r1, c1, r2, c2)| {
+                (r1..=r2).flat_map(move |r| (c1..=c2).map(move |c| (r, c)))
+            })
+            .collect();
+        cells.sort_unstable();
+        cells.dedup();
+        cells
     }
 }
 

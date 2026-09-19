@@ -14,7 +14,8 @@
 use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::{
     AppCommand, CellFormat, ChannelId, ClipboardCell, ClipboardPayload, DocType, DocumentId,
-    LogicEvent, RequestId, RestCommand, RestEvent, Role, SyncCommand, TrameCommand, UserId,
+    LogicEvent, RequestId, RestCommand, RestEvent, Role, SelectionKind, SyncCommand, TrameCommand,
+    UserId,
 };
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
@@ -257,6 +258,8 @@ fn read_only_and_local_commands_are_not_mutating() {
             col: 0,
             anchor_row: 0,
             anchor_col: 0,
+            extra: vec![],
+            kind: SelectionKind::Cells,
         }),
         AppCommand::Trame(TrameCommand::ActivateSheet {
             sheet_id: "s1".into(),

@@ -78,7 +78,8 @@ impl TrameState {
     /// context-menu intent resolves against the whole selection, not just the
     /// active cell, so one step splits every merge the selection touches.
     pub(super) fn unmerge_selection(&mut self) -> TrameOutcome {
-        let (mut r1, mut c1, mut r2, mut c2) = self.selection;
+        // Bounding box of every selected rectangle (`TRAME-UI-129`).
+        let (mut r1, mut c1, mut r2, mut c2) = self.selection_bounds();
         // Masters whose rectangle intersects the selection. Snapshot first: the
         // deletion mutates the CRDT, but `self.merges` stays put until rebuild.
         let masters: Vec<(u32, u32, u32, u32)> = self

@@ -67,7 +67,10 @@ impl TrameState {
     /// sets (and the `format_{sheet}` map); the rest into the cell's [`CellStyle`]
     /// (the `style_{sheet}` / colour / font containers).
     pub(super) fn set_cell_style(&mut self, patch: StylePatch) -> TrameOutcome {
-        let (r1, c1, r2, c2) = self.selection;
+        // Bounding box for the border perimeter, and the deduplicated cell set for
+        // the writes (`TRAME-UI-129`): every rectangle the user selected.
+        let (r1, c1, r2, c2) = self.selection_bounds();
+        let cells = self.selected_cells();
         // One undo group + one commit for the whole selection. The restyle is then
         // a single undo step and a single broadcast delta (mirrors `fill_range` /
         // `SetCellsBatch`). Pre-materialize every targeted cell up front so the
@@ -77,96 +80,92 @@ impl TrameState {
         // collapse into the single trailing commit. The group is sealed by the
         // next command's fallback `group_end`.
         let _ = self.undo_manager.group_start();
-        for row in r1..=r2 {
-            for col in c1..=c2 {
-                if !self.covered.contains(&(row, col)) {
-                    let _ = self.materialize(row, col);
-                }
+        for &(row, col) in &cells {
+            if !self.covered.contains(&(row, col)) {
+                let _ = self.materialize(row, col);
             }
         }
-        for row in r1..=r2 {
-            for col in c1..=c2 {
-                let cell = (row, col);
-                // Cells covered by a merge are swallowed by their master: they
-                // render blank, so styling them is pointless. For `All` borders
-                // it is actively wrong, since it would draw interior edges
-                // inside the merged block. The master carries the whole span's
-                // style.
-                if self.covered.contains(&cell) {
-                    continue;
-                }
-                // Bold/italic live in their own in-memory sets; they are folded
-                // back into the single style record by `persist_cell_style` below.
-                if let Some(b) = patch.bold {
-                    if b {
-                        self.bold.insert(cell);
-                    } else {
-                        self.bold.remove(&cell);
-                    }
-                }
-                if let Some(i) = patch.italic {
-                    if i {
-                        self.italic.insert(cell);
-                    } else {
-                        self.italic.remove(&cell);
-                    }
-                }
-                // Everything else lives in the cell's `CellStyle`.
-                let mut style = self.styles.get(&cell).cloned().unwrap_or_default();
-                apply_patch_to_style(&mut style, &patch);
-                // Resolve the selection-level border edit into this cell's edges.
-                // Merge-aware: a master's perimeter follows its full span, and
-                // interior edges fall between adjacent selected cells. Every
-                // preset is additive (touches only its own edges) except `None`,
-                // which clears all four.
-                if let Some(edit) = patch.border {
-                    let (br, bc) = self.merges.get(&cell).copied().unwrap_or((row, col));
-                    // Perimeter membership within the selection rectangle.
-                    let top_p = row == r1;
-                    let bottom_p = br == r2;
-                    let left_p = col == c1;
-                    let right_p = bc == c2;
-                    // Interior membership (edge shared with an adjacent cell).
-                    let top_i = row > r1;
-                    let bottom_i = br < r2;
-                    let left_i = col > c1;
-                    let right_i = bc < c2;
-                    // Targeted edges in [top, right, bottom, left] order.
-                    let targeted = match edit.preset {
-                        BorderPreset::None => [true; 4],
-                        BorderPreset::All => [true; 4],
-                        BorderPreset::Outline => [top_p, right_p, bottom_p, left_p],
-                        BorderPreset::Inner => [top_i, right_i, bottom_i, left_i],
-                        BorderPreset::InnerHorizontal => [top_i, false, bottom_i, false],
-                        BorderPreset::InnerVertical => [false, right_i, false, left_i],
-                        BorderPreset::Top => [top_p, false, false, false],
-                        BorderPreset::Bottom => [false, false, bottom_p, false],
-                        BorderPreset::Left => [false, false, false, left_p],
-                        BorderPreset::Right => [false, right_p, false, false],
-                    };
-                    let new_edge = (edit.preset != BorderPreset::None).then_some(CellBorder {
-                        style: edit.style,
-                        color: edit.color,
-                    });
-                    let slots = [
-                        &mut style.borders.top,
-                        &mut style.borders.right,
-                        &mut style.borders.bottom,
-                        &mut style.borders.left,
-                    ];
-                    for (slot, &hit) in slots.into_iter().zip(targeted.iter()) {
-                        if hit {
-                            *slot = new_edge;
-                        }
-                    }
-                }
-                if style == CellStyle::default() {
-                    self.styles.remove(&cell);
-                } else {
-                    self.styles.insert(cell, style.clone());
-                }
-                let _ = self.write_cell_style(row, col);
+        for &(row, col) in &cells {
+            let cell = (row, col);
+            // Cells covered by a merge are swallowed by their master: they
+            // render blank, so styling them is pointless. For `All` borders
+            // it is actively wrong, since it would draw interior edges
+            // inside the merged block. The master carries the whole span's
+            // style.
+            if self.covered.contains(&cell) {
+                continue;
             }
+            // Bold/italic live in their own in-memory sets; they are folded
+            // back into the single style record by `persist_cell_style` below.
+            if let Some(b) = patch.bold {
+                if b {
+                    self.bold.insert(cell);
+                } else {
+                    self.bold.remove(&cell);
+                }
+            }
+            if let Some(i) = patch.italic {
+                if i {
+                    self.italic.insert(cell);
+                } else {
+                    self.italic.remove(&cell);
+                }
+            }
+            // Everything else lives in the cell's `CellStyle`.
+            let mut style = self.styles.get(&cell).cloned().unwrap_or_default();
+            apply_patch_to_style(&mut style, &patch);
+            // Resolve the selection-level border edit into this cell's edges.
+            // Merge-aware: a master's perimeter follows its full span, and
+            // interior edges fall between adjacent selected cells. Every
+            // preset is additive (touches only its own edges) except `None`,
+            // which clears all four.
+            if let Some(edit) = patch.border {
+                let (br, bc) = self.merges.get(&cell).copied().unwrap_or((row, col));
+                // Perimeter membership within the selection rectangle.
+                let top_p = row == r1;
+                let bottom_p = br == r2;
+                let left_p = col == c1;
+                let right_p = bc == c2;
+                // Interior membership (edge shared with an adjacent cell).
+                let top_i = row > r1;
+                let bottom_i = br < r2;
+                let left_i = col > c1;
+                let right_i = bc < c2;
+                // Targeted edges in [top, right, bottom, left] order.
+                let targeted = match edit.preset {
+                    BorderPreset::None => [true; 4],
+                    BorderPreset::All => [true; 4],
+                    BorderPreset::Outline => [top_p, right_p, bottom_p, left_p],
+                    BorderPreset::Inner => [top_i, right_i, bottom_i, left_i],
+                    BorderPreset::InnerHorizontal => [top_i, false, bottom_i, false],
+                    BorderPreset::InnerVertical => [false, right_i, false, left_i],
+                    BorderPreset::Top => [top_p, false, false, false],
+                    BorderPreset::Bottom => [false, false, bottom_p, false],
+                    BorderPreset::Left => [false, false, false, left_p],
+                    BorderPreset::Right => [false, right_p, false, false],
+                };
+                let new_edge = (edit.preset != BorderPreset::None).then_some(CellBorder {
+                    style: edit.style,
+                    color: edit.color,
+                });
+                let slots = [
+                    &mut style.borders.top,
+                    &mut style.borders.right,
+                    &mut style.borders.bottom,
+                    &mut style.borders.left,
+                ];
+                for (slot, &hit) in slots.into_iter().zip(targeted.iter()) {
+                    if hit {
+                        *slot = new_edge;
+                    }
+                }
+            }
+            if style == CellStyle::default() {
+                self.styles.remove(&cell);
+            } else {
+                self.styles.insert(cell, style.clone());
+            }
+            let _ = self.write_cell_style(row, col);
         }
         // Single trailing commit for every style write in the selection -> one
         // undo item, one delta.

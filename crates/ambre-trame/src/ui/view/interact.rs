@@ -308,34 +308,11 @@ impl TrameView {
         self.announce_active();
     }
 
-    /// Build the active-cell report for a whole-axis selection
-    /// (`trame-selection`). The band has no on-screen rectangle, so the
-    /// perpendicular extent is bounded by the UI's used-range cache
-    /// (`trame-grid-viewport`). A column band spans rows `0..=last_used_row`, and
-    /// a row band spans cols `0..=last_used_col`. The Logic thread then resolves
-    /// sort / filter / delete / style against that rectangle, and tracks the
-    /// clicked column/row as the active cell.
+    /// Build the active-cell report for a whole-axis selection (`trame-selection`).
+    /// The band carries no extent across the other axis. The Logic thread resolves
+    /// that extent from the used range (`TRAME-UI-033`).
     pub(crate) fn axis_active_cmd(&self) -> TrameCommand {
-        let sel = &self.state.selection;
-        let (last_row, last_col) = self
-            .state
-            .last_content_cell()
-            .unwrap_or((self.state.active_row(), self.state.active_col()));
-        match sel.kind {
-            crate::ui::grid::SelKind::Cols => TrameCommand::SetActiveCell {
-                row: 0,
-                col: sel.active.1,
-                anchor_row: last_row,
-                anchor_col: sel.anchor.1,
-            },
-            crate::ui::grid::SelKind::Rows => TrameCommand::SetActiveCell {
-                row: sel.active.0,
-                col: 0,
-                anchor_row: sel.anchor.0,
-                anchor_col: last_col,
-            },
-            crate::ui::grid::SelKind::Cells => self.set_active_cmd(),
-        }
+        self.set_active_cmd()
     }
 
     /// Whether the current whole-axis selection is of `kind` and its band covers

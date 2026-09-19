@@ -11,6 +11,17 @@ use crate::UserId;
 // Trame (spreadsheet) -- commands (UI -> Logic)
 // -----------------------------------------------------------------------------
 
+/// Shape of a Trame selection band (`trame-selection`), the bus-side mirror of
+/// `ambre_trame`'s `SelKind`. `Cells` is the ordinary rectangle; `Cols`/`Rows`
+/// are whole-axis bands the Logic thread resolves to the used range.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SelectionKind {
+    #[default]
+    Cells,
+    Cols,
+    Rows,
+}
+
 /// Commands sent from the UI Thread to the Trame logic for an open document.
 #[derive(Debug, Clone)]
 pub enum TrameCommand {
@@ -31,8 +42,10 @@ pub enum TrameCommand {
         col_end: u32,
     },
 
-    /// Move the active cell to `(row, col)` and report the selection rectangle
-    /// whose opposite (anchor) corner is `(anchor_row, anchor_col)`.
+    /// Move the active cell to `(row, col)` and report the whole selection
+    /// (`trame-selection`). The report holds the live rectangle's corners,
+    /// every committed disjoint rectangle in `extra`, and the band shape in
+    /// `kind`.
     ///
     /// Formatting ([`SetCellStyle`](TrameCommand::SetCellStyle)) targets whatever
     /// selection the Logic thread tracks, so the UI Thread must keep it informed
@@ -40,10 +53,10 @@ pub enum TrameCommand {
     /// resolved style ([`TrameEvent::StyleApplied`](super::TrameEvent::StyleApplied))
     /// so the formatting toolbar tracks the selection.
     ///
-    /// `(anchor_row, anchor_col)` is the selection's other corner (equal to
-    /// `(row, col)` for a single-cell selection). The Logic thread normalizes the
-    /// two corners into the selection rectangle that the parameterless structural
-    /// intents (`MergeSelection`, `DeleteSelectedRows`, ...) resolve against. The
+    /// The Logic thread normalizes the two corners into the live rectangle, and
+    /// resolves a `Cols`/`Rows` band to the materialized used range across its
+    /// axis. The parameterless structural intents (`MergeSelection`,
+    /// `DeleteSelectedRows`, ...) then act on every reported rectangle. The
     /// selection is local view state -- never persisted, never synced
     /// (`trame-selection`).
     SetActiveCell {
@@ -51,6 +64,13 @@ pub enum TrameCommand {
         col: u32,
         anchor_row: u32,
         anchor_col: u32,
+        /// Committed disjoint rectangles (Ctrl+click), each normalized. The live
+        /// rectangle (`anchor..=active`) is not here; the full selection is these
+        /// plus that rectangle.
+        extra: Vec<GridRange>,
+        /// Band shape: `Cells`, `Cols` or `Rows`. A `Cols`/`Rows` band carries no
+        /// extent across its axis; the Logic thread resolves it to the used range.
+        kind: SelectionKind,
     },
 
     /// Set the plaintext content of cell `(row, col)`.

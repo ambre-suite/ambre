@@ -17,6 +17,8 @@ fn bold_stays_on_the_cell_not_the_selection() {
         col: 0,
         anchor_row: 0,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     let evts = state.handle_command(TrameCommand::SetCellStyle {
         patch: bold_patch(true),
@@ -33,6 +35,8 @@ fn bold_stays_on_the_cell_not_the_selection() {
         col: 1,
         anchor_row: 1,
         anchor_col: 1,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     assert!(matches!(
         evts.display[0],
@@ -66,6 +70,8 @@ fn formatting_survives_snapshot_roundtrip() {
         col: 0,
         anchor_row: 0,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     state.handle_command(TrameCommand::SetCellStyle {
         patch: crate::StylePatch {
@@ -117,6 +123,8 @@ fn set_cell_style_round_trips_and_formats_numbers() {
         col: 0,
         anchor_row: 0,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
 
     // Apply Percent with 1 decimal + right alignment + underline.
@@ -637,6 +645,8 @@ fn selection_style_is_a_single_undo() {
         col: 2,
         anchor_row: 0,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     state.handle_command(TrameCommand::SetCellStyle {
         patch: bold_patch(true),

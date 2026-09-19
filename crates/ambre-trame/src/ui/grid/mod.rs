@@ -16,7 +16,7 @@ use ambre_canvas::{TextEditor, TextEditorStyle};
 use ambre_draw::Color;
 
 use crate::render::BODY_SIZE;
-use crate::{TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
+use crate::{GridRange, SelectionKind, TOTAL_COLS, TOTAL_ROWS, TrameCommand, TrameEvent};
 
 // Cell layout.
 
@@ -206,6 +206,16 @@ pub enum SelKind {
     Rows,
 }
 
+impl From<SelKind> for SelectionKind {
+    fn from(kind: SelKind) -> Self {
+        match kind {
+            SelKind::Cells => SelectionKind::Cells,
+            SelKind::Cols => SelectionKind::Cols,
+            SelKind::Rows => SelectionKind::Rows,
+        }
+    }
+}
+
 /// Which surface a right-click landed on, choosing the context-menu layout
 /// (`trame-context-menu`). Each header scope drops the cell-only entries (clipboard /
 /// merge). It keeps only the structural + sort/filter ops relevant to the axis the
@@ -326,6 +336,34 @@ impl Selection {
     /// style, fill...). Mirrors the spec's `sel.bounds()`.
     pub fn bounds(&self) -> CellRect {
         self.live_rect()
+    }
+
+    /// The whole selection as a [`TrameCommand::SetActiveCell`] report
+    /// (`trame-selection`): the live rectangle's two corners, every committed
+    /// disjoint rectangle, and the band kind. A whole-axis band carries no
+    /// extent across the other axis. The Logic thread resolves that extent from
+    /// the used range, never from the UI cache.
+    pub fn report(&self) -> TrameCommand {
+        let (row, col) = self.active;
+        let (anchor_row, anchor_col) = self.anchor;
+        let extra = self
+            .extra
+            .iter()
+            .map(|&(r1, c1, r2, c2)| GridRange {
+                row: r1,
+                col: c1,
+                row_end: r2,
+                col_end: c2,
+            })
+            .collect();
+        TrameCommand::SetActiveCell {
+            row,
+            col,
+            anchor_row,
+            anchor_col,
+            extra,
+            kind: self.kind.into(),
+        }
     }
 
     /// Iterator over every selected rectangle: the committed disjoint ones

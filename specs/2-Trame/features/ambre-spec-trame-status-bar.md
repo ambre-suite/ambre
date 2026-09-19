@@ -1,7 +1,8 @@
 # AMBRE -- FEATURE: THE TRAME STATUS BAR
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the band ships; a whole-column total covers the visible rows alone.
+**Implementation:** partial -- the band ships and totals the whole selection; the band itself has no
+host test (section 5).
 
 > A user selects a block of cells and reads its total without writing a formula. A thin band under
 > the grid shows the sum, the average, the count, the minimum and the maximum of the selection.
@@ -22,7 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-UI-103` | `INV` | The aggregates MUST be computed by the Logic thread, never by the UI thread. | this spec section 2 | type-level -- the reply `TrameEvent::SelectionStats` carries six numbers with no cell in them, and the signal the band reads has one writer, the launcher's relay on that event (`ambre-app`); `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- the Logic side | none | verified |
 | `TRAME-UI-106` | `INV` | A query for the aggregates MUST emit no CRDT delta. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- it asserts the outcome carries no update | none | verified |
-| `TRAME-UI-104` | `OBS` | An aggregate MUST cover the whole selection, not the part the UI thread holds. | this spec section 2; section 4 | none | fails -- on two selections (section 5): a whole-column band is clamped by the UI to its own cache, and a disjoint selection reaches the Logic thread as its last rectangle alone; lands with the `The selection reaches the Logic thread whole` Story (`ambre-roadmap.md` E7) | failing |
+| `TRAME-UI-104` | `OBS` | An aggregate MUST cover the whole selection, not the part the UI thread holds. | this spec section 2; section 4 | `ambre_trame::logic::tests::group4::selection_stats_covers_the_whole_band` -- a whole-column band tallies an off-screen row; `::selection_stats_totals_a_disjoint_selection` -- two rectangles are tallied together | none | verified |
 | `TRAME-UI-105` | `OBS` | `count` MUST tally every non-empty cell. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- a column holding numbers, a blank and a word, asserting the count of the non-empty ones | none | verified |
 | `TRAME-UI-172` | `OBS` | A numeric aggregate MUST tally the numbers alone. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_aggregate_numeric_cells` -- the same column, where the word and the blank leave the sum, the average and the extremes untouched | none | verified |
 | `TRAME-UI-107` | `OBS` | The band MUST show a numeric aggregate only when the selection holds a number. | this spec section 3 | `ambre_trame::tests::chrome_ui::status_bar_renders_label_and_aggregates` -- it mounts the band over a selection holding three numbers | partial -- the branch that hides the four numeric aggregates is reached by no test; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -42,11 +43,11 @@ status values are normative in `ambre-spec-template.md`.
   phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the band reads and shows. It writes nothing to the document, opens no path,
   and `UI-THREAD-004` bans a network, crypto or persistence path on the thread it paints on.
-* **Verification.** 5 `verified`, 2 `failing`, 4 `untested`. The walk, the tallies, the read-only
-  guarantee and the clear decision all have a host test. The six gaps are the UI half -- what the
-  band shows, how it reads, when it refreshes, and which rows it covers. Two of them are rules the
-  code answers with something else, listed in section 5. The count and the numeric aggregates are two
-  rows (`TRAME-UI-105`, `TRAME-UI-172`) over one test.
+* **Verification.** 6 `verified`, 1 `failing`, 4 `untested`. The walk, the tallies, the read-only
+  guarantee, the whole-selection coverage and the clear decision all have a host test. The five gaps
+  are the UI half -- what the band shows, how it reads, when it refreshes, and which rows it covers.
+  Two of them are rules the code answers with something else, listed in section 5. The count and the
+  numeric aggregates are two rows (`TRAME-UI-105`, `TRAME-UI-172`) over one test.
 
 ---
 
@@ -77,7 +78,7 @@ pub struct SelStats {
 **Steps, when the Logic thread answers a request:**
 
 1. bring the formula cache up to date, so each cell is read at its computed value;
-2. walk the tracked selection rectangle, skipping the rows the filter hides (`TRAME-UI-110`);
+2. walk every tracked selection rectangle, skipping the rows the filter hides (`TRAME-UI-110`);
 3. tally every non-empty cell into `count`;
 4. tally each number into `count_num`, and fold it into the sum, the minimum and the maximum;
 5. divide the sum by the numeric count for the average, and answer zero for an empty one;
@@ -133,16 +134,6 @@ value (`TRAME-UI-108`).
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **A whole-column total covers the visible rows alone** (`TRAME-UI-104`). A click on a column
-  header selects the band. The UI turns it into a rectangle ending at the last non-empty
-  cell **in its own cache**, which holds the window and its margin. So the aggregate of a column
-  longer than the screen is the aggregate of its first screen. The same clamp reaches every command
-  that resolves against the selection: the sort, the style, the delete and the copy.
-  `ambre-spec-trame-selection.md section 6` states it from the side that produces it.
-* **A disjoint selection is totalled by its last rectangle** (`TRAME-UI-104`, second failure).
-  Ctrl+click keeps every rectangle on the UI thread, and the active-cell report carries one pair, so
-  the band answers for the block clicked last. `ambre-spec-trame-selection.md section 6` states the
-  same clamp from the side that produces it.
 * **Extending a header band does not refresh the aggregates** (`TRAME-UI-109`). The refresh hangs
   off the active-cell announcement. `extend_axis` -- Shift+click on a header, or a header drag
   -- is the one selection path that does not announce. So sweeping columns A to D leaves the total

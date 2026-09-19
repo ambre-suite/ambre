@@ -262,14 +262,8 @@ impl TrameUiState {
         let scroll = self
             .scroll_to_include(new_row, new_col)
             .then(|| self.scroll_viewport_cmd());
-        let (anchor_row, anchor_col) = self.selection.anchor;
         Some(CursorMove {
-            active: TrameCommand::SetActiveCell {
-                row: new_row,
-                col: new_col,
-                anchor_row,
-                anchor_col,
-            },
+            active: self.selection.report(),
             scroll,
         })
     }

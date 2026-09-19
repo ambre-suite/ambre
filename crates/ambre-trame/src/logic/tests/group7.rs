@@ -129,6 +129,8 @@ fn batched_formatting_broadcasts_complete_delta() {
         col: 0,
         anchor_row: 2,
         anchor_col: 2,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     let delta = author
         .handle_command(TrameCommand::SetCellStyle {
@@ -349,6 +351,8 @@ fn copy_range_covers_the_full_selection_not_a_viewport() {
         col: 0,
         anchor_row: 500,
         anchor_col: 3,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
 
     let out = state.handle_command(TrameCommand::CopyRange);

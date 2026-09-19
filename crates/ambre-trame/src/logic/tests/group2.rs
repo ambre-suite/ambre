@@ -114,6 +114,8 @@ fn mutating_command_reports_undo_state() {
         col: 1,
         anchor_row: 1,
         anchor_col: 1,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     assert!(
         !evts
@@ -565,6 +567,8 @@ fn insert_intents_land_relative_to_active_cell() {
         col: 0,
         anchor_row: 1,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     state.handle_command(TrameCommand::InsertRowAbove);
     assert_eq!(
@@ -597,6 +601,8 @@ fn delete_selected_rows_drops_the_whole_span() {
         col: 0,
         anchor_row: 1,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     state.handle_command(TrameCommand::DeleteSelectedRows);
     assert_eq!(read_cell(&mut state, 0, 0), "keep");
@@ -624,6 +630,8 @@ fn merge_and_unmerge_intents_use_the_selection() {
         col: 1,
         anchor_row: 0,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     state.handle_command(TrameCommand::MergeSelection);
     assert_eq!(

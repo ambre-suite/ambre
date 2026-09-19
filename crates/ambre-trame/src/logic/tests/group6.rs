@@ -179,6 +179,8 @@ fn find_next_matches_and_wraps() {
         col: 0,
         anchor_row: 0,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     let out = state.handle_command(TrameCommand::FindNext {
         query: "apple".to_owned(),
@@ -197,6 +199,8 @@ fn find_next_matches_and_wraps() {
         col: 0,
         anchor_row: 3,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     let out = state.handle_command(TrameCommand::FindNext {
         query: "apple".to_owned(),
@@ -216,6 +220,8 @@ fn find_next_honors_case_and_whole_cell() {
         col: 0,
         anchor_row: 0,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
 
     // Case-sensitive "apple": only the exact-case A1 substring matches.
@@ -325,6 +331,8 @@ fn replace_one_replaces_active_and_advances() {
         col: 0,
         anchor_row: 0,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     let out = state.handle_command(TrameCommand::ReplaceOne {
         query: "apple".to_owned(),
@@ -348,6 +356,8 @@ fn replace_one_replaces_active_and_advances() {
         col: 0,
         anchor_row: 2,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     let out = state.handle_command(TrameCommand::ReplaceOne {
         query: "apple".to_owned(),

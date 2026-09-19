@@ -596,18 +596,11 @@ impl TrameView {
     }
 
     /// Build the active-cell report from the current selection, carrying the
-    /// anchor corner. The Logic thread needs that corner to track the whole
-    /// selection rectangle, as the structural intents do (merge / delete
-    /// rows-cols).
+    /// whole selection (`trame-selection`): the live rectangle's corners, the
+    /// committed disjoint rectangles and the band kind. The Logic thread needs
+    /// all of it to resolve the parameterless intents against every rectangle.
     pub(crate) fn set_active_cmd(&self) -> TrameCommand {
-        let (row, col) = self.state.selection.active;
-        let (anchor_row, anchor_col) = self.state.selection.anchor;
-        TrameCommand::SetActiveCell {
-            row,
-            col,
-            anchor_row,
-            anchor_col,
-        }
+        self.state.selection.report()
     }
 
     /// Extend the live selection rectangle to `(row, col)` (Shift+click / drag),

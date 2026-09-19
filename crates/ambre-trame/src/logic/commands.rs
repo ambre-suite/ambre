@@ -40,16 +40,21 @@ impl TrameState {
                 col,
                 anchor_row,
                 anchor_col,
+                extra,
+                kind,
             } => {
                 self.active = (row, col);
-                // Normalize the active cell and the anchor corner into the
-                // selection rectangle the structural intents resolve against.
-                self.selection = (
-                    row.min(anchor_row),
-                    col.min(anchor_col),
-                    row.max(anchor_row),
-                    col.max(anchor_col),
-                );
+                // Store the whole selection: the anchor corner, every committed
+                // disjoint rectangle, and the band kind. The readers resolve the
+                // live rectangle and the used range from these.
+                self.selection = TrackedSelection {
+                    anchor: (anchor_row, anchor_col),
+                    extra: extra
+                        .into_iter()
+                        .map(|r| (r.row, r.col, r.row_end, r.col_end))
+                        .collect(),
+                    kind,
+                };
                 // Report the new active cell's formatting so the chrome toggle
                 // buttons reflect the selection.
                 // Resolved style (incl. bold/italic) drives the formatting toolbar.
@@ -225,7 +230,7 @@ impl TrameState {
             TrameCommand::DeleteSelectedRows => self.delete_selected_axis(Axis::Row),
             TrameCommand::DeleteSelectedCols => self.delete_selected_axis(Axis::Col),
             TrameCommand::MergeSelection => {
-                let (r1, c1, r2, c2) = self.selection;
+                let (r1, c1, r2, c2) = self.live_selection_rect();
                 self.merge_cells(r1, c1, r2, c2)
             }
             TrameCommand::UnmergeActive => self.unmerge_selection(),

@@ -32,6 +32,8 @@ fn unmerge_active_splits_every_merge_in_selection() {
         col: 0,
         anchor_row: 2,
         anchor_col: 1,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     let out = state.handle_command(TrameCommand::UnmergeActive);
 
@@ -78,6 +80,8 @@ fn unmerge_selection_grows_to_cover_straddling_merge() {
         col: 0,
         anchor_row: 1,
         anchor_col: 1,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     let out = state.handle_command(TrameCommand::UnmergeActive);
 
@@ -120,6 +124,8 @@ fn unmerge_two_vertical_merges_selected_by_masters() {
         col: 1,
         anchor_row: 0,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     let out = state.handle_command(TrameCommand::UnmergeActive);
 
@@ -140,6 +146,8 @@ fn merge_selection_single_cell_is_noop() {
         col: 2,
         anchor_row: 2,
         anchor_col: 2,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     let evts = state.handle_command(TrameCommand::MergeSelection);
     assert!(evts.update.is_none(), "no CRDT mutation");

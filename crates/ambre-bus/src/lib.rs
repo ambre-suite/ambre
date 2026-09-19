@@ -42,8 +42,8 @@ pub use app::trame::{
     BORDER_EDGE_ALL, BORDER_EDGE_BOTTOM, BORDER_EDGE_LEFT, BORDER_EDGE_RIGHT, BORDER_EDGE_TOP,
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellStyle,
     ClipboardCell, ClipboardPayload, CondFormatKind, CondStyle, DisplayCell, FillMode, FilterKind,
-    FilterOp, GridRange, HAlign, SortKey, StylePatch, TrameCommand, TrameEvent, VAlign,
-    ValidationKind, ValidationOnInvalid,
+    FilterOp, GridRange, HAlign, SelectionKind, SortKey, StylePatch, TrameCommand, TrameEvent,
+    VAlign, ValidationKind, ValidationOnInvalid,
 };
 pub use logic::{AppCommand, LogicCommand};
 pub use lossy::{LossyOutcome, send_lossy};

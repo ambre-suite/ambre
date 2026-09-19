@@ -390,6 +390,8 @@ fn apply_style(state: &mut TrameState, patch: StylePatch) {
         col: 0,
         anchor_row: 0,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     state.handle_command(TrameCommand::SetCellStyle { patch });
 }

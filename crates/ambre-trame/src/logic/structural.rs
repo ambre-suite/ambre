@@ -101,11 +101,14 @@ impl TrameState {
     /// carries the refreshed display. The selection is left untouched -- the UI
     /// owns it and re-reports it on the next cursor move.
     pub(super) fn delete_selected_axis(&mut self, axis: Axis) -> TrameOutcome {
-        let (r1, c1, r2, c2) = self.selection;
-        let (start, end) = match axis {
-            Axis::Row => (r1, r2),
-            Axis::Col => (c1, c2),
-        };
+        // The span of every selected rectangle across the axis (`TRAME-UI-129`).
+        let (start, end) = self.selection_rects().into_iter().fold(
+            (u32::MAX, 0u32),
+            |(lo, hi), (r1, c1, r2, c2)| match axis {
+                Axis::Row => (lo.min(r1), hi.max(r2)),
+                Axis::Col => (lo.min(c1), hi.max(c2)),
+            },
+        );
         let mut outcome = TrameOutcome::display_only(vec![]);
         for at in (start..=end).rev() {
             outcome = self.delete_axis(at, axis);
@@ -121,7 +124,7 @@ impl TrameState {
     /// sheet, which guards the empty/single-row cases and replies with
     /// [`TrameEvent::SortComplete`].
     pub(super) fn sort_selection(&mut self, ascending: bool) -> TrameOutcome {
-        let (r1, c1, r2, c2) = self.selection;
+        let (r1, c1, r2, c2) = self.selection_bounds();
         let sheet = self.active_sheet.clone();
         self.sort_range(&sheet, r1, r2, c1, c2, 0, ascending, false)
     }
@@ -153,7 +156,7 @@ impl TrameState {
         sort_keys: &[SortKey],
         has_header: bool,
     ) -> TrameOutcome {
-        let (r1, c1, r2, c2) = self.selection;
+        let (r1, c1, r2, c2) = self.selection_bounds();
         let sheet = self.active_sheet.clone();
         self.sort_range_multi(&sheet, r1, r2, c1, c2, sort_keys, has_header)
     }

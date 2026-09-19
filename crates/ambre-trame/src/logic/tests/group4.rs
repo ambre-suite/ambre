@@ -162,6 +162,8 @@ fn sort_selection_resolves_against_tracked_selection() {
         col: 0,
         anchor_row: 2,
         anchor_col: 1,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     let evts = state.handle_command(TrameCommand::SortSelectionAsc);
     assert!(
@@ -204,6 +206,8 @@ fn sort_sheet_sorts_used_range_by_active_column() {
         col: 1,
         anchor_row: 2,
         anchor_col: 1,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     let evts = state.handle_command(TrameCommand::SortSheetAsc);
     assert!(
@@ -298,6 +302,8 @@ fn sort_selection_multi_resolves_against_tracked_selection() {
         col: 0,
         anchor_row: 2,
         anchor_col: 1,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
     let evts = state.handle_command(TrameCommand::SortSelectionMulti {
         sort_keys: vec![
@@ -480,6 +486,8 @@ fn active_column_values_are_distinct_sorted_and_visible() {
         col: 0,
         anchor_row: 0,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
 
     let evts = state.handle_command(TrameCommand::RequestActiveColumnValues);
@@ -506,6 +514,8 @@ fn selection_stats_aggregate_numeric_cells() {
         col: 0,
         anchor_row: 0,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
 
     let evts = state.handle_command(TrameCommand::RequestSelectionStats);
@@ -530,6 +540,120 @@ fn selection_stats_aggregate_numeric_cells() {
     assert!(evts.update.is_none(), "a stats query is read-only");
 }
 
+/// A disjoint selection reaches the Logic thread whole: a range intent styles
+/// every rectangle, not the live one alone (`TRAME-UI-129`).
+#[test]
+fn disjoint_selection_styles_every_rectangle() {
+    let mut state = TrameState::new();
+    // Two blocks far apart: the committed rectangle A1 and the live one C3.
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 2,
+        col: 2,
+        anchor_row: 2,
+        anchor_col: 2,
+        extra: vec![crate::GridRange {
+            row: 0,
+            col: 0,
+            row_end: 0,
+            col_end: 0,
+        }],
+        kind: crate::SelectionKind::Cells,
+    });
+    state.handle_command(TrameCommand::SetCellStyle {
+        patch: bold_patch(true),
+    });
+    assert!(read_display(&mut state, 0, 0).bold, "A1 is styled");
+    assert!(read_display(&mut state, 2, 2).bold, "C3 is styled");
+}
+
+/// A whole-column band reaches the Logic thread whole. The aggregate covers the
+/// materialized used range, not a first screen (`TRAME-UI-104`).
+#[test]
+fn selection_stats_covers_the_whole_band() {
+    let mut state = TrameState::new();
+    // Content above and far below a hypothetical first screen.
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "10".to_owned(),
+    });
+    state.handle_command(TrameCommand::SetCellText {
+        row: 50,
+        col: 0,
+        text: "20".to_owned(),
+    });
+    // A whole-column band over column A carries no extent from the UI cache.
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 0,
+        col: 0,
+        anchor_row: 0,
+        anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cols,
+    });
+    let evts = state.handle_command(TrameCommand::RequestSelectionStats);
+    match &evts.display[0] {
+        TrameEvent::SelectionStats {
+            sum,
+            count,
+            count_num,
+            ..
+        } => {
+            assert_eq!(*count, 2, "the off-screen row is tallied");
+            assert_eq!(*count_num, 2);
+            assert_eq!(*sum, 30.0);
+        }
+        other => panic!("expected SelectionStats, got {other:?}"),
+    }
+    assert!(evts.update.is_none(), "a stats query is read-only");
+}
+
+/// A disjoint selection is totalled as a whole: the aggregate covers every
+/// rectangle, not the live one alone (`TRAME-UI-104`).
+#[test]
+fn selection_stats_totals_a_disjoint_selection() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::SetCellText {
+        row: 0,
+        col: 0,
+        text: "10".to_owned(),
+    });
+    state.handle_command(TrameCommand::SetCellText {
+        row: 2,
+        col: 2,
+        text: "20".to_owned(),
+    });
+    // The committed rectangle A1 plus the live one C3.
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: 2,
+        col: 2,
+        anchor_row: 2,
+        anchor_col: 2,
+        extra: vec![crate::GridRange {
+            row: 0,
+            col: 0,
+            row_end: 0,
+            col_end: 0,
+        }],
+        kind: crate::SelectionKind::Cells,
+    });
+    let evts = state.handle_command(TrameCommand::RequestSelectionStats);
+    match &evts.display[0] {
+        TrameEvent::SelectionStats {
+            sum,
+            count,
+            count_num,
+            ..
+        } => {
+            assert_eq!(*count, 2, "both rectangles are tallied");
+            assert_eq!(*count_num, 2);
+            assert_eq!(*sum, 30.0);
+        }
+        other => panic!("expected SelectionStats, got {other:?}"),
+    }
+    assert!(evts.update.is_none(), "a stats query is read-only");
+}
+
 /// The parameterless filter wrappers resolve the sheet/column from the tracked
 /// active cell, mirroring the sort intents (`trame-shared-filter`).
 #[test]
@@ -541,6 +665,8 @@ fn active_column_filter_wrappers_apply_and_clear() {
         col: 0,
         anchor_row: 0,
         anchor_col: 0,
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
     });
 
     let applied = state.handle_command(TrameCommand::ApplyFilterToActiveColumn {
