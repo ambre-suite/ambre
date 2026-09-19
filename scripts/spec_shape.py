@@ -7,22 +7,17 @@ carries production history, whether the schema document stays a schema, and
 whether the persisted format still matches the code.
 
 One check per pillar that a script can hold (`ambre-spec-template.md`
-section 1.D):
+section 1.G):
 
-  * prose share  -- a reader must be able to stop after the tables. A migrated
+  * prose share  -- a reader must be able to stop after the tables, so a
                     document is capped at 25 % of its content **words**. Words
-                    for the same reason the ceiling below counts them, and the
-                    cap moved from 30 to 25 with the unit: a table row is
-                    word-dense, so a line-based share overstated prose by about
-                    six points and 30-in-words would have held nothing.
-  * long lines   --**the prose meter is blind to line length, and a reader is
+                    and not lines: a table row is word-dense, so a line-based
+                    share overstates prose by about six points.
+  * long lines   -- **the prose meter is blind to line length, and a reader is
                     not.** A bullet is structure to the classifier whatever its
-                    length, so the template measured 29.4 %, under the cap,
-                    while its section 0 was three bullets of 741, 650 and 530
-                    characters. Wrapping them changed no word and no metric, and
-                    it was the biggest difference in how the file reads. Held
-                    to zero for every spec. A table row and a fenced line are not
-                    counted, because neither can be wrapped at all -- a
+                    length, so a document of walls measures under the cap. Held
+                    to zero for every spec. A table row and a fenced line are
+                    not counted, because neither can be wrapped at all -- a
                     too-wide table is fixed by a shorter cell, which no script
                     can hold.
   * feature      -- a feature document states what is, never the steps that
@@ -30,54 +25,33 @@ section 1.D):
                     production marker.
   * schedule     -- **no spec carries a backlog**, feature document or not. One
                     checkbox list, or one roadmap heading, and the spec is a
-                    second schedule. Twenty of them were what made "Phase 1"
-                    name four different things and let four specs call a
-                    shipped behaviour unbuilt (`ambre-spec-testing.md
-                    section 7`, findings 12 and 14). The ban lived in
-                    `ambre-spec-template.md` alone until 2026-08-21, which is
-                    to say it was a wish.
+                    second schedule. Two of them make "Phase 1" name two things.
   * one home     -- **no spec restates a fact another spec owns.** Four shapes
-                    are refused. A `QUALITY` section and a "Definition of Done":
-                    nineteen documents held the same tiers, seams and belts with
-                    the names changed, and two contradicted their own crate. A
-                    `PERFORMANCE` section: eighteen documents budgeted the same
-                    operations at different figures, one against its own
-                    sibling. A `SECURITY & CONFIDENTIALITY` section: thirteen
-                    audited a boundary they do not own, restating `ZK-001..008`.
-                    The homes are `ambre-spec-testing.md`, the roadmap,
+                    are refused: a `QUALITY` section, a "Definition of Done", a
+                    `PERFORMANCE` section and a `SECURITY & CONFIDENTIALITY`
+                    section. The homes are `ambre-spec-testing.md`, the roadmap,
                     `ambre-spec-budgets.md` and `ambre-spec-zero-knowledge.md`;
                     the document that owns a fact is exempt from its marker.
-                    Matched on the
-                    title, because the numbering ran from 3 to 15 and some
-                    sections carried no number at all.
-  * answers      -- **a table states rules; it asks nothing.** The `QUALITY`,
-                    `PERFORMANCE` and `SECURITY` sections held few facts, and
-                    deleting them removed the one thing they did well: a writer
-                    met three headings and had to answer them, and an empty
-                    section was visible. The question comes back as three
-                    bullets under the contract table -- `Budget`, `Boundary`
-                    and `Verification` -- at three lines instead of three
-                    pages. Each must be present and non-empty. **Whether the
-                    answer is true, no script holds**, exactly like the
-                    `Implementation` field: forgetting becomes impossible, and
-                    a false answer becomes visible in review.
+                    Matched on the title, because such a section is numbered
+                    anything or nothing at all.
+  * answers      -- **a table states rules; it asks nothing.** Three bullets
+                    under the contract table ask -- `Budget`, `Boundary` and
+                    `Verification` -- and each must be present and non-empty.
+                    **Whether the answer is true, no script holds**, exactly
+                    like the `Implementation` field: forgetting becomes
+                    impossible, and a false answer becomes visible in review.
   * header       -- the lines a reader gets first: `Type` and
                     `Implementation`, and `Implementation` must be one of the
                     three values `ambre-spec-template.md section 1.A` declares.
-                    A fourth value appeared within two documents of the field
-                    being written down, which is what an unchecked vocabulary
-                    does -- and the deleted `Status` field, which no script
-                    ever checked, ended on four values and three meanings.
+                    An unchecked vocabulary grows a fourth value within two
+                    documents of being written down.
   * schema       -- the schema document keeps its budgets: prose words for the
                     whole file, words for one container note.
   * containers   -- asymmetric on purpose: a container declared in the spec with
                     no code is normal under spec-driven development; a container
                     built in the code and absent from the table is a lie.
 
-Every metric is a hard cap. A ratchet held the prose count and the long lines
-per spec while the corpus migrated, and it is gone: the whole corpus is under
-the caps, and a ceiling on a count already at the cap holds nothing a refusal
-does not hold better.
+Every metric is a hard cap, never a per-file ceiling: a breach is red.
 
 **The prose word count is a column, not a check.** The report prints it beside
 the share so a reader sees a document growing, and no threshold reads it: a
@@ -147,23 +121,20 @@ BUDGETS = "1-Foundations/ambre-spec-budgets.md"
 # the forbidden column.
 TERM_INDEX = "ambre-glossary.md"
 
-# The template declares the pillars, so it is held to the one it can be held to:
-# the prose cap. It was exempt until 2026-08-21 and stood at 34.5 %, which is
-# what an exemption written by the author of the rule is worth.
+# The template declares the pillars, so it is held to the one it can be held
+# to: the prose cap. An exemption written by the author of a rule is worth
+# nothing.
 TEMPLATE = "ambre-spec-template.md"
 
-# Per cent of content **words**. 25, not the 30 the line-based share used: a
-# table row is word-dense, so lines overstated prose by about six points and the
-# migrated corpus peaks at 23.6 %. 30 in words would be a cap that holds
-# nothing; 25 reproduces the severity 30-on-lines had.
-MIGRATED_PROSE_MAX = 25.0
+# Per cent of content **words**, not lines: a table row is word-dense, so a
+# line-based share overstates prose by several points. The cap is in words, and
+# the figure is set to the severity a reader feels.
+PROSE_MAX = 25.0
 
 # A line a reader meets as a wall. 110 leaves a tolerance over the corpus habit
-# of wrapping at 100, so an ordinary paragraph does not trip the check; nothing
-# in `ai/ambre-writing-style.md` writes the 100 down, which is how three bullets
-# of 741, 650 and 530 characters reached the template.
+# of wrapping at 100, which nothing in `ai/ambre-writing-style.md` writes down.
 LONG_LINE_COLS = 110
-MIGRATED_LONG_MAX = 0
+LONG_LINES_MAX = 0
 
 SCHEMA_PROSE_WORDS_MAX = 600
 SCHEMA_NOTE_WORDS_MAX = 40
@@ -181,20 +152,12 @@ SCHEDULE_MARKERS = [
 # The two files that *are* the schedule.
 SCHEDULE_DOCS = {"ambre-roadmap.md", "ambre-roadmap-journal.md"}
 
-# The applications the migration has not reached. Each still carries the old
-# skeleton, and deleting a section before the app is measured against the
-# templates would be a blind delete. **This set only ever shrinks**, and it is
-# empty when Toile and Prose have migrated. **It is empty**: every application
-# has, and the four files it named are deleted.
-METHOD_EXEMPT: set[str] = set()
-
 # A shared fact lives in one file. These are the shapes each one takes when it
 # grows back inside a spec: a section to hold it, and the one claim a quality
-# section always ended on. Matched on the **title**, never on a number -- the
-# instances were numbered 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 15 or nothing at all
-# depending on the file, so a number-based ban would have caught almost none.
-# The third element is the set of documents that **own** the fact and therefore
-# carry the section legitimately; `METHOD_EXEMPT` is added to every one of them.
+# section always ends on. Matched on the **title**, never on a number -- such a
+# section is numbered anything or nothing at all, so a number-based ban catches
+# almost none. The third element is the set of documents that **own** the fact
+# and therefore carry the section legitimately.
 METHOD_MARKERS = [
     (
         re.compile(r"^#{2,}\s.*\bQUALITY\b", re.I),
@@ -209,10 +172,9 @@ METHOD_MARKERS = [
     (
         re.compile(r"^#{2,}\s.*\bPERFORMANCE\b", re.I),
         "a performance section: a budget is a row of `ambre-spec-budgets.md`",
-        # `ambre-spec-architecture.md` owned the register until `F7` moved it out.
-        # The register carries the budgets of the whole workspace, most of which
-        # measure no part of the stack, and holding it inside a feature document
-        # is what kept that document outside both templates.
+        # The register is the one exemption: it carries the budgets of the whole
+        # workspace, so a heading naming performance is its subject, not a
+        # section a feature document grew on its own.
         {BUDGETS},
     ),
     (
@@ -257,10 +219,10 @@ ANSWERS = {
     for label in ("Budget", "Boundary", "Verification")
 }
 
-# A numbered section heading, `## 11 bis.` and `## 4bis.` included. Kept here
-# rather than imported from `spec_refs.py`: that script reads a coordinate to
-# resolve it, this one reads a heading to count it, and one shared regex would tie
-# the two rules together for no gain.
+# A numbered section heading, `## 11 bis.` and `## 4bis.` included. This is the
+# one script that reads the Latin ordinal, and it reads it to refuse it: nothing
+# else in the workspace knows the word, so a heading this lets through is a
+# coordinate `spec_refs.py` cannot resolve and does not report either.
 SECTION_HEADING = re.compile(r"^##\s+(\d+)\s*(bis)?\s*[.:]")
 
 # Documents that describe no code, so they carry no `Implementation` field.
@@ -271,18 +233,18 @@ NO_CODE_DOCS = SCHEDULE_DOCS | {TEMPLATE, BUDGETS, TERM_INDEX}
 # after a ` -- `, naming what is missing: "partial -- the file round trip is
 # not built".
 #
-# The value ends at the space or at the line: a word boundary let `implemented.`
-# through, and a value the gate reads as one of three while the corpus carries
-# four spellings of it is the `Kind` column's story again. Anything after the
-# value is a clause, so it announces itself with the dash the template writes.
+# The value ends at the space or at the line, never at a word boundary: a
+# boundary lets `implemented.` through, and a gate reading one value where the
+# corpus writes two spellings of it holds nothing. Anything after the value is a
+# clause, so it announces itself with the dash the template writes.
 HEADER_FIELDS = ("Type", "Implementation")
 
 # The title, read off the first heading. It is what a search result and a diff
 # hang the document on, so two documents sharing one make a reader open both.
-# Twenty-one shared a title before the template asked for a unique one: four
-# spelled `UNDO AND REDO`, four `PDF EXPORT`, three `IMPORT AND EXPORT`
-# (`ambre-spec-template.md section 1.A`). The search is bounded to the opening
-# lines, so a `#` inside a later fence is never read as a heading.
+# A title is unique in the corpus (`ambre-spec-template.md section 1.A`): the
+# obvious names -- `UNDO AND REDO`, `PDF EXPORT`, `IMPORT AND EXPORT` -- are the
+# ones several documents reach for. The search is bounded to the opening lines,
+# so a `#` inside a later fence is never read as a heading.
 TITLE = re.compile(r"^#\s+(\S.*?)\s*$", re.M)
 IMPLEMENTATION = re.compile(
     r"^\*\*Implementation:\*\* ("
@@ -293,11 +255,10 @@ IMPLEMENTATION = re.compile(
 # A feature document describes the current state. These betray the steps.
 #
 # Each marker names a form, never a sense. `landed`, `used to` and `was fixed`
-# were here and are gone: they read a verb and guessed what it was about, so
-# "the codec used to encode the frame" was refused as production history. A
-# detector that guesses produces a number, not a rule, which is why the passive
-# meter left this suite too. What a past tense is really saying stays a reading,
-# and a reading belongs to review.
+# do not qualify: they read a verb and guess what it is about, so "the codec
+# used to encode the frame" reads as production history. A detector that guesses
+# produces a number, not a rule, which is why the passive meter is absent too.
+# What a past tense is really saying stays a reading, and a reading is review.
 FEATURE_MARKERS = [
     (re.compile(r"^\s*[-*]\s*\[[ x]\]"), "a checkbox: the steps live in the roadmap"),
     (re.compile(r"\bMVP\b"), "a milestone word: a milestone tags a story, never a feature"),
@@ -349,9 +310,9 @@ def classify(text: str) -> "Shape":
 
     Structure is everything a reader scans rather than reads: a table row, a
     list item **and its wrapped continuation lines**, which are the same item.
-    Counting a continuation as prose was the first version's bug -- it made a
-    tight bullet list read as a wall on the meter while reading fine on the
-    page. A heading and a rule are neither prose nor structure: they are
+    Counting a continuation as prose makes a tight bullet list read as a wall
+    on the meter while it reads fine on the page. A heading and a rule are
+    neither prose nor structure: they are
     navigation, and they are skipped. A fenced block counts whole, fence
     markers included: it is neither prose to read nor a table to scan.
 
@@ -542,7 +503,7 @@ def method_issues(text: str, rel: str):
     defect everywhere except in the one document that owns the fact.
     """
     for i, line in enumerate(text.splitlines(), 1):
-        # A table cell may name the ban: `ambre-spec-template.md` section 1.C
+        # A table cell may name the ban: `ambre-spec-template.md` section 1.F
         # lists what no document carries, and `ambre-spec-testing.md` section 10
         # records why the section was dropped. Naming a rule is not breaking it.
         if line.lstrip().startswith("|"):
@@ -559,12 +520,11 @@ def numbering_issues(text: str):
     """Yield (line_no, reason) for a section number that breaks the sequence.
 
     A hole is what a deletion leaves and what an insertion refuses to pay for:
-    the corpus reached `1, 2, 6` in four documents, `1, 2, 3, 6, 7, 8` in one, and
-    `4bis` / `5bis` / `13bis` in the spreadsheet's UI. Nothing broke, which is the
-    problem -- a reader counts and finds three sections missing, and a coordinate
-    citing a hole reads as a citation like any other. The rule is the cheapest one
-    a document can carry: numbers run from 0 or 1 upward, one step at a time, and
-    `bis` is not a number.
+    `1, 2, 6` after three sections go, `4bis` when one arrives. Nothing breaks,
+    which is the problem -- a reader counts and finds three sections missing, and
+    a coordinate citing a hole reads as a citation like any other. The rule is the
+    cheapest one a document can carry: numbers run from 0 or 1 upward, one step at
+    a time, and `bis` is not a number.
     """
     seen, expected = [], None
     for i, line in enumerate(text.splitlines(), 1):
@@ -655,14 +615,13 @@ def main() -> int:
         share = prose_share(text)
         measured = {"prose_words": classify(text).prose_words, "long": long_lines(text)}
 
-        # Every spec, whatever its class. The caps held the migrated documents
-        # while a ceiling carried the rest down to them, and the rest arrived.
-        if share > MIGRATED_PROSE_MAX:
-            errors.append(f"{rel}: prose {share:.1f} %, cap {MIGRATED_PROSE_MAX:.0f} %")
-        if measured["long"] > MIGRATED_LONG_MAX:
+        # Every spec, whatever its class.
+        if share > PROSE_MAX:
+            errors.append(f"{rel}: prose {share:.1f} %, cap {PROSE_MAX:.0f} %")
+        if measured["long"] > LONG_LINES_MAX:
             errors.append(
                 f"{rel}: {measured['long']} {LONG_LINES},"
-                f" cap {MIGRATED_LONG_MAX} -- a spec wraps"
+                f" cap {LONG_LINES_MAX} -- a spec wraps"
             )
 
         if "/features/" in f"/{rel}":
@@ -676,11 +635,10 @@ def main() -> int:
             for lineno, reason in schedule_issues(text):
                 errors.append(f"{rel}:{lineno}: {reason}")
 
-        if rel not in METHOD_EXEMPT:
-            for lineno, reason in method_issues(text, rel):
-                errors.append(f"{rel}:{lineno}: {reason}")
-            for lineno, reason in numbering_issues(text):
-                errors.append(f"{rel}:{lineno}: {reason}")
+        for lineno, reason in method_issues(text, rel):
+            errors.append(f"{rel}:{lineno}: {reason}")
+        for lineno, reason in numbering_issues(text):
+            errors.append(f"{rel}:{lineno}: {reason}")
 
         for kind, detail in answer_issues(text):
             errors.append(f"{rel}: {kind}: {detail}")

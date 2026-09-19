@@ -14,26 +14,21 @@ Two metrics, both a hard cap:
                     `scripts/prose.py`, which already caps them at six
                     sentences. Six sentences under the 25-word sentence cap is
                     150 words, so 150 is the target the template states, and
-                    the gate refuses a document over it. The corpus measured a
-                    median of 199 and a maximum of 463 when this script was
-                    written, 99 documents of 124 over the target: a ratchet
-                    carried them down, and the cap holds them there on its own.
+                    the gate refuses a document over it.
   * history      -- a line writing the history of the document itself: which
                     conjunction came apart, what this pass added, which row was
                     carrying which half. That is a commit message. It ages
-                    without a reader, no gate can tell whether it is still true,
-                    and it was the bulk of what the `Verification` answers spent
-                    their words on. Measured over the whole document, not just
-                    the answers, because the shape spreads.
+                    without a reader, and no gate can tell whether it is still
+                    true. Measured over the whole document, not just the
+                    answers, because the shape spreads.
 
 **Why the markers are narrow.** `no longer` and `is new` read as history and are
 overwhelmingly the system: a target that no longer exists, an address that is
-new. A wide net over those two matched 80 lines of which a handful were history.
-Each pattern below names a verb as well as a subject, so `the pass added` is
-caught and `the settling pass runs` is not. `landed`, `used to` and `was fixed`
-were here and are gone: a lone verb is not a subject, so "the codec used to
-encode the frame" was refused as production history. A marker this script
-misses is a review act, like a `Budget` answer that is false.
+new. Each pattern below names a verb as well as a subject, so `the pass added`
+is caught and `the settling pass runs` is not. `landed`, `used to` and
+`was fixed` do not qualify: a lone verb is not a subject, so "the codec used to
+encode the frame" would read as production history. A marker this script misses
+is a review act, like a `Budget` answer that is false.
 """
 
 from __future__ import annotations
@@ -80,8 +75,7 @@ METRICS = (
     ("history", "lines of document history"),
 )
 
-# What every document holds. A ratchet once softened the two while the corpus
-# migrated; the corpus is under both, so the cap stands alone.
+# What every document holds, as a hard cap: a breach is red, never a budget.
 CAPS = {"answer_words": ANSWER_WORDS_TARGET, "history": 0}
 
 

@@ -95,9 +95,8 @@ class HardRulesReadATableCell(unittest.TestCase):
 class AHyphenBindsAsTightlyAsALetter(unittest.TestCase):
     """`cargo-deny` is a tool, and the list forbids a verb.
 
-    The word boundary around a forbidden term treated the hyphen as a break, so
-    the name of the tool read as the verb it contains, fourteen times over, in
-    the `Verification` column of the contract tables.
+    A word boundary treating the hyphen as a break reads the name of the tool as
+    the verb it contains, once per `Mechanism` cell that cites it.
     """
 
     def test_a_hyphenated_name_is_not_the_verb_it_contains(self):

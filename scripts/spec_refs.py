@@ -4,19 +4,17 @@
 The corpus cites a document by its name, never by a path or a number: a comment
 writes `` `trame-clipboard` `` and a spec writes `` `ambre-spec-sync.md` ``. A
 name is stable, greppable and readable, which is why `ambre-spec-template.md`
-section 1.D makes it a pillar. Nothing resolved it. Splitting one spec into
-fifteen feature documents left every stale citation silent, and a reader follows
-a name to a document that no longer holds the rule, or to no document at all.
-`prose-engine` named no document for as long as three Prose specs have existed.
+section 1.G makes it a pillar. Nothing else resolves it: a spec split into
+feature documents leaves every stale citation silent, and a reader follows a
+name to a document that no longer holds the rule, or to no document at all.
 
 Three namespaces, one resolver.
 
-**The document name.** Five forms are recognised, and two of them are why this
-file was rewritten. The name and the coordinate sit inside one backtick span more
-often than not, and the pattern that required a closing backtick after the name
-saw none of them: 423 citations were outside the resolver while it reported
-success. The fifth is the same failure a second time -- a name pattern stopping at
-`/` read a prefixed sibling as no citation at all, 311 of them (finding 68).
+**The document name.** Five forms are recognised, and two of them are where a
+resolver goes quietly blind. The name and the coordinate sit inside one backtick
+span more often than not, so a pattern requiring a closing backtick after the
+name sees none of them. A name pattern stopping at `/` reads a prefixed sibling
+as no citation at all. Both failures report success while resolving nothing.
 
   `trame-sort`                          -> specs/**/ambre-spec-trame-sort.md
   `ambre-spec-docfile.md`               -> specs/**/ambre-spec-docfile.md
@@ -25,52 +23,51 @@ success. The fifth is the same failure a second time -- a name pattern stopping 
   `features/ambre-spec-toile-links.md`  -> the prefix is dropped, the name resolves
 
 A short name is accepted only when it resolves to exactly **one** document. That
-is what makes `` `architecture section 5` `` legitimate and `` `ui section 5bis` ``
+is what makes `` `architecture section 5` `` legitimate and `` `ui section 5` ``
 in a Toile document a defect: `ui` is `ambre-spec-ui.md` corpus-wide, so a reader
 following it lands in Foundations, not in a Toile document.
 
 **The section coordinate.** A citation that carries `section N` must name a
 section the target document has. The number is checked, never the letter that may
 follow it: `section 5.B` is verified as `5`. Renumbering a document silently
-breaks every coordinate aimed at it, and the corpus had accumulated coordinates
-pointing at sections deleted three commits earlier.
+breaks every coordinate aimed at it, and a coordinate pointing at a deleted
+section reads like any other.
 
-`§N` is the same coordinate, and it was the spelling `crates/` used. Both are
-read, so neither can hide from the other.
+`§N` is the same coordinate in a second spelling. Both are read, so neither can
+hide from the other.
 
 **The coordinate namespace is the corpus. The code is out of it, deliberately.**
-A section number is the one part of a citation that rots: renumbering ten
-documents re-pointed 108 coordinates, and the code held 906 more that named no
-document at all. A code comment cites the **document name** and, where the rule
-has one, its **contract id** -- the two namespaces an ID is minted once and never
-renumbered in. Nothing in `crates/` needs a number to be followed: a name picks
-one document out of 57, and a grep finds the rule inside it. So a coordinate
+A section number is the one part of a citation that rots: renumbering one
+document re-points every coordinate aimed at it, wherever it was written. A code
+comment cites the **document name** and, where the rule has one, its **contract
+id** -- the two namespaces an ID is minted once and never renumbered in. Nothing
+in `crates/` needs a number to be followed: a name picks one document out of the
+corpus, and a grep finds the rule inside it. So a coordinate
 written in a `.rs` file is neither resolved nor reported here; what is held there
 is the name.
 
 Which document a coordinate belongs to is decided by adjacency: the name it
 touches, the coordinate it chains from (`section 6/section 7`), or, failing both,
 the document doing the citing. A coordinate that resolves to no document at all is
-reported too -- `` Trame `logic section 11 bis` `` names no file, so no reader can
+reported too -- `` Trame `logic section 11` `` names no file, so no reader can
 follow it either.
 
 Adjacency crosses a line break. A citation wrapped between `` `architecture` ``
-and `section 5.F` is one citation to a reader and was two to the resolver, which
-fell back on the citing document and found a section 5 that existed and said
-something else. The glue may therefore carry the end of one line, the newline,
-and the comment or quote marker that opens the next.
+and `section 5.F` is one citation to a reader. Read as two, it falls back on the
+citing document, which has a section 5 of its own that says something else. The
+glue may therefore carry the end of one line, the newline, and the comment or
+quote marker that opens the next.
 
 **The code path.** A document names a file of the workspace --
-`` `crates/ambre-sync/src/pipeline.rs` `` -- and 329 such paths sit in the corpus
-and in the code. Nothing resolved one: this file used to declare a `crates/` path
-"not a citation", because it is not a *document*, and a rename left the reader
-walking to a file that no longer exists.
+`` `crates/ambre-sync/src/pipeline.rs` `` -- and such paths sit in the corpus and
+in the code alike. A path is not a *document*, and calling it "not a citation" on
+that ground leaves a rename walking the reader to a file that no longer exists.
 
 The split above holds here unchanged. **The path is a name, and the line range is
 a coordinate.** So a path is resolved everywhere, a record included, and a range
 is refused everywhere but in a record: `rate_limit.rs:131-197` is exact on the day
 an audit is written and wrong at the next edit of the file, which is what
-`ambre-spec-template.md` section 1.D means by `crates/` carrying no section
+`ambre-spec-template.md` section 1.G means by `crates/` carrying no section
 number. The range is cut before the path is resolved, so a finding keeps both and
 only the half that rots is reported. A path carrying `*` is a shape rather than a
 file, and it resolves when it matches at least one.
@@ -109,8 +106,8 @@ APPS = ("trame", "toile", "prose")
 # A directory prefix is consumed and dropped: the corpus writes a sibling document
 # as `` `features/ambre-spec-toile-links.md` `` and a rules file as
 # `` `ai/ambre-writing-style.md` ``, and a name pattern stopping at `/` reads
-# neither as a citation at all -- 311 of them, outside the rule that a citation
-# names a document that exists (finding 68). A path whose last component is not a
+# neither as a citation at all, leaving both outside the rule that a citation
+# names a document that exists. A path whose last component is not a
 # document still resolves to nothing here, so `` `crates/ambre-prose/src/lib.rs` ``
 # is no document citation; `CODE_PATH` is what resolves it, in its own namespace.
 NAME = re.compile(r"`((?:[a-z0-9][a-z0-9-]*/)*)([a-z0-9][a-z0-9.-]*)(?=[`\s])")
@@ -125,24 +122,17 @@ CRATE_NAMES = {path.name for path in (ROOT / "crates").iterdir() if path.is_dir(
 # `this spec`, `this document`: the citing file is the target.
 SELF = re.compile(r"\bthis (?:spec|document)\b", re.IGNORECASE)
 
-# The Latin ordinal an unmigrated document appends to a section it inserted
-# rather than renumbering: `5bis`, `5 ter`, `5quinquies`. Toile and Prose still
-# carry them, so the resolver reads them; `spec_shape.py` is what refuses a new
-# one in a migrated document.
-ORDINAL = r"bis|ter|quater|quinquies|sexies"
-
-# A section coordinate. `sec.5bis`, `section 11 bis` and `sections 1` are all in
-# the corpus, and `§2.A` is the spelling `crates/` used. The sub-section that may
-# follow (`5.B`, `11 bis.F`, `2.A bis`) is matched but left outside the two
-# groups: it is consumed so that the next coordinate in a chain
-# (`section 2.D / section 12`) still reads as adjacent, and it is not captured
-# because only the number is checked and renumbered.
+# A section coordinate. `sec.5`, `section 11` and `sections 1` are all in the
+# corpus, and `§2.A` is a second spelling of the same thing. The sub-section that
+# may follow (`5.B`, `2.A`) is matched but left outside the group: it is consumed
+# so that the next coordinate in a chain (`section 2.D / section 12`) still reads
+# as adjacent, and it is not captured because only the number is checked and
+# renumbered.
 #
 # `§` carries no word boundary of its own -- it sits against `(`, `/` or a space
 # -- so the boundary belongs to the `sec` branch alone.
 COORD = re.compile(
-    rf"(?:\bsec(?:tions?|\.)?\s*|§\s*)"
-    rf"(\d+)\s*({ORDINAL})?(?:\.[A-Za-z0-9]+(?:\s*(?:{ORDINAL}))?)?\b",
+    r"(?:\bsec(?:tions?|\.)?\s*|§\s*)(\d+)(?:\.[A-Za-z0-9]+)?\b",
     re.IGNORECASE)
 
 # What may sit between a name and the coordinate it owns. Short by design: a
@@ -161,10 +151,9 @@ CHAIN = re.compile(r"[`'\"]*\s*(?:[/,;-]|and|to|or)\s*[`'\"]*")
 # in the glue: a doc comment, a comment, a blockquote, a list bullet.
 MARKER = re.compile(r"^\s*(?://[/!]?|[*>|-]+|#+)?\s*")
 
-# A heading that opens a numbered section, `## 11 bis.` and `## 5quinquies.`
-# included. It must read every ordinal the coordinate reads, or a citation of a
-# section that exists is reported dead.
-HEADING = re.compile(rf"^##\s+(\d+)\s*({ORDINAL})?\s*[.:]", re.IGNORECASE)
+# A heading that opens a numbered section. It must read every number the
+# coordinate reads, or a citation of a section that exists is reported dead.
+HEADING = re.compile(r"^##\s+(\d+)\s*[.:]")
 
 # Dated records. Their coordinates are quotations of a past state, so they are
 # not resolved; their document names are, except for the names below. Everything
@@ -219,36 +208,33 @@ def code_resolves(path: str) -> bool:
 
 
 # Documents the corpus deleted. A record naming one is quoting the corpus of the
-# day it was written, exactly as it quotes a since-deleted heading: finding 65 is
-# *about* what `trame-ui` said, so rewriting it to name `trame-engine` would make
-# the record claim something it never said. Reporting it instead asks the author
-# to falsify the archive, which is the one thing an archive may not do.
+# day it was written, exactly as it quotes a since-deleted heading: a finding
+# *about* what `trame-ui` said would claim something it never said if it were
+# rewritten to name `trame-engine`. Reporting it instead asks the author to
+# falsify the archive, which is the one thing an archive may not do.
 #
 # Narrow on purpose. It buys the exemption for these names alone, inside a record
-# alone: every other dead name in a record is still reported, which is the class
-# `prose-engine` belonged to. **The set only grows by a deletion**, one line per
-# document, so it doubles as the register of what the corpus removed and when.
+# alone: every other dead name in a record is still reported, a name that was
+# never a document included. **The set only grows by a deletion**, one line per
+# document, so it doubles as the register of what the corpus removed.
 RETIRED = {
-    # Step 31: the four Trame specs, emptied by the feature migration and
-    # replaced by `features/ambre-spec-trame-engine.md`.
+    # The four Trame specs, replaced by `features/ambre-spec-trame-engine.md`.
     "ambre-spec-trame-logic.md",
     "ambre-spec-trame-ui.md",
     "ambre-spec-trame-features.md",
     "ambre-spec-trame-interop.md",
-    # Step T9: the four Toile specs, emptied by the same migration and replaced
-    # by `features/ambre-spec-toile-engine.md`.
+    # The four Toile specs, replaced by `features/ambre-spec-toile-engine.md`.
     "ambre-spec-toile-logic.md",
     "ambre-spec-toile-ui.md",
     "ambre-spec-toile-features.md",
     "ambre-spec-toile-interop.md",
-    # Step P9: the four Prose specs, emptied by the same migration and replaced
-    # by `features/ambre-spec-prose-engine.md`.
+    # The four Prose specs, replaced by `features/ambre-spec-prose-engine.md`.
     "ambre-spec-prose-logic.md",
     "ambre-spec-prose-ui.md",
     "ambre-spec-prose-features.md",
     "ambre-spec-prose-interop.md",
-    # Step F2: the content rendering spec, cut into the five feature documents
-    # of the rendering layer -- `ambre-spec-frame.md`,
+    # The content rendering spec, cut into the five feature documents of the
+    # rendering layer -- `ambre-spec-frame.md`,
     # `ambre-spec-render-assets.md`, `ambre-spec-drawing-surface.md`,
     # `ambre-spec-text-editor.md` and `ambre-spec-high-density.md`.
     "ambre-spec-canvas.md",
@@ -256,18 +242,10 @@ RETIRED = {
 
 # The same set, as `resolve` claims a short name once the file is gone: the short
 # form no longer sits in `shorts`, so the candidate falls through to `in_span` and
-# claims `<short>.md`. A record cites either spelling -- finding 62 wrote `canvas
-# section 5.B` -- so the exemption covers both or it covers the archive by half.
+# claims `<short>.md`. A record cites either spelling -- `canvas section 5.B` as
+# readily as the file name -- so the exemption covers both or it covers the
+# archive by half.
 RETIRED_SHORTS = {name[len("ambre-spec-"):] for name in RETIRED}
-
-
-def coordinate(number: str, ordinal: str | None) -> str:
-    """One spelling for a coordinate, whatever the citation or heading wrote.
-
-    `5bis`, `5 BIS` and `## 5 bis.` are one coordinate; so are `§5quinquies` and
-    `section 5 quinquies`.
-    """
-    return f"{number} {ordinal.lower()}" if ordinal else number
 
 
 def corpus_files() -> list[Path]:
@@ -331,7 +309,7 @@ def sections(path: Path) -> set[str]:
     for line in path.read_text().splitlines():
         match = HEADING.match(line)
         if match:
-            found.add(coordinate(match.group(1), match.group(2)))
+            found.add(match.group(1))
     return found
 
 
@@ -365,7 +343,7 @@ def resolve(candidate: str, shorts: dict[str, str], coordinated: bool,
     `in_span` says the coordinate sits inside this candidate's own backtick span,
     which makes the candidate a document name **by position**: whatever
     `` `logic section 6` `` is, it is being read as a document, so it must resolve
-    or be reported. `` `ambre-chrome` (section 1bis) `` is the other case -- a crate
+    or be reported. `` `ambre-chrome` (section 1) `` is the other case -- a crate
     name, and a coordinate that belongs to the citing document.
     """
     stem = candidate[:-len(".md")] if candidate.endswith(".md") else candidate
@@ -394,9 +372,9 @@ def citations(text: str, own: str | None, shorts: dict[str, str]):
       ("name", line, cited name, claimed file, span)
       ("coord", line, claimed file or None, coordinate, span)
 
-    The span of a coordinate covers the number and its ordinal only, never the
-    word `section` and never the letter of a sub-section, so a renumbering pass
-    can rewrite it in place.
+    The span of a coordinate covers the number only, never the word `section`
+    and never the letter of a sub-section, so a renumbering pass can rewrite it
+    in place.
 
     Adjacency survives one line break, and one only: a citation the writer wrapped
     is still one citation, but a document named a paragraph earlier owns nothing.
@@ -432,16 +410,16 @@ def citations(text: str, own: str | None, shorts: dict[str, str]):
                 continue
             hit = resolve(match.group(2), shorts, near, span)
             # A backticked word that is not a document citation is not an anchor
-            # either: `` `ambre-chrome` (section 1bis) `` names a crate, and the
+            # either: `` `ambre-chrome` (section 1) `` names a crate, and the
             # coordinate belongs to the citing document.
             if hit:
                 tokens.append((match.start(), match.end(), "name", hit[1], hit))
         for match in SELF.finditer(line):
             tokens.append((match.start(), match.end(), "name", own, None))
         for match in COORD.finditer(line):
-            inner = (match.start(1), match.end(2) if match.group(2) else match.end(1))
+            inner = (match.start(1), match.end(1))
             tokens.append((match.start(), match.end(), "coord",
-                           coordinate(match.group(1), match.group(2)), inner))
+                           match.group(1), inner))
         tokens.sort()
         if not tokens:
             previous, trailing = None, None
@@ -553,7 +531,7 @@ def main() -> int:
     if check and shared:
         print(
             "\nERROR: two documents carry one file name, and a citation carries "
-            "the file name alone (ambre-spec-template.md section 1.D). One of "
+            "the file name alone (ambre-spec-template.md section 1.G). One of "
             "them resolves and the other is unreachable, so rename one.",
             file=sys.stderr,
         )
@@ -561,7 +539,7 @@ def main() -> int:
     if check and (dead_names or dead_coords):
         print(
             "\nERROR: a citation names a document, or a section of one, that does "
-            "not exist (ambre-spec-template.md section 1.D). Point the citation at "
+            "not exist (ambre-spec-template.md section 1.G). Point the citation at "
             "the document and the section that hold the rule today.",
             file=sys.stderr,
         )
@@ -569,7 +547,7 @@ def main() -> int:
     if check and dead_paths:
         print(
             "\nERROR: a citation names a file of `crates/` that does not exist "
-            "(ambre-spec-template.md section 1.D). Point it at the file that "
+            "(ambre-spec-template.md section 1.G). Point it at the file that "
             "holds the code today, or cut it.",
             file=sys.stderr,
         )
@@ -577,7 +555,7 @@ def main() -> int:
     if check and ranged_paths:
         print(
             "\nERROR: a code path carries a line range, and `crates/` carries no "
-            "coordinate (ambre-spec-template.md section 1.D). A range is exact "
+            "coordinate (ambre-spec-template.md section 1.G). A range is exact "
             "the day it is written and wrong at the next edit: name the file, and "
             "the symbol where the citation needs one.",
             file=sys.stderr,

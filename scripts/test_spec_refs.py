@@ -161,31 +161,17 @@ class Coordinates(unittest.TestCase):
         )
 
     def test_a_crate_name_is_not_an_anchor_either(self):
-        """`` `ambre-chrome` (section 1bis) `` names a crate, so the coordinate
+        """`` `ambre-chrome` (section 1) `` names a crate, so the coordinate
         belongs to the citing document."""
-        self.assertEqual([("ambre-spec-frame.md", "1 bis")], coords("`ambre-chrome` (section 1bis)"))
+        self.assertEqual([("ambre-spec-frame.md", "1")], coords("`ambre-chrome` (section 1)"))
 
     def test_the_section_mark_is_the_same_coordinate(self):
-        """`§` was the spelling `crates/` used, so both are read or one hides
-        from the other."""
+        """`§` is a second spelling, so both are read or one hides from the
+        other."""
         self.assertEqual([("ambre-spec-sync.md", "3")], coords("See `sync` §3."))
 
     def test_a_sub_section_is_verified_on_its_number(self):
         self.assertEqual([("ambre-spec-sync.md", "5")], coords("See `sync` section 5.B."))
-
-    def test_an_ordinal_is_part_of_the_coordinate(self):
-        self.assertEqual([("ambre-spec-sync.md", "5 bis")], coords("See `sync` section 5bis."))
-
-
-class Spelling(unittest.TestCase):
-    """One spelling for a coordinate, whatever the citation or heading wrote."""
-
-    def test_an_ordinal_is_cased_and_spaced_once(self):
-        self.assertEqual("5 bis", spec_refs.coordinate("5", "BIS"))
-        self.assertEqual("5 bis", spec_refs.coordinate("5", "bis"))
-
-    def test_a_plain_number_carries_no_ordinal(self):
-        self.assertEqual("5", spec_refs.coordinate("5", None))
 
 
 class ShortNames(unittest.TestCase):

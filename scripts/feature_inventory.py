@@ -69,9 +69,8 @@ NOT_A_FEATURE = {
 GENERATED = re.compile(r"-(inventory|ledger)\.md$")
 
 # A row is built unless it is `unimplemented`. What "loose" means is stated in
-# `contracts.py` and read from there, never typed again: the day `unverified`
-# became three values, that file was corrected and this one kept naming a status
-# the template no longer has, which is the second statement drifting on its own.
+# `contracts.py` and read from there, never typed again: a status vocabulary
+# written twice is a vocabulary one of the two copies stops holding.
 UNBUILT = "unimplemented"
 
 # `STATES` is the template's `Implementation` vocabulary, and its order is the

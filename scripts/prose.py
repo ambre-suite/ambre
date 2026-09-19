@@ -1,43 +1,29 @@
 #!/usr/bin/env python3
 """Fail when English drifts from `ai/ambre-writing-style.md`.
 
-The style file closed on its own admission: "No script checks this file, unlike
-`just contracts` and `just spec-code`. It is a review rule, and review rules
-drift." This is the half of it a script can hold.
-
-**Every metric is a hard error.** The corpus once predated the check by a
-thousand breaches, so each file carried a per-metric ceiling that only fell.
-Every count reached zero, and a ceiling on a count of zero holds nothing a
-refusal does not hold better, so the ratchet is gone and a breach is red.
+That file states the rules and names the half a script can hold. This is that
+half, and every metric below is a hard error and an exact count.
 
   * long      -- a sentence over 25 words.
   * latin     -- a Latin abbreviation, where the rule asks for words.
-  * para      -- a paragraph over 6 sentences. The last 16 were broken by hand,
-                 most of them a numbered list the reader counted as one
-                 paragraph rather than prose anyone wrote long.
+  * para      -- a paragraph over 6 sentences.
 
-Each of the three is an exact count. A rule enters this script when the measure
-is exact, never because a regular expression reaches it: a detector that guesses
-produces a number, not a rule. "Active voice, named actor" left on that test.
-`be` plus a participle names a state as often as a passive, and a closed list of
-participles reads about thirty of the two hundred English carries.
+A rule enters this script when the measure is exact, never because a regular
+expression reaches it: a detector that guesses produces a number, not a rule.
+"Active voice, named actor" fails that test. `be` plus a participle names a
+state as often as a passive, and a closed list of participles reads about thirty
+of the two hundred English carries.
 
-Five more rules are a hard error. The four empty openers the style file names,
-which the corpus breaches nowhere. The banned terms of the style file's own
-table, which it breaches 18 times: one rewrite pass, not a debt. And a code
-point outside 32 to 126, letters of another script apart: the 296 the corpus
-carried were an em dash, a non-breaking hyphen, an arrow and a box rule, each of
-which has an ASCII spelling, so the debt closed by spelling them.
+Five more rules are a hard error: the four empty openers the style file names,
+the banned terms of its own table, and a code point outside 32 to 126, letters
+of another script apart.
 
 **What no script holds.** A metaphor, an ambiguous pronoun, one word used for
 two meanings, the passive voice, one negative per sentence, and a comment that
-states what the code does instead of why. Those
-stay a human read of the diff. The script narrows the read; it does not replace
-it.
+states what the code does instead of why. Those stay a human read of the diff.
+The script narrows the read; it does not replace it.
 
-**Scope.** The comments of `crates/**/*.rs`, and the prose of the corpus. A
-comment is where the workspace had no check at all; a spec had `spec_shape.py`
-for its shape and nothing for its sentences.
+**Scope.** The comments of `crates/**/*.rs`, and the prose of the corpus.
 
 Usage:
     python3 scripts/prose.py --check    # CI: fail on a breach
@@ -163,18 +149,17 @@ def rust_comments(text: str) -> list[tuple[int, str, bool, bool]]:
     Rust comment opens one by following a line of code, which the line numbers
     already say. The fourth says the line is prose at all.
 
-    A table row is structure, not a sentence, and it is the one shape that read
-    as both. A doc comment holding a five-row table joined its cells into one
-    31-word "sentence", which no rewrite can shorten because nobody wrote it.
-    It stays in the result for the hard rules and leaves the paragraph.
+    A table row is structure, not a sentence, and it is the one shape that reads
+    as both. A doc comment holding a five-row table joins its cells into one
+    long "sentence", which no rewrite can shorten because nobody wrote it. It
+    stays in the result for the hard rules and leaves the paragraph.
 
     An empty comment line and a Markdown heading both drop out, the way
     `markdown_prose` drops a blank line and a `#` heading. A doc comment is
-    Markdown, so the two readers must agree. Keeping an empty `///` made a
+    Markdown, so the two readers must agree. Keeping an empty `///` would make a
     whole rustdoc block one paragraph, so a section added to a six-sentence
-    block breached the budget whatever it said. Dropping it also ends a
-    paragraph at a `// ---` rule, where `DIAGRAM` used to swallow the prose
-    below the rule along with it.
+    block would breach the budget whatever it said. Dropping it also ends a
+    paragraph at a `// ---` rule.
     """
     out: list[tuple[int, str, bool, bool]] = []
     fenced = False
@@ -232,8 +217,7 @@ def markdown_prose(text: str) -> list[tuple[int, str, bool, bool]]:
     A boundary line stays in the result rather than leaving it, because the hard
     rules read every line. A heading that carries a forbidden synonym is still a
     breach; it is simply not a sentence of the paragraph under it. A table row
-    is the same, and used to leave: a forbidden term in a cell went unread,
-    which is most of a corpus written in tables.
+    is the same, and a corpus written in tables would otherwise go unread.
     """
     out: list[tuple[int, str, bool, bool]] = []
     fenced = False
@@ -279,8 +263,7 @@ def opener_breaches(lines: list[tuple[int, str, bool, bool]]) -> list[tuple[int,
 def unit_breaches(lines: list[tuple[int, str, bool, bool]]) -> list[tuple[int, str]]:
     """A figure welded to its unit, outside a code span.
 
-    A hard error and not a ceiling: the corpus held six of them on the day the
-    rule was written, so the count starts at zero and stays there.
+    A hard error and not a ceiling: the count is zero and stays there.
     """
     out = []
     for lineno, raw, _, _ in lines:
@@ -314,8 +297,7 @@ def glossary_breaches() -> list[str]:
 
     A duplicate term is two definitions of one idea, which is the drift the
     register exists to end. A reference that does not hold its own term sends
-    the reader to the wrong document, and the index this file replaced carried
-    four of those on the day it was written.
+    the reader to the wrong document, and reads as a reference like any other.
     """
     out = []
     seen: dict[str, str] = {}
@@ -422,9 +404,7 @@ def measure(
     return counts, detail
 
 
-# The three counted metrics, each a hard error. Every one reached zero across
-# the corpus, and a ceiling on a count of zero holds nothing a refusal does not
-# hold better, so none of them is ratcheted.
+# The three counted metrics, each a hard error: a breach is red, never a budget.
 HARD = ("long", "latin", "para")
 
 # A document that states a rule has to spell what the rule forbids. The style
