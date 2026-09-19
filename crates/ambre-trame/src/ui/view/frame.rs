@@ -53,7 +53,14 @@ impl TrameView {
                     && self.editor.is_none()
                     && self.state.snap_active_to_master()
                 {
-                    self.send_command_lossy(self.set_active_cmd());
+                    // A selection is lossless: the Logic thread resolves range
+                    // commands against the cell it tracks. A dropped re-home
+                    // would leave it pointing at a covered cell.
+                    if let Err(SendError::Refused) =
+                        self.send_command_lossless(self.set_active_cmd())
+                    {
+                        tracing::error!("Trame: the outbox is full, the merge re-home was dropped");
+                    }
                     self.needs_full = true;
                 }
             }
@@ -113,8 +120,11 @@ impl TrameView {
             // with the result.
             TrameEvent::DataReset | TrameEvent::CondFormatsUpdated { .. } => {
                 self.needs_full = true;
-                let cmd = self.state.scroll_viewport_cmd();
-                self.send_command_lossy(cmd);
+                // Queued rather than sent here, so the one flush below carries
+                // it and re-offers it when the channel is full (`BUS-024`). A
+                // dropped re-fetch would leave the cache showing the content
+                // this event just invalidated.
+                self.pending_viewport = Some(self.state.scroll_viewport_cmd());
             }
             // Logic asks the canvas to adopt a selection it cannot derive locally.
             // An unmerge is the case: the freed cells stay selected, though the
@@ -219,17 +229,23 @@ impl TrameView {
         // ScrollViewport it produces ships this same frame.
         self.step_momentum();
 
-        // Flush the coalesced viewport request: at most one ScrollViewport per
-        // frame, regardless of how many arrow keys fired since the last frame.
-        if let Some(cmd) = self.pending_viewport.take() {
-            self.send_command_lossy(cmd);
-        }
-
+        // The first fetch of the document joins the coalescing queue, so it
+        // takes the same re-offer as every other one. Sent and forgotten, a full
+        // channel on the opening frame would leave the grid empty for good.
         if !self.initial_viewport_sent {
             self.initial_viewport_sent = true;
             self.needs_full = true;
-            let cmd = self.state.scroll_viewport_cmd();
-            self.send_command_lossy(cmd);
+            self.pending_viewport = Some(self.state.scroll_viewport_cmd());
+        }
+
+        // Flush the coalesced viewport request: at most one ScrollViewport per
+        // frame, regardless of how many arrow keys fired since the last frame
+        // (`BUS-012`). A full channel drops it, and the request goes back in the
+        // queue for the next frame (`BUS-024`).
+        if let Some(cmd) = self.pending_viewport.take()
+            && !self.send_command_lossy(cmd.clone())
+        {
+            self.pending_viewport = Some(cmd);
         }
 
         // Pick up a theme switch (chrome toggled it): repaint everything with

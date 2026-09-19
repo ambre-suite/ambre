@@ -19,15 +19,15 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2485 rows: 1735 shipped, of which 843 loose. 750 unbuilt.**
+**2487 rows: 1737 shipped, of which 843 loose. 750 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 210 | 209 | 473 |  | 892 |
-| `failing` | 44 | 56 | 80 |  | 180 |
-| `untested` | 269 | 145 | 234 |  | 648 |
+| `verified` | 211 | 210 | 473 |  | 894 |
+| `failing` | 44 | 54 | 80 |  | 178 |
+| `untested` | 270 | 145 | 234 |  | 649 |
 | `human-review` | 7 |  |  |  | 7 |
-| `qa-manual` | 3 | 3 | 2 |  | 8 |
+| `qa-manual` | 3 | 4 | 2 |  | 9 |
 | `unimplemented` | 54 | 56 | 23 | 617 | 750 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
@@ -56,7 +56,7 @@
 | `ambre-spec-launcher.md` | 17 | 17 | 7 | 10 |  |
 | `ambre-spec-media.md` | 11 | 11 | 0 | 11 |  |
 | `ambre-spec-membership.md` | 17 | 17 | 12 | 5 |  |
-| `ambre-spec-message-bus.md` | 22 | 22 | 10 | 12 |  |
+| `ambre-spec-message-bus.md` | 24 | 24 | 11 | 13 |  |
 | `ambre-spec-object-store.md` | 12 | 12 | 3 | 9 |  |
 | `ambre-spec-organizations.md` | 11 | 10 | 5 | 5 | 1 |
 | `ambre-spec-pdf-export.md` | 6 | 5 | 0 | 5 | 1 |
@@ -97,7 +97,7 @@
 | `ambre-spec-trame-shared-filter.md` | 35 | 32 | 18 | 14 | 3 |
 | `ambre-spec-trame-sheets.md` | 18 | 17 | 7 | 10 | 1 |
 | `ambre-spec-trame-sort.md` | 24 | 24 | 12 | 12 |  |
-| `ambre-spec-trame-status-bar.md` | 11 | 11 | 4 | 7 |  |
+| `ambre-spec-trame-status-bar.md` | 11 | 11 | 5 | 6 |  |
 | `ambre-spec-trame-undo.md` | 8 | 4 | 4 |  | 4 |
 | `ambre-spec-toile-schema.md` | 11 | 11 | 7 | 4 |  |
 | `ambre-spec-toile-auto-layout.md` | 27 | 27 | 21 | 6 |  |
@@ -159,7 +159,7 @@
 | `ambre-spec-locale.md` | LOCALE-001..013 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077 |
 | `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094 |
-| `ambre-spec-message-bus.md` | BUS-001..022 |
+| `ambre-spec-message-bus.md` | BUS-001..024 |
 | `ambre-spec-object-store.md` | SRV-002,004,052..059,078..079 |
 | `ambre-spec-organizations.md` | SRV-060..067,071,076..077 |
 | `ambre-spec-pdf-export.md` | PDF-001..006 |

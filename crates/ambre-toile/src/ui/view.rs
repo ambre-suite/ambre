@@ -22,7 +22,9 @@ use ambre_bus::app::toile::{
     DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, End, LinkTarget,
     PresencePayload, ThreadId, ToileCommand, ToileEvent, Viewport,
 };
-use ambre_bus::{AppCommand, AppEvent, DocumentId, LogicCommand, Outbox, SendOutcome, UiEvent};
+use ambre_bus::{
+    AppCommand, AppEvent, DocumentId, LogicCommand, LossyOutcome, Outbox, SendOutcome, UiEvent,
+};
 use ambre_canvas::{
     BusyPublisher, ContentRepaint, FrameStats, InputEvent, OverlayRepaint, PerfPublisher,
     PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
@@ -667,8 +669,6 @@ impl ToileView {
 
     // -- Command emission ------------------------------------------------------
 
-    /// Send a lossy command (viewport requests): dropped when the channel is full
-    /// (the next coalesced request supersedes it). Never blocks the UI thread.
     /// Ask the Logic thread for the pixels of every picture the new display list
     /// names and this view does not hold (`toile-media`).
     ///
@@ -689,6 +689,12 @@ impl ToileView {
         self.send_lossy(ToileCommand::RequestMedia { hashes: wanted });
     }
 
+    /// Offer one lossy command to the Logic thread (`BUS-023`).
+    ///
+    /// A full channel drops the request, because the next coalesced request
+    /// supersedes it. The bus gate refuses a command that changes the document,
+    /// so an edit offered here stops instead of dropping. Never blocks the UI
+    /// thread.
     fn send_lossy(&self, cmd: ToileCommand) {
         if self.fatal {
             return;
@@ -697,8 +703,14 @@ impl ToileView {
             document_id: self.document_id,
             command: AppCommand::Toile(cmd),
         };
-        if let Err(flume::TrySendError::Disconnected(_)) = self.to_logic.try_send(msg) {
-            tracing::error!("Toile: UI->Logic channel disconnected");
+        match ambre_bus::send_lossy(&self.to_logic, msg) {
+            LossyOutcome::Sent | LossyOutcome::Dropped => {}
+            LossyOutcome::Refused => {
+                tracing::error!("Toile: a document mutation was offered to the lossy class");
+            }
+            LossyOutcome::Disconnected => {
+                tracing::error!("Toile: UI->Logic channel disconnected");
+            }
         }
     }
 

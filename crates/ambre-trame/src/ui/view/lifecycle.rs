@@ -113,28 +113,41 @@ impl TrameView {
         }
     }
 
-    /// Send a lossy `TrameCommand` to the Logic thread (viewport requests).
+    /// Send a lossy `TrameCommand` to the Logic thread: a request that changes
+    /// nothing, over a state the screen already draws.
     ///
-    /// Lossy: drops the command when the channel is full. Viewport requests are
-    /// idempotent and coalesced (only the latest `pending_viewport` is kept), so
-    /// a dropped frame is naturally superseded by the next one.
+    /// Returns whether the command reached the channel. A full one drops it and
+    /// nothing holds it. The caller MUST read this and either offer the request
+    /// again next frame or undo what it drew for it (`BUS-024`).
+    /// A caller that ignores it leaves the screen ahead of the document, which
+    /// is the state `BUS-018` bans.
+    ///
+    /// The class carries no document mutation: `send_lossy` refuses one
+    /// (`BUS-023`), and the outbox is the path such a command owes
+    /// (`send_command_lossless`).
     ///
     /// Runs on the page's main thread, so it must never block.
-    pub(crate) fn send_command_lossy(&self, cmd: TrameCommand) {
+    pub(crate) fn send_command_lossy(&self, cmd: TrameCommand) -> bool {
         if self.fatal {
-            return;
+            return false;
         }
         let msg = LogicCommand::App {
             document_id: self.document_id,
             command: AppCommand::Trame(cmd),
         };
-        match self.to_logic.try_send(msg) {
-            Ok(()) => {}
-            Err(flume::TrySendError::Full(_)) => {
-                tracing::warn!("Trame: UI->Logic channel full, dropping lossy command");
+        match ambre_bus::send_lossy(&self.to_logic, msg) {
+            LossyOutcome::Sent => true,
+            LossyOutcome::Dropped => {
+                tracing::warn!("Trame: UI->Logic channel full, the lossy request was dropped");
+                false
             }
-            Err(flume::TrySendError::Disconnected(_)) => {
+            LossyOutcome::Refused => {
+                tracing::error!("Trame: a document mutation was offered to the lossy class");
+                false
+            }
+            LossyOutcome::Disconnected => {
                 tracing::error!("Trame: UI->Logic channel disconnected");
+                false
             }
         }
     }
@@ -228,10 +241,15 @@ impl TrameView {
     /// cell, not just the viewport) for the aggregates. The reply is a
     /// [`TrameEvent::SelectionStats`], mirrored into the signal by the launcher's
     /// event loop.
+    ///
+    /// The request is lossy, and a full channel drops it. The band is then
+    /// cleared rather than left showing another selection's totals
+    /// (`TRAME-UI-136`): an unanswered band reads as an absence, stale numbers
+    /// as a fact.
     pub(crate) fn refresh_selection_stats(&self) {
-        if self.state.selection.is_multi() {
-            self.send_command_lossy(TrameCommand::RequestSelectionStats);
-        } else {
+        if stats_band_clears(self.state.selection.is_multi(), || {
+            self.send_command_lossy(TrameCommand::RequestSelectionStats)
+        }) {
             #[cfg(target_arch = "wasm32")]
             self.sel_stats.set(None);
         }
@@ -433,5 +451,41 @@ impl TrameView {
             self.formula_text
                 .set(self.cell_seed(self.state.active_row(), self.state.active_col()));
         }
+    }
+}
+
+/// Whether the status band clears after a selection change, before any reply
+/// (`TRAME-UI-136`).
+///
+/// A single-cell selection sends nothing and clears. A multi-cell one sends a
+/// lossy request, and the band clears when that request did not reach the Logic
+/// thread. No answer is coming, and the last selection's totals must not stay
+/// up.
+fn stats_band_clears(is_multi: bool, send: impl FnOnce() -> bool) -> bool {
+    if is_multi { !send() } else { true }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_single_cell_clears_and_sends_nothing() {
+        let mut sent = false;
+        assert!(stats_band_clears(false, || {
+            sent = true;
+            true
+        }));
+        assert!(!sent, "a single cell must not send a request");
+    }
+
+    #[test]
+    fn a_dropped_request_clears_the_band() {
+        assert!(stats_band_clears(true, || false));
+    }
+
+    #[test]
+    fn a_sent_request_keeps_the_last_answer() {
+        assert!(!stats_band_clears(true, || true));
     }
 }

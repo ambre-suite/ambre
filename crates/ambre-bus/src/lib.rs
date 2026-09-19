@@ -26,6 +26,7 @@ pub mod app;
 pub mod command;
 pub mod event;
 pub mod logic;
+pub mod lossy;
 pub mod outbox;
 pub mod rest;
 pub mod sink;
@@ -45,6 +46,7 @@ pub use app::trame::{
     ValidationKind, ValidationOnInvalid,
 };
 pub use logic::{AppCommand, LogicCommand};
+pub use lossy::{LossyOutcome, send_lossy};
 pub use outbox::{Outbox, SendOutcome};
 pub use rest::{
     ChannelSummary, DocumentSummary, MemberInfo, RequestId, RestCommand, RestEvent, SecretBytes,

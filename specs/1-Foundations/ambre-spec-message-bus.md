@@ -1,8 +1,9 @@
 # AMBRE -- FEATURE: THE CLIENT MESSAGE BUS
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the three planes, the four envelopes, the role gate and the lossless
-outbox all ship. The lossy class coalesces by habit and no test drives it.
+**Implementation:** partial -- the three planes, the four envelopes, the role gate, the lossless
+outbox and the lossy gate all ship. The lossy class coalesces by habit and no test drives the
+coalescing.
 
 > The contract the three threads talk over. It fixes what a message may carry, who allocates its
 > identity, and what happens to it when nobody is listening.
@@ -37,7 +38,9 @@ is what a full channel means.
 | `BUS-011` | `POST` | A lossless command MUST NOT be dropped. | this spec section 2 | `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it`; `::a_flush_after_the_reader_drains_sends_the_held_command`; `::a_held_queue_keeps_the_order_the_user_typed`; `::a_send_while_busy_never_overtakes_a_held_command` | none | verified |
 | `BUS-016` | `POST` | A full command channel MUST reach the user as a busy signal. | this spec section 2 | `ambre_canvas::busy::tests::only_the_first_frame_of_an_episode_reports_a_change` -- the publisher reports the edge once per episode, so the shell raises one notice and clears it once; `ambre_bus::outbox::tests::a_full_channel_holds_the_command_instead_of_dropping_it` -- the level the publisher carries; qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), the shell's per-frame read of that level and the notice it raises, reached by typing into a document whose Logic thread is saturated | none | qa-manual |
 | `BUS-022` | `POST` | A view MUST stop accepting input while its outbox is busy. | this spec section 2; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), one early return at the head of each `handle_input`, reached by typing into a document whose Logic thread is saturated. The level it reads is `BUS-016` | none | qa-manual |
-| `BUS-018` | `FRAME` | A command that failed to send MUST NOT be reflected in the view state. | this spec section 2; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), one branch at each Trame commit path, read back off the cell after a refused send. The outcome it branches on is `BUS-011` | none | qa-manual |
+| `BUS-024` | `POST` | A lossy command the channel dropped MUST be offered again on a later frame. | this spec section 2; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), Trame's frame hook putting the dropped request back into `pending_viewport`, reached by scrolling a document whose Logic thread is saturated | partial -- only Trame re-offers. Toile drops a camera request, a cull request and a media request with nothing holding any of them; lands with the `A dropped display request leaves a trace` Story (`ambre-roadmap.md` E7) | untested |
+| `BUS-018` | `FRAME` | A command that failed to send MUST NOT be reflected in the view state. | this spec section 2; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), one branch at each Trame commit path, read back off the cell after a refused send. The outcome it branches on is `BUS-011` or `BUS-023` | none | qa-manual |
+| `BUS-023` | `FRAME` | A command that changes the document MUST NOT travel on the lossy class. | this spec section 2; derived | `ambre_bus::lossy::tests::a_command_that_changes_the_document_never_reaches_the_channel` -- one insert, one move and one resize, and the channel stays empty; `::a_command_of_another_plane_is_refused_with_the_mutations`; `::an_open_channel_takes_a_request_that_changes_nothing` -- the other side of the gate | none | verified |
 
 ### 1.3 Logic routes a content command
 
@@ -72,16 +75,16 @@ is what a full channel means.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 10 `verified`, 9 `untested`, 3 `qa-manual`. What holds is the Logic dispatcher,
+* **Verification.** 11 `verified`, 10 `untested`, 3 `qa-manual`. What holds is the Logic dispatcher,
   driven on host through an unknown document, a viewer's edit and a child's role. A service round
-  trip and a late response are driven too. What is loose is the envelope discipline the other two
-  threads owe. That is the planes a view crosses, and the pressure a full channel puts on a
-  sender.
+  trip and a late response are driven too. The lossy gate is driven: an edit offered to the droppable
+  class reaches no channel. Loose is the envelope discipline the other two threads owe.
 
-  Four paths are loose because nobody drives them: the encode of a variant no test names, a stale
-  version, a handler that captures a sender. The fourth is the registry entry no test asserts was
-  never created. Three rows live in the DOM glue, and the doctrine rules them `qa-manual`. They are
-  the busy notice, the input gate and the call site that must not write what it failed to send.
+  Five paths are loose because nobody drives them. Three sit in the codec and dispatcher: an encode
+  no test names, a stale version, a handler capturing a sender. The fourth is the registry entry no
+  test asserts was never created; the fifth is Toile's re-offer of a dropped request. Three rows
+  live in the DOM glue, and the doctrine rules them `qa-manual`. They are the busy notice, the input
+  gate and the call site that must not write what it failed to send.
 ---
 
 ## 2. MODEL
@@ -155,8 +158,14 @@ means.
 
 | Class | Examples | On a full channel |
 |---|---|---|
-| lossy | a viewport request, a hit test | drop it: the next frame resends the current state, and a stale answer is dropped by its version |
+| lossy | a viewport request, a hit test | drop it: the next frame offers the request again, and a stale answer is dropped by its version |
 | lossless | an edit, a selection, a paste, an undo group boundary | never drop it: surface a busy signal and stop accepting input |
+
+Each class is one function, and the function decides what a full channel does. `Outbox::send` holds
+a lossless command for a later frame (`BUS-011`). `send_lossy` drops a lossy one, and refuses a
+command that changes the document, because the lossy class carries no intent the user gave
+(`BUS-023`). The caller reads the outcome: it writes nothing into the view for a command that did
+not leave (`BUS-018`), and re-offers a dropped request (`BUS-024`).
 
 **Code.** `crates/ambre-bus/src/` for the contract, `crates/ambre-logic/src/dispatch.rs` for the
 routing, `crates/ambre-logic/src/data.rs` for the role gate.
@@ -203,6 +212,9 @@ The bus has no control of its own. What a user meets is what it does under load.
   can `try_send` a lossless command on it, and drop it silently. The
   outbox holds `BUS-011` for every caller that goes through it, and no type refuses the caller that
   does not.
+* **The lossy gate refuses a mutation, and nothing more.** Presence and view state are not mutating,
+  so a selection offered to `send_lossy` passes the gate and a full channel drops it. No call site
+  does so today, and the class table is what says it must not (`BUS-023`).
 * **The hold queue has a bound, and past it the command is refused.** Sixty-four commands, after
   which the outbox reports a refusal rather than growing without limit. The input gate closes on the
   first held command, so reaching the bound takes a saturation no test has produced.

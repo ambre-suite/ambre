@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-048` | `POST` | The inline insert MUST insert at the boundary its affordance sits on. | this spec section 3 | none | unheld -- the affordance resolves to the right boundary (`TRAME-UI-044`), and nothing drives the click through to the insert it fires. The intent also leaves the UI thread as a lossy send (`ui/view/interact.rs`), the one class the bus allows to drop (`ambre-spec-message-bus.md section 2`), while every other document mutation of this crate is sent lossless; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-048` | `POST` | The inline insert MUST insert at the boundary its affordance sits on. | this spec section 3 | none | unheld -- the affordance resolves to the right boundary (`TRAME-UI-044`), and nothing drives the click through to the insert it fires; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-123` | `FRAME` | An insert fired from a boundary MUST NOT change the size of either axis that boundary separates. | this spec section 4; derived | none | unheld -- the insert and the resize are armed from the same four pixels, split by the half of the band the point falls in, and `::header_boundary_splits_insert_and_resize` covers the split alone: no test fires an insert and reads the widths back; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** none of its own: the strips paint from the same viewport slice the grid does, inside
@@ -43,8 +43,8 @@ status values are normative in `ambre-spec-template.md`.
 * **Verification.** 4 `verified`, 5 `untested`. What holds is the column strip: its label
   convention, and the tint that marks the active column. What is loose is the row strip, whose
   number has no rule of its own and whose tint is only ever asserted absent. The insert gesture is
-  loose, untested end to end, sharing its pixels with the resize and sent on the droppable class of
-  the bus. The strips reach a band selection (`features/ambre-spec-trame-selection.md`), a size
+  loose, untested end to end, sharing its pixels with the resize. The strips reach a band selection
+  (`features/ambre-spec-trame-selection.md`), a size
   (`features/ambre-spec-trame-resize.md`), a reorder
   (`features/ambre-spec-trame-rows-and-columns.md`) and the first row's filter buttons
   (`features/ambre-spec-trame-shared-filter.md`), ruled where they live.
@@ -119,9 +119,8 @@ insert_hint: Option<HeaderHit>,    // the boundary whose insert affordance is sh
 | the right button, anywhere in a strip | the context menu, scoped to that axis: the structural and sort entries, without the cell entries (`features/ambre-spec-trame-context-menu.md section 3`) |
 
 An insert from the strip carries no coordinates. The tracked active cell is moved onto the target
-axis first, and the intent the menu sends is fired unchanged. One path resolves the position. That
-intent is sent on the droppable class of the bus, and the selection moves either way. That is the
-state `BUS-018` bans, and it does not yet hold (`ambre-spec-message-bus.md section 1`).
+axis first, and the intent the menu sends is fired unchanged. One path resolves the position. The
+intent goes out through the outbox, and a refused send selects no band (`BUS-018`).
 
 ---
 
@@ -147,11 +146,8 @@ state `BUS-018` bans, and it does not yet hold (`ambre-spec-message-bus.md secti
 * **The band tint is unrecorded** (`TRAME-UI-047`), in the one case where the strip is the only
   place the selection is visible.
 * **The click through an insert affordance is untested** (`TRAME-UI-048`, `TRAME-UI-123`). It
-  moves the tracked active cell before firing the intent, so a dropped command leaves the active
-  cell moved and nothing inserted. The half-step is ruled by `BUS-018`. The drop is possible
-  because the insert is this crate's one document mutation sent on the lossy class, not the lossless
-  one. It reaches neither the outbox that holds a command nor the gate that refuses input while it
-  waits (`BUS-011`).
+  moves the tracked active cell before firing the intent, which goes out through the outbox, so a
+  refused send selects no band (`BUS-018`). No test drives the click through to the insert.
 * **The row strip is asserted only in the negative** (`TRAME-UI-121`, `TRAME-UI-122`). Every
   recording of it passes no active row and reads no label text. The tint that marks the active row
   and the number that names a row are both held by reading the code. The column strip has a

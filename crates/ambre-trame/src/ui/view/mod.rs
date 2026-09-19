@@ -12,8 +12,8 @@
 // ============================================================================
 
 use ambre_bus::{
-    AppCommand, AppEvent, DocumentId, FillMode, GridRange, LogicCommand, Outbox, SendOutcome,
-    TrameCommand, TrameEvent, UiEvent,
+    AppCommand, AppEvent, DocumentId, FillMode, GridRange, LogicCommand, LossyOutcome, Outbox,
+    SendOutcome, TrameCommand, TrameEvent, UiEvent,
 };
 use ambre_canvas::{
     Anchor, AnchorPublisher, BusyPublisher, ContentRepaint, FilterOpenPublisher, FrameStats,

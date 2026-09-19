@@ -35,18 +35,18 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-109` | `POST` | A change to the selection MUST refresh the aggregates. | this spec section 2 | none | fails -- the refresh is called from the active-cell announcement alone, which extending a header band does not reach (section 5); lands with the `Every selection change refreshes the aggregates` Story (`ambre-roadmap.md` E7) | failing |
-| `TRAME-UI-136` | `FRAME` | A refresh whose request did not reach the Logic thread MUST NOT leave the band showing the totals of another selection. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | none | fails -- the request is lossy, a full channel is logged, and the previous totals stay on screen (section 5); lands with the `A dropped lossy request does not leave a stale screen` Story (`ambre-roadmap.md` E7) | failing |
+| `TRAME-UI-136` | `FRAME` | A refresh whose request did not reach the Logic thread MUST NOT leave the band showing the totals of another selection. | `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | `ambre_trame::ui::view::lifecycle::tests::a_dropped_request_clears_the_band` -- the clear decision in `stats_band_clears`; `::a_single_cell_clears_and_sends_nothing`; `::a_sent_request_keeps_the_last_answer` -- the other two sides | none | verified |
 
 * **Budget.** none: the tallies are one walk over the selection, and
   `ambre-spec-budgets.md` budgets no aggregate. The band paints inside the frame
   phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the band reads and shows. It writes nothing to the document, opens no path,
   and `UI-THREAD-004` bans a network, crypto or persistence path on the thread it paints on.
-* **Verification.** 4 `verified`, 3 `failing`, 4 `untested`. The Logic half is held: the walk, the tallies and
-  the read-only guarantee all have a host test. The seven gaps are the UI half -- what the band
-  shows, how it reads, when it refreshes, and which rows it covers. Three of them are rules the
-  code answers with something else, listed in section 5. The count and the numeric aggregates
-  are two rows (`TRAME-UI-105`, `TRAME-UI-172`) over one test, which names the half a change breaks.
+* **Verification.** 5 `verified`, 2 `failing`, 4 `untested`. The walk, the tallies, the read-only
+  guarantee and the clear decision all have a host test. The six gaps are the UI half -- what the
+  band shows, how it reads, when it refreshes, and which rows it covers. Two of them are rules the
+  code answers with something else, listed in section 5. The count and the numeric aggregates are two
+  rows (`TRAME-UI-105`, `TRAME-UI-172`) over one test.
 
 ---
 
@@ -85,8 +85,9 @@ pub struct SelStats {
 
 **Steps, on the UI side:**
 
-1. a selection change clears the band, then asks for the aggregates when the selection is
-   multi-cell (`TRAME-UI-108`). The request is lossy, so a full channel drops it (`TRAME-UI-136`);
+1. a selection change asks for the aggregates when the selection is multi-cell, and clears the
+   band otherwise (`TRAME-UI-108`). The request is lossy, so a full channel drops it and the band
+   stays cleared (`TRAME-UI-136`);
 2. the reply is mirrored into one signal, which the band reads.
 
 **Code:**
@@ -146,12 +147,9 @@ value (`TRAME-UI-108`).
   off the active-cell announcement. `extend_axis` -- Shift+click on a header, or a header drag
   -- is the one selection path that does not announce. So sweeping columns A to D leaves the total
   of A on screen, with no sign it is stale.
-* **A dropped request leaves the previous totals up** (`TRAME-UI-136`). The request is sent lossy:
-  a full channel is a warning in the log, and the band keeps the numbers of the selection before it.
-  The clear runs only for a single cell, so nothing marks the band as unanswered.
-* **The band has no host test.** Seven rows say `none`. The band itself is a pure function of one
+* **The band has no host test.** Six rows say `none`. The band itself is a pure function of one
   `SelStats` value, so the wasm tier can reach it. `fmt_num` is a free function the host tier can
-  call today; the refresh sits on the browser-only view and cannot be reached without one.
+  call today; only the signal write stays on the browser.
 * **A merged block is counted by its cells.** A covered cell holds no value, so a block spanning
   four cells adds one to `count`, and nothing states whether that is the intent.
 * **No aggregate is selectable.** A user cannot choose which aggregates the band shows, and cannot

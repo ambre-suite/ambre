@@ -35,31 +35,44 @@ impl TrameView {
         vec![r]
     }
 
-    /// Emit a `ResizeCol`, updating the local metric cache optimistically so the
-    /// grid reflows immediately (the echoing `DataReset` confirms it).
+    /// Emit a `ResizeCol`, then update the local metric cache so the grid
+    /// reflows before the echoing `DataReset` confirms it (`TRAME-UI-041`).
+    ///
+    /// A size is a document write, so it goes out lossless: a full channel
+    /// holds it (`BUS-011`). The local map takes the width only once the outbox
+    /// carries the command: a width the document never took hides the loss
+    /// (`TRAME-UI-127`).
     pub(crate) fn send_resize_col(&mut self, col: u32, width: f32) {
-        self.state.col_widths.insert(col, width);
         let version = self.state.bump_version();
-        self.send_command_lossy(TrameCommand::ResizeCol {
+        let cmd = TrameCommand::ResizeCol {
             version,
             sheet_id: self.state.active_sheet.clone(),
             col,
             width_px: width,
-        });
+        };
+        if self.send_command_lossless(cmd).is_err() {
+            tracing::error!("Trame: the resize was dropped, the column keeps its width");
+            return;
+        }
+        self.state.col_widths.insert(col, width);
         self.viewport_changed = true;
         self.needs_full = true;
     }
 
     /// Emit a `ResizeRow` (row analogue of [`send_resize_col`]).
     pub(crate) fn send_resize_row(&mut self, row: u32, height: f32) {
-        self.state.row_heights.insert(row, height);
         let version = self.state.bump_version();
-        self.send_command_lossy(TrameCommand::ResizeRow {
+        let cmd = TrameCommand::ResizeRow {
             version,
             sheet_id: self.state.active_sheet.clone(),
             row,
             height_px: height,
-        });
+        };
+        if self.send_command_lossless(cmd).is_err() {
+            tracing::error!("Trame: the resize was dropped, the row keeps its height");
+            return;
+        }
+        self.state.row_heights.insert(row, height);
         self.viewport_changed = true;
         self.needs_full = true;
     }
@@ -158,9 +171,19 @@ impl TrameView {
     /// Inline "+" insert at a column boundary (`trame-headers`): move the tracked
     /// active cell onto column `c`. Then fire the existing `InsertColLeft` intent
     /// so the Logic thread resolves the position exactly as from the menu.
+    ///
+    /// The intent is a document mutation, so it goes out lossless (`BUS-023`).
+    /// A command the outbox took nowhere selects no band: a whole-column
+    /// selection would read as an insertion that never happened (`BUS-018`).
     pub(crate) fn insert_col_at(&mut self, c: u32) {
         self.select_cell(self.state.active_row(), c);
-        self.send_command_lossy(TrameCommand::InsertColLeft);
+        if self
+            .send_command_lossless(TrameCommand::InsertColLeft)
+            .is_err()
+        {
+            tracing::error!("Trame: the insert was dropped, no column was added");
+            return;
+        }
         // Select the freshly created column (it lands at `c`) so the insertion
         // reads as a clear whole-column band rather than a silent shift.
         self.select_axis(crate::ui::grid::SelKind::Cols, c);
@@ -168,7 +191,13 @@ impl TrameView {
 
     pub(crate) fn insert_row_at(&mut self, r: u32) {
         self.select_cell(r, self.state.active_col());
-        self.send_command_lossy(TrameCommand::InsertRowAbove);
+        if self
+            .send_command_lossless(TrameCommand::InsertRowAbove)
+            .is_err()
+        {
+            tracing::error!("Trame: the insert was dropped, no row was added");
+            return;
+        }
         // Select the freshly created row (it lands at `r`) for the same feedback.
         self.select_axis(crate::ui::grid::SelKind::Rows, r);
     }
@@ -348,7 +377,13 @@ impl TrameView {
             crate::ui::grid::SelKind::Rows => TrameCommand::MoveRow { from, to },
             crate::ui::grid::SelKind::Cells => return,
         };
-        self.send_command_lossy(cmd);
+        // A move is a document mutation, so it goes out lossless (`BUS-023`). A
+        // command the outbox took nowhere reselects nothing: a band drawn at the
+        // destination would read as a move that never happened (`BUS-018`).
+        if self.send_command_lossless(cmd).is_err() {
+            tracing::error!("Trame: the move was dropped, the line stays where it was");
+            return;
+        }
         // Keep the moved column/row selected at its new position.
         self.select_axis(kind, to);
     }
