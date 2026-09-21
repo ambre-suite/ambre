@@ -11,10 +11,20 @@
 //! **Text (why not usvg).** usvg only exposes `<text>` by flattening it to glyph
 //! *paths*, which needs a font database. That is impossible in the browser (no
 //! system fonts) and destructive (it would lose the editable string). So the usvg
-//! font stack is disabled and `<text>` is read directly from the SVG source with
-//! `roxmltree`. The raw body plus its `x`/`y` become a `Text` element that Toile
-//! renders through its own Parley stack. Phase 0 reads top-level `x`/`y` only (no
-//! transform / `tspan` offset resolution), noted where it matters.
+//! font stack is disabled. The normalized tree then carries no text node at all,
+//! and `<text>` is read from the SVG source with `roxmltree`. The raw body plus
+//! its `x`/`y` become a `Text` element Toile renders through its own Parley
+//! stack.
+//!
+//! **One walk over two trees.** The source and the usvg tree are stepped
+//! together. A text node then lands where the drawing put it. In document
+//! order (`TOILE-IO-027`), inside the group that holds it (`TOILE-IO-083`),
+//! under the transforms above it (`TOILE-IO-080`). Those come from the usvg
+//! group the walk is inside, which already carries them.
+//!
+//! Each usvg child consumes the next source child that is not a `<text>`, and
+//! every `<text>` passed on the way is imported at that point. Text the reader cannot read is reported
+//! rather than dropped in silence (`TOILE-IO-081`).
 //!
 //! **Groups.** The spec maps `<g>` to a Toile `group`. A group is created only via
 //! `GroupElements { ids }`, which needs the `ElementId`s the engine mints *after*
@@ -26,8 +36,9 @@
 //!
 //! Groups are pushed **innermost-first** (post-order) so a nested member `Group(i)`
 //! always refers to an already-resolved entry. The apply pass mints the ids and
-//! issues `GroupElements` in the same undo group, reconstructing the hierarchy. No
-//! group is flattened or reported as lost.
+//! issues `GroupElements` in the same undo group, reconstructing the hierarchy. A
+//! group the walk reduced to one member, or to none, cannot be rebuilt and is
+//! reported (`TOILE-IO-079`).
 //!
 //! All geometry is clamped to the world bound and the element/depth counts are
 //! enforced while walking. Any breach aborts the whole import atomically: the
@@ -56,14 +67,34 @@ pub fn import_svg(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, ImportEr
 
     let mut batch = ImportBatch::default();
     let mut media_counter = 0usize;
+    // The source tree, for the text nodes usvg refuses to carry. A body that is
+    // not UTF-8, or not well-formed XML, costs the drawing its text. The report
+    // says so, rather than letting the shapes land as though the file had
+    // carried none (`TOILE-IO-081`).
+    let source = std::str::from_utf8(bytes).ok();
+    let doc = source.and_then(|src| match roxmltree::Document::parse(src) {
+        Ok(d) => Some(d),
+        Err(e) => {
+            batch
+                .report
+                .skip(format!("text: the source is not well-formed XML ({e})"));
+            None
+        }
+    });
+    if source.is_none() {
+        batch.report.skip("text: the source is not UTF-8");
+    }
+    let root_xml = doc.as_ref().map(|d| d.root_element());
     // The document root is not itself a `<g>`; its direct-member refs are dropped
     // (only nested `<g>` become groups). Nested groups are pushed during the walk.
-    walk_group(tree.root(), 0, limits, &mut batch, &mut media_counter)?;
-
-    // Text is read from the source (see the module note), not the usvg tree.
-    if let Ok(source) = std::str::from_utf8(bytes) {
-        import_text_nodes(source, limits, &mut batch)?;
-    }
+    walk_group(
+        tree.root(),
+        root_xml,
+        0,
+        limits,
+        &mut batch,
+        &mut media_counter,
+    )?;
 
     if batch.commands.is_empty() {
         return Err(ImportError::Empty);
@@ -72,59 +103,79 @@ pub fn import_svg(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, ImportEr
     Ok(batch)
 }
 
-/// Extract every `<text>` element from the SVG source via `roxmltree` and map it
-/// to a `Text` `CreateElement`. usvg cannot give us editable text (see the module
-/// note), so this direct pass preserves the string. A malformed document yields no
-/// text (the vector import already succeeded); the count/limit bound still applies.
-fn import_text_nodes(
-    source: &str,
+/// Map one `<text>` node of the source to a `Text` element, inside the group
+/// the walk is currently in. `tf` is that group's absolute transform, so the
+/// text lands under the transforms the drawing put above it (`TOILE-IO-080`).
+///
+/// A node whose body reads empty creates nothing and is reported: its content
+/// sits in a construct this pass does not follow. A drawing that quietly loses
+/// its words reads as one that carried none (`TOILE-IO-081`). usvg cannot give
+/// us editable text (see the module note), so the string is taken from the
+/// source.
+fn import_text_node(
+    node: roxmltree::Node,
+    tf: &usvg::Transform,
     limits: &Limits,
     batch: &mut ImportBatch,
-) -> Result<(), ImportError> {
-    let doc = match roxmltree::Document::parse(source) {
-        Ok(d) => d,
-        Err(_) => return Ok(()),
-    };
-    for node in doc.descendants().filter(|n| n.has_tag_name("text")) {
-        // Concatenate only the actual text children (avoid double-counting the
-        // element node's own text accessor).
-        let body: String = node
-            .descendants()
-            .filter(|d| d.is_text())
-            .filter_map(|d| d.text())
-            .collect();
-        let body = body.trim().to_owned();
-        if body.is_empty() {
-            continue;
-        }
-        limits.check_element_count(batch.commands.len())?;
-        let x = node
-            .attribute("x")
-            .and_then(|v| v.parse::<f64>().ok())
-            .unwrap_or(0.0);
-        let y = node
-            .attribute("y")
-            .and_then(|v| v.parse::<f64>().ok())
-            .unwrap_or(0.0);
-        let size = node
-            .attribute("font-size")
-            .and_then(|v| v.trim_end_matches("px").parse::<f64>().ok())
-            .unwrap_or(16.0);
-        // A minimal text box: width grows with content, height ~ the em box. The
-        // authoritative extent is re-derived by the renderer; this seeds a sane AABB.
-        let w = (body.chars().count() as f64) * size * 0.6;
-        // SVG `y` is the text baseline; the element's top sits ~one em above it.
-        let top = y - size;
-        let rect = limits.clamp_rect(Rect::new(x, top, x + w, top + size * 1.4));
-        push_element(
-            batch,
-            ElementKind::Text,
-            rect,
-            InitContent::Text(body),
-            None,
-        );
+) -> Result<Option<ImportRef>, ImportError> {
+    // Concatenate only the actual text children (avoid double-counting the
+    // element node's own text accessor).
+    let body: String = node
+        .descendants()
+        .filter(|d| d.is_text())
+        .filter_map(|d| d.text())
+        .collect();
+    let body = body.trim().to_owned();
+    if body.is_empty() {
+        batch
+            .report
+            .skip("text: a node the reader could not read a body from");
+        return Ok(None);
     }
-    Ok(())
+    limits.check_element_count(batch.commands.len())?;
+    let x = node
+        .attribute("x")
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(0.0);
+    let y = node
+        .attribute("y")
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(0.0);
+    let size = node
+        .attribute("font-size")
+        .and_then(|v| v.trim_end_matches("px").parse::<f64>().ok())
+        .unwrap_or(16.0);
+    // A minimal text box: width grows with content, height ~ the em box. The
+    // authoritative extent is re-derived by the renderer; this seeds a sane AABB.
+    let w = (body.chars().count() as f64) * size * 0.6;
+    // SVG `y` is the text baseline; the element's top sits ~one em above it.
+    let top = y - size;
+    let corner = |px: f64, py: f64| -> Point {
+        let wx = f64::from(tf.sx) * px + f64::from(tf.kx) * py + f64::from(tf.tx);
+        let wy = f64::from(tf.ky) * px + f64::from(tf.sy) * py + f64::from(tf.ty);
+        limits.clamp_point(Point::new(wx, wy))
+    };
+    let a = corner(x, top);
+    let b = corner(x + w, top + size * 1.4);
+    let rect = limits.clamp_rect(Rect::from_points(a, b));
+    Ok(Some(ImportRef::Slot(push_element(
+        batch,
+        ElementKind::Text,
+        rect,
+        InitContent::Text(body),
+        None,
+    ))))
+}
+
+/// Whether a source element carries drawn content, and therefore pairs with a
+/// node of the usvg tree. `<defs>` and the metadata elements beside it describe
+/// the drawing without being in it.
+fn is_drawn(node: roxmltree::Node) -> bool {
+    node.is_element()
+        && !matches!(
+            node.tag_name().name(),
+            "defs" | "title" | "desc" | "metadata" | "style"
+        )
 }
 
 /// Recursively walk a usvg group, appending commands, and return the
@@ -136,6 +187,7 @@ fn import_text_nodes(
 /// entry.
 fn walk_group(
     group: &usvg::Group,
+    xml: Option<roxmltree::Node>,
     depth: usize,
     limits: &Limits,
     batch: &mut ImportBatch,
@@ -143,28 +195,77 @@ fn walk_group(
 ) -> Result<Vec<ImportRef>, ImportError> {
     limits.check_depth(depth)?;
     let mut members = Vec::new();
+    let tf = group.abs_transform();
+    // The source children this group's usvg children are paired against, in
+    // document order. Empty when the source could not be read, which leaves the
+    // walk exactly as it was before the text pass joined it.
+    let mut source: Vec<roxmltree::Node> = xml
+        .map(|n| n.children().filter(|c| is_drawn(*c)).collect())
+        .unwrap_or_default();
+    // Popped from the back, so the order walked is the document's.
+    source.reverse();
+    // Every `<text>` up to the next drawn source child, imported where the
+    // drawing put it (`TOILE-IO-027`).
+    macro_rules! take_text_before_next {
+        () => {{
+            let mut paired = None;
+            while let Some(node) = source.pop() {
+                if node.has_tag_name("text") {
+                    if let Some(r) = import_text_node(node, &tf, limits, batch)? {
+                        members.push(r);
+                    }
+                } else {
+                    paired = Some(node);
+                    break;
+                }
+            }
+            paired
+        }};
+    }
     for node in group.children() {
+        let paired = take_text_before_next!();
         match node {
             usvg::Node::Group(g) => {
-                let child_members = walk_group(g, depth + 1, limits, batch, media_counter)?;
-                // An empty `<g>` (all children skipped) produces no group.
-                if !child_members.is_empty() {
-                    let group_idx = batch.groups.len();
-                    batch.groups.push(ImportGroup {
-                        members: child_members,
-                    });
-                    members.push(ImportRef::Group(group_idx));
+                let child_members = walk_group(g, paired, depth + 1, limits, batch, media_counter)?;
+                match child_members.len() {
+                    // A group of one member, or of none, is not a group the
+                    // board can rebuild. Its children keep their geometry and
+                    // the structure the drawing had is reported lost
+                    // (`TOILE-IO-079`).
+                    0 => batch.report.skip("group: every child was skipped"),
+                    1 => {
+                        batch
+                            .report
+                            .skip("group: one member left, so no group was rebuilt");
+                        members.extend(child_members);
+                    }
+                    _ => {
+                        let group_idx = batch.groups.len();
+                        batch.groups.push(ImportGroup {
+                            members: child_members,
+                        });
+                        members.push(ImportRef::Group(group_idx));
+                    }
                 }
             }
             usvg::Node::Path(p) => members.push(import_path(p, limits, batch)?),
-            // Text is handled by the roxmltree pass (see module note); the font
-            // stack is disabled so usvg never yields a Text node here.
+            // The font stack is disabled, so usvg yields no text node: the
+            // source walk above carries `<text>` instead (see module note).
             usvg::Node::Text(_) => {}
             usvg::Node::Image(img) => {
                 if let Some(r) = import_image(img, limits, batch, media_counter)? {
                     members.push(r);
                 }
             }
+        }
+    }
+    // The text after the last drawn node of this group.
+    let _ = take_text_before_next!();
+    while let Some(node) = source.pop() {
+        if node.has_tag_name("text")
+            && let Some(r) = import_text_node(node, &tf, limits, batch)?
+        {
+            members.push(r);
         }
     }
     Ok(members)

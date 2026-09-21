@@ -54,12 +54,12 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-076` | `POST` | Every node MUST keep the fill and the stroke the drawing gave it. | this spec section 3 | `ambre_toile::logic::interop::tests::rect_import_preserves_fill_and_stroke_style`; `ambre_toile::logic::interop::tests::unstyled_kinds_keep_the_default_style`; `ambre_toile::logic::state::import::tests::import_applies_styles_per_slot` | none | verified |
 | `TOILE-IO-077` | `POST` | A group MUST come back as a group, nested as the drawing nested it, never flattened. | this spec section 3 | `ambre_toile::logic::interop::tests::nested_groups_are_rebuilt_innermost_first` -- it reads the two groups and the baked transforms; `ambre_toile::logic::state::import::tests::import_rebuilds_nested_groups` -- it reads both surviving the apply pass | none | verified |
 | `TOILE-IO-078` | `POST` | A picture inside the drawing MUST come in with its pixels, never as an empty box. | this spec section 3 | `ambre_toile::logic::interop::tests::embedded_png_maps_to_image_and_media_blob` | none | verified |
-| `TOILE-IO-027` | `POST` | An SVG import MUST keep the paint order the drawing had. | this spec section 3 | none | fails -- text is read in a second pass and appended after every vector node, section 6; lands with the `The SVG reader keeps the drawing's structure` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-IO-083` | `POST` | A text node inside a group MUST stay in that group. | this spec section 3 | none | fails -- the text pass walks the source, not the tree, so it can name no group, section 6; lands with the `The SVG reader keeps the drawing's structure` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-IO-080` | `POST` | A text node MUST land where the drawing put it, the transforms above it included. | this spec section 3 | none | fails -- the text pass reads the top-level coordinates alone, so text under a moved group lands where the group is not, section 6; lands with the `The SVG reader keeps the drawing's structure` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-IO-027` | `POST` | An SVG import MUST keep the paint order the drawing had. | this spec section 3 | `ambre_toile::logic::interop::tests::text_lands_in_the_paint_order_the_drawing_had` -- a text node between two shapes, which lands between them | none | verified |
+| `TOILE-IO-083` | `POST` | A text node inside a group MUST stay in that group. | this spec section 3 | `ambre_toile::logic::interop::tests::text_inside_a_group_keeps_its_place_and_its_transform` -- the group's member list carries the text's slot | none | verified |
+| `TOILE-IO-080` | `POST` | A text node MUST land where the drawing put it, the transforms above it included. | this spec section 3 | `ambre_toile::logic::interop::tests::text_inside_a_group_keeps_its_place_and_its_transform` -- the same text, landing at the translated group's own origin | none | verified |
 | `TOILE-IO-082` | `FRAME` | Reading the drawing MUST NOT touch the board: a file refused halfway MUST leave nothing behind. | this spec section 3 | structural -- a converter is a pure function returning a batch, so a refusal carries no command; `ambre_toile::logic::interop::tests::too_many_elements_aborts_atomically` -- it refuses a file whose first nodes had already mapped; `ambre_toile::logic::interop::tests::too_deep_nesting_aborts_atomically` -- it refuses one whose outer nodes had already mapped | none | verified |
-| `TOILE-IO-079` | `FAIL` | A group the board cannot rebuild MUST be reported, never dropped without a word. | this spec section 3 | none | fails -- a group of a single member builds nothing and reports nothing, so the drawing's structure leaves in silence, section 6; lands with the `The SVG reader keeps the drawing's structure` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-IO-081` | `FAIL` | A drawing whose text the reader cannot parse MUST say the text was lost. | this spec section 3 | none | fails -- a body that is not valid XML, or not UTF-8, yields no text and no notice, and the shapes import as though the file carried none, section 6; lands with the `The SVG reader keeps the drawing's structure` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-IO-079` | `FAIL` | A group the board cannot rebuild MUST be reported, never dropped without a word. | this spec section 3 | `ambre_toile::logic::interop::tests::a_group_of_one_member_is_reported_rather_than_dropped` -- the member still imports, no group the apply pass would refuse is emitted, and the report names the structure | none | verified |
+| `TOILE-IO-081` | `FAIL` | A drawing whose text the reader cannot parse MUST say the text was lost. | this spec section 3 | `ambre_toile::logic::interop::tests::text_the_reader_cannot_parse_is_reported` -- a node whose body the reader finds nothing in, with the shape beside it still importing | none | verified |
 
 ### 1.4 Take the board out as a file
 
@@ -114,10 +114,10 @@ status values are normative in `ambre-spec-template.md`.
   the pixels an import produces reach the relay as ciphertext alone
   (`features/ambre-spec-toile-media.md section 1`, `TOILE-IO-013`). The showcase bundle is the one
   deliberate exit from the zero-knowledge boundary, and `TOILE-IO-096` makes it say so.
-* **Verification.** 25 `verified`, 12 `failing`, 2 `untested`, 12 `unimplemented`, 2 `qa-manual`. What
-  holds is the drop point, the export and the report, each carrying a test of its own. The two
-  `qa-manual` rows are the DOM glue underneath, which no belt reaches. What is loose is fourteen
-  rules: eight the code answers with something else, six it holds and no test drives.
+* **Verification.** 30 `verified`, 7 `failing`, 2 `untested`, 12 `unimplemented`, 2 `qa-manual`. What
+  holds is the drop point, the reader's structure, the export and the report, each carrying a test of
+  its own. The two `qa-manual` rows are the DOM glue underneath, which no belt reaches. What is loose
+  is nine rules: seven the code answers with something else, two it holds and no test drives.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -209,6 +209,11 @@ content's corner would translate the whole document on re-import.
 to glyph outlines, which needs a system font database the browser does not have. That flattening also loses
 the editable string. So the font stack is disabled and the text nodes are read from the XML directly.
 
+**The two trees are walked together.** The normalized tree carries no text node at all, so the source is
+stepped beside it. Each normalized child consumes the next drawn source child. Every `<text>` passed on the
+way is imported at that point, inside the group the walk is in and under its transform (`TOILE-IO-027`,
+`TOILE-IO-080`, `TOILE-IO-083`).
+
 **What an SVG export writes:** shapes, vector nodes, text and pictures. A sticky, a connector, a
 group, an embed and a freehand stroke write nothing at all (`TOILE-IO-025`).
 
@@ -297,16 +302,12 @@ view past its own gate.
 * **A rotated element exports upright** (`TOILE-IO-026`). The view model carries a rotation and the
   serializer never writes a transform. A board of rotated shapes exports as a board of unrotated
   ones, and the determinism rows still pass.
-* **Text loses its place** (`TOILE-IO-027`, `TOILE-IO-083`, `TOILE-IO-080`). The vector walk and the text pass
-  are two passes over one file, and the text pass appends. So every text node lands above every shape,
-  whatever the source said. A text node inside a group is not a member of that group. The text pass reads `x`,
-  `y` and `font-size` off the node alone, so every transform above it is ignored.
-* **Text the reader refuses is lost in silence** (`TOILE-IO-081`). A source that is not UTF-8, or one
-  the XML reader rejects, ends the text pass with no skip recorded. The shapes import as if the file
-  had carried no text at all, and the report says nothing.
-* **A group of one member disappears without a word** (`TOILE-IO-079`). The walk emits the group, the
-  apply pass declines to build one from fewer than two members, and neither calls the report. The
-  decision in section 5 is that no group is flattened silently; this one is.
+* **The two trees are paired by position, not by identity.** Each normalized child takes the next
+  drawn source child. A normalization that drops or splits a node steps the two walks apart: a
+  `<use>`, a `<switch>`, a clip path. The text after that point then lands in the wrong group.
+  Nothing detects the drift, and no rule covers it.
+* **A text node reads its own `x`, `y` and `font-size` alone.** A `tspan` offset and an inherited
+  font size are not followed, so text built from spans lands at the parent's coordinates.
 * **A board the export could not read still becomes a file** (`TOILE-IO-069`). The snapshot is taken
   with a fallback: on failure it logs an error and writes the header over an empty payload. The file
   is well formed, carries the right document id, and opens as an empty board.

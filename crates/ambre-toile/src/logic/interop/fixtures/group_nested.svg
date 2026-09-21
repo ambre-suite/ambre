@@ -3,6 +3,7 @@
     <rect x="0" y="0" width="30" height="30" fill="#111111"/>
     <g transform="translate(50,50)">
       <rect x="0" y="0" width="20" height="20" fill="#222222"/>
+      <rect x="40" y="0" width="20" height="20" fill="#333333"/>
     </g>
   </g>
 </svg>

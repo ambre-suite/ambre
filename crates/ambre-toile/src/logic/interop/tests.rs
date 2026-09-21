@@ -91,11 +91,121 @@ fn text_maps_to_text_element_preserving_body() {
     }
 }
 
+/// `TOILE-IO-027`: the paint order the drawing had. A text node between two
+/// shapes lands between them, not after every shape the file carries.
+#[test]
+fn text_lands_in_the_paint_order_the_drawing_had() {
+    const SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">
+  <rect x="0" y="0" width="10" height="10" fill="#111111"/>
+  <text x="20" y="20">between</text>
+  <rect x="40" y="0" width="10" height="10" fill="#222222"/>
+</svg>"##;
+    let batch = import_svg(SVG.as_bytes(), &Limits::default()).unwrap();
+    let kinds: Vec<&ElementKind> = batch
+        .commands
+        .iter()
+        .map(|c| match c {
+            ToileCommand::CreateElement { kind, .. } => kind,
+            other => panic!("expected a create, got {other:?}"),
+        })
+        .collect();
+    assert_eq!(
+        kinds,
+        vec![
+            &ElementKind::Shape(ShapeKind::Rect),
+            &ElementKind::Text,
+            &ElementKind::Shape(ShapeKind::Rect),
+        ]
+    );
+}
+
+/// `TOILE-IO-080` and `TOILE-IO-083`: a text node inside a moved group lands
+/// under that group's transform, and stays a member of it.
+#[test]
+fn text_inside_a_group_keeps_its_place_and_its_transform() {
+    const SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">
+  <g transform="translate(100,200)">
+    <rect x="0" y="0" width="10" height="10" fill="#111111"/>
+    <text x="0" y="16" font-size="16">moved</text>
+  </g>
+</svg>"##;
+    let batch = import_svg(SVG.as_bytes(), &Limits::default()).unwrap();
+    let text_slot = batch
+        .commands
+        .iter()
+        .position(|c| {
+            matches!(
+                c,
+                ToileCommand::CreateElement {
+                    kind: ElementKind::Text,
+                    ..
+                }
+            )
+        })
+        .expect("the text imported");
+    match &batch.commands[text_slot] {
+        // The group translates by (100,200); the baseline sits one em below the
+        // box top, so the top lands exactly on the group's own origin.
+        ToileCommand::CreateElement { at, .. } => {
+            assert_eq!((at.x, at.y), (100.0, 200.0), "the transform was dropped");
+        }
+        other => panic!("expected a create, got {other:?}"),
+    }
+    assert_eq!(batch.groups.len(), 1, "one group for one <g>");
+    assert!(
+        batch.groups[0]
+            .members
+            .contains(&ImportRef::Slot(text_slot)),
+        "the text left its group: {:?}",
+        batch.groups[0].members
+    );
+}
+
+/// `TOILE-IO-079`: a group the board cannot rebuild is reported. `GroupElements`
+/// refuses a group of one, so the member keeps its geometry and the structure
+/// the drawing had is named as lost.
+#[test]
+fn a_group_of_one_member_is_reported_rather_than_dropped() {
+    const SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">
+  <g transform="translate(5,5)">
+    <rect x="0" y="0" width="10" height="10" fill="#111111"/>
+  </g>
+</svg>"##;
+    let batch = import_svg(SVG.as_bytes(), &Limits::default()).unwrap();
+    assert_eq!(batch.commands.len(), 1, "the member still imports");
+    assert!(batch.groups.is_empty(), "no group the board would refuse");
+    assert!(
+        batch.report.skipped.iter().any(|s| s.contains("group")),
+        "the lost structure was not reported: {:?}",
+        batch.report.skipped
+    );
+}
+
+/// `TOILE-IO-081`: text the reader cannot read is named in the report. The
+/// shapes still import, and a silent import would be a drawing missing its
+/// words with nothing to read.
+#[test]
+fn text_the_reader_cannot_parse_is_reported() {
+    // The body sits in a construct this pass does not follow, so the reader
+    // finds no string to import.
+    const SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">
+  <rect x="0" y="0" width="10" height="10" fill="#111111"/>
+  <text x="20" y="20"><!-- the words live in a comment --></text>
+</svg>"##;
+    let batch = import_svg(SVG.as_bytes(), &Limits::default()).unwrap();
+    assert_eq!(batch.commands.len(), 1, "the shape still imports");
+    assert!(
+        batch.report.skipped.iter().any(|s| s.contains("text")),
+        "the lost text was not reported: {:?}",
+        batch.report.skipped
+    );
+}
+
 #[test]
 fn nested_groups_are_rebuilt_innermost_first() {
     let batch = import_svg(GROUP_SVG.as_bytes(), &Limits::default()).unwrap();
-    // Two rects are created; groups are rebuilt post-apply, not flattened.
-    assert_eq!(batch.commands.len(), 2);
+    // Three rects are created; groups are rebuilt post-apply, not flattened.
+    assert_eq!(batch.commands.len(), 3);
     assert!(batch.commands.iter().all(|c| matches!(
         c,
         ToileCommand::CreateElement {
@@ -111,8 +221,11 @@ fn nested_groups_are_rebuilt_innermost_first() {
     );
     // Two groups: the inner group first (post-order), the outer group second.
     assert_eq!(batch.groups.len(), 2, "one ImportGroup per <g>");
-    // groups[0] is the innermost <g> (a single rect slot).
-    assert_eq!(batch.groups[0].members, vec![ImportRef::Slot(1)]);
+    // groups[0] is the innermost <g> (its two rect slots).
+    assert_eq!(
+        batch.groups[0].members,
+        vec![ImportRef::Slot(1), ImportRef::Slot(2)]
+    );
     // groups[1] is the outer <g>: a rect slot plus the already-resolved inner group.
     assert_eq!(
         batch.groups[1].members,
