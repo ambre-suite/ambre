@@ -31,6 +31,11 @@ use crate::logic::model::{ElementId, FrameId, NodeId};
 use super::codec::str_of;
 use super::{CHILDREN, NOTES, PRESENTATION_CONFIG, PRESENTATION_ORDER, ToileState};
 
+/// The slide transition length a fresh board is seeded with, in milliseconds.
+/// The deck's `transition_ms` register carries an editable value over it, and a
+/// register holding anything else reads as this (`TOILE-FEAT-028`).
+pub const DEFAULT_TRANSITION_MS: f64 = 300.0;
+
 impl ToileState {
     // -- sequence (CRDT,) -------------------------------------------------
 
@@ -219,10 +224,16 @@ impl ToileState {
     /// role only, no CRDT delta. When turning on while in present mode, the
     /// current slide is broadcast immediately so followers snap without waiting
     /// for the next navigation.
+    /// Turning it off broadcasts one last frame carrying no slide. The peers
+    /// then stop offering this viewer to follow at once, rather than at the
+    /// presence timeout (`TOILE-UI-315`).
     pub(super) fn set_present_broadcast(&mut self, on: bool) -> ToileOutcome {
+        let was = self.broadcasting;
         self.broadcasting = on;
         let ephemeral = if on {
             self.slide_broadcast_frame()
+        } else if was {
+            silent_presence_frame()
         } else {
             None
         };
@@ -276,7 +287,40 @@ impl ToileState {
             count: order.len(),
             notes: frame.as_ref().map(|f| self.notes(f)).unwrap_or_default(),
             frame,
+            transition_ms: self.transition_ms(),
         }
+    }
+
+    /// Write the deck's transition length, for a test that needs a board
+    /// configured otherwise. No command writes this register yet: the surface
+    /// that would edit it is not built (this spec section 6).
+    #[cfg(test)]
+    pub(crate) fn set_transition_ms_for_test(&mut self, ms: f64) {
+        let _ = self
+            .doc
+            .get_map(PRESENTATION_CONFIG)
+            .insert("transition_ms", ms);
+        self.doc.commit();
+    }
+
+    /// The deck's own transition length, in milliseconds (`TOILE-FEAT-028`).
+    ///
+    /// A config the board does not carry reads as the default. So does a value
+    /// that is not a plain length. A negative or absurd one would make every
+    /// slide change instant or unending, on a register any peer can write.
+    fn transition_ms(&self) -> f64 {
+        const MAX_TRANSITION_MS: f64 = 10_000.0;
+        self.doc
+            .get_map(PRESENTATION_CONFIG)
+            .get("transition_ms")
+            .and_then(|v| v.into_value().ok())
+            .and_then(|v| match v {
+                LoroValue::Double(ms) => Some(ms),
+                LoroValue::I64(ms) => Some(ms as f64),
+                _ => None,
+            })
+            .filter(|ms| ms.is_finite() && (0.0..=MAX_TRANSITION_MS).contains(ms))
+            .unwrap_or(DEFAULT_TRANSITION_MS)
     }
 
     /// Leave presentation mode. Local only. Broadcasting is turned off on
@@ -285,11 +329,14 @@ impl ToileState {
     pub(super) fn exit_present(&mut self) -> ToileOutcome {
         self.present = false;
         let mut display = vec![ToileEvent::PresentModeChanged(false)];
-        if self.broadcasting {
-            self.broadcasting = false;
-            display.push(ToileEvent::PresentBroadcastChanged(false));
+        if !self.broadcasting {
+            return ToileOutcome::display_only(display);
         }
-        ToileOutcome::display_only(display)
+        self.broadcasting = false;
+        display.push(ToileEvent::PresentBroadcastChanged(false));
+        // Say so on the wire too: a presenter who left the mode is no longer
+        // one to follow (`TOILE-UI-315`).
+        ToileOutcome::display_and_ephemeral(display, silent_presence_frame())
     }
 
     /// Number of slides in the shared deck (`0` if absent). Local read.
@@ -467,6 +514,19 @@ impl ToileState {
     }
 }
 
+/// A presence frame carrying no slide: what a viewer sends when it stops
+/// broadcasting (`TOILE-UI-315`). The peers read the whole live set, so a
+/// sample naming no slide is what drops this viewer from the presenters.
+fn silent_presence_frame() -> Option<Vec<u8>> {
+    match postcard::to_allocvec(&PresencePayload::default()) {
+        Ok(bytes) => Some(bytes),
+        Err(e) => {
+            tracing::warn!("Toile: the end-of-broadcast frame failed to encode: {e}");
+            None
+        }
+    }
+}
+
 /// Write the presentation defaults into the config root map (`TOILE-029`).
 ///
 /// Called from board construction and from the schema step that carries an
@@ -475,7 +535,7 @@ impl ToileState {
 pub(crate) fn seed_presentation_config(doc: &LoroDoc) {
     let cfg = doc.get_map(PRESENTATION_CONFIG);
     if cfg.get("transition_ms").is_none() {
-        let _ = cfg.insert("transition_ms", 300.0);
+        let _ = cfg.insert("transition_ms", DEFAULT_TRANSITION_MS);
         let _ = cfg.insert("autoplay", false);
         let _ = cfg.insert("loop", false);
     }

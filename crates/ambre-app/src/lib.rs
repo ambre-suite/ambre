@@ -1494,6 +1494,22 @@ pub fn main() {
                     presenter_notes.set(c.notes.clone());
                     presenter_frame.set(c.frame.clone());
                 }
+                // A peer wrote into the note on screen, or a history step did
+                // (`TOILE-UI-316`). The editor is otherwise seeded by the slide
+                // event alone, so the writing would stay invisible until the
+                // slide changed.
+                UiEvent::Viewport {
+                    event:
+                        AppEvent::Toile(ambre_bus::app::toile::ToileEvent::NotesChanged {
+                            frame,
+                            notes,
+                        }),
+                    ..
+                } => {
+                    if presenter_frame.get_untracked().as_ref() == Some(frame) {
+                        presenter_notes.set(notes.clone());
+                    }
+                }
                 // "Follow presenter" role changes: reflect the local
                 // broadcast toggle and follow target in the panel signals.
                 UiEvent::Viewport {

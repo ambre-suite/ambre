@@ -489,15 +489,17 @@ impl ToileState {
     /// rebuild the derived caches, and return the display events to repaint. A
     /// remote import is never re-broadcast.
     pub fn apply_remote(&mut self, update: &[u8]) -> Vec<ToileEvent> {
+        let deck_before = self.slide_order();
+        let notes_before = self.active_notes();
         if let Err(e) = self.doc.import(update) {
             tracing::warn!("Toile: remote import failed: {e}");
             return vec![ToileEvent::Error(ToileError::RemoteImportFailed)];
         }
-        let deck_before = self.slide_order();
         self.absorb_imported();
         self.rebuild_caches();
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
+        events.extend(self.notes_change(&notes_before));
         // A delta can carry a register this build cannot decode just as a
         // snapshot can, and the user deserves the same word (`SCHEMA-003`).
         events.extend(self.undecodable_notice());
@@ -516,6 +518,7 @@ impl ToileState {
             return Vec::new();
         }
         let deck_before = self.slide_order();
+        let notes_before = self.active_notes();
         let mut any_ok = false;
         let mut any_failed = false;
         for update in updates {
@@ -534,6 +537,7 @@ impl ToileState {
         self.rebuild_caches();
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
+        events.extend(self.notes_change(&notes_before));
         if any_failed {
             events.push(ToileEvent::Error(ToileError::RemoteImportFailed));
         }
@@ -585,14 +589,16 @@ impl ToileState {
         // comes back is the payload itself at the current version, or a migrated
         // snapshot.
         let payload = schema::gate(payload)?;
+        let deck_before = self.slide_order();
+        let notes_before = self.active_notes();
         if let Err(e) = self.doc.import(&payload) {
             tracing::warn!("Toile: snapshot import failed: {e}");
             return Err(SchemaError::PayloadRejected);
         }
-        let deck_before = self.slide_order();
         self.rebuild_caches();
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
+        events.extend(self.notes_change(&notes_before));
         events.extend(self.undecodable_notice());
         Ok(events)
     }
@@ -649,11 +655,13 @@ impl ToileState {
             return ToileOutcome::display_only(vec![self.undo_state_event()]);
         }
         let deck_before = self.slide_order();
+        let notes_before = self.active_notes();
         self.rebuild_caches();
         // `undo_state_event` last, so the central refresh in `handle_command`
         // sees it and skips the duplicate (`UNDO-006`).
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
+        events.extend(self.notes_change(&notes_before));
         events.push(self.undo_state_event());
         self.emit_with_update(events)
     }
@@ -664,6 +672,27 @@ impl ToileState {
     /// authoritative state, and it would otherwise show a deck nobody has.
     pub(super) fn deck_change(&self, before: &[FrameId]) -> Option<ToileEvent> {
         (self.slide_order() != before).then_some(ToileEvent::DeckChanged)
+    }
+
+    /// The speaker notes of the slide on screen, read before a write this
+    /// viewer did not make (`TOILE-UI-316`). `None` when no slide resolves.
+    pub(super) fn active_notes(&self) -> Option<(FrameId, String)> {
+        let frame = self.slide_order().get(self.playback.active).cloned()?;
+        let notes = self.notes(&frame);
+        Some((frame, notes))
+    }
+
+    /// `NotesChanged` when the note on screen is no longer `before`
+    /// (`TOILE-UI-316`). Every write that can move it without naming it calls
+    /// this: a remote delta, a history step. The editor is otherwise seeded by
+    /// the slide event alone, so a co-author's writing stays invisible until
+    /// the slide changes.
+    pub(super) fn notes_change(&self, before: &Option<(FrameId, String)>) -> Option<ToileEvent> {
+        let (frame, notes) = self.active_notes()?;
+        match before {
+            Some((f, n)) if *f == frame && *n == notes => None,
+            _ => Some(ToileEvent::NotesChanged { frame, notes }),
+        }
     }
 
     pub(super) fn undo_state_event(&self) -> ToileEvent {

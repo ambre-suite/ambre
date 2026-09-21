@@ -625,6 +625,12 @@ fn paint_text<S: DrawSurface>(
 /// The selection box is skipped for an empty selection, but find
 /// highlights are painted regardless (a search can be active with nothing
 /// selected).
+///
+/// `present` is presentation mode. It skips every editing surface of this pass:
+/// the gesture preview, the arrow box, the find highlights, the selection box
+/// and its handles (`TOILE-UI-083`). A slide is what the room is looking at.
+/// The link badges stay: following a link is navigation, and a presenter uses
+/// it.
 #[allow(clippy::too_many_arguments)]
 pub fn paint_overlay<S: DrawSurface>(
     surface: &mut S,
@@ -643,7 +649,13 @@ pub fn paint_overlay<S: DrawSurface>(
     // The selected arrow, if one is (`toile-connectors`). Exclusive with
     // `selection`, so at most one of the two boxes is drawn.
     arrow: Option<&ConnectorId>,
+    present: bool,
 ) {
+    if present {
+        // Navigation only: a badge says a slide carries a link.
+        paint_link_badges(surface, vp, cam, palette);
+        return;
+    }
     // Live gesture preview (world -> screen), a thin outline / trail.
     if let Some(p) = preview {
         paint_preview(surface, p, cam, palette);
@@ -1359,6 +1371,7 @@ mod tests {
             None,
             &HashMap::new(),
             None,
+            false,
         );
         // 4 corner handles + 1 rotate handle = 5 filled squares (corners-only).
         let handle_fills = surface
@@ -1367,6 +1380,42 @@ mod tests {
             .filter(|o| matches!(o, DrawOp::FillRect { .. }))
             .count();
         assert_eq!(handle_fills, 5);
+    }
+
+    /// `TOILE-UI-083`: presentation mode paints no editing surface. The same
+    /// selection that draws a box and five handles above draws neither while
+    /// the mode holds.
+    #[test]
+    fn overlay_paints_no_editing_surface_while_presenting() {
+        let vp = DisplayViewport {
+            pins: Vec::new(),
+            reactions: Default::default(),
+            viewport: Default::default(),
+            nodes: vec![elem(
+                "r",
+                DisplayGeom::Rect,
+                Rect::new(0.0, 0.0, 50.0, 50.0),
+            )],
+        };
+        let mut surface = RecordingSurface::new();
+        paint_overlay(
+            &mut surface,
+            &[ElementId("r".into())],
+            &vp,
+            &cam(),
+            &LIGHT_PALETTE,
+            None,
+            &[ElementId("r".into())],
+            None,
+            &HashMap::new(),
+            None,
+            true,
+        );
+        assert!(
+            surface.ops().is_empty(),
+            "a slide took a selection box, a handle or a find outline: {:?}",
+            surface.ops()
+        );
     }
 
     #[test]
@@ -1408,6 +1457,7 @@ mod tests {
             None,
             &gesture,
             None,
+            false,
         );
         // The selection box is stroked at the preview bounds, not the committed rect.
         let expected = world_rect_to_screen(preview_bounds, &cam);
@@ -1453,6 +1503,7 @@ mod tests {
             None,
             &HashMap::new(),
             Some(&selected),
+            false,
         );
         let handles = surface
             .ops()
@@ -1505,6 +1556,7 @@ mod tests {
             None,
             &HashMap::new(),
             None,
+            false,
         );
         let badges = surface
             .ops()
@@ -1537,6 +1589,7 @@ mod tests {
             None,
             &HashMap::new(),
             Some(&selected),
+            false,
         );
         assert!(surface.ops().is_empty(), "nothing is painted");
     }
@@ -1565,6 +1618,7 @@ mod tests {
             Some(&ElementId("b".into())),
             &HashMap::new(),
             None,
+            false,
         );
         // No selection => no handles, only the two hit outlines (one per match).
         let strokes = surface
@@ -1622,6 +1676,7 @@ mod tests {
             None,
             &HashMap::new(),
             None,
+            false,
         );
         // The box must NOT be a `stroke_rect` (that degrades to an upright AABB on
         // the WgpuSurface); it is drawn as rotated `stroke_line` edges instead.

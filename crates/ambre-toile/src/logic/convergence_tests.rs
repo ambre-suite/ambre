@@ -2176,6 +2176,112 @@ fn no_broadcast_frame_when_not_broadcasting() {
     );
 }
 
+/// `TOILE-FEAT-028`: a transition lasts what the deck configures, not a
+/// constant of the render thread. The length rides the slide event, because
+/// the UI thread holds no board data.
+#[test]
+fn a_transition_lasts_what_the_deck_configures() {
+    let mut st = ToileState::new();
+    deck_of_three(&mut st);
+    let out = st.handle_command(ToileCommand::NextSlide);
+    assert_eq!(
+        slide_change(&out).transition_ms,
+        crate::logic::state::presentation::DEFAULT_TRANSITION_MS,
+        "a board nobody configured carries the default"
+    );
+
+    st.set_transition_ms_for_test(900.0);
+    let out = st.handle_command(ToileCommand::PrevSlide);
+    assert_eq!(slide_change(&out).transition_ms, 900.0);
+
+    // A register holding something else, or a length nothing could play, reads
+    // as the default rather than freezing or skipping every slide change.
+    st.set_transition_ms_for_test(-1.0);
+    let out = st.handle_command(ToileCommand::NextSlide);
+    assert_eq!(
+        slide_change(&out).transition_ms,
+        crate::logic::state::presentation::DEFAULT_TRANSITION_MS
+    );
+}
+
+/// `TOILE-UI-316`: a peer writing into the note on screen reaches this
+/// viewer's panel. The editor is seeded by the slide event alone, so without
+/// the event the writing stays invisible until the slide changes.
+#[test]
+fn a_peers_note_edit_reaches_the_slide_on_screen() {
+    let mut a = ToileState::new();
+    let frame = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    a.handle_command(ToileCommand::SetSlideOrder {
+        order: vec![frame.clone()],
+    });
+    let mut b = ToileState::new();
+    b.apply_remote(&a.export_snapshot());
+    b.handle_command(ToileCommand::EnterPresent { focus: true });
+
+    let delta = a
+        .handle_command(ToileCommand::EditNotes {
+            frame: frame.clone(),
+            delta: TextDelta {
+                at: 0,
+                delete: 0,
+                insert: "open on the budget".into(),
+            },
+        })
+        .update
+        .expect("the note broadcasts a delta");
+
+    let events = b.apply_remote(&delta);
+    let reported = events.iter().find_map(|e| match e {
+        ToileEvent::NotesChanged { frame, notes } => Some((frame.clone(), notes.clone())),
+        _ => None,
+    });
+    assert_eq!(
+        reported,
+        Some((frame, "open on the budget".to_owned())),
+        "the note on screen moved and the panel was not told"
+    );
+
+    // A remote change that leaves the note alone says nothing.
+    let other = create_rect(&mut a, Point::new(900.0, 0.0), Size::new(10.0, 10.0));
+    let _ = other;
+    let delta = a.export_snapshot();
+    assert!(
+        !b.apply_remote(&delta)
+            .iter()
+            .any(|e| matches!(e, ToileEvent::NotesChanged { .. }))
+    );
+}
+
+/// `TOILE-UI-315`: a viewer that stops broadcasting says so on the wire. The
+/// peers read the whole live set. A frame naming no slide is what drops this
+/// viewer from the presenters the panel offers to follow.
+#[test]
+fn stopping_a_broadcast_sends_a_frame_naming_no_slide() {
+    let mut st = ToileState::new();
+    deck_of_three(&mut st);
+    st.handle_command(ToileCommand::SetPresentBroadcast(true));
+
+    let frame = st
+        .handle_command(ToileCommand::SetPresentBroadcast(false))
+        .ephemeral
+        .expect("stopping broadcasts one last frame");
+    let mut rx = ToileState::new();
+    let presenter = UserId::new();
+    rx.apply_ephemeral(presenter, &frame);
+    assert_eq!(
+        rx.peer_presence(&presenter).and_then(|p| p.present_slide),
+        None,
+        "the peer is still offered as a presenter"
+    );
+
+    // A viewer that was not broadcasting says nothing.
+    assert!(
+        st.handle_command(ToileCommand::SetPresentBroadcast(false))
+            .ephemeral
+            .is_none()
+    );
+}
+
 #[test]
 fn follower_adopts_presenter_slide() {
     // A follower adopts the presenter's broadcast slide (gliding via SlideChanged)

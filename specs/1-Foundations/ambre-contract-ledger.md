@@ -19,13 +19,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2487 rows: 1737 shipped, of which 796 loose. 750 unbuilt.**
+**2487 rows: 1737 shipped, of which 793 loose. 750 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 212 | 219 | 510 |  | 941 |
-| `failing` | 39 | 46 | 45 |  | 130 |
-| `untested` | 273 | 144 | 231 |  | 648 |
+| `verified` | 212 | 219 | 513 |  | 944 |
+| `failing` | 39 | 46 | 40 |  | 125 |
+| `untested` | 273 | 144 | 233 |  | 650 |
 | `human-review` | 7 |  |  |  | 7 |
 | `qa-manual` | 4 | 4 | 3 |  | 11 |
 | `unimplemented` | 54 | 56 | 23 | 617 | 750 |
@@ -118,7 +118,7 @@
 | `ambre-spec-toile-menus.md` | 52 | 52 | 37 | 15 |  |
 | `ambre-spec-toile-pdf-export.md` | 16 | 14 | 10 | 4 | 2 |
 | `ambre-spec-toile-presence.md` | 28 | 28 | 22 | 6 |  |
-| `ambre-spec-toile-presentation.md` | 45 | 45 | 36 | 9 |  |
+| `ambre-spec-toile-presentation.md` | 45 | 45 | 39 | 6 |  |
 | `ambre-spec-toile-reactions.md` | 35 | 29 | 20 | 9 | 6 |
 | `ambre-spec-toile-selection.md` | 29 | 29 | 21 | 8 |  |
 | `ambre-spec-toile-status-bar.md` | 13 | 13 | 8 | 5 |  |

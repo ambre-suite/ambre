@@ -917,6 +917,11 @@ pub struct SlideChange {
     /// panel's editor (`toile-presentation`). Empty when the frame has no
     /// notes yet or is absent.
     pub notes: String,
+    /// How long this transition lasts, in milliseconds: the deck's own
+    /// `transition_ms`, read off the document (`TOILE-FEAT-028`). The render
+    /// thread holds no board data, so the length rides the event like the
+    /// snapshots beside it.
+    pub transition_ms: f64,
 }
 
 /// Command from the UI / Logic thread to `ToileState` (in `ambre-toile`).
@@ -1610,6 +1615,14 @@ pub enum ToileEvent {
     /// local write reordered it, or a deleted frame left it. The panel holds no
     /// authoritative state, so it re-reads on this event.
     DeckChanged,
+    /// The speaker notes of the slide on screen changed under this viewer: a
+    /// peer wrote into them, or a history step did (`TOILE-UI-316`). Carries
+    /// the whole note, because the presenter panel's editor holds a body and
+    /// not a position. Emitted only when the text actually differs.
+    NotesChanged {
+        frame: ElementId,
+        notes: String,
+    },
     /// A foreign-file import applied successfully
     /// (`toile-import-export`). Carries the lossy-import summary the UI
     /// surfaces: how many elements landed and which unsupported constructs the

@@ -19,11 +19,6 @@ use crate::logic::animate::{AnimatedElement, ease_in_out_cubic, smart_animate};
 
 use super::viewport::ViewportTransform;
 
-/// Default slide transition length in milliseconds (`transition_ms`). The
-/// deck config carries an editable value; Phase 1 uses this constant until the
-/// config is threaded through the event.
-pub const DEFAULT_TRANSITION_MS: f64 = 300.0;
-
 /// One in-flight slide transition. Built by the view on a `SlideChanged` event
 /// and advanced each frame. The camera glides from `cam_from` to `(cam_to_center,
 /// cam_to_zoom)`; the content tweens from `from` to `to`. `start_ms` is
@@ -70,6 +65,17 @@ impl Transition {
             from,
             to,
         }
+    }
+
+    /// The culling viewport that covers both ends of this transition
+    /// (`TOILE-UI-085`). `cam` is the camera the frame is drawn at, and only
+    /// its size is read.
+    pub fn covering_viewport(&self, cam: &ViewportTransform) -> ambre_bus::app::toile::Viewport {
+        let from = ViewportTransform {
+            size: cam.size,
+            ..self.cam_from
+        };
+        from.covering_viewport(self.cam_to_center, self.cam_to_zoom)
     }
 
     /// Advance to wall-clock `now_ms`, stamping the start on the first call. The
@@ -229,5 +235,31 @@ mod tests {
             "a zero-duration transition is done on first advance"
         );
         assert_eq!(f.cam.center, Point::new(10.0, 10.0));
+    }
+
+    /// `TOILE-UI-085`: the cull a transition asks for covers both ends of the
+    /// glide. An element only the previous slide holds therefore stays in the
+    /// visible set. Its fade-out runs to the end, instead of stopping the frame
+    /// the camera leaves it.
+    #[test]
+    fn the_covering_cull_holds_both_ends_of_the_glide() {
+        let from = cam(0.0, 0.0, 1.0);
+        let t = Transition::new(
+            from,
+            Point::new(4000.0, 0.0),
+            1.0,
+            FrameSnapshot::default(),
+            FrameSnapshot::default(),
+            300.0,
+        );
+        let covering = t.covering_viewport(&from);
+        let half_w = covering.size.width / (2.0 * covering.zoom);
+        let (left, right) = (covering.center.x - half_w, covering.center.x + half_w);
+        let start_left = from.center.x - from.size.width / (2.0 * from.zoom);
+        let end_right = 4000.0 + from.size.width / 2.0;
+        assert!(
+            left <= start_left && right >= end_right,
+            "the cull dropped one end: {left}..{right}"
+        );
     }
 }

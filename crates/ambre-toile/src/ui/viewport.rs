@@ -166,6 +166,42 @@ impl ViewportTransform {
         self.size = Size::new(width.max(1.0), height.max(1.0));
     }
 
+    /// The world rectangle this camera shows.
+    pub fn visible_world(&self) -> Rect {
+        let half_w = self.size.width / (2.0 * self.zoom);
+        let half_h = self.size.height / (2.0 * self.zoom);
+        Rect::new(
+            self.center.x - half_w,
+            self.center.y - half_h,
+            self.center.x + half_w,
+            self.center.y + half_h,
+        )
+    }
+
+    /// A culling viewport covering what this camera shows and what the camera
+    /// `(to_center, to_zoom)` will (`TOILE-UI-085`).
+    ///
+    /// A slide transition glides between the two, and the culled set is asked
+    /// for once per frame. Asking at the moving camera drops an element the
+    /// glide leaves behind, which stops its fade-out halfway. The union keeps
+    /// every element of both slides in the set for the whole transition, and
+    /// adds nothing that is off both screens.
+    pub fn covering_viewport(&self, to_center: Point, to_zoom: f64) -> Viewport {
+        let to = ViewportTransform {
+            center: to_center,
+            zoom: to_zoom,
+            size: self.size,
+        };
+        let union = self.visible_world().union(to.visible_world());
+        let zoom_x = self.size.width / union.width().max(f64::EPSILON);
+        let zoom_y = self.size.height / union.height().max(f64::EPSILON);
+        Viewport {
+            center: union.center(),
+            zoom: Self::clamp_zoom(zoom_x.min(zoom_y)),
+            size: self.size,
+        }
+    }
+
     /// Project to the Logic-side `Viewport` for a `SetViewport` forward (the
     /// culling input). Identical fields, a distinct type by design.
     pub fn to_bus_viewport(&self) -> Viewport {

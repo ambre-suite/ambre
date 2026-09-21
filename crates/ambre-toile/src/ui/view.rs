@@ -45,7 +45,7 @@ use super::hit::hit_topmost;
 use super::label;
 use super::link::{self, LinkAction};
 use super::presence::{PeerCursors, PresenceSender};
-use super::present::{DEFAULT_TRANSITION_MS, Transition};
+use super::present::Transition;
 use super::reactions;
 use super::render;
 use super::tool::{
@@ -981,6 +981,9 @@ impl ToileView {
             // clock.
             ToileEvent::SlideChanged(change) => {
                 let cam_from = self.cam;
+                // The length rides the event: the deck's own `transition_ms`,
+                // read off the document by the Logic thread (`TOILE-FEAT-028`).
+                let dur_ms = change.transition_ms;
                 let (to_center, to_zoom) = change
                     .to_rect
                     .and_then(|r| self.cam.fit_target(r, super::viewport::FIT_PAD))
@@ -991,7 +994,7 @@ impl ToileView {
                     to_zoom,
                     change.from,
                     change.to,
-                    DEFAULT_TRANSITION_MS,
+                    dur_ms,
                 ));
                 self.needs_full = true;
             }
@@ -1057,6 +1060,10 @@ impl ToileView {
             // a history step, a remote delta or a deleted frame. Re-read what
             // the panel shows; it keeps no answer of its own.
             ToileEvent::DeckChanged => self.reread_deck(),
+            // The note on screen moved under this viewer (`TOILE-UI-316`). The
+            // presenter panel is chrome, and the shell mirrors the body into
+            // its signal; the board itself draws no note.
+            ToileEvent::NotesChanged { .. } => {}
             // An export produced a file (`toile-import-export`). The Logic
             // thread holds the board and serialized the bytes; the UI thread
             // owns the DOM, so this arm triggers the download (`TOILE-IO-085`).
@@ -3026,9 +3033,16 @@ impl ToileView {
         // (`toile-presentation`): glide the camera and
         // rebuild the Smart Animate overrides from the frame clock, until it
         // completes. Each active frame is a full repaint (the camera and content
-        // both change) and re-culls (`queue_viewport`) so elements entering the
-        // fitted frame are painted.
+        // both change) and re-culls so elements entering the fitted frame are
+        // painted. The cull asks for both ends of the glide at once. An element
+        // only the previous slide holds therefore stays in the set, and fades
+        // out whole (`TOILE-UI-085`).
         if self.transition.is_some() {
+            let covering = self
+                .transition
+                .as_ref()
+                .expect("the guard above found one")
+                .covering_viewport(&self.cam);
             let frame = self.transition.as_mut().unwrap().advance(now_ms);
             self.cam = frame.cam;
             self.anim_overrides = frame
@@ -3037,10 +3051,13 @@ impl ToileView {
                 .map(|a| (a.id.clone(), a))
                 .collect();
             self.needs_full = true;
-            self.queue_viewport();
             if frame.done {
                 self.transition = None;
                 self.anim_overrides.clear();
+                self.queue_viewport();
+            } else {
+                self.pending_viewport = Some(covering);
+                self.viewport_changed = true;
             }
         }
 
@@ -3156,12 +3173,14 @@ impl ToileView {
             self.find_focus.as_ref(),
             &self.gesture_overrides,
             self.arrow.as_ref(),
+            self.present,
         );
 
         // Remote presence overlay (`toile-presence`): cursors, selection
         // ghosts, live strokes and laser trails, above content, in each peer's
-        // cross-app colour.
-        if !self.presence.is_empty() {
+        // cross-app colour. A presentation shows the slide alone, so the peers'
+        // pointers stay off it (`TOILE-UI-083`).
+        if !self.present && !self.presence.is_empty() {
             self.presence.paint(
                 surface,
                 &self.display,
