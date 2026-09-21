@@ -106,9 +106,8 @@ status values are normative in `ambre-spec-template.md`.
   `features/ambre-spec-toile-media.md section 1`.
 * **Verification.** 31 `verified`, 5 `failing`, 4 `untested`. What holds is the pair no other application
   holds: the index equivalence and the convergence of every derived cache. Both under one property test,
-  neither at a culling camera (`TOILE-206`). A remote change that will not import now answers a distinct
-  error, alone and in a batch. What is loose is four rules nothing exercises and `TOILE-023`, a
-  measurement; ten verified rows are structural.
+  neither at a culling camera (`TOILE-206`). What is loose is four rules nothing exercises and
+  `TOILE-023`, a measurement; ten verified rows are structural.
 
 ---
 
