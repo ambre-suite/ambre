@@ -63,7 +63,30 @@ pub(super) fn decode_media(
     hash: ContentHash,
 ) -> Result<MediaBlob, ImportError> {
     let format = image::guess_format(bytes).map_err(|e| ImportError::Decode(e.to_string()))?;
-    let decoded = image::load_from_memory(bytes).map_err(|e| ImportError::Decode(e.to_string()))?;
+    // The header first (`TOILE-IO-052`). A decoded picture is four bytes per
+    // pixel, so measuring one after expanding it bounds the document and not
+    // the heap. A file declaring 40 000 squared costs six gigabytes before the
+    // bound is read. Reading the dimensions off the header costs the header.
+    let reader = image::ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|e| ImportError::Decode(e.to_string()))?;
+    let (width, height) = reader
+        .into_dimensions()
+        .map_err(|e| ImportError::Decode(e.to_string()))?;
+    limits.check_image_dims(width, height)?;
+
+    // A header that lies about its size is the second way in, so the decoder
+    // carries the same bound and refuses to allocate past it.
+    let mut reader = image::ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|e| ImportError::Decode(e.to_string()))?;
+    let mut alloc = image::Limits::default();
+    alloc.max_image_width = Some(limits.max_image_dim);
+    alloc.max_image_height = Some(limits.max_image_dim);
+    reader.limits(alloc);
+    let decoded = reader
+        .decode()
+        .map_err(|e| ImportError::Decode(e.to_string()))?;
     let (width, height) = decoded.dimensions();
     limits.check_image_dims(width, height)?;
 
@@ -154,6 +177,37 @@ mod tests {
         };
         let err = import_raster(&png, &limits).unwrap_err();
         assert!(matches!(err, ImportError::ImageTooLarge { limit: 256, .. }));
+    }
+
+    /// `TOILE-IO-052`: the picture is measured before it is expanded. The
+    /// bytes here carry a whole header and a truncated body, so a decoder that
+    /// expanded first would answer with a decode failure. Measured first, the
+    /// size is read off the header and the refusal names the bound.
+    #[test]
+    fn an_oversized_picture_is_refused_off_its_header() {
+        let png = solid_png(300, 20);
+        // Everything up to the first pixel chunk: the header is whole, the
+        // image data is not there at all.
+        let idat = png
+            .windows(4)
+            .position(|w| w == b"IDAT")
+            .expect("a PNG data chunk");
+        let header_only = png[..idat + 4].to_vec();
+        let limits = Limits {
+            max_image_dim: 256,
+            ..Limits::default()
+        };
+        assert!(
+            matches!(
+                import_raster(&header_only, &limits).unwrap_err(),
+                ImportError::ImageTooLarge {
+                    width: 300,
+                    height: 20,
+                    limit: 256
+                }
+            ),
+            "the picture was expanded before it was measured"
+        );
     }
 
     #[test]

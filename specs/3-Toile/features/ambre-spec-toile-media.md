@@ -35,7 +35,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-IO-052` | `PRE` | The caller MUST hand over bytes whose decoded form fits in memory. | this spec section 3 | none | fails -- the decoder expands the whole picture before `ambre_toile::logic::interop::raster::decode_media` measures it, so the dimension bound protects the document and not the heap, section 6; lands with the `A picture is measured before it is expanded` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-IO-052` | `PRE` | The caller MUST hand over bytes whose decoded form fits in memory. | this spec section 3 | `ambre_toile::logic::interop::raster::tests::an_oversized_picture_is_refused_off_its_header` -- a whole header over a body that is not there, refused by the bound rather than by the decoder, which proves nothing was expanded; `ambre_toile::logic::interop::raster::tests::oversized_image_aborts_atomically` -- the same refusal on a whole file | none | verified |
 | `TOILE-IO-053` | `POST` | An import MUST yield one picture element sized to the decoded resolution and one plaintext blob it names. | this spec section 3 | `ambre_toile::logic::interop::raster::tests::imports_one_image_with_thumbnail` -- the element kind, its size, the blob dimensions, the type and the address they share | none | verified |
 | `TOILE-IO-054` | `POST` | An import MUST build a thumbnail bounded on each edge, so the entry stays small enough to ride in the document. | this spec section 3 | `ambre_toile::logic::interop::raster::tests::thumbnail_is_bounded` -- it decodes the produced thumbnail and reads both edges against the bound | none | verified |
 | `TOILE-IO-055` | `FRAME` | Converting a file MUST NOT write to the document: it MUST return a batch the state layer applies. | this spec section 3 | type-level -- the decoder takes bytes and returns a batch, and holds no handle on the document | none | verified |
@@ -73,10 +73,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** this document owns Toile's only outbound flow of user content: media blobs, sealed
   by the Sync thread before they leave (`TOILE-IO-013`). No board geometry and no pixel leaves in
   plaintext.
-* **Verification.** 24 `verified`, 1 `failing`, 4 `untested`. What holds is the upload half: the address
-  dedups, the cache keeps a load in flight. A failed upload takes the import with it, and a hostile picture is
-  refused. What is loose is the download half: the cache and the thumbnail exist, and nothing joins either to
-  a screen. Loose too are the decoder bound and the placeholder.
+* **Verification.** 25 `verified`, 4 `untested`. What holds is the upload half: the address dedups, the
+  cache keeps a load in flight. A failed upload takes the import with it, and a hostile picture is refused
+  off its header. What is loose is the download half: the cache and the thumbnail exist, and nothing joins
+  either to a screen. Loose too is the placeholder.
 
 ---
 
@@ -129,13 +129,15 @@ pub enum RequestOutcome { Fetch, CacheHit(MediaState) }
 
 **Steps, when a picture is imported:**
 
-1. decode the bytes, refuse a picture past the dimension bound, and build a bounded thumbnail
-   (`TOILE-IO-009`);
-2. hand the plaintext up as an upload and apply nothing yet (`TOILE-IO-008`);
-3. rewrite the placeholder address to the one the Sync thread returns, in the blob and in every
+1. read the dimensions off the header and refuse a picture past the bound before anything is
+   expanded (`TOILE-IO-052`);
+2. decode under that same bound, so a header that lies about its size is refused by the decoder.
+   Then measure the decoded form and build a bounded thumbnail (`TOILE-IO-009`);
+3. hand the plaintext up as an upload and apply nothing yet (`TOILE-IO-008`);
+4. rewrite the placeholder address to the one the Sync thread returns, in the blob and in every
    element that named it;
-4. seed the entry when the address is new, and leave it alone when it is not (`TOILE-IO-006`);
-5. commit once, with the elements, so the entry belongs to the import's undo item
+5. seed the entry when the address is new, and leave it alone when it is not (`TOILE-IO-006`);
+6. commit once, with the elements, so the entry belongs to the import's undo item
    (`TOILE-IO-036`).
 
 **Steps, when a picture is displayed:**
@@ -232,10 +234,9 @@ picture the document cannot resolve would be re-requested on every frame that fa
   single commit, so the rule follows from the commit. A test does undo an import -- it counts the
   elements that left and never the entries, which is the assertion the rule needs.
 
-* **The bound is read after the decode** (`TOILE-IO-052`). The decoder expands the whole picture into memory,
-  then measures it and refuses. A picture whose header claims dimensions no machine can hold is therefore held
-  before it is refused. The bound protects the document, not the process. Reading the header alone first would
-  refuse the same pictures for a few hundred bytes.
+* **The plaintext is held whole beside the decoded form.** The blob carries the file's own bytes
+  while the decode holds the expanded picture, so a picture at the bound costs both. No rule caps
+  the file's size, only the dimensions it declares.
 
 * **The thumbnail is bounded on its edges and not in bytes.** The rule the entry must meet is that
   it rides in the document (`TOILE-IO-054`); what is enforced is the longest edge. A noisy picture

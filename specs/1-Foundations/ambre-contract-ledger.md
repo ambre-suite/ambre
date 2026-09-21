@@ -19,12 +19,12 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2487 rows: 1737 shipped, of which 780 loose. 750 unbuilt.**
+**2487 rows: 1737 shipped, of which 779 loose. 750 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 212 | 219 | 526 |  | 957 |
-| `failing` | 39 | 46 | 25 |  | 110 |
+| `verified` | 212 | 219 | 527 |  | 958 |
+| `failing` | 39 | 46 | 24 |  | 109 |
 | `untested` | 273 | 144 | 234 |  | 651 |
 | `human-review` | 7 |  |  |  | 7 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
@@ -114,7 +114,7 @@
 | `ambre-spec-toile-groups.md` | 24 | 24 | 10 | 14 |  |
 | `ambre-spec-toile-import-export.md` | 53 | 41 | 35 | 6 | 12 |
 | `ambre-spec-toile-links.md` | 12 | 12 | 5 | 7 |  |
-| `ambre-spec-toile-media.md` | 29 | 29 | 24 | 5 |  |
+| `ambre-spec-toile-media.md` | 29 | 29 | 25 | 4 |  |
 | `ambre-spec-toile-menus.md` | 52 | 52 | 37 | 15 |  |
 | `ambre-spec-toile-pdf-export.md` | 16 | 14 | 10 | 4 | 2 |
 | `ambre-spec-toile-presence.md` | 28 | 28 | 22 | 6 |  |
