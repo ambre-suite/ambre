@@ -46,11 +46,13 @@ impl ToileState {
         let mut nodes = Vec::new();
         // Every visible element the order lists, so the omitted remainder is the
         // difference, not a second pass over the element map (`TOILE-058`).
-        let mut listed = HashSet::new();
+        // Borrowed from the order rather than cloned: this walk runs on every
+        // camera, and an `ElementId` owns a heap string.
+        let mut listed: HashSet<&ElementId> = HashSet::new();
         for node in &self.layers {
             match node {
                 crate::logic::model::NodeId::Element(id) if visible.contains(id) => {
-                    listed.insert(id.clone());
+                    listed.insert(id);
                     if let Some(de) = self.display_element(id) {
                         nodes.push(DisplayNode::Element(de));
                     }
@@ -65,12 +67,16 @@ impl ToileState {
         }
         // An element the document holds but the order omits still paints, last,
         // in an order every peer computes alike: by id (`TOILE-058`, `TOILE-121`).
-        let mut omitted: Vec<&ElementId> =
-            visible.iter().filter(|id| !listed.contains(*id)).collect();
-        omitted.sort();
-        for id in omitted {
-            if let Some(de) = self.display_element(id) {
-                nodes.push(DisplayNode::Element(de));
+        // The order lists every visible element on a board no concurrent change
+        // tore, so the common camera stops on the count and sorts nothing.
+        if listed.len() < visible.len() {
+            let mut omitted: Vec<&ElementId> =
+                visible.iter().filter(|id| !listed.contains(*id)).collect();
+            omitted.sort();
+            for id in omitted {
+                if let Some(de) = self.display_element(id) {
+                    nodes.push(DisplayNode::Element(de));
+                }
             }
         }
         DisplayViewport {

@@ -4260,6 +4260,7 @@
   {"edge": "cites-section", "from": "TOILE-UI-033", "section": "3", "to": "3-Toile/features/ambre-spec-toile-selection.md"},
   {"edge": "cites-section", "from": "TOILE-UI-033", "section": "4", "to": "3-Toile/features/ambre-spec-toile-selection.md"},
   {"edge": "verified-by", "from": "TOILE-UI-033", "to": "ambre_toile::logic::convergence_tests::board_ids_returns_every_element"},
+  {"edge": "verified-by", "from": "TOILE-UI-033", "to": "::board_ids_covers_an_element_the_order_omits"},
   {"edge": "cites-section", "from": "TOILE-UI-241", "section": "3", "to": "3-Toile/features/ambre-spec-toile-selection.md"},
   {"edge": "verified-by", "from": "TOILE-UI-241", "to": "ambre_toile::logic::convergence_tests::board_ids_excludes_locked_and_group_nodes"},
   {"edge": "cites-section", "from": "TOILE-UI-242", "section": "3", "to": "3-Toile/features/ambre-spec-toile-selection.md"},

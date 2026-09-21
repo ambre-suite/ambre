@@ -68,7 +68,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-033` | `POST` | Select-all MUST cover the whole board, not the part the UI thread holds. | this spec section 3; section 4 | `ambre_toile::logic::convergence_tests::board_ids_returns_every_element` -- Logic answers every element id, off-screen included, and select-all selects that list | none | verified |
+| `TOILE-UI-033` | `POST` | Select-all MUST cover the whole board, not the part the UI thread holds. | this spec section 3; section 4 | `ambre_toile::logic::convergence_tests::board_ids_returns_every_element` -- Logic answers every element id, off-screen included, and select-all selects that list; `::board_ids_covers_an_element_the_order_omits` -- the answer reads the element map, so an element the `layers` order omits is still in it | none | verified |
 | `TOILE-UI-241` | `POST` | Select-all MUST obey the exclusions a pick obeys: no locked element, no group node. | this spec section 3 | `ambre_toile::logic::convergence_tests::board_ids_excludes_locked_and_group_nodes` -- the board's id list carries the unlocked members and neither a locked element nor a group node | none | verified |
 | `TOILE-UI-242` | `FRAME` | Select-all MUST NOT alter the group scope the user has entered. | this spec section 3 | structural -- the walk writes the id list and the redraw flag, and no other field | none | verified |
 

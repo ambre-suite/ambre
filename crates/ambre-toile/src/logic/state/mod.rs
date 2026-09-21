@@ -727,21 +727,29 @@ impl ToileState {
     /// and a group node (`TOILE-UI-006`, `TOILE-UI-224`); select-all obeys the
     /// same exclusions (`TOILE-UI-241`).
     fn board_ids(&self) -> ToileOutcome {
-        let ids = self
-            .layers
-            .iter()
-            .filter_map(|node| match node {
-                crate::logic::model::NodeId::Element(id) => {
-                    let em = self.element_map(id)?;
-                    if codec::bool_of(&em, "locked") || codec::str_of(&em, "type") == "group" {
-                        None
-                    } else {
-                        Some(id.clone())
-                    }
+        // The element map, never the `layers` order: an element the order omits
+        // is on the board, and the paint walk already draws it (`TOILE-058`).
+        // Reading the order here would leave select-all short of exactly the
+        // elements that fallback exists for.
+        let elems = self.doc.get_map(ELEMENTS);
+        let LoroValue::Map(entries) = elems.get_value() else {
+            return ToileOutcome::display_only(vec![ToileEvent::BoardIds(Vec::new())]);
+        };
+        let mut ids: Vec<ElementId> = entries
+            .keys()
+            .filter_map(|key| {
+                let id = ElementId(key.to_string());
+                let em = self.element_map(&id)?;
+                if codec::bool_of(&em, "locked") || codec::str_of(&em, "type") == "group" {
+                    None
+                } else {
+                    Some(id)
                 }
-                crate::logic::model::NodeId::Connector(_) => None,
             })
             .collect();
+        // By id, so every peer answers the same list (`TOILE-121`). The map's
+        // own iteration order carries no such promise.
+        ids.sort();
         ToileOutcome::display_only(vec![ToileEvent::BoardIds(ids)])
     }
 

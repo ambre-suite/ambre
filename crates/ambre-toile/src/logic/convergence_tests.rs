@@ -487,6 +487,27 @@ fn board_ids_returns_every_element() {
     }
 }
 
+/// `TOILE-UI-033`: select-all covers an element the `layers` order omits. The
+/// board holds it and the paint walk draws it (`TOILE-058`), so a select-all
+/// reading the order alone would be short of exactly that element.
+#[test]
+fn board_ids_covers_an_element_the_order_omits() {
+    let mut st = ToileState::new();
+    let listed = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
+    let omitted = create_rect(&mut st, Point::new(40.0, 0.0), Size::new(10.0, 10.0));
+    st.debug_remove_layer_entry(&NodeId::Element(omitted.clone()));
+
+    let out = st.handle_command(ToileCommand::RequestBoardIds);
+    match &out.display[0] {
+        ToileEvent::BoardIds(ids) => {
+            let mut want = vec![listed, omitted];
+            want.sort();
+            assert_eq!(ids, &want, "select-all takes the board, not the order");
+        }
+        other => panic!("expected BoardIds, got {other:?}"),
+    }
+}
+
 /// `TOILE-UI-241`: select-all obeys the exclusions a pick obeys -- a locked
 /// element and a group node never join the board's id list.
 #[test]
