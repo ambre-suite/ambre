@@ -1855,6 +1855,34 @@ mod tests {
         }
     }
 
+    /// `TOILE-106`, the sending half: the machine offers the samples of a
+    /// stroke being drawn, so the per-frame presence sampler has a pen to
+    /// broadcast. An idle machine offers none, so a peer's trail ends when the
+    /// gesture does.
+    #[test]
+    fn a_stroke_being_drawn_is_offered_to_the_presence_sampler() {
+        let mut m = ToolMachine::new();
+        m.set_tool(Tool::Draw);
+        let disp = empty_display();
+        let cam = cam();
+        assert!(m.live_stroke().is_none(), "no stroke, nothing to send");
+        let p0 = Point::new(0.0, 0.0);
+        m.pointer_down(p0, to_screen(&cam, p0), &[], &disp, &cam, None);
+        m.pointer_move(Point::new(10.0, 5.0));
+        let mid = m.live_stroke().expect("a stroke in flight").to_vec();
+        assert!(mid.len() >= 2, "the samples so far: {mid:?}");
+        m.pointer_move(Point::new(20.0, 0.0));
+        assert!(
+            m.live_stroke().expect("still in flight").len() > mid.len(),
+            "a new sample did not reach the sampler"
+        );
+        let _ = m.pointer_up(Point::new(30.0, 5.0), &disp);
+        assert!(
+            m.live_stroke().is_none(),
+            "the trail outlived the gesture that drew it"
+        );
+    }
+
     #[test]
     fn connector_anchor_to_anchor_emits_create_connector() {
         let a = rect_elem("a", Rect::new(0.0, 0.0, 100.0, 100.0));

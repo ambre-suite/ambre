@@ -735,6 +735,52 @@ fn identity_is_seeded_and_read_back() {
 }
 
 #[test]
+fn a_stroke_in_flight_reaches_the_other_users() {
+    // `TOILE-106`: each sample of a stroke being drawn rides presence, so the
+    // other boards see the pen move instead of waiting for the commit. The
+    // board it rides is never touched: an in-flight stroke is not document
+    // state until release (`TOILE-105`).
+    let mut drawer = ToileState::new();
+    let tail = vec![
+        StrokePoint {
+            x: 10.0,
+            y: 10.0,
+            pressure: 0.5,
+        },
+        StrokePoint {
+            x: 12.0,
+            y: 14.0,
+            pressure: 0.6,
+        },
+    ];
+    let out = drawer.handle_command(ToileCommand::Presence {
+        payload: PresencePayload {
+            name: None,
+            cursor: Some(Point::new(12.0, 14.0)),
+            selection: Vec::new(),
+            live_stroke: Some(tail.clone()),
+            laser: None,
+            present_slide: None,
+        },
+        now_ms: 1_000,
+    });
+    assert!(out.update.is_none(), "a stroke in flight writes nothing");
+    let frame = out.ephemeral.expect("the sample broadcasts");
+
+    let mut watcher = ToileState::new();
+    let drawer_id = UserId::new();
+    watcher.apply_ephemeral(drawer_id, &frame);
+    assert_eq!(
+        watcher
+            .peer_presence(&drawer_id)
+            .and_then(|p| p.live_stroke.clone()),
+        Some(tail),
+        "the watcher sees no pen"
+    );
+    assert_eq!(watcher.element_count(), 0, "nothing landed on the board");
+}
+
+#[test]
 fn presence_command_broadcasts_ephemeral_only() {
     // A local presence sample rides the ephemeral leg. The board emits no
     // display event while the live set holds steady, and no CRDT delta. The UI
