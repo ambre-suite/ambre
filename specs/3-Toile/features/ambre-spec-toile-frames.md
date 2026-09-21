@@ -144,14 +144,16 @@ is the format's (`TOILE-029`), and the frame is the place the code applies it (`
 |---|---|
 | the frame tool, dragged on the board | `CreateElement` with the frame kind (`features/ambre-spec-toile-tools.md`) |
 | a press on a frame's title | nothing: the selection is the view's own (`TOILE-254`, `TOILE-256`) |
+| a double-click on a frame's title | `RenameFrame`, once the edit closes (`TOILE-257`, `TOILE-258`) |
 | "Add to frame", in the context menu over a selection inside a frame | `SetFrameChildren` adding the selection (`features/ambre-spec-toile-menus.md`) |
 | typing in a deck row's name field | `RenameFrame` for that frame (`features/ambre-spec-toile-presentation.md section 4`) |
 
 **What a frame looks like.** A rectangle painted from its own style register, before its members,
 so it reads as a background rather than a box drawn over them. Its title sits above its top-left
 corner, outside the box, in screen space so it keeps one size through the zoom (`TOILE-253`). A
-press on it selects the frame, which is how a user grabs one without clicking through what is inside
-(`TOILE-254`). A presentation drops the titles with the grid (`TOILE-255`).
+press on it selects the frame, so a user grabs one without clicking through what is inside
+(`TOILE-254`). A double-click renames it in place (`TOILE-257`), and a presentation drops the titles
+with the grid (`TOILE-255`).
 
 **What no surface offers.** Removing an element from a frame, and dropping an element into a frame by
 dragging it there. The context menu's one entry adds; nothing removes, and membership is never
@@ -201,6 +203,12 @@ implied by position.
   and one of narrow glyphs stops short of it.
 * **Two titles at the same corner overlap.** Nothing staggers the bands of two frames whose
   top-left corners meet, and the one painted last wins the click (`TOILE-254`).
+* **A frame nobody named cannot be named from the board.** Nothing is painted above it, so there is
+  nothing to double-click. The first name is typed in the deck panel, and the board edits it
+  afterwards (`TOILE-257`).
+* **The edited title does not hold its size through a zoom.** The editor's size is pinned when it
+  opens, from the camera of that moment, while the painted band is screen space. Zooming mid-edit
+  grows or shrinks the text being typed, and the committed title returns to the band's own size.
 * **A resized frame does not carry its members.** The members keep their world positions, so shrinking
   a frame leaves them outside it and nothing says whether they are still members. They are.
 * **Nesting a frame in a frame is neither allowed nor refused.** The handler refuses only the frame

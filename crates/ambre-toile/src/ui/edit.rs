@@ -31,14 +31,18 @@ const TEXT_PAD: f64 = 4.0;
 pub enum EditTarget {
     Element(ElementId),
     ConnectorLabel(ConnectorId),
+    /// A frame's title, edited on the board itself (`TOILE-257`). Distinct from
+    /// `Element`: a frame has no body, and what commits is a rename.
+    FrameTitle(ElementId),
 }
 
 impl EditTarget {
-    /// The element under edit, or `None` when a caption is.
+    /// The element whose body is under edit, or `None` for a caption and for a
+    /// frame's title. Neither is a body the content pass paints.
     pub fn element(&self) -> Option<&ElementId> {
         match self {
             Self::Element(id) => Some(id),
-            Self::ConnectorLabel(_) => None,
+            Self::ConnectorLabel(_) | Self::FrameTitle(_) => None,
         }
     }
 
@@ -46,7 +50,16 @@ impl EditTarget {
     pub fn connector(&self) -> Option<&ConnectorId> {
         match self {
             Self::ConnectorLabel(id) => Some(id),
-            Self::Element(_) => None,
+            Self::Element(_) | Self::FrameTitle(_) => None,
+        }
+    }
+
+    /// The frame whose title is under edit, or `None` otherwise. The title pass
+    /// reads it, so the band is not painted twice while it is edited.
+    pub fn frame_title(&self) -> Option<&ElementId> {
+        match self {
+            Self::FrameTitle(id) => Some(id),
+            Self::Element(_) | Self::ConnectorLabel(_) => None,
         }
     }
 }
@@ -115,6 +128,26 @@ impl InlineEditor {
         Self {
             target: EditTarget::ConnectorLabel(id),
             core,
+        }
+    }
+
+    /// Open the editor on a frame's title (`TOILE-257`). `base_size` is world
+    /// units and the paint applies the zoom, so the caller hands the size the
+    /// band reads at the current camera.
+    pub fn open_frame_title(id: ElementId, title: &str, base_size: f32, palette: &Palette) -> Self {
+        let font = ElementStyle::default().font;
+        let style = TextEditorStyle {
+            weight: font.weight,
+            italic: font.italic,
+            family: font.family,
+            base_size,
+            color: palette.cell_text,
+            underline: false,
+            strikethrough: false,
+        };
+        Self {
+            target: EditTarget::FrameTitle(id),
+            core: TextEditor::new(title, style),
         }
     }
 
@@ -214,6 +247,22 @@ mod tests {
 
     fn palette() -> &'static Palette {
         Theme::Light.palette()
+    }
+
+    /// `TOILE-257`: the editor opens on a frame's title, carrying the title it
+    /// is about to replace. The frame is not an element under edit, because its
+    /// body is not what is being typed. The content pass skips the band alone.
+    #[test]
+    fn the_editor_opens_on_a_frames_title() {
+        let id = ElementId("f".to_owned());
+        let editor = InlineEditor::open_frame_title(id.clone(), "Agenda", 14.0, palette());
+        assert_eq!(editor.target().frame_title(), Some(&id));
+        assert_eq!(editor.target().element(), None);
+        assert_eq!(editor.target().connector(), None);
+        assert_eq!(editor.style().base_size, 14.0);
+        // Nothing to commit until the user types: an edit that leaves the title
+        // as it was writes no rename (`TOILE-250`).
+        assert_eq!(editor.committed_text(), None);
     }
 
     /// `TOILE-UI-186` / `TOILE-UI-187`: the pinned style carries the committed

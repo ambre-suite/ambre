@@ -2278,6 +2278,14 @@ impl ToileView {
         // editor on it (`toile-text-editing`), taking precedence over group
         // entering.
         if self.machine.tool() == Tool::Select {
+            // A frame's title is the one thing a double-click edits that the
+            // board hit test cannot see: the band sits outside the frame
+            // (`TOILE-257`).
+            if let Some(frame) = super::hit::frame_title_at(&self.display.nodes, screen, &self.cam)
+            {
+                self.open_frame_title_editor(frame);
+                return true;
+            }
             let editable = hit_topmost(&self.display.nodes, world).filter(|hit| {
                 self.find_element(hit)
                     .is_some_and(|e| matches!(e.kind, ElementKind::Sticky | ElementKind::Text))
@@ -2615,6 +2623,50 @@ impl ToileView {
                 let (origin, wrap_w, sb) = self.edit_geometry_of(world);
                 Some((origin, wrap_w, sb, 0.0))
             }
+            // The title band is screen space, and the editor takes world
+            // coordinates, so the band is projected back through the camera
+            // (`TOILE-257`). Padding rides outside it, so the caret sits where
+            // the painted glyphs did.
+            EditTarget::FrameTitle(id) => {
+                let e = self.find_element(id)?;
+                let band = self.frame_title_band(e);
+                let pad = InlineEditor::pad(self.cam.zoom);
+                let s2w = self.cam.screen_to_world();
+                let world = Rect::from_points(
+                    s2w * Point::new(band.x0 - pad, band.y0 - pad),
+                    s2w * Point::new(band.x1 + pad, band.y1 + pad),
+                );
+                let (origin, wrap_w, sb) = self.edit_geometry_of(world);
+                Some((origin, wrap_w, sb, 0.0))
+            }
+        }
+    }
+
+    /// The screen-space band a frame's title occupies, or a band of the same
+    /// shape when it carries none. An editor has to open on a frame the user is
+    /// naming for the first time (`TOILE-257`).
+    fn frame_title_band(&self, e: &DisplayElement) -> Rect {
+        let screen = world_rect_to_screen(e.bounds, &self.cam);
+        let title = match &e.geom {
+            DisplayGeom::Frame(t) => t.as_str(),
+            _ => "",
+        };
+        render::frame_title_box(screen, title).unwrap_or_else(|| {
+            render::frame_title_box(screen, "Untitled").expect("a non-empty placeholder")
+        })
+    }
+
+    /// Optimistically set a frame's title in the local display, so the band
+    /// does not flash its previous name before the round trip returns.
+    fn patch_frame_title(&mut self, id: &ElementId, title: &str) {
+        if let Some(DisplayNode::Element(e)) = self
+            .display
+            .nodes
+            .iter_mut()
+            .find(|n| matches!(n, DisplayNode::Element(e) if &e.id == id))
+            && let DisplayGeom::Frame(t) = &mut e.geom
+        {
+            *t = title.trim().to_owned();
         }
     }
 
@@ -2641,6 +2693,38 @@ impl ToileView {
         self.editor = Some(InlineEditor::open_label(id, &text, self.theme.palette()));
         // A caption is not an element: nothing is selected while it is edited,
         // and the previous selection would otherwise take the next Delete.
+        self.selection.clear();
+        self.edit_closing = false;
+        self.edit_pointer_down = false;
+        self.edit_dirty = true;
+        self.needs_full = true;
+        self.text_input.clear();
+        self.text_input.focus();
+    }
+
+    /// Open the inline editor on a frame's title (`TOILE-257`). No-op for a
+    /// frame that has left the culled set.
+    fn open_frame_title_editor(&mut self, id: ElementId) {
+        let Some(e) = self.find_element(&id) else {
+            return;
+        };
+        let DisplayGeom::Frame(title) = &e.geom else {
+            return;
+        };
+        let title = title.clone();
+        // The band is a screen size, and the editor's own size is world units
+        // scaled by the zoom at paint. Dividing here opens the edited text at
+        // the size the band reads today. A zoom during the edit then drifts,
+        // which `toile-frames` section 6 records.
+        let base_size = (render::FRAME_TITLE_PX / self.cam.zoom.max(f64::EPSILON)) as f32;
+        self.editor = Some(InlineEditor::open_frame_title(
+            id,
+            &title,
+            base_size,
+            self.theme.palette(),
+        ));
+        // A title is not the frame: nothing is selected while it is edited, so
+        // the next Delete cannot take the frame the user is naming.
         self.selection.clear();
         self.edit_closing = false;
         self.edit_pointer_down = false;
@@ -2923,6 +3007,15 @@ impl ToileView {
                     EditTarget::ConnectorLabel(id) => {
                         self.patch_connector_label(&id, &text);
                         self.send_edit(ToileCommand::SetConnectorLabel { id, text });
+                    }
+                    // A title commits as a rename, and the engine trims it and
+                    // refuses a no-op (`TOILE-249`, `TOILE-250`).
+                    EditTarget::FrameTitle(id) => {
+                        self.patch_frame_title(&id, &text);
+                        self.send_edit(ToileCommand::RenameFrame {
+                            frame: id,
+                            name: text,
+                        });
                     }
                 }
             }

@@ -294,7 +294,7 @@ pub fn paint_content<S: DrawSurface>(
     // same at every zoom. A presentation shows the board's content and not its
     // structure, so the mode drops them with the grid (`TOILE-255`).
     if !present {
-        paint_frame_titles(surface, vp, cam, palette, font_cx, text_cache);
+        paint_frame_titles(surface, vp, cam, palette, font_cx, text_cache, editing);
     }
 
     // 4. Connector captions, in the same screen-space pass. They come after the
@@ -975,6 +975,7 @@ fn paint_frame_titles<S: DrawSurface>(
     palette: &Palette,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
+    editing: Option<&super::edit::EditTarget>,
 ) {
     for node in &vp.nodes {
         let DisplayNode::Element(e) = node else {
@@ -983,6 +984,11 @@ fn paint_frame_titles<S: DrawSurface>(
         let DisplayGeom::Frame(title) = &e.geom else {
             continue;
         };
+        // The title under edit is painted by the editor overlay instead, as an
+        // element's body is (`TOILE-257`).
+        if editing.and_then(|t| t.frame_title()) == Some(&e.id) {
+            continue;
+        }
         let Some(band) = frame_title_box(world_rect_to_screen(e.bounds, cam), title) else {
             continue;
         };
