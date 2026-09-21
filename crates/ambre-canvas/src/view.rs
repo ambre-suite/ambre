@@ -70,6 +70,12 @@ pub enum InputEvent {
         shift: bool,
         meta: bool,
     },
+    /// A key released. A view that arms a mode on a held key disarms it here.
+    /// A flag raised by a press and lowered by nothing outlives the gesture
+    /// (`TOILE-UI-256`).
+    KeyUp {
+        key: String,
+    },
     /// `shift` / `ctrl` carry the modifier state at press time. The grid can
     /// then distinguish a plain click (single select), Shift+click (extend the
     /// range) and Ctrl+click (add a disjoint range). On macOS the Cmd key is

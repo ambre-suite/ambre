@@ -113,6 +113,9 @@ enum Drag {
         id: ElementId,
         base: Rect,
         handle: Handle,
+        /// Pointer at press (world). The release compares against it: a press
+        /// that moved nothing emits no command (`TOILE-UI-252`).
+        start: Point,
         /// The element's rotation (radians about `base.center()`), captured at
         /// press so the resize math can keep the opposite corner world-fixed on a
         /// rotated element.
@@ -124,6 +127,9 @@ enum Drag {
     Rotate {
         id: ElementId,
         center: Point,
+        /// Pointer at press (world), read by the release like the resize's own
+        /// (`TOILE-UI-252`).
+        start: Point,
         start_angle: f64,
         base_rot: f64,
         /// Live pointer angle (world radians about `center`), updated each move
@@ -187,6 +193,7 @@ impl SelectTool {
                         self.drag = Some(Drag::Rotate {
                             id: id.clone(),
                             center,
+                            start: world,
                             start_angle,
                             base_rot: element_rotation(display, &id),
                             last_angle: start_angle,
@@ -197,6 +204,7 @@ impl SelectTool {
                             id,
                             base: sb,
                             handle: h,
+                            start: world,
                             rot,
                             last: world,
                         });
@@ -284,19 +292,27 @@ impl SelectTool {
                 id,
                 base,
                 handle,
+                start,
                 rot,
                 ..
             } => {
+                if (world - start).hypot2() <= f64::EPSILON {
+                    return SelectOutcome::None;
+                }
                 let new = resize_rect_rotated(base, handle, world, rot);
                 SelectOutcome::Command(ToileCommand::ResizeElement { id, new })
             }
             Drag::Rotate {
                 id,
                 center,
+                start,
                 start_angle,
                 base_rot,
                 ..
             } => {
+                if (world - start).hypot2() <= f64::EPSILON {
+                    return SelectOutcome::None;
+                }
                 let now = (world - center).atan2();
                 let radians = base_rot + (now - start_angle);
                 SelectOutcome::Command(ToileCommand::RotateElement { id, radians })
@@ -380,6 +396,7 @@ impl SelectTool {
                 handle,
                 rot,
                 last,
+                ..
             }) => vec![(
                 id.clone(),
                 resize_rect_rotated(*base, *handle, *last, *rot),
@@ -1956,6 +1973,46 @@ mod tests {
         assert_eq!(nearest_anchor(b, Point::new(98.0, 50.0)), Anchor::Right);
         assert_eq!(nearest_anchor(b, Point::new(2.0, 50.0)), Anchor::Left);
         assert_eq!(nearest_anchor(b, Point::new(50.0, 98.0)), Anchor::Bottom);
+    }
+
+    /// `TOILE-UI-252`: a press on a resize handle that never moved commits
+    /// nothing. The geometry is the one the document already holds, and a
+    /// command for it costs a delta and an undo item for no change.
+    #[test]
+    fn press_on_a_resize_handle_without_movement_emits_no_command() {
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let disp = viewport(vec![rect_elem("a", bounds)]);
+        let cam = cam();
+        let mut tool = SelectTool::new();
+        let sel = vec![ElementId("a".into())];
+        let se_world = Point::new(100.0, 100.0);
+        let out = tool.pointer_down(se_world, to_screen(&cam, se_world), &sel, &disp, &cam, None);
+        assert!(matches!(out, SelectOutcome::None));
+        assert!(tool.is_dragging());
+        assert!(matches!(
+            tool.pointer_up(se_world, &disp),
+            SelectOutcome::None
+        ));
+    }
+
+    /// `TOILE-UI-252`, the rotate handle: the same press, the same silence.
+    #[test]
+    fn press_on_the_rotate_handle_without_movement_emits_no_command() {
+        let bounds = Rect::new(-50.0, -50.0, 50.0, 50.0);
+        let disp = viewport(vec![rect_elem("a", bounds)]);
+        let cam = cam();
+        let mut tool = SelectTool::new();
+        let sel = vec![ElementId("a".into())];
+        let screen_b = world_rect_to_screen(bounds, &cam);
+        let rot_screen = rotate_handle_point(screen_b);
+        let rot_world = cam.screen_to_world() * rot_screen;
+        let out = tool.pointer_down(rot_world, rot_screen, &sel, &disp, &cam, None);
+        assert!(matches!(out, SelectOutcome::None));
+        assert!(tool.is_dragging());
+        assert!(matches!(
+            tool.pointer_up(rot_world, &disp),
+            SelectOutcome::None
+        ));
     }
 
     #[test]

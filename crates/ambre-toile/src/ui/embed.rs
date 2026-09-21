@@ -332,6 +332,8 @@ where
 {
     match ev {
         InputEvent::Key { key, .. } => key != "Escape",
+        // A release follows its press: the child that took the key takes it.
+        InputEvent::KeyUp { .. } => true,
         // Typing has no position at all: it follows focus, as a caret does.
         InputEvent::Text { .. }
         | InputEvent::CompositionUpdate { .. }

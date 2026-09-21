@@ -160,6 +160,29 @@ where
         cb.forget();
     }
 
+    // -- Key releases -> view. ------------------------------------------------
+    // A view that arms a mode on a held key needs the release to disarm it: the
+    // board's space-drag is the one today (`TOILE-UI-256`). The release is never
+    // consumed, so it reaches whatever else listens.
+    {
+        let host_c = Rc::clone(&host);
+        let pipe = text_input.element().clone();
+        let cb = Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(
+            move |event: web_sys::KeyboardEvent| {
+                if event.target().is_some_and(|t| is_other_editable(&t, &pipe)) {
+                    return;
+                }
+                host_c
+                    .borrow_mut()
+                    .handle_input(&InputEvent::KeyUp { key: event.key() });
+            },
+        );
+        document
+            .add_event_listener_with_callback("keyup", cb.as_ref().unchecked_ref())
+            .expect("add keyup listener");
+        cb.forget();
+    }
+
     // -- Textarea pipe: committed text + IME composition -> view. -------------
     // `input` fires for latin typing / paste / autocomplete; outside a
     // composition we read the buffer, forward it as `Text`, and clear it so the

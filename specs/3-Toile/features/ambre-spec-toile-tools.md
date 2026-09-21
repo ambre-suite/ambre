@@ -46,7 +46,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-249` | `POST` | A press that does not drag MUST fall back to the tool's default size. | this spec section 2 | `ambre_toile::ui::tool::tests::shape_click_uses_default_size` -- the shape; `ambre_toile::ui::tool::tests::sticky_click_creates_sticky_with_empty_text_and_picked_fill` -- the note, and the picked colour riding the tool with it | none | verified |
 | `TOILE-UI-250` | `FRAME` | A gesture MUST NOT write while the pointer is down: no command, no history entry, no round trip. | this spec section 2; section 4 | `ambre_toile::ui::tool::tests::resize_preview_then_release_emits_exactly_one_command` -- it reads the intermediate move producing nothing while the live override is already there | none | verified |
 | `TOILE-UI-251` | `FAIL` | A press on an element that moves nothing MUST emit no command. | this spec section 2 | `ambre_toile::ui::tool::tests::click_without_movement_emits_no_command` | none | verified |
-| `TOILE-UI-252` | `FAIL` | A press on a transform handle that moves nothing MUST emit no command. | this spec section 2 | none | fails -- the release emits a resize or a rotate whatever the pointer did, so a stray click on a handle costs a delta and an undo item for a geometry nobody changed, section 5; lands with the `The board tools let go` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-252` | `FAIL` | A press on a transform handle that moves nothing MUST emit no command. | this spec section 2 | `ambre_toile::ui::tool::tests::press_on_a_resize_handle_without_movement_emits_no_command` -- the resize; `ambre_toile::ui::tool::tests::press_on_the_rotate_handle_without_movement_emits_no_command` -- the rotate | none | verified |
 | `TOILE-UI-253` | `FAIL` | A connector released anywhere but on a second element MUST emit nothing. | this spec section 2 | `ambre_toile::ui::tool::tests::connector_release_on_empty_emits_nothing` | none | verified |
 | `TOILE-UI-254` | `FAIL` | A pen path of fewer than two nodes MUST emit nothing. | this spec section 2 | none | unheld -- the guard is there and no test drives it, and the sibling guard on the freehand stroke is unreachable, because press and release each add a sample, section 5; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -56,7 +56,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-UI-041` | `POST` | Holding `Space` MUST pan, in any tool. | this spec section 3; `features/ambre-spec-toile-viewport.md section 1` | none | unheld -- the key sets a flag the pointer handler reads before it dispatches to the machine, and no test drives the pair; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-255` | `FRAME` | A space-drag MUST NOT start the active tool's gesture. | this spec section 3 | none | unheld -- the pan branch returns before the machine is reached, so the rule holds by the early return and nothing would go red the day the branch moved; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-256` | `POST` | Releasing `Space` MUST give the board back to its tool. | this spec section 3 | none | fails -- the flag is raised on the key and lowered by nothing, so one press turns every later drag into a pan for the rest of the session, section 5; lands with the `The board tools let go` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-256` | `POST` | Releasing `Space` MUST give the board back to its tool. | this spec section 3 | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), the host `keyup` listener and the board arm that lowers the pan flag and ends a pan under the pointer, reached by holding `Space`, panning, releasing it and dragging an element | none | qa-manual |
 
 ### 1.5 Cancel a gesture
 
@@ -89,10 +89,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the machine is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What it emits is a command; what it streams mid-gesture is
   presence, sealed by the Sync worker like any other frame (`ZK-005`).
-* **Verification.** 22 `verified`, 2 `failing`, 6 `untested`. What holds is the machine itself: the
-  modes, the transitions and the commands each gesture ends in. What is loose is the refusals: a
-  click on a transform handle, the release of `Space`, a degenerate pen path. The first two fail
-  today (`TOILE-UI-252`, `TOILE-UI-256`).
+* **Verification.** 23 `verified`, 6 `untested`, 1 `qa-manual`. What holds is the machine: the
+  modes, the transitions and the command each gesture ends in, a click on a handle included. What
+  is loose is the pan. Its three `Space` rows rest on DOM glue no host test reaches, and a
+  degenerate pen path is driven by nothing (`TOILE-UI-254`).
 
 ---
 
@@ -143,8 +143,8 @@ create-then-restyle.
 3. the release turns the draft into exactly one command (`TOILE-UI-008`);
 4. a release that describes nothing -- a connector on empty board, a pen path of one node -- emits
    none. A shape under the drag floor is not one of them: it falls back to the tool's default size
-   (`TOILE-UI-249`). Neither is a handle: the release emits its transform whether the pointer moved
-   or not (`TOILE-UI-252`).
+   (`TOILE-UI-249`). A handle is one of them: a press that moved nothing emits no transform
+   (`TOILE-UI-252`).
 
 **The live preview is local.** A move, resize or rotate feeds the in-flight geometry into the same
 per-element override a presentation transition uses, so the object itself follows the drag. Nothing
@@ -205,7 +205,7 @@ board returns to Select, ready to type into (`TOILE-UI-038`).
 | One explicit machine owns every gesture | a handler per tool, each free to emit what it wants | every tool times press, move and release is a matrix, and spreading it over the features that own each element makes "one command per gesture" a rule nobody can check. One machine makes it a property of one module |
 | Nothing is written while the pointer is down | streaming the transform as it moves | a drag at 60 frames a second is sixty operations, sixty history entries and sixty deltas for one user action. The presence path already streams it without touching the document |
 | The preview transforms the object, not a box | drawing the selection box alone during the gesture | a user resizing a note wants to see the text reflow, and an outline says where it will land, not what it will look like |
-| A degenerate gesture emits nothing | committing whatever the gesture described, however small | a click is how a user cancels, and a zero-area shape or a connector to nowhere is an element only an undo can remove. The transform handles are the corner the code has not reached: they commit whatever they were, moved or not (`TOILE-UI-252`) |
+| A degenerate gesture emits nothing | committing whatever the gesture described, however small | a click is how a user cancels, and a zero-area shape or a connector to nowhere is an element only an undo can remove. A transform handle is read the same way: a press that never moved commits nothing (`TOILE-UI-252`) |
 | A click with a creation tool falls back to a default size | requiring a drag for every creation | placing a note is a click, not a drag, and sizing every note makes the fastest gesture on a whiteboard the slowest |
 | The colour rides the sticky tool | arming a colour separately from the tool | a create-then-restyle is two operations, two undo items and a visible flash of the wrong colour |
 | `Escape` re-arms Select | cancelling the gesture and keeping the tool | an armed creation tool is invisible once the popover closes, and a user who pressed `Escape` to abort does not expect the next click to place a note |
@@ -219,12 +219,9 @@ board returns to Select, ready to type into (`TOILE-UI-038`).
   nodes of a committed path is described and unbuilt, so a path is editable by its box alone.
 * **The connector routing has one shape.** Every connector is created straight, with an arrow at the
   end. The routing modes and the end caps the model carries are not reachable from any gesture.
-* **`Space` is raised and nothing lowers it.** The key handler sets the pan flag and no handler in
-  the workspace clears it: there is no `keyup` listener anywhere. One press turns every later drag
-  into a pan for the rest of the session, whatever tool the palette shows (`TOILE-UI-256`).
-* **A click on a transform handle commits a null transform.** A body drag that moves nothing emits
-  nothing. A handle release emits its resize or its rotate unconditionally. A stray click on a
-  handle costs a delta and an undo item for a geometry nobody changed (`TOILE-UI-252`).
+* **The pan rests on DOM glue no test reaches.** The host `keyup` listener and the board's pan
+  flag are read by using the application. No host test drives a key press and its release, so the
+  three `Space` rows are held by a reader (`TOILE-UI-041`, `TOILE-UI-255`, `TOILE-UI-256`).
 * **The freehand refusal is unreachable.** Press and release each push a sample, so the guard that
   would drop a stroke of one point can never fire. A click with Draw armed commits a two-point
   stroke standing still. The pen guard beside it is reachable and undriven (`TOILE-UI-254`).

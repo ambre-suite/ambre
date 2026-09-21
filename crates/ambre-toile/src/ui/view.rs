@@ -2359,6 +2359,21 @@ impl ToileView {
             .map(|h| super::palette::resize_cursor(h, theta))
     }
 
+    /// Release of a key the board held. `Space` is the only one: it arms the
+    /// pan, and the release gives the board back to its tool (`TOILE-UI-256`).
+    /// A pan already under the pointer is ended with it, so the drag does not
+    /// outlive the key that started it.
+    fn handle_key_up(&mut self, key: &str) -> bool {
+        if !matches!(key, " " | "Spacebar") {
+            return false;
+        }
+        self.space_down = false;
+        if self.machine.tool() != Tool::Hand {
+            self.panning = None;
+        }
+        true
+    }
+
     /// Keyboard shortcuts (`toile-tools`). Modifiers ride the event:
     /// `ctrl || meta` is the command chord (Ctrl on Windows/Linux, Cmd on macOS).
     /// Ctrl+C/X/V are intentionally NOT decoded here -- they ride the native
@@ -2701,6 +2716,9 @@ impl ToileView {
                 shift,
                 meta,
             } => Some(self.edit_key(key, *ctrl, *alt, *shift, *meta)),
+            // The editor holds no key across frames, so a release means nothing
+            // to it. Normal handling runs, where the board lowers its pan flag.
+            InputEvent::KeyUp { .. } => None,
             InputEvent::PointerDown { x, y, .. } => {
                 self.last_pointer = Point::new(*x, *y);
                 match self.edit_local_point(Point::new(*x, *y)) {
@@ -3260,6 +3278,7 @@ impl ToileView {
                 shift,
                 meta,
             } => self.handle_key(key, *ctrl, *alt, *shift, *meta),
+            InputEvent::KeyUp { key } => self.handle_key_up(key),
             InputEvent::DoubleClick { x, y } => self.handle_double_click(*x, *y),
             InputEvent::Text { .. }
             | InputEvent::CompositionUpdate { .. }
