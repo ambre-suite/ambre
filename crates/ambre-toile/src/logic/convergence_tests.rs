@@ -2108,6 +2108,43 @@ fn deck_of_three(st: &mut ToileState) {
     });
 }
 
+/// `TOILE-029`: two peers building a deck at the same moment write into one
+/// list. The order lives in a root container, whose identity is its name, so
+/// neither peer creates it and neither side's slides are dropped.
+#[test]
+fn concurrent_first_decks_converge_on_one_list() {
+    let mut a = ToileState::new();
+    let mut b = ToileState::new();
+    let f1 = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    let f2 = create_frame(&mut a, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    // B takes the board, frames and all, before either peer has a deck.
+    b.apply_remote(&a.export_snapshot());
+    assert!(a.slide_order().is_empty() && b.slide_order().is_empty());
+
+    // Each peer builds a deck, neither having seen the other's.
+    let da = a
+        .handle_command(ToileCommand::SetSlideOrder {
+            order: vec![f1.clone()],
+        })
+        .update
+        .expect("A's deck broadcasts a delta");
+    let db = b
+        .handle_command(ToileCommand::SetSlideOrder {
+            order: vec![f2.clone()],
+        })
+        .update
+        .expect("B's deck broadcasts a delta");
+    b.apply_remote(&da);
+    a.apply_remote(&db);
+
+    let merged = a.slide_order();
+    assert_eq!(merged, b.slide_order(), "the two decks diverged");
+    assert!(
+        merged.contains(&f1) && merged.contains(&f2),
+        "a rival list dropped one peer's slides, got {merged:?}"
+    );
+}
+
 #[test]
 fn broadcast_frame_carries_active_slide() {
     // While broadcasting, a navigation additionally emits an ephemeral frame

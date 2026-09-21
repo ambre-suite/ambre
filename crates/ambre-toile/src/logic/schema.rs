@@ -25,7 +25,7 @@ use ambre_core::schema::{
 };
 
 use crate::logic::model::ElementStyle;
-use crate::logic::state::{CONNECTORS, ELEMENTS};
+use crate::logic::state::{CONNECTORS, ELEMENTS, PRESENTATION_CONFIG, PRESENTATION_ORDER};
 
 /// The schema version this build writes into every board it creates
 /// (`SCHEMA-004`).
@@ -34,8 +34,9 @@ use crate::logic::state::{CONNECTORS, ELEMENTS};
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing document across it (`SCHEMA-009`). `1 -> 2` puts the layout version
 /// in front of every `"style"` register, which obliges the [`MIGRATIONS`] row
-/// that rewrites the registers an older board holds.
-pub const SCHEMA_VERSION: u32 = 2;
+/// that rewrites the registers an older board holds. `2 -> 3` moves the deck
+/// out of the `presentation` map and into two root containers.
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// Write the current version into a board's `meta` register.
 ///
@@ -86,6 +87,11 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 ///
 /// `1 -> 2` puts [`STYLE_VERSION`] in front of every `"style"` register, the
 /// element registers and the connector registers alike.
+///
+/// `2 -> 3` copies the slide order and the presentation config out of the
+/// `presentation` map, whose two sub-containers each peer created for itself.
+/// They land in the two root containers every peer addresses alike
+/// (`TOILE-029`).
 const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
         from: 0,
@@ -96,6 +102,11 @@ const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
         from: 1,
         to: 2,
         apply: style_version_step,
+    },
+    SchemaMigration {
+        from: 2,
+        to: 3,
+        apply: presentation_root_step,
     },
 ];
 
@@ -142,6 +153,53 @@ fn style_version_step(doc: &LoroDoc) -> Result<(), String> {
             }
         }
     }
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
+
+/// The `2 -> 3` step: carry the deck into its two root containers
+/// (`TOILE-029`).
+///
+/// A version 2 board holds `presentation.order` and `presentation.config`, two
+/// sub-containers created by the first peer to write a deck. The step copies
+/// the slide order into [`PRESENTATION_ORDER`] and the config registers into
+/// [`PRESENTATION_CONFIG`]. A root container's identity is its name, so every
+/// peer addresses the same one.
+///
+/// The old map is left verbatim (`SCHEMA-003`): this build names neither key
+/// again, and rewriting a container it no longer reads buys nothing.
+fn presentation_root_step(doc: &LoroDoc) -> Result<(), String> {
+    let pres = doc.get_map("presentation");
+    if let Some(old) = pres
+        .get("order")
+        .and_then(|v| v.into_container().ok())
+        .and_then(|c| c.into_movable_list().ok())
+        && let LoroValue::List(items) = old.get_deep_value()
+    {
+        let root = doc.get_movable_list(PRESENTATION_ORDER);
+        for value in items.iter() {
+            if let LoroValue::String(id) = value {
+                root.push(id.as_str())
+                    .map_err(|e| format!("carrying a slide to the root list failed: {e}"))?;
+            }
+        }
+    }
+    let root_cfg = doc.get_map(PRESENTATION_CONFIG);
+    if let Some(old) = pres
+        .get("config")
+        .and_then(|v| v.into_container().ok())
+        .and_then(|c| c.into_map().ok())
+        && let LoroValue::Map(entries) = old.get_deep_value()
+    {
+        for (key, value) in entries.iter() {
+            root_cfg
+                .insert(key.as_str(), value.clone())
+                .map_err(|e| format!("carrying the config key {key} failed: {e}"))?;
+        }
+    }
+    // A board that carried no deck still gets the defaults a fresh one has.
+    crate::logic::state::presentation::seed_presentation_config(doc);
     stamp(doc);
     doc.commit();
     Ok(())
@@ -306,6 +364,50 @@ mod tests {
             styles_of(&gated),
             vec![Some(style.clone()), Some(style)],
             "the element and the connector both keep the style they carried"
+        );
+    }
+
+    /// `SCHEMA-009`, the `2 -> 3` row: a version 2 board keeps its deck. The
+    /// slides live under `presentation.order`, which this build never reads
+    /// again, so without the step the deck opens empty.
+    #[test]
+    fn a_board_whose_deck_sits_in_the_presentation_map_keeps_it() {
+        let doc = LoroDoc::new();
+        let pres = doc.get_map("presentation");
+        let old = pres
+            .insert_container("order", loro::LoroMovableList::new())
+            .expect("the layout before the root list");
+        old.push("f1").expect("seed");
+        old.push("f2").expect("seed");
+        let cfg = pres
+            .insert_container("config", loro::LoroMap::new())
+            .expect("seed");
+        cfg.insert("transition_ms", 800.0).expect("seed");
+        doc.get_map(SCHEMA_META_MAP)
+            .insert(SCHEMA_VERSION_KEY, 2i64)
+            .expect("stamp");
+        doc.commit();
+        let bytes = doc.export(ExportMode::Snapshot).expect("snapshot");
+
+        let gated = gate(&bytes).expect("version 2 migrates");
+        let mut state = ToileState::new();
+        state.apply_remote(&gated);
+        let order: Vec<String> = state
+            .slide_order()
+            .into_iter()
+            .map(|id| id.0.clone())
+            .collect();
+        assert_eq!(order, vec!["f1".to_owned(), "f2".to_owned()]);
+
+        let migrated = LoroDoc::new();
+        migrated.import(&gated).expect("imports");
+        assert_eq!(
+            migrated
+                .get_map(PRESENTATION_CONFIG)
+                .get("transition_ms")
+                .and_then(|v| v.into_value().ok()),
+            Some(LoroValue::Double(800.0)),
+            "the config the board carried must survive the move"
         );
     }
 

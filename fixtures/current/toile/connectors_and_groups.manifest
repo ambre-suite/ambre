@@ -4,8 +4,8 @@
   "seed": 1669982087086082,
   "doc_type": "Toile",
   "ambre_version": 1,
-  "schema_version": 2,
-  "digest": "d31b6eb23534574c5a3a3a68c162bea086e7205c09572cf5d2952127c3aac896",
+  "schema_version": 3,
+  "digest": "6f96c99ad4abdb7be169f758acff7f5a120d66552e87714c502b301e7cdd2c22",
   "shape": {
     "peers": 1,
     "body": {

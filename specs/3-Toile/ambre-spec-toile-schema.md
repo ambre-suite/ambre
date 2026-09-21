@@ -48,18 +48,18 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-230` | `INV` | An unset property MUST be the absence of its key; a container MUST NOT carry a "cleared" marker. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` -- it clears a frame's auto-layout and reads back `None` with the key gone, and the clear of an already-absent key broadcasting nothing, both of which a marker would break | none | verified |
 | `TOILE-027` | `INV` | A Toile document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7 | `ambre_toile::logic::schema::tests::a_new_board_carries_the_current_version` -- the stamp `schema::stamp` writes inside the scaffolding commit of `from_doc`, alongside the board defaults, so a board carries it before any user edit (the protocol it obeys is `ambre-spec-schema-version.md`) | none | verified |
 | `TOILE-028` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | none | unheld -- none is possible today, this being the Toile half of `SCHEMA-009`, because the rule binds a code change to a constant and nothing compares this build's layouts against the previous release's. It is human review, named as such, and the registry it obliges exists now (`logic/schema.rs`), so the reviewer has somewhere to put the step; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-029` | `INV` | A container under a fixed key MUST be created once, with its parent; it MUST NOT be created by the first peer that writes into it. | this spec section 5 | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` -- the half that obeys, a frame's `notes` being seeded at frame birth (`logic/state/elements.rs`) so two concurrent first edits both survive | fails -- for `presentation/order` and `presentation/config`, `order_list_or_seed` creates both on the first `SetSlideOrder`, so two peers building the deck at the same moment mint rival lists and Loro keeps one. A container under a minted key (`elements/{id}`, `comments/{id}`) is out of reach of the race, and a `media/{hash}` entry loses nothing to it, the two rival maps carrying the same bytes; lands with the `The deck is one list for every peer` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-029` | `INV` | A container under a fixed key MUST be created once, with its parent; it MUST NOT be created by the first peer that writes into it. | this spec section 5 | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` -- a frame's `notes`, seeded at frame birth so two concurrent first edits both survive; `ambre_toile::logic::convergence_tests::concurrent_first_decks_converge_on_one_list` -- the deck, where two peers writing a first slide order keep both slides; `ambre_toile::logic::schema::tests::a_board_whose_deck_sits_in_the_presentation_map_keeps_it` -- the step that carries an older board into the root containers | none | verified |
 | `TOILE-030` | `CONC` | A sticky or text body MUST converge character by character; it MUST NOT be a register two authors race for whole. | this spec section 3; `features/ambre-spec-toile-text-editing.md section 3` | none | fails -- for a sticky and a text element, the body is a flat String under the element's `text` key, so one of two authors typing in the same note loses their sentence. The two `LoroText` bodies of `ambre-toile` are a frame's `notes` and a comment message. It lands with the `Rich text on the board` Story (`ambre-roadmap.md` E6) | failing |
 * **Budget.** none: a format has no operation to budget. What loading a board costs is the remote
   change row of `ambre-spec-budgets.md section 1`, and leg 4 of `ambre-spec-budgets.md section 4`.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and the media entry holds a content hash, never the pixels
   (`features/ambre-spec-toile-media.md section 3`).
-* **Verification.** 7 `verified`, 2 `failing`, 2 `untested`. What holds is the table's shape: the
+* **Verification.** 8 `verified`, 1 `failing`, 2 `untested`. What holds is the table's shape: the
   container per subject, the composite key re-read as its pair, the absent key that is the value.
   What is loose is the move-invariance two paste tests never walk and the fixed-width id no type
-  constrains. Section 7 counts 25 bytes of it. The version register `ARCH P8` shipped; the two
-  failures each name the code that breaks them (`TOILE-029`, `TOILE-030`).
+  constrains. Section 7 counts 25 bytes of it. The one failure names the code that breaks it
+  (`TOILE-030`).
 
 ---
 
@@ -102,9 +102,8 @@ code uses.
 | `layers` | MovableList | position | `"E:{element_id}"` or `"C:{connector_id}"` | list order, no LWW | z-order | built |
 | `media` | Map | `blake2b` content hash | one media map | the media entry | media | built |
 | `media/{hash}` | Map | `w`, `h`, `mime`, `thumb` | `i64`, `i64`, String, Binary | the key | media | built |
-| `presentation` | Map | `order`, `config` | the two containers below | the key | presentation | built |
-| `presentation/order` | MovableList | position | `frame_id` | list order, no LWW | presentation | built |
-| `presentation/config` | Map | `transition_ms`, `autoplay`, `loop` | `f64`, `bool`, `bool` | the key | presentation | built |
+| `presentation_order` | MovableList | position | `frame_id` | list order, no LWW | presentation | built |
+| `presentation_config` | Map | `transition_ms`, `autoplay`, `loop` | `f64`, `bool`, `bool` | the key | presentation | built |
 | `reactions` | Map | `"{target_id}/{user_id}"` | `Binary(postcard(Reaction))` | that user's reaction on that target | reactions | built |
 | `comments` | Map | `thread_id` | one thread map | the thread entry | comments | built |
 | `comments/{id}` | Map | `anchor`, `resolved`, `messages` | `Binary(postcard(CommentAnchor))`, `bool`, the list below | the key | comments | built |
@@ -152,7 +151,7 @@ lock and the style, and reads the box from the derived cache.
 | `style` | Binary | the layout version byte then `postcard(ElementStyle)`, seeded at birth | built |
 
 **Absence is a value** (`TOILE-230`). No `link` key means no hyperlink; no `autolayout` key means
-free positioning. An empty `presentation` map means no deck; no `reactions` key under a target
+free positioning. An empty `presentation_order` list means no deck; no `reactions` key under a target
 prefix means no reaction. No container carries a "cleared" marker.
 
 ---
@@ -171,8 +170,8 @@ prefix means no reaction. No container carries a "cleared" marker.
   * `layers`
   * `media`
     * per blob, keyed by content hash: `w`, `h`, `mime`, `thumb`
-  * `presentation`
-    * `order`, `config`
+  * `presentation_order`
+  * `presentation_config`
   * `reactions`
   * `comments`
     * per thread, keyed by `thread_id`: `anchor`, `resolved`, `messages`
@@ -201,8 +200,9 @@ Only where a schema decision needs a reason. 40 words each.
   tagged string keeps the list flat and order-preserving.
 * **`media`.** The entry holds the dimensions, the type and an inline thumbnail, never the pixels.
   The full blob is content-addressed and encrypted (`features/ambre-spec-toile-media.md section 3`).
-* **`presentation`.** The root map is deterministic; `order` and `config` under it are not. Both
-  are created by the first peer to build a deck, which is the race `TOILE-029` states.
+* **`presentation_order`, `presentation_config`.** Two root containers rather than one map holding
+  them. A root container's identity is its name. Every peer addresses the same one, and none is
+  created by the first peer to build a deck (`TOILE-029`).
 * **`reactions`.** A flat composite key, not a sub-map per target. A per-target sub-map is created
   on the first reaction to that target. Two peers reacting at once mint rival containers, and one
   set of reactions is dropped.
@@ -226,6 +226,7 @@ Only where a schema decision needs a reason. 40 words each.
 | A frame is an ordinary element | a parallel `frames` map | it duplicates the move, resize, delete and reorder surface, and splits paint order over two structures. As an element there is one lifecycle for every node and one `layers` list, and frame-specific content is three payload fields |
 | A group is a frame without chrome | an independent `groups` container with its own membership list | it is a third lifecycle, and two membership rules to keep in step. Reusing the frame's machinery costs one element type and no new container, and the group's bounds are the derived union of its members |
 | `layers` holds a tagged string, not a sub-map | a `LoroMap` per entry | it is a container per z-order slot, and a reorder that touches two structures. A tagged string keeps the list flat and order-preserving, and a `mov` is one operation on one element |
+| The deck in two root containers | one `presentation` map holding an `order` list and a `config` map | a sub-container under a fixed key is created by the first peer that writes into it, so two peers building a deck at the same moment mint rival lists and the engine keeps one. A root container is addressed by its name, which every peer computes alike |
 | A flat `"{target_id}/{user_id}"` key for a reaction | a nested sub-map per target | it is created lazily by the first reactor, so two peers reacting on a fresh target mint rival containers and Loro drops one. The `reactions` root always exists, so concurrent inserts under distinct composite keys all converge, and splitting on the first `/` recovers the target |
 | Keyed by `UserId`, never `PeerID` | keying by `PeerID` | it double-counts the tally and leaves a vote no later session can remove. `PeerID` is per session, so one user on two devices votes twice, while a reaction must survive a reload, a key rotation and a second device |
 | Raw stroke samples only, never the smoothed curve | storing the smoothed polyline beside the samples | smoothing is a pure function of the samples, so replicating it costs bandwidth and can disagree with a peer's own render |
@@ -240,7 +241,7 @@ Only where a schema decision needs a reason. 40 words each.
 |---|---|---|
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `TOILE-027` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaError::DocumentTooNew`), read in a scratch document so a refusal writes nothing | architecture section 2.D; `ambre-spec-schema-version.md section 2` |
-| Migration | the registry lives in `ambre-toile` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. `1 -> 2` puts the layout version in front of every `style` register | architecture section 2.D; `SCHEMA-010` |
+| Migration | the registry lives in `ambre-toile` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. `1 -> 2` puts the layout version in front of every `style` register, `2 -> 3` carries the deck out of the `presentation` map into two root containers | architecture section 2.D; `SCHEMA-010` |
 | Bump | a key or layout change raises `SCHEMA_VERSION` and freezes one named fixture in the same commit | `TOILE-028`; `ambre-spec-fixtures.md section 2` |
 | Unknown field | `postcard` decodes a blob whole and tolerates none, so an `ElementStyle` written by a newer client falls back to `Default` -- no longer silently: the read raises one warning per import (`SCHEMA-003`) | architecture section 2.D |
 | Size, ids | an id is 25 bytes and a `layers` entry 27; a 50 000-element board is 1.3 MB of ids alone | this spec section 2; `TOILE-231` |

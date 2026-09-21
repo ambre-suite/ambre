@@ -141,11 +141,11 @@ against the text they hold.
 
 ## 3. MODEL
 
-**Containers.** The `presentation` map, holding the `order` list of frame ids and the `config` map;
-and one `notes` text per frame element (`ambre-spec-toile-schema.md section 3`). The order names
-frames by their minted id, never by position, so reordering slides and editing a frame never break
-the deck. Two peers ordering the deck at the same moment race for the container itself, which is
-`TOILE-029`.
+**Containers.** The `presentation_order` list of frame ids and the `presentation_config` map, both
+root containers; and one `notes` text per frame element (`ambre-spec-toile-schema.md section 3`).
+The order names frames by their minted id, never by position, so reordering slides and editing a
+frame never break the deck. A root container is created by no peer, so two peers ordering the deck
+at the same moment write into one list (`TOILE-029`).
 
 **Playback is a field, not a container.** The active index and the focus flag live on the engine's
 own state and reach no peer (`TOILE-FEAT-001`).

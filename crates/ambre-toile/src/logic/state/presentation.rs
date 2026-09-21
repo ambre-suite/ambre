@@ -12,7 +12,7 @@
 use std::collections::HashSet;
 
 use ambre_bus::UserId;
-use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
+use loro::{LoroDoc, LoroMap, LoroMovableList, LoroText, LoroValue};
 
 #[cfg(feature = "pdf")]
 use kurbo::Rect;
@@ -29,7 +29,7 @@ use crate::logic::command::{
 use crate::logic::model::{ElementId, FrameId, NodeId};
 
 use super::codec::str_of;
-use super::{CHILDREN, CONFIG, NOTES, ORDER, PRESENTATION, ToileState};
+use super::{CHILDREN, NOTES, PRESENTATION_CONFIG, PRESENTATION_ORDER, ToileState};
 
 impl ToileState {
     // -- sequence (CRDT,) -------------------------------------------------
@@ -49,7 +49,7 @@ impl ToileState {
             }
         }
 
-        let list = self.order_list_or_seed();
+        let list = self.order_list();
         // Skip a no-op set so an unchanged order produces neither a commit nor a
         // delta (it would otherwise be a spurious undo item).
         let current = slide_order_of(&list);
@@ -123,10 +123,7 @@ impl ToileState {
     /// The shared slide sequence, in playback order. Empty if no deck exists.
     /// Test / integration accessor.
     pub fn slide_order(&self) -> Vec<FrameId> {
-        let Some(list) = self.order_list() else {
-            return Vec::new();
-        };
-        slide_order_of(&list)
+        slide_order_of(&self.order_list())
             .into_iter()
             .map(|s| ElementId(s.to_owned()))
             .collect()
@@ -297,12 +294,10 @@ impl ToileState {
 
     /// Number of slides in the shared deck (`0` if absent). Local read.
     pub(super) fn slide_len(&self) -> usize {
-        self.order_list()
-            .map(|list| match list.get_deep_value() {
-                LoroValue::List(items) => items.len(),
-                _ => 0,
-            })
-            .unwrap_or(0)
+        match self.order_list().get_deep_value() {
+            LoroValue::List(items) => items.len(),
+            _ => 0,
+        }
     }
 
     /// Current playback state: `(present, active, focus)`. Test accessor.
@@ -433,13 +428,14 @@ impl ToileState {
     /// committing. The caller owns the commit, so a deletion and the deck it
     /// prunes are one undo item and can never be seen apart.
     ///
-    /// A board with no deck, or a deletion naming no slide, writes nothing --
-    /// deleting a note must not seed a presentation.
+    /// A deletion naming no slide writes nothing: deleting a note must leave
+    /// the deck untouched, and an empty deck has nothing to prune.
     pub(super) fn drop_slides(&mut self, deleted: &HashSet<&ElementId>) -> bool {
-        let Some(list) = self.order_list() else {
-            return false;
-        };
+        let list = self.order_list();
         let before = slide_order_of(&list);
+        if before.is_empty() {
+            return false;
+        }
         let dead: HashSet<&str> = deleted.iter().map(|id| id.as_str()).collect();
         let kept: Vec<String> = before
             .iter()
@@ -464,34 +460,24 @@ impl ToileState {
 
     // -- container helpers -----------------------------------------------------
 
-    /// The `presentation.order` movable list, if the deck has been seeded.
-    fn order_list(&self) -> Option<LoroMovableList> {
-        self.doc
-            .get_map(PRESENTATION)
-            .get(ORDER)?
-            .into_container()
-            .ok()?
-            .into_movable_list()
-            .ok()
+    /// The slide sequence: a root container, so it exists in every peer's
+    /// document from the start and is created by nobody (`TOILE-029`).
+    fn order_list(&self) -> LoroMovableList {
+        self.doc.get_movable_list(PRESENTATION_ORDER)
     }
+}
 
-    /// The `presentation.order` movable list, creating the `presentation` map,
-    /// its `order` list and default `config` on first use.
-    fn order_list_or_seed(&mut self) -> LoroMovableList {
-        if let Some(list) = self.order_list() {
-            return list;
-        }
-        let pres = self.doc.get_map(PRESENTATION);
-        // Default config: the fields exist so later slices can edit them.
-        if pres.get(CONFIG).is_none()
-            && let Ok(cfg) = pres.insert_container(CONFIG, LoroMap::new())
-        {
-            let _ = cfg.insert("transition_ms", 300.0);
-            let _ = cfg.insert("autoplay", false);
-            let _ = cfg.insert("loop", false);
-        }
-        pres.insert_container(ORDER, LoroMovableList::new())
-            .expect("seed presentation order list")
+/// Write the presentation defaults into the config root map (`TOILE-029`).
+///
+/// Called from board construction and from the schema step that carries an
+/// older board. The map is a root container, so this writes registers into a
+/// container every peer already addresses, never a container of its own.
+pub(crate) fn seed_presentation_config(doc: &LoroDoc) {
+    let cfg = doc.get_map(PRESENTATION_CONFIG);
+    if cfg.get("transition_ms").is_none() {
+        let _ = cfg.insert("transition_ms", 300.0);
+        let _ = cfg.insert("autoplay", false);
+        let _ = cfg.insert("loop", false);
     }
 }
 

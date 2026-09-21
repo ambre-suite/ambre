@@ -50,7 +50,7 @@ mod groups;
 mod import;
 mod presence;
 pub use presence::PRESENCE_TTL_MS;
-mod presentation;
+pub(crate) mod presentation;
 mod reactions;
 
 use std::collections::HashMap;
@@ -80,12 +80,12 @@ const CHILDREN: &str = "children";
 const NOTES: &str = "notes";
 /// Auto-layout spec LWW register key inside a frame element map.
 const AUTOLAYOUT: &str = "autolayout";
-/// Presentation root map key (`toile-presentation`).
-const PRESENTATION: &str = "presentation";
-/// Slide sequence movable-list key inside the `presentation` map.
-const ORDER: &str = "order";
-/// Presentation config map key inside the `presentation` map.
-const CONFIG: &str = "config";
+/// Slide sequence root movable list (`toile-presentation`). A root container's
+/// identity is the name itself. Every peer therefore addresses the same list,
+/// and none mints a rival one by writing into it first (`TOILE-029`).
+pub(crate) const PRESENTATION_ORDER: &str = "presentation_order";
+/// Presentation config root map, a root container for the same reason.
+pub(crate) const PRESENTATION_CONFIG: &str = "presentation_config";
 /// Reactions root map key: `reactions[target_id][user_id]`.
 const REACTIONS: &str = "reactions";
 /// Comment threads root map key: `comments[thread_id]` (`toile-comments`).
@@ -234,6 +234,9 @@ impl ToileState {
         let _ = board.insert("bg_color", 0xFF1E_1E1Eu32 as i64);
         let _ = board.insert("grid_size", 32.0);
         let _ = board.insert("grid_snap", false);
+        // The presentation defaults sit in a root map, so they are registers on
+        // a container every peer already addresses (`TOILE-029`).
+        presentation::seed_presentation_config(&doc);
         // The schema version is board scaffolding too, and it rides the same
         // commit so no board ever persists without it (`SCHEMA-004`).
         schema::stamp(&doc);
