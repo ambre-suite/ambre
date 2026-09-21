@@ -520,6 +520,11 @@ pub enum ClipValue {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClipElement {
     pub fields: Vec<(String, ClipValue)>,
+    /// A frame's speaker notes, captured as their text (`TOILE-137`). They are
+    /// a shared text container on the board, not a scalar field. So they travel
+    /// beside the fields, and are written back into a container of their own.
+    /// `None` for every other kind.
+    pub notes: Option<String>,
 }
 
 /// A connector captured with both endpoints remapped to element slot indices.

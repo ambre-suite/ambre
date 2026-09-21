@@ -1497,6 +1497,87 @@ fn copy_does_not_mutate_and_paste_remints_offset() {
     );
 }
 
+/// `TOILE-137` and `TOILE-138`: a pasted frame is a frame. It carries its
+/// speaker notes as the shared text they are born as, never as a scalar
+/// field. It takes an element like any other frame.
+#[test]
+fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
+    let mut st = ToileState::new();
+    let frame = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    st.handle_command(ToileCommand::EditNotes {
+        frame: frame.clone(),
+        delta: TextDelta {
+            at: 0,
+            delete: 0,
+            insert: "open on the budget".into(),
+        },
+    });
+
+    // Copied alone: no member travels with it.
+    let copy = st.handle_command(ToileCommand::CopyElements {
+        ids: vec![frame.clone()],
+    });
+    let paste = st.handle_command(ToileCommand::PasteElements {
+        payload: clip_of(&copy),
+        at: Point::new(500.0, 500.0),
+    });
+    let pasted = created_ids(&paste);
+    assert_eq!(pasted.len(), 1);
+    assert_eq!(
+        st.notes(&pasted[0]),
+        "open on the budget",
+        "the copy lost its notes"
+    );
+
+    // A peer's first edit of the copy's notes converges rather than minting a
+    // rival container, which is what a scalar field would have produced.
+    let mut peer = ToileState::new();
+    peer.apply_remote(&st.export_snapshot());
+    let da = st
+        .handle_command(ToileCommand::EditNotes {
+            frame: pasted[0].clone(),
+            delta: TextDelta {
+                at: 0,
+                delete: 0,
+                insert: "A: ".into(),
+            },
+        })
+        .update
+        .expect("a delta");
+    let db = peer
+        .handle_command(ToileCommand::EditNotes {
+            frame: pasted[0].clone(),
+            delta: TextDelta {
+                at: 18,
+                delete: 0,
+                insert: " (B)".into(),
+            },
+        })
+        .update
+        .expect("a delta");
+    peer.apply_remote(&da);
+    st.apply_remote(&db);
+    let merged = st.notes(&pasted[0]);
+    assert_eq!(merged, peer.notes(&pasted[0]), "the notes diverged");
+    assert!(
+        merged.contains("A: ") && merged.contains("(B)"),
+        "a rival container dropped one side: {merged:?}"
+    );
+
+    // And the copy takes an element, as any frame can.
+    let rect = create_rect(&mut st, Point::new(510.0, 510.0), Size::new(10.0, 10.0));
+    let out = st.handle_command(ToileCommand::SetFrameChildren {
+        frame: pasted[0].clone(),
+        add: vec![rect.clone()],
+        remove: Vec::new(),
+    });
+    assert!(
+        out.update.is_some(),
+        "the add was refused: {:?}",
+        out.display
+    );
+}
+
 #[test]
 fn paste_keeps_fully_copied_connector_drops_half_copied() {
     let mut st = ToileState::new();

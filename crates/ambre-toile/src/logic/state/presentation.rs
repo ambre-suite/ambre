@@ -108,7 +108,7 @@ impl ToileState {
     }
 
     /// Whether `id` still names a frame on the board.
-    fn is_frame(&self, id: &ElementId) -> bool {
+    pub(super) fn is_frame(&self, id: &ElementId) -> bool {
         self.element_map(id)
             .is_some_and(|em| str_of(&em, "type") == "frame")
     }

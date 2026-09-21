@@ -6,7 +6,7 @@
 use std::collections::{HashMap, HashSet};
 
 use kurbo::{Point, Rect, Vec2};
-use loro::{LoroMap, LoroMovableList, LoroValue};
+use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
 use crate::logic::command::{
     ClipConnector, ClipElement, ClipMembership, ClipboardPayload, ToileEvent, ToileOutcome,
@@ -14,7 +14,7 @@ use crate::logic::command::{
 use crate::logic::model::{ConnectorId, ElementId, NodeId};
 
 use super::codec::{capture_scalars, map_str, write_clip_fields};
-use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, ToileState};
+use super::{CHILDREN, CONNECTORS, ELEMENTS, LAYERS, NOTES, ToileState};
 
 impl ToileState {
     /// Read the selection into a self-contained, id-free payload. Non-mutating:
@@ -71,14 +71,19 @@ impl ToileState {
         let mut membership = Vec::new();
         let mut origin: Option<Rect> = None;
         for (slot, id) in order.iter().enumerate() {
+            // `notes` reads as a plain string through the deep value. Writing
+            // it back as one makes a frame whose notes are a scalar register,
+            // so it is skipped here and carried beside the fields
+            // (`TOILE-137`).
             let fields = match self.element_map(id) {
                 Some(em) => match em.get_deep_value() {
-                    LoroValue::Map(f) => capture_scalars(&f, &[]),
+                    LoroValue::Map(f) => capture_scalars(&f, &[NOTES]),
                     _ => Vec::new(),
                 },
                 None => Vec::new(),
             };
-            elements.push(ClipElement { fields });
+            let notes = self.is_frame(id).then(|| self.notes(id));
+            elements.push(ClipElement { fields, notes });
             // Group / frame membership -> child slots (captured children only).
             let child_slots: Vec<usize> = self
                 .children_of(id)
@@ -152,6 +157,18 @@ impl ToileState {
                 continue;
             };
             write_clip_fields(&em, &clip.fields, offset);
+            // A frame is born with its two containers, here as at every other
+            // birth. The membership list makes the copy a frame an element can
+            // be added to (`TOILE-138`). The notes text is the container every
+            // peer must see before anyone edits it (`TOILE-137`, `TOILE-051`).
+            if let Some(notes) = &clip.notes {
+                let _ = em.insert_container(CHILDREN, LoroMovableList::new());
+                if let Ok(text) = em.insert_container(NOTES, LoroText::new())
+                    && !notes.is_empty()
+                {
+                    let _ = text.insert(0, notes);
+                }
+            }
             let _ = layers.push(NodeId::Element(id.clone()).encode().as_str());
             created.push(id.clone());
         }
