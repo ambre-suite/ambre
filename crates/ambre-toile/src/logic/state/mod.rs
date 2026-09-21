@@ -70,8 +70,8 @@ use crate::logic::model::{ConnectorId, ElementId, ElementStyle, FrameId, NodeId,
 use crate::logic::schema;
 
 // Root container names.
-const ELEMENTS: &str = "elements";
-const CONNECTORS: &str = "connectors";
+pub(crate) const ELEMENTS: &str = "elements";
+pub(crate) const CONNECTORS: &str = "connectors";
 const LAYERS: &str = "layers";
 const BOARD: &str = "board";
 /// Per-group / per-frame membership list key inside an element map.

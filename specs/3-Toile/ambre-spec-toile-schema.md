@@ -127,7 +127,7 @@ lock and the style, and reads the box from the derived cache.
 | `x`, `y`, `w`, `h` | `f64` | the world AABB, top-left, pre-rotation | every but `group` | built |
 | `rot` | `f64` | radians, about the AABB centre | every | built |
 | `locked` | `bool` | the advisory lock | every | built |
-| `style` | Binary | `postcard(ElementStyle)`, one register per element (`TOILE-018`) | every | built |
+| `style` | Binary | the layout version byte then `postcard(ElementStyle)`, one register per element (`TOILE-018`, `TOILE-UI-071`) | every | built |
 | `link` | Binary | `postcard(LinkTarget)`; absent means no link | every | built |
 | `name` | String | the frame title, which Find reads | `frame` | design |
 | `text` | String | the body (`TOILE-030`) | `sticky`, `text` | built |
@@ -149,7 +149,7 @@ lock and the style, and reads the box from the derived cache.
 | `path_type` | String | `s` straight, `e` elbow, `c` curved | built |
 | `arrow_start`, `arrow_end` | `bool` | the two end caps | built |
 | `label` | Text | the edge caption, seeded empty at birth | built |
-| `style` | Binary | `postcard(ElementStyle)`, seeded at birth | built |
+| `style` | Binary | the layout version byte then `postcard(ElementStyle)`, seeded at birth | built |
 
 **Absence is a value** (`TOILE-230`). No `link` key means no hyperlink; no `autolayout` key means
 free positioning. An empty `presentation` map means no deck; no `reactions` key under a target
@@ -240,7 +240,7 @@ Only where a schema decision needs a reason. 40 words each.
 |---|---|---|
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `TOILE-027` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaError::DocumentTooNew`), read in a scratch document so a refusal writes nothing | architecture section 2.D; `ambre-spec-schema-version.md section 2` |
-| Migration | the registry lives in `ambre-toile` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics | architecture section 2.D; `SCHEMA-010` |
+| Migration | the registry lives in `ambre-toile` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. `1 -> 2` puts the layout version in front of every `style` register | architecture section 2.D; `SCHEMA-010` |
 | Bump | a key or layout change raises `SCHEMA_VERSION` and freezes one named fixture in the same commit | `TOILE-028`; `ambre-spec-fixtures.md section 2` |
 | Unknown field | `postcard` decodes a blob whole and tolerates none, so an `ElementStyle` written by a newer client falls back to `Default` -- no longer silently: the read raises one warning per import (`SCHEMA-003`) | architecture section 2.D |
 | Size, ids | an id is 25 bytes and a `layers` entry 27; a 50 000-element board is 1.3 MB of ids alone | this spec section 2; `TOILE-231` |

@@ -24,13 +24,18 @@ use ambre_core::schema::{
     SchemaVerdict, migrate_schema, verdict,
 };
 
+use crate::logic::model::ElementStyle;
+use crate::logic::state::{CONNECTORS, ELEMENTS};
+
 /// The schema version this build writes into every board it creates
 /// (`SCHEMA-004`).
 ///
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
-/// existing document across it (`SCHEMA-009`).
-pub const SCHEMA_VERSION: u32 = 1;
+/// existing document across it (`SCHEMA-009`). `1 -> 2` puts the layout version
+/// in front of every `"style"` register, which obliges the [`MIGRATIONS`] row
+/// that rewrites the registers an older board holds.
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Write the current version into a board's `meta` register.
 ///
@@ -78,15 +83,65 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 /// reads as version 0, and its layout is identical to a version 1 board. The
 /// step therefore stamps the number and changes nothing else, which is what
 /// makes it a migration rather than a rewrite.
-const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
-    from: 0,
-    to: 1,
-    apply: stamp_step,
-}];
+///
+/// `1 -> 2` puts [`STYLE_VERSION`] in front of every `"style"` register, the
+/// element registers and the connector registers alike.
+const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
+    SchemaMigration {
+        from: 0,
+        to: 1,
+        apply: stamp_step,
+    },
+    SchemaMigration {
+        from: 1,
+        to: 2,
+        apply: style_version_step,
+    },
+];
 
 /// The `0 -> 1` step. A free function rather than a closure because a registry
 /// row holds a plain `fn`.
 fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
+
+/// The `1 -> 2` step: put the layout version in front of every `"style"`
+/// register.
+///
+/// A version 1 board stores the bare postcard value. This build reads the first
+/// byte as the layout version (`TOILE-UI-071`). Every such register therefore
+/// decodes as a layout it does not know, and the element loses its style. The
+/// step rewrites each one through
+/// [`ElementStyle::upgrade_unversioned`](ambre_bus::app::toile::ElementStyle::upgrade_unversioned).
+///
+/// A register that call refuses is left verbatim (`SCHEMA-003`): the layout the
+/// step cannot name is not one it may overwrite.
+fn style_version_step(doc: &LoroDoc) -> Result<(), String> {
+    for container in [ELEMENTS, CONNECTORS] {
+        let root = doc.get_map(container);
+        let LoroValue::Map(entries) = root.get_value() else {
+            continue;
+        };
+        for id in entries.keys() {
+            let Some(map) = root
+                .get(id.as_str())
+                .and_then(|v| v.into_container().ok())
+                .and_then(|c| c.into_map().ok())
+            else {
+                continue;
+            };
+            let Some(Ok(LoroValue::Binary(bytes))) = map.get("style").map(|v| v.into_value())
+            else {
+                continue;
+            };
+            if let Some(upgraded) = ElementStyle::upgrade_unversioned(&bytes) {
+                map.insert("style", LoroValue::Binary(upgraded.into()))
+                    .map_err(|e| format!("rewriting the style register of {id} failed: {e}"))?;
+            }
+        }
+    }
     stamp(doc);
     doc.commit();
     Ok(())
@@ -189,6 +244,68 @@ mod tests {
         assert!(
             migrated.get_map("board").get("bg_color").is_some(),
             "the migration must not drop what it migrates"
+        );
+    }
+
+    /// A version 1 board: one element and one connector, each carrying the bare
+    /// postcard style register that layout stored.
+    fn unversioned_board(style: &ElementStyle) -> Vec<u8> {
+        let doc = LoroDoc::new();
+        let bare = postcard::to_allocvec(style).expect("the layout before the version byte");
+        for (container, id) in [(ELEMENTS, "e1"), (CONNECTORS, "c1")] {
+            let map = doc
+                .get_map(container)
+                .insert_container(id, loro::LoroMap::new())
+                .expect("seed");
+            map.insert("style", LoroValue::Binary(bare.clone().into()))
+                .expect("seed the style register");
+        }
+        doc.get_map(SCHEMA_META_MAP)
+            .insert(SCHEMA_VERSION_KEY, 1i64)
+            .expect("stamp");
+        doc.commit();
+        doc.export(ExportMode::Snapshot).expect("snapshot")
+    }
+
+    /// Read every `"style"` register of a migrated snapshot back.
+    fn styles_of(bytes: &[u8]) -> Vec<Option<ElementStyle>> {
+        let doc = LoroDoc::new();
+        doc.import(bytes).expect("the migrated snapshot imports");
+        [(ELEMENTS, "e1"), (CONNECTORS, "c1")]
+            .into_iter()
+            .map(|(container, id)| {
+                let map = doc
+                    .get_map(container)
+                    .get(id)
+                    .and_then(|v| v.into_container().ok())
+                    .and_then(|c| c.into_map().ok())
+                    .expect("the migration must not drop the map");
+                let Some(Ok(LoroValue::Binary(b))) = map.get("style").map(|v| v.into_value())
+                else {
+                    panic!("the migration must not drop the register");
+                };
+                ElementStyle::try_from_bytes(&b)
+            })
+            .collect()
+    }
+
+    /// `SCHEMA-009`: a board written before the style register carried its
+    /// layout version keeps its styles. Without the `1 -> 2` row, this build
+    /// reads the first postcard byte as a layout it does not know. Every element
+    /// then falls back to the default look.
+    #[test]
+    fn a_board_whose_styles_carry_no_version_keeps_them() {
+        let style = ElementStyle {
+            fill: Some(0xffaa_bbcc),
+            corner: 8.0,
+            ..ElementStyle::default()
+        };
+        let board = unversioned_board(&style);
+        let gated = gate(&board).expect("version 1 migrates");
+        assert_eq!(
+            styles_of(&gated),
+            vec![Some(style.clone()), Some(style)],
+            "the element and the connector both keep the style they carried"
         );
     }
 
