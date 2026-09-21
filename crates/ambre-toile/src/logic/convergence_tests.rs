@@ -3237,7 +3237,7 @@ fn doc_embed_with_an_unreadable_reference_falls_back_to_a_frame() {
         _ => None,
     });
     assert!(
-        matches!(geom, Some(DisplayGeom::Frame)),
+        matches!(geom, Some(DisplayGeom::Frame(_))),
         "expected a Frame placeholder, got {geom:?}"
     );
 }

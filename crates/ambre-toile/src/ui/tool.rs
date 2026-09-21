@@ -214,11 +214,17 @@ impl SelectTool {
             }
         }
 
+        // A frame's title sits outside its box, so the board hit test below
+        // cannot see it. A press on one selects that frame: it is how a user
+        // grabs a frame without clicking through what is inside it
+        // (`TOILE-254`).
+        let title_hit = super::hit::frame_title_at(&display.nodes, screen, cam);
+
         // No handle: hit-test the board, then resolve the raw hit up its group
         // chain to the selection target. That is the top-most enclosing group,
         // unless a scope has been entered, so a grouped element selects as its
         // group.
-        match hit_topmost(&display.nodes, world) {
+        match title_hit.or_else(|| hit_topmost(&display.nodes, world)) {
             Some(hit) => {
                 let id = resolve_group_target(hit, display, scope);
                 let changed = !selection.contains(&id);
@@ -1282,6 +1288,22 @@ mod tests {
         })
     }
 
+    /// A named frame: the one element whose title is clickable outside its own
+    /// box (`TOILE-254`).
+    fn frame_elem(id: &str, bounds: Rect, title: &str) -> DisplayNode {
+        DisplayNode::Element(DisplayElement {
+            id: ElementId(id.to_owned()),
+            kind: ElementKind::Frame,
+            transform: Affine::IDENTITY,
+            bounds,
+            locked: false,
+            style: ElementStyle::default(),
+            geom: DisplayGeom::Frame(title.to_owned()),
+            link: None,
+            group: None,
+        })
+    }
+
     /// A rectangle that is a member of group `group`.
     fn member_elem(id: &str, bounds: Rect, group: &str) -> DisplayNode {
         let DisplayNode::Element(mut e) = rect_elem(id, bounds) else {
@@ -1414,6 +1436,43 @@ mod tests {
         let w = Point::new(50.0, 50.0);
         tool.pointer_down(w, to_screen(&cam, w), &[], &disp, &cam, None);
         assert!(matches!(tool.pointer_up(w, &disp), SelectOutcome::None));
+    }
+
+    /// `TOILE-254`: a press on a frame's title selects that frame. The title
+    /// sits outside the frame's box, so the board hit test cannot see it. It
+    /// is how a user grabs a frame without clicking through what is inside.
+    #[test]
+    fn a_press_on_a_frames_title_selects_the_frame() {
+        let bounds = Rect::new(0.0, 0.0, 300.0, 300.0);
+        let disp = viewport(vec![frame_elem("f", bounds, "Agenda")]);
+        let cam = cam();
+        let band =
+            super::super::render::frame_title_box(world_rect_to_screen(bounds, &cam), "Agenda")
+                .expect("a named frame has a title band");
+        let screen = band.center();
+        let world = cam.screen_to_world() * screen;
+        // The press point is above the frame, so the board holds nothing there.
+        assert!(super::super::hit::hit_topmost(&disp.nodes, world).is_none());
+
+        let mut tool = SelectTool::new();
+        let out = tool.pointer_down(world, screen, &[], &disp, &cam, None);
+        assert!(
+            matches!(out, SelectOutcome::SelectionChanged(ref ids) if ids == &[ElementId("f".into())]),
+            "the title did not select its frame: {out:?}"
+        );
+    }
+
+    /// The same press over an unnamed frame's band selects nothing: there is no
+    /// band at all (`TOILE-253`).
+    #[test]
+    fn an_unnamed_frame_has_no_title_to_press() {
+        let bounds = Rect::new(0.0, 0.0, 300.0, 300.0);
+        let disp = viewport(vec![frame_elem("f", bounds, "")]);
+        let cam = cam();
+        let above = Point::new(bounds.x0 + 10.0, bounds.y0 - 10.0);
+        assert!(
+            super::super::hit::frame_title_at(&disp.nodes, to_screen(&cam, above), &cam).is_none()
+        );
     }
 
     #[test]

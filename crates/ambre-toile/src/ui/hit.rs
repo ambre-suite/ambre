@@ -14,6 +14,9 @@ use ambre_bus::app::toile::{DisplayElement, DisplayGeom, DisplayNode, ElementId}
 use ambre_draw::{BezPath, Point, Rect};
 use kurbo::{ParamCurveNearest, Shape};
 
+use super::tool::world_rect_to_screen;
+use super::viewport::ViewportTransform;
+
 /// A shape at or above this world distance from a thin stroke's outline is a
 /// miss; below it, a hit. Keeps hair-thin lines and open paths clickable.
 pub(crate) const MIN_STROKE_PICK: f64 = 4.0;
@@ -31,7 +34,7 @@ pub fn exact_hit(elem: &DisplayElement, world_pt: Point) -> bool {
         | DisplayGeom::Image(_)
         | DisplayGeom::Sticky(_)
         | DisplayGeom::Text(_)
-        | DisplayGeom::Frame
+        | DisplayGeom::Frame(_)
         | DisplayGeom::Embed(_)
         | DisplayGeom::DocEmbed { .. } => elem.bounds.contains(local),
         DisplayGeom::Ellipse => ellipse_contains(elem.bounds, local),
@@ -40,6 +43,29 @@ pub fn exact_hit(elem: &DisplayElement, world_pt: Point) -> bool {
         DisplayGeom::Stroke(pts) => polyline_hit(pts, local, elem.style.stroke_w as f64),
         DisplayGeom::Group => false,
     }
+}
+
+/// The frame whose title band holds the screen point `screen_pt`, top-most
+/// first (`TOILE-254`).
+///
+/// A frame's title sits outside its box, so the ordinary hit test cannot see
+/// it: this is what makes a title clickable. Screen space, because that is
+/// where the band is drawn.
+pub fn frame_title_at(
+    nodes: &[DisplayNode],
+    screen_pt: Point,
+    cam: &ViewportTransform,
+) -> Option<ElementId> {
+    nodes.iter().rev().find_map(|node| {
+        let DisplayNode::Element(e) = node else {
+            return None;
+        };
+        let DisplayGeom::Frame(title) = &e.geom else {
+            return None;
+        };
+        let band = super::render::frame_title_box(world_rect_to_screen(e.bounds, cam), title)?;
+        band.contains(screen_pt).then(|| e.id.clone())
+    })
 }
 
 /// Whether `local` lies inside the axis-aligned ellipse inscribed in `bounds`.

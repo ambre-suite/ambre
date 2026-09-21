@@ -1770,8 +1770,10 @@ pub enum DisplayGeom {
     Image(String),
     /// Logic-smoothed polyline (`toile-freehand`).
     Stroke(Vec<Point>),
-    /// Background + border only; children are separate `DisplayElement`s.
-    Frame,
+    /// Background + border, and the frame's title (`TOILE-253`). Children are
+    /// separate `DisplayElement`s. The title is carried here because the render
+    /// thread holds no board data: what it paints, it was handed.
+    Frame(String),
     /// Paints nothing; carried for group-selection resolution
     /// (`toile-embeds`).
     Group,

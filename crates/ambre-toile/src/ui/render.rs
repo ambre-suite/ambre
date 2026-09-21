@@ -290,6 +290,13 @@ pub fn paint_content<S: DrawSurface>(
         );
     }
 
+    // 3b. Frame titles, in the same screen-space pass, so a title reads the
+    // same at every zoom. A presentation shows the board's content and not its
+    // structure, so the mode drops them with the grid (`TOILE-255`).
+    if !present {
+        paint_frame_titles(surface, vp, cam, palette, font_cx, text_cache);
+    }
+
     // 4. Connector captions, in the same screen-space pass. They come after the
     // element bodies so a caption stays readable over whatever the arrow
     // crosses (`toile-connectors`).
@@ -452,7 +459,7 @@ fn paint_element<S: DrawSurface>(
     let style = anim_style(&e.style, anim);
     surface.push_transform(transform);
     match &e.geom {
-        DisplayGeom::Rect | DisplayGeom::Frame => {
+        DisplayGeom::Rect | DisplayGeom::Frame(_) => {
             fill_and_stroke(surface, &rect_path(bounds), &style);
         }
         DisplayGeom::Ellipse => fill_and_stroke(surface, &ellipse_path(bounds), &style),
@@ -923,6 +930,87 @@ fn paint_link_badges<S: DrawSurface>(
     }
 }
 
+/// Height of a frame's title band in screen pixels, and the font size inside
+/// it (`TOILE-253`). Screen space, so a title reads the same at every zoom,
+/// like the link badges and the comment pins.
+pub const FRAME_TITLE_PX: f64 = 14.0;
+
+/// Gap between the title's baseline band and the frame's own top edge.
+const FRAME_TITLE_GAP: f64 = 4.0;
+
+/// The screen-space box a frame's title occupies, above its top-left corner
+/// (`TOILE-253`), or `None` when the frame carries no title to draw.
+///
+/// `screen` is the frame's box already projected. The band sits outside the
+/// frame, so it never covers the content a user put inside it. Its width is an
+/// estimate of the glyphs. The exact advance is known only once the text is
+/// shaped, and the hit target has to exist without a font at all
+/// (`TOILE-254`).
+pub fn frame_title_box(screen: Rect, title: &str) -> Option<Rect> {
+    let title = title.trim();
+    if title.is_empty() {
+        return None;
+    }
+    // ~0.6 em per character, the same estimate the SVG import seeds a text box
+    // with. A title is one short line, so the error is a few pixels of hit
+    // target rather than a layout.
+    let w = (title.chars().count() as f64) * FRAME_TITLE_PX * 0.6;
+    let bottom = screen.y0 - FRAME_TITLE_GAP;
+    Some(Rect::new(
+        screen.x0,
+        bottom - FRAME_TITLE_PX,
+        screen.x0 + w,
+        bottom,
+    ))
+}
+
+/// Paint each visible frame's title above it, in screen space (`TOILE-253`).
+///
+/// Skipped in presentation mode: a slide shows the board's content, not the
+/// board's structure (`TOILE-255`).
+fn paint_frame_titles<S: DrawSurface>(
+    surface: &mut S,
+    vp: &DisplayViewport,
+    cam: &ViewportTransform,
+    palette: &Palette,
+    font_cx: &mut FontContext,
+    text_cache: &mut TextCache,
+) {
+    for node in &vp.nodes {
+        let DisplayNode::Element(e) = node else {
+            continue;
+        };
+        let DisplayGeom::Frame(title) = &e.geom else {
+            continue;
+        };
+        let Some(band) = frame_title_box(world_rect_to_screen(e.bounds, cam), title) else {
+            continue;
+        };
+        let layout = text_cache.get_or_build_font(
+            font_cx,
+            title.trim(),
+            FRAME_TITLE_PX as f32,
+            f32::MAX,
+            Alignment::Start,
+            false,
+            false,
+            None,
+            false,
+        );
+        let brush = Brush::Solid(palette.cell_text);
+        for line in layout.lines() {
+            for item in line.items() {
+                let PositionedLayoutItem::GlyphRun(run) = item else {
+                    continue;
+                };
+                let tx = band.x0 + run.offset() as f64;
+                let ty = band.y0 + run.baseline() as f64;
+                surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+            }
+        }
+    }
+}
+
 /// A small filled square handle centered on `p`.
 fn draw_handle<S: DrawSurface>(surface: &mut S, p: Point, palette: &Palette) {
     let h = HANDLE_SIZE_PX / 2.0;
@@ -954,6 +1042,34 @@ mod tests {
 
     fn cam() -> ViewportTransform {
         ViewportTransform::new(1000.0, 800.0)
+    }
+
+    /// `TOILE-253`: a named frame carries a title band above its own top-left
+    /// corner, outside the frame, so it never covers what a user put inside.
+    /// Screen space, so it keeps one size through the zoom.
+    #[test]
+    fn a_named_frame_reserves_a_title_band_above_itself() {
+        let screen = Rect::new(100.0, 200.0, 400.0, 500.0);
+        let band = frame_title_box(screen, "Agenda").expect("a named frame has a band");
+        assert!(
+            band.y1 <= screen.y0,
+            "the title covers the frame: {band:?} over {screen:?}"
+        );
+        assert_eq!(band.x0, screen.x0, "the band starts at the frame's corner");
+        assert_eq!(band.height(), FRAME_TITLE_PX);
+        // A longer title reserves a wider band, which is what the click target
+        // is measured against.
+        let wider = frame_title_box(screen, "Agenda and next steps").expect("a band");
+        assert!(wider.width() > band.width());
+    }
+
+    /// `TOILE-253`, the other side: a frame nobody named draws no band, so an
+    /// unnamed board is exactly as it was before titles existed.
+    #[test]
+    fn an_unnamed_frame_reserves_nothing() {
+        let screen = Rect::new(0.0, 0.0, 100.0, 100.0);
+        assert_eq!(frame_title_box(screen, ""), None);
+        assert_eq!(frame_title_box(screen, "   "), None);
     }
 
     #[test]

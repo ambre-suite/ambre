@@ -531,7 +531,7 @@ mod tests {
             style: ElementStyle::default(),
             geom: match kind {
                 ElementKind::Group => DisplayGeom::Group,
-                ElementKind::Frame => DisplayGeom::Frame,
+                ElementKind::Frame => DisplayGeom::Frame(String::new()),
                 _ => DisplayGeom::Rect,
             },
             link: None,

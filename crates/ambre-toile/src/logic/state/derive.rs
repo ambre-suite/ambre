@@ -221,10 +221,10 @@ impl ToileState {
                         doc_type,
                         focused: false,
                     },
-                    _ => DisplayGeom::Frame,
+                    _ => DisplayGeom::Frame(String::new()),
                 }
             }
-            ElementKind::Frame => DisplayGeom::Frame,
+            ElementKind::Frame => DisplayGeom::Frame(str_of(em, "name")),
             ElementKind::Group => DisplayGeom::Group,
             ElementKind::Sticky => DisplayGeom::Sticky(str_of(em, "text")),
             ElementKind::Text => DisplayGeom::Text(str_of(em, "text")),

@@ -150,9 +150,6 @@ clear -- are `ambre-spec-find.md section 5`. Toile's own:
 The shared gaps -- the live shared session, the undebounced walk -- are in
 `ambre-spec-find.md section 6`. Toile's own:
 
-* **A found frame is highlighted and never labelled.** The walk matches a title the board paints
-  nowhere (`features/ambre-spec-toile-frames.md`). A hit on a frame outlines a region whose name
-  the user opens the deck panel to read.
 * **The fallback has no test** (`TOILE-080`). An element missing from the paint order is found here
   and is invisible on the board (`TOILE-058`). The two halves of the same design disagree, and only
   one of them is exercised.
