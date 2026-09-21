@@ -14,7 +14,6 @@ use ambre_bus::app::toile::{DisplayElement, DisplayGeom, DisplayNode, ElementId}
 use ambre_draw::{BezPath, Point, Rect};
 use kurbo::{ParamCurveNearest, Shape};
 
-use super::tool::world_rect_to_screen;
 use super::viewport::ViewportTransform;
 
 /// A shape at or above this world distance from a thin stroke's outline is a
@@ -56,16 +55,12 @@ pub fn frame_title_at(
     screen_pt: Point,
     cam: &ViewportTransform,
 ) -> Option<ElementId> {
-    nodes.iter().rev().find_map(|node| {
-        let DisplayNode::Element(e) = node else {
-            return None;
-        };
-        let DisplayGeom::Frame(title) = &e.geom else {
-            return None;
-        };
-        let band = super::render::frame_title_box(world_rect_to_screen(e.bounds, cam), title)?;
-        band.contains(screen_pt).then(|| e.id.clone())
-    })
+    // Reverse paint order: the band drawn last is the one on top, so it takes
+    // the press where two overlap.
+    super::render::frame_bands(nodes, cam)
+        .filter(|(_, band, _, _)| band.contains(screen_pt))
+        .last()
+        .map(|(e, _, _, _)| e.id.clone())
 }
 
 /// Whether `local` lies inside the axis-aligned ellipse inscribed in `bounds`.

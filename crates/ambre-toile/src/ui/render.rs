@@ -938,8 +938,44 @@ pub const FRAME_TITLE_PX: f64 = 14.0;
 /// Gap between the title's baseline band and the frame's own top edge.
 const FRAME_TITLE_GAP: f64 = 4.0;
 
+/// What a frame's band shows, and whether it is the frame's own title
+/// (`TOILE-253`).
+///
+/// A frame nobody named shows a placeholder instead of nothing, so there is
+/// always something to read and something to double-click. The placeholder
+/// names no rank. The deck panel numbers a frame by its place in the deck, and
+/// a second numbering here would call one frame two different things.
+pub fn frame_title_label(title: &str) -> (&str, bool) {
+    let title = title.trim();
+    if title.is_empty() {
+        ("Untitled frame", false)
+    } else {
+        (title, true)
+    }
+}
+
+/// Every frame of the visible set, with the band it draws and what is in it, in
+/// paint order (`TOILE-253`). One source for the painter, the hit test and the
+/// editor, so the three cannot disagree on where a title is.
+pub fn frame_bands<'a>(
+    nodes: &'a [DisplayNode],
+    cam: &'a ViewportTransform,
+) -> impl Iterator<Item = (&'a DisplayElement, Rect, &'a str, bool)> {
+    nodes.iter().filter_map(move |node| {
+        let DisplayNode::Element(e) = node else {
+            return None;
+        };
+        let DisplayGeom::Frame(title) = &e.geom else {
+            return None;
+        };
+        let (label, named) = frame_title_label(title);
+        let band = frame_title_box(world_rect_to_screen(e.bounds, cam), label)?;
+        Some((e, band, label, named))
+    })
+}
+
 /// The screen-space box a frame's title occupies, above its top-left corner
-/// (`TOILE-253`), or `None` when the frame carries no title to draw.
+/// (`TOILE-253`), or `None` when there is nothing to draw.
 ///
 /// `screen` is the frame's box already projected. The band sits outside the
 /// frame, so it never covers the content a user put inside it. Its width is an
@@ -977,24 +1013,16 @@ fn paint_frame_titles<S: DrawSurface>(
     text_cache: &mut TextCache,
     editing: Option<&super::edit::EditTarget>,
 ) {
-    for node in &vp.nodes {
-        let DisplayNode::Element(e) = node else {
-            continue;
-        };
-        let DisplayGeom::Frame(title) = &e.geom else {
-            continue;
-        };
+    let editing = editing.and_then(|t| t.frame_title());
+    for (e, band, label, named) in frame_bands(&vp.nodes, cam) {
         // The title under edit is painted by the editor overlay instead, as an
         // element's body is (`TOILE-257`).
-        if editing.and_then(|t| t.frame_title()) == Some(&e.id) {
+        if editing == Some(&e.id) {
             continue;
         }
-        let Some(band) = frame_title_box(world_rect_to_screen(e.bounds, cam), title) else {
-            continue;
-        };
         let layout = text_cache.get_or_build_font(
             font_cx,
-            title.trim(),
+            label,
             FRAME_TITLE_PX as f32,
             f32::MAX,
             Alignment::Start,
@@ -1003,7 +1031,13 @@ fn paint_frame_titles<S: DrawSurface>(
             None,
             false,
         );
-        let brush = Brush::Solid(palette.cell_text);
+        // A placeholder reads as the absence it is: the secondary ink, not the
+        // ink of a title somebody typed.
+        let brush = Brush::Solid(if named {
+            palette.cell_text
+        } else {
+            palette.header_text
+        });
         for line in layout.lines() {
             for item in line.items() {
                 let PositionedLayoutItem::GlyphRun(run) = item else {
@@ -1069,13 +1103,16 @@ mod tests {
         assert!(wider.width() > band.width());
     }
 
-    /// `TOILE-253`, the other side: a frame nobody named draws no band, so an
-    /// unnamed board is exactly as it was before titles existed.
+    /// `TOILE-253`, the other side: a frame nobody named reads as a
+    /// placeholder rather than as nothing. The board then always offers
+    /// somewhere to type a first name.
     #[test]
-    fn an_unnamed_frame_reserves_nothing() {
-        let screen = Rect::new(0.0, 0.0, 100.0, 100.0);
-        assert_eq!(frame_title_box(screen, ""), None);
-        assert_eq!(frame_title_box(screen, "   "), None);
+    fn an_unnamed_frame_reads_as_a_placeholder() {
+        assert_eq!(frame_title_label("Agenda"), ("Agenda", true));
+        assert_eq!(frame_title_label("  Agenda "), ("Agenda", true));
+        let (label, named) = frame_title_label("   ");
+        assert!(!named, "a blank title is not a title");
+        assert!(!label.is_empty(), "the band would have nothing to show");
     }
 
     #[test]

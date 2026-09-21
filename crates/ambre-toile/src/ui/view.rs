@@ -2646,14 +2646,13 @@ impl ToileView {
     /// shape when it carries none. An editor has to open on a frame the user is
     /// naming for the first time (`TOILE-257`).
     fn frame_title_band(&self, e: &DisplayElement) -> Rect {
-        let screen = world_rect_to_screen(e.bounds, &self.cam);
         let title = match &e.geom {
             DisplayGeom::Frame(t) => t.as_str(),
             _ => "",
         };
-        render::frame_title_box(screen, title).unwrap_or_else(|| {
-            render::frame_title_box(screen, "Untitled").expect("a non-empty placeholder")
-        })
+        let (label, _) = render::frame_title_label(title);
+        render::frame_title_box(world_rect_to_screen(e.bounds, &self.cam), label)
+            .expect("the label is never empty")
     }
 
     /// Optimistically set a frame's title in the local display, so the band

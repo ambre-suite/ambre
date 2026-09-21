@@ -1462,16 +1462,21 @@ mod tests {
         );
     }
 
-    /// The same press over an unnamed frame's band selects nothing: there is no
-    /// band at all (`TOILE-253`).
+    /// `TOILE-253`: a frame nobody named carries a placeholder band, so it can
+    /// be pressed and named like any other. The board would otherwise offer no
+    /// way to give a frame its first name.
     #[test]
-    fn an_unnamed_frame_has_no_title_to_press() {
+    fn an_unnamed_frame_can_still_be_pressed_by_its_band() {
         let bounds = Rect::new(0.0, 0.0, 300.0, 300.0);
         let disp = viewport(vec![frame_elem("f", bounds, "")]);
         let cam = cam();
-        let above = Point::new(bounds.x0 + 10.0, bounds.y0 - 10.0);
-        assert!(
-            super::super::hit::frame_title_at(&disp.nodes, to_screen(&cam, above), &cam).is_none()
+        let band = super::super::render::frame_bands(&disp.nodes, &cam)
+            .next()
+            .expect("an unnamed frame still has a band")
+            .1;
+        assert_eq!(
+            super::super::hit::frame_title_at(&disp.nodes, band.center(), &cam),
+            Some(ElementId("f".into()))
         );
     }
 

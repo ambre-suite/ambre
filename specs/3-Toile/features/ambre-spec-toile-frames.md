@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-049` | `INV` | An element MUST belong to at most one container: joining a frame MUST detach it from its group. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_detaches_from_a_group` -- both memberships are read back | none | verified |
 | `TOILE-051` | `CONC` | A frame's speaker-notes container MUST exist from its birth, so two peers editing it first MUST converge. | this spec section 3; `TOILE-029` | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` | none | verified |
 | `TOILE-252` | `CONC` | Two users naming one frame at once MUST converge on one writer's whole name. | this spec section 3; `TOILE-018` | `ambre_toile::logic::convergence_tests::concurrent_names_converge_on_one_whole_name` -- two peers naming one frame, converging on one of the two names entire | none | verified |
-| `TOILE-253` | `OBS` | A named frame MUST show its title on the board, outside its own box so nothing inside it is covered. A frame nobody named MUST show none. | this spec section 4 | `ambre_toile::ui::render::tests::a_named_frame_reserves_a_title_band_above_itself` -- the band above the frame's own top edge, starting at its corner, widening with the title; `ambre_toile::ui::render::tests::an_unnamed_frame_reserves_nothing` | partial -- the glyphs themselves are asserted by nothing: a host shapes none without a font, which is the vacuous assertion `features/ambre-spec-toile-board-rendering.md section 5` records for the bodies beside them; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-253` | `OBS` | A frame MUST show its title on the board, outside its own box so nothing inside it is covered. A frame nobody named MUST show a placeholder in its place. | this spec section 4 | `ambre_toile::ui::render::tests::a_named_frame_reserves_a_title_band_above_itself` -- the band above the frame's own top edge, starting at its corner, widening with the title; `ambre_toile::ui::render::tests::an_unnamed_frame_reads_as_a_placeholder` -- the placeholder standing in, and never empty | partial -- the glyphs themselves are asserted by nothing: a host shapes none without a font, which is the vacuous assertion `features/ambre-spec-toile-board-rendering.md section 5` records for the bodies beside them; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-255` | `OBS` | A presentation MUST NOT paint a frame's title: a slide shows the board's content, not its structure. | this spec section 4; `TOILE-UI-083` | type-level -- the title pass has one call site, inside the content pass's `if !present`, so a slide cannot reach it | none | verified |
 
 ### 1.2 Add a selection to a frame
@@ -53,7 +53,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-254` | `POST` | A press on a frame's title MUST select that frame. | this spec section 4 | `ambre_toile::ui::tool::tests::a_press_on_a_frames_title_selects_the_frame` -- the board holding nothing under that point, and the press selecting the frame anyway; `ambre_toile::ui::tool::tests::an_unnamed_frame_has_no_title_to_press` | none | verified |
+| `TOILE-254` | `POST` | A press on a frame's title MUST select that frame. | this spec section 4 | `ambre_toile::ui::tool::tests::a_press_on_a_frames_title_selects_the_frame` -- the board holding nothing under that point, and the press selecting the frame anyway; `ambre_toile::ui::tool::tests::an_unnamed_frame_can_still_be_pressed_by_its_band` -- the same press over a placeholder | none | verified |
 | `TOILE-256` | `FRAME` | Selecting a frame by its title MUST NOT change the board: it MUST write nothing. | this spec section 4 | structural -- the press answers a selection change and the title branch reaches no command sink, so no write can leave it | none | verified |
 
 * **Budget.** the membership change under 1 ms, the transform-command row of
@@ -155,6 +155,12 @@ press on it selects the frame, so a user grabs one without clicking through what
 (`TOILE-254`). A double-click renames it in place (`TOILE-257`), and a presentation drops the titles
 with the grid (`TOILE-255`).
 
+**A frame nobody named reads as a placeholder**, in the secondary ink, so every frame has something
+to read and something to double-click (`TOILE-253`). The placeholder names no rank. The deck panel
+numbers a frame by its place in the deck, and a second numbering here would call one frame two
+different things. It is never written to the document, and an edit that types nothing over it
+renames nothing (`TOILE-258`).
+
 **What no surface offers.** Removing an element from a frame, and dropping an element into a frame by
 dragging it there. The context menu's one entry adds; nothing removes, and membership is never
 implied by position.
@@ -203,9 +209,8 @@ implied by position.
   and one of narrow glyphs stops short of it.
 * **Two titles at the same corner overlap.** Nothing staggers the bands of two frames whose
   top-left corners meet, and the one painted last wins the click (`TOILE-254`).
-* **A frame nobody named cannot be named from the board.** Nothing is painted above it, so there is
-  nothing to double-click. The first name is typed in the deck panel, and the board edits it
-  afterwards (`TOILE-257`).
+* **Two unnamed frames read alike.** The placeholder carries no rank, so a board of unnamed frames
+  shows the same words above each of them. What tells them apart is where they are.
 * **The edited title does not hold its size through a zoom.** The editor's size is pinned when it
   opens, from the camera of that moment, while the painted band is screen space. Zooming mid-edit
   grows or shrinks the text being typed, and the committed title returns to the band's own size.
