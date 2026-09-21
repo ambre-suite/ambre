@@ -62,7 +62,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-UI-020` | `POST` | At most one cull request MUST leave the UI thread per frame. | this spec section 2 | type-level -- the pending request is one `Option<Viewport>` on the view, so a second request in the same frame replaces the first, and the frame flush is its only send site | none | verified |
 | `TOILE-UI-274` | `FRAME` | Asking for the visible set MUST NOT stall the frame. | this spec section 2; `BUS-004` | structural -- the flush is a try-send on a bounded channel and the frame continues on either arm, so no paint waits on the Logic thread | none | verified |
-| `TOILE-UI-275` | `FAIL` | A cull request the channel refuses MUST NOT leave the board painting a stale set. | this spec section 2; section 5 | none | fails -- a full channel drops the request without a warning, the dirty flag is cleared in the same frame, and the board keeps the previous culled set until the camera moves again, section 5; lands with the `A dropped display request leaves a trace` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-275` | `FAIL` | A cull request the channel refuses MUST NOT leave the board painting a stale set. | this spec section 2 | type-level -- the flush reads the outcome of the send and puts the camera back into `pending_viewport` on anything but `Sent`, so the slot is empty only once a request left, and the next frame offers the same camera again (`BUS-024`) | none | verified |
 
 * **Budget.** the board paint under 16 ms at 2 000 visible elements, a row of
   `ambre-spec-budgets.md section 2`, beside the frame phases it sits inside. An idle board
@@ -70,7 +70,7 @@ status values are normative in `ambre-spec-template.md`.
   a bench.
 * **Boundary.** none: the walk paints view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It reads no document and holds no key (`TOILE-UI-001`).
-* **Verification.** 12 `verified`, 1 `failing`, 17 `untested`. What holds is the shape of the walk --
+* **Verification.** 13 `verified`, 17 `untested`. What holds is the shape of the walk --
   its order, its inputs and the element bodies thirteen tests drive. What is loose is what it draws. The
   background, the grid, the gesture preview, the selection box and three arms of the walk are
   painted by no test. Two rows rest on assertions that hold vacuously on a host with no font.
@@ -194,10 +194,6 @@ override at all, which is what stops a fade half-way (`TOILE-UI-085`).
 * **The background and the grid have no test at all**, in either branch of the presentation choice
   (`TOILE-UI-045`, `TOILE-UI-267`). The zoom-scaled body pass is held only by pure functions of the
   card that take no camera (`TOILE-UI-044`).
-* **A refused cull request is lost without a trace** (`TOILE-UI-275`). The flush is a try-send that
-  logs a disconnect and nothing else. The pending camera has already been taken, and the dirty flag
-  is cleared on either arm. A full channel leaves the board painting the previous culled set until
-  the camera moves again. Nothing retries and nothing warns.
 * **A differential visible set is unspecified.** Every push carries the whole culled set, including
   what the UI already holds. The design names a patch, keyed on change size; nothing states when a
   patch is correct against an out-of-order full push.

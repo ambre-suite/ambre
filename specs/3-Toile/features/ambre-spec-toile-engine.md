@@ -87,7 +87,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-UI-312` | `POST` | A command sent from the drawing thread MUST reach the Logic thread addressed to the document it was drawn on. | this spec section 4; `ambre-spec-message-bus.md` | type-level -- the two board paths wrap the command in `LogicCommand::App` with the view's own document id, the id is not a parameter of the send, and the construction is the proof | none | verified |
 | `TOILE-UI-100` | `FAIL` | A full channel MUST drop an edit rather than block the frame, and MUST say so. | `ambre-spec-architecture.md section 2`; `ambre-spec-ui.md section 1` | type-level -- the edit path and the embed-session path are `try_send` and each handles `TrySendError::Full` with a warning | none | verified |
-| `TOILE-UI-313` | `FAIL` | A full channel MUST drop a camera request rather than block the frame, and MUST say so. | `ambre-spec-ui.md section 1` | none | fails -- `send_lossy` matches `TrySendError::Disconnected` alone, so a full channel drops the camera request with no log at all. The drop is deliberate (the next coalesced request supersedes it), but a board that stops re-culling leaves no trace of why; lands with the `A dropped display request leaves a trace` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-UI-313` | `FAIL` | A full channel MUST drop a camera request rather than block the frame, and MUST say so. | `ambre-spec-ui.md section 1` | type-level -- the camera path is a try-send whose `Full` arm warns and returns `false`, and the arm is the only way the call answers a full channel | none | verified |
 | `TOILE-UI-314` | `FRAME` | Sending a command MUST NOT change what the canvas draws: the gesture is already on screen and no answer is awaited. | this spec section 4 | type-level -- the three senders take `&self`, so no send can touch the view's render state | none | verified |
 
 ### 1.8 Fan one answer out to the three threads
@@ -104,7 +104,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the board lives in this thread's CRDT and leaves as bytes the Sync
   worker seals (`ZK-001`). Its one outbound flow of user content is the media path of
   `features/ambre-spec-toile-media.md section 1`.
-* **Verification.** 31 `verified`, 5 `failing`, 4 `untested`. What holds is the pair no other application
+* **Verification.** 32 `verified`, 4 `failing`, 4 `untested`. What holds is the pair no other application
   holds: the index equivalence and the convergence of every derived cache. Both under one property test,
   neither at a culling camera (`TOILE-206`). What is loose is four rules nothing exercises and
   `TOILE-023`, a measurement; ten verified rows are structural.
@@ -391,8 +391,8 @@ The user touches no part of this document directly. What it exposes is the answe
 draws from, and the rules that keep the drawing thread honest. It holds view state and the current visible set
 and nothing else (`TOILE-UI-001`). Every mutation leaves as a command (`TOILE-UI-099`), carrying the document
 it was drawn on (`TOILE-UI-312`) and touching nothing the canvas draws (`TOILE-UI-314`). A full channel drops
-that command rather than blocking the frame: the edit path says so (`TOILE-UI-100`), the camera path drops it
-in silence (`TOILE-UI-313`).
+that command rather than blocking the frame, and both paths say so: the edit path (`TOILE-UI-100`) and the
+camera path (`TOILE-UI-313`). The dropped camera is offered again on the next frame (`BUS-024`).
 
 **Where each event lands.** One arm per event and **no wildcard arm**, so a new event is a compile
 error rather than a silent drop (`TOILE-UI-101`).
@@ -451,9 +451,6 @@ error rather than a silent drop (`TOILE-UI-101`).
   walked whole. So a board of a thousand arrows pays for all of them at every camera. The one test that names
   the cull filters connectors out of what it asserts on, so the belt cannot see it. Answered by the "Engine
   and render optimization" Story (`ambre-roadmap.md` E6).
-* **A full camera channel drops without a trace** (`TOILE-UI-313`). The camera sender matches a
-  disconnected channel alone, so a full one drops the request silently. The drop is right -- the
-  next coalesced camera supersedes it -- but a board that stops re-culling leaves nothing to read.
 * **No budget is measured.** Not one of the Toile rows of `ambre-spec-budgets.md` has
   a benchmark, so every cost above is a claim about a number nothing weighs. Two of those rows are
   already known to be false.

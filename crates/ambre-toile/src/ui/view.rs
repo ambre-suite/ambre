@@ -697,33 +697,47 @@ impl ToileView {
         if wanted.is_empty() {
             return;
         }
-        for h in &wanted {
-            self.media_requested.insert(h.clone());
+        // Mark the requests in flight only once they left: a dropped request
+        // that stayed marked is a picture nothing ever asks for again
+        // (`BUS-024`).
+        if self.send_lossy(ToileCommand::RequestMedia {
+            hashes: wanted.clone(),
+        }) {
+            for h in wanted {
+                self.media_requested.insert(h);
+            }
         }
-        self.send_lossy(ToileCommand::RequestMedia { hashes: wanted });
     }
 
     /// Offer one lossy command to the Logic thread (`BUS-023`).
     ///
-    /// A full channel drops the request, because the next coalesced request
-    /// supersedes it. The bus gate refuses a command that changes the document,
-    /// so an edit offered here stops instead of dropping. Never blocks the UI
-    /// thread.
-    fn send_lossy(&self, cmd: ToileCommand) {
+    /// Returns whether the command reached the channel. A full one drops it and
+    /// nothing holds it. The caller offers the request again on a later frame
+    /// (`BUS-024`), or undoes what it recorded for it. Every drop is logged: a
+    /// board that stops re-culling leaves no trace of why (`TOILE-UI-313`). The
+    /// bus gate refuses a command that changes the document, so an edit offered
+    /// here stops instead of dropping. Never blocks the UI thread.
+    fn send_lossy(&self, cmd: ToileCommand) -> bool {
         if self.fatal {
-            return;
+            return false;
         }
         let msg = LogicCommand::App {
             document_id: self.document_id,
             command: AppCommand::Toile(cmd),
         };
         match ambre_bus::send_lossy(&self.to_logic, msg) {
-            LossyOutcome::Sent | LossyOutcome::Dropped => {}
+            LossyOutcome::Sent => true,
+            LossyOutcome::Dropped => {
+                tracing::warn!("Toile: UI->Logic channel full, the lossy request was dropped");
+                false
+            }
             LossyOutcome::Refused => {
                 tracing::error!("Toile: a document mutation was offered to the lossy class");
+                false
             }
             LossyOutcome::Disconnected => {
                 tracing::error!("Toile: UI->Logic channel disconnected");
+                false
             }
         }
     }
@@ -1735,7 +1749,9 @@ impl ToileView {
     /// and presence must never displace an edit on a full channel.
     fn broadcast_presence(&mut self, now_ms: f64) {
         if let Some(payload) = self.presence_out.due(self.presence_sample(), now_ms) {
-            self.send_lossy(ToileCommand::Presence {
+            // A dropped sample is not re-offered: the next one carries a fresher
+            // pointer, and a queue of stale samples is worse than a gap.
+            let _ = self.send_lossy(ToileCommand::Presence {
                 payload,
                 now_ms: now_ms as i64,
             });
@@ -2954,9 +2970,15 @@ impl ToileView {
             self.send_edit(ToileCommand::RequestBoardIds);
         }
 
-        // Flush the coalesced viewport request (at most one per frame).
-        if let Some(vp) = self.pending_viewport.take() {
-            self.send_lossy(ToileCommand::SetViewport(vp));
+        // Flush the coalesced viewport request (at most one per frame). A full
+        // channel takes none, and the request goes back into the slot. The next
+        // frame offers it again: dropped outright, it leaves the board painting
+        // the previous culled set until the camera moves (`TOILE-UI-275`,
+        // `BUS-024`).
+        if let Some(vp) = self.pending_viewport.take()
+            && !self.send_lossy(ToileCommand::SetViewport(vp))
+        {
+            self.pending_viewport = Some(vp);
         }
 
         // Pick up a theme switch from the chrome toggle.
