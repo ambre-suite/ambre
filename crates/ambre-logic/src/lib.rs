@@ -186,8 +186,12 @@ impl DocState {
     /// the suite (`board.svg`, `deck.pdf`). The document's own name is encrypted
     /// and lives on the Sync thread, which this one cannot read (`ZK-001`).
     fn ambre_file_event(&self, document_id: DocumentId) -> AppEvent {
-        let (filename, data) = self.ambre_file_bytes(document_id);
-        self.export_complete_event(filename, data)
+        match self.ambre_file_bytes(document_id) {
+            Some((filename, data)) => self.export_complete_event(filename, data),
+            // A document the engine could not read becomes no file
+            // (`TOILE-IO-069`). The user is told instead.
+            None => self.export_failed_event("the document could not be read".to_owned()),
+        }
     }
 
     /// The file name and the plaintext container behind
@@ -196,16 +200,18 @@ impl DocState {
     /// The sealed export needs exactly these two, and needs them *before*
     /// there is an event to carry them. The bytes travel to the Sync worker and
     /// come back changed, while the name waits here (`DOCFILE-014`).
-    fn ambre_file_bytes(&self, document_id: DocumentId) -> (String, Vec<u8>) {
+    /// `None` when the engine could not read the document: no file is written
+    /// at all (`TOILE-IO-069`).
+    fn ambre_file_bytes(&self, document_id: DocumentId) -> Option<(String, Vec<u8>)> {
         match self {
-            DocState::Trame(state) => (
+            DocState::Trame(state) => Some((
                 "workbook.ambre".to_owned(),
-                state.export_ambre_plaintext(document_id.into()),
-            ),
-            DocState::Toile(state) => (
+                state.export_ambre_plaintext(document_id.into())?,
+            )),
+            DocState::Toile(state) => Some((
                 "board.ambre".to_owned(),
-                state.export_ambre_plaintext(document_id.into()),
-            ),
+                state.export_ambre_plaintext(document_id.into())?,
+            )),
         }
     }
 

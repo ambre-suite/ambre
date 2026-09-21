@@ -67,7 +67,9 @@ impl FixtureGen for TrameGen {
                 text: text.to_owned(),
             });
         }
-        state.export_ambre_plaintext(seeded_document_id(self.seed))
+        state
+            .export_ambre_plaintext(seeded_document_id(self.seed))
+            .expect("the document reads")
     }
 }
 
@@ -110,7 +112,9 @@ impl FixtureGen for ToileGen {
             fill: None,
             correlate: 0,
         });
-        state.export_ambre_plaintext(seeded_document_id(self.seed))
+        state
+            .export_ambre_plaintext(seeded_document_id(self.seed))
+            .expect("the document reads")
     }
 }
 

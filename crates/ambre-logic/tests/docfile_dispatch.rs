@@ -34,7 +34,9 @@ fn trame_file() -> Vec<u8> {
         col: 0,
         text: "hello".to_owned(),
     });
-    state.export_ambre_plaintext(doc_id(1))
+    state
+        .export_ambre_plaintext(doc_id(1))
+        .expect("the document reads")
 }
 
 fn toile_file() -> Vec<u8> {
@@ -47,7 +49,9 @@ fn toile_file() -> Vec<u8> {
         fill: None,
         correlate: 0,
     });
-    state.export_ambre_plaintext(doc_id(2))
+    state
+        .export_ambre_plaintext(doc_id(2))
+        .expect("the document reads")
 }
 
 #[test]

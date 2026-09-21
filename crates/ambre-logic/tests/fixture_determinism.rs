@@ -70,7 +70,9 @@ fn build_trame(seed: u64, doc_id: Uuid) -> Vec<u8> {
             .map(|i| (i, 3, format!("row {i}")))
             .collect::<Vec<_>>(),
     });
-    state.export_ambre_plaintext(doc_id)
+    state
+        .export_ambre_plaintext(doc_id)
+        .expect("the document reads")
 }
 
 /// A board with several shapes and a frame, so the dump and the shape summary
@@ -95,7 +97,9 @@ fn build_toile(seed: u64, doc_id: Uuid) -> Vec<u8> {
         fill: None,
         correlate: 0,
     });
-    state.export_ambre_plaintext(doc_id)
+    state
+        .export_ambre_plaintext(doc_id)
+        .expect("the document reads")
 }
 
 // -----------------------------------------------------------------------------
@@ -148,7 +152,9 @@ fn an_unpinned_peer_is_not_deterministic() {
             col: 0,
             text: "21".to_owned(),
         });
-        state.export_ambre_plaintext(doc_id())
+        state
+            .export_ambre_plaintext(doc_id())
+            .expect("the document reads")
     };
     assert_ne!(bare(()), bare(()));
 }
@@ -243,8 +249,11 @@ fn a_two_peer_merge_is_deterministic() {
         alice.apply_remote(&bob.export_snapshot());
         bob.apply_remote(&alice.export_snapshot());
         (
-            alice.export_ambre_plaintext(doc_id()),
-            bob.export_ambre_plaintext(doc_id()),
+            alice
+                .export_ambre_plaintext(doc_id())
+                .expect("the document reads"),
+            bob.export_ambre_plaintext(doc_id())
+                .expect("the document reads"),
         )
     };
     let (alice_1, bob_1) = merged(());
@@ -279,7 +288,9 @@ fn a_large_document_is_deterministic() {
                 .flat_map(|row| (0..20).map(move |col| (row, col, format!("v{row}_{col}"))))
                 .collect(),
         });
-        state.export_ambre_plaintext(doc_id())
+        state
+            .export_ambre_plaintext(doc_id())
+            .expect("the document reads")
     };
     let first = build(());
     assert!(first.len() > 10_000, "a 5k-cell document, not an empty one");

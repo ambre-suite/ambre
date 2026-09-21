@@ -21,14 +21,15 @@ use ambre_core::{
 ///
 /// Pure and crypto-free (I4). Protection, when it applies, is a separate stage
 /// owned by `ambre-sync` (`docfile`).
-pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Vec<u8> {
-    let payload = doc.export(ExportMode::Snapshot).unwrap_or_else(|e| {
-        // Never silent: the caller is about to write these bytes to a file the
-        // user believes holds their board.
-        tracing::error!("[Toile] .ambre export failed, writing an empty payload: {e:?}");
-        Vec::new()
-    });
-    write_ambre_plaintext(DocType::Toile, doc_id, &payload)
+pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Option<Vec<u8>> {
+    // `None` rather than a header over nothing (`TOILE-IO-069`). A well-formed
+    // file carrying the right document id and an empty board is what the user
+    // cannot tell from a board they emptied themselves.
+    let payload = doc
+        .export(ExportMode::Snapshot)
+        .inspect_err(|e| tracing::error!("[Toile] .ambre export failed, writing no file: {e:?}"))
+        .ok()?;
+    Some(write_ambre_plaintext(DocType::Toile, doc_id, &payload))
 }
 
 /// Validate a plaintext `.ambre` as a *Toile* document and hand back the header

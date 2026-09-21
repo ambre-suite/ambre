@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-IO-068` | `INV` | A conversion MUST run on the user's own machine, never reaching the network. | README pillar "E2EE"; this spec section 5 | structural -- no interop module names a network client, and the one blob that leaves rides `ToileRequest::UploadMedia`, which Sync encrypts before it goes | none | verified |
 | `TOILE-IO-010` | `IO` | An `.ambre` export and import round trip MUST preserve the document state, byte for byte on a bare board. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::round_trip_is_byte_identical_on_a_bare_document`; `ambre_toile::logic::state::docfile::tests::round_trip_preserves_the_document_state`; `ambre_toile::logic::state::docfile::tests::the_header_names_toile_and_the_document` | none | verified |
-| `TOILE-IO-069` | `IO` | A board the export could not read MUST NOT become a file: a valid header over an empty payload MUST NOT be written. | this spec section 3 | none | fails -- a failed snapshot logs an error and writes the header alone, so the file opens as an empty board, section 6; lands with the `A board the export could not read becomes no file` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-IO-069` | `IO` | A board the export could not read MUST NOT become a file: a valid header over an empty payload MUST NOT be written. | this spec section 3 | type-level -- the container writer answers `Option<Vec<u8>>` and the header is written inside the branch a read snapshot reaches, so no payload-less file can be constructed. The registry turns the empty answer into the export-failure event, on the plain path and the sealed one alike | none | verified |
 
 ### 1.2 Bring a file onto the board
 
@@ -114,10 +114,10 @@ status values are normative in `ambre-spec-template.md`.
   the pixels an import produces reach the relay as ciphertext alone
   (`features/ambre-spec-toile-media.md section 1`, `TOILE-IO-013`). The showcase bundle is the one
   deliberate exit from the zero-knowledge boundary, and `TOILE-IO-096` makes it say so.
-* **Verification.** 34 `verified`, 2 `failing`, 3 `untested`, 12 `unimplemented`, 2 `qa-manual`. What
+* **Verification.** 35 `verified`, 1 `failing`, 3 `untested`, 12 `unimplemented`, 2 `qa-manual`. What
   holds is the drop point, the reader's structure, the writer's own, and the report, each carrying a
   test of its own. The two `qa-manual` rows are the DOM glue underneath, which no belt reaches. What
-  is loose is five rules: two the code answers with something else, three it holds in part.
+  is loose is four rules: one the code answers with something else, three it holds in part.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -312,9 +312,6 @@ view past its own gate.
   Nothing detects the drift, and no rule covers it.
 * **A text node reads its own `x`, `y` and `font-size` alone.** A `tspan` offset and an inherited
   font size are not followed, so text built from spans lands at the parent's coordinates.
-* **A board the export could not read still becomes a file** (`TOILE-IO-069`). The snapshot is taken
-  with a fallback: on failure it logs an error and writes the header over an empty payload. The file
-  is well formed, carries the right document id, and opens as an empty board.
 * **A board reaching before the origin loses its absolute place on re-import** (`TOILE-IO-086`). The
   frame then carries a non-zero origin, which a reader normalizes away. The geometry survives whole
   and the board lands at the origin. Nothing rules on where a re-imported drawing belongs.

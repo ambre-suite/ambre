@@ -17,7 +17,9 @@ impl ToileState {
     /// `doc_id` is supplied by the caller because the engine does not hold the
     /// document's identity. The registry does (`ambre-logic`), and a fixture
     /// generator pins it from its seed (`ambre-spec-fixtures.md`).
-    pub fn export_ambre_plaintext(&self, doc_id: Uuid) -> Vec<u8> {
+    /// `None` when the board could not be read: no file is better than a file
+    /// that opens empty (`TOILE-IO-069`).
+    pub fn export_ambre_plaintext(&self, doc_id: Uuid) -> Option<Vec<u8>> {
         export_ambre_plaintext(&self.doc, doc_id)
     }
 
@@ -100,7 +102,9 @@ mod tests {
 
     #[test]
     fn the_header_names_toile_and_the_document() {
-        let bytes = populated().export_ambre_plaintext(doc_id());
+        let bytes = populated()
+            .export_ambre_plaintext(doc_id())
+            .expect("the document reads");
         let header = import_ambre_plaintext(&bytes).expect("a Toile container");
         assert_eq!(header.version, AMBRE_VERSION);
         assert_eq!(header.doc_type, DocType::Toile);
@@ -116,18 +120,25 @@ mod tests {
         // a bare `LoroDoc` rather than a `ToileState`, because `ToileState::new`
         // commits its own board scaffolding under a fresh random peer id. That op
         // is a second peer's history, not a lost round trip.
-        let bytes = populated().export_ambre_plaintext(doc_id());
+        let bytes = populated()
+            .export_ambre_plaintext(doc_id())
+            .expect("the document reads");
         let header = import_ambre_plaintext(&bytes).expect("a Toile container");
         let reloaded = LoroDoc::new();
         reloaded.import(&header.payload).expect("payload imports");
-        assert_eq!(export_ambre_plaintext(&reloaded, doc_id()), bytes);
+        assert_eq!(
+            export_ambre_plaintext(&reloaded, doc_id()).expect("the document reads"),
+            bytes
+        );
     }
 
     #[test]
     fn round_trip_preserves_the_document_state() {
         let source = populated();
         let expected: Vec<NodeId> = source.layer_order().to_vec();
-        let bytes = source.export_ambre_plaintext(doc_id());
+        let bytes = source
+            .export_ambre_plaintext(doc_id())
+            .expect("the document reads");
 
         let mut restored = ToileState::new();
         let (id, events) = restored
@@ -176,7 +187,9 @@ mod tests {
     fn a_rejected_file_leaves_both_the_input_and_the_state_alone() {
         // I3, on the two things a failed open must not damage: the file's bytes
         // and the board already open.
-        let good = populated().export_ambre_plaintext(doc_id());
+        let good = populated()
+            .export_ambre_plaintext(doc_id())
+            .expect("the document reads");
         let mut state = ToileState::new();
         state.import_ambre_plaintext(&good).expect("loads");
         let before_state = state.export_snapshot();

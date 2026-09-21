@@ -85,12 +85,17 @@ impl LogicState {
     /// every hop that drops it wipes it, and it prints as nothing in a log
     /// line.
     fn export_ambre_file_sealed(&mut self, document_id: DocumentId, passphrase: SecretBytes) {
-        let Some((filename, plaintext)) = self
-            .docs
-            .get(&document_id)
-            .map(|d| d.state.ambre_file_bytes(document_id))
-        else {
+        let Some(doc) = self.docs.get(&document_id) else {
             tracing::warn!("Logic: sealed .ambre export asked of a document that is not open");
+            return;
+        };
+        let Some((filename, plaintext)) = doc.state.ambre_file_bytes(document_id) else {
+            // Nothing to seal: a document the engine could not read becomes no
+            // file, sealed or not (`TOILE-IO-069`).
+            let answer = doc
+                .state
+                .export_failed_event("the document could not be read".to_owned());
+            self.dispatch_outcome(document_id, vec![answer], None, None, None, Vec::new());
             return;
         };
         let id = RequestId::next();

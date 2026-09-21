@@ -59,7 +59,9 @@ impl FixtureGen for Gen {
                 .map(|row| (row, 0, format!("row {row}")))
                 .collect(),
         });
-        state.export_ambre_plaintext(seeded_document_id(self.seed))
+        state
+            .export_ambre_plaintext(seeded_document_id(self.seed))
+            .expect("the document reads")
     }
 }
 

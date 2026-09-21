@@ -260,7 +260,9 @@ impl FixtureGen for ToileFixture {
             Self::ShapesAndFrame => build_shapes_and_frame(&mut state),
             Self::ConnectorsAndGroups => build_connectors_and_groups(&mut state),
         }
-        state.export_ambre_plaintext(seeded_document_id(seed))
+        state
+            .export_ambre_plaintext(seeded_document_id(seed))
+            .expect("the document reads")
     }
 }
 
@@ -484,7 +486,9 @@ impl FixtureGen for ToileBenchFixture {
             Self::DenseViewport2k => build_spread_board(&mut state, 4, 600.0, 24.0),
             Self::Deck50 => build_deck(&mut state, 50),
         }
-        state.export_ambre_plaintext(seeded_document_id(seed))
+        state
+            .export_ambre_plaintext(seeded_document_id(seed))
+            .expect("the document reads")
     }
 }
 

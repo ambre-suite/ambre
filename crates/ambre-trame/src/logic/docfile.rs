@@ -23,15 +23,15 @@ use super::*;
 ///
 /// Pure and crypto-free (`FIXTURE-007`). Protection, when it applies, is a
 /// separate stage owned by `ambre-sync` (`docfile`).
-pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Vec<u8> {
-    let payload = doc.export(ExportMode::Snapshot).unwrap_or_else(|e| {
-        // Same treatment as `TrameState::export_snapshot`: never silently, since
-        // the caller is about to write these bytes to a file the user believes
-        // holds their document.
-        tracing::error!("[Trame] .ambre export failed, writing an empty payload: {e:?}");
-        Vec::new()
-    });
-    write_ambre_plaintext(DocType::Trame, doc_id, &payload)
+pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Uuid) -> Option<Vec<u8>> {
+    // `None` rather than a header over nothing, as the board half answers
+    // (`TOILE-IO-069`). A valid file that opens empty reads as a document the
+    // user emptied.
+    let payload = doc
+        .export(ExportMode::Snapshot)
+        .inspect_err(|e| tracing::error!("[Trame] .ambre export failed, writing no file: {e:?}"))
+        .ok()?;
+    Some(write_ambre_plaintext(DocType::Trame, doc_id, &payload))
 }
 
 /// Validate a plaintext `.ambre` as a *Trame* document and hand back the header
@@ -57,7 +57,8 @@ impl TrameState {
     /// `doc_id` is supplied by the caller because the engine does not hold the
     /// document's identity. The registry does (`ambre-logic`), and a fixture
     /// generator pins it from its seed (`ambre-spec-fixtures.md`).
-    pub fn export_ambre_plaintext(&self, doc_id: Uuid) -> Vec<u8> {
+    /// `None` when the document could not be read, so no file is written.
+    pub fn export_ambre_plaintext(&self, doc_id: Uuid) -> Option<Vec<u8>> {
         export_ambre_plaintext(&self.doc, doc_id)
     }
 
@@ -150,7 +151,9 @@ mod tests {
     #[test]
     fn the_header_names_trame_and_the_document() {
         let state = populated();
-        let bytes = state.export_ambre_plaintext(doc_id());
+        let bytes = state
+            .export_ambre_plaintext(doc_id())
+            .expect("the document reads");
         let header = import_ambre_plaintext(&bytes).expect("a Trame container");
         assert_eq!(header.version, AMBRE_VERSION);
         assert_eq!(header.doc_type, DocType::Trame);
@@ -166,16 +169,23 @@ mod tests {
         // on a bare `LoroDoc` rather than a `TrameState`, because
         // `TrameState::new` commits its own default-sheet op under a fresh random
         // peer id. That op is a second peer's history, not a lost round trip.
-        let bytes = populated().export_ambre_plaintext(doc_id());
+        let bytes = populated()
+            .export_ambre_plaintext(doc_id())
+            .expect("the document reads");
         let header = import_ambre_plaintext(&bytes).expect("a Trame container");
         let reloaded = LoroDoc::new();
         reloaded.import(&header.payload).expect("payload imports");
-        assert_eq!(export_ambre_plaintext(&reloaded, doc_id()), bytes);
+        assert_eq!(
+            export_ambre_plaintext(&reloaded, doc_id()).expect("the document reads"),
+            bytes
+        );
     }
 
     #[test]
     fn round_trip_preserves_the_document_state() {
-        let bytes = populated().export_ambre_plaintext(doc_id());
+        let bytes = populated()
+            .export_ambre_plaintext(doc_id())
+            .expect("the document reads");
         let mut restored = TrameState::new();
         let (id, _events) = restored
             .import_ambre_plaintext(&bytes)
@@ -219,7 +229,9 @@ mod tests {
     fn a_rejected_file_leaves_both_the_input_and_the_state_alone() {
         // I3, on the two things a failed open must not damage: the file's bytes
         // and the document already open.
-        let good = populated().export_ambre_plaintext(doc_id());
+        let good = populated()
+            .export_ambre_plaintext(doc_id())
+            .expect("the document reads");
         let mut state = TrameState::new();
         state.import_ambre_plaintext(&good).expect("loads");
         let before_state = state.export_snapshot();

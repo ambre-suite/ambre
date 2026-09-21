@@ -3542,7 +3542,6 @@
   {"edge": "verified-by", "from": "TOILE-IO-010", "to": "ambre_toile::logic::state::docfile::tests::round_trip_preserves_the_document_state"},
   {"edge": "verified-by", "from": "TOILE-IO-010", "to": "ambre_toile::logic::state::docfile::tests::the_header_names_toile_and_the_document"},
   {"edge": "cites-section", "from": "TOILE-IO-069", "section": "3", "to": "3-Toile/features/ambre-spec-toile-import-export.md"},
-  {"edge": "lands-with", "from": "TOILE-IO-069", "to": "A board the export could not read becomes no file"},
   {"edge": "cites-section", "from": "TOILE-IO-020", "section": "4", "to": "3-Toile/features/ambre-spec-toile-import-export.md"},
   {"edge": "cites-section", "from": "TOILE-IO-098", "section": "4", "to": "3-Toile/features/ambre-spec-toile-import-export.md"},
   {"edge": "verified-by", "from": "TOILE-IO-098", "to": "ambre_toile::ui::interop::tests::a_format_no_converter_reads_is_refused"},

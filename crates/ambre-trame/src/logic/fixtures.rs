@@ -261,7 +261,9 @@ impl FixtureGen for TrameFixture {
             // one that does not fit the shared `state` above.
             Self::TwoPeerMerge => build_two_peer_merge(&mut state, seed),
         }
-        state.export_ambre_plaintext(seeded_document_id(seed))
+        state
+            .export_ambre_plaintext(seeded_document_id(seed))
+            .expect("the document reads")
     }
 }
 
@@ -503,7 +505,9 @@ impl FixtureGen for TrameBenchFixture {
             Self::FormulaDag10k => build_formula_cascade(&mut state),
             Self::ExportSheet10k => build_literal_grid(&mut state, 1_250, 8),
         }
-        state.export_ambre_plaintext(seeded_document_id(seed))
+        state
+            .export_ambre_plaintext(seeded_document_id(seed))
+            .expect("the document reads")
     }
 }
 
