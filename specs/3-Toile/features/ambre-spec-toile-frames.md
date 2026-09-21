@@ -23,6 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-011` | `INV` | A frame's children MUST paint after the frame: a child's place in the paint order MUST be later than its frame's. | this spec section 3 | `ambre_toile::logic::convergence_tests::frame_children_paint_after_their_frame` -- it creates both children before the frame so the clamp has to fire, and reads the paint order back. The two membership tests this row also cited never read that order | none | verified |
 | `TOILE-049` | `INV` | An element MUST belong to at most one container: joining a frame MUST detach it from its group. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_detaches_from_a_group` -- both memberships are read back | none | verified |
 | `TOILE-051` | `CONC` | A frame's speaker-notes container MUST exist from its birth, so two peers editing it first MUST converge. | this spec section 3; `TOILE-029` | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` | none | verified |
+| `TOILE-252` | `CONC` | Two users naming one frame at once MUST converge on one writer's whole name. | this spec section 3; `TOILE-018` | `ambre_toile::logic::convergence_tests::concurrent_names_converge_on_one_whole_name` -- two peers naming one frame, converging on one of the two names entire | none | verified |
 
 ### 1.2 Add a selection to a frame
 
@@ -36,17 +37,26 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-102` | `FRAME` | A membership change that changes nothing MUST write nothing and broadcast nothing. | this spec section 3 | none | unheld -- the handler returns before any commit when neither list moved, and no test sends a gesture with no effect; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-050` | `FAIL` | A membership change aimed at an element that is not a frame MUST be refused, and MUST write nothing. | this spec section 3 | none | unheld -- the handler returns silently, with no event at all, where a frame the board does not hold returns an unknown-element error, so a surface cannot tell the refusal from a no-op. Neither path is tested; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
+### 1.3 Name a frame
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-247` | `POST` | Naming a frame MUST make the board hold that name, so every surface reading a frame's title reads what the user typed. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_named_frame_is_found_by_its_title` -- the name read back off the board, trimmed, and the search finding the frame by it; `ambre_toile::tests::chrome_ui::deck_panel_names_a_frame` -- the panel's field emitting that name for a deck frame and for one off it | none | verified |
+| `TOILE-248` | `POST` | Naming a frame MUST be one undo item. | this spec section 3 | `ambre_toile::logic::convergence_tests::naming_a_frame_is_bounded_undoable_and_refused_off_a_frame` -- one undo takes the name and leaves the frame, and the redo brings it back | none | verified |
+| `TOILE-249` | `POST` | A name MUST be bounded, so no frame can carry a title the document cannot hold. | this spec section 3 | `ambre_toile::logic::convergence_tests::naming_a_frame_is_bounded_undoable_and_refused_off_a_frame` -- a title past the bound, read back cut to it | none | verified |
+| `TOILE-250` | `FRAME` | A naming that changes nothing MUST write nothing and broadcast nothing. | this spec section 3 | `ambre_toile::logic::convergence_tests::naming_a_frame_is_bounded_undoable_and_refused_off_a_frame` -- the same name again, answering no delta and no event | none | verified |
+| `TOILE-251` | `FAIL` | A naming aimed at an element that is not a frame MUST be refused, and MUST write nothing. | this spec section 3 | `ambre_toile::logic::convergence_tests::naming_a_frame_is_bounded_undoable_and_refused_off_a_frame` -- a sticky answering the kind-mismatch error, with no delta and its own body untouched | none | verified |
+
 * **Budget.** the membership change under 1 ms, the transform-command row of
   `ambre-spec-budgets.md section 1`. The clamp re-materializes the whole paint order per moved
   child, so the figure is per child out of order and no bench measures it.
 * **Boundary.** none of its own: a frame and its membership live in the Logic thread's document and
   leave as bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 5 `verified`, 1 `failing`, 4 `untested`. What holds is membership as data: an
-  element joins one frame, leaves it, detaches from its group, paints after it, and the notes
-  converge. What is loose is everything the gesture refuses or skips: the re-append, the ineligible
-  id that must not stop the rest. The empty change that writes nothing and the non-frame nobody can
-  tell from a no-op are loose too. The failure is the two undo items a fired clamp produces
-  (`TOILE-048`).
+* **Verification.** 11 `verified`, 1 `failing`, 4 `untested`. What holds is membership as data and
+  the title beside it. An element joins one frame, leaves it, detaches from its group and paints
+  after it, and both the notes and the name converge. What is loose is what the membership gesture
+  refuses or skips: the re-append, the ineligible id, the empty change, the non-frame. The failure
+  is the two undo items a fired clamp produces (`TOILE-048`).
 
 ---
 
@@ -58,6 +68,7 @@ status values are normative in `ambre-spec-template.md`.
 | adds a shape to a frame | brings that shape to the back | the membership, and a paint order the clamp corrected | the shape above its frame on both screens (`TOILE-011`) | `logic::convergence_tests::frame_children_paint_after_their_frame` |
 | edits the frame's speaker notes | edits the same notes at the same moment | both sentences, character by character | one merged text, with neither sentence lost | `logic::convergence_tests::concurrent_notes_edits_converge` |
 | deletes the frame | moves a child of it | the frame gone; the child moved and no longer a member | the child alone on the board | `logic::convergence_tests::caches_match_a_full_rebuild` |
+| names the frame "Agenda" | names it "Roadmap" at the same moment | one of the two names, whole | the same title on both screens, never a blend (`TOILE-252`) | `logic::convergence_tests::concurrent_names_converge_on_one_whole_name` |
 
 Deleting a frame does not delete its members: only a group cascades
 (`features/ambre-spec-toile-groups.md`).
@@ -71,9 +82,9 @@ nested containers, both declared in `ambre-spec-toile-schema.md section 3`: a me
 speaker-notes text. Its optional layout register belongs to
 `features/ambre-spec-toile-auto-layout.md`.
 
-**Command** (`ambre-bus`): `SetFrameChildren { frame, add, remove }`, meant as one undo item.
-Creating, moving, resizing, rotating, reordering and deleting a frame use the ordinary element
-commands (`features/ambre-spec-toile-elements.md`).
+**Commands** (`ambre-bus`): `SetFrameChildren { frame, add, remove }` and `RenameFrame { frame, name }`,
+each meant as one undo item. Creating, moving, resizing, rotating, reordering and deleting a frame use
+the ordinary element commands (`features/ambre-spec-toile-elements.md`).
 
 **Steps, when membership changes:**
 
@@ -89,6 +100,19 @@ commands (`features/ambre-spec-toile-elements.md`).
 7. commit;
 8. clamp every child that sits below the frame in the paint order to just above it. Commit again
    if anything moved (`TOILE-011`, and the reason `TOILE-048` fails).
+
+**Steps, when a frame is named:**
+
+1. resolve the frame and refuse anything that is not one (`TOILE-251`);
+2. trim the name and cut it to the bound, so no title outgrows what the document carries
+   (`TOILE-249`);
+3. stop and write nothing when the name did not change (`TOILE-250`);
+4. write it as one register and commit once (`TOILE-247`, `TOILE-248`).
+
+**The name is one register, never a shared text.** A title is short and written by one person at a
+time. The whole value converging on one writer is what a user expects, where a character-wise text
+would interleave two titles into a third nobody typed. That is the opposite choice from the
+speaker notes beside it, which two people do write together (`TOILE-051`).
 
 **Why the containers are seeded at birth.** The notes text and the membership list are created in the
 frame's own creation write, not on the first edit. A lazy per-peer seed would mint two rival
@@ -111,10 +135,11 @@ is the format's (`TOILE-029`), and the frame is the place the code applies it (`
 |---|---|
 | the frame tool, dragged on the board | `CreateElement` with the frame kind (`features/ambre-spec-toile-tools.md`) |
 | "Add to frame", in the context menu over a selection inside a frame | `SetFrameChildren` adding the selection (`features/ambre-spec-toile-menus.md`) |
+| typing in a deck row's name field | `RenameFrame` for that frame (`features/ambre-spec-toile-presentation.md section 4`) |
 
 **What a frame looks like.** A rectangle painted from its own style register, before its members,
-so it reads as a background rather than a box drawn over them. Its title is designed and unwritten
-(`features/ambre-spec-toile-find.md`).
+so it reads as a background rather than a box drawn over them. Its title is board data and the deck
+panel is where it is typed; the board itself paints no title yet.
 
 **What no surface offers.** Removing an element from a frame, and dropping an element into a frame by
 dragging it there. The context menu's one entry adds; nothing removes, and membership is never
@@ -128,6 +153,7 @@ implied by position.
 | :--- | :--- | :--- |
 | A frame is an element | a parallel container map, with a duplicated lifecycle and a per-frame stack | as an element, move, resize, rotate, delete and reorder apply for free and there is one paint order rather than one per frame; only the frame-specific content needs handlers |
 | Membership is declared, never spatial | membership by containment, recomputed on every move | a user drags a shape across a frame constantly, so every drag would change the document, and two overlapping frames would leave the membership ambiguous |
+| A frame's name is one register | a character-wise text, like the speaker notes | a title is short and written by one person at a time. Two writers would interleave into a third title nobody typed, where a register converges on one of the two whole |
 | The ordering rule is enforced, not assumed | trusting the writers | a concurrent reorder can put a child under its frame, and the frame would then paint over its own contents. Clamping is cheap and makes the nesting a property rather than a convention |
 | The ordering rule is enforced, not assumed | painting the frame in a pass of its own | a frame painted in its own pass is always in front or always behind, so the paint order stops saying anything about two frames overlapping, and the author loses a control they had |
 | An element belongs to one container | multiple membership, resolved at derivation | a shape in a frame and in a group has two owners for one position, and the two would fight over it on every transform |
@@ -157,8 +183,8 @@ implied by position.
 * **The membership list is seeded beside the notes and nothing proves it.** Both containers are born
   with the frame, and only the notes have a concurrent-first-write test (`TOILE-051`). Two peers each
   adding the first child to a fresh frame is the same collision, untested.
-* **A frame has no title.** The search walks a frame's name field and no command writes it, so a frame
-  is unnamed on the board and unfindable by name (`features/ambre-spec-toile-find.md`).
+* **A frame's title is never painted.** The name is written, found and listed, and the board draws
+  no title bar over the frame. A user reads a frame's name in the deck panel and nowhere else.
 * **A resized frame does not carry its members.** The members keep their world positions, so shrinking
   a frame leaves them outside it and nothing says whether they are still members. They are.
 * **Nesting a frame in a frame is neither allowed nor refused.** The handler refuses only the frame

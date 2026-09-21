@@ -264,6 +264,12 @@ impl Default for ElementStyle {
     }
 }
 
+/// Longest frame title the document carries, in characters (`TOILE-249`). A
+/// title names a region of a board and is read in a one-line field, so nothing
+/// legible reaches this. The cut is what keeps an unbounded register out of a
+/// document every peer replicates.
+pub const FRAME_NAME_MAX: usize = 120;
+
 /// The default sticky-note card colour (ARGB): a warm pastel yellow, the Miro /
 /// Figma-whiteboard default. Used as the seeded fill for a `sticky` element and
 /// as the Sticky tool's default colour (`toile-tools`).
@@ -1039,6 +1045,16 @@ pub enum ToileCommand {
         frame: ElementId,
         add: Vec<ElementId>,
         remove: Vec<ElementId>,
+    },
+    /// Name a frame (`toile-frames`). The title is one LWW register, not a
+    /// shared text. A title is short and written by one person at a time. Two
+    /// writers converge on one whole name, never interleaving into a third
+    /// (`TOILE-252`). Trimmed and cut to
+    /// [`FRAME_NAME_MAX`](crate::app::toile::FRAME_NAME_MAX) by the engine.
+    /// One undo item.
+    RenameFrame {
+        frame: ElementId,
+        name: String,
     },
 
     // -- Presentation (`toile-presentation`) --

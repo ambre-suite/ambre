@@ -34,7 +34,7 @@ nothing, that it wraps and that an empty query clears. This table owns what a To
 | `TOILE-079` | `POST` | Hits MUST be returned in paint order, so stepping follows the stacking rather than the storage. | this spec section 3 | `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default` -- its one assertion is an ordered vector of two ids, so it falsifies the order as well as the folding below, which is why both rows cite it | none | verified |
 | `TOILE-080` | `POST` | An element the paint order omits MUST still be found, after the ordered hits and in an order every peer computes alike. | this spec section 3 | none | unheld -- the fallback appends the unlisted elements the bounds map holds, sorted by identity, and no test drives an element missing from the order. The paint walk carries no such fallback (`TOILE-058`); lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-142` | `POST` | An element carrying no searchable body MUST NOT match, whatever its geometry or style holds. | this spec section 3 | `ambre_toile::logic::convergence_tests::find_ignores_non_text_elements_and_empty_query` -- a rectangle answers no hits for its own kind name | none | verified |
-| `TOILE-082` | `POST` | A frame MUST be findable by its title. | this spec section 3 | none | fails -- the walk reads a frame title field that no command in the workspace writes, so the branch can never match, section 6. It lands with the `A frame carries a title` Story (`ambre-roadmap.md` E6) | failing |
+| `TOILE-082` | `POST` | A frame MUST be findable by its title. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_named_frame_is_found_by_its_title` -- an unnamed frame matching nothing, then the same frame found by the title it was given (`TOILE-247`) | none | verified |
 | `TOILE-143` | `POST` | A query MUST match without regard to case unless the user asks otherwise. | this spec section 3 | `ambre_toile::logic::convergence_tests::find_matches_in_z_order_and_is_case_insensitive_by_default` -- its hit vector names an element whose body differs from the query in case alone | none | verified |
 | `TOILE-144` | `POST` | With the case option set, a body MUST match only where the case agrees. | this spec section 3 | none | unheld -- `ambre_toile::logic::convergence_tests::find_honors_match_case_and_whole_word` counts two hits out of three bodies rather than naming them, and the wrong two (the folded body and the exact one, dropping the longer word) also count two; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-145` | `POST` | With the whole-word option set, a match MUST be bounded by a non-alphanumeric character on each side. | this spec section 3 | `ambre_toile::logic::convergence_tests::find_honors_match_case_and_whole_word` -- its second half names the one surviving element rather than counting, so the body the query only prefixes is dropped | none | verified |
@@ -55,11 +55,11 @@ Where the step lands is `ambre-spec-find.md`. What the camera does about it is T
   fifty thousand elements.
 * **Boundary.** none: the query never leaves the client and the results never enter the document. The
   panel is chrome on the UI thread, where `UI-THREAD-004` bans a network, crypto or persistence path.
-* **Verification.** 8 `verified`, 1 `failing`, 6 `untested`. The shared rules are `ambre-spec-find.md`;
-  what is counted here is what a Toile match is. What holds is the walk over element bodies, on seven
-  tests carrying eleven assertions, and the token naming the recentre request (`TOILE-UI-117`). What
-  is loose is its two edges and the whole camera half, where nothing drives the recentre and no test
-  reads the zoom back. The failure is the unwritten frame title (`TOILE-082`).
+* **Verification.** 9 `verified`, 6 `untested`. The shared rules are `ambre-spec-find.md`; what is
+  counted here is what a Toile match is. What holds is the walk over element bodies and frame
+  titles, on eight tests, and the token naming the recentre request (`TOILE-UI-117`). What is loose
+  is its two edges and the whole camera half, where nothing drives the recentre and no test reads
+  the zoom back.
 
 ---
 
@@ -88,9 +88,9 @@ pub struct FindResults { pub hits: Vec<ElementId>, pub focus: Option<ElementId> 
 
 **What a board match is** (the shared walk is `ambre-spec-find.md section 3`):
 
-* a note's body, a text element's body, and a frame's title -- a field nothing writes, which is why
-  `TOILE-082` fails. Every other kind matches nothing, a shape and a picture included
-  (`TOILE-142`);
+* a note's body, a text element's body, and a frame's title, which the deck panel writes
+  (`TOILE-082`, `features/ambre-spec-toile-frames.md`). Every other kind matches nothing, a shape
+  and a picture included (`TOILE-142`);
 * the hits come back in paint order, so stepping follows the stacking rather than the storage
   (`TOILE-079`);
 * the text-bearing elements the paint order omits are appended, sorted by identity. An unlisted
@@ -150,10 +150,9 @@ clear -- are `ambre-spec-find.md section 5`. Toile's own:
 The shared gaps -- the live shared session, the undebounced walk -- are in
 `ambre-spec-find.md section 6`. Toile's own:
 
-* **A frame cannot be found by name** (`TOILE-082`). The walk reads a frame's title field, and no command
-  writes one. No section of the corpus declared the field until the format table did
-  (`ambre-spec-toile-schema.md`). The branch is unreachable, so a board organized into named frames
-  is searchable only through the notes inside them.
+* **A found frame is highlighted and never labelled.** The walk matches a title the board paints
+  nowhere (`features/ambre-spec-toile-frames.md`). A hit on a frame outlines a region whose name
+  the user opens the deck panel to read.
 * **The fallback has no test** (`TOILE-080`). An element missing from the paint order is found here
   and is invisible on the board (`TOILE-058`). The two halves of the same design disagree, and only
   one of them is exercised.

@@ -622,6 +622,117 @@ fn find_matches_in_z_order_and_is_case_insensitive_by_default() {
     assert_eq!(r.focus, Some(a));
 }
 
+/// `TOILE-247` and `TOILE-082`: a frame the user named is held under that name
+/// and found by it. That is the field the search walk has always read and
+/// nothing wrote.
+#[test]
+fn a_named_frame_is_found_by_its_title() {
+    let mut st = ToileState::new();
+    let frame = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let opts = crate::logic::command::FindOptions::default();
+    assert!(
+        find(&mut st, "agenda", opts, None).hits.is_empty(),
+        "an unnamed frame matches nothing"
+    );
+
+    let out = st.handle_command(ToileCommand::RenameFrame {
+        frame: frame.clone(),
+        name: "  Agenda  ".into(),
+    });
+    assert!(out.update.is_some(), "a name broadcasts a delta");
+    assert_eq!(st.frame_name(&frame), "Agenda", "the name is trimmed");
+    assert_eq!(find(&mut st, "agenda", opts, None).hits, vec![frame]);
+}
+
+/// `TOILE-248`, `TOILE-249`, `TOILE-250` and `TOILE-251`: what a naming does
+/// besides naming. One undo item, a bounded title, silence on a no-op, and a
+/// refusal for anything that is not a frame.
+#[test]
+fn naming_a_frame_is_bounded_undoable_and_refused_off_a_frame() {
+    let mut st = ToileState::new();
+    let frame = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    st.handle_command(ToileCommand::RenameFrame {
+        frame: frame.clone(),
+        name: "Agenda".into(),
+    });
+
+    // One undo item: the name goes, the frame stays.
+    st.handle_command(ToileCommand::Undo);
+    assert_eq!(st.frame_name(&frame), "");
+    assert_eq!(st.element_count(), 1);
+    st.handle_command(ToileCommand::Redo);
+    assert_eq!(st.frame_name(&frame), "Agenda");
+
+    // The same name again writes nothing at all.
+    let out = st.handle_command(ToileCommand::RenameFrame {
+        frame: frame.clone(),
+        name: "Agenda".into(),
+    });
+    assert!(out.update.is_none() && out.display.is_empty());
+
+    // A title no document should carry is cut to the bound.
+    let long = "x".repeat(ambre_bus::app::toile::FRAME_NAME_MAX + 50);
+    st.handle_command(ToileCommand::RenameFrame {
+        frame: frame.clone(),
+        name: long,
+    });
+    assert_eq!(
+        st.frame_name(&frame).chars().count(),
+        ambre_bus::app::toile::FRAME_NAME_MAX
+    );
+
+    // Anything that is not a frame is refused, and keeps its own body.
+    let sticky = create_sticky(&mut st, Point::new(400.0, 0.0), "note");
+    let out = st.handle_command(ToileCommand::RenameFrame {
+        frame: sticky.clone(),
+        name: "Agenda".into(),
+    });
+    assert!(out.update.is_none(), "the refusal wrote to the document");
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, ToileEvent::Error(ToileError::ContentKindMismatch))),
+        "the refusal said nothing: {:?}",
+        out.display
+    );
+    assert_eq!(st.frame_name(&sticky), "");
+}
+
+/// `TOILE-252`: two users naming one frame at once converge on one writer's
+/// whole name. A character-wise text would interleave them into a third title
+/// nobody typed.
+#[test]
+fn concurrent_names_converge_on_one_whole_name() {
+    let mut a = ToileState::new();
+    let frame = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    let mut b = ToileState::new();
+    b.apply_remote(&a.export_snapshot());
+
+    let da = a
+        .handle_command(ToileCommand::RenameFrame {
+            frame: frame.clone(),
+            name: "Agenda".into(),
+        })
+        .update
+        .expect("a delta");
+    let db = b
+        .handle_command(ToileCommand::RenameFrame {
+            frame: frame.clone(),
+            name: "Roadmap".into(),
+        })
+        .update
+        .expect("a delta");
+    b.apply_remote(&da);
+    a.apply_remote(&db);
+
+    let merged = a.frame_name(&frame);
+    assert_eq!(merged, b.frame_name(&frame), "the two names diverged");
+    assert!(
+        merged == "Agenda" || merged == "Roadmap",
+        "a blend of the two: {merged:?}"
+    );
+}
+
 #[test]
 fn find_focus_wraps_after_from() {
     let mut st = ToileState::new();

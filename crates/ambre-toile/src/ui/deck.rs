@@ -85,6 +85,10 @@ pub enum DeckIntent {
     Shift(usize, Move),
     /// Move this viewer's playback to a slide (`TOILE-FEAT-081`).
     Goto(usize),
+    /// Name a frame, deck member or not (`TOILE-247`). It names the frame
+    /// rather than a rank, because the panel's second list holds frames no
+    /// rank addresses.
+    Rename(FrameId, String),
 }
 
 /// The signals the canvas view and the DOM panel share (`toile-presentation`

@@ -1969,6 +1969,13 @@ impl ToileView {
                 self.send_edit(ToileCommand::GotoSlide(at));
                 return;
             }
+            // The engine refuses a non-frame and a name that changed nothing,
+            // so the panel sends what was typed and reads the answer back
+            // (`TOILE-250`, `TOILE-251`).
+            DeckIntent::Rename(frame, name) => {
+                self.send_edit(ToileCommand::RenameFrame { frame, name });
+                return;
+            }
         };
         if let Some(order) = next {
             self.send_edit(ToileCommand::SetSlideOrder { order });

@@ -228,6 +228,7 @@ whatever overlaps its box. An element in no frame never animates.
 | a deck row's up / down button | swaps that slide with its neighbour, as one undo item (`TOILE-FEAT-077`) |
 | a deck row's remove button | drops the slide, and leaves the frame on the board |
 | a click on a deck row | moves this viewer to that slide (`TOILE-FEAT-081`) |
+| typing in a row's title field | names that frame, deck member or not (`features/ambre-spec-toile-frames.md`, `TOILE-247`) |
 | the panel's previous and next buttons | move this viewer one slide, and break any follow |
 | the panel's exit button | leaves presentation mode, and stops broadcasting |
 | the panel's broadcast button | starts or stops sharing this viewer's slide with peers |
@@ -245,6 +246,11 @@ stops being offered (`TOILE-UI-315`).
 trims the common head and tail, and sends what is left as one insert and one delete (`TOILE-UI-088`). That is
 what a keystroke and a paste each produce, and it is what makes two authors converge instead of overwriting
 each other (`TOILE-FEAT-008`).
+
+**The deck panel is where a frame is named.** Each row's title is an editable field, on both lists, so
+a frame off the deck is named as easily as a slide. The field carries the frame's own name and shows
+its rank as a placeholder. One edit leaves as one command, never one per keystroke (`TOILE-247`,
+`TOILE-248`).
 
 **The deck panel** is the second floating component of the subject, opened from the Present menu. It is
 independent of presentation mode: a user builds the deck before presenting it. It lists the deck in playback

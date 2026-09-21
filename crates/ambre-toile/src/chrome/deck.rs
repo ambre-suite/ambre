@@ -10,10 +10,29 @@
 // DOM names no command channel, and the panel keeps no order of its own.
 // ============================================================================
 
-use ambre_bus::app::toile::DeckView;
+use ambre_bus::app::toile::{DeckView, FrameId};
 use leptos::prelude::*;
+use wasm_bindgen::JsCast as _;
 
 use crate::ui::deck::{DeckIntent, Move, deck_label};
+
+/// The `change` handler of one row's title field: it emits the typed name for
+/// `frame` (`TOILE-247`). `change` rather than `input`, so one edit is one
+/// command and one undo item rather than one per keystroke (`TOILE-248`).
+fn name_handler(
+    on_intent: Callback<DeckIntent>,
+    frame: FrameId,
+) -> impl Fn(web_sys::Event) + 'static {
+    move |ev: web_sys::Event| {
+        let Some(field) = ev
+            .target()
+            .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+        else {
+            return;
+        };
+        on_intent.run(DeckIntent::Rename(frame.clone(), field.value()));
+    }
+}
 
 /// The deck panel. `state` is the open flag, set by the Present menu. `view`
 /// is the board's frames as the view last read them, and `on_intent` carries
@@ -50,11 +69,18 @@ pub fn DeckPanel(
                                     <li class="ambre-deck-row">
                                         <button
                                             class="ambre-deck-goto"
+                                            aria-label="Go to slide"
                                             on:click=move |_| on_intent.run(DeckIntent::Goto(rank))
                                         >
                                             <span class="ambre-deck-rank">{(rank + 1).to_string()}</span>
-                                            <span class="ambre-deck-name">{deck_label(&frame, rank)}</span>
                                         </button>
+                                        <input
+                                            class="ambre-deck-name"
+                                            aria-label="Frame title"
+                                            placeholder=deck_label(&frame, rank)
+                                            prop:value=frame.name.clone()
+                                            on:change=name_handler(on_intent, frame.id.clone())
+                                        />
                                         <button
                                             class="ambre-deck-up"
                                             aria-label="Move up"
@@ -101,15 +127,23 @@ pub fn DeckPanel(
                                             let id = frame.id.clone();
                                             view! {
                                                 <li class="ambre-deck-pool-row">
+                                                    <input
+                                                        class="ambre-deck-name"
+                                                        aria-label="Frame title"
+                                                        placeholder=deck_label(&frame, rank)
+                                                        prop:value=frame.name.clone()
+                                                        on:change=name_handler(
+                                                            on_intent,
+                                                            frame.id.clone(),
+                                                        )
+                                                    />
                                                     <button
                                                         class="ambre-deck-add-btn"
+                                                        aria-label="Add to deck"
                                                         on:click=move |_| {
                                                             on_intent.run(DeckIntent::Add(id.clone()))
                                                         }
                                                     >
-                                                        <span class="ambre-deck-name">
-                                                            {deck_label(&frame, rank)}
-                                                        </span>
                                                         <span class="ambre-deck-plus">"+"</span>
                                                     </button>
                                                 </li>

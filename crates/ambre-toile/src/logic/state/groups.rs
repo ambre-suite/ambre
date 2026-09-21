@@ -11,6 +11,7 @@ use loro::{LoroMap, LoroMovableList, LoroValue};
 use crate::logic::command::{ToileError, ToileEvent, ToileOutcome};
 use crate::logic::index::ElementBounds;
 use crate::logic::model::{ElementId, NodeId};
+use ambre_bus::app::toile::FRAME_NAME_MAX;
 
 use super::codec::{em_seed_group, str_of};
 use super::{CHILDREN, ELEMENTS, LAYERS, ToileState};
@@ -207,6 +208,43 @@ impl ToileState {
         self.enforce_frame_zorder(frame);
         self.rematerialize_layers();
         self.emit_with_update(vec![self.viewport_event()])
+    }
+
+    /// The title a frame carries, empty until it is named. Test / integration
+    /// accessor; every surface reads it off the display payload instead.
+    pub fn frame_name(&self, frame: &ElementId) -> String {
+        self.element_map(frame)
+            .map(|em| str_of(&em, "name"))
+            .unwrap_or_default()
+    }
+
+    /// Name a frame (`TOILE-247`). The title is one LWW register, so two users
+    /// naming one frame converge on one of the two whole names rather than
+    /// interleaving them (`TOILE-252`).
+    ///
+    /// The name is trimmed and cut to [`FRAME_NAME_MAX`] characters, so no
+    /// title outgrows what every peer replicates (`TOILE-249`). A name that
+    /// did not change writes nothing (`TOILE-250`), and an element that is not
+    /// a frame is refused (`TOILE-251`). One commit, so one undo item
+    /// (`TOILE-248`).
+    pub(super) fn rename_frame(&mut self, frame: &ElementId, name: &str) -> ToileOutcome {
+        let Some(fm) = self.element_map(frame) else {
+            return self.err_no_element(frame);
+        };
+        if str_of(&fm, "type") != "frame" {
+            return ToileOutcome::display_only(vec![ToileEvent::Error(
+                ToileError::ContentKindMismatch,
+            )]);
+        }
+        let name: String = name.trim().chars().take(FRAME_NAME_MAX).collect();
+        if str_of(&fm, "name") == name {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        let _ = fm.insert("name", name.as_str());
+        self.doc.commit();
+        // The deck panel reads a frame by its title, and holds no copy of its
+        // own (`TOILE-UI-343`).
+        self.emit_with_update(vec![self.viewport_event(), ToileEvent::DeckChanged])
     }
 
     /// Clamp every child of `frame` to paint after (above) the frame in

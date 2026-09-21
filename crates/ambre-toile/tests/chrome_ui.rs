@@ -404,6 +404,7 @@ fn selection_toolbar_delete_fires_command() {
         any_locked: false,
         any_unlocked: true,
         fill: None,
+        mixed: Default::default(),
     }));
     let fired = RwSignal::new(None::<CommandId>);
     let on_command = Callback::new(move |id: CommandId| fired.set(Some(id)));
@@ -645,14 +646,13 @@ fn deck_panel_lists_the_slides_in_order() {
         .query_selector_all(".ambre-deck-list .ambre-deck-name")
         .unwrap();
     assert_eq!(names.length(), 2);
-    assert_eq!(
-        names.item(0).unwrap().text_content().as_deref(),
-        Some("Agenda")
-    );
-    assert_eq!(
-        names.item(1).unwrap().text_content().as_deref(),
-        Some("Frame 2")
-    );
+    let field =
+        |i: u32| -> web_sys::HtmlInputElement { names.item(i).unwrap().dyn_into().unwrap() };
+    assert_eq!(field(0).value(), "Agenda");
+    // An unnamed frame reads by its rank, and the field stays empty so typing
+    // starts on a blank title rather than on the placeholder.
+    assert_eq!(field(1).value(), "");
+    assert_eq!(field(1).placeholder(), "Frame 2");
     root.remove();
 }
 
@@ -687,6 +687,49 @@ fn deck_panel_edits_fire_intents() {
     assert_eq!(
         fired.get_untracked(),
         Some(DeckIntent::Add(ElementId("c".to_owned())))
+    );
+    root.remove();
+}
+
+/// `TOILE-247`: the panel is where a frame is named, deck member or not. One
+/// edit leaves as one intent naming that frame, so the engine writes one undo
+/// item rather than one per keystroke (`TOILE-248`).
+#[wasm_bindgen_test]
+fn deck_panel_names_a_frame() {
+    let owner = Owner::new();
+    owner.set();
+    let (root, fired) = mount_deck(vec![deck_frame("a", "One")], vec![deck_frame("c", "Three")]);
+
+    let type_into = |sel: &str, text: &str| {
+        let field: web_sys::HtmlInputElement = root
+            .query_selector(sel)
+            .unwrap()
+            .unwrap()
+            .dyn_into()
+            .unwrap();
+        field.set_value(text);
+        field
+            .dispatch_event(&web_sys::Event::new("change").unwrap())
+            .unwrap();
+    };
+
+    type_into(".ambre-deck-list .ambre-deck-name", "Agenda");
+    assert_eq!(
+        fired.get_untracked(),
+        Some(DeckIntent::Rename(
+            ElementId("a".to_owned()),
+            "Agenda".to_owned()
+        ))
+    );
+
+    // A frame off the deck is named the same way: it has no rank to address.
+    type_into(".ambre-deck-pool .ambre-deck-name", "Roadmap");
+    assert_eq!(
+        fired.get_untracked(),
+        Some(DeckIntent::Rename(
+            ElementId("c".to_owned()),
+            "Roadmap".to_owned()
+        ))
     );
     root.remove();
 }
@@ -766,6 +809,7 @@ fn a_finished_export_names_its_file() {
     let owner = Owner::new();
     owner.set();
     let root = mount_notified(ToileEvent::ExportComplete {
+        skipped: Vec::new(),
         filename: "board.svg".to_owned(),
         data: Vec::new(),
     });
