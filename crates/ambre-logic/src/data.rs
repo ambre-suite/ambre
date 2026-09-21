@@ -34,6 +34,9 @@ impl LogicState {
             Ok(data) => ToileEvent::ExportComplete {
                 filename: PDF_FILENAME.to_owned(),
                 data,
+                // The deck walk draws every element through the shared surface,
+                // so a page holds what the slide holds.
+                skipped: Vec::new(),
             },
             Err(reason) => ToileEvent::ExportFailed(reason),
         };

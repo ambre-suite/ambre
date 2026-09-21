@@ -1068,7 +1068,16 @@ impl ToileView {
             // thread holds the board and serialized the bytes; the UI thread
             // owns the DOM, so this arm triggers the download (`TOILE-IO-085`).
             // Nothing on the board changed.
-            ToileEvent::ExportComplete { filename, data } => {
+            ToileEvent::ExportComplete {
+                filename,
+                data,
+                skipped,
+            } => {
+                // What the file could not express (`TOILE-IO-025`). The board
+                // is unchanged; the user is told what left it behind.
+                for line in &skipped {
+                    tracing::warn!("Toile: the export skipped {line}");
+                }
                 trigger_download(&filename, &data);
             }
             // Nothing to download: the notice is the shell's (`TOILE-IO-022`).

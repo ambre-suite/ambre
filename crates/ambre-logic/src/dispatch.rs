@@ -1409,7 +1409,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
         let doc_id = board_with_content(&mut state);
         match export_pdf_answer(&mut state, &ui_rx, doc_id) {
-            ambre_bus::app::toile::ToileEvent::ExportComplete { filename, data } => {
+            ambre_bus::app::toile::ToileEvent::ExportComplete { filename, data, .. } => {
                 assert_eq!(filename, "deck.pdf");
                 assert!(data.starts_with(b"%PDF-"), "a PDF header");
             }

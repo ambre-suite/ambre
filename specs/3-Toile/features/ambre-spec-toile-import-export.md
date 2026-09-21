@@ -68,11 +68,11 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-021` | `POST` | A user MUST be able to take the board out as a file. | this spec section 4 | `ambre_toile::logic::state::export::tests::the_board_exports_as_an_svg_document` -- it walks the board into the serializer and reads the element back out of the file; `ambre_toile::logic::state::export::tests::an_empty_board_exports_an_empty_document`; `ambre_toile::tests::chrome_ui::a_finished_export_names_its_file` -- it holds the confirmation | none | verified |
 | `TOILE-IO-085` | `POST` | The exported bytes MUST reach the browser's download path. | this spec section 4 | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), a `Blob` behind an object URL, clicked through a detached anchor. The bytes it is handed are `TOILE-IO-021` | none | qa-manual |
 | `TOILE-IO-004` | `POST` | An export MUST be deterministic: the same board yields a byte-stable structure. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::export_is_deterministic`; `ambre_toile::logic::interop::svg_export::tests::rect_serializes_with_fixed_attrs`; `ambre_toile::logic::interop::svg_export::tests::text_body_is_escaped`; `ambre_toile::logic::interop::svg_export::tests::float_formatter_trims`; `ambre_toile::logic::interop::tests::round_trip_rect_is_stable`; `ambre_toile::logic::interop::tests::round_trip_path_geometry_survives` | none | verified |
-| `TOILE-IO-025` | `POST` | An element the SVG serializer cannot express MUST be reported, never dropped in silence. | this spec section 3 | none | fails -- a sticky, a connector, a group, an embed and a stroke each serialize to nothing, and the export has no report at all, section 6; lands with the `The SVG writer holds what the board holds` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-IO-026` | `POST` | An exported element MUST carry its rotation. | this spec section 3 | none | fails -- the serializer reads the rotation field and writes no transform, so every element leaves axis-aligned, section 6; lands with the `The SVG writer holds what the board holds` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-IO-086` | `POST` | An export MUST hold every element the board holds: one placed left of or above the origin MUST NOT fall outside the frame. | this spec section 3 | none | fails -- the frame spans the origin to the far corner, so a negative coordinate leaves the element outside it, section 6; lands with the `The SVG writer holds what the board holds` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-IO-087` | `POST` | An exported picture MUST leave with its pixels, never with an address no reader can resolve. | this spec section 3 | none | fails -- a picture exports as a reference to its content address, which no reader outside Ambre can follow, section 6; lands with the `The SVG writer holds what the board holds` Story (`ambre-roadmap.md` E7) | failing |
-| `TOILE-IO-088` | `POST` | Exported text MUST carry the size and the colour it was drawn with. | this spec section 3 | none | fails -- text exports as a body at a point, with neither a size nor a paint, so it comes back in the default of whatever opens it, section 6; lands with the `The SVG writer holds what the board holds` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-IO-025` | `POST` | An element the SVG serializer cannot express MUST be reported, never dropped in silence. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::a_kind_the_writer_cannot_express_is_reported` -- a sticky, a group and a stroke each named, with the shape beside them still written; `ambre_toile::logic::interop::svg_export::tests::a_picture_without_pixels_is_reported` | partial -- a connector is not an element, so the board walk never offers one to the serializer and the file loses every arrow with nothing said; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-IO-026` | `POST` | An exported element MUST carry its rotation. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::a_rotated_element_carries_its_angle` -- the transform a rotated element writes, and the wrapper an upright one does not | none | verified |
+| `TOILE-IO-086` | `POST` | An export MUST hold every element the board holds: one placed left of or above the origin MUST NOT fall outside the frame. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::the_frame_holds_an_element_placed_before_the_origin` -- the frame a board reaching before the origin writes, and the `0 0` one a board in the positive quadrant keeps | none | verified |
+| `TOILE-IO-087` | `POST` | An exported picture MUST leave with its pixels, never with an address no reader can resolve. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::a_picture_leaves_with_its_pixels` -- the inline data the file carries, and the address it no longer names | none | verified |
+| `TOILE-IO-088` | `POST` | Exported text MUST carry the size and the colour it was drawn with. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::text_carries_its_size_and_its_ink` | none | verified |
 | `TOILE-IO-017` | `POST` | The PNG render-back MUST run offscreen, on the UI thread's own surface. | this spec section 3 | not built | unbuilt -- lands with the `PNG export` Story (`ambre-roadmap.md` E6). It needs a real GPU adapter, so its belt is wasm-tier | unimplemented |
 | `TOILE-IO-024` | `FRAME` | An export MUST NOT change the board: it MUST emit no CRDT delta. | this spec section 3 | `ambre_toile::logic::state::export::tests::exporting_twice_yields_the_same_bytes_and_changes_nothing` -- every export in that module reads the empty update on its way through | none | verified |
 | `TOILE-IO-097` | `FRAME` | A PNG export MUST NOT block the visible frame. | this spec section 3 | not built | unbuilt -- lands with the `PNG export` Story (`ambre-roadmap.md` E6). It needs a real GPU adapter, so its belt is wasm-tier | unimplemented |
@@ -114,10 +114,10 @@ status values are normative in `ambre-spec-template.md`.
   the pixels an import produces reach the relay as ciphertext alone
   (`features/ambre-spec-toile-media.md section 1`, `TOILE-IO-013`). The showcase bundle is the one
   deliberate exit from the zero-knowledge boundary, and `TOILE-IO-096` makes it say so.
-* **Verification.** 30 `verified`, 7 `failing`, 2 `untested`, 12 `unimplemented`, 2 `qa-manual`. What
-  holds is the drop point, the reader's structure, the export and the report, each carrying a test of
-  its own. The two `qa-manual` rows are the DOM glue underneath, which no belt reaches. What is loose
-  is nine rules: seven the code answers with something else, two it holds and no test drives.
+* **Verification.** 34 `verified`, 2 `failing`, 3 `untested`, 12 `unimplemented`, 2 `qa-manual`. What
+  holds is the drop point, the reader's structure, the writer's own, and the report, each carrying a
+  test of its own. The two `qa-manual` rows are the DOM glue underneath, which no belt reaches. What
+  is loose is five rules: two the code answers with something else, three it holds in part.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -190,9 +190,11 @@ pub struct ImportBatch {
 Step 3 is ordered on purpose: a style is an independent register that cannot ride a create. A group needs the
 ids the creates mint.
 
-**Steps, on an SVG export:** map each element back to its SVG counterpart. Write the attributes in a fixed
-order through a single float formatter, and anchor the view box at the origin. A view box anchored at the
-content's corner would translate the whole document on re-import.
+**Steps, on an SVG export:** map each element back to its SVG counterpart, wrapping a rotated one in its own
+transform (`TOILE-IO-026`). Write the attributes in a fixed order through a single float formatter. Anchor the
+view box at the origin, or at the content's own corner when the board reaches before it (`TOILE-IO-086`). A
+board in the positive quadrant therefore keeps a `0 0` origin, which is the one a reader leaves alone. Name in
+the report every element no SVG shape expresses (`TOILE-IO-025`).
 
 **What an SVG file becomes:**
 
@@ -214,8 +216,10 @@ stepped beside it. Each normalized child consumes the next drawn source child. E
 way is imported at that point, inside the group the walk is in and under its transform (`TOILE-IO-027`,
 `TOILE-IO-080`, `TOILE-IO-083`).
 
-**What an SVG export writes:** shapes, vector nodes, text and pictures. A sticky, a connector, a
-group, an embed and a freehand stroke write nothing at all (`TOILE-IO-025`).
+**What an SVG export writes:** shapes, vector nodes, text with its size and its ink (`TOILE-IO-088`), and
+pictures carrying their pixels inline (`TOILE-IO-087`). A sticky, a group, a frame, an embed and a freehand
+stroke write nothing, and each is named in the report (`TOILE-IO-025`). A connector is not an element, so the
+board walk never offers one.
 
 **The crates each path uses:**
 
@@ -296,12 +300,12 @@ view past its own gate.
   one `<input type="file">` and a click on a detached anchor. No belt of this workspace drives a
   `DataTransfer` or watches a file leave a browser. Everything decidable around them is a row with a test: the
   formats, the drop point, the notice. What is left is the glue itself.
-* **The export drops five kinds and says nothing** (`TOILE-IO-025`). A sticky, a connector, a group,
-  an embed and a freehand stroke serialize to nothing. The import path has a report and the export
-  path has no equivalent, so the loss is invisible on the way out.
-* **A rotated element exports upright** (`TOILE-IO-026`). The view model carries a rotation and the
-  serializer never writes a transform. A board of rotated shapes exports as a board of unrotated
-  ones, and the determinism rows still pass.
+* **A connector leaves with nothing said** (`TOILE-IO-025`). The report names what the serializer
+  refuses, and the board walk offers it elements alone. An arrow is therefore lost before the
+  serializer sees it, so no line of the report covers one.
+* **An exported picture is the thumbnail, not the blob** (`TOILE-IO-100`). The full pixels are
+  ciphertext on the relay and no path here fetches them, so a file leaves at the resolution the
+  board itself paints.
 * **The two trees are paired by position, not by identity.** Each normalized child takes the next
   drawn source child. A normalization that drops or splits a node steps the two walks apart: a
   `<use>`, a `<switch>`, a clip path. The text after that point then lands in the wrong group.
@@ -311,12 +315,9 @@ view past its own gate.
 * **A board the export could not read still becomes a file** (`TOILE-IO-069`). The snapshot is taken
   with a fallback: on failure it logs an error and writes the header over an empty payload. The file
   is well formed, carries the right document id, and opens as an empty board.
-* **The export frame is anchored at the origin** (`TOILE-IO-086`). The view box spans `0 0` to the content's
-  far corner, which keeps the round trip from translating the document. Whatever sits left of or above the
-  origin falls outside the frame a reader crops to.
-* **A picture and a text leave without what they carried** (`TOILE-IO-087`, `TOILE-IO-088`). An `<image>` is
-  written with a `media:` href no reader outside Ambre resolves. A `<text>` carries a position and a body, but
-  neither the size nor the colour it was drawn with.
+* **A board reaching before the origin loses its absolute place on re-import** (`TOILE-IO-086`). The
+  frame then carries a non-zero origin, which a reader normalizes away. The geometry survives whole
+  and the board lands at the origin. Nothing rules on where a re-imported drawing belongs.
 * **No test of the apply pass starts from a populated board** (`TOILE-IO-071`). Every one begins on a
   fresh state, so the rule that an import leaves alone what the board already held rests on reading
   the code.

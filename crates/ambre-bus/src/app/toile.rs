@@ -1661,6 +1661,9 @@ pub enum ToileEvent {
     ExportComplete {
         filename: String,
         data: Vec<u8>,
+        /// What the file could not express, one line per element, in board
+        /// order (`TOILE-IO-025`). Empty when the board left whole.
+        skipped: Vec<String>,
     },
     Error(ToileError),
 }

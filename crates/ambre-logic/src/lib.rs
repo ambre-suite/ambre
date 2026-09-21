@@ -222,6 +222,7 @@ impl DocState {
                 AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete {
                     filename,
                     data,
+                    skipped: Vec::new(),
                 })
             }
         }

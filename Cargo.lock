@@ -329,6 +329,7 @@ dependencies = [
  "ambre-core",
  "ambre-draw",
  "ambre-pdf",
+ "base64 0.22.1",
  "flume",
  "i_overlay",
  "icondata",

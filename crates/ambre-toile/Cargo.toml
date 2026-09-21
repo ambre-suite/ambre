@@ -60,6 +60,9 @@ postcard = { workspace = true }
 usvg = { workspace = true }
 roxmltree = { workspace = true }
 image = { workspace = true }
+# An exported picture carries its pixels as a `data:` URI, so a reader outside
+# Ambre resolves it (`TOILE-IO-087`). No key and no ciphertext go through it.
+base64 = { workspace = true }
 
 # UI side (UI Thread): the DrawSurface renderer, GPU runtime, frame channels.
 # The heavy render crates (wgpu/lyon/parley/swash) are linked once in

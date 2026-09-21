@@ -378,7 +378,7 @@ fn round_trip_rect_is_stable() {
     );
     el.style.fill = Some(0xFF33_66CC);
 
-    let svg1 = export_svg(std::slice::from_ref(&el));
+    let svg1 = export_svg(std::slice::from_ref(&el)).document;
     let batch = import_svg(svg1.as_bytes(), &Limits::default()).unwrap();
     match only_cmd(&batch) {
         ToileCommand::CreateElement {
@@ -394,7 +394,7 @@ fn round_trip_rect_is_stable() {
     }
 
     // Export is byte-stable across runs.
-    let svg2 = export_svg(std::slice::from_ref(&el));
+    let svg2 = export_svg(std::slice::from_ref(&el)).document;
     assert_eq!(svg1, svg2);
 }
 
@@ -406,7 +406,7 @@ fn round_trip_path_geometry_survives() {
     let mut el = ExportElement::new(ElementKind::Shape(ShapeKind::Path), bez.bounding_box());
     el.path = Some(bez);
 
-    let svg = export_svg(std::slice::from_ref(&el));
+    let svg = export_svg(std::slice::from_ref(&el)).document;
     let batch = import_svg(svg.as_bytes(), &Limits::default()).unwrap();
     assert!(matches!(
         only_cmd(&batch),

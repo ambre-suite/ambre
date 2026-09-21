@@ -44,6 +44,22 @@ impl ToileState {
         Some((rgba.width(), rgba.height(), rgba.into_raw()))
     }
 
+    /// The PNG bytes stored as one media address's thumbnail, if the document
+    /// carries one (`toile-media`). Handed to the SVG export, which writes them
+    /// inline (`TOILE-IO-087`).
+    fn thumbnail_png(&self, hash: &str) -> Option<Vec<u8>> {
+        let loro::LoroValue::Map(entries) = self.doc.get_map(super::MEDIA).get_deep_value() else {
+            return None;
+        };
+        let loro::LoroValue::Map(fields) = entries.get(hash)? else {
+            return None;
+        };
+        let loro::LoroValue::Binary(thumb) = fields.get("thumb")? else {
+            return None;
+        };
+        Some(thumb.to_vec())
+    }
+
     /// Serialize the board to an SVG document (`TOILE-IO-021`). Emits one
     /// [`ExportComplete`](ToileEvent::ExportComplete) carrying the bytes, which
     /// the UI thread hands to the browser (`TOILE-IO-085`).
@@ -51,10 +67,13 @@ impl ToileState {
     /// An empty board still exports: a valid, empty SVG is an answer, and
     /// refusing one would leave the user wondering whether the gesture arrived.
     pub(super) fn export_svg_document(&self) -> ToileOutcome {
-        let svg = export_svg(&self.export_elements());
+        let export = export_svg(&self.export_elements());
         ToileOutcome::display_only(vec![ToileEvent::ExportComplete {
             filename: SVG_FILENAME.to_owned(),
-            data: svg.into_bytes(),
+            data: export.document.into_bytes(),
+            // What no SVG shape expresses, named rather than dropped in
+            // silence (`TOILE-IO-025`).
+            skipped: export.skipped,
         }])
     }
 
@@ -102,6 +121,12 @@ impl ToileState {
             },
             media_hash: match kind {
                 ElementKind::Image => Some(str_of(&em, "hash")),
+                _ => None,
+            },
+            // The plaintext thumbnail, re-encoded as the PNG the export writes
+            // inline (`TOILE-IO-087`).
+            image_png: match kind {
+                ElementKind::Image => self.thumbnail_png(&str_of(&em, "hash")),
                 _ => None,
             },
         })
@@ -211,7 +236,7 @@ mod tests {
         out.display
             .iter()
             .find_map(|e| match e {
-                ToileEvent::ExportComplete { filename, data } => {
+                ToileEvent::ExportComplete { filename, data, .. } => {
                     Some((filename.clone(), data.clone()))
                 }
                 _ => None,
