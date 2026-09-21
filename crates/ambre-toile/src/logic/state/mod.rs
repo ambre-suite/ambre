@@ -53,7 +53,7 @@ pub use presence::PRESENCE_TTL_MS;
 pub(crate) mod presentation;
 mod reactions;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use kurbo::Rect;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
@@ -491,6 +491,7 @@ impl ToileState {
     pub fn apply_remote(&mut self, update: &[u8]) -> Vec<ToileEvent> {
         let deck_before = self.slide_order();
         let notes_before = self.active_notes();
+        let dangling_before = self.dangling_connectors();
         if let Err(e) = self.doc.import(update) {
             tracing::warn!("Toile: remote import failed: {e}");
             return vec![ToileEvent::Error(ToileError::RemoteImportFailed)];
@@ -500,6 +501,7 @@ impl ToileState {
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
         events.extend(self.notes_change(&notes_before));
+        events.extend(self.newly_dangling(&dangling_before));
         // A delta can carry a register this build cannot decode just as a
         // snapshot can, and the user deserves the same word (`SCHEMA-003`).
         events.extend(self.undecodable_notice());
@@ -519,6 +521,7 @@ impl ToileState {
         }
         let deck_before = self.slide_order();
         let notes_before = self.active_notes();
+        let dangling_before = self.dangling_connectors();
         let mut any_ok = false;
         let mut any_failed = false;
         for update in updates {
@@ -538,6 +541,7 @@ impl ToileState {
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
         events.extend(self.notes_change(&notes_before));
+        events.extend(self.newly_dangling(&dangling_before));
         if any_failed {
             events.push(ToileEvent::Error(ToileError::RemoteImportFailed));
         }
@@ -591,6 +595,7 @@ impl ToileState {
         let payload = schema::gate(payload)?;
         let deck_before = self.slide_order();
         let notes_before = self.active_notes();
+        let dangling_before = self.dangling_connectors();
         if let Err(e) = self.doc.import(&payload) {
             tracing::warn!("Toile: snapshot import failed: {e}");
             return Err(SchemaError::PayloadRejected);
@@ -599,6 +604,7 @@ impl ToileState {
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
         events.extend(self.notes_change(&notes_before));
+        events.extend(self.newly_dangling(&dangling_before));
         events.extend(self.undecodable_notice());
         Ok(events)
     }
@@ -656,12 +662,14 @@ impl ToileState {
         }
         let deck_before = self.slide_order();
         let notes_before = self.active_notes();
+        let dangling_before = self.dangling_connectors();
         self.rebuild_caches();
         // `undo_state_event` last, so the central refresh in `handle_command`
         // sees it and skips the duplicate (`UNDO-006`).
         let mut events = vec![self.viewport_event()];
         events.extend(self.deck_change(&deck_before));
         events.extend(self.notes_change(&notes_before));
+        events.extend(self.newly_dangling(&dangling_before));
         events.push(self.undo_state_event());
         self.emit_with_update(events)
     }
@@ -672,6 +680,25 @@ impl ToileState {
     /// authoritative state, and it would otherwise show a deck nobody has.
     pub(super) fn deck_change(&self, before: &[FrameId]) -> Option<ToileEvent> {
         (self.slide_order() != before).then_some(ToileEvent::DeckChanged)
+    }
+
+    /// One `DanglingConnector` per connector that was whole before this write
+    /// and is not any more (`TOILE-165`). Every write that can strand an arrow
+    /// without naming it calls this: a remote delta, a history step, a peer's
+    /// deletion. The re-aim path announces its own.
+    pub(super) fn newly_dangling(&self, before: &HashSet<ConnectorId>) -> Vec<ToileEvent> {
+        let mut fresh: Vec<ConnectorId> = self
+            .dangling_connectors()
+            .into_iter()
+            .filter(|id| !before.contains(id))
+            .collect();
+        // The board is a set, so the order it walks is the engine's, not the
+        // document's. Sorted, two peers announce the same arrows in one order.
+        fresh.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+        fresh
+            .into_iter()
+            .map(ToileEvent::DanglingConnector)
+            .collect()
     }
 
     /// The speaker notes of the slide on screen, read before a write this

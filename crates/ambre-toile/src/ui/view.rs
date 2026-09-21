@@ -1022,6 +1022,9 @@ impl ToileView {
             // reflects them via its own signals. The WebGPU view has nothing to
             // repaint for these.
             ToileEvent::PresentBroadcastChanged(_) | ToileEvent::FollowingChanged(_) => {}
+            // An arrow lost an end (`TOILE-044`). It is not painted any more
+            // (`TOILE-166`), so the board itself cannot show it. The shell
+            // raises the notice from this same event.
             ToileEvent::DanglingConnector(_) | ToileEvent::UndoState { .. } => {}
             // A foreign-file import landed (`toile-import-export`). The
             // accompanying `ViewportData` already triggered the repaint; log the

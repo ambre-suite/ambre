@@ -1578,6 +1578,73 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
     );
 }
 
+/// `TOILE-165`: an arrow goes dangling when a peer deletes its endpoint
+/// concurrently. The deleting peer never saw the arrow, so nothing cleaned it
+/// up, and it stops being painted on every board. The announcement is what a
+/// surface has to say the document still holds it.
+#[test]
+fn an_arrow_stranded_by_a_peer_is_announced() {
+    let mut a = ToileState::new();
+    let x = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
+    let y = create_rect(&mut a, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
+    let mut b = ToileState::new();
+    b.apply_remote(&a.export_snapshot());
+
+    // Concurrent: B joins the two, A deletes one of them.
+    let db = b
+        .handle_command(ToileCommand::CreateConnector {
+            from: x.clone(),
+            from_anch: Anchor::Right,
+            to: y.clone(),
+            to_anch: Anchor::Left,
+            path_type: PathType::Straight,
+            arrows: EndCaps {
+                start: false,
+                end: true,
+            },
+        })
+        .update
+        .expect("the arrow broadcasts a delta");
+    let da = a
+        .handle_command(ToileCommand::DeleteElements { ids: vec![y] })
+        .update
+        .expect("the delete broadcasts a delta");
+
+    let events = b.apply_remote(&da);
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| matches!(e, ToileEvent::DanglingConnector(_)))
+            .count(),
+        1,
+        "the stranded arrow was not announced: {events:?}"
+    );
+
+    // The peer that deleted sees it too, once the arrow reaches it.
+    assert_eq!(
+        a.apply_remote(&db)
+            .iter()
+            .filter(|e| matches!(e, ToileEvent::DanglingConnector(_)))
+            .count(),
+        1
+    );
+
+    // A later delta that strands nothing announces nothing, so the notice does
+    // not repeat for as long as the arrow stays dangling.
+    let da = a
+        .handle_command(ToileCommand::MoveElements {
+            ids: vec![x],
+            delta: Vec2::new(5.0, 5.0),
+        })
+        .update
+        .expect("a delta");
+    assert!(
+        !b.apply_remote(&da)
+            .iter()
+            .any(|e| matches!(e, ToileEvent::DanglingConnector(_)))
+    );
+}
+
 #[test]
 fn paste_keeps_fully_copied_connector_drops_half_copied() {
     let mut st = ToileState::new();

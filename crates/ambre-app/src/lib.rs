@@ -1524,6 +1524,14 @@ pub fn main() {
                 // A peer broadcasting its playback position: remember it as
                 // the current presenter so the Follow affordance appears. The event
                 // still flows to the view below for the overlay pass.
+                // An arrow lost an end, here or under a peer's delete
+                // (`TOILE-044`, `TOILE-165`). It stops being painted, so the
+                // board cannot show it: the notice is the one surface that
+                // says the document still holds it.
+                UiEvent::Viewport {
+                    event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::DanglingConnector(_)),
+                    ..
+                } => toasts.warning("An arrow lost an end and is no longer drawn"),
                 UiEvent::Viewport {
                     event: AppEvent::Toile(ambre_bus::app::toile::ToileEvent::PeerPresence(peers)),
                     ..

@@ -2,8 +2,8 @@
 
 **Type:** Vertical (feature)
 **Implementation:** partial -- the board draws, routes, captions, selects, re-aims, restyles,
-reorders and deletes a straight arrow. Two of the three path kinds and two of the anchors still have
-no sender, and a dangling arrow still reaches nobody.
+reorders and deletes a straight arrow. It says when one goes dangling. Two path kinds and two
+anchors have no sender.
 
 > A user drags from one shape to another and gets an arrow. Moving either shape keeps the arrow
 > attached: the board draws it between the two, rather than placing it on the board.
@@ -26,8 +26,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-164` | `INV` | Moving an element MUST NOT write a change to the connectors that touch it: a drag costs one register write, whatever hangs off it. | this spec section 3 | structural -- no path from a move reaches the connector map, and the routing runs inside the read-only derivation | none | verified |
 | `TOILE-166` | `OBS` | A connector whose endpoint element is not held MUST NOT be painted. | this spec section 2 | `ambre_toile::logic::connector::tests::missing_endpoint_yields_none` -- the routing answers nothing; structural -- the derivation drops the connector on that same `None` | none | verified |
 | `TOILE-007` | `CONC` | A connector whose endpoint element is deleted by another peer MUST keep its own data: dangling is not destruction. | this spec section 2 | none | unheld -- the one test named for this deletes an endpoint locally, which garbage-collects the connector instead of dangling it (`TOILE-042`), and reads only that nothing is painted. No test holds two peers, and none reads the document afterwards; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-044` | `OBS` | A dangling connector MUST be announced, so a surface can offer a repair. | this spec section 3 | `ambre_toile::logic::convergence_tests::retarget_to_missing_element_reports_dangling` -- it holds the one path that announces | partial -- nothing consumes the announcement: the view drops the event; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-165` | `OBS` | A connector that goes dangling because its endpoint left MUST be announced too, not only one re-aimed at a missing element. | this spec section 3 | none | fails -- section 6 records the failure; lands with the `A dangling arrow is announced however it dangled` Story (`ambre-roadmap.md` E7) | failing |
+| `TOILE-044` | `OBS` | A dangling connector MUST be announced, so a surface can offer a repair. | this spec section 3 | `ambre_toile::logic::convergence_tests::retarget_to_missing_element_reports_dangling` -- the re-aim path; `ambre_toile::logic::convergence_tests::an_arrow_stranded_by_a_peer_is_announced` -- the endpoint that left; qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), the shell raising its notice off this event, reached by deleting a shape a collaborator is joining to another | none | qa-manual |
+| `TOILE-165` | `OBS` | A connector that goes dangling because its endpoint left MUST be announced too, not only one re-aimed at a missing element. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_arrow_stranded_by_a_peer_is_announced` -- a concurrent delete announcing the arrow on both peers, and the later delta that strands nothing announcing nothing | none | verified |
 | `TOILE-043` | `INV` | A connector MUST sit in the one paint order with the elements, so it can be placed behind one. | this spec section 3; `features/ambre-spec-toile-z-order.md` | `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` -- the reorder over the shared order; `ambre_toile::ui::arrow::tests::an_arrow_answers_delete_and_the_z_order` -- the four entries that drive a connector through it | partial -- no test runs the two ends together; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-045` | `INV` | A connector MUST be culled with the viewport, like an element. | this spec section 3 | none | fails -- the visible-set walk tests the culled set for an element and emits every connector on the board unconditionally, because no connector is in the spatial index, section 6; lands with the `Engine and render optimization` Story (`ambre-roadmap.md` E6), which names the unculled connectors | failing |
 | `TOILE-046` | `INV` | A connector MUST carry its own style, so an arrow can be coloured and thickened. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_arrow_carries_its_own_style` -- it restyles one arrow of two and reads the second keeping the default: the register is per connector, not shared | none | verified |
@@ -98,12 +98,11 @@ status values are normative in `ambre-spec-template.md`.
   connector on the board rather than once per visible connector, and no bench measures either.
 * **Boundary.** none of its own: a connector lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`).
-* **Verification.** 21 `verified`, 3 `failing`, 21 `untested`. What holds is the pure geometry and
-  what the surface paints back: which arrow a point lands on, and which end a press grabs. Held too
-  are a release over a shape and the handles a selected arrow gets. What is loose is the paths
-  between them, because the view is not host-constructible. Loose too are a create that trusts its
-  endpoints, a dangling announcement that reaches nobody, and four rows describing a shape no
-  gesture produces.
+* **Verification.** 22 `verified`, 2 `failing`, 20 `untested`, 1 `qa-manual`. What holds is the pure
+  geometry and what the surface paints back: which arrow a point lands on, and which end a press
+  grabs. Held too are both ways an arrow goes dangling. What is loose is the paths between them,
+  because the view is not host-constructible. Loose too are a create that trusts its endpoints, and
+  four rows describing a shape no gesture produces.
 
 ---
 
@@ -114,7 +113,8 @@ status values are normative in `ambre-spec-template.md`.
 | moves a shape an arrow starts from | watches | the shape's new position, and nothing about the arrow | the arrow following the shape, re-routed on both screens | `logic::connector::tests::straight_endpoints_are_the_anchors` |
 | deletes the shape an arrow ends at | re-aims that arrow at a third shape | either the deletion with the arrow gone, or the arrow bound to the third shape | one consistent board: no arrow pointing at nothing | none: no test holds two peers over a connector |
 | deletes the shape | keeps the arrow, offline | the arrow, referencing an element nobody holds | nothing painted where the arrow was, and the arrow still in the document | `logic::connector::tests::missing_endpoint_yields_none` holds the half that is painted; nothing reads the document afterwards (`TOILE-007`) |
-| re-aims an arrow at a shape she just deleted | watches | the arrow bound to a missing element | nothing painted, and an announcement no surface reads (`TOILE-044`) | `logic::convergence_tests::retarget_to_missing_element_reports_dangling` |
+| re-aims an arrow at a shape she just deleted | watches | the arrow bound to a missing element | nothing painted, and a notice naming the loss (`TOILE-044`) | `logic::convergence_tests::retarget_to_missing_element_reports_dangling` |
+| deletes a shape | joins that shape to another, at the same moment | the arrow, bound to a shape nobody holds | nothing painted on either board, and both are told (`TOILE-165`) | `logic::convergence_tests::an_arrow_stranded_by_a_peer_is_announced` |
 | drags a shape an arrow ends at, for a second | watches | the shape's new position, and no connector write at all | the arrow re-routed on every frame (`TOILE-164`) | none |
 | types `unit cost` on an arrow's caption | types `cost in EUR` on the same caption, offline | one caption holding both edits, merged character by character | the same caption on both screens, neither user's typing dropped (`TOILE-047`) | `logic::convergence_tests::concurrent_captions_converge` |
 
@@ -166,6 +166,11 @@ nobody holds therefore lands, and dangles at the next read (`TOILE-168`).
 connector referencing a removed id at either end. It removes those connector maps and strips them
 from the paint order, inside the delete's own commit (`TOILE-042`). Under concurrency the cleanup
 can lose the race, which is exactly the dangling case above.
+
+**Steps, when a write this viewer did not make lands:** the set of connectors missing an endpoint is
+read before and after. Each one that was whole and is not any more is announced (`TOILE-165`). A
+remote delta, a history step and a peer's delete all reach this. The announcement is once per arrow:
+one already dangling before the write is not announced again.
 
 **Steps, when a user captions an arrow:** the handler resolves the connector map and takes its
 `label` text. It **diffs** the whole caption into that text, rather than replacing it. Two peers
@@ -265,14 +270,9 @@ the peers, because presence carries element ids -- section 6.
   the arrow leaves the display, which is right only because no pass culls a connector
   (`TOILE-045`). The day that row holds, an arrow panned off screen would deselect itself, and this
   has to ask the board instead of reading absence.
-* **The announcement goes nowhere** (`TOILE-044`). The dangling event reaches the view, which drops
-  it. The repair affordance the design names therefore does not exist, and a dangling arrow looks
-  exactly like no arrow.
-* **A deleted endpoint announces nothing** (`TOILE-165`). Only the re-aim path emits the dangling
-  event.
-  * The endpoint can leave instead, when another peer deletes it, or when an undo restores it under
-    a local cleanup that already ran. The arrow then stops appearing, with no notice at all. The one
-    path that could offer a repair is the one a user never takes.
+* **The notice names no arrow** (`TOILE-044`). The shell says an arrow lost an end, and the board
+  paints nothing the user can point at (`TOILE-166`). The repair is the re-aim, and reaching it
+  means finding an arrow that is not drawn. No rule says how a surface offers that.
 * **Two path kinds and two anchors have no sender** (`TOILE-167`). The tool writes
   `PathType::Straight` on every create and picks among the four sides.
   * The elbow, the curve, the centre anchor and the free anchor are therefore shapes no gesture

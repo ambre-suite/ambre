@@ -150,6 +150,25 @@ impl ToileState {
             .ok()
     }
 
+    /// Every connector of the board whose endpoint the board no longer holds
+    /// (`TOILE-165`). Read before and after a write this viewer did not make,
+    /// so the ones that just went dangling can be announced.
+    pub(super) fn dangling_connectors(&self) -> HashSet<ConnectorId> {
+        let mut out = HashSet::new();
+        if let LoroValue::Map(m) = self.doc.get_map(CONNECTORS).get_deep_value() {
+            for (key, v) in m.iter() {
+                if let LoroValue::Map(f) = v {
+                    let from = ElementId(map_str(f, "from"));
+                    let to = ElementId(map_str(f, "to"));
+                    if !self.bounds.contains_key(&from) || !self.bounds.contains_key(&to) {
+                        out.insert(ConnectorId(key.clone()));
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// Ids of every connector referencing one of `del` at either endpoint.
     pub(super) fn connectors_touching(&self, del: &HashSet<&ElementId>) -> HashSet<ConnectorId> {
         let mut out = HashSet::new();
