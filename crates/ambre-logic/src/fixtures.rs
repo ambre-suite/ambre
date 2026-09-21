@@ -320,6 +320,7 @@ pub fn shape_of(state: &DocState) -> FixtureShape {
     match state {
         DocState::Trame(s) => s.fixture_shape(),
         DocState::Toile(s) => s.fixture_shape(),
+        DocState::Prose(s) => s.fixture_shape(),
     }
 }
 
@@ -343,6 +344,7 @@ pub fn canonical_dump(state: &DocState) -> String {
     match state {
         DocState::Trame(s) => s.canonical_dump(),
         DocState::Toile(s) => s.canonical_dump(),
+        DocState::Prose(s) => s.canonical_dump(),
     }
 }
 
@@ -440,6 +442,8 @@ pub fn import_fixture(bytes: &[u8]) -> Result<(DocumentId, DocState), FixtureErr
     let mut state = match doc_type {
         DocType::Trame => DocState::Trame(Box::new(TrameState::with_peer(FIXTURE_IMPORT_PEER))),
         DocType::Toile => DocState::Toile(Box::new(ToileState::with_peer(FIXTURE_IMPORT_PEER))),
+        // Prose has no native container yet: the file lands with the
+        // "The native format" Story (`ambre-roadmap.md` E5).
         DocType::Prose | DocType::Murmure => return Err(FixtureError::NoEngine { doc_type }),
     };
     // The same bytes, header included: each app re-reads the header through
@@ -449,6 +453,13 @@ pub fn import_fixture(bytes: &[u8]) -> Result<(DocumentId, DocState), FixtureErr
     let document_id = match &mut state {
         DocState::Trame(trame) => trame.import_ambre_plaintext(bytes).map(|(id, _events)| id),
         DocState::Toile(toile) => toile.import_ambre_plaintext(bytes).map(|(id, _events)| id),
+        // Unreachable by the construction above, and an arm all the same: the
+        // compiler holds the pair, not a comment.
+        DocState::Prose(_) => {
+            return Err(FixtureError::NoEngine {
+                doc_type: DocType::Prose,
+            });
+        }
     }?;
     Ok((DocumentId::from_uuid(document_id), state))
 }

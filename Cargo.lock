@@ -182,6 +182,7 @@ dependencies = [
  "ambre-bus",
  "ambre-core",
  "ambre-crypto",
+ "ambre-prose",
  "ambre-toile",
  "ambre-trame",
  "criterion",
@@ -230,10 +231,10 @@ version = "0.1.0"
 dependencies = [
  "ambre-bus",
  "ambre-core",
- "ambre-draw",
+ "flume",
  "loro",
+ "postcard",
  "serde",
- "thiserror 2.0.18",
  "tracing",
 ]
 

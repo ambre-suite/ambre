@@ -50,6 +50,7 @@ use ambre_bus::{
 
 use ambre_core::schema::SchemaError;
 
+use ambre_prose::ProseState;
 use ambre_toile::{ToileRequest, ToileState};
 use ambre_trame::TrameState;
 
@@ -73,7 +74,8 @@ pub enum DocState {
     // open document is negligible and keeps the registry entry pointer-sized.
     Trame(Box<TrameState>),
     Toile(Box<ToileState>),
-    // Future: Prose(ProseState), Murmure(MurmureState), ...
+    Prose(Box<ProseState>),
+    // Future: Murmure(MurmureState), ...
 }
 
 /// The variant, never the contents. Neither `TrameState` nor `ToileState` is
@@ -95,7 +97,10 @@ impl DocState {
         match doc_type {
             DocType::Trame => Some(DocState::Trame(Box::new(TrameState::new()))),
             DocType::Toile => Some(DocState::Toile(Box::new(ToileState::new()))),
-            DocType::Prose | DocType::Murmure => {
+            // `None` when the CRDT engine refused the scaffolding: the document
+            // is not opened rather than opened empty (`PROSE-027`).
+            DocType::Prose => ProseState::new().map(|state| DocState::Prose(Box::new(state))),
+            DocType::Murmure => {
                 tracing::warn!(
                     "Logic: no state implemented for {:?}, document will not render",
                     doc_type
@@ -111,6 +116,7 @@ impl DocState {
         match self {
             DocState::Trame(_) => DocType::Trame,
             DocState::Toile(_) => DocType::Toile,
+            DocState::Prose(_) => DocType::Prose,
         }
     }
 
@@ -145,6 +151,11 @@ impl DocState {
                 .into_iter()
                 .map(AppEvent::Toile)
                 .collect()),
+            DocState::Prose(state) => Ok(state
+                .import_snapshot(payload)?
+                .into_iter()
+                .map(AppEvent::Prose)
+                .collect()),
         }
     }
 
@@ -156,6 +167,7 @@ impl DocState {
         match self {
             DocState::Trame(state) => state.schema_version(),
             DocState::Toile(state) => state.schema_version(),
+            DocState::Prose(state) => state.schema_version(),
         }
     }
 
@@ -170,6 +182,11 @@ impl DocState {
             DocState::Toile(_) => AppEvent::Toile(
                 ambre_bus::app::toile::ToileEvent::DocumentRefused(error.to_string()),
             ),
+            DocState::Prose(_) => {
+                AppEvent::Prose(ambre_bus::app::prose::ProseEvent::DocumentRefused {
+                    reason: error.to_string(),
+                })
+            }
         }
     }
 
@@ -212,6 +229,10 @@ impl DocState {
                 "board.ambre".to_owned(),
                 state.export_ambre_plaintext(document_id.into())?,
             )),
+            // Prose writes no native file yet. It lands with "The native
+            // format" Story (`ambre-roadmap.md` E5), and until then the export
+            // says so rather than writing an empty container.
+            DocState::Prose(_) => None,
         }
     }
 
@@ -231,6 +252,13 @@ impl DocState {
                     skipped: Vec::new(),
                 })
             }
+            DocState::Prose(_) => AppEvent::Prose(ambre_bus::app::prose::ProseEvent::Error {
+                code: ambre_bus::app::prose::error_code::WRITE_FAILED,
+                message: format!(
+                    "{filename} holds {} bytes this build cannot write",
+                    data.len()
+                ),
+            }),
         }
     }
 
@@ -243,6 +271,10 @@ impl DocState {
             DocState::Toile(_) => {
                 AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportFailed(reason))
             }
+            DocState::Prose(_) => AppEvent::Prose(ambre_bus::app::prose::ProseEvent::Error {
+                code: ambre_bus::app::prose::error_code::WRITE_FAILED,
+                message: reason,
+            }),
         }
     }
 
@@ -257,6 +289,7 @@ impl DocState {
         match self {
             DocState::Trame(state) => state.export_snapshot(),
             DocState::Toile(state) => state.export_snapshot(),
+            DocState::Prose(state) => state.export_snapshot(),
         }
     }
 
@@ -266,6 +299,7 @@ impl DocState {
     fn set_user_id(&mut self, user_id: UserId) {
         match self {
             DocState::Toile(state) => state.set_user_id(user_id),
+            DocState::Prose(state) => state.set_user_id(user_id),
             DocState::Trame(_) => {}
         }
     }
@@ -277,6 +311,7 @@ impl DocState {
     fn set_display_name(&mut self, name: &str) {
         match self {
             DocState::Toile(state) => state.set_display_name(name.to_owned()),
+            DocState::Prose(state) => state.set_display_name(name.to_owned()),
             DocState::Trame(_) => {}
         }
     }

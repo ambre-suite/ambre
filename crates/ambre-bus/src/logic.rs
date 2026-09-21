@@ -143,7 +143,9 @@ pub enum AppCommand {
     Trame(crate::app::trame::TrameCommand),
     /// Command for a Toile (whiteboard) document.
     Toile(crate::app::toile::ToileCommand),
-    // Future document types: Prose(ProseCommand), Murmure(MurmureCommand),
+    /// Command for a Prose (word processor) document.
+    Prose(crate::app::prose::ProseCommand),
+    // Future document types: Murmure(MurmureCommand),
     // Rendezvous(RendezvousCommand), ...
     // Future plugin surface: Plugin(Box<dyn Plugin>).
 }
@@ -159,6 +161,7 @@ impl AppCommand {
         match self {
             Self::Trame(cmd) => cmd.is_mutating(),
             Self::Toile(cmd) => cmd.is_mutating(),
+            Self::Prose(cmd) => cmd.is_mutating(),
         }
     }
 }

@@ -15,11 +15,13 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
+| `prose-engine` | An author types a word and every collaborator reads it. | implemented | 39 | 4 |
+| `prose-tables` | A grid of cells inside the document. | partial | 42 | 1 |
+| `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 25 | 2 |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 | `prose-clipboard` | Copy, cut and paste. | design-only | 14 |  |
 | `prose-comments` | A discussion attached to a passage of the text. | design-only | 33 |  |
 | `prose-cross-references` | A pointer from one place in the document to another: "see page 4", "see section 2.1", or a label the author chose. | design-only | 16 |  |
-| `prose-engine` | An author types a word and every collaborator reads it. | design-only | 39 |  |
 | `prose-find-replace` | Searching the document, walking the matches, and replacing one or all of them. | design-only | 15 |  |
 | `prose-footnotes` | A note at the foot of the page, called from a mark in the text. | design-only | 12 |  |
 | `prose-headers-footers` | A band at the top of every page and a band at the bottom, each holding ordinary text. | design-only | 27 |  |
@@ -36,12 +38,10 @@
 | `prose-slash-command` | Type a slash at the start of an empty line and a short list appears: a heading, a list, a table, a page break. | design-only | 16 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 | `prose-table-of-contents` | A list of the document's headings, with the page each one starts on. | design-only | 13 |  |
-| `prose-tables` | A grid of cells inside the document. | design-only | 42 |  |
-| `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | design-only | 25 |  |
 | `prose-toolbar` | Select a few words and a small bar appears above them. | design-only | 14 |  |
 | `prose-track-changes` | A reviewer edits without changing the document. | design-only | 35 |  |
 | `prose-undo` | Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one item is in running text. | design-only | 3 |  |
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | design-only | 17 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | design-only | 13 |  |
 
-**28 features: 0 implemented, 0 partial, 28 design-only. 595 contract rows, 0 loose.**
+**28 features: 1 implemented, 2 partial, 25 design-only. 595 contract rows, 7 loose.**

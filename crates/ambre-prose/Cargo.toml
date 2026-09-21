@@ -5,16 +5,32 @@ edition = "2024"
 license.workspace = true
 description = "Word processing application for Ambre — rich text, layout, import/export"
 
+[features]
+# Document-fixture machinery (`ambre-spec-fixtures.md`, `FIXTURE-007`).
+# Non-default and host-only. It forwards `ambre-core/fixtures` explicitly: a
+# Cargo feature never enables its dependency's feature implicitly, and the gated
+# code names `ambre_core::FixtureShape`.
+fixtures = ["ambre-core/fixtures"]
+
 [dependencies]
 ambre-core = { path = "../ambre-core" }
 ambre-bus = { path = "../ambre-bus" }
-ambre-draw = { path = "../ambre-draw" }
 serde = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 
-# CRDT
+# CRDT: `LoroMovableTree` for the block hierarchy, `LoroText` for a body,
+# `LoroMap` for the registers, `UndoManager` for the local history
+# (`features/ambre-spec-prose-engine.md section 3`).
 loro = { workspace = true }
+
+# The presence frame, and nothing else: a CRDT delta is already bytes
+# (`features/ambre-spec-prose-engine.md section 3.D`).
+postcard = { workspace = true }
+
+# The UI -> Logic channel the view sends on. Shared memory between the two
+# threads, so a command moves rather than serializes.
+flume = { workspace = true }
+
 
 [lints]
 workspace = true

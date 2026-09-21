@@ -198,9 +198,9 @@ pub struct FixtureShape {
     pub body: ShapeBody,
 }
 
-/// Per-app rather than a union of nullable counters. The apps that join later
-/// (`ambre-prose`, `ambre-murmure` -- `FIXTURES P2`) add a variant. They do
-/// not widen every existing row with a field that means nothing to them.
+/// Per-app rather than a union of nullable counters. An application that joins
+/// later adds a variant, and widens no existing row. `Prose` names blocks and
+/// characters, and no row of `Trame` or `Toile` changed when it arrived.
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub enum ShapeBody {
     Trame {
@@ -212,6 +212,10 @@ pub enum ShapeBody {
         elements: u32,
         frames: u16,
         connectors: u32,
+    },
+    Prose {
+        blocks: u32,
+        characters: u32,
     },
 }
 

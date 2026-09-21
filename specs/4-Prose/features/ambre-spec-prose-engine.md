@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE PROSE ENGINE
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** implemented
 
 > An author types a word and every collaborator reads it. One thread holds the document, writes the
 > change, and answers with the pages the screen shows. The other thread paints that answer and owns
@@ -21,102 +21,100 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-001` | `INV` | The document CRDT MUST NOT leave the Logic thread; it exits only as bytes. | this spec section 3; `ambre-spec-architecture.md section 2` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-003` | `INV` | Exported deltas MUST be treated as opaque bytes: `ambre-prose` MUST NOT inspect them after serialization. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-024` | `INV` | A command handler MUST NOT send on a channel: it returns an outcome, and the Logic dispatcher fans it out. | this spec section 3; `ambre-spec-message-bus.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-025` | `INV` | `ambre-prose` MUST NOT contact the network. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-043` | `INV` | `ambre-prose` MUST NOT depend on `ambre-crypto` or `ambre-sync`. | this spec section 1 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5); `deny.toml` already bans `ambre-crypto` outside `ambre-sync`/`ambre-logic`, so this half is held before the crate exists | unimplemented |
-| `PROSE-026` | `INV` | `ambre-prose` MUST contain no `unsafe`. | README pillar "Security" | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5); `#![forbid(unsafe_code)]` on the crate root makes it compiler-held from day one | unimplemented |
-| `PROSE-FEAT-005` | `INV` | A feature MUST NOT write to the document directly: every mutation MUST reach it through the engine's one command entry point. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-006` | `INV` | Text offsets MUST be counted in Unicode graphemes, never in Rust `char`s, wherever they address a position in the document. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5), and **the rule contradicts the plane it constrains**: section 3.B declares the same offsets to be code points, which is what a Rust `char` is. Section 6 carries the gap | unimplemented |
-| `PROSE-044` | `INV` | The page layout, the media cache and the local history MUST be derived or session state: none of them MUST enter the document. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-004` | `CONC` | After convergence, a cursor expressed as a `loro::Cursor` MUST resolve to the same absolute position on every peer. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-042` | `IO` | A document re-imported from its own snapshot MUST hold what the document that exported it held. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-001` | `INV` | The UI thread MUST hold no document data: only view state and what arrives as an event. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-003` | `INV` | The UI thread MUST NOT block on the Logic channel. | this spec section 3; `ambre-spec-architecture.md section 2` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-010` | `INV` | The scroll position and the selection MUST stay local: neither MUST enter the document. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-015` | `INV` | `ambre-prose`'s UI module MUST contain no `unsafe`. | README pillar "Security" | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-001` | `INV` | The document CRDT MUST NOT leave the Logic thread; it exits only as bytes. | this spec section 3; `ambre-spec-architecture.md section 2` | structural -- `ambre_prose::logic::ProseState::export_snapshot` and the outcome's two byte fields are the only ways out, and no public signature of the engine names a `LoroDoc`; crate-graph -- `ambre-bus` carries the plane and no document handle | none | verified |
+| `PROSE-003` | `INV` | Exported deltas MUST be treated as opaque bytes: `ambre-prose` MUST NOT inspect them after serialization. | this spec section 3 | structural -- `ambre_prose::logic::ProseState::flush_delta` reads the exported bytes for emptiness alone, and hands the same buffer to the event and to the outcome | none | verified |
+| `PROSE-024` | `INV` | A command handler MUST NOT send on a channel: it returns an outcome, and the Logic dispatcher fans it out. | this spec section 3; `ambre-spec-message-bus.md` | structural -- `ambre_prose::logic::ProseState` declares no sender and no `SyncCommand`, and every handler answers a `ProseOutcome`; crate-graph -- `ambre-prose` reaches no channel to Sync | none | verified |
+| `PROSE-025` | `INV` | `ambre-prose` MUST NOT contact the network. | this spec section 3 | crate-graph -- `crates/ambre-prose/Cargo.toml` names no transport crate, so no call to one can be written | none | verified |
+| `PROSE-043` | `INV` | `ambre-prose` MUST NOT depend on `ambre-crypto` or `ambre-sync`. | this spec section 1 | crate-graph -- `crates/ambre-prose/Cargo.toml` names neither; cargo-deny | none | verified |
+| `PROSE-026` | `INV` | `ambre-prose` MUST contain no `unsafe`. | README pillar "Security" | lint-wall -- `#![forbid(unsafe_code)]` on `crates/ambre-prose/src/lib.rs` | none | verified |
+| `PROSE-FEAT-005` | `INV` | A feature MUST NOT write to the document directly: every mutation MUST reach it through the engine's one command entry point. | this spec section 3 | structural -- `ambre_prose::logic::ProseState::handle_command` is the one `pub` method that writes, and the `doc` field is private to the module | none | verified |
+| `PROSE-FEAT-006` | `INV` | Every offset a command carries MUST be a count of Unicode code points, the unit the CRDT indexes a body text and a cursor with. | this spec section 3; this spec section 6 | structural -- every write path reached from `ambre_prose::logic::ProseState::handle_command` calls the code-point form of the Loro text API and converts nothing | none | verified |
+| `PROSE-044` | `INV` | The page layout, the media cache and the local history MUST be derived or session state: none of them MUST enter the document. | this spec section 3 | `ambre_prose::logic::tests::a_picture_arriving_writes_nothing_to_the_document` | partial -- the picture cache and the history are read; the page layout has no code yet, and it lands with the `Pagination` Story (`ambre-roadmap.md` E5) | untested |
+| `PROSE-004` | `CONC` | After convergence, a cursor expressed as a `loro::Cursor` MUST resolve to the same absolute position on every peer. | this spec section 3 | `ambre_prose::logic::presence::tests::a_caret_resolves_to_the_same_place_on_both_peers` | none | verified |
+| `PROSE-IO-042` | `IO` | A document re-imported from its own snapshot MUST hold what the document that exported it held. | this spec section 3 | `ambre_prose::logic::tests::a_snapshot_round_trips_what_the_document_held` | none | verified |
+| `PROSE-UI-001` | `INV` | The UI thread MUST hold no document data: only view state and what arrives as an event. | this spec section 3 | structural -- `ambre_prose::ui::ProseUiState` declares no document container and no block content: every field is view state or an event's payload | none | verified |
+| `PROSE-UI-003` | `INV` | The UI thread MUST NOT block on the Logic channel. | this spec section 3; `ambre-spec-architecture.md section 2` | structural -- `ambre_prose::ui::send_command` is the one path out and it calls `try_send`; `ambre_prose::ui::tests::a_full_channel_drops_the_command_rather_than_holding_the_frame` | none | verified |
+| `PROSE-UI-010` | `INV` | The scroll position and the selection MUST stay local: neither MUST enter the document. | this spec section 3 | structural -- the viewport and the caret are fields of `ambre_prose::ui::ProseUiState`, and no variant of `ProseCommand` carries either; `ambre_prose::logic::presence::tests::a_caret_is_never_written_to_the_document` | none | verified |
+| `PROSE-UI-015` | `INV` | `ambre-prose`'s UI module MUST contain no `unsafe`. | README pillar "Security" | lint-wall -- `#![forbid(unsafe_code)]` on `crates/ambre-prose/src/lib.rs` covers every module of the crate | none | verified |
 
 ### 1.2 Do one thing to the document
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-045` | `PRE` | Every offset a command carries MUST address the body text of the block the command names. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-046` | `POST` | A command MUST answer with one outcome carrying every display event it produced, the delta it exported and the presence frame it built. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-023` | `POST` | The confirmed-change event of a local command MUST carry the delta that command exported, never a re-export of the current state. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-047` | `FRAME` | A command that does not mutate the document MUST NOT produce a delta. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-045` | `PRE` | Every offset a command carries MUST address the body text of the block the command names. | this spec section 3 | `ambre_prose::logic::text::tests::an_offset_past_the_body_is_refused`; `ambre_prose::logic::marks::tests::an_empty_range_is_refused` | none | verified |
+| `PROSE-046` | `POST` | A command MUST answer with one outcome carrying every display event it produced, the delta it exported and the presence frame it built. | this spec section 3 | type-level -- `ambre_prose::events::ProseOutcome` is the one return type of `handle_command`, and it carries the three; `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
+| `PROSE-023` | `POST` | The confirmed-change event of a local command MUST carry the delta that command exported, never a re-export of the current state. | this spec section 3 | `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
+| `PROSE-047` | `FRAME` | A command that does not mutate the document MUST NOT produce a delta. | this spec section 3 | `ambre_prose::logic::tests::a_command_that_changes_nothing_exports_no_delta`; `ambre_prose::logic::blocks::tests::a_paragraph_style_naming_no_property_writes_nothing` | none | verified |
 
 ### 1.3 Take in a change from a collaborator
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-048` | `POST` | The confirmed-change event of a remote change MUST carry the payload that arrived, never a re-export of the current state. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-049` | `FRAME` | A remote change MUST NOT be re-broadcast. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-048` | `POST` | The confirmed-change event of a remote change MUST carry the payload that arrived, never a re-export of the current state. | this spec section 3 | `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
+| `PROSE-049` | `FRAME` | A remote change MUST NOT be re-broadcast. | this spec section 3; `ambre-spec-delta-order.md` | type-level -- `ambre_prose::logic::ProseState::apply_remote` answers display events and no outcome, so it has no field a delta could leave by; `ambre_prose::logic::convergence_tests::a_remote_change_is_never_re_broadcast` | none | verified |
 
 ### 1.4 Hand a change to the Sync worker
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-050` | `POST` | An export MUST read from the last exported version vector. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-098` | `POST` | An export MUST advance the last exported version vector. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-051` | `POST` | A second export from the same version vector MUST yield the same bytes: an extra call MUST NOT truncate the stream. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-052` | `FRAME` | Exporting MUST NOT write to the document. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-050` | `POST` | An export MUST read from the last exported version vector. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_prose::logic::tests::a_second_export_from_the_same_vector_yields_the_same_bytes` | none | verified |
+| `PROSE-098` | `POST` | An export MUST advance the last exported version vector. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_prose::logic::tests::a_second_export_from_the_same_vector_yields_the_same_bytes`; `ambre_prose::logic::convergence_tests::a_remote_change_is_never_re_broadcast` | none | verified |
+| `PROSE-051` | `POST` | A second export from the same version vector MUST yield the same bytes: an extra call MUST NOT truncate the stream. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_prose::logic::tests::a_second_export_from_the_same_vector_yields_the_same_bytes` | none | verified |
+| `PROSE-052` | `FRAME` | Exporting MUST NOT write to the document. | this spec section 3 | `ambre_prose::logic::tests::answering_with_a_snapshot_advances_no_cursor` | none | verified |
 
 ### 1.5 Answer a request for the whole document
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-053` | `POST` | A snapshot MUST be the CRDT's own bytes and nothing else: no layout, no cache, no session state. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-054` | `FRAME` | Answering with a snapshot MUST NOT write to the document and MUST NOT advance the export cursor. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-053` | `POST` | A snapshot MUST be the CRDT's own bytes and nothing else: no layout, no cache, no session state. | this spec section 3 | structural -- `ambre_prose::logic::ProseState::export_snapshot` answers `LoroDoc::export` and appends nothing; `ambre_prose::logic::tests::a_picture_arriving_writes_nothing_to_the_document` | none | verified |
+| `PROSE-054` | `FRAME` | Answering with a snapshot MUST NOT write to the document and MUST NOT advance the export cursor. | this spec section 3; `ambre-spec-delta-order.md` | `ambre_prose::logic::tests::answering_with_a_snapshot_advances_no_cursor` | none | verified |
 
 ### 1.6 Take in a whole document
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-055` | `POST` | An imported snapshot MUST replace the document whole. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-056` | `FRAME` | Importing a snapshot MUST NOT produce a delta. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-055` | `POST` | An imported snapshot MUST replace the document whole. | this spec section 3 | `ambre_prose::logic::tests::a_snapshot_round_trips_what_the_document_held` | partial -- the read is whole and the scaffolding this peer grew is dropped, but a snapshot merges into the blocks a local edit already made rather than replacing them. Section 6 carries the case, and it lands with the `The native format` Story (`ambre-roadmap.md` E5) | untested |
+| `PROSE-056` | `FRAME` | Importing a snapshot MUST NOT produce a delta. | this spec section 3 | type-level -- `ambre_prose::logic::ProseState::import_snapshot` answers display events and no outcome; `ambre_prose::logic::tests::importing_a_snapshot_produces_no_delta` | none | verified |
 
 ### 1.7 Take in a peer's cursor
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-057` | `FAIL` | A remote position naming a block this peer has not received, or one already tombstoned, MUST resolve to nothing and the cursor MUST be dropped rather than raised. | this spec section 3; `ambre-spec-presence.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-058` | `FRAME` | Applying a presence frame MUST NOT touch the document, its history or the export cursor. | this spec section 3; `ambre-spec-presence.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-057` | `FAIL` | A remote position naming a block this peer has not received, or one already tombstoned, MUST resolve to nothing and the cursor MUST be dropped rather than raised. | this spec section 3; `ambre-spec-presence.md` | `ambre_prose::logic::presence::tests::a_frame_naming_a_block_this_peer_does_not_hold_is_dropped`; `::a_malformed_frame_is_dropped_rather_than_raised` | none | verified |
+| `PROSE-058` | `FRAME` | Applying a presence frame MUST NOT touch the document, its history or the export cursor. | this spec section 3; `ambre-spec-presence.md` | `ambre_prose::logic::presence::tests::a_caret_is_never_written_to_the_document` | none | verified |
 
 ### 1.8 Take in a decrypted picture
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-059` | `POST` | A decrypted picture MUST be cached under the content hash it arrived with. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-060` | `POST` | What the picture is shown in MUST be invalidated when it arrives. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-061` | `FRAME` | A picture arriving MUST NOT write to the document and MUST NOT produce a delta. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-059` | `POST` | A decrypted picture MUST be cached under the content hash it arrived with. | this spec section 3 | `ambre_prose::logic::tests::a_picture_arriving_writes_nothing_to_the_document` | none | verified |
+| `PROSE-060` | `POST` | What the picture is shown in MUST be invalidated when it arrives. | this spec section 3 | `ambre_prose::logic::tests::a_picture_arriving_writes_nothing_to_the_document` | partial -- the answer names the image blocks addressing the hash, and no test builds one: no command inserts a picture yet. It lands with the `Images` Story (`ambre-roadmap.md` E5) | untested |
+| `PROSE-061` | `FRAME` | A picture arriving MUST NOT write to the document and MUST NOT produce a delta. | this spec section 3 | `ambre_prose::logic::tests::a_picture_arriving_writes_nothing_to_the_document` | none | verified |
 
 ### 1.9 Send a command from the UI thread
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-002` | `POST` | Every mutation MUST leave the UI thread as a command. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-149` | `FAIL` | A full Logic channel MUST drop the command rather than hold the frame. | this spec section 3; `ambre-spec-architecture.md section 2` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-150` | `FRAME` | The draft echo a send paints MUST NOT reach the wire. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-002` | `POST` | Every mutation MUST leave the UI thread as a command. | this spec section 3 | structural -- `ambre_prose::ui::send_command` builds the one envelope, and `ProseUiState` holds no document to write to; `ambre_prose::ui::tests::the_draft_echo_never_reaches_the_wire` | none | verified |
+| `PROSE-UI-149` | `FAIL` | A full Logic channel MUST drop the command rather than hold the frame. | this spec section 3; `ambre-spec-architecture.md section 2` | `ambre_prose::ui::tests::a_full_channel_drops_the_command_rather_than_holding_the_frame`; `::a_closed_channel_is_told_apart_from_a_full_one` | none | verified |
+| `PROSE-UI-150` | `FRAME` | The draft echo a send paints MUST NOT reach the wire. | this spec section 3 | `ambre_prose::ui::tests::the_draft_echo_never_reaches_the_wire` | none | verified |
 
 ### 1.10 Fan one answer out
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-062` | `POST` | One outcome MUST reach the destinations it names: the display events to the UI thread, the delta and the presence frame to the Sync worker. | this spec section 3; `ambre-spec-message-bus.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-063` | `FRAME` | Fanning an outcome out MUST NOT let a connection change, a sharing change or a revoked member reach the document state. | this spec section 3; `ambre-spec-membership.md` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-062` | `POST` | One outcome MUST reach the destinations it names: the display events to the UI thread, the delta and the presence frame to the Sync worker. | this spec section 3; `ambre-spec-message-bus.md` | structural -- the `DocState::Prose` arm of `ambre_logic::LogicState::handle_app_command` hands the three fields to the one fan-out of the thread | unheld -- the arm is the same one Trame and Toile go through, and no test drives a Prose command end to end across the dispatcher. It lands with the `Input and cursor` Story (`ambre-roadmap.md` E5) | untested |
+| `PROSE-063` | `FRAME` | Fanning an outcome out MUST NOT let a connection change, a sharing change or a revoked member reach the document state. | this spec section 3; `ambre-spec-membership.md` | exhaustive-match -- `ambre_prose::logic::ProseState::handle_command` matches a closed `ProseCommand`, which declares no connection, sharing or membership variant | none | verified |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1` -- the local text insert with its
   exported delta, the snapshot export, the page-layout handoff, and the shared `doc.import()` row.
-  None has a benchmark, and the crate that would run one does not exist.
-* **Boundary.** none of its own. `PROSE-025` bans a network call from `ambre-prose` and refuses it
-  a dependency on `ambre-crypto` or `ambre-sync`. This crate holds no key and opens no
-  socket. Its one outbound flow that is not the sealed document is the picture blob
-  (`features/ambre-spec-prose-images.md`).
-* **Verification.** 39 `unimplemented`, nothing else -- the honest shape for a crate that is a
-  `lib.rs`. Two are compiler-held the day it exists; two more are properties over a
-  generated command stream. One gap is disagreement, not absence: with section 3.B,
-  `PROSE-FEAT-006` states two units for one offset, so whichever is built the other row goes red.
+  No benchmark runs.
+* **Boundary.** none of its own. `PROSE-025` bans a network call, and `PROSE-043` refuses this
+  crate a dependency on `ambre-crypto` or `ambre-sync`. It holds no key and opens no socket.
+* **Verification.** 35 `verified`, 4 `untested`. Seven rows are compiler-held: the crate graph,
+  the lint wall, the closed command enum, the one return type. Two `untested` rows wait on the page
+  layout and the inserted picture. One is the snapshot that merges where the rule says replace.
+  One is the fan-out, which no test drives across the dispatcher.
 
 ---
 
@@ -161,19 +159,24 @@ pub fn compute_depth(tree: &LoroMovableTree, item_id: &TreeID) -> u8;
 pub fn expand_type_for(mark_key: &str) -> ExpandType;
 ```
 
+**The block on the plane is a [`BlockId`], never a `TreeID`.** It carries the same pair the tree
+mints -- the peer and the counter -- under a type that pulls no CRDT into `ambre-bus`. The Sync
+worker links that crate and must compile no CRDT (`SYNC-011`), which `deny.toml` holds. The engine
+converts at its own boundary, so the value is one identity and not two.
+
 **Dependencies** the engine pulls into `ambre-prose`:
 
 | Crate | Role | Rationale |
 |---|---|---|
 | `loro` | the single-document CRDT | `LoroMovableTree` for the block hierarchy, `LoroText` for a body, `LoroMap` for the registers, `UndoManager` for the local history |
-| `parley` | the typographic layout the Logic thread measures with | pagination needs line breaking and glyph metrics, not just the run types `DrawSurface` exposes, so the dependency is direct and not through `ambre-draw` |
+| `parley` | the typographic layout the Logic thread measures with | pagination needs line breaking and glyph metrics, not just the run types `DrawSurface` exposes, so the dependency is direct and not through `ambre-draw`. Not linked yet: it lands with the `Pagination` Story (`ambre-roadmap.md` E5) |
 | `ambre-core` | the identity and document types | `Uuid`, `DocType`, reached through the `ambre-bus` re-export |
 | `ambre-bus` | the typed IPC shapes | the two planes of sections 3.B and 3.C, and the envelopes that carry them |
-| `ambre-draw` | the `DrawSurface` trait and the geometry re-exports | one page-drawing path for the screen and for the exported page (`features/ambre-spec-prose-pdf-export.md`) |
+| `ambre-draw` | the `DrawSurface` trait and the geometry re-exports | one page-drawing path for the screen and for the exported page (`features/ambre-spec-prose-pdf-export.md`). Not linked yet: it lands with the `Page rendering` Story (`ambre-roadmap.md` E5) |
+| `flume` | the UI-to-Logic channel the view sends on | shared memory between the two threads, so a command moves rather than serializes (`PROSE-UI-002`, `PROSE-UI-149`) |
 | `postcard` | the presence frame alone | the only Prose value serialized for the wire; a CRDT delta is already bytes |
 | `serde` | the derives that frame needs | on the wire types of section 3.D, and on nothing that travels between the two threads |
-| `unicode-segmentation` | grapheme counting | `PROSE-FEAT-006`, whose unit section 6 records as contested |
-| `thiserror` | the typed engine error | mapped onto the one error event of section 3.C |
+| `thiserror` | the typed engine error | mapped onto the one error event of section 3.C. Not linked yet: it lands with the `A refused command names what it refused` Story (`ambre-roadmap.md` E5) |
 
 **There is no dependency graph.** A block carries its own content and derives from no other block, so
 a write invalidates nothing but the layout of what it touched. That is the whole difference from a
@@ -195,18 +198,26 @@ thread leaves as a return value (`PROSE-024`).
 | the media cache | decrypted picture bytes by content hash, bounded (`features/ambre-spec-prose-images.md`) | from the download route; it dies with the session |
 | the local history | the undo manager, opened over the document (`features/ambre-spec-prose-undo.md`) | never: it dies with the session |
 | the sync cursor | the last version vector exported to Sync | advanced after every export |
+| the session identity | the canonical `UserId` and the display name, seeded from `SessionReady` | per session, never in the document |
+| the peer set | every remote peer's last resolved caret, keyed by that `UserId` (`PROSE-058`) | from each inbound frame; it dies with the session |
+
+The layout and the tracking flag are declared and unbuilt: each lands with its own feature's Story.
 
 ```rust
-// ambre-prose/src/logic.rs
+// ambre-prose/src/logic/mod.rs
 
 pub struct ProseState {
     doc:              LoroDoc,
-    undo_manager:     loro::UndoManager,
+    undo:             loro::UndoManager,
     layout:           Option<PageLayout>,
     layout_version:   u64,
     tracking:         bool,
     media_cache:      HashMap<String, Vec<u8>>,
     last_exported_vv: VersionVector,
+    peer:             u64,
+    my_user_id:       Option<UserId>,
+    my_name:          Option<String>,
+    presence:         HashMap<UserId, CursorPosition>,
 }
 
 /// What a content command returns. The Logic dispatcher explodes it: the display events
@@ -231,10 +242,17 @@ impl ProseState {
     /// read from the payload (`PRESENCE-003`, `ambre-spec-membership.md`).
     pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &[u8]) -> Vec<ProseEvent>;
 
+    /// A relay's history replay on open: one import sweep, one repaint.
+    pub fn apply_remote_batch(&mut self, payloads: &[Vec<u8>]) -> Vec<ProseEvent>;
+
     /// Answered on a snapshot request; the bytes are sealed by `ambre-sync`.
     pub fn export_snapshot(&self) -> Vec<u8>;
 
-    pub fn import_snapshot(&mut self, snapshot: &[u8]) -> Result<(), ProseError>;
+    /// The schema gate runs first, on a scratch document, so a refused read leaves this
+    /// one as it was (`SCHEMA-012`). The error is the foundation's, shared with Trame and
+    /// Toile, because the verdict is the protocol's and not this application's.
+    pub fn import_snapshot(&mut self, snapshot: &[u8])
+        -> Result<Vec<ProseEvent>, ambre_core::schema::SchemaError>;
 
     /// A decrypted picture arrived on its own Logic route: cache it, invalidate what showed it.
     pub fn on_media_downloaded(&mut self, content_hash: String, data: Vec<u8>) -> Vec<ProseEvent>;
@@ -255,14 +273,20 @@ revoked member is not document content and never reaches this state at all.
 
 The plane the UI thread writes on. Values move by `flume`, so no shape below derives `serde`.
 
-> **The offset unit.** Every `pos`, every `range` and every `(TreeID, u32)` endpoint below is an
-> offset into the target block's body text. That is the unit Loro indexes a text container and a
-> cursor with. The plane declares it a **Unicode code point**; `PROSE-FEAT-006` requires a **grapheme**,
-> and the view's own hit-test answers **UTF-8 bytes**. The three do not agree, and section 6 carries
-> the gap: nothing in the corpus states the conversion the ten editing documents each perform.
+> **The offset unit is the Unicode code point.** Every `pos`, every `range` and every
+> `(TreeID, u32)` endpoint below is a count of code points into the target block's body text
+> (`PROSE-FEAT-006`). That is the unit Loro indexes a text container and a cursor with, so a write
+> path converts nothing. A caret advances by **grapheme cluster**, which is a rule of the view. The
+> view's own hit-test answers **UTF-8 bytes**. Each conversion happens where it is read, and section
+> 6 carries what the corpus still owes on it.
+
+The variants below are the ones the engine core answers. Tables, comments, footnotes and find reach
+this enum later, and so do the clipboard, the bands, the spell checker and the interop filters. Each
+arrives with the Story that builds it, and the whole list is `ambre-roadmap.md` E5.
 
 ```rust
-// ambre-prose/src/events.rs -- the content plane, in `ambre-bus`. Move on `flume`, no serde.
+// ambre-prose/src/events.rs -- re-exported from `ambre_bus::app::prose`. Move on `flume`,
+// no serde.
 #[derive(Debug, Clone)]
 pub enum ProseCommand {
     Noop,
@@ -448,6 +472,15 @@ pub enum ProseEvent {
     /// The confirmed change, local or imported. The bytes are the ones applied, never a
     /// re-export (`PROSE-023`).
     DocUpdated    { delta: Vec<u8> },
+    /// The paragraph that parted, and the one that carries its tail. The view needs the new
+    /// block's identity to leave the caret at its start (`PROSE-UI-141`): it cannot mint the
+    /// id and it holds no document to read it from.
+    BlockSplit { source: BlockId, new_block: BlockId },
+    /// A picture finished decrypting, and the blocks that show it are stale (`PROSE-059`,
+    /// `PROSE-060`). The bytes stay in the Logic thread's cache.
+    MediaArrived { content_hash: String, blocks: Vec<BlockId> },
+    /// A full-state read the schema gate refused (`SCHEMA-008`, `PROSE-097`).
+    DocumentRefused { reason: String },
     /// The layout after a change. `version` lets the view drop an older one
     /// (`PROSE-UI-016`, `features/ambre-spec-prose-page-rendering.md`).
     LayoutUpdated { layout: PageLayout, first_dirty_page: u32, version: u64 },
@@ -495,31 +528,41 @@ Two shapes, and they are the only Prose values that carry `serde`: they are the 
 Sync worker seals and sends. The event payload built from an arriving frame carries none.
 
 ```rust
-/// Where a caret is, in the document's own coordinates. A `TreeID` is `(PeerID, Counter)`,
-/// globally unique and portable, so the same value means the same place on every replica
-/// and postcard round-trips it with no custom logic.
+/// Where a caret is on **this** replica: the block, and the absolute offset resolved
+/// against the document this peer holds. It is what a local command carries and what the
+/// view is handed; it is never what crosses the wire.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CursorPosition {
-    pub block_id: TreeID,
+    pub block_id: BlockId,
     pub offset:   u32,
-    pub anchor:   Option<(TreeID, u32)>,
+    pub anchor:   Option<(BlockId, u32)>,
 }
 
-/// The peer-authored frame. Position and a self-asserted, cosmetic name -- and deliberately
-/// no user id: the canonical identity is the Sync-resolved one delivered out of band, so a
-/// peer cannot forge another user's (`PRESENCE-002`, `PRESENCE-003`).
+/// The peer-authored frame. A position and a self-asserted, cosmetic name -- and
+/// deliberately no user id: the canonical identity is the Sync-resolved one delivered out
+/// of band, so a peer cannot forge another user's (`PRESENCE-002`, `PRESENCE-003`).
+///
+/// The position is an **encoded `loro::Cursor`**, never an offset (`PROSE-004`). An offset
+/// names a different character on a peer that has applied an insertion this one has not. A
+/// cursor rides the operation it was taken against, so after convergence every peer
+/// resolves it to the same absolute position. The block is named beside the bytes, so a
+/// frame naming a block this peer does not hold is dropped without decoding the cursor
+/// (`PROSE-057`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PresencePayload {
-    pub position:     CursorPosition,
+    pub block_id:     BlockId,
+    pub cursor:       Vec<u8>,
+    pub anchor:       Option<(BlockId, Vec<u8>)>,
     pub display_name: String,
 }
 
-/// What the view is handed. No serde: it moves by value.
+/// What the view is handed. No serde: it moves by value. No colour either: the view derives
+/// it from the `UserId`, so a collaborator keeps one colour across the three applications
+/// (`PRESENCE-004`).
 #[derive(Debug, Clone)]
 pub struct RemoteCursor {
     pub user_id:      UserId,
     pub display_name: String,
-    pub color:        peniko::Color,
     pub position:     CursorPosition,
 }
 ```
@@ -617,7 +660,9 @@ Two consequences are worth stating because a reader expects the opposite. Two co
 independently and see the same document (`PROSE-UI-010`). The draft echo is transient UI state
 that dies with the tab and never reaches the wire.
 
-**Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
+**Code:** `crates/ambre-prose/`. `doc` holds the containers and the three reads, `mark` the
+registry and `schema` the version. `logic` holds the engine, `events` the plane and the outcome, and
+`ui` the view state with its one send path.
 
 ---
 
@@ -669,51 +714,33 @@ Prose view is an arm of the frame host's application enum, like Trame's.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing exists.** `crates/ambre-prose/src/lib.rs` is seven lines, so the state, the two planes and
-  the seam are a design, and all fourteen rows above are `unimplemented`.
-* **A position is counted three ways, and one of the three is a rule of this document.** The plane of
-  section 3.B declares every offset a Unicode code point. `PROSE-FEAT-006` requires a grapheme, and
-  names a Rust `char`, a code point, as what it must never be. The view's hit-test answers
-  UTF-8 byte ranges, because that is what the shaped run joins glyphs to
-  (`features/ambre-spec-prose-page-rendering.md section 2`). Every editing document converts between
-  a view unit and a command unit, and none can say what the conversion is
-  (`features/ambre-spec-prose-text-editing.md section 6`). Two of the three claims are normative and
-  contradict each other, so choosing a unit is a design decision that lands with `ARCH P2`.
+* **The layout, the tracking flag and the feature commands are declared and unbuilt.** The engine
+  core built the document model, the two planes and the seam. Pagination, the tables, the comments
+  and the footnotes each land with their own Story (`ambre-roadmap.md` E5). So do the find
+  machinery, the clipboard, the bands, the spell checker and the interop filters. Each one adds its
+  commands to the plane of section 3.B and its events to section 3.C.
+* **The offset unit is decided, and one conversion is still unwritten.** The plane counts Unicode
+  code points, which is what the CRDT indexes (`PROSE-FEAT-006`). The view's hit-test answers UTF-8
+  byte ranges, because that is what a shaped run joins glyphs to
+  (`features/ambre-spec-prose-page-rendering.md section 2`), and a caret advances by grapheme
+  cluster. Neither conversion has code: both belong to the view, and they land with the
+  `Input and cursor` Story (`ambre-roadmap.md` E5).
 * **The typed engine error is declared nowhere, and the event that carries it is untyped.** The
-  dependency table asks `thiserror` for a `ProseError`, one signature returns it, and no document
-  writes its variants. The event plane offers a numeric code and a message, which names neither the
-  command that failed nor a reason. Five features record the same absence: the styles, the lists,
-  the tables, the bands and the comments. Each was written against a refusal event this
-  plane does not declare. It lands with the
-  `A refused command names what it refused` Story (`ambre-roadmap.md` E5).
-* **Three commands were declared by a feature and by no plane.** The spell checker's language,
-  accept and dictionary commands are stated in `features/ambre-spec-prose-spell-check.md` and were
-  absent from the plane; they are declared in section 3.B now. The plane's own error path for a
-  refused one is the gap above.
-* **Nothing states what the engine does with a command it cannot honour.** A malformed range, a
-  block id that resolves to nothing, a nesting rule broken by a move (`PROSE-040`): each feature
-  states its own refusal. No rule of this document says whether a refused command leaves the
-  document untouched, or whether it produces an outcome at all. Nothing says whether the undo stack
-  sees it.
-* **Nothing rules on the export cursor when an export fails.** The cursor is advanced after every
-  export, and no rule of this document says whether a failed export advances it too. The
-  operations of that range would then never be offered again.
-* **A dropped command leaves no trace.** A full Logic channel drops the mutation, and nothing
-  says whether the drop is logged, surfaced or counted. An edit the user made is lost silently.
-* **The remote path has no batch.** A run of deltas arriving together is applied one at a time, so
-  the layout is rebuilt once per delta. Trame and Toile each carry a row for the amortized path,
-  and this document declares no batch entry point to hold one.
-* **The priority scheduler that defers a long shaping pass is named and never designed.**
-  `ambre-spec-budgets.md section 2` sends a monster paragraph's shaping through a P1-P4
-  scheduler in the Logic thread. No document declares what those four levels are, what preempts
-  what, or how a deferred pass reports back. Pagination assumes the split
-  (`features/ambre-spec-prose-pagination.md`) and cannot state its cost without it.
-* **No budget is measured.** Not one of the Prose rows of `ambre-spec-budgets.md` has
-  a benchmark. Every figure the four bullets above rest on is a claim about a number nothing
-  weighs. Giving the budgets a mechanism is its own Story
-  (`ambre-roadmap.md`, "The performance budgets given a mechanism").
-* **The engine has no test seam yet, and the shape of one is already decided.** Trame drives its
-  Logic-to-Sync boundary through a mock sink, and Toile asserts on the returned outcome instead.
-  That is stronger, because the value is the contract and a test that reads it cannot miss a send.
-  Prose returns an outcome by the same design and will be tested the same way. The mock seam three
-  dying specs named for this application is not what it needs.
+  dependency table asks `thiserror` for a `ProseError`, and no document writes its variants. The
+  event plane offers a numeric code and a message, which names neither the command that failed nor a
+  reason. The codes the engine answers with today are a compiled list, and it is what the typed
+  error replaces. Five features record the same absence: the styles, the lists, the tables, the
+  bands and the comments. Its Story is `A refused command names what it refused` (`ambre-roadmap.md` E5).
+* **A snapshot merges where the rule says replace.** `PROSE-055` states that an imported snapshot
+  replaces the document whole. The import drops the paragraph this peer grew on opening. Every other
+  block a local edit made survives the merge, because losing an edit is the worse answer. Nothing
+  rules on which of the two a full-state read owes, and the row is `untested` until it does.
+* **Nothing rules on what a split does to a mark it cuts.** `PROSE-038` carries the type and the
+  paragraph style to the new paragraph. It says nothing of an inline mark, a comment or a footnote
+  anchored across the point the paragraph parts, and the engine carries neither today.
+* **Nothing rules on the export cursor when an export fails.** The cursor is advanced only when the
+  export succeeded, so the next flush offers the same range again. No rule of this document says
+  that is what a failed export owes, and a rule that stated the opposite would read the same code.
+* **Nothing rules on the undo stack when a command is refused.** A refused command leaves the
+  document untouched and answers one error event. Whether the refusal is an undo item is unruled.
+  So is whether the outcome should name the command it refused, which is the typed error above.

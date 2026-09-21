@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: TEXT EDITING
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- the join and the split are built; the draft and the composition are not
 
 > Typing, deleting, splitting and joining paragraphs. A keystroke shows on the glass at once and
 > reaches the document a moment later. Two authors typing in the same paragraph never wait for
@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-134` | `OBS` | The text a draft holds MUST be drawn under the caret over the confirmed runs, before the document has answered. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-135` | `INV` | A draft MUST hold text and an anchor and no structure: it MUST NOT be able to express a split, a deletion or a mark. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-137` | `INV` | One primitive MUST delete the active selection, and a second one MUST NOT exist per editing path. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-039` | `INV` | Joining two paragraphs MUST be expressed as the deletion below with an empty range; a second join operation MUST NOT exist. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-039` | `INV` | Joining two paragraphs MUST be expressed as the deletion below with an empty range; a second join operation MUST NOT exist. | this spec section 3 | exhaustive-match -- `ProseCommand` is closed and declares one deletion across blocks and no join variant; `ambre_prose::logic::text::tests::a_deletion_across_a_boundary_joins_the_two_paragraphs` | none | verified |
 
 ### 1.2 Type a run of text
 
@@ -45,17 +45,17 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-037` | `POST` | What survives of the last paragraph MUST be appended to the first. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-101` | `POST` | Every paragraph the deletion emptied MUST be removed. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-041` | `FRAME` | The deletion MUST NOT change the identity of the first paragraph or its paragraph style, whichever of the two the caret started in. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-037` | `POST` | What survives of the last paragraph MUST be appended to the first. | this spec section 3 | `ambre_prose::logic::text::tests::a_deletion_across_a_boundary_joins_the_two_paragraphs`; `::the_endpoints_arrive_in_either_order` | none | verified |
+| `PROSE-101` | `POST` | Every paragraph the deletion emptied MUST be removed. | this spec section 3 | `ambre_prose::logic::text::tests::a_deletion_removes_every_paragraph_it_emptied` | partial -- the first paragraph of the range is the one exception, because `PROSE-041` keeps its identity whether or not the deletion left it empty. No row states that exception, and it lands with the `Undo, footnotes and cross references` Story (`ambre-roadmap.md` E5), which is what reads an emptied paragraph back | untested |
+| `PROSE-041` | `FRAME` | The deletion MUST NOT change the identity of the first paragraph or its paragraph style, whichever of the two the caret started in. | this spec section 3 | `ambre_prose::logic::text::tests::the_join_keeps_the_first_paragraphs_identity_and_style` | none | verified |
 
 ### 1.5 Split a paragraph
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-038` | `POST` | The new paragraph MUST carry the source's type and paragraph style. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-141` | `POST` | The caret MUST be left at the start of the new paragraph. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-042` | `FRAME` | The split MUST NOT change the text the two paragraphs carry between them, or the identity of the source paragraph. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-038` | `POST` | The new paragraph MUST carry the source's type and paragraph style. | this spec section 3 | `ambre_prose::logic::text::tests::the_new_paragraph_carries_the_sources_type_and_style` | none | verified |
+| `PROSE-UI-141` | `POST` | The caret MUST be left at the start of the new paragraph. | this spec section 3 | `ambre_prose::ui::tests::a_split_leaves_the_caret_at_the_start_of_the_new_paragraph` | none | verified |
+| `PROSE-042` | `FRAME` | The split MUST NOT change the text the two paragraphs carry between them, or the identity of the source paragraph. | this spec section 3 | `ambre_prose::logic::text::tests::a_split_leaves_the_text_the_two_paragraphs_carry_between_them`; `ambre_prose::logic::convergence_tests::a_split_and_a_concurrent_insertion_both_survive` | partial -- the text and the identity are read; an inline mark cut by the split is not, and no row states what it becomes. Section 6 carries it, and it lands with the `Styles, lists and headings` Story (`ambre-roadmap.md` E5) | untested |
 
 ### 1.6 Compose with an input method
 
@@ -75,16 +75,17 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-027` | `FRAME` | An event carrying no change MUST leave the draft untouched: a download or a presence update MUST NOT erase what is being typed. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the keystroke to a local echo and the keystroke to a confirmed one, two rows of
-  `ambre-spec-budgets.md section 1`. The first is what the draft exists to hold.
+  `ambre-spec-budgets.md section 1`.
 * **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. Every mutation leaves as a command (`PROSE-UI-002`,
   `features/ambre-spec-prose-engine.md section 1`).
-* **Verification.** 25 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-039` and `PROSE-UI-137` are the two a reviewer holds before a test exists, because a
-  second primitive is a second declaration. The four rows of section 1.7 are a pure state machine
-  over one struct, which is the shape a property test reaches directly. `PROSE-UI-134` is the one
-  row of this document that needs a page drawn, so it waits on the renderer rather than on the
-  engine.
+* **Budget.** the keystroke to a local echo and the keystroke to a confirmed one, two rows of
+  `ambre-spec-budgets.md section 1`.
+* **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
+  network, crypto or persistence path.
+* **Verification.** 5 `verified`, 2 `untested`, 18 `unimplemented`. The join and the split are
+  built; the draft's state machine is not. The two `untested` rows are the two the code answers in
+  part: the paragraph a deletion empties, and the mark a split cuts.
 
 ---
 
@@ -201,7 +202,8 @@ is that deletion with both endpoints at the boundary. A merge and a cross-paragr
 one code path and one convergence case (`PROSE-039`). Splitting is its inverse (`PROSE-038`,
 `PROSE-042`), and it leaves the caret on the new paragraph (`PROSE-UI-141`).
 
-**Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
+**Code:** `crates/ambre-prose/src/logic/text.rs` holds the four commands, and
+`crates/ambre-prose/src/ui.rs` the draft and the one send path.
 
 ---
 
@@ -238,13 +240,16 @@ toolbar and the slash command.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The corpus states the position unit four ways, and they are not the same.** The command plane
-  declares a Unicode code point (`features/ambre-spec-prose-engine.md section 3`), the interaction model
-  declares a UTF-8 byte offset and cites that same section for it. The shaped run joins glyphs to
-  byte ranges (`features/ambre-spec-prose-page-rendering.md section 2`), and `PROSE-FEAT-006`
-  requires graphemes wherever a Loro position is addressed. Every document of this area converts
-  between the UI representation and the command one, and no document says what the conversion is.
-  Deciding it is authorship, not migration: it is recorded here and as a finding.
+* **The position unit is decided, and the conversion is still unwritten.** The command plane counts
+  Unicode code points, which is what the CRDT indexes (`PROSE-FEAT-006`,
+  `features/ambre-spec-prose-engine.md section 3`). The shaped run joins glyphs to UTF-8 byte ranges
+  (`features/ambre-spec-prose-page-rendering.md section 2`), and a caret advances by grapheme
+  cluster. Both conversions belong to the view, and neither has code: they land with the
+  `Input and cursor` Story (`ambre-roadmap.md` E5).
+* **Nothing states what a deletion leaves of the paragraph it started in.** `PROSE-101` removes
+  every paragraph the deletion emptied, and `PROSE-041` keeps the first one's identity. A deletion
+  that empties the first paragraph reads the two rules against each other, and the code keeps the
+  paragraph. No row says so, which is why `PROSE-101` is `untested`.
 * **Nothing rules on how many pending characters a draft may hold.** A slow or blocked Logic
   thread grows the string without bound, and no rule caps it or says what happens when the
   confirmation never comes.

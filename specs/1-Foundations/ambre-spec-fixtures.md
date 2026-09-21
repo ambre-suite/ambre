@@ -190,6 +190,7 @@ pub struct FixtureShape {
 pub enum ShapeBody {
     Trame { cells: u32, sheets: u16, formulas: u32 },
     Toile { elements: u32, frames: u16, connectors: u32 },
+    Prose { blocks: u32, characters: u32 },
 }
 ```
 

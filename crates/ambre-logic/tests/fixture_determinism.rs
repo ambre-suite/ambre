@@ -16,6 +16,7 @@
 use ambre_bus::{DocType, TrameCommand};
 use ambre_core::Uuid;
 use ambre_logic::DocState;
+use ambre_prose::{ProseCommand, ProseState};
 use ambre_toile::ToileState;
 use ambre_toile::logic::command::{InitContent, ToileCommand};
 use ambre_toile::logic::model::{ElementKind, ShapeKind};
@@ -375,6 +376,15 @@ fn the_round_trip_is_stable_on_every_doc_state_variant() {
         correlate: 0,
     });
     assert_round_trip(&DocState::Toile(Box::new(toile)), DocType::Toile);
+
+    let mut prose = ProseState::with_peer(SEED).expect("a document is built");
+    let block = prose.root_blocks()[0];
+    prose.handle_command(ProseCommand::InsertText {
+        block_id: block,
+        pos: 0,
+        text: "a paragraph".to_owned(),
+    });
+    assert_round_trip(&DocState::Prose(Box::new(prose)), DocType::Prose);
 }
 
 #[test]
@@ -382,14 +392,12 @@ fn every_variant_reports_its_own_doc_type() {
     // `DocState::doc_type` is the inverse of `DocState::new`, and what the driver
     // writes into a manifest. A variant that misreported it would produce an
     // artifact no importer could route.
-    for doc_type in [DocType::Trame, DocType::Toile] {
+    for doc_type in [DocType::Trame, DocType::Toile, DocType::Prose] {
         let state = DocState::new(doc_type).expect("an engine");
         assert_eq!(state.doc_type(), doc_type);
     }
-    for doc_type in [DocType::Prose, DocType::Murmure] {
-        assert!(
-            DocState::new(doc_type).is_none(),
-            "{doc_type:?} has no engine yet, and the loader must see that"
-        );
-    }
+    assert!(
+        DocState::new(DocType::Murmure).is_none(),
+        "Murmure has no engine yet, and the loader must see that"
+    );
 }

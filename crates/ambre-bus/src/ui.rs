@@ -185,4 +185,6 @@ pub enum AppEvent {
     Trame(crate::app::trame::TrameEvent),
     /// Display event for a Toile (whiteboard) document.
     Toile(crate::app::toile::ToileEvent),
+    /// Display event for a Prose (word processor) document.
+    Prose(crate::app::prose::ProseEvent),
 }

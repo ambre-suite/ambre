@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: TABLES
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- the nesting guard is built; no command creates a table
 
 > A grid of cells inside the document. Cells hold ordinary text and ordinary paragraphs, and a
 > merged region is described by its two corners. A row inserted at the same moment widens the
@@ -109,19 +109,19 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-040` | `FAIL` | An insert or a move whose result breaks the nesting rules of the document MUST be refused, and the refusal MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built | unbuilt -- lands with the `ARCH P2` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-040` | `FAIL` | An insert or a move whose result breaks the nesting rules of the document MUST be refused, and the refusal MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | `ambre_prose::logic::blocks::tests::a_table_row_is_refused_at_the_root`; `::a_block_moved_under_its_own_descendant_is_refused` | partial -- the refusal is read and the report is a number and a message, which names neither the command nor a reason. The typed error lands with the `A refused command names what it refused` Story (`ambre-roadmap.md` E5) | untested |
 
 * **Budget.** none of its own: a table is measured with the rest of the page, the pagination row of
   `ambre-spec-budgets.md section 1`. Resolving a merged region to a rectangle is part of that
   measurement, and `features/ambre-spec-prose-pagination.md section 3` owns it.
 * **Boundary.** none of its own: a cell is a block like any other, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 42 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+* **Verification.** 41 `unimplemented`, 1 `untested`: no command of `crates/ambre-prose` builds a
+  table yet. The `untested` row is the nesting guard, which the engine core built and reports
+  through a number rather than a typed error.
   `PROSE-009` is what a reviewer holds without a test: a stored span would be a key in the
   schema table, and it has none. `PROSE-FEAT-017`, `-050` and `-230` need two peers
-  rather than one, and the rest a single writer reaches. The eight frame conditions are what a grid
-  costs. They are a width list, a merge map and a text per cell, which most gestures must leave
-  untouched.
+  rather than one, and the rest a single writer reaches.
 
 ---
 

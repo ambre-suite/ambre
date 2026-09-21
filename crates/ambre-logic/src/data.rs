@@ -236,6 +236,20 @@ impl LogicState {
                     outcome.requests,
                 );
             }
+            (DocState::Prose(state), AppCommand::Prose(cmd)) => {
+                let outcome = state.handle_command(cmd);
+                let snapshot = outcome.update.is_some().then(|| state.export_snapshot());
+                self.dispatch_outcome(
+                    document_id,
+                    outcome.display.into_iter().map(AppEvent::Prose).collect(),
+                    outcome.update,
+                    outcome.ephemeral,
+                    snapshot,
+                    // Prose issues no service-plane request yet: the picture
+                    // route lands with the "Images" Story.
+                    Vec::new(),
+                );
+            }
             // A mismatched (state, command) pair is impossible by routing. The
             // `document_id` selects a single `DocState`, and the UI only ever
             // sends the matching `AppCommand` variant for that document.
@@ -405,6 +419,11 @@ impl LogicState {
                 let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
                 (events.into_iter().map(AppEvent::Toile).collect(), snapshot)
             }
+            DocState::Prose(state) => {
+                let events = state.apply_remote(payload);
+                let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
+                (events.into_iter().map(AppEvent::Prose).collect(), snapshot)
+            }
         };
         for event in events {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
@@ -435,6 +454,11 @@ impl LogicState {
                 let events = state.apply_remote_batch(payloads);
                 let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
                 (events.into_iter().map(AppEvent::Toile).collect(), snapshot)
+            }
+            DocState::Prose(state) => {
+                let events = state.apply_remote_batch(payloads);
+                let snapshot = (!events.is_empty()).then(|| state.export_snapshot());
+                (events.into_iter().map(AppEvent::Prose).collect(), snapshot)
             }
         };
         for event in events {
@@ -470,6 +494,11 @@ impl LogicState {
                 .into_iter()
                 .map(AppEvent::Toile)
                 .collect(),
+            DocState::Prose(state) => state
+                .apply_ephemeral(from_user_id, payload)
+                .into_iter()
+                .map(AppEvent::Prose)
+                .collect(),
         };
         for event in events {
             self.send_to_ui(UiEvent::Presence { document_id, event });
@@ -491,6 +520,11 @@ impl LogicState {
                 .into_iter()
                 .map(AppEvent::Toile)
                 .collect(),
+            DocState::Prose(state) => state
+                .drop_presence(user_id)
+                .into_iter()
+                .map(AppEvent::Prose)
+                .collect(),
         };
         for event in events {
             self.send_to_ui(UiEvent::Presence { document_id, event });
@@ -502,6 +536,7 @@ impl LogicState {
         match &self.docs.get(&document_id)?.state {
             DocState::Trame(state) => Some(state.export_snapshot()),
             DocState::Toile(state) => Some(state.export_snapshot()),
+            DocState::Prose(state) => Some(state.export_snapshot()),
         }
     }
 }
