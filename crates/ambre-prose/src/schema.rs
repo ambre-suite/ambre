@@ -139,6 +139,7 @@ pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::ProseCommand;
     use crate::logic::ProseState;
 
     /// A snapshot carrying `version` in its register. A `None` version writes no
@@ -190,6 +191,39 @@ mod tests {
             gate(&bytes),
             Err(SchemaError::DocumentTooNew { .. })
         ));
+    }
+
+    /// The refusal is free: the gate reads the payload in a scratch document,
+    /// so the live one is never written on the refusing path (`SCHEMA-012`).
+    /// The whole snapshot is compared, not a block count, because a write that
+    /// left the block set alone would still be a write.
+    #[test]
+    fn a_document_from_a_newer_client_is_refused_and_changes_nothing() {
+        let mut state = ProseState::with_peer(1).expect("a document is built");
+        let root = state.root_blocks()[0];
+        state.handle_command(ProseCommand::InsertText {
+            block_id: root,
+            pos: 0,
+            text: "kept".to_owned(),
+        });
+        let before = state.export_snapshot();
+
+        let err = state
+            .import_snapshot(&snapshot_at(Some(SCHEMA_VERSION + 1)))
+            .expect_err("a newer document is refused");
+
+        assert_eq!(
+            err,
+            SchemaError::DocumentTooNew {
+                document: SCHEMA_VERSION + 1,
+                binary: SCHEMA_VERSION,
+            }
+        );
+        assert_eq!(
+            state.export_snapshot(),
+            before,
+            "a refused read must not write the document back"
+        );
     }
 
     #[test]
