@@ -44,19 +44,20 @@ what two peers reach, not what one holds. Grammar and status values are normativ
 | `TRAME-016` | `INV` | A cell's whole style MUST be one binary register, keyed by that cell's identity. | this spec section 3; architecture section 2.D | `ambre_trame::logic::convergence_tests::subset_style_edit_does_not_tear_a_whole_cell_rewrite` -- it goes red on a split register, because a partial patch racing a whole rewrite is what a second style container tears on; `logic::tests::group1::bold_stays_on_the_cell_not_the_selection` -- the key | none | verified |
 | `TRAME-222` | `CONC` | Two concurrent restyles of one cell MUST converge on the whole style one of the two wrote, never a per-attribute blend. | this spec section 3; architecture section 2.D | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`; `::subset_style_edit_does_not_tear_a_whole_cell_rewrite` | none | verified |
 | `TRAME-025` | `INV` | A Trame document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7; `ambre-spec-schema-version.md`, the protocol it obeys | `ambre_trame::logic::schema::tests::a_new_workbook_carries_the_current_version` -- `schema::stamp` writes the key inside the scaffolding commit of `from_doc`, alongside the implicit sheet, so a workbook carries it before any user edit | none | verified |
-| `TRAME-026` | `INV` | A change to a container's key set, or to the type a key's value holds, MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | none | unheld -- nothing records the key set and the value types a build writes, so nothing notices them move. A shape snapshot frozen under `fixtures/frozen/trame/` and named by `SCHEMA_VERSION` would hold it. The freeze is append-only, so turning the gate green forces a snapshot at a higher version. `TRAME-224` is the half that stays human review; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-026` | `INV` | The key set a build writes, the type each key's value holds, and the `postcard` layout of each binary register MUST match the shape frozen under the compiled `SCHEMA_VERSION`. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | `ambre_trame::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_trame::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_trame::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_trame::logic::schema_shape::a_value_type_changing_moves_the_shape` | none | verified |
+| `TRAME-225` | `INV` | A frozen shape section MUST NOT change after the commit that wrote it. | architecture section 2.D; this spec section 7 | none | unheld -- a developer who regenerates the `v2` section of `crates/ambre-trame/schema/shapes.txt` in place turns `TRAME-026` green without raising the version. Only history says whether a section was edited, so the gate is a script over the diff and CI has to fetch more than one commit; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-224` | `INV` | A change to what a key's value means, the key and its type unchanged, MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | human-review -- the reviewer reads the diff for a unit or a reference point that moved under an unchanged key, which is the one drift no snapshot can show | unheld -- no gate is possible. `col_widths_{sheet}` holds a width in pixels. A build that reads the same `f64` as a count of characters writes the same key and the same type. Every shape snapshot stays green, and every document written before the change is read wrong | human-review |
 
 * **Budget.** none: a format has no operation to budget. What loading one costs is legs 3 and 4 of
   `ambre-spec-budgets.md section 4`, and both are recorded there as unbudgeted.
 * **Boundary.** none: `TRAME-010` keeps computed values out of the document, and the containers
   this table declares reach the relay as ciphertext alone (`ZK-001`).
-* **Verification.** 5 `verified`, 2 `untested`, 1 `human-review`. What holds is the shape a merge
+* **Verification.** 6 `verified`, 2 `untested`, 1 `human-review`. What holds is the shape a merge
   reads back. The
-  identity a cell keeps, the single register a style lives in, and the `meta.schema_version` every
-  document carries. What is loose is `TRAME-010`, narrower than it reads: only a computed value
-  stored **beside** the raw text escapes (`ambre-spec-testing.md section 7`). The version bump no
-  test can reach is loose too.
+  identity a cell keeps, the single register a style lives in, and the key set a build writes.
+  What is loose is `TRAME-010`, narrower than it reads: only a computed value
+  stored **beside** the raw text escapes (`ambre-spec-testing.md section 7`). The append-only
+  freeze is loose too: only history shows a section edited in place.
 
 ---
 

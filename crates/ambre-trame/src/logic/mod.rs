@@ -459,3 +459,9 @@ mod tests;
 // the chrome UI tests instead (`tests/chrome_ui.rs`).
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod convergence_tests;
+
+/// The schema shape belt (`TRAME-026`): the key set, the value types and the
+/// `postcard` layouts a build writes, frozen per `SCHEMA_VERSION`. Test-only,
+/// so no client build carries it.
+#[cfg(test)]
+mod schema_shape;
