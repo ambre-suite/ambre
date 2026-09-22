@@ -29,7 +29,7 @@ prefix is `SCHEMA`.
 | `SCHEMA-002` | `INV` | A shared formatting control MUST emit one changed field. | this spec section 2; `ambre-spec-chrome.md` | none | unheld -- the four shared controls each emit one field, and nothing refuses a fifth that emits a whole style; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SCHEMA-011` | `INV` | A view MUST fold that field into a whole-register write. | this spec section 2; `ambre-spec-chrome.md` | none | unheld -- it is the half that decides whether `SCHEMA-001` survives contact with the chrome: a view writing the field straight into a register of its own is the per-attribute layout the first rule forbids, arrived at from the other end. Nothing refuses one; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SCHEMA-004` | `INV` | Every document MUST carry its schema version in a root register, written when the document is created. | this spec section 2 | `ambre_toile::logic::schema::tests::a_new_board_carries_the_current_version`; `ambre_trame::logic::schema::tests::a_new_workbook_carries_the_current_version` -- written inside the scaffolding commit of each engine's `from_doc`, so no document reaches persistence without it | none | verified |
-| `SCHEMA-009` | `INV` | A change to the layout of a persisted record MUST raise the schema version. | this spec section 2 | none | unheld -- the rule binds a code change to a constant, and nothing compares this build's record layouts against the previous release's, so it is a human review named as such. `FIXTURES P1` narrows it rather than closing it: a layout change moves every fixture digest, so the corpus gate turns a silent layout drift into a red build that a reviewer must explain; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SCHEMA-009` | `INV` | A change to the layout of a persisted record MUST raise the schema version. | this spec section 2 | `ambre_prose::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_trame::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_toile::logic::state::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- each recomputes the shape from this build and compares it against the section frozen for the compiled `SCHEMA_VERSION`, so a moved key, a moved value type or a moved `postcard` layout is red until the number rises; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which holds a published section append-only, so the red cannot be cleared by rewriting the section it broke | none | verified |
 | `SCHEMA-010` | `INV` | A migration MUST live in the application crate that owns the schema it migrates. | this spec section 2 | crate-graph -- `ambre_core::schema::SchemaMigration<D>` is generic over the document, and `ambre-core` depends on no CRDT: it is linked by `ambre-server`, which may never decode a document (`ZK-001`), so a migration written in the foundation has no type to write against and does not compile | none | verified |
 
 ### 1.2 Read a document's full state
@@ -53,10 +53,10 @@ container, which is the only moment a wrong reading can still be caught.
 * **Boundary.** none. The version register is ordinary document state, so it travels sealed like
   every other container and the relay sees a blob (`ZK-001`). The protocol half lives in
   `ambre-core`, which the relay links, and nothing in it knows what a CRDT is.
-* **Verification.** 9 `verified`, 4 `untested`. A test holds everything the register promises: the
+* **Verification.** 10 `verified`, 3 `untested`. A test holds what the register promises: the
   number carried from creation, the comparison at every full-state entry point, and a named case per
-  verdict. What is loose is the per-element register in one application, the two ends of the
-  forbidden per-attribute layout, and the constant no test can see.
+  verdict. A layout moved under an unchanged number turns a shape belt red. What is loose is the
+  per-element register in one application, and the two ends of the per-attribute layout.
 
 ---
 
@@ -194,8 +194,10 @@ The user never sees the version. What they meet is what it protects them from.
 * **A second unreadable register says nothing new.** The import drains the notice, so a document
   with one broken record and a document with a thousand read identically. Deliberate -- see the
   rejected alternative -- but it does mean the surface cannot express severity.
-* **Nothing verifies that a layout change raised the version** (`SCHEMA-009`). The rule binds a code
-  change to a constant, and only a reviewer sees both.
+* **A meaning that moves under an unchanged layout still raises nothing.** The shape belts hold
+  `SCHEMA-009` because a layout change moves a line of the frozen text. A value read differently
+  under the same key and type leaves that text identical. The bump obligation on meaning
+  therefore stays with the reviewer. Each application's schema document names that half.
 * **The relay-side minimum-version gate has a name and no owner.** It is the only answer to live
   version skew, and no document holds a rule for it.
 
