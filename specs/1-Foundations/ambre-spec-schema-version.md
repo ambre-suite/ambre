@@ -26,7 +26,7 @@ prefix is `SCHEMA`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SCHEMA-001` | `INV` | A styled unit's whole style MUST be one binary register keyed by that unit's identity; a register per attribute is forbidden. | this spec section 2; `features/ambre-spec-trame-cell-styles.md` | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`; `::subset_style_edit_does_not_tear_a_whole_cell_rewrite` | partial -- Toile stores one register per element and no test drives two concurrent restyles of it; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SCHEMA-001` | `INV` | A styled unit's whole style MUST be one binary register keyed by that unit's identity; a register per attribute is forbidden. | this spec section 2; `features/ambre-spec-trame-cell-styles.md` | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`; `::subset_style_edit_does_not_tear_a_whole_cell_rewrite`; `ambre_toile::logic::convergence_tests::concurrent_whole_element_restyles_do_not_blend_across_registers` -- two peers restyle one element concurrently and exchange whole histories, and the converged style must be one peer's, so a field arriving from the other peer is red | none | verified |
 | `SCHEMA-002` | `INV` | A shared formatting control MUST emit one changed field. | this spec section 2; `ambre-spec-chrome.md` | none | unheld -- the four shared controls each emit one field, and nothing refuses a fifth that emits a whole style; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SCHEMA-011` | `INV` | A view MUST fold that field into a whole-register write. | this spec section 2; `ambre-spec-chrome.md` | none | unheld -- it is the half that decides whether `SCHEMA-001` survives contact with the chrome: a view writing the field straight into a register of its own is the per-attribute layout the first rule forbids, arrived at from the other end. Nothing refuses one; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SCHEMA-004` | `INV` | Every document MUST carry its schema version in a root register, written when the document is created. | this spec section 2 | `ambre_prose::schema::tests::a_new_document_carries_the_current_version`; `ambre_toile::logic::schema::tests::a_new_board_carries_the_current_version`; `ambre_trame::logic::schema::tests::a_new_workbook_carries_the_current_version` -- written inside the scaffolding commit of each engine's `from_doc`, so no document reaches persistence without it | none | verified |
@@ -54,10 +54,10 @@ container, which is the only moment a wrong reading can still be caught.
 * **Boundary.** none. The version register is ordinary document state, so it travels sealed like
   every other container and the relay sees a blob (`ZK-001`). The protocol half lives in
   `ambre-core`, which the relay links, and nothing in it knows what a CRDT is.
-* **Verification.** 10 `verified`, 3 `untested`. A test holds what the register promises: the
+* **Verification.** 11 `verified`, 2 `untested`. A test holds what the register promises: the
   number carried from creation, the comparison at every full-state entry point, and a named case per
-  verdict. A layout moved under an unchanged number turns a shape belt red. What is loose is the
-  per-element register in one application, and the two ends of the per-attribute layout.
+  verdict. A layout moved under an unchanged number turns a shape belt red. Both style registers
+  carry a convergence test. What is loose is the two ends of the per-attribute layout.
 
 ---
 
@@ -190,8 +190,6 @@ The user never sees the version. What they meet is what it protects them from.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Toile's style register has no convergence test.** The no-tear property is proven over Trame's
-  cells alone, and Toile's element register is the same design with no proof.
 * **Nothing refuses a per-attribute register.** `SCHEMA-001` holds because the two applications
   that store a style register happen to take that shape, and a third would inherit no check.
 * **No rule covers what a migration may do to a document it cannot fully read.** The three

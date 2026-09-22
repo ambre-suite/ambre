@@ -4489,6 +4489,70 @@ fn a_restyle_naming_a_missing_element_answers_an_error() {
     ));
 }
 
+/// Peer A and peer B restyle the same element concurrently, then exchange
+/// their whole histories. `SCHEMA-001`: the element's style is one binary
+/// register keyed by the element, so the two writes are LWW rivals. The style
+/// they converge on must be one of the two written, never a field-by-field
+/// blend, which is what a register per attribute would produce.
+///
+/// Each peer's intent is read back rather than assumed. The whole-selection
+/// restyle keeps the element's own corner radius, shadow and weight
+/// (`TOILE-UI-174`), so the register holds less than the command carried.
+#[test]
+fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
+    // Shared base: one element, its history known to both peers.
+    let mut a = ToileState::with_peer(1);
+    let id = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
+    let base = a.export_snapshot();
+    let mut b = ToileState::with_peer(2);
+    b.import_snapshot(&base)
+        .expect("a snapshot this build wrote reads back at the current schema");
+
+    // Two whole-style writes that differ in every field a blend could mix.
+    a.handle_command(ToileCommand::RestyleElements {
+        ids: vec![id.clone()],
+        style: ElementStyle {
+            fill: Some(0xFFFF_0000),
+            stroke: None,
+            stroke_w: 4.0,
+            opacity: 0.5,
+            text_color: Some(0xFF00_FF00),
+            ..ElementStyle::default()
+        },
+    });
+    b.handle_command(ToileCommand::RestyleElements {
+        ids: vec![id.clone()],
+        style: ElementStyle {
+            fill: None,
+            stroke: Some(0xFF00_00FF),
+            stroke_w: 1.5,
+            opacity: 0.25,
+            text_color: None,
+            ..ElementStyle::default()
+        },
+    });
+    let a_intent = a.style_of(&id);
+    let b_intent = b.style_of(&id);
+    assert_ne!(a_intent, b_intent, "the two edits must actually differ");
+
+    // Full bidirectional exchange.
+    let sa = a.export_snapshot();
+    let sb = b.export_snapshot();
+    a.apply_remote(&sb);
+    b.apply_remote(&sa);
+
+    let conv_a = a.style_of(&id);
+    let conv_b = b.style_of(&id);
+    assert_eq!(conv_a, conv_b, "peers diverged after full history exchange");
+    assert!(
+        conv_a == a_intent || conv_a == b_intent,
+        "converged style is a blend neither peer wrote:\n\
+         converged: {conv_a:?}\n\
+         peer A wrote: {a_intent:?}\n\
+         peer B wrote: {b_intent:?}"
+    );
+}
+
 /// `TOILE-201`: a delete naming a missing element answers an error.
 #[test]
 fn a_delete_naming_a_missing_element_answers_an_error() {

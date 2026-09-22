@@ -1214,6 +1214,32 @@ mod tests {
         ));
     }
 
+    /// The `.ambre` container is a file format, never a wire format
+    /// (`DOCFILE-011`). This is the one place a snapshot enters the wire, so it
+    /// is the one place the header could be added. The payload is the engine's
+    /// own export, and a container would announce itself in the first four
+    /// bytes.
+    #[test]
+    fn a_snapshot_on_the_wire_carries_no_container_header() {
+        let (mut state, _ui, sync_rx) = harness();
+        let doc_id = DocumentId::new();
+        state.docs.insert(
+            doc_id,
+            LiveDoc::new(DocState::Trame(Box::new(TrameState::new()))),
+        );
+        state.handle_logic_event(LogicEvent::SnapshotNeeded {
+            document_id: doc_id,
+        });
+
+        let Ok(SyncCommand::SendSnapshot { payload, .. }) = sync_rx.try_recv() else {
+            panic!("a snapshot is sent");
+        };
+        assert!(
+            !payload.starts_with(&ambre_core::AMBRE_MAGIC),
+            "the wire payload must be a bare snapshot, not a container"
+        );
+    }
+
     // -- Service-plane routing: interop media uploads (`toile-media`) ------
     //
     // A Toile media import issues `UploadMedia` requests, which the dispatcher
