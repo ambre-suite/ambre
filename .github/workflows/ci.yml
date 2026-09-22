@@ -78,6 +78,10 @@ jobs:
       - name: Fetch the base branch
         run: git fetch --depth=2 origin main:refs/remotes/origin/main
       - run: just schema-freeze
+      # What each crate can reach: fixture machinery out of the client build,
+      # a generator driving commands, and a shared control with no whole-style
+      # type to emit.
+      - run: just crate-boundaries
       # How the English is written: the mechanical half of
       # `ai/ambre-writing-style.md`, every metric a hard error.
       - run: just prose

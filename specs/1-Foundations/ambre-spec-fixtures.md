@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `FIXTURE-007` | `INV` | Fixture machinery MUST NOT reach a client build. The three production symbols named in section 2 are the whole exception. | this spec section 2; section 3 | crate-graph -- `ambre-app` names no `fixtures` feature, and Cargo never enables a dependency feature implicitly, so the surface is unreachable from the wasm artifact today | unheld -- nothing refuses the manifest line that would change that; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
+| `FIXTURE-007` | `INV` | Fixture machinery MUST NOT reach a client build. The three production symbols named in section 2 are the whole exception. | this spec section 2; section 3 | crate-graph -- `ambre-app` names no `fixtures` feature, and Cargo never enables a dependency feature implicitly, so the surface is unreachable from the wasm artifact today; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, which refuses the client naming the feature and any crate folding it into its own `default`, the two manifest lines that would make it reachable | none | verified |
 | `FIXTURE-010` | `INV` | Two generators MUST NOT share a name: the name is the artifact's identity on disk. | this spec section 2 | `fixtures_corpus::the_shipping_registry_has_no_duplicate_names` -- over the six shipping generators, and it refuses an empty registry first: the dedup alone passes on nothing at all | none | verified |
 | `FIXTURE-005` | `INV` | Every committed artifact MUST trace to a generator run from a seed. | this spec section 2 | human-review -- the reviewer reads each committed artifact against the generator and the seed the manifest names, which is the line the contribution checklist carries | unheld -- the manifest is prose a reviewer reads: nothing reruns the generator to confirm the seed produces the bytes on disk | human-review |
 | `FIXTURE-032` | `INV` | A committed artifact MUST NOT come from a real user document. | this spec section 2 | human-review -- the same reading, and the one it exists for | unheld -- no gate is possible: a real document and a generated one are both Loro bytes, so nothing can tell them apart. A committed real document would place plaintext user content in a public AGPL repository, permanently, in git history, and a fixture that is interesting *because* it came from real data is exactly the one that must not be committed: write a generator that reproduces its shape instead | human-review |
@@ -43,7 +43,7 @@ status values are normative in `ambre-spec-template.md`.
 | `FIXTURE-002` | `POST` | A generator MUST pin all three sources of entropy -- the `PeerID`, the commit clock and the `document_id`. None is optional. | this spec section 2 | `fixture_determinism::an_unpinned_peer_is_not_deterministic`; `::the_commit_clock_is_not_recorded`; `::the_document_id_is_part_of_what_the_digest_covers` -- one test per source, each asserting the output moves when that source is left free; `ambre_core::fixtures::tests::a_seeded_document_id_is_stable_distinct_and_well_formed` -- the seeded identity itself | none | verified |
 | `FIXTURE-003` | `POST` | Determinism MUST hold at the scale a fixture is built at. | this spec section 2 | `fixture_determinism::a_large_document_is_deterministic` -- 5 000 cells, wide enough for the encoder's wide paths, which is the scale the committed fixtures are built at (the 100k-cell case belongs to the `FIXTURES P2` benchmark corpus, too slow for a per-commit belt, and no test exercises an architecture other than x86_64) | none | verified |
 | `FIXTURE-028` | `POST` | Determinism MUST hold on a document that has been through a merge. | this spec section 2; `ambre-spec-delta-order.md` | `fixture_determinism::a_two_peer_merge_is_deterministic` -- two pinned peers edit disjoint cells, exchange snapshots both ways and export the result. Without it no post-convergence fixture could ever be committed, because convergence is exactly where a stable encoder stops being enough | none | verified |
-| `FIXTURE-004` | `FRAME` | A generator MUST build through `handle_command` on the app state; it MUST NOT write CRDT containers directly. | this spec section 2 | none | unheld -- every generator obeys the rule, and nothing stops the next one from writing to the `LoroDoc` directly. Such a fixture holds a state that no user action can reach, so it proves nothing; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
+| `FIXTURE-004` | `FRAME` | A generator MUST build through `handle_command` on the app state; it MUST NOT write CRDT containers directly. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, which reads every free function of a fixture module and refuses one that names a CRDT container. The reading half of those modules sits in `impl` blocks and stays free | none | verified |
 
 ### 1.3 An artifact and its manifest are written
 
@@ -92,10 +92,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the machinery is host-only and gated behind a non-default `fixtures` feature
   that `ambre-app` never names (`FIXTURE-007`), so it links into no shipped binary. The one key it
   touches is derived at test setup and never written to disk (section 2).
-* **Verification.** 29 `verified`, 2 `untested`, 3 `human-review`. Determinism is held on four axes
-  including the cross-process one, the whole loader is held, and each gate runs over a throwaway
-  corpus root. What is loose is the benchmark pair, which is held without reading a corpus so that
-  it can run in CI at all.
+* **Verification.** 31 `verified`, 3 `human-review`. Determinism is held on four axes including
+  the cross-process one, the whole loader is held, and each gate runs over a throwaway corpus root.
+  A gate now refuses the manifest line that would pull the machinery into the client build. It also
+  refuses a generator that writes to the CRDT rather than driving a command.
 ---
 
 ## 2. MODEL

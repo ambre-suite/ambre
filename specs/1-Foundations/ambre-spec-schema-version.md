@@ -27,8 +27,8 @@ prefix is `SCHEMA`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SCHEMA-001` | `INV` | A styled unit's whole style MUST be one binary register keyed by that unit's identity; a register per attribute is forbidden. | this spec section 2; `features/ambre-spec-trame-cell-styles.md` | `ambre_trame::logic::convergence_tests::concurrent_whole_cell_style_edits_do_not_blend_across_containers`; `::subset_style_edit_does_not_tear_a_whole_cell_rewrite`; `ambre_toile::logic::convergence_tests::concurrent_whole_element_restyles_do_not_blend_across_registers` -- two peers restyle one element concurrently and exchange whole histories, and the converged style must be one peer's, so a field arriving from the other peer is red | none | verified |
-| `SCHEMA-002` | `INV` | A shared formatting control MUST emit one changed field. | this spec section 2; `ambre-spec-chrome.md` | none | unheld -- the four shared controls each emit one field, and nothing refuses a fifth that emits a whole style; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SCHEMA-011` | `INV` | A view MUST fold that field into a whole-register write. | this spec section 2; `ambre-spec-chrome.md` | none | unheld -- it is the half that decides whether `SCHEMA-001` survives contact with the chrome: a view writing the field straight into a register of its own is the per-attribute layout the first rule forbids, arrived at from the other end. Nothing refuses one; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SCHEMA-002` | `INV` | A shared formatting control MUST emit one changed field. | this spec section 2; `ambre-spec-chrome.md` | crate-graph -- `ambre-chrome` depends on no application crate, so a shared control has no whole-style type to name and can only report the scalar it edits; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, which refuses the dependency line that would hand it one | none | verified |
+| `SCHEMA-011` | `INV` | A view MUST fold that field into a whole-register write. | this spec section 2; `ambre-spec-chrome.md` | `ambre_trame::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_toile::logic::state::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- a field written into a register of its own is a key the shape did not carry, so the frozen text gains a line and the belt turns red; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which holds the published section append-only, so the red cannot be cleared by rewriting it | none | verified |
 | `SCHEMA-004` | `INV` | Every document MUST carry its schema version in a root register, written when the document is created. | this spec section 2 | `ambre_prose::schema::tests::a_new_document_carries_the_current_version`; `ambre_toile::logic::schema::tests::a_new_board_carries_the_current_version`; `ambre_trame::logic::schema::tests::a_new_workbook_carries_the_current_version` -- written inside the scaffolding commit of each engine's `from_doc`, so no document reaches persistence without it | none | verified |
 | `SCHEMA-009` | `INV` | A change to the layout of a persisted record MUST raise the schema version. | this spec section 2 | `ambre_prose::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_trame::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_toile::logic::state::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- each recomputes the shape from this build and compares it against the section frozen for the compiled `SCHEMA_VERSION`, so a moved key, a moved value type or a moved `postcard` layout is red until the number rises; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which holds a published section append-only, so the red cannot be cleared by rewriting the section it broke | none | verified |
 | `SCHEMA-010` | `INV` | A migration MUST live in the application crate that owns the schema it migrates. | this spec section 2 | crate-graph -- `ambre_core::schema::SchemaMigration<D>` is generic over the document, and `ambre-core` depends on no CRDT: it is linked by `ambre-server`, which may never decode a document (`ZK-001`), so a migration written in the foundation has no type to write against and does not compile | none | verified |
@@ -54,10 +54,10 @@ container, which is the only moment a wrong reading can still be caught.
 * **Boundary.** none. The version register is ordinary document state, so it travels sealed like
   every other container and the relay sees a blob (`ZK-001`). The protocol half lives in
   `ambre-core`, which the relay links, and nothing in it knows what a CRDT is.
-* **Verification.** 11 `verified`, 2 `untested`. A test holds what the register promises: the
-  number carried from creation, the comparison at every full-state entry point, and a named case per
-  verdict. A layout moved under an unchanged number turns a shape belt red. Both style registers
-  carry a convergence test. What is loose is the two ends of the per-attribute layout.
+* **Verification.** 13 `verified`. A test holds what the register promises: the number carried
+  from creation, the comparison at every full-state entry point, and a named case per verdict. A
+  layout moved under an unchanged number turns a shape belt red, as would a field given its own
+  register. Both style registers carry a convergence test.
 
 ---
 
@@ -190,8 +190,9 @@ The user never sees the version. What they meet is what it protects them from.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Nothing refuses a per-attribute register.** `SCHEMA-001` holds because the two applications
-  that store a style register happen to take that shape, and a third would inherit no check.
+* **Nothing refuses a per-attribute register in a third application.** The two that store a style
+  register are held by their shape belts. A new crate inherits neither belt, so it would carry the
+  rule with nothing to fail on.
 * **No rule covers what a migration may do to a document it cannot fully read.** The three
   registries hold one step each and none can fail, so nothing has forced the question yet. A step
   that *can* fail reports the hop it broke on (`SchemaError::MigrationFailed`), and the caller

@@ -253,7 +253,7 @@ owns the subsystem.
 | `[ ]` The shared document-tool belts | -- | the same debt across the command dispatch, the undo engine, find and replace, the text editor and the PDF export |
 | `[ ]` The Trame belts | -- | the same debt across the grid viewport, the cell surface, the number formats and the data tools |
 | `[ ]` The Toile belts | -- | the same debt across the board surface, the connectors, the presentation and the interop converters |
-| `[ ]` The container and schema belts | -- | the shipped rows no test would fail on across the `.ambre` container, the schema register and the fixture corpora: the header a wire payload must never carry, the bump obligation a reviewer holds today, and the writers a version freeze binds |
+| `[x]` The container and schema belts | -- | the shipped rows no test would fail on across the `.ambre` container, the schema register and the fixture corpora: the header a wire payload must never carry, the bump obligation a reviewer holds today, and the writers a version freeze binds |
 | `[ ]` Fuzzing the untrusted readers | -- | a `cargo-fuzz` target on the wire decode, the `.ambre` container and the formula parser, each of which is fed by a relay or by a user's file |
 | `[ ]` The suite checked adversarially | -- | `cargo-mutants` over the crates whose tests are generated, so a test that asserts nothing fails |
 | `[ ]` The workspace lints | -- | `forbid(unsafe_code)` in every crate instead of two, and a workspace lint table in place of the default clippy set |

@@ -290,6 +290,13 @@ prose:
 schema-freeze:
     python3 scripts/schema_freeze.py --check
 
+# Three reachability rules a manifest line could erase: fixture machinery out
+# of the client build (`FIXTURE-007`), a generator driving commands rather than
+# the CRDT (`FIXTURE-004`), and a shared control with no whole-style type to
+# emit (`SCHEMA-002`).
+crate-boundaries:
+    python3 scripts/crate_boundaries.py --check
+
 # The checks in `scripts/` guard every Rust comment, every document and every
 # contract row, and nothing guarded the checks. Three defects shipped in the
 # prose one, and the worst produced no symptom: a table row left the reader's

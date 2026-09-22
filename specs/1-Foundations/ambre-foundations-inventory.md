@@ -22,7 +22,7 @@
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 | 5 |
 | `docfile` | The file a user saves a document into, and opens back. | implemented | 17 | 1 |
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | implemented | 10 | 6 |
-| `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 34 | 5 |
+| `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 34 | 3 |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 18 | 13 |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 17 | 10 |
 | `media` | A picture in a document travels apart from it. | implemented | 11 | 11 |
@@ -30,7 +30,7 @@
 | `message-bus` | The contract the three threads talk over. | implemented | 24 | 13 |
 | `object-store` | Everything too large for a frame lives in object storage, sealed. | implemented | 12 | 9 |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 14 | 4 |
-| `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 13 | 2 |
+| `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 13 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | implemented | 17 | 9 |
 | `server` | The one process every client talks to. | implemented | 22 | 11 |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 16 | 9 |
@@ -55,4 +55,4 @@
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**39 features: 23 implemented, 14 partial, 2 design-only. 589 contract rows, 320 loose.**
+**39 features: 23 implemented, 14 partial, 2 design-only. 589 contract rows, 316 loose.**
