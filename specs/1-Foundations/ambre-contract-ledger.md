@@ -19,11 +19,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2502 rows: 1819 shipped, of which 783 loose. 683 unbuilt.**
+**2503 rows: 1820 shipped, of which 783 loose. 683 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 212 | 220 | 537 | 67 | 1036 |
+| `verified` | 212 | 220 | 538 | 67 | 1037 |
 | `failing` | 39 | 46 | 23 |  | 108 |
 | `untested` | 273 | 144 | 235 | 1 | 653 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
@@ -99,7 +99,7 @@
 | `ambre-spec-trame-sort.md` | 24 | 24 | 12 | 12 |  |
 | `ambre-spec-trame-status-bar.md` | 11 | 11 | 7 | 4 |  |
 | `ambre-spec-trame-undo.md` | 8 | 4 | 4 |  | 4 |
-| `ambre-spec-toile-schema.md` | 12 | 12 | 8 | 4 |  |
+| `ambre-spec-toile-schema.md` | 13 | 13 | 9 | 4 |  |
 | `ambre-spec-toile-auto-layout.md` | 27 | 27 | 21 | 6 |  |
 | `ambre-spec-toile-board-rendering.md` | 30 | 30 | 13 | 17 |  |
 | `ambre-spec-toile-clipboard.md` | 17 | 17 | 13 | 4 |  |
@@ -226,7 +226,7 @@
 | `ambre-spec-toile-presence.md` | TOILE-016,177..185,241; TOILE-UI-014,073..078,216..222,367,376..377 |
 | `ambre-spec-toile-presentation.md` | TOILE-FEAT-001..004,008,026..028,075..095,098; TOILE-UI-083..089,315..319,342..343,368 |
 | `ambre-spec-toile-reactions.md` | TOILE-FEAT-007,010,019..025,055..067,100..101,106; TOILE-UI-079..081,299..305 |
-| `ambre-spec-toile-schema.md` | TOILE-003,018,027..030,227..231,257 |
+| `ambre-spec-toile-schema.md` | TOILE-003,018,027..030,227..231,257..258 |
 | `ambre-spec-toile-selection.md` | TOILE-UI-005..007,031..035,223..242,349 |
 | `ambre-spec-toile-status-bar.md` | TOILE-020,116..118; TOILE-UI-053..056,106..110 |
 | `ambre-spec-toile-styles.md` | TOILE-163; TOILE-UI-019,066..071,161..182 |
