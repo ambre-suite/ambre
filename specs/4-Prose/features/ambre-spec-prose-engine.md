@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-026` | `INV` | `ambre-prose` MUST contain no `unsafe`. | README pillar "Security" | lint-wall -- `#![forbid(unsafe_code)]` on `crates/ambre-prose/src/lib.rs` | none | verified |
 | `PROSE-FEAT-005` | `INV` | A feature MUST NOT write to the document directly: every mutation MUST reach it through the engine's one command entry point. | this spec section 3 | structural -- `ambre_prose::logic::ProseState::handle_command` is the one `pub` method that writes, and the `doc` field is private to the module | none | verified |
 | `PROSE-FEAT-006` | `INV` | Every offset a command carries MUST be a count of Unicode code points, the unit the CRDT indexes a body text and a cursor with. | this spec section 3; this spec section 6 | structural -- every write path reached from `ambre_prose::logic::ProseState::handle_command` calls the code-point form of the Loro text API and converts nothing | none | verified |
-| `PROSE-044` | `INV` | The page layout, the media cache and the local history MUST be derived or session state: none of them MUST enter the document. | this spec section 3 | `ambre_prose::logic::tests::a_picture_arriving_writes_nothing_to_the_document` | partial -- the picture cache and the history are read; the page layout has no code yet, and it lands with the `Pagination` Story (`ambre-roadmap.md` E5) | untested |
+| `PROSE-044` | `INV` | The page layout, the media cache and the local history MUST be derived or session state: none of them MUST enter the document. | this spec section 3 | `ambre_prose::logic::tests::the_picture_cache_and_the_history_never_enter_the_document`; `::a_picture_arriving_writes_nothing_to_the_document` | none | verified |
 | `PROSE-004` | `CONC` | After convergence, a cursor expressed as a `loro::Cursor` MUST resolve to the same absolute position on every peer. | this spec section 3 | `ambre_prose::logic::presence::tests::a_caret_resolves_to_the_same_place_on_both_peers` | none | verified |
 | `PROSE-IO-042` | `IO` | A document re-imported from its own snapshot MUST hold what the document that exported it held. | this spec section 3 | `ambre_prose::logic::tests::a_snapshot_round_trips_what_the_document_held` | none | verified |
 | `PROSE-UI-001` | `INV` | The UI thread MUST hold no document data: only view state and what arrives as an event. | this spec section 3 | structural -- `ambre_prose::ui::ProseUiState` declares no document container and no block content: every field is view state or an event's payload | none | verified |
@@ -73,7 +73,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-055` | `POST` | An imported snapshot MUST replace the document whole. | this spec section 3 | `ambre_prose::logic::tests::a_snapshot_round_trips_what_the_document_held` | partial -- the read is whole and the scaffolding this peer grew is dropped, but a snapshot merges into the blocks a local edit already made rather than replacing them. Section 6 carries the case, and it lands with the `The native format` Story (`ambre-roadmap.md` E5) | untested |
+| `PROSE-055` | `POST` | An imported snapshot MUST carry the whole document, and the scaffolding the reading peer grew MUST NOT survive it. | this spec section 3 | `ambre_prose::logic::tests::a_snapshot_round_trips_what_the_document_held`; `ambre_logic::tests::the_round_trip_is_stable_on_every_doc_state_variant` | none | verified |
 | `PROSE-056` | `FRAME` | Importing a snapshot MUST NOT produce a delta. | this spec section 3 | type-level -- `ambre_prose::logic::ProseState::import_snapshot` answers display events and no outcome; `ambre_prose::logic::tests::importing_a_snapshot_produces_no_delta` | none | verified |
 
 ### 1.7 Take in a peer's cursor
@@ -88,7 +88,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-059` | `POST` | A decrypted picture MUST be cached under the content hash it arrived with. | this spec section 3 | `ambre_prose::logic::tests::a_picture_arriving_writes_nothing_to_the_document` | none | verified |
-| `PROSE-060` | `POST` | What the picture is shown in MUST be invalidated when it arrives. | this spec section 3 | `ambre_prose::logic::tests::a_picture_arriving_writes_nothing_to_the_document` | partial -- the answer names the image blocks addressing the hash, and no test builds one: no command inserts a picture yet. It lands with the `Images` Story (`ambre-roadmap.md` E5) | untested |
+| `PROSE-060` | `POST` | What the picture is shown in MUST be invalidated when it arrives. | this spec section 3 | `ambre_prose::logic::tests::a_picture_arriving_names_every_block_that_shows_it` | none | verified |
 | `PROSE-061` | `FRAME` | A picture arriving MUST NOT write to the document and MUST NOT produce a delta. | this spec section 3 | `ambre_prose::logic::tests::a_picture_arriving_writes_nothing_to_the_document` | none | verified |
 
 ### 1.9 Send a command from the UI thread
@@ -103,7 +103,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-062` | `POST` | One outcome MUST reach the destinations it names: the display events to the UI thread, the delta and the presence frame to the Sync worker. | this spec section 3; `ambre-spec-message-bus.md` | structural -- the `DocState::Prose` arm of `ambre_logic::LogicState::handle_app_command` hands the three fields to the one fan-out of the thread | unheld -- the arm is the same one Trame and Toile go through, and no test drives a Prose command end to end across the dispatcher. It lands with the `Input and cursor` Story (`ambre-roadmap.md` E5) | untested |
+| `PROSE-062` | `POST` | One outcome MUST reach the destinations it names: the display events to the UI thread, the delta and the presence frame to the Sync worker. | this spec section 3; `ambre-spec-message-bus.md` | `ambre_logic::dispatch::tests::a_prose_outcome_reaches_the_ui_thread_and_the_sync_worker`; `::a_prose_caret_leaves_as_an_ephemeral_and_not_as_a_delta` | none | verified |
 | `PROSE-063` | `FRAME` | Fanning an outcome out MUST NOT let a connection change, a sharing change or a revoked member reach the document state. | this spec section 3; `ambre-spec-membership.md` | exhaustive-match -- `ambre_prose::logic::ProseState::handle_command` matches a closed `ProseCommand`, which declares no connection, sharing or membership variant | none | verified |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1` -- the local text insert with its
@@ -111,10 +111,10 @@ status values are normative in `ambre-spec-template.md`.
   No benchmark runs.
 * **Boundary.** none of its own. `PROSE-025` bans a network call, and `PROSE-043` refuses this
   crate a dependency on `ambre-crypto` or `ambre-sync`. It holds no key and opens no socket.
-* **Verification.** 35 `verified`, 4 `untested`. Seven rows are compiler-held: the crate graph,
-  the lint wall, the closed command enum, the one return type. Two `untested` rows wait on the page
-  layout and the inserted picture. One is the snapshot that merges where the rule says replace.
-  One is the fan-out, which no test drives across the dispatcher.
+* **Verification.** 39 `verified`, nothing else. Seven rows are compiler-held: the crate graph, the
+  lint wall, the closed command enum, the one return type. Two rows bind a shape no command builds
+  yet: the image block, and the block under a table cell. Each is read through the format rather
+  than through a gesture. The fan-out is driven across the real dispatcher.
 
 ---
 
@@ -731,10 +731,6 @@ Prose view is an arm of the frame host's application enum, like Trame's.
   reason. The codes the engine answers with today are a compiled list, and it is what the typed
   error replaces. Five features record the same absence: the styles, the lists, the tables, the
   bands and the comments. Its Story is `A refused command names what it refused` (`ambre-roadmap.md` E5).
-* **A snapshot merges where the rule says replace.** `PROSE-055` states that an imported snapshot
-  replaces the document whole. The import drops the paragraph this peer grew on opening. Every other
-  block a local edit made survives the merge, because losing an edit is the worse answer. Nothing
-  rules on which of the two a full-state read owes, and the row is `untested` until it does.
 * **Nothing rules on what a split does to a mark it cuts.** `PROSE-038` carries the type and the
   paragraph style to the new paragraph. It says nothing of an inline mark, a comment or a footnote
   anchored across the point the paragraph parts, and the engine carries neither today.

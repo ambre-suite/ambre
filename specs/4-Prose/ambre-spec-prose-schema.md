@@ -41,7 +41,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-085` | `INV` | A block's identity MUST be the `TreeID` the tree mints; a position among siblings MUST NOT be used as a key. | this spec section 2 | structural -- `ambre_prose::doc::body_key` addresses a block by the `TreeID` alone, and no key of the node map holds a sibling position; `ambre_prose::logic::convergence_tests::a_block_a_peer_moved_keeps_every_reference_to_it` | none | verified |
-| `PROSE-086` | `INV` | A reference to a block MUST still resolve after a move, an indent and a move into a table cell. | this spec section 2 | `ambre_prose::logic::blocks::tests::a_reference_to_a_block_survives_a_move`; `ambre_prose::logic::convergence_tests::a_block_a_peer_moved_keeps_every_reference_to_it` | partial -- the move and the indent are read; the move into a table cell is not, because no command creates a table yet. It lands with the `Tables, table of contents and word count` Story (`ambre-roadmap.md` E5) | untested |
+| `PROSE-086` | `INV` | A reference to a block MUST still resolve after a move, an indent and a move into a table cell. | this spec section 2 | `ambre_prose::logic::blocks::tests::a_reference_survives_an_indent_and_a_move_into_a_table_cell`; `::a_reference_to_a_block_survives_a_move`; `ambre_prose::logic::convergence_tests::a_block_a_peer_moved_keeps_every_reference_to_it` | none | verified |
 | `PROSE-087` | `INV` | An annotation's identity MUST be a `Uuid` minted by the peer that creates it, carried as the value of the mark that anchors it. | this spec section 2 | not built | unbuilt -- lands with the `Comments and track changes` Story (`ambre-roadmap.md` E5), which is what mints an annotation at all. The engine core built the mark registry the id rides, and no annotation | unimplemented |
 | `PROSE-088` | `INV` | A body key MUST re-read as the pair it joins -- the tag and the tree id -- split on a separator neither half can carry. | this spec section 2 | `ambre_prose::doc::tests::a_body_key_re_reads_as_the_pair_it_joins`; `::neither_half_of_a_body_key_carries_the_separator`; `::a_name_that_is_not_a_body_key_reads_as_none` | none | verified |
 | `PROSE-002` | `INV` | All editable text MUST live in `LoroText`; a `LoroMap` MUST NOT hold body text. | this spec section 3 | structural -- `ambre_prose::doc::get_block_text` opens one root `LoroText` per leaf block, and `ambre_prose::doc::create_block` writes no text into the node map; `ambre_prose::logic::convergence_tests::two_peers_typing_in_one_paragraph_keep_both_sentences` | none | verified |
@@ -68,11 +68,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and an image node holds a content hash, never the pixels
   (`features/ambre-spec-prose-images.md`).
-* **Verification.** 18 `verified`, 2 `unimplemented`, 1 `untested`, 1 `human-review`. The
-  engine core built the format: `crates/ambre-prose` holds the containers, the keys and the three
-  reads. The four convergence rows each run a two-peer test rather than a claim.
+* **Verification.** 19 `verified`, 2 `unimplemented`, 1 `human-review`. The engine core built the
+  format: `crates/ambre-prose` holds the containers, the keys and the three reads. The four
+  convergence rows each run a two-peer test rather than a claim.
   * The two `unimplemented` rows are the annotation entry's, and no command writes one yet.
-  * The `untested` row reads a move and an indent, and no table exists to move a block into.
   * The `human-review` row binds a code change to a constant, which no test can read.
 
 ---

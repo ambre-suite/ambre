@@ -311,6 +311,20 @@ mod tests {
         assert_eq!(state.root_blocks(), vec![ids[0]]);
     }
 
+    /// The one paragraph a deletion does not remove, even when it empties it.
+    /// The first of the range keeps its identity and its style (`PROSE-041`),
+    /// which is the exception `PROSE-101` names.
+    #[test]
+    fn a_deletion_that_empties_the_first_paragraph_keeps_it() {
+        let (mut state, ids) = document_of(&["head", "tail"]);
+        state.handle_command(ProseCommand::DeleteRange {
+            anchor: (ids[0], 0),
+            focus: (ids[1], 4),
+        });
+        assert_eq!(state.root_blocks(), vec![ids[0]]);
+        assert_eq!(state.text_of(&ids[0]).as_deref(), Some(""));
+    }
+
     #[test]
     fn the_join_keeps_the_first_paragraphs_identity_and_style() {
         let (mut state, ids) = document_of(&["one", "two"]);

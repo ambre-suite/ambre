@@ -50,6 +50,12 @@ use crate::events::{ProseCommand, ProseEvent, ProseOutcome, block_id, error_code
 use crate::mark;
 use crate::schema;
 
+/// The commit origin every load-time write carries.
+///
+/// The undo manager excludes the prefix, so `Ctrl+Z` on a restored document
+/// retracts what its author wrote and never what opening it did.
+const LOAD_ORIGIN: &str = "load";
+
 /// The per-document Prose engine.
 pub struct ProseState {
     /// The CRDT, private and named by no public signature (`PROSE-001`).
@@ -121,7 +127,12 @@ impl ProseState {
         let peer = doc.peer_id();
         // The undo manager opens after the scaffolding commit: seeding a
         // document is not a user edit and must not sit on the stack.
-        let undo = UndoManager::new(&doc);
+        let mut undo = UndoManager::new(&doc);
+        // Neither is loading one. A full-state read drops the paragraph this
+        // peer grew on opening, and that write lands after this manager exists.
+        // Excluded by origin, an undo on a restored document retracts the
+        // author's own edits and never the load (`UNDO-001`).
+        undo.add_exclude_origin_prefix(LOAD_ORIGIN);
         Some(Self {
             doc,
             undo,
@@ -345,7 +356,8 @@ impl ProseState {
         {
             tracing::warn!("Prose: the scaffolding paragraph could not be dropped: {e:?}");
         }
-        self.doc.commit();
+        self.doc
+            .commit_with(loro::CommitOptions::new().origin(LOAD_ORIGIN));
         if let Err(e) = self.doc.import(&payload) {
             tracing::warn!("Prose: the snapshot import failed: {e:?}");
             return Err(SchemaError::PayloadRejected);
@@ -390,6 +402,24 @@ impl ProseState {
     #[must_use]
     pub fn cached_media(&self, content_hash: &str) -> Option<&[u8]> {
         self.media_cache.get(content_hash).map(Vec::as_slice)
+    }
+
+    /// Mint an image block addressing `content_hash`, for a test that binds the
+    /// answer rather than the gesture.
+    ///
+    /// Test-only: `InsertImage` lands with the `Images` Story
+    /// (`ambre-roadmap.md` E5).
+    #[cfg(test)]
+    fn image_for_test(&mut self, content_hash: &str) -> Option<crate::events::BlockId> {
+        let id = doc::create_block(&self.doc, None, crate::events::BlockType::Image)?;
+        let tree = doc::blocks(&self.doc);
+        let node = doc::node_of(&tree, &id)?;
+        let attrs = node
+            .insert_container(doc::K_ATTRS, loro::LoroMap::new())
+            .ok()?;
+        attrs.insert("content_hash", content_hash).ok()?;
+        self.doc.commit();
+        Some(crate::events::block_id(id))
     }
 
     /// The live image blocks addressing one content hash. Sorted, so two peers
@@ -691,6 +721,73 @@ mod tests {
         assert_eq!(state.cached_media("abc"), Some(&[1u8, 2, 3][..]));
         assert_eq!(events.len(), 1);
         assert_eq!(state.export_snapshot().len(), before.len());
+    }
+
+    /// `PROSE-060`: the picture arriving names what showed it.
+    ///
+    /// The image block is built through the format, because no command inserts
+    /// a picture until the images Story lands. The rule binds the answer, not
+    /// the gesture.
+    #[test]
+    fn a_picture_arriving_names_every_block_that_shows_it() {
+        let mut state = ProseState::new().expect("a document is built");
+        let shown = state
+            .image_for_test("a-content-hash")
+            .expect("an image block");
+        let other = state
+            .image_for_test("another-hash")
+            .expect("an image block");
+
+        let events = state.on_media_downloaded("a-content-hash".to_owned(), vec![9]);
+        let named = events
+            .iter()
+            .find_map(|e| match e {
+                ProseEvent::MediaArrived { blocks, .. } => Some(blocks.clone()),
+                _ => None,
+            })
+            .expect("the picture named its blocks");
+        assert_eq!(named, vec![shown]);
+        assert!(!named.contains(&other));
+    }
+
+    /// `PROSE-044`: the picture cache and the local history are session state.
+    ///
+    /// Neither is a container of the document, so neither survives the bytes.
+    /// The cache is read against the snapshot directly. The history is read
+    /// through a restore. An undo stack that had entered the document would
+    /// come back with it, and the restored state could then retract an edit it
+    /// never made.
+    ///
+    /// The page layout has no code to test. Nothing can carry it into the
+    /// document while it has none, and the pagination Story owns that half.
+    #[test]
+    fn the_picture_cache_and_the_history_never_enter_the_document() {
+        let mut state = ProseState::with_peer(11).expect("a document is built");
+        let block = state.root_blocks()[0];
+        state.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "same text".to_owned(),
+        });
+        let before = state.export_snapshot();
+        state.on_media_downloaded("a-hash".to_owned(), vec![1, 2, 3, 4]);
+        assert!(state.cached_media("a-hash").is_some());
+        // The cache is session state: the bytes the document exports are the
+        // ones it exported before the picture arrived.
+        assert_eq!(state.export_snapshot(), before);
+
+        // The history is session state too. A restored document carries the
+        // text and no stack, so an undo on it retracts nothing.
+        let mut restored = ProseState::with_peer(12).expect("a document is built");
+        restored.import_snapshot(&before).expect("it imports");
+        assert_eq!(restored.text_of(&block).as_deref(), Some("same text"));
+        let outcome = restored.handle_command(ProseCommand::Undo);
+        assert!(
+            outcome.update.is_none(),
+            "a restored stack retracts nothing"
+        );
+        assert_eq!(restored.text_of(&block).as_deref(), Some("same text"));
+        assert!(restored.cached_media("a-hash").is_none());
     }
 
     #[test]

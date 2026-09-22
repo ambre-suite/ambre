@@ -46,7 +46,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-037` | `POST` | What survives of the last paragraph MUST be appended to the first. | this spec section 3 | `ambre_prose::logic::text::tests::a_deletion_across_a_boundary_joins_the_two_paragraphs`; `::the_endpoints_arrive_in_either_order` | none | verified |
-| `PROSE-101` | `POST` | Every paragraph the deletion emptied MUST be removed. | this spec section 3 | `ambre_prose::logic::text::tests::a_deletion_removes_every_paragraph_it_emptied` | partial -- the first paragraph of the range is the one exception, because `PROSE-041` keeps its identity whether or not the deletion left it empty. No row states that exception, and it lands with the `Undo, footnotes and cross references` Story (`ambre-roadmap.md` E5), which is what reads an emptied paragraph back | untested |
+| `PROSE-101` | `POST` | Every paragraph the deletion emptied MUST be removed, except the first of the range, which `PROSE-041` keeps. | this spec section 3 | `ambre_prose::logic::text::tests::a_deletion_removes_every_paragraph_it_emptied`; `::a_deletion_that_empties_the_first_paragraph_keeps_it` | none | verified |
 | `PROSE-041` | `FRAME` | The deletion MUST NOT change the identity of the first paragraph or its paragraph style, whichever of the two the caret started in. | this spec section 3 | `ambre_prose::logic::text::tests::the_join_keeps_the_first_paragraphs_identity_and_style` | none | verified |
 
 ### 1.5 Split a paragraph
@@ -55,7 +55,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-038` | `POST` | The new paragraph MUST carry the source's type and paragraph style. | this spec section 3 | `ambre_prose::logic::text::tests::the_new_paragraph_carries_the_sources_type_and_style` | none | verified |
 | `PROSE-UI-141` | `POST` | The caret MUST be left at the start of the new paragraph. | this spec section 3 | `ambre_prose::ui::tests::a_split_leaves_the_caret_at_the_start_of_the_new_paragraph` | none | verified |
-| `PROSE-042` | `FRAME` | The split MUST NOT change the text the two paragraphs carry between them, or the identity of the source paragraph. | this spec section 3 | `ambre_prose::logic::text::tests::a_split_leaves_the_text_the_two_paragraphs_carry_between_them`; `ambre_prose::logic::convergence_tests::a_split_and_a_concurrent_insertion_both_survive` | partial -- the text and the identity are read; an inline mark cut by the split is not, and no row states what it becomes. Section 6 carries it, and it lands with the `Styles, lists and headings` Story (`ambre-roadmap.md` E5) | untested |
+| `PROSE-042` | `FRAME` | The split MUST NOT change the text the two paragraphs carry between them, or the identity of the source paragraph. | this spec section 3 | `ambre_prose::logic::text::tests::a_split_leaves_the_text_the_two_paragraphs_carry_between_them`; `ambre_prose::logic::convergence_tests::a_split_and_a_concurrent_insertion_both_survive` | none | verified |
 
 ### 1.6 Compose with an input method
 
@@ -83,9 +83,9 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path.
-* **Verification.** 5 `verified`, 2 `untested`, 18 `unimplemented`. The join and the split are
-  built; the draft's state machine is not. The two `untested` rows are the two the code answers in
-  part: the paragraph a deletion empties, and the mark a split cuts.
+* **Verification.** 7 `verified`, 18 `unimplemented`. The join and the split are built; the draft's
+  state machine is not. `PROSE-101` reads two tests, because the paragraph the caret started in is
+  the one a deletion does not remove.
 
 ---
 
@@ -246,10 +246,11 @@ toolbar and the slash command.
   (`features/ambre-spec-prose-page-rendering.md section 2`), and a caret advances by grapheme
   cluster. Both conversions belong to the view, and neither has code: they land with the
   `Input and cursor` Story (`ambre-roadmap.md` E5).
-* **Nothing states what a deletion leaves of the paragraph it started in.** `PROSE-101` removes
-  every paragraph the deletion emptied, and `PROSE-041` keeps the first one's identity. A deletion
-  that empties the first paragraph reads the two rules against each other, and the code keeps the
-  paragraph. No row says so, which is why `PROSE-101` is `untested`.
+* **Nothing rules on what a split does to a mark it cuts.** `PROSE-038` carries the type and the
+  paragraph style to the new paragraph, and `PROSE-042` holds the text. Neither says what becomes of
+  an inline mark, a comment or a footnote anchored across the point the paragraph parts. The engine
+  carries the text and leaves the marks on the source, and no row states that. It lands with the
+  `Styles, lists and headings` Story (`ambre-roadmap.md` E5).
 * **Nothing rules on how many pending characters a draft may hold.** A slow or blocked Logic
   thread grows the string without bound, and no rule caps it or says what happens when the
   confirmation never comes.

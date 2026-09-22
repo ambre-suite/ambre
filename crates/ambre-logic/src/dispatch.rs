@@ -489,6 +489,95 @@ mod tests {
         }
     }
 
+    /// `PROSE-062`: one outcome, three destinations.
+    ///
+    /// The display events reach the UI thread. The delta reaches the Sync
+    /// worker under the document id the registry keyed, and the presence frame
+    /// reaches it as an ephemeral. An engine answers a value and sends nothing
+    /// (`PROSE-024`), so this fan-out is the dispatcher's whole job and no
+    /// engine-side test can reach it.
+    #[test]
+    fn a_prose_outcome_reaches_the_ui_thread_and_the_sync_worker() {
+        let (mut state, ui, sync) = harness();
+        let document_id = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Prose,
+        });
+        let block = match &state.docs.get(&document_id).expect("a live document").state {
+            DocState::Prose(prose) => prose.root_blocks()[0],
+            other => panic!("the registry opened {other:?}"),
+        };
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::InsertText {
+                block_id: block,
+                pos: 0,
+                text: "typed".to_owned(),
+            }),
+        });
+
+        let confirmed = std::iter::from_fn(|| ui.try_recv().ok())
+            .find_map(|evt| match evt {
+                UiEvent::Viewport {
+                    event: AppEvent::Prose(ambre_bus::app::prose::ProseEvent::DocUpdated { delta }),
+                    document_id: id,
+                } if id == document_id => Some(delta),
+                _ => None,
+            })
+            .expect("the confirmed change reached the UI thread");
+        let broadcast = std::iter::from_fn(|| sync.try_recv().ok())
+            .find_map(|cmd| match cmd {
+                SyncCommand::SendUpdate {
+                    document_id: id,
+                    payload,
+                } if id == document_id => Some(payload),
+                _ => None,
+            })
+            .expect("the delta reached the Sync worker");
+        // One outcome, and the two halves carry the same bytes: the event is
+        // not a re-export (`PROSE-023`).
+        assert_eq!(confirmed, broadcast);
+    }
+
+    /// The other half of `PROSE-062`: the presence frame leaves as an
+    /// ephemeral, and a caret produces no CRDT delta (`PROSE-058`).
+    #[test]
+    fn a_prose_caret_leaves_as_an_ephemeral_and_not_as_a_delta() {
+        let (mut state, _ui, sync) = harness();
+        let document_id = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Prose,
+        });
+        let block = match &state.docs.get(&document_id).expect("a live document").state {
+            DocState::Prose(prose) => prose.root_blocks()[0],
+            other => panic!("the registry opened {other:?}"),
+        };
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::UpdateCursor {
+                pos: ambre_bus::app::prose::CursorPosition {
+                    block_id: block,
+                    offset: 0,
+                    anchor: None,
+                },
+            }),
+        });
+        let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync.try_recv().ok()).collect();
+        assert!(
+            sent.iter()
+                .any(|cmd| matches!(cmd, SyncCommand::SendEphemeral { document_id: id, .. } if *id == document_id)),
+            "the presence frame reached the Sync worker"
+        );
+        assert!(
+            !sent
+                .iter()
+                .any(|cmd| matches!(cmd, SyncCommand::SendUpdate { .. })),
+            "a caret is never written to the document"
+        );
+    }
+
     /// `DOCFILE-007`, and the reason this command is served by the dispatcher:
     /// the container's header carries the document's identity, which only the
     /// registry knows. An engine-side implementation could not write this byte

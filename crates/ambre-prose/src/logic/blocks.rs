@@ -137,6 +137,28 @@ impl ProseState {
         }
     }
 
+    /// Mint one block of a type no `BlockInit` carries yet, for a test that
+    /// binds the format rather than a gesture.
+    ///
+    /// It passes the same nesting guard every command does, so a test cannot
+    /// build a shape section 4 refuses. Test-only: the gestures that create a
+    /// table and a list item land with their own Story
+    /// (`ambre-roadmap.md` E5).
+    #[cfg(test)]
+    pub(crate) fn insert_for_test(
+        &mut self,
+        parent_id: Option<BlockId>,
+        block_type: BlockType,
+    ) -> Option<BlockId> {
+        let parent = parent_id.map(tree_id);
+        if !doc::nesting_allows(&doc::blocks(&self.doc), parent, block_type) {
+            return None;
+        }
+        let id = doc::create_block(&self.doc, parent, block_type)?;
+        self.doc.commit();
+        Some(crate::events::block_id(id))
+    }
+
     /// Delete one block, and the subtree under it.
     ///
     /// A deletion that empties the tree is re-grown by the commit path from the
@@ -382,6 +404,61 @@ mod tests {
         // The same id still names the same body after the move.
         assert_eq!(state.text_of(&second).as_deref(), Some("carried"));
         assert!(state.root_blocks().contains(&second));
+    }
+
+    /// A table is built through the format rather than through a command: no
+    /// `BlockInit` mints one until the tables Story lands. The rule binds the
+    /// reference and not the gesture, so the test builds the shape section 4
+    /// declares and moves a paragraph through it.
+    #[test]
+    fn a_reference_survives_an_indent_and_a_move_into_a_table_cell() {
+        let mut state = ProseState::new().expect("a document is built");
+        let first = state.root_blocks()[0];
+        state.handle_command(ProseCommand::InsertBlock {
+            parent_id: None,
+            after_id: Some(first),
+            init: BlockInit::Paragraph,
+            style_id: None,
+        });
+        let carried = state.root_blocks()[1];
+        state.handle_command(ProseCommand::InsertText {
+            block_id: carried,
+            pos: 0,
+            text: "carried".to_owned(),
+        });
+
+        // An indent: the paragraph becomes a child of a list item.
+        let item = state
+            .insert_for_test(None, crate::events::BlockType::ListItem)
+            .expect("a list item");
+        state.handle_command(ProseCommand::MoveBlock {
+            block_id: carried,
+            new_parent: Some(item),
+            after_id: None,
+        });
+        assert_eq!(state.parent_of(&carried), Some(item));
+        assert_eq!(state.text_of(&carried).as_deref(), Some("carried"));
+
+        // And a move into a table cell, through the parentages of section 4.
+        let table = state
+            .insert_for_test(None, crate::events::BlockType::Table)
+            .expect("a table");
+        let row = state
+            .insert_for_test(Some(table), crate::events::BlockType::TableRow)
+            .expect("a row");
+        let cell = state
+            .insert_for_test(Some(row), crate::events::BlockType::TableCell)
+            .expect("a cell");
+        state.handle_command(ProseCommand::MoveBlock {
+            block_id: carried,
+            new_parent: Some(cell),
+            after_id: None,
+        });
+        assert_eq!(state.parent_of(&carried), Some(cell));
+        // The same id still names the same body after three moves
+        // (`PROSE-085`, `PROSE-086`).
+        assert_eq!(state.text_of(&carried).as_deref(), Some("carried"));
+        assert!(state.parentages_are_declared());
     }
 
     #[test]

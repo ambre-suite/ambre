@@ -15,9 +15,9 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `prose-engine` | An author types a word and every collaborator reads it. | implemented | 39 | 4 |
-| `prose-tables` | A grid of cells inside the document. | partial | 42 | 1 |
-| `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 25 | 2 |
+| `prose-engine` | An author types a word and every collaborator reads it. | implemented | 39 |  |
+| `prose-tables` | A grid of cells inside the document. | partial | 42 |  |
+| `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 25 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 | `prose-clipboard` | Copy, cut and paste. | design-only | 14 |  |
 | `prose-comments` | A discussion attached to a passage of the text. | design-only | 33 |  |
@@ -44,4 +44,4 @@
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | design-only | 17 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | design-only | 13 |  |
 
-**28 features: 1 implemented, 2 partial, 25 design-only. 595 contract rows, 7 loose.**
+**28 features: 1 implemented, 2 partial, 25 design-only. 595 contract rows, 0 loose.**
