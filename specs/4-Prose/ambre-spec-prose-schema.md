@@ -61,16 +61,20 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-095` | `INV` | A converged document MUST hold only the parentages section 4 declares. | this spec section 4 | `ambre_prose::logic::convergence_tests::a_converged_document_holds_only_the_parentages_the_format_declares`; `ambre_prose::logic::blocks::tests::a_table_row_is_refused_at_the_root`; `::a_block_moved_under_its_own_descendant_is_refused`; `::an_insert_after_a_table_row_does_not_land_a_paragraph_under_the_table`; `::a_move_after_a_table_row_does_not_land_a_paragraph_under_the_table` | none | verified |
 | `PROSE-028` | `INV` | A Prose document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7 | `ambre_prose::schema::tests::a_new_document_carries_the_current_version`; `ambre_prose::logic::tests::a_fresh_document_holds_one_paragraph_and_a_version` | none | verified |
 | `PROSE-097` | `INV` | A document whose `schema_version` exceeds the compiled `SCHEMA_VERSION` MUST be refused whole. | architecture section 2.D; this spec section 7 | `ambre_prose::schema::tests::a_document_a_newer_client_wrote_is_refused_whole`; `ambre_prose::logic::tests::a_document_a_newer_client_wrote_leaves_this_one_untouched` | none | verified |
-| `PROSE-029` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | none | unheld -- the rule binds a code change to a constant, and no test reads a diff. A reviewer holds it, by the same argument as `SCHEMA-009` | human-review |
+| `PROSE-029` | `INV` | The key set a build writes, and the type each key's value holds, MUST match the shape frozen under the compiled `SCHEMA_VERSION`. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | `ambre_prose::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_prose::logic::schema_shape::every_declared_key_appears_in_the_shape`; `ambre_prose::logic::schema_shape::a_key_appearing_moves_the_shape`; `ambre_prose::logic::schema_shape::a_value_type_changing_moves_the_shape` | none | verified |
+| `PROSE-103` | `INV` | A frozen shape section MUST NOT change after the commit that wrote it. | architecture section 2.D; this spec section 7 | none | unheld -- a developer who regenerates the `v1` section of `crates/ambre-prose/schema/shapes.txt` in place turns `PROSE-029` green without raising the version. Only history says whether a section was edited, so the gate is a script over the diff and CI has to fetch more than one commit; lands with the `The container and schema belts` Story (`ambre-roadmap.md` E9) | untested |
+| `PROSE-102` | `INV` | A change to what a key's value means, the key and its type unchanged, MUST raise `SCHEMA_VERSION` in the same commit as the change. | architecture section 2.D; `ambre-spec-fixtures.md section 2` | human-review -- the reviewer reads the diff for a unit or a reference point that moved under an unchanged key, which is the one drift no snapshot can show | unheld -- no gate is possible. `meta/defaults/line_height` holds a multiple of the font size. A build that reads the same `f32` as a point measure writes the same key and the same type. Every shape snapshot stays green, and every document written before the change is read wrong | human-review |
 
 * **Budget.** none: a format has no operation to budget. What opening, shaping and paginating a
   document costs is a row of `ambre-spec-budgets.md`, cited by the document that owns it.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and an image node holds a content hash, never the pixels
   (`features/ambre-spec-prose-images.md`).
-* **Verification.** 19 `verified`, 2 `unimplemented`, 1 `human-review`. The engine core built the
-  format: `crates/ambre-prose` holds the containers, the keys and the three reads. The four
-  convergence rows each run a two-peer test rather than a claim.
+* **Verification.** 20 `verified`, 2 `unimplemented`, 1 `untested`, 1 `human-review`. The bump
+  obligation splits: a key or a type moving is red against a frozen shape; regenerating that
+  shape, or moving a meaning, is not. The engine core built the
+  format: `crates/ambre-prose` holds the containers, the keys and the three reads. The four convergence
+  rows each run a two-peer test.
   * The two `unimplemented` rows are the annotation entry's, and no command writes one yet.
   * The `human-review` row binds a code change to a constant, which no test can read.
 
@@ -296,7 +300,7 @@ Only where a schema decision needs a reason. 40 words each.
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `PROSE-028` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaTooNew`) | architecture section 2.D |
 | Migration | the chain lives in `ambre-prose`; the foundation owns the protocol, never the semantics | architecture section 2.D |
-| Bump | a key or layout change raises `SCHEMA_VERSION` and freezes one named fixture in the same commit | `PROSE-029`; `ambre-spec-fixtures.md section 2` |
+| Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `PROSE-029`; `PROSE-102`; `ambre-spec-fixtures.md section 2` |
 | Unknown field | a map key no build knows is ignored on read, so a forward-written key is dropped rather than refused; the `ref` mark is the exception, a postcard record that tolerates none, and `PROSE-028` is what stops a stale build reading it | architecture section 2.D |
 | Size, ids | a body key is the tag, a separator and a `TreeID`; a document of 300 blocks carries 300 root containers keyed that way | this spec section 2 |
 | Size, blobs | an image node holds a hash and a display size; the document never holds pixels | `features/ambre-spec-prose-images.md` |

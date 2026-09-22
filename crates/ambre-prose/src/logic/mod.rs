@@ -38,6 +38,12 @@ mod fixtures;
 #[cfg(test)]
 mod convergence_tests;
 
+/// The schema shape belt (`PROSE-029`): the key set and the value types a
+/// build writes, frozen per `SCHEMA_VERSION`. Test-only, so no client build
+/// carries it.
+#[cfg(test)]
+mod schema_shape;
+
 use std::collections::HashMap;
 
 use loro::{ExportMode, LoroDoc, TreeID, UndoManager, VersionVector};
