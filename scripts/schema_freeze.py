@@ -23,11 +23,19 @@ landing straight on it is read too.
 
 **A check that cannot read the base proves nothing**, so a missing revision is
 an error naming the fetch that fixes it, never a silent pass.
+
+**A freeze with no belt holds nothing**, and a belt is what makes `SCHEMA-009`
+falsifiable. The mechanism of that rule is a list of three test paths, one per
+application, which a fourth application does not join by existing. So the
+pairing is read here rather than trusted: a crate that freezes a shape carries
+the belt that compares it, a crate that stamps a `SCHEMA_VERSION` freezes a
+shape, and the compiled version has a section to be compared against.
 """
 
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -115,6 +123,61 @@ def resolve(base: str) -> str:
     return resolved
 
 
+BELT = "the_shape_a_build_writes_is_the_shape_frozen_for_its_version"
+# `SCHEMA_VERSION` alone: the protocol's `SCHEMA_VERSION_KEY` and
+# `SCHEMA_VERSION_ABSENT` are not a stamped number.
+STAMP = re.compile(r"^pub const SCHEMA_VERSION\s*:\s*u32\s*=\s*(\d+)", re.MULTILINE)
+
+
+def crate_of(path: Path) -> str:
+    """The crate directory a path sits under."""
+    return path.relative_to(ROOT).parts[1]
+
+
+def stamped_crates() -> dict[str, int]:
+    """Each crate declaring a `SCHEMA_VERSION`, and the number it declares."""
+    out: dict[str, int] = {}
+    for path in ROOT.glob("crates/*/src/**/*.rs"):
+        found = STAMP.search(path.read_text())
+        if found:
+            out[crate_of(path)] = int(found.group(1))
+    return out
+
+
+def check_belts(errors: list[str]) -> int:
+    """Every freeze paired with its belt, and every stamp with its freeze.
+
+    Neither half is redundant. A shape file with no belt is a text nothing
+    compares a build against. A stamped crate with no shape file is an
+    application that raises a number no layout is bound to.
+    """
+    frozen = {crate_of(p): p for p in ROOT.glob(GLOB)}
+    stamped = stamped_crates()
+
+    for crate, path in sorted(frozen.items()):
+        belts = list((ROOT / "crates" / crate / "src").rglob("*.rs"))
+        if not any(BELT in p.read_text() for p in belts):
+            errors.append(
+                f"crates/{crate}: a frozen shape with no belt. Nothing compares "
+                f"a build against it, so add `{BELT}`"
+            )
+        version = stamped.get(crate)
+        if version is None:
+            errors.append(f"crates/{crate}: a frozen shape in a crate that stamps no version")
+        elif f"{MARK}v{version}" not in path.read_text():
+            errors.append(
+                f"crates/{crate}: `SCHEMA_VERSION` is {version} and the shape "
+                f"file carries no `{MARK}v{version}` section to compare against"
+            )
+
+    for crate in sorted(set(stamped) - set(frozen)):
+        errors.append(
+            f"crates/{crate}: a stamped `SCHEMA_VERSION` with no frozen shape. "
+            "A number that binds no layout raises on nothing"
+        )
+    return len(frozen | {c: None for c in stamped})
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="exit non-zero on a finding")
@@ -160,13 +223,28 @@ def main() -> int:
         gone = "" if path.exists() else ", gone from the tree"
         print(f"{rel}: {len(sections(was))} published, {len(new)} new{gone}")
 
+    errors: list[str] = []
+    paired = check_belts(errors)
+
     print(f"\nbase {base[:12]}: {held} sections held, {added} new, "
-          f"{len(edited)} edited, {len(dropped)} dropped")
+          f"{len(edited)} edited, {len(dropped)} dropped; "
+          f"{paired} crates read for a shape and its belt")
+    for line in errors:
+        print(f"  {line}")
     for line in edited:
         print(f"  edited  {line}")
     for line in dropped:
         print(f"  dropped {line}")
 
+    if args.check and errors:
+        print(
+            "\nERROR: a shape freeze and its belt came apart. The freeze is only "
+            "worth the test that compares a build against it, and `SCHEMA-009` "
+            "rests on that pairing holding for every application, including the "
+            "next one.",
+            file=sys.stderr,
+        )
+        return 1
     if args.check and (edited or dropped):
         print(
             "\nERROR: a frozen shape section changed after it was published. A "

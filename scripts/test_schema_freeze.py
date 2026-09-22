@@ -8,7 +8,8 @@ is resolved, not assumed: a branch sitting on the base reads the parent commit,
 so a section edited by a commit landing straight on the base branch is caught
 like any other.
 
-The section reader is tested on text alone. The rest runs against a real
+The pairing of a freeze with its belt is tested on a tree alone, since no
+revision comes into it. The section reader is tested on text alone. The rest runs against a real
 repository built in a temporary directory, because the defect worth catching is
 in what `git show` hands back, not in the comparison.
 
@@ -31,6 +32,27 @@ import schema_freeze  # noqa: E402  -- the module under test
 HEADER = "# a comment header\n# a second line\n"
 V1 = "== v1\nmeta/schema_version: i64\nmeta: map\n"
 V2 = "== v2\nmeta/schema_version: i64\nmeta: map\nrows/*: string\n"
+
+
+def belt(root: Path, crate: str, version: int = 1, named: bool = True) -> Path:
+    """A crate's source side of the pairing: the stamp, and the belt that reads
+    the frozen section. `named=False` writes the stamp without the belt."""
+    src = root / "crates" / crate / "src"
+    src.mkdir(parents=True, exist_ok=True)
+    body = f"pub const SCHEMA_VERSION: u32 = {version};\n"
+    if named:
+        body += f"fn {schema_freeze.BELT}() {{}}\n"
+    path = src / "schema.rs"
+    path.write_text(body)
+    return path
+
+
+def shape(root: Path, crate: str, text: str = HEADER + V1) -> Path:
+    """A crate's frozen shape file."""
+    path = root / "crates" / crate / "schema" / "shapes.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -65,6 +87,7 @@ class RepositoryTest(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.shapes = self.root / "crates" / "ambre-x" / "schema" / "shapes.txt"
         self.shapes.parent.mkdir(parents=True)
+        belt(self.root, "ambre-x", version=1)
         git(self.root, "init", "-q", "-b", "main")
         git(self.root, "config", "user.email", "t@example.com")
         git(self.root, "config", "user.name", "t")
@@ -123,6 +146,66 @@ class RepositoryTest(unittest.TestCase):
 
     def test_a_base_that_cannot_be_read_is_refused(self):
         self.assertEqual(self.run_check("nope/nope"), 1)
+
+
+class BeltTest(unittest.TestCase):
+    """The pairing of a frozen shape with the test that compares a build to it.
+
+    `SCHEMA-009` names three test paths, one per application. A fourth
+    application joins none of them by existing, which is the whole reason this
+    reads the tree rather than trusting the list.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.was = schema_freeze.ROOT
+        schema_freeze.ROOT = self.root
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        schema_freeze.ROOT = self.was
+        self.tmp.cleanup()
+
+    def findings(self) -> list[str]:
+        errors: list[str] = []
+        schema_freeze.check_belts(errors)
+        return errors
+
+    def test_a_crate_that_freezes_and_compares_is_clean(self):
+        shape(self.root, "ambre-x")
+        belt(self.root, "ambre-x", version=1)
+        self.assertEqual(self.findings(), [])
+
+    def test_the_real_tree_is_clean(self):
+        schema_freeze.ROOT = self.was
+        self.assertEqual(self.findings(), [])
+
+    def test_a_freeze_with_no_belt_is_refused(self):
+        shape(self.root, "ambre-x")
+        belt(self.root, "ambre-x", version=1, named=False)
+        self.assertEqual(len(self.findings()), 1)
+
+    def test_a_stamped_crate_with_no_frozen_shape_is_refused(self):
+        belt(self.root, "ambre-x", version=1)
+        self.assertEqual(len(self.findings()), 1)
+
+    def test_a_bump_with_no_section_to_compare_against_is_refused(self):
+        shape(self.root, "ambre-x")
+        belt(self.root, "ambre-x", version=2)
+        self.assertEqual(len(self.findings()), 1)
+
+    def test_the_protocol_constants_are_not_a_stamp(self):
+        # `ambre-core` declares `SCHEMA_VERSION_KEY` and
+        # `SCHEMA_VERSION_ABSENT`, and freezes no shape. Reading either as a
+        # stamp would make the shared crate a permanent finding.
+        src = self.root / "crates" / "ambre-core" / "src"
+        src.mkdir(parents=True)
+        (src / "schema.rs").write_text(
+            'pub const SCHEMA_VERSION_KEY: &str = "schema_version";\n'
+            "pub const SCHEMA_VERSION_ABSENT: u32 = 0;\n"
+        )
+        self.assertEqual(self.findings(), [])
 
 
 if __name__ == "__main__":

@@ -31,6 +31,8 @@ prefix is `SCHEMA`.
 | `SCHEMA-011` | `INV` | A view MUST fold that field into a whole-register write. | this spec section 2; `ambre-spec-chrome.md` | `ambre_trame::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_toile::logic::state::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- a field written into a register of its own is a key the shape did not carry, so the frozen text gains a line and the belt turns red; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which holds the published section append-only, so the red cannot be cleared by rewriting it | none | verified |
 | `SCHEMA-004` | `INV` | Every document MUST carry its schema version in a root register, written when the document is created. | this spec section 2 | `ambre_prose::schema::tests::a_new_document_carries_the_current_version`; `ambre_toile::logic::schema::tests::a_new_board_carries_the_current_version`; `ambre_trame::logic::schema::tests::a_new_workbook_carries_the_current_version` -- written inside the scaffolding commit of each engine's `from_doc`, so no document reaches persistence without it | none | verified |
 | `SCHEMA-009` | `INV` | A change to the layout of a persisted record MUST raise the schema version. | this spec section 2 | `ambre_prose::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_trame::logic::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version`; `ambre_toile::logic::state::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- each recomputes the shape from this build and compares it against the section frozen for the compiled `SCHEMA_VERSION`, so a moved key, a moved value type or a moved `postcard` layout is red until the number rises; ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which holds a published section append-only, so the red cannot be cleared by rewriting the section it broke | none | verified |
+| `SCHEMA-015` | `INV` | An application that stamps a schema version MUST freeze the shape its build writes. | this spec section 2 | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which reads every crate declaring a `SCHEMA_VERSION` and refuses one carrying no frozen shape | none | verified |
+| `SCHEMA-016` | `INV` | Each build MUST be compared against the section frozen for its version. | this spec section 2 | ci-gate -- `scripts/schema_freeze.py`, run by `just schema-freeze` in the CI `lint` job, which refuses a frozen shape whose crate names no belt, and a compiled version with no section for the belt to read | none | verified |
 | `SCHEMA-010` | `INV` | A migration MUST live in the application crate that owns the schema it migrates. | this spec section 2 | crate-graph -- `ambre_core::schema::SchemaMigration<D>` is generic over the document, and `ambre-core` depends on no CRDT: it is linked by `ambre-server`, which may never decode a document (`ZK-001`), so a migration written in the foundation has no type to write against and does not compile | none | verified |
 
 ### 1.2 Read a document's full state
@@ -46,6 +48,7 @@ container, which is the only moment a wrong reading can still be caught.
 | `SCHEMA-012` | `FRAME` | A read that refuses a document MUST NOT write it back. | this spec section 2 | `ambre_prose::schema::tests::a_document_from_a_newer_client_is_refused_and_changes_nothing`; `ambre_toile::logic::state::schema_tests::a_board_from_a_newer_client_is_refused_and_changes_nothing`; `ambre_trame::logic::schema::tests::a_workbook_from_a_newer_client_is_refused_and_changes_nothing` -- each compares the full snapshot before and after the refusal, not merely an element count; structural -- the gate reads the payload in a scratch document, so the live one is never written on the refusing path | none | verified |
 | `SCHEMA-008` | `FAIL` | A document newer than the binary MUST be refused whole. | this spec section 2 | `ambre_prose::schema::tests::a_document_a_newer_client_wrote_is_refused_whole`; `ambre_toile::logic::schema::tests::a_board_from_a_newer_client_is_refused_whole`; `ambre_trame::logic::schema::tests::a_workbook_from_a_newer_client_is_refused_whole`; `ambre_core::schema::tests::the_walk_refuses_to_run_backwards` -- the back door: a chain asked to run downhill refuses rather than guessing | none | verified |
 | `SCHEMA-013` | `FAIL` | A schema version register this build cannot read MUST be refused, never read as absent. | this spec section 2 | `ambre_prose::schema::tests::a_register_this_build_cannot_read_is_refused`; `ambre_toile::logic::schema::tests::a_register_holding_something_other_than_a_version_is_refused`; `ambre_trame::logic::schema::tests::a_register_holding_something_other_than_a_version_is_refused` -- the back door `SCHEMA-005` opens, where absent means 0 means migrate means open, so a register holding a string, or an integer outside `u32`, read as absent would open a document this build does not understand | none | verified |
+| `SCHEMA-014` | `FAIL` | A payload the CRDT engine refuses MUST be refused before its schema version is read. | this spec section 2 | `ambre_prose::schema::tests::bytes_the_crdt_engine_refuses_never_reach_the_version_check`; `ambre_trame::logic::schema::tests::bytes_the_crdt_engine_refuses_never_reach_the_version_check`; `ambre_toile::logic::schema::tests::bytes_the_crdt_engine_refuses_never_reach_the_version_check` -- each hands the gate bytes no engine reads and requires the engine's own refusal, not a version verdict; structural -- the import into the scratch document is the first statement of `gate`, and the version is read off that same scratch, so the order is carried by the data flow rather than by a convention | none | verified |
 | `SCHEMA-003` | `FAIL` | A record a binary cannot decode MUST reach the user as an error, never as a default or an absence. | this spec section 2; derived | `ambre_toile::logic::state::schema_tests::a_register_that_cannot_be_decoded_reaches_the_user`; `ambre_trame::logic::schema::tests::a_register_that_cannot_be_decoded_reaches_the_user`; `::a_board_this_build_wrote_raises_no_notice`; `::a_workbook_this_build_wrote_raises_no_notice` -- the last pair holds the notice back on every ordinary open | none | verified |
 
 * **Budget.** none of its own, and one cost worth naming. A full-state read imports the payload
@@ -54,7 +57,7 @@ container, which is the only moment a wrong reading can still be caught.
 * **Boundary.** none. The version register is ordinary document state, so it travels sealed like
   every other container and the relay sees a blob (`ZK-001`). The protocol half lives in
   `ambre-core`, which the relay links, and nothing in it knows what a CRDT is.
-* **Verification.** 13 `verified`. A test holds what the register promises: the number carried
+* **Verification.** 16 `verified`. A test holds what the register promises: the number carried
   from creation, the comparison at every full-state entry point, and a named case per verdict. A
   layout moved under an unchanged number turns a shape belt red, as would a field given its own
   register. Both style registers carry a convergence test.
@@ -114,7 +117,10 @@ successful open of a wrong document is silent loss. The register makes that case
   engines that carry a container file. A
   delta carries no version and applies blind -- there is nothing in it to compare.
 * **How the gate reads it.** It imports the payload into a **scratch** document and reads the
-  register there. Only then does anything reach the live document: the payload itself when the
+  register there. The import comes first, so bytes the engine refuses never reach the comparison
+  (`SCHEMA-014`). Read the other way around, a failed import would show an absent register, which
+  is version 0, which is a migration, which is an open. Only then does anything reach the live
+  document: the payload itself when the
   versions match, a re-exported snapshot when a migration ran. That is what makes a refusal free
   (`SCHEMA-012`) and what the second import in the budget note above pays for.
 
@@ -123,6 +129,23 @@ successful open of a wrong document is silent loss. The register makes that case
 | equal | the document is used |
 | the document is older | the application's migration chain runs, then the document is used |
 | the document is newer | the open is refused, whole, and reported as a client that needs updating |
+
+**The number is bound to a layout, by a frozen shape.** A version raised by hand is a promise,
+and a layout that moves under an unchanged number is silent loss on every peer. So each
+application writes the key set and the value types of its build to a `schema/shapes.txt` of its
+own, one section per version. A belt in the crate compares the build against the section frozen
+for its compiled number (`SCHEMA-016`). A moved key, a moved value type or a moved `postcard`
+layout is then red until the number rises.
+
+* **The section is append-only.** A developer whose build moved the shape could regenerate the
+  section in place and watch the belt go green, with the number never raised. `just schema-freeze`
+  reads the base revision and refuses a published section that changed.
+* **The pairing is read, not trusted.** A crate that stamps a version and freezes nothing, and a
+  frozen shape no belt compares, are each a half that holds nothing (`SCHEMA-015`). The same gate
+  pairs them both ways, so a fourth application inherits the obligation rather than the list.
+* **What a layout is.** The frozen text records shape, not meaning. A value read differently under
+  the same key and type leaves it identical, so that half of the bump obligation stays with the
+  reviewer.
 
 **Two versions, and the reader checks both.**
 
@@ -191,8 +214,9 @@ The user never sees the version. What they meet is what it protects them from.
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **Nothing refuses a per-attribute register in a third application.** The two that store a style
-  register are held by their shape belts. A new crate inherits neither belt, so it would carry the
-  rule with nothing to fail on.
+  register are held by their shape belts, and `SCHEMA-015` now obliges a new crate to carry one.
+  What the belt reads is a layout, so it would still take a reader to see a register per attribute
+  in the lines it gained.
 * **No rule covers what a migration may do to a document it cannot fully read.** The three
   registries hold one step each and none can fail, so nothing has forced the question yet. A step
   that *can* fail reports the hop it broke on (`SchemaError::MigrationFailed`), and the caller
