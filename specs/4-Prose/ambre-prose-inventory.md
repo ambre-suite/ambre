@@ -16,6 +16,7 @@
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
 | `prose-engine` | An author types a word and every collaborator reads it. | implemented | 42 |  |
+| `prose-pagination` | A document becomes a sequence of measured pages. | partial | 37 |  |
 | `prose-tables` | A grid of cells inside the document. | partial | 42 |  |
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 25 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
@@ -31,7 +32,6 @@
 | `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | design-only | 23 |  |
 | `prose-lists` | Bulleted, numbered and checkbox lists, nested to any depth. | design-only | 17 |  |
 | `prose-page-rendering` | What a page looks like on the canvas. | design-only | 19 |  |
-| `prose-pagination` | A document becomes a sequence of measured pages. | design-only | 37 |  |
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | design-only | 8 |  |
 | `prose-ruler` | A horizontal scale above the page, carrying three handles. | design-only | 5 |  |
 | `prose-selection` | Where the caret is, where it goes, and what a drag selects. | design-only | 35 |  |
@@ -44,4 +44,4 @@
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | design-only | 17 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | design-only | 13 |  |
 
-**28 features: 1 implemented, 2 partial, 25 design-only. 598 contract rows, 0 loose.**
+**28 features: 1 implemented, 3 partial, 24 design-only. 598 contract rows, 0 loose.**

@@ -233,7 +233,9 @@ dependencies = [
  "ambre-core",
  "flume",
  "loro",
+ "parley",
  "postcard",
+ "proptest",
  "serde",
  "tracing",
 ]

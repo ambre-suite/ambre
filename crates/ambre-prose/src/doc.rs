@@ -262,6 +262,40 @@ pub(crate) fn map_at(parent: &LoroMap, key: &str) -> Option<LoroMap> {
     }
 }
 
+/// The `meta` register, or `None` when the document has none.
+///
+/// A reader takes this path and never `get_map`, which attaches the root
+/// container it did not find. Laying the document out writes nothing to it
+/// (`PROSE-079`).
+#[must_use]
+pub(crate) fn meta_read(doc: &LoroDoc) -> Option<LoroMap> {
+    doc.get_by_str_path(META)
+        .and_then(|value| value.into_container().ok())
+        .and_then(|container| container.into_map().ok())
+}
+
+/// The block tree, or `None` when the document has none, for the same reason
+/// as [`meta_read`].
+#[must_use]
+pub(crate) fn blocks_read(doc: &LoroDoc) -> Option<LoroTree> {
+    doc.get_by_str_path(BLOCKS)
+        .and_then(|value| value.into_container().ok())
+        .and_then(|container| container.into_tree().ok())
+}
+
+/// The map a key already holds, or `None` when the key is empty.
+///
+/// The read-only half of [`map_at`]. A reader must never mint the container it
+/// went looking for: laying the document out writes nothing to it
+/// (`PROSE-079`).
+#[must_use]
+pub(crate) fn map_read(parent: &LoroMap, key: &str) -> Option<LoroMap> {
+    parent
+        .get(key)
+        .and_then(|value| value.into_container().ok())
+        .and_then(|container| container.into_map().ok())
+}
+
 /// Write the properties the caller named, and no other key (`PROSE-096`).
 ///
 /// `None` is "leave this property alone". Two peers writing two different
@@ -383,6 +417,128 @@ const A4_HEIGHT_MM: f32 = 297.0;
 /// The four margins of a fresh document, in millimetres.
 const DEFAULT_MARGIN_MM: f32 = 20.0;
 
+/// The two text defaults of a fresh document that carry a number.
+///
+/// The family is a value, not a key. It lives in `DocDefaults::default` alone,
+/// because a string constant in this module is read as a schema key
+/// (`PROSE-029`).
+const DEFAULT_FONT_SIZE_PT: f32 = 11.0;
+const DEFAULT_LINE_HEIGHT: f32 = 1.5;
+
+/// The page format a document declares, in millimetres.
+///
+/// Read out of `meta/page` and converted to pixels by the layout, which is the
+/// one place a page number or a measured height exists (`PROSE-065`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PageFormat {
+    pub width_mm: f32,
+    pub height_mm: f32,
+    pub margin_top_mm: f32,
+    pub margin_bottom_mm: f32,
+    pub margin_left_mm: f32,
+    pub margin_right_mm: f32,
+}
+
+impl Default for PageFormat {
+    /// A4 portrait with the four default margins: what `seed` writes.
+    fn default() -> Self {
+        Self {
+            width_mm: A4_WIDTH_MM,
+            height_mm: A4_HEIGHT_MM,
+            margin_top_mm: DEFAULT_MARGIN_MM,
+            margin_bottom_mm: DEFAULT_MARGIN_MM,
+            margin_left_mm: DEFAULT_MARGIN_MM,
+            margin_right_mm: DEFAULT_MARGIN_MM,
+        }
+    }
+}
+
+/// The three document defaults `meta/defaults` holds: what a block that names
+/// no style of its own is measured with.
+///
+/// The full four-level cascade is the inline-styles feature's
+/// (`features/ambre-spec-prose-inline-styles.md`). This is its bottom level,
+/// which is what pagination needs to shape a run.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DocDefaults {
+    pub font_family: String,
+    pub font_size_pt: f32,
+    /// A multiple of the font size, never an absolute length.
+    pub line_height: f32,
+}
+
+impl Default for DocDefaults {
+    /// What `seed` writes.
+    fn default() -> Self {
+        Self {
+            font_family: "Inter".to_string(),
+            font_size_pt: DEFAULT_FONT_SIZE_PT,
+            line_height: DEFAULT_LINE_HEIGHT,
+        }
+    }
+}
+
+/// The defaults `meta/defaults` holds.
+///
+/// A key that is missing, or that holds a number no text can be set in, falls
+/// back for that key alone. A size of zero would measure every block as a
+/// zero-height one, and place a whole document on one page.
+#[must_use]
+pub fn read_defaults(doc: &LoroDoc) -> DocDefaults {
+    let fallback = DocDefaults::default();
+    let Some(defaults) = meta_read(doc).and_then(|meta| map_read(&meta, DEFAULTS)) else {
+        return fallback;
+    };
+    let read = |key: &str, default: f32| -> f32 {
+        read_f32(&defaults, key)
+            .filter(|number| number.is_finite() && *number > 0.0)
+            .unwrap_or(default)
+    };
+    DocDefaults {
+        font_family: read_string(&defaults, "font_family")
+            .filter(|name| !name.is_empty())
+            .unwrap_or(fallback.font_family),
+        font_size_pt: read("font_size_pt", fallback.font_size_pt),
+        line_height: read("line_height", fallback.line_height),
+    }
+}
+
+/// The page format `meta/page` holds.
+///
+/// A key that is missing, or that holds a number no page can have, falls back
+/// to the default for that key alone. A document with one bad margin lays out
+/// on the right sheet rather than on none.
+#[must_use]
+pub fn read_page_format(doc: &LoroDoc) -> PageFormat {
+    let fallback = PageFormat::default();
+    let Some(page) = meta_read(doc).and_then(|meta| map_read(&meta, PAGE)) else {
+        return fallback;
+    };
+    let read = |key: &str, default: f32| -> f32 {
+        read_f32(&page, key)
+            .filter(|number| number.is_finite() && *number >= 0.0)
+            .unwrap_or(default)
+    };
+    let width_mm = read("width_mm", fallback.width_mm);
+    let height_mm = read("height_mm", fallback.height_mm);
+    PageFormat {
+        width_mm: if width_mm > 0.0 {
+            width_mm
+        } else {
+            fallback.width_mm
+        },
+        height_mm: if height_mm > 0.0 {
+            height_mm
+        } else {
+            fallback.height_mm
+        },
+        margin_top_mm: read("margin_top_mm", fallback.margin_top_mm),
+        margin_bottom_mm: read("margin_bottom_mm", fallback.margin_bottom_mm),
+        margin_left_mm: read("margin_left_mm", fallback.margin_left_mm),
+        margin_right_mm: read("margin_right_mm", fallback.margin_right_mm),
+    }
+}
+
 /// Write the page format, and refuse an orientation its two dimensions
 /// contradict (`PROSE-032`).
 ///
@@ -444,9 +600,16 @@ pub(crate) fn seed(doc: &LoroDoc) -> Option<TreeID> {
         page.insert(key, f64::from(DEFAULT_MARGIN_MM)).ok()?;
     }
     let defaults = map_at(&meta, DEFAULTS)?;
-    defaults.insert("font_family", "Inter").ok()?;
-    defaults.insert("font_size_pt", 11.0).ok()?;
-    defaults.insert("line_height", 1.5).ok()?;
+    let text = DocDefaults::default();
+    defaults
+        .insert("font_family", text.font_family.as_str())
+        .ok()?;
+    defaults
+        .insert("font_size_pt", f64::from(text.font_size_pt))
+        .ok()?;
+    defaults
+        .insert("line_height", f64::from(text.line_height))
+        .ok()?;
     // The two registers no seeded key belongs to are opened all the same, so
     // every peer addresses one container rather than minting a rival one.
     let _ = doc.get_map(STYLES);
@@ -532,6 +695,33 @@ fn read_string(map: &LoroMap, key: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_seeded_document_reads_back_the_a4_format_it_was_written_with() {
+        let doc = LoroDoc::new();
+        seed(&doc);
+        assert_eq!(read_page_format(&doc), PageFormat::default());
+    }
+
+    #[test]
+    fn a_document_with_no_page_register_reads_the_default_format() {
+        let doc = LoroDoc::new();
+        assert_eq!(read_page_format(&doc), PageFormat::default());
+    }
+
+    #[test]
+    fn a_width_no_page_can_have_falls_back_for_that_key_alone() {
+        let doc = LoroDoc::new();
+        seed(&doc);
+        let page = map_at(&doc.get_map(META), PAGE).expect("seed writes the page register");
+        page.insert("width_mm", 0.0)
+            .expect("the register takes a double");
+        page.insert("margin_left_mm", 5.0)
+            .expect("the register takes a double");
+        let format = read_page_format(&doc);
+        assert_eq!(format.width_mm, PageFormat::default().width_mm);
+        assert_eq!(format.margin_left_mm, 5.0);
+    }
 
     #[test]
     fn a_body_key_re_reads_as_the_pair_it_joins() {

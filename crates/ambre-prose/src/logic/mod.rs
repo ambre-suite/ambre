@@ -55,6 +55,8 @@ use crate::doc;
 use crate::events::{
     ProseCommand, ProseError, ProseEvent, ProseOutcome, ProseRefusal, block_id, tree_id,
 };
+use crate::layout::pass::PageLayout;
+use crate::layout::reflow::Paginator;
 use crate::mark;
 use crate::schema;
 
@@ -90,6 +92,11 @@ pub struct ProseState {
     /// (`PROSE-058`). The name is cosmetic and decides nothing
     /// (`PRESENCE-004`).
     presence: HashMap<UserId, (crate::events::CursorPosition, String)>,
+    /// The paginator, built on the first layout asked for. It is the one place
+    /// the document is measured, for the screen and for export alike
+    /// (`PROSE-064`). It lives here so measuring runs where the document does
+    /// (`PROSE-010`).
+    paginator: Option<Paginator>,
 }
 
 impl ProseState {
@@ -150,7 +157,21 @@ impl ProseState {
             my_user_id: None,
             my_name: None,
             presence: HashMap::new(),
+            paginator: None,
         })
+    }
+
+    /// Lay the document out, reusing what the last layout measured.
+    ///
+    /// The one place a page number, a break position or a measured height
+    /// comes from. Each is derived on every call, never read back from the
+    /// document (`PROSE-033`, `PROSE-064`). `dirty` names the blocks an
+    /// edit touched; an empty slice re-measures nothing (`PROSE-083`). The
+    /// first call builds the paginator, since loading the faces costs more
+    /// than a document that is never laid out should pay.
+    pub fn paginate(&mut self, dirty: &[TreeID]) -> &PageLayout {
+        let paginator = self.paginator.get_or_insert_with(Paginator::new);
+        paginator.reflow(&self.doc, dirty)
     }
 
     /// The two settings a document needs before its first operation, and after
@@ -575,6 +596,10 @@ impl ProseState {
     /// under a fresh peer id. Swallowing those operations would make the next
     /// local delta depend on operations no other peer holds.
     fn absorb_imported(&mut self) {
+        // Bytes that arrive name no block, so nothing says which measurement
+        // they invalidated. The layout is dropped and the next call to
+        // [`paginate`](Self::paginate) recomputes it whole (`PROSE-082`).
+        self.paginator = None;
         let ours = self.last_exported_vv.get(&self.peer).copied();
         self.last_exported_vv = self.doc.oplog_vv();
         match ours {
@@ -668,8 +693,10 @@ mod tests {
             block_id: absent,
             range: (0, 1),
         });
-        let splitting =
-            state.handle_command(ProseCommand::SplitBlock { block_id: absent, pos: 0 });
+        let splitting = state.handle_command(ProseCommand::SplitBlock {
+            block_id: absent,
+            pos: 0,
+        });
         assert_eq!(refusal(&deleting).reason, refusal(&splitting).reason);
         assert_ne!(refusal(&deleting).refused, refusal(&splitting).refused);
     }
@@ -783,6 +810,48 @@ mod tests {
             .expect("the snapshot imports");
         assert!(reader.root_blocks().contains(&mine));
         assert_eq!(reader.text_of(&mine).as_deref(), Some("mine"));
+    }
+
+    #[test]
+    fn the_layout_is_derived_and_the_document_is_left_alone() {
+        let mut state = ProseState::new().expect("a document is built");
+        let block = state.root_blocks()[0];
+        state.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "a paragraph that is measured, never stored".to_owned(),
+        });
+        let before = state.doc.get_deep_value();
+        let pages = state.paginate(&[]).page_count;
+        assert!(pages >= 1);
+        // `PROSE-033`, `PROSE-065`, `PROSE-079`: laying out reads, and the
+        // document holds no page number, no break and no height afterwards.
+        assert_eq!(state.doc.get_deep_value(), before);
+        assert_eq!(state.paginate(&[]).page_count, pages);
+    }
+
+    #[test]
+    fn a_snapshot_import_lays_the_document_out_again() {
+        let mut source = ProseState::new().expect("a document is built");
+        let block = source.root_blocks()[0];
+        source.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "a long paragraph ".repeat(400),
+        });
+        let snapshot = source.export_snapshot();
+        let mut target = ProseState::new().expect("a document is built");
+        let empty = target.paginate(&[]).page_count;
+        target
+            .import_snapshot(&snapshot)
+            .expect("the snapshot imports");
+        // `PROSE-082`: the bytes named no block, so the layout is recomputed
+        // whole rather than reusing what the empty document measured.
+        assert!(target.paginate(&[]).page_count > empty);
+        assert_eq!(
+            target.paginate(&[]).page_count,
+            source.paginate(&[]).page_count
+        );
     }
 
     #[test]

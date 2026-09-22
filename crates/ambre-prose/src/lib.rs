@@ -10,6 +10,8 @@
 //! * [`mark`] -- the inline mark registry: the expansion policy and the
 //!   canonical value.
 //! * [`schema`] -- the persisted version register and the migration registry.
+//! * [`layout`] -- pagination: the page box, family resolution, and the passes
+//!   that measure and place (`features/ambre-spec-prose-pagination.md`).
 //! * [`logic`] -- the engine: the command entry point, the remote and snapshot
 //!   paths, presence, and the picture cache.
 //! * [`events`] -- the IPC contract, re-exported from `ambre-bus`, plus the
@@ -25,6 +27,7 @@
 
 pub mod doc;
 pub mod events;
+pub mod layout;
 pub mod logic;
 pub mod mark;
 pub mod schema;

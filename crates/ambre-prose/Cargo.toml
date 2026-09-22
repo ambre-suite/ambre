@@ -27,10 +27,24 @@ loro = { workspace = true }
 # (`features/ambre-spec-prose-engine.md section 3.D`).
 postcard = { workspace = true }
 
+# The typographic layout pagination measures with: line breaking and glyph
+# metrics, not just the run types a draw surface exposes
+# (`features/ambre-spec-prose-engine.md section 5`). Only parley -- not the
+# whole GPU canvas crate -- so the Logic worker's wasm stays lean.
+parley = { workspace = true }
+
 # The UI -> Logic channel the view sends on. Shared memory between the two
 # threads, so a command moves rather than serializes.
 flume = { workspace = true }
 
+
+# Placement holds universal rules over an unenumerated input space: a walk that
+# terminates, a page it never goes back to, and a cut only ever taken at a line
+# (`PROSE-017`, `PROSE-078`, `PROSE-071`). proptest pulls `wait-timeout`, which
+# does not build on wasm32, and placement is host-testable, so it is gated to
+# the host target as ambre-toile and ambre-trame do.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+proptest = { workspace = true }
 
 [lints]
 workspace = true
