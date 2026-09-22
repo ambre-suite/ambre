@@ -168,10 +168,10 @@ see section 6.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The event a refusal travels on does not exist.** `PROSE-FEAT-028` requires the refusal to be
-  reported, and it was written as `CommandRejected`, a variant
-  `features/ambre-spec-prose-engine.md section 3` never declares. The styles feature reports
-  through the same missing variant, and it lands with the `A refused command names what it refused`
+* **A refusal travels, and nothing shows it.** `PROSE-FEAT-028` requires the refusal to be
+  reported. The engine names the command and the reason
+  (`features/ambre-spec-prose-engine.md section 3`), and no list command exists to be refused yet.
+  Nor does a view that would show one. It lands with the `Styles, lists and headings`
   Story (`ambre-roadmap.md` E5).
 * **Nothing rules on Enter in an empty item.** Every editor of this kind ends a list that way. No
   rule here says whether it outdents, leaves the list, or adds another empty item.

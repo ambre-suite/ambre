@@ -35,9 +35,19 @@ use loro::LoroValue;
 use ambre_bus::UserId;
 
 use crate::logic::command::{Reaction, ReactionKind, ReactionTally, ToileEvent, ToileOutcome};
+use crate::ToileError;
 use crate::logic::model::{ElementId, TargetId};
 
 use super::{REACTIONS, ToileState};
+
+/// Encode a value for storage under a reactions key. A failure is a refusal
+/// the user has to see (`TOILE-FEAT-064`). It becomes a typed error, not a
+/// line in the log under an outcome that reads like success. The function is
+/// generic so the failing arm has an input: no `Reaction` makes `postcard`
+/// refuse, and the mapping is what the test holds.
+fn encode<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, ToileError> {
+    postcard::to_allocvec(value).map_err(|e| ToileError::WriteFailed(e.to_string()))
+}
 
 /// The composite reactions key for a `(target, user)` pair (see module docs).
 fn reaction_key(target: &TargetId, user: &UserId) -> String {
@@ -81,12 +91,9 @@ impl ToileState {
 
         match reaction {
             Some(r) => {
-                let bytes = match postcard::to_allocvec(&r) {
+                let bytes = match encode(&r) {
                     Ok(b) => b,
-                    Err(e) => {
-                        tracing::warn!("Toile: reaction encode failed: {e}");
-                        return ToileOutcome::display_only(Vec::new());
-                    }
+                    Err(e) => return ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
                 };
                 // Skip a byte-identical re-write so an unchanged reaction is not a
                 // spurious commit / undo item.
@@ -195,5 +202,39 @@ impl ToileState {
             return None;
         };
         postcard::from_bytes(&bytes).ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A value no encoder can write. Nothing the board holds serializes like
+    /// this; it exists so the failing arm of `encode` has an input.
+    struct Unwritable;
+
+    impl serde::Serialize for Unwritable {
+        fn serialize<S: serde::Serializer>(&self, _serializer: S) -> Result<S::Ok, S::Error> {
+            Err(serde::ser::Error::custom("this value refuses to be written"))
+        }
+    }
+
+    /// An encode that fails answers a typed error, not an empty outcome
+    /// (`TOILE-FEAT-064`). The caller can tell it from a reaction that landed.
+    #[test]
+    fn a_reaction_that_will_not_encode_answers_a_write_failure() {
+        let answer = encode(&Unwritable);
+        assert!(matches!(answer, Err(ToileError::WriteFailed(_))));
+    }
+
+    /// The reaction the board actually stores encodes, so the failing arm is
+    /// the only one that carries an error.
+    #[test]
+    fn a_reaction_encodes() {
+        let reaction = Reaction {
+            kind: ReactionKind::Emoji("+1".to_owned()),
+            ts: 0,
+        };
+        assert!(encode(&reaction).is_ok());
     }
 }

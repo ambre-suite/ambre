@@ -1507,6 +1507,8 @@ pub enum ToileError {
     BooleanNeedsTwo,
     #[error("boolean op produced an empty result")]
     BooleanEmpty,
+    #[error("the board engine could not write the change: {0}")]
+    WriteFailed(String),
 }
 
 // =============================================================================

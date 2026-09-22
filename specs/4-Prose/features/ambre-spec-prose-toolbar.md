@@ -192,10 +192,11 @@ respecified here (`ambre-spec-chrome.md`).
   bar is where a selection-scoped gesture would live
   (`features/ambre-spec-prose-comments.md section 6`,
   `features/ambre-spec-prose-track-changes.md section 6`).
-* **A refused mark value has nowhere to go.** `PROSE-FEAT-022` requires a malformed value to be
-  reported to the author, and no event carries the refusal. The colour and size controls therefore
-  have no failure path (`features/ambre-spec-prose-inline-styles.md section 6`). It lands with the
-  `A refused command names what it refused` Story (`ambre-roadmap.md` E5).
+* **A refused mark value reaches the toolbar and stops there.** `PROSE-FEAT-022` requires a
+  malformed value to be reported to the author. The engine now names the command and the reason
+  (`features/ambre-spec-prose-engine.md section 3`), so the colour and size controls have a
+  failure to show. Nothing rules where they show it, or for how long
+  (`features/ambre-spec-prose-inline-styles.md section 6`).
 * **What a control applies to is stated twice, and differently.** Section 4 says a control
   applies its formatting to the whole selection, which is what `PROSE-UI-102` carries. The control
   table of section 3 sends the heading and quote controls to the block the selection starts in.

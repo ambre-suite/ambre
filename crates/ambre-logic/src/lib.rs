@@ -252,13 +252,15 @@ impl DocState {
                     skipped: Vec::new(),
                 })
             }
-            DocState::Prose(_) => AppEvent::Prose(ambre_bus::app::prose::ProseEvent::Error {
-                code: ambre_bus::app::prose::error_code::WRITE_FAILED,
-                message: format!(
-                    "{filename} holds {} bytes this build cannot write",
-                    data.len()
+            DocState::Prose(_) => AppEvent::Prose(ambre_bus::app::prose::ProseEvent::Error(
+                ambre_bus::app::prose::ProseError::new(
+                    "exporting",
+                    ambre_bus::app::prose::ProseRefusal::WriteFailed(format!(
+                        "{filename} holds {} bytes this build cannot write",
+                        data.len()
+                    )),
                 ),
-            }),
+            )),
         }
     }
 
@@ -271,10 +273,12 @@ impl DocState {
             DocState::Toile(_) => {
                 AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportFailed(reason))
             }
-            DocState::Prose(_) => AppEvent::Prose(ambre_bus::app::prose::ProseEvent::Error {
-                code: ambre_bus::app::prose::error_code::WRITE_FAILED,
-                message: reason,
-            }),
+            DocState::Prose(_) => AppEvent::Prose(ambre_bus::app::prose::ProseEvent::Error(
+                ambre_bus::app::prose::ProseError::new(
+                    "exporting",
+                    ambre_bus::app::prose::ProseRefusal::WriteFailed(reason),
+                ),
+            )),
         }
     }
 

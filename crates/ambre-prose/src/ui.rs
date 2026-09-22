@@ -160,7 +160,7 @@ impl ProseUiState {
             // and none of them touches what is being typed (`PROSE-UI-027`).
             ProseEvent::MediaArrived { .. }
             | ProseEvent::DocumentRefused { .. }
-            | ProseEvent::Error { .. } => {}
+            | ProseEvent::Error(_) => {}
         }
     }
 }

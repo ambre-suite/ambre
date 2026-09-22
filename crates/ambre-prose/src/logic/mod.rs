@@ -52,7 +52,9 @@ use ambre_core::UserId;
 use ambre_core::schema::SchemaError;
 
 use crate::doc;
-use crate::events::{ProseCommand, ProseEvent, ProseOutcome, block_id, error_code, tree_id};
+use crate::events::{
+    ProseCommand, ProseError, ProseEvent, ProseOutcome, ProseRefusal, block_id, tree_id,
+};
 use crate::mark;
 use crate::schema;
 
@@ -191,6 +193,14 @@ impl ProseState {
     /// command that wrote nothing exports no delta (`PROSE-047`), because the
     /// export reads the version vector and finds it unchanged.
     pub fn handle_command(&mut self, command: ProseCommand) -> ProseOutcome {
+        // The handlers refuse by reason alone. The command that drew the
+        // refusal is known here and nowhere deeper, so the name is written in
+        // on the way out (`PROSE-105`).
+        let refused = command.name();
+        self.dispatch(command).named(refused)
+    }
+
+    fn dispatch(&mut self, command: ProseCommand) -> ProseOutcome {
         match command {
             ProseCommand::Noop => ProseOutcome::nothing(),
             ProseCommand::InsertText {
@@ -269,10 +279,7 @@ impl ProseState {
     pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<ProseEvent> {
         if let Err(e) = self.doc.import(payload) {
             tracing::warn!("Prose: a remote change could not be applied: {e:?}");
-            return vec![ProseEvent::Error {
-                code: error_code::REMOTE_IMPORT_FAILED,
-                message: "a collaborator's change could not be applied".to_owned(),
-            }];
+            return vec![Self::err_remote()];
         }
         self.absorb_imported();
         let mut events = vec![ProseEvent::DocUpdated {
@@ -310,19 +317,13 @@ impl ProseState {
             }
         }
         if events.is_empty() {
-            return vec![ProseEvent::Error {
-                code: error_code::REMOTE_IMPORT_FAILED,
-                message: "a collaborator's changes could not be applied".to_owned(),
-            }];
+            return vec![Self::err_remote()];
         }
         self.absorb_imported();
         events.extend(self.regrow_root());
         self.doc.commit();
         if any_failed {
-            events.push(ProseEvent::Error {
-                code: error_code::REMOTE_IMPORT_FAILED,
-                message: "a collaborator's change could not be applied".to_owned(),
-            });
+            events.push(Self::err_remote());
         }
         events
     }
@@ -510,10 +511,10 @@ impl ProseState {
             return Vec::new();
         }
         if doc::grow_root(&self.doc).is_none() {
-            return vec![ProseEvent::Error {
-                code: error_code::WRITE_FAILED,
-                message: "the document could not keep a block".to_owned(),
-            }];
+            return vec![ProseEvent::Error(ProseError::new(
+                "keeping a block",
+                ProseRefusal::WriteFailed("the document could not keep a block".to_owned()),
+            ))];
         }
         Vec::new()
     }
@@ -590,49 +591,116 @@ impl ProseState {
 
     /// The refusal a command that names no live block answers with.
     fn err_no_block(id: &TreeID) -> ProseOutcome {
-        ProseOutcome::refused(
-            error_code::NO_SUCH_BLOCK,
-            format!("no live block {id} in this document"),
-        )
+        ProseOutcome::refused(ProseRefusal::NoSuchBlock(block_id(*id)))
     }
 
     /// The refusal a command whose offsets leave the body it addresses answers
     /// with (`PROSE-045`).
     fn err_bad_range() -> ProseOutcome {
-        ProseOutcome::refused(
-            error_code::BAD_RANGE,
-            "the range leaves the body of the block the command names",
-        )
+        ProseOutcome::refused(ProseRefusal::BadRange)
     }
 
     /// The refusal the nesting table answers a move or an insert with
     /// (`PROSE-040`, `PROSE-095`).
     fn err_nesting() -> ProseOutcome {
-        ProseOutcome::refused(
-            error_code::NESTING_REFUSED,
-            "the document refuses that block under that parent",
-        )
+        ProseOutcome::refused(ProseRefusal::NestingRefused)
+    }
+
+    /// The refusal a collaborator's change this peer could not apply answers
+    /// with. It names the update rather than a command: nothing local was
+    /// asked for (`PROSE-105`).
+    fn err_remote() -> ProseEvent {
+        ProseEvent::Error(ProseError::new(
+            "a collaborator's update",
+            ProseRefusal::RemoteImportFailed,
+        ))
     }
 
     /// The refusal a write the CRDT engine itself rejected answers with.
     fn err_write(reason: &str) -> ProseOutcome {
-        ProseOutcome::refused(
-            error_code::WRITE_FAILED,
-            format!("the write failed: {reason}"),
-        )
+        ProseOutcome::refused(ProseRefusal::WriteFailed(reason.to_owned()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::BlockInit;
+    use crate::events::{BlockId, BlockInit};
 
     #[test]
     fn a_fresh_document_holds_one_paragraph_and_a_version() {
         let state = ProseState::new().expect("a document is built");
         assert_eq!(state.schema_version(), schema::SCHEMA_VERSION);
         assert_eq!(state.root_blocks().len(), 1);
+    }
+
+    /// The one refusal in an outcome, or the test fails on the spot.
+    fn refusal(outcome: &ProseOutcome) -> &ProseError {
+        let [ProseEvent::Error(error)] = outcome.display.as_slice() else {
+            panic!("the outcome carried no single refusal");
+        };
+        error
+    }
+
+    /// A refusal names the command that drew it (`PROSE-105`). The handler
+    /// states the reason; the name comes from the entry point.
+    #[test]
+    fn a_refusal_names_the_command_it_refused() {
+        let mut state = ProseState::new().expect("a document is built");
+        let absent = BlockId::new(9, 9);
+        let outcome = state.handle_command(ProseCommand::DeleteText {
+            block_id: absent,
+            range: (0, 1),
+        });
+        let error = refusal(&outcome);
+        assert_eq!(error.refused, "deleting text");
+        assert_eq!(error.reason, ProseRefusal::NoSuchBlock(absent));
+    }
+
+    /// Two commands refused for one reason MUST NOT read alike (`PROSE-105`).
+    /// The reason is what the author can act on least, so the name carries the
+    /// message.
+    #[test]
+    fn two_commands_refused_for_one_reason_name_themselves_apart() {
+        let mut state = ProseState::new().expect("a document is built");
+        let absent = BlockId::new(9, 9);
+        let deleting = state.handle_command(ProseCommand::DeleteText {
+            block_id: absent,
+            range: (0, 1),
+        });
+        let splitting =
+            state.handle_command(ProseCommand::SplitBlock { block_id: absent, pos: 0 });
+        assert_eq!(refusal(&deleting).reason, refusal(&splitting).reason);
+        assert_ne!(refusal(&deleting).refused, refusal(&splitting).refused);
+    }
+
+    /// A mark value the key's grammar refuses says so (`PROSE-105`). It used
+    /// to travel as a range failure, which named a part of the command that
+    /// was correct.
+    #[test]
+    fn a_mark_value_the_grammar_refuses_is_not_a_range_failure() {
+        let mut state = ProseState::new().expect("a document is built");
+        let block = state.root_blocks()[0];
+        state.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "text".to_owned(),
+        });
+        let outcome = state.handle_command(ProseCommand::ApplyMark {
+            block_id: block,
+            range: (0, 4),
+            key: "fs".to_owned(),
+            value: Some("huge".to_owned()),
+        });
+        let error = refusal(&outcome);
+        assert_eq!(error.refused, "applying the style");
+        assert_eq!(
+            error.reason,
+            ProseRefusal::BadMarkValue {
+                key: "fs".to_owned(),
+                value: "huge".to_owned(),
+            }
+        );
     }
 
     #[test]

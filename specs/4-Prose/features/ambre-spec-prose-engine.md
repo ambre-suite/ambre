@@ -44,6 +44,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-045` | `PRE` | Every offset a command carries MUST address the body text of the block the command names. | this spec section 3 | `ambre_prose::logic::text::tests::an_offset_past_the_body_is_refused`; `ambre_prose::logic::marks::tests::an_empty_range_is_refused` | none | verified |
 | `PROSE-046` | `POST` | A command MUST answer with one outcome carrying every display event it produced, the delta it exported and the presence frame it built. | this spec section 3 | type-level -- `ambre_prose::events::ProseOutcome` is the one return type of `handle_command`, and it carries the three; `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
 | `PROSE-023` | `POST` | The confirmed-change event of a local command MUST carry the delta that command exported, never a re-export of the current state. | this spec section 3 | `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
+| `PROSE-105` | `POST` | A refusal MUST name the command that drew it. | this spec section 3 | `ambre_prose::logic::tests::a_refusal_names_the_command_it_refused`; `ambre_prose::logic::tests::two_commands_refused_for_one_reason_name_themselves_apart` -- the second refuses two commands for one reason and requires the two names to differ, so a refusal that named the reason alone fails it | none | verified |
+| `PROSE-106` | `POST` | A refusal MUST carry its reason as a value the view can tell from every other reason. | this spec section 3 | `ambre_prose::logic::tests::a_mark_value_the_grammar_refuses_is_not_a_range_failure` -- it requires the mark-value refusal, which used to travel as the range failure, so a reason folded into a neighbour fails it | none | verified |
 | `PROSE-047` | `FRAME` | A command that does not mutate the document MUST NOT produce a delta. | this spec section 3 | `ambre_prose::logic::tests::a_command_that_changes_nothing_exports_no_delta`; `ambre_prose::logic::blocks::tests::a_paragraph_style_naming_no_property_writes_nothing` | none | verified |
 
 ### 1.3 Take in a change from a collaborator
@@ -112,7 +114,7 @@ status values are normative in `ambre-spec-template.md`.
   No benchmark runs.
 * **Boundary.** none of its own. `PROSE-025` bans a network call, and `PROSE-043` refuses this
   crate a dependency on `ambre-crypto` or `ambre-sync`. It holds no key and opens no socket.
-* **Verification.** 40 `verified`, nothing else. Seven rows are compiler-held: the crate graph, the
+* **Verification.** 42 `verified`, nothing else. Seven rows are compiler-held: the crate graph, the
   lint wall, the closed command enum, the one return type. Two rows bind a shape no command builds
   yet: the image block, and the block under a table cell. Each is read through the format rather
   than through a gesture. The fan-out is driven across the real dispatcher.
@@ -177,7 +179,7 @@ converts at its own boundary, so the value is one identity and not two.
 | `flume` | the UI-to-Logic channel the view sends on | shared memory between the two threads, so a command moves rather than serializes (`PROSE-UI-002`, `PROSE-UI-149`) |
 | `postcard` | the presence frame alone | the only Prose value serialized for the wire; a CRDT delta is already bytes |
 | `serde` | the derives that frame needs | on the wire types of section 3.D, and on nothing that travels between the two threads |
-| `thiserror` | the typed engine error | mapped onto the one error event of section 3.C. Not linked yet: it lands with the `A refused command names what it refused` Story (`ambre-roadmap.md` E5) |
+| `thiserror` | the typed engine error | `ProseError` and `ProseRefusal` derive it, in `ambre-bus`, and the one error event of section 3.C carries them |
 
 **There is no dependency graph.** A block carries its own content and derives from no other block, so
 a write invalidates nothing but the layout of what it touched. That is the whole difference from a
@@ -526,9 +528,35 @@ pub enum ProseEvent {
     ExportProgress  { percent: u8 },
 
     // -- Failure --
-    Error { code: u16, message: String },
+    /// What the engine turned down, and why (`PROSE-105`, `PROSE-106`).
+    Error(ProseError),
+}
+
+/// One refusal, as the author is told about it.
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("{refused} refused: {reason}")]
+pub struct ProseError {
+    /// The command, under the name `ProseCommand::name` gives it. A
+    /// collaborator's update names itself, entering the engine the same way.
+    pub refused: &'static str,
+    pub reason: ProseRefusal,
 }
 ```
+
+**A refusal has two halves, and the code reads both.** A number and a message could only be
+printed. The command is one half: the view knows where to put the message from it. An author told
+that typing was refused learns something a reason alone never says (`PROSE-105`). The reason
+is the other: one variant per thing the engine can state, never one per call site
+(`PROSE-106`). Two handlers refusing a range out of bounds carry one variant and differ by the
+command they name.
+
+* **The reason is stated where it is known, the command where it is held.** A handler sits several
+  calls below the dispatch and holds no command. It answers the reason alone, and the entry point
+  writes the command in on the way out. That is the one place that has it, so it is the one place
+  that can be wrong.
+* **A command names itself through an exhaustive match.** A variant added to the command plane
+  does not compile until it has a name an author understands. The plane cannot grow a command whose
+  refusal says nothing.
 
 > **The conversion report carries no `serde`**, like every other payload above. It is a plain owned
 > value that moves to the UI thread. An import or an export is a local Logic-thread operation
@@ -738,12 +766,10 @@ Prose view is an arm of the frame host's application enum, like Trame's.
   (`features/ambre-spec-prose-page-rendering.md section 2`), and a caret advances by grapheme
   cluster. Neither conversion has code: both belong to the view, and they land with the
   `Input and cursor` Story (`ambre-roadmap.md` E5).
-* **The typed engine error is declared nowhere, and the event that carries it is untyped.** The
-  dependency table asks `thiserror` for a `ProseError`, and no document writes its variants. The
-  event plane offers a numeric code and a message, which names neither the command that failed nor a
-  reason. The codes the engine answers with today are a compiled list, and it is what the typed
-  error replaces. Five features record the same absence: the styles, the lists, the tables, the
-  bands and the comments. Its Story is `A refused command names what it refused` (`ambre-roadmap.md` E5).
+* **Nothing rules on what a view does with a refusal.** The engine names the command and the reason
+  (`PROSE-105`, `PROSE-106`), and the view drops both on the floor. Nothing says where a refusal
+  is shown, how long it stays, or whether two of them stack. The features that need an author told
+  wait on that, not on the error.
 * **Nothing rules on what a split does to a mark it cuts.** `PROSE-038` carries the type and the
   paragraph style to the new paragraph. It says nothing of an inline mark, a comment or a footnote
   anchored across the point the paragraph parts, and the engine carries neither today.

@@ -234,12 +234,10 @@ Which control sits where, and what the format bar shows for the current selectio
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The event a refusal travels on does not exist.** `PROSE-FEAT-022` requires the author to be
-  told, and the refusal was written as `CommandRejected`, a variant
-  `features/ambre-spec-prose-engine.md section 3` never declares. The lists feature reports
-  through the same missing variant. The enum carries one generic error instead, which names no
-  command and no reason. It lands with the
-  `A refused command names what it refused` Story (`ambre-roadmap.md` E5).
+* **A refusal travels, and nothing shows it.** `PROSE-FEAT-022` requires the author to be told.
+  The engine names the command and the reason (`PROSE-105`, `PROSE-106`), and a malformed mark
+  value is one of the reasons it states. What is missing is the view: nothing rules where a
+  refusal appears or how long it stays.
 * **Nothing says which side of the registry a new key falls on.** Clearing removes the
   presentation marks and the link, and spares the annotations. The split is a sentence of
   section 3 rather than a column of the registry. A key added to

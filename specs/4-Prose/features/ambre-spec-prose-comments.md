@@ -244,10 +244,11 @@ position the view publishes for its anchor (`PROSE-UI-050`).
 * **Nothing surfaces an orphan.** `PROSE-FEAT-009` requires the thread to be kept for review, and
   no event carries the orphan set and no command lists it. `features/ambre-spec-prose-footnotes.md`
   records the same gap for a note whose call is deleted; this is the comments half of it.
-* **The refusal has no event.** `PROSE-FEAT-080` requires the refusal to be reported, and the
-  engine declares one untyped error alone (`features/ambre-spec-prose-engine.md section 3`). Five
-  features report through the same gap, and it lands with the `A refused command names what it
-  refused` Story (`ambre-roadmap.md` E5).
+* **A refusal travels, and nothing shows it.** `PROSE-FEAT-080` requires the refusal to be
+  reported. The engine names the command and the reason
+  (`features/ambre-spec-prose-engine.md section 3`), and no comment command exists to be refused
+  yet. Nor does a view that would show one. It lands with
+  the "Comments and track changes" Story (`ambre-roadmap.md` E5).
 * **The panel's own state is named and never declared.**
   `features/ambre-spec-prose-engine.md section 3` gives the view a `CommentPanelState` field, and no
   document says what it holds. The open thread, the panel's scroll position and the orphaned

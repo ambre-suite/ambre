@@ -12,7 +12,8 @@
 
 pub use ambre_bus::app::prose::{
     Align, BlockId, BlockInit, BlockType, CursorPosition, LineHeight, LineHeightMode,
-    ParagraphStyle, PresencePayload, ProseCommand, ProseEvent, RemoteCursor, error_code,
+    ParagraphStyle, PresencePayload, ProseCommand, ProseError, ProseEvent, ProseRefusal,
+    RemoteCursor,
 };
 
 use loro::TreeID;
@@ -76,15 +77,31 @@ impl ProseOutcome {
         }
     }
 
-    /// The refusal of a command, as the one event the plane declares today.
+    /// The refusal of a command, by its reason alone (`PROSE-105`).
     ///
-    /// The typed engine error lands with the "A refused command names what it
-    /// refused" Story (`ambre-roadmap.md` E5). The event names the command then.
+    /// The reason is known deep in a handler; the command is known only where
+    /// the engine was entered. So a refusal is built unnamed here and
+    /// [`ProseOutcome::named`] writes the command in on the way out, which is
+    /// the one place that holds it.
     #[must_use]
-    pub fn refused(code: u16, message: impl Into<String>) -> Self {
-        Self::display_only(vec![ProseEvent::Error {
-            code,
-            message: message.into(),
-        }])
+    pub fn refused(reason: ProseRefusal) -> Self {
+        Self::display_only(vec![ProseEvent::Error(ProseError::new(UNNAMED, reason))])
+    }
+
+    /// Name every refusal this outcome carries after the command that drew it
+    /// (`PROSE-105`). An outcome that refused nothing passes through.
+    #[must_use]
+    pub fn named(mut self, refused: &'static str) -> Self {
+        for event in &mut self.display {
+            if let ProseEvent::Error(error) = event {
+                error.refused = refused;
+            }
+        }
+        self
     }
 }
+
+/// What a refusal names before the entry point names the command it came from.
+/// It reaches a screen only if a handler refuses somewhere the engine is not
+/// driven by a command, and no such path exists today.
+const UNNAMED: &str = "that";

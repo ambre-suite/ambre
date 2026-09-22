@@ -19,12 +19,12 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2509 rows: 1826 shipped, of which 773 loose. 683 unbuilt.**
+**2511 rows: 1828 shipped, of which 772 loose. 683 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 222 | 221 | 541 | 69 | 1053 |
-| `failing` | 39 | 46 | 23 |  | 108 |
+| `verified` | 222 | 221 | 542 | 71 | 1056 |
+| `failing` | 39 | 46 | 22 |  | 107 |
 | `untested` | 266 | 143 | 234 |  | 643 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
@@ -119,7 +119,7 @@
 | `ambre-spec-toile-pdf-export.md` | 16 | 14 | 10 | 4 | 2 |
 | `ambre-spec-toile-presence.md` | 28 | 28 | 22 | 6 |  |
 | `ambre-spec-toile-presentation.md` | 45 | 45 | 39 | 6 |  |
-| `ambre-spec-toile-reactions.md` | 35 | 29 | 20 | 9 | 6 |
+| `ambre-spec-toile-reactions.md` | 35 | 29 | 21 | 8 | 6 |
 | `ambre-spec-toile-selection.md` | 29 | 29 | 21 | 8 |  |
 | `ambre-spec-toile-status-bar.md` | 13 | 13 | 8 | 5 |  |
 | `ambre-spec-toile-styles.md` | 30 | 30 | 22 | 8 |  |
@@ -130,7 +130,7 @@
 | `ambre-spec-toile-viewport.md` | 32 | 30 | 16 | 14 | 2 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 7 | 9 |  |
 | `ambre-spec-prose-schema.md` | 24 | 22 | 21 | 1 | 2 |
-| `ambre-spec-prose-engine.md` | 40 | 40 | 40 |  |  |
+| `ambre-spec-prose-engine.md` | 42 | 42 | 42 |  |  |
 | `ambre-spec-prose-tables.md` | 42 | 1 | 1 |  | 41 |
 | `ambre-spec-prose-text-editing.md` | 25 | 7 | 7 |  | 18 |
 
@@ -172,7 +172,7 @@
 | `ambre-spec-prose-clipboard.md` | PROSE-UI-013,040..044,105..112 |
 | `ambre-spec-prose-comments.md` | PROSE-FEAT-001,009,075..081,185..204,279; PROSE-UI-049..050,144 |
 | `ambre-spec-prose-cross-references.md` | PROSE-FEAT-014,072..074,128..135; PROSE-UI-048,084..086 |
-| `ambre-spec-prose-engine.md` | PROSE-001,003..004,023..026,043..063,098,104; PROSE-FEAT-005..006; PROSE-IO-042; PROSE-UI-001..003,010,015,149..150 |
+| `ambre-spec-prose-engine.md` | PROSE-001,003..004,023..026,043..063,098,104..106; PROSE-FEAT-005..006; PROSE-IO-042; PROSE-UI-001..003,010,015,149..150 |
 | `ambre-spec-prose-find-replace.md` | PROSE-FEAT-033..036,148,150..153,155..159,289 |
 | `ambre-spec-prose-footnotes.md` | PROSE-FEAT-013,069..071,095..101,280 |
 | `ambre-spec-prose-headers-footers.md` | PROSE-006; PROSE-FEAT-063..068,160..172,281..285; PROSE-UI-047,133 |

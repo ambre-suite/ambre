@@ -448,6 +448,33 @@ impl ProseCommand {
     pub fn is_mutating(&self) -> bool {
         !matches!(self, Self::Noop | Self::UpdateCursor { .. })
     }
+
+    /// What a refusal calls this command when it tells the author
+    /// (`PROSE-105`). The match is exhaustive, so a command added to the enum
+    /// does not compile until it has a name a reader understands.
+    #[must_use]
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Noop => "nothing",
+            Self::InsertText { .. } => "typing",
+            Self::DeleteText { .. } => "deleting text",
+            Self::DeleteRange { .. } => "deleting the selection",
+            Self::SplitBlock { .. } => "splitting the block",
+            Self::ApplyMark { .. } => "applying the style",
+            Self::RemoveMark { .. } => "removing the style",
+            Self::ClearInlineMarks { .. } => "clearing the styles",
+            Self::InsertBlock { .. } => "inserting a block",
+            Self::DeleteBlock { .. } => "deleting the block",
+            Self::MoveBlock { .. } => "moving the block",
+            Self::SetBlockStyle { .. } => "setting the block style",
+            Self::SetHeadingLevel { .. } => "setting the heading level",
+            Self::SetCodeLang { .. } => "setting the code language",
+            Self::SetParagraphStyle { .. } => "setting the paragraph style",
+            Self::UpdateCursor { .. } => "moving the cursor",
+            Self::Undo => "undoing",
+            Self::Redo => "redoing",
+        }
+    }
 }
 
 // =============================================================================
@@ -480,28 +507,70 @@ pub enum ProseEvent {
     },
     /// A full-state read the schema gate refused (`SCHEMA-008`).
     DocumentRefused { reason: String },
-    /// A command the engine could not honour.
-    Error { code: u16, message: String },
+    /// A command the engine could not honour. The value names what was
+    /// refused and why (`PROSE-105`).
+    Error(ProseError),
 }
 
-/// The numeric codes `ProseEvent::Error` carries.
+// =============================================================================
+// Errors
+// =============================================================================
+
+/// One refusal, as the author is told about it.
 ///
-/// A number and a message is what the plane declares today. The typed engine
-/// error lands with the "A refused command names what it refused" Story
-/// (`ambre-roadmap.md` E5). That Story replaces these constants.
-pub mod error_code {
+/// A number and a message named neither the command nor a reason, so a view
+/// could only print it. Both halves here are readable by code. The view picks
+/// where to put the message from `refused`, and the message itself from
+/// `reason` (`PROSE-105`, `PROSE-106`).
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{refused} refused: {reason}")]
+pub struct ProseError {
+    /// What the engine turned down: a command, under the name
+    /// [`ProseCommand::name`] gives it. A collaborator's update names itself,
+    /// entering the engine the same way and failing on the same terms.
+    pub refused: &'static str,
+    /// Why.
+    pub reason: ProseRefusal,
+}
+
+impl ProseError {
+    #[must_use]
+    pub fn new(refused: &'static str, reason: ProseRefusal) -> Self {
+        Self { refused, reason }
+    }
+}
+
+/// Why the engine refused.
+///
+/// One variant per reason the engine can state, never one per call site. Two
+/// handlers refusing a range out of bounds carry the same variant. They differ
+/// by the command they name.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ProseRefusal {
     /// A block id that resolves to no live block.
-    pub const NO_SUCH_BLOCK: u16 = 1;
+    #[error("block {0} is not in the document")]
+    NoSuchBlock(BlockId),
     /// An offset or a range outside the body text it addresses
     /// (`PROSE-045`).
-    pub const BAD_RANGE: u16 = 2;
+    #[error("the range leaves the body of the block the command names")]
+    BadRange,
     /// A move or an insert the nesting table refuses (`PROSE-040`,
     /// `PROSE-095`).
-    pub const NESTING_REFUSED: u16 = 3;
+    #[error("the document refuses that block under that parent")]
+    NestingRefused,
+    /// A mark key the registry of `ambre-spec-prose-schema.md section 3` does
+    /// not declare (`PROSE-008`).
+    #[error("the mark registry declares no key {0}")]
+    UnknownMark(String),
+    /// A mark value the key's own grammar refuses (`PROSE-008`).
+    #[error("{value} is not a value the {key} style takes")]
+    BadMarkValue { key: String, value: String },
     /// A collaborator's change this peer could not apply.
-    pub const REMOTE_IMPORT_FAILED: u16 = 4;
+    #[error("a collaborator's change could not be applied; the document may be behind")]
+    RemoteImportFailed,
     /// A write the CRDT engine itself refused.
-    pub const WRITE_FAILED: u16 = 5;
+    #[error("the document engine could not write the change: {0}")]
+    WriteFailed(String),
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@
 
 use loro::TreeID;
 
-use crate::events::{BlockId, ProseOutcome, error_code, tree_id};
+use crate::events::{BlockId, ProseOutcome, ProseRefusal, tree_id};
 use crate::mark;
 
 use super::ProseState;
@@ -33,10 +33,7 @@ impl ProseState {
             return Self::err_no_block(id);
         };
         if !mark::is_registered(key) {
-            return ProseOutcome::refused(
-                error_code::BAD_RANGE,
-                format!("the mark registry declares no key {key}"),
-            );
+            return ProseOutcome::refused(ProseRefusal::UnknownMark(key.to_owned()));
         }
         let (start, end) = ordered(range);
         if end > body.len_unicode() || start == end {
@@ -46,10 +43,10 @@ impl ProseState {
             Some(raw) => match mark::canonical_value(key, raw) {
                 Some(canonical) => canonical,
                 None => {
-                    return ProseOutcome::refused(
-                        error_code::BAD_RANGE,
-                        "the mark value has no canonical spelling",
-                    );
+                    return ProseOutcome::refused(ProseRefusal::BadMarkValue {
+                        key: key.to_owned(),
+                        value: raw.to_owned(),
+                    });
                 }
             },
             None => String::new(),
@@ -71,10 +68,7 @@ impl ProseState {
             return Self::err_no_block(id);
         };
         if !mark::is_registered(key) {
-            return ProseOutcome::refused(
-                error_code::BAD_RANGE,
-                format!("the mark registry declares no key {key}"),
-            );
+            return ProseOutcome::refused(ProseRefusal::UnknownMark(key.to_owned()));
         }
         let (start, end) = ordered(range);
         if end > body.len_unicode() || start == end {

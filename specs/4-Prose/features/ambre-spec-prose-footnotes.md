@@ -156,10 +156,11 @@ whole and deleted whole.
 * **Nothing surfaces an orphan.** `PROSE-FEAT-069` requires the note to be kept for review, and no
   event carries the orphan set and no command lists it. A comment orphaned by the same rule has the
   same gap.
-* **The refusal has no event.** `PROSE-FEAT-071` requires the refusal to be reported, and the
-  engine declares one untyped error alone (`features/ambre-spec-prose-engine.md section 3`). Four features
-  report through the same gap, and it lands with the `A refused command names what it refused`
-  Story (`ambre-roadmap.md` E5).
+* **A refusal travels, and nothing shows it.** `PROSE-FEAT-071` requires the refusal to be
+  reported. The engine names the command and the reason
+  (`features/ambre-spec-prose-engine.md section 3`), and no footnote command exists to be refused
+  yet. Nor does a view that would show one. It lands with the
+  `Undo, footnotes and cross references` Story (`ambre-roadmap.md` E5).
 * **What the call is a mark on is not settled.** Section 3 makes the call an inline mark and says
   that deleting the character it sits on deletes it. Section 4 says it draws as its number and is
   selected and deleted whole, as one character. Either the mark rides a character the author typed,

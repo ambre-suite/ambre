@@ -273,11 +273,11 @@ traversal lands on the anchor and skips the cells it covers.
   `SetCellStyle` carries the background and the border colour as packed integers, and the schema
   stores both as `"#rrggbb"` strings. Nothing states the conversion, and it is the same two-unit
   shape `features/ambre-spec-prose-text-editing.md section 6` records for positions.
-* **The refusal has no event.** `PROSE-040`, `PROSE-FEAT-046` and `PROSE-FEAT-047` each require the
-  refusal to be reported, and the engine declares one untyped error carrying a code and a message
-  (`features/ambre-spec-prose-engine.md section 3`). The lists and the styles features report through the
-  same gap, and it lands with the
-  `A refused command names what it refused` Story (`ambre-roadmap.md` E5).
+* **A refusal travels, and nothing shows it.** `PROSE-040`, `PROSE-FEAT-046` and `PROSE-FEAT-047`
+  each require the refusal to be reported. The engine names the command and the reason
+  (`features/ambre-spec-prose-engine.md section 3`), and a nesting break is one of the reasons it
+  states. What is missing is the view, and the table commands themselves. Both land with the
+  `Tables, table of contents and word count` Story (`ambre-roadmap.md` E5).
 * **Nothing rules on a caret inside a cell a merge covers.** Traversal skips a covered cell
   (section 4), and no row says where a caret already sitting in one goes when the merge lands.
 * **Nothing rules on the selection inside a table.** Every gesture above needs a rectangle of
