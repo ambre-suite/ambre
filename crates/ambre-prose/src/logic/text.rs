@@ -15,7 +15,7 @@
 use loro::{LoroText, TreeID, TreeParentId};
 
 use crate::doc;
-use crate::events::{BlockId, ProseEvent, ProseOutcome, block_id, tree_id};
+use crate::events::{BlockId, BlockType, ProseEvent, ProseOutcome, block_id, tree_id};
 
 use super::ProseState;
 
@@ -140,29 +140,39 @@ impl ProseState {
             return Self::err_bad_range();
         }
         // What survives of the last paragraph, before anything is written
-        // (`PROSE-037`).
-        let Ok(surviving) = tail_body.slice(tail_off, tail_len) else {
-            return Self::err_bad_range();
-        };
+        // (`PROSE-037`), with the marks it carries (`PROSE-042`).
+        let surviving = marked_runs(&tail_body, tail_off, tail_len);
         if let Err(e) = head_body.delete(head_off, head_len - head_off) {
             return Self::err_write(&format!("{e:?}"));
         }
-        if !surviving.is_empty()
-            && let Err(e) = head_body.insert(head_off, &surviving)
-        {
-            return Self::err_write(&format!("{e:?}"));
+        if let Err(e) = write_runs(&head_body, head_off, &surviving) {
+            return Self::err_write(&e);
         }
         // Every block the deletion emptied goes (`PROSE-101`). The head is the
         // exception the frame condition names: it keeps its identity and its
         // paragraph style whether or not it is left empty (`PROSE-041`). An
         // ancestor of either endpoint stays too, or the deletion would take the
         // head out of the tree with it.
+        //
+        // Two further blocks stay. A block that carries no body was never
+        // emptied by a text deletion. A table the selection merely crossed is
+        // structure, and dropping it takes rows the reader never selected.
+        // Nor does a block whose subtree reaches past the selection go, because
+        // deleting it would take the blocks beyond the focus with it.
         let tree = doc::blocks(&self.doc);
-        let emptied: Vec<TreeID> = order[anchor_at.min(focus_at)..=anchor_at.max(focus_at)]
+        let (first, last) = (anchor_at.min(focus_at), anchor_at.max(focus_at));
+        let beyond = &order[last + 1..];
+        let emptied: Vec<TreeID> = order[first..=last]
             .iter()
             .copied()
             .filter(|id| *id != head)
             .filter(|id| !doc::is_ancestor_of(&tree, id, &head))
+            .filter(|id| doc::block_type_of(&tree, id).is_some_and(BlockType::has_body))
+            .filter(|id| {
+                !beyond
+                    .iter()
+                    .any(|later| doc::is_ancestor_of(&tree, id, later))
+            })
             .collect();
         for id in emptied {
             if let Err(e) = tree.delete(id) {
@@ -188,9 +198,7 @@ impl ProseState {
         if pos > len {
             return Self::err_bad_range();
         }
-        let Ok(tail) = body.slice(pos, len) else {
-            return Self::err_bad_range();
-        };
+        let tail = marked_runs(&body, pos, len);
         let tree = doc::blocks(&self.doc);
         let Some(block_type) = doc::block_type_of(&tree, id) else {
             return Self::err_no_block(id);
@@ -211,13 +219,13 @@ impl ProseState {
         if let Err(e) = self.carry_style(id, &new_block) {
             return Self::err_write(&e);
         }
-        if !tail.is_empty() {
+        if pos < len {
             if let Err(e) = body.delete(pos, len - pos) {
                 return Self::err_write(&format!("{e:?}"));
             }
             let new_body = doc::get_block_text(&self.doc, &new_block);
-            if let Err(e) = new_body.insert(0, &tail) {
-                return Self::err_write(&format!("{e:?}"));
+            if let Err(e) = write_runs(&new_body, 0, &tail) {
+                return Self::err_write(&e);
             }
         }
         self.commit_with(vec![ProseEvent::BlockSplit {
@@ -225,6 +233,86 @@ impl ProseState {
             new_block: block_id(new_block),
         }])
     }
+}
+
+/// One run of body text and the marks it carries.
+struct MarkedRun {
+    text: String,
+    marks: Vec<(String, loro::LoroValue)>,
+}
+
+/// The marked runs a body holds between two code-point offsets.
+///
+/// `LoroText::slice` answers a plain `String`, so a suffix moved through it
+/// would reach its new block with every inline mark stripped. The text the two
+/// blocks carry between them must be unchanged (`PROSE-042`), and a mark is
+/// part of it. This reads the rich-text value instead and keeps each run's
+/// attributes beside its text.
+fn marked_runs(body: &LoroText, start: usize, end: usize) -> Vec<MarkedRun> {
+    let loro::LoroValue::List(runs) = body.get_richtext_value() else {
+        return Vec::new();
+    };
+    let mut taken = Vec::new();
+    let mut run_start = 0usize;
+    for run in runs.iter() {
+        let loro::LoroValue::Map(fields) = run else {
+            continue;
+        };
+        let Some(loro::LoroValue::String(text)) = fields.get("insert") else {
+            continue;
+        };
+        let run_end = run_start + text.chars().count();
+        let (from, to) = (run_start.max(start), run_end.min(end));
+        if from < to {
+            let marks = match fields.get("attributes") {
+                Some(loro::LoroValue::Map(attrs)) => attrs
+                    .iter()
+                    // A null attribute is a mark the run does not carry.
+                    .filter(|(_, value)| !matches!(value, loro::LoroValue::Null))
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect(),
+                _ => Vec::new(),
+            };
+            taken.push(MarkedRun {
+                text: text
+                    .chars()
+                    .skip(from - run_start)
+                    .take(to - from)
+                    .collect(),
+                marks,
+            });
+        }
+        run_start = run_end;
+    }
+    taken
+}
+
+/// Write runs into `target` at `dest`, marks and all.
+///
+/// Every run lands first and the marks follow, so no expansion policy pulls a
+/// neighbouring run into a range that was never marked (`PROSE-007`).
+///
+/// # Errors
+/// The CRDT engine's own refusal of an insertion. A mark the engine refuses is
+/// logged rather than raised. The text is the content, and losing it to a
+/// rejected attribute would be the worse answer.
+fn write_runs(target: &LoroText, dest: usize, runs: &[MarkedRun]) -> Result<(), String> {
+    let mut at = dest;
+    for run in runs {
+        target.insert(at, &run.text).map_err(|e| format!("{e:?}"))?;
+        at += run.text.chars().count();
+    }
+    let mut at = dest;
+    for run in runs {
+        let len = run.text.chars().count();
+        for (key, value) in &run.marks {
+            if let Err(e) = target.mark(at..at + len, key, value.clone()) {
+                tracing::warn!("Prose: the moved text lost the mark {key}: {e:?}");
+            }
+        }
+        at += len;
+    }
+    Ok(())
 }
 
 /// The two ends of a range, smaller first. A selection is dragged in either
@@ -411,5 +499,121 @@ mod tests {
         let (mut state, ids) = document_of(&["only"]);
         state.handle_command(ProseCommand::DeleteBlock { block_id: ids[0] });
         assert_eq!(state.root_blocks().len(), 1);
+    }
+
+    /// A selection that merely crossed a table used to take the table with it:
+    /// every node in the document-order span was deleted, structure included.
+    /// A block that carries no body was never emptied by a text deletion.
+    #[test]
+    fn a_deletion_crossing_a_table_leaves_the_table_standing() {
+        use crate::events::BlockType;
+        let (mut state, ids) = document_of(&["hello"]);
+        let table = state
+            .insert_for_test(None, BlockType::Table)
+            .expect("a table");
+        let row = state
+            .insert_for_test(Some(table), BlockType::TableRow)
+            .expect("a row");
+        let cell = state
+            .insert_for_test(Some(row), BlockType::TableCell)
+            .expect("a cell");
+        let inner = state
+            .insert_for_test(Some(cell), BlockType::Paragraph)
+            .expect("a paragraph in the cell");
+        state.handle_command(ProseCommand::InsertText {
+            block_id: inner,
+            pos: 0,
+            text: "inside".to_owned(),
+        });
+        state.handle_command(ProseCommand::DeleteRange {
+            anchor: (ids[0], 1),
+            focus: (inner, 2),
+        });
+        assert!(state.root_blocks().contains(&table));
+        assert_eq!(state.parent_of(&cell), Some(row));
+        assert!(state.parentages_are_declared());
+    }
+
+    /// `LoroText::slice` answers a plain `String`, so the suffix a split moved
+    /// used to reach its new block with every inline mark stripped.
+    #[test]
+    fn a_split_carries_the_marks_of_the_text_it_moves() {
+        let (mut state, ids) = document_of(&["hello world"]);
+        state.handle_command(ProseCommand::ApplyMark {
+            block_id: ids[0],
+            range: (0, 11),
+            key: "b".to_owned(),
+            value: None,
+        });
+        let outcome = state.handle_command(ProseCommand::SplitBlock {
+            block_id: ids[0],
+            pos: 5,
+        });
+        let new_block = outcome
+            .display
+            .iter()
+            .find_map(|e| match e {
+                crate::events::ProseEvent::BlockSplit { new_block, .. } => Some(*new_block),
+                _ => None,
+            })
+            .expect("the split names the new block");
+        assert_eq!(state.text_of(&new_block).as_deref(), Some(" world"));
+        let rendered = format!("{:?}", state.marks_of(&new_block));
+        assert!(rendered.contains("\"b\""), "{rendered}");
+    }
+
+    /// The deletion joined the two halves, and the marks the tail carried are
+    /// part of the text the head must end up holding.
+    #[test]
+    fn a_join_carries_the_marks_of_the_surviving_tail() {
+        let (mut state, ids) = document_of(&["hello", "world"]);
+        state.handle_command(ProseCommand::ApplyMark {
+            block_id: ids[1],
+            range: (0, 5),
+            key: "i".to_owned(),
+            value: None,
+        });
+        state.handle_command(ProseCommand::DeleteRange {
+            anchor: (ids[0], 5),
+            focus: (ids[1], 0),
+        });
+        assert_eq!(state.text_of(&ids[0]).as_deref(), Some("helloworld"));
+        let rendered = format!("{:?}", state.marks_of(&ids[0]));
+        assert!(rendered.contains("\"i\""), "{rendered}");
+    }
+
+    /// A split used to drop the language of the half it minted: `carry_style`
+    /// carried the heading level and nothing else.
+    #[test]
+    fn a_split_code_block_carries_its_language() {
+        let mut state = ProseState::new().expect("a document is built");
+        let first = state.root_blocks()[0];
+        state.handle_command(ProseCommand::InsertBlock {
+            parent_id: None,
+            after_id: Some(first),
+            init: BlockInit::CodeBlock {
+                lang: "rust".to_owned(),
+            },
+            style_id: None,
+        });
+        let code = state.root_blocks()[1];
+        state.handle_command(ProseCommand::InsertText {
+            block_id: code,
+            pos: 0,
+            text: "fn main".to_owned(),
+        });
+        let outcome = state.handle_command(ProseCommand::SplitBlock {
+            block_id: code,
+            pos: 2,
+        });
+        let new_block = outcome
+            .display
+            .iter()
+            .find_map(|e| match e {
+                crate::events::ProseEvent::BlockSplit { new_block, .. } => Some(*new_block),
+                _ => None,
+            })
+            .expect("the split names the new block");
+        assert_eq!(state.code_lang_of(&new_block).as_deref(), Some("rust"));
     }
 }

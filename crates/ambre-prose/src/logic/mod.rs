@@ -362,6 +362,10 @@ impl ProseState {
             tracing::warn!("Prose: the snapshot import failed: {e:?}");
             return Err(SchemaError::PayloadRejected);
         }
+        // The operations that arrived are not ours to broadcast: the next local
+        // edit would otherwise send the whole imported history back out
+        // (`PROSE-056`).
+        self.absorb_imported();
         // An imported document carries containers this build has not configured
         // yet: the mark registry and the tree's ordering are settings, not
         // content.
@@ -414,9 +418,7 @@ impl ProseState {
         let id = doc::create_block(&self.doc, None, crate::events::BlockType::Image)?;
         let tree = doc::blocks(&self.doc);
         let node = doc::node_of(&tree, &id)?;
-        let attrs = node
-            .insert_container(doc::K_ATTRS, loro::LoroMap::new())
-            .ok()?;
+        let attrs = doc::map_at(&node, doc::K_ATTRS)?;
         attrs.insert("content_hash", content_hash).ok()?;
         self.doc.commit();
         Some(crate::events::block_id(id))
@@ -451,6 +453,10 @@ impl ProseState {
             return ProseOutcome::nothing();
         }
         let mut events = self.regrow_root();
+        // `regrow_root` leaves its writes to the caller, and the export cursor
+        // is about to move past them: an uncommitted repair would never reach a
+        // peer.
+        self.doc.commit();
         let update = self.flush_delta();
         if let Some(delta) = update.clone() {
             events.insert(0, ProseEvent::DocUpdated { delta });
@@ -807,5 +813,46 @@ mod tests {
         let newer = doc.export(ExportMode::Snapshot).expect("snapshot");
         assert!(state.import_snapshot(&newer).is_err());
         assert_eq!(state.text_of(&block).as_deref(), Some("mine"));
+    }
+
+    /// An import used to leave the export cursor behind the operations it
+    /// brought in. The next local edit then broadcast the whole imported
+    /// history back out (`PROSE-056`).
+    #[test]
+    fn the_first_edit_after_an_import_exports_only_what_this_peer_wrote() {
+        let mut origin = ProseState::new().expect("a document is built");
+        let block = origin.root_blocks()[0];
+        origin.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "an imported paragraph".to_owned(),
+        });
+        let snapshot = origin.export_snapshot();
+
+        let mut peer = ProseState::new().expect("a document is built");
+        peer.import_snapshot(&snapshot)
+            .expect("the snapshot imports");
+        let delta = peer
+            .handle_command(ProseCommand::InsertText {
+                block_id: block,
+                pos: 0,
+                text: "mine".to_owned(),
+            })
+            .update
+            .expect("a delta");
+
+        // A third peer that never saw the snapshot is the measure: a delta
+        // carrying the imported history would hand it the origin's paragraph.
+        let mut stranger = ProseState::new().expect("a document is built");
+        stranger.apply_remote(&delta);
+        let held: String = stranger
+            .root_blocks()
+            .iter()
+            .filter_map(|id| stranger.text_of(id))
+            .collect();
+        assert!(
+            !held.contains("an imported paragraph"),
+            "the delta replayed the imported history: {held}"
+        );
     }
 }

@@ -20,6 +20,36 @@ fn clamp_level(level: u8) -> u8 {
 
 use super::ProseState;
 
+/// The parent a placement actually lands under.
+///
+/// `mov_after` addresses a sibling position, so it reparents the block under
+/// that sibling's own parent. A nesting check made against the parent the
+/// command named would then guard a parentage the write never uses
+/// (`PROSE-040`, `PROSE-095`). This resolves the landing parent before the
+/// check. A named parent the sibling contradicts is refused rather than
+/// silently overridden: the caller meant one of the two.
+///
+/// # Errors
+/// `Err(())` when the sibling is not a live block, or when the two disagree.
+fn landing_parent(
+    tree: &loro::LoroTree,
+    parent_id: Option<TreeID>,
+    after_id: Option<TreeID>,
+) -> Result<Option<TreeID>, ()> {
+    let Some(after) = after_id else {
+        return Ok(parent_id);
+    };
+    let landing = match tree.parent(after) {
+        Some(TreeParentId::Node(parent)) => Some(parent),
+        Some(TreeParentId::Root) => None,
+        _ => return Err(()),
+    };
+    if parent_id.is_some() && parent_id != landing {
+        return Err(());
+    }
+    Ok(landing)
+}
+
 impl ProseState {
     /// The type a live block carries, for a test and for the view's own reads.
     #[must_use]
@@ -45,6 +75,16 @@ impl ProseState {
         let attrs = self.attrs_of(&tree_id(*id))?;
         match attrs.get(doc::A_LEVEL)?.into_value() {
             Ok(loro::LoroValue::I64(n)) => u8::try_from(n).ok(),
+            _ => None,
+        }
+    }
+
+    /// The language a live code block carries.
+    #[must_use]
+    pub fn code_lang_of(&self, id: &BlockId) -> Option<String> {
+        let attrs = self.attrs_of(&tree_id(*id))?;
+        match attrs.get(doc::A_LANG)?.into_value() {
+            Ok(loro::LoroValue::String(lang)) => Some(lang.to_string()),
             _ => None,
         }
     }
@@ -91,6 +131,9 @@ impl ProseState {
         {
             return Self::err_no_block(&after);
         }
+        let Ok(parent_id) = landing_parent(&tree, parent_id, after_id) else {
+            return Self::err_nesting();
+        };
         if !doc::nesting_allows(&tree, parent_id, init.block_type()) {
             return Self::err_nesting();
         }
@@ -121,9 +164,8 @@ impl ProseState {
             return Err("the block vanished before its attributes landed".to_owned());
         };
         let attrs = |key: &str, value: loro::LoroValue| -> Result<(), String> {
-            let map = node
-                .insert_container(doc::K_ATTRS, LoroMap::new())
-                .map_err(|e| format!("{e:?}"))?;
+            let map = doc::map_at(&node, doc::K_ATTRS)
+                .ok_or_else(|| "the attribute map refused a container".to_owned())?;
             map.insert(key, value).map_err(|e| format!("{e:?}"))
         };
         match init {
@@ -189,13 +231,25 @@ impl ProseState {
         let Some(block_type) = doc::block_type_of(&tree, id) else {
             return Self::err_no_block(id);
         };
+        if let Some(parent) = new_parent
+            && doc::node_of(&tree, &parent).is_none()
+        {
+            return Self::err_no_block(&parent);
+        }
+        if let Some(after) = after_id
+            && doc::node_of(&tree, &after).is_none()
+        {
+            return Self::err_no_block(&after);
+        }
+        // The sibling position decides the parent, so both guards below are
+        // made against the parent the block actually lands under.
+        let Ok(new_parent) = landing_parent(&tree, new_parent, after_id) else {
+            return Self::err_nesting();
+        };
         if let Some(parent) = new_parent {
-            if doc::node_of(&tree, &parent).is_none() {
-                return Self::err_no_block(&parent);
-            }
-            // A block moved under its own descendant leaves the tree for a
-            // cycle, and no parentage of section 4 describes that.
-            if doc::is_ancestor_of(&tree, id, &parent) {
+            // A block moved under itself or under its own descendant leaves the
+            // tree for a cycle, and no parentage of section 4 describes that.
+            if parent == *id || doc::is_ancestor_of(&tree, id, &parent) {
                 return Self::err_nesting();
             }
         }
@@ -255,9 +309,8 @@ impl ProseState {
         let Some(node) = doc::node_of(&tree, id) else {
             return Self::err_no_block(id);
         };
-        let attrs = match node.insert_container(doc::K_ATTRS, LoroMap::new()) {
-            Ok(map) => map,
-            Err(e) => return Self::err_write(&format!("{e:?}")),
+        let Some(attrs) = doc::map_at(&node, doc::K_ATTRS) else {
+            return Self::err_write("the attribute map refused a container");
         };
         if let Err(e) = attrs.insert(key, value) {
             return Self::err_write(&format!("{e:?}"));
@@ -304,13 +357,23 @@ impl ProseState {
         }
         doc::write_paragraph_style(&target_node, &doc::read_paragraph_style(&tree, source))
             .map_err(|e| format!("{e:?}"))?;
-        if let Some(level) = self.heading_level_of(&crate::events::block_id(*source)) {
-            let attrs = target_node
-                .insert_container(doc::K_ATTRS, LoroMap::new())
-                .map_err(|e| format!("{e:?}"))?;
-            attrs
-                .insert(doc::A_LEVEL, i64::from(level))
-                .map_err(|e| format!("{e:?}"))?;
+        // The attributes the split must carry. Without them the second half
+        // of a heading has no level, and that of a code block no language.
+        let level = self.heading_level_of(&crate::events::block_id(*source));
+        let lang = self.code_lang_of(&crate::events::block_id(*source));
+        if level.is_some() || lang.is_some() {
+            let attrs = doc::map_at(&target_node, doc::K_ATTRS)
+                .ok_or_else(|| "the attribute map refused a container".to_owned())?;
+            if let Some(level) = level {
+                attrs
+                    .insert(doc::A_LEVEL, i64::from(level))
+                    .map_err(|e| format!("{e:?}"))?;
+            }
+            if let Some(lang) = lang {
+                attrs
+                    .insert(doc::A_LANG, lang.as_str())
+                    .map_err(|e| format!("{e:?}"))?;
+            }
         }
         Ok(())
     }
@@ -495,5 +558,73 @@ mod tests {
     fn every_parentage_of_a_fresh_document_is_declared() {
         let state = ProseState::new().expect("a document is built");
         assert!(state.parentages_are_declared());
+    }
+
+    /// `mov_after` reparents the block under the sibling's own parent. A
+    /// nesting check made against the parent the command named therefore used
+    /// to guard a parentage the write never used (`PROSE-095`).
+    #[test]
+    fn an_insert_after_a_table_row_does_not_land_a_paragraph_under_the_table() {
+        use crate::events::BlockType;
+        let mut state = ProseState::new().expect("a document is built");
+        let table = state
+            .insert_for_test(None, BlockType::Table)
+            .expect("a table");
+        let row = state
+            .insert_for_test(Some(table), BlockType::TableRow)
+            .expect("a row");
+        let outcome = state.handle_command(ProseCommand::InsertBlock {
+            parent_id: None,
+            after_id: Some(row),
+            init: BlockInit::Paragraph,
+            style_id: None,
+        });
+        assert!(outcome.update.is_none());
+        assert!(state.parentages_are_declared());
+    }
+
+    /// The same bypass on the move path: the sibling decided the parent, and
+    /// the check was made against the one the command named.
+    #[test]
+    fn a_move_after_a_table_row_does_not_land_a_paragraph_under_the_table() {
+        use crate::events::BlockType;
+        let mut state = ProseState::new().expect("a document is built");
+        let paragraph = state.root_blocks()[0];
+        let table = state
+            .insert_for_test(None, BlockType::Table)
+            .expect("a table");
+        let row = state
+            .insert_for_test(Some(table), BlockType::TableRow)
+            .expect("a row");
+        let outcome = state.handle_command(ProseCommand::MoveBlock {
+            block_id: paragraph,
+            new_parent: None,
+            after_id: Some(row),
+        });
+        assert!(outcome.update.is_none());
+        assert_eq!(state.parent_of(&paragraph), None);
+        assert!(state.parentages_are_declared());
+    }
+
+    /// A move naming a sibling that is not a live block is refused, rather than
+    /// reaching the engine with a position no node answers.
+    #[test]
+    fn a_move_after_a_block_the_document_does_not_hold_is_refused() {
+        let mut state = ProseState::new().expect("a document is built");
+        let first = state.root_blocks()[0];
+        state.handle_command(ProseCommand::InsertBlock {
+            parent_id: None,
+            after_id: Some(first),
+            init: BlockInit::Paragraph,
+            style_id: None,
+        });
+        let second = state.root_blocks()[1];
+        state.handle_command(ProseCommand::DeleteBlock { block_id: second });
+        let outcome = state.handle_command(ProseCommand::MoveBlock {
+            block_id: first,
+            new_parent: None,
+            after_id: Some(second),
+        });
+        assert!(outcome.update.is_none());
     }
 }

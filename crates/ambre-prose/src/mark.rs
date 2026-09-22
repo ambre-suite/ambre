@@ -111,18 +111,28 @@ pub fn canonical_number(value: f32) -> Option<String> {
     (!rendered.contains(['e', 'E'])).then_some(rendered)
 }
 
+/// The keys whose value is a number, and the only ones a re-spelling applies to.
+///
+/// Every other key of section 3 carries text: a URL, a family name, a `Uuid`,
+/// a hex record, a `#rrggbb` colour. The float parser would rewrite those. A
+/// cross reference of `"1e5"` reads as a number, and a footnote of `"007"`
+/// loses its zeroes. So the grammar is read from the key.
+const NUMERIC_KEYS: [&str; 1] = ["fs"];
+
 /// The canonical spelling of a mark value a command carried, or `None` when the
 /// value has none (`PROSE-008`, `PROSE-091`).
 ///
-/// A value that reads as a number is re-spelled through [`canonical_number`], so
-/// `"11.0"` and `"11"` reach the document as one string. Every other value is
-/// its own canonical form: a URL, a family name and a `Uuid` are spelled once.
+/// A value under a numeric key is re-spelled through [`canonical_number`], so
+/// `"11.0"` and `"11"` reach the document as one string. A value that is not a
+/// finite number is refused. Every other key's value is its own canonical form:
+/// a URL, a family name and a `Uuid` are spelled once.
 #[must_use]
-pub fn canonical_value(raw: &str) -> Option<String> {
-    match raw.parse::<f32>() {
-        Ok(number) => canonical_number(number),
-        Err(_) => Some(raw.to_owned()),
+pub fn canonical_value(mark_key: &str, raw: &str) -> Option<String> {
+    let root = mark_key.split(':').next().unwrap_or(mark_key);
+    if !NUMERIC_KEYS.contains(&root) {
+        return Some(raw.to_owned());
     }
+    canonical_number(raw.parse::<f32>().ok()?)
 }
 
 #[cfg(test)]
@@ -163,9 +173,9 @@ mod tests {
 
     #[test]
     fn two_peers_spell_one_size_the_same_way() {
-        assert_eq!(canonical_value("11.0").as_deref(), Some("11"));
-        assert_eq!(canonical_value("11").as_deref(), Some("11"));
-        assert_eq!(canonical_value("11.50").as_deref(), Some("11.5"));
+        assert_eq!(canonical_value("fs", "11.0").as_deref(), Some("11"));
+        assert_eq!(canonical_value("fs", "11").as_deref(), Some("11"));
+        assert_eq!(canonical_value("fs", "11.50").as_deref(), Some("11.5"));
         assert_eq!(canonical_number(0.5).as_deref(), Some("0.5"));
         assert_eq!(canonical_number(f32::NAN), None);
         assert_eq!(canonical_number(f32::INFINITY), None);
@@ -174,9 +184,30 @@ mod tests {
     #[test]
     fn a_value_that_is_not_a_number_is_its_own_canonical_form() {
         assert_eq!(
-            canonical_value("https://example.org/a").as_deref(),
+            canonical_value("a", "https://example.org/a").as_deref(),
             Some("https://example.org/a")
         );
-        assert_eq!(canonical_value("#ff8800").as_deref(), Some("#ff8800"));
+        assert_eq!(canonical_value("fg", "#ff8800").as_deref(), Some("#ff8800"));
+    }
+
+    /// A value under a key the registry spells as text reaches the document as
+    /// the user wrote it. Each of these reads as a number to the float parser,
+    /// and re-spelling it would name another anchor or another font.
+    #[test]
+    fn a_textual_value_that_reads_as_a_number_is_left_alone() {
+        assert_eq!(canonical_value("ref", "1.10").as_deref(), Some("1.10"));
+        assert_eq!(canonical_value("fn", "007").as_deref(), Some("007"));
+        assert_eq!(canonical_value("cm", "1e5").as_deref(), Some("1e5"));
+        assert_eq!(canonical_value("ff", "inf").as_deref(), Some("inf"));
+        assert_eq!(canonical_value("f:pn", "NaN").as_deref(), Some("NaN"));
+    }
+
+    /// The numeric key is the one that refuses. A size with no finite value
+    /// has no canonical spelling. The command is refused, rather than the
+    /// document left holding a marker no reader can use.
+    #[test]
+    fn a_size_that_is_not_a_finite_number_has_no_canonical_spelling() {
+        assert_eq!(canonical_value("fs", "inf"), None);
+        assert_eq!(canonical_value("fs", "eleven"), None);
     }
 }

@@ -241,6 +241,27 @@ pub(crate) fn nesting_allows(tree: &LoroTree, parent: Option<TreeID>, child: Blo
 // The paragraph style, one key per property (`PROSE-030`)
 // -----------------------------------------------------------------------------
 
+/// The sub-map a key holds, opened once and never replaced.
+///
+/// `LoroMap::insert_container` mints a fresh container and drops the one the key
+/// held, taking every other key with it. Every nested register here is written
+/// by more than one path: the page format beside the margins, one block
+/// attribute beside another. So a write reaches the map that is already there,
+/// and mints one only when the key is empty (`PROSE-092`).
+pub(crate) fn map_at(parent: &LoroMap, key: &str) -> Option<LoroMap> {
+    let existing = parent
+        .get(key)
+        .and_then(|value| value.into_container().ok())
+        .and_then(|container| container.into_map().ok());
+    match existing {
+        Some(map) => Some(map),
+        None => parent
+            .insert_container(key, LoroMap::new())
+            .map_err(|e| tracing::warn!("Prose: the register {key} refused a container: {e}"))
+            .ok(),
+    }
+}
+
 /// Write the properties the caller named, and no other key (`PROSE-096`).
 ///
 /// `None` is "leave this property alone". Two peers writing two different
@@ -276,7 +297,11 @@ pub(crate) fn write_paragraph_style(
         }
     }
     if let Some(line_height) = style.line_height {
-        let map = node.insert_container(K_LINE_HEIGHT, LoroMap::new())?;
+        let Some(map) = map_at(node, K_LINE_HEIGHT) else {
+            return Err(loro::LoroError::NotFoundError(
+                "the line-height register refused a container".into(),
+            ));
+        };
         map.insert(LH_MODE, i64::from(line_height.mode.code()))?;
         map.insert(LH_VALUE, f64::from(line_height.value))?;
     }
@@ -379,11 +404,9 @@ pub(crate) fn write_page_format(
     if !orientation.agrees_with(width_mm, height_mm) {
         return false;
     }
-    let Ok(page) = doc
-        .get_map(META)
-        .insert_container(PAGE, LoroMap::new())
-        .map_err(|e| tracing::warn!("Prose: the page register refused a write: {e}"))
-    else {
+    // The register the document already holds: minting a fresh one would drop
+    // the four margins `seed` wrote beside these three keys.
+    let Some(page) = map_at(&doc.get_map(META), PAGE) else {
         return false;
     };
     page.insert("orientation", orientation.as_str()).is_ok()
@@ -411,10 +434,7 @@ pub(crate) fn seed(doc: &LoroDoc) -> Option<TreeID> {
     if !write_page_format(doc, Orientation::Portrait, A4_WIDTH_MM, A4_HEIGHT_MM) {
         return None;
     }
-    let page = meta
-        .get(PAGE)
-        .and_then(|v| v.into_container().ok())
-        .and_then(|c| c.into_map().ok())?;
+    let page = map_at(&meta, PAGE)?;
     for key in [
         "margin_top_mm",
         "margin_bottom_mm",
@@ -423,7 +443,7 @@ pub(crate) fn seed(doc: &LoroDoc) -> Option<TreeID> {
     ] {
         page.insert(key, f64::from(DEFAULT_MARGIN_MM)).ok()?;
     }
-    let defaults = meta.insert_container(DEFAULTS, LoroMap::new()).ok()?;
+    let defaults = map_at(&meta, DEFAULTS)?;
     defaults.insert("font_family", "Inter").ok()?;
     defaults.insert("font_size_pt", 11.0).ok()?;
     defaults.insert("line_height", 1.5).ok()?;
@@ -594,5 +614,31 @@ mod tests {
         assert!(is_built_in_style("quote"));
         assert!(is_built_in_style("heading-6"));
         assert!(!is_built_in_style("my-style"));
+    }
+
+    /// `write_page_format` used to mint a fresh page register, dropping the four
+    /// margins `seed` had written beside the three keys it writes.
+    #[test]
+    fn a_second_page_format_leaves_the_four_margins_in_place() {
+        let doc = LoroDoc::new();
+        seed(&doc).expect("the scaffolding is written");
+        doc.commit();
+        assert!(write_page_format(
+            &doc,
+            Orientation::Landscape,
+            297.0,
+            210.0
+        ));
+        doc.commit();
+        let page = map_at(&doc.get_map(META), PAGE).expect("the page register");
+        for key in [
+            "margin_top_mm",
+            "margin_bottom_mm",
+            "margin_left_mm",
+            "margin_right_mm",
+        ] {
+            assert!(page.get(key).is_some(), "{key} was dropped");
+        }
+        assert!(page.get("orientation").is_some());
     }
 }

@@ -74,7 +74,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-055` | `POST` | An imported snapshot MUST carry the whole document, and the scaffolding the reading peer grew MUST NOT survive it. | this spec section 3 | `ambre_prose::logic::tests::a_snapshot_round_trips_what_the_document_held`; `ambre_logic::tests::the_round_trip_is_stable_on_every_doc_state_variant` | none | verified |
-| `PROSE-056` | `FRAME` | Importing a snapshot MUST NOT produce a delta. | this spec section 3 | type-level -- `ambre_prose::logic::ProseState::import_snapshot` answers display events and no outcome; `ambre_prose::logic::tests::importing_a_snapshot_produces_no_delta` | none | verified |
+| `PROSE-056` | `FRAME` | Importing a snapshot MUST NOT produce a delta. | this spec section 3 | type-level -- `ambre_prose::logic::ProseState::import_snapshot` answers display events and no outcome; `ambre_prose::logic::tests::importing_a_snapshot_produces_no_delta`; `::the_first_edit_after_an_import_exports_only_what_this_peer_wrote` | none | verified |
 
 ### 1.7 Take in a peer's cursor
 

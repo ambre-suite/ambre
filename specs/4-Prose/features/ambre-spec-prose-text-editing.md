@@ -46,7 +46,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-037` | `POST` | What survives of the last paragraph MUST be appended to the first. | this spec section 3 | `ambre_prose::logic::text::tests::a_deletion_across_a_boundary_joins_the_two_paragraphs`; `::the_endpoints_arrive_in_either_order` | none | verified |
-| `PROSE-101` | `POST` | Every paragraph the deletion emptied MUST be removed, except the first of the range, which `PROSE-041` keeps. | this spec section 3 | `ambre_prose::logic::text::tests::a_deletion_removes_every_paragraph_it_emptied`; `::a_deletion_that_empties_the_first_paragraph_keeps_it` | none | verified |
+| `PROSE-101` | `POST` | Every paragraph the deletion emptied MUST be removed, except the first of the range, which `PROSE-041` keeps. A block that carries no body was emptied by nothing and MUST stay. | this spec section 3 | `ambre_prose::logic::text::tests::a_deletion_removes_every_paragraph_it_emptied`; `::a_deletion_that_empties_the_first_paragraph_keeps_it`; `::a_deletion_crossing_a_table_leaves_the_table_standing` | none | verified |
 | `PROSE-041` | `FRAME` | The deletion MUST NOT change the identity of the first paragraph or its paragraph style, whichever of the two the caret started in. | this spec section 3 | `ambre_prose::logic::text::tests::the_join_keeps_the_first_paragraphs_identity_and_style` | none | verified |
 
 ### 1.5 Split a paragraph
@@ -55,7 +55,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-038` | `POST` | The new paragraph MUST carry the source's type and paragraph style. | this spec section 3 | `ambre_prose::logic::text::tests::the_new_paragraph_carries_the_sources_type_and_style` | none | verified |
 | `PROSE-UI-141` | `POST` | The caret MUST be left at the start of the new paragraph. | this spec section 3 | `ambre_prose::ui::tests::a_split_leaves_the_caret_at_the_start_of_the_new_paragraph` | none | verified |
-| `PROSE-042` | `FRAME` | The split MUST NOT change the text the two paragraphs carry between them, or the identity of the source paragraph. | this spec section 3 | `ambre_prose::logic::text::tests::a_split_leaves_the_text_the_two_paragraphs_carry_between_them`; `ambre_prose::logic::convergence_tests::a_split_and_a_concurrent_insertion_both_survive` | none | verified |
+| `PROSE-042` | `FRAME` | The split MUST NOT change the text the two paragraphs carry between them, marks included, or the identity of the source paragraph. | this spec section 3 | `ambre_prose::logic::text::tests::a_split_leaves_the_text_the_two_paragraphs_carry_between_them`; `::a_split_carries_the_marks_of_the_text_it_moves`; `ambre_prose::logic::convergence_tests::a_split_and_a_concurrent_insertion_both_survive` | none | verified |
 
 ### 1.6 Compose with an input method
 

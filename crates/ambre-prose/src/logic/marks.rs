@@ -43,7 +43,7 @@ impl ProseState {
             return Self::err_bad_range();
         }
         let stored = match value {
-            Some(raw) => match mark::canonical_value(raw) {
+            Some(raw) => match mark::canonical_value(key, raw) {
                 Some(canonical) => canonical,
                 None => {
                     return ProseOutcome::refused(
