@@ -19,13 +19,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2503 rows: 1820 shipped, of which 783 loose. 683 unbuilt.**
+**2503 rows: 1820 shipped, of which 780 loose. 683 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 212 | 220 | 538 | 67 | 1037 |
+| `verified` | 212 | 221 | 539 | 68 | 1040 |
 | `failing` | 39 | 46 | 23 |  | 108 |
-| `untested` | 273 | 144 | 235 | 1 | 653 |
+| `untested` | 273 | 143 | 234 |  | 650 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
 | `unimplemented` | 54 | 56 | 23 | 550 | 683 |
@@ -73,7 +73,7 @@
 | `ambre-spec-ui.md` | 17 | 11 | 2 | 9 | 6 |
 | `ambre-spec-undo.md` | 9 | 9 | 3 | 6 |  |
 | `ambre-spec-zero-knowledge.md` | 14 | 14 | 6 | 8 |  |
-| `ambre-spec-trame-schema.md` | 9 | 9 | 6 | 3 |  |
+| `ambre-spec-trame-schema.md` | 9 | 9 | 7 | 2 |  |
 | `ambre-spec-trame-autofill.md` | 10 | 10 | 3 | 7 |  |
 | `ambre-spec-trame-cell-editing.md` | 40 | 28 | 6 | 22 | 12 |
 | `ambre-spec-trame-cell-merges.md` | 38 | 37 | 24 | 13 | 1 |
@@ -99,7 +99,7 @@
 | `ambre-spec-trame-sort.md` | 24 | 24 | 12 | 12 |  |
 | `ambre-spec-trame-status-bar.md` | 11 | 11 | 7 | 4 |  |
 | `ambre-spec-trame-undo.md` | 8 | 4 | 4 |  | 4 |
-| `ambre-spec-toile-schema.md` | 13 | 13 | 9 | 4 |  |
+| `ambre-spec-toile-schema.md` | 13 | 13 | 10 | 3 |  |
 | `ambre-spec-toile-auto-layout.md` | 27 | 27 | 21 | 6 |  |
 | `ambre-spec-toile-board-rendering.md` | 30 | 30 | 13 | 17 |  |
 | `ambre-spec-toile-clipboard.md` | 17 | 17 | 13 | 4 |  |
@@ -129,7 +129,7 @@
 | `ambre-spec-toile-vector-paths.md` | 13 | 13 | 4 | 9 |  |
 | `ambre-spec-toile-viewport.md` | 32 | 30 | 16 | 14 | 2 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 7 | 9 |  |
-| `ambre-spec-prose-schema.md` | 24 | 22 | 20 | 2 | 2 |
+| `ambre-spec-prose-schema.md` | 24 | 22 | 21 | 1 | 2 |
 | `ambre-spec-prose-engine.md` | 39 | 39 | 39 |  |  |
 | `ambre-spec-prose-tables.md` | 42 | 1 | 1 |  | 41 |
 | `ambre-spec-prose-text-editing.md` | 25 | 7 | 7 |  | 18 |

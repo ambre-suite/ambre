@@ -70,6 +70,14 @@ jobs:
       # What the corpus derives: the feature inventory of each application must
       # be what the feature documents say today (`ambre-spec-template.md` §4).
       - run: just inventory
+      # A frozen shape section is the record of what one `SCHEMA_VERSION`
+      # wrote, so it never moves. The check compares the shape files against
+      # the default branch, which a depth-1 checkout does not carry: two
+      # commits are fetched, because a push of `main` itself is read against
+      # its parent.
+      - name: Fetch the base branch
+        run: git fetch --depth=2 origin main:refs/remotes/origin/main
+      - run: just schema-freeze
       # How the English is written: the mechanical half of
       # `ai/ambre-writing-style.md`, every metric a hard error.
       - run: just prose

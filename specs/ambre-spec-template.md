@@ -168,6 +168,7 @@ where the two disagree; this table invents no rung of its own.
 | `target-build` | the build is the mechanism: the code compiles only under this flag, this manifest entry or this generated file, so the CI build fails without it |
 | `lint-wall` | `[workspace.lints]`, `deny(unwrap_used, panic, indexing_slicing)`, `#![forbid(unsafe_code)]` |
 | `cargo-deny` | a capability ban in `deny.toml`, held by the CI `deny` job |
+| `ci-gate` | a gate in `scripts/`, run by a `just` recipe in the CI `lint` job. The clause names the script |
 | `proptest`, `cargo-fuzz`, `cargo-mutants`, `cargo-llvm-cov`, `criterion`, `insta` | the upper rungs, each written only where the mechanism runs in CI |
 | `qa-manual` | the two places the doctrine declares mechanism-free: the wgpu pipeline, and the DOM glue |
 | `human-review` | cryptography, line by line, by decision |
@@ -179,9 +180,10 @@ says where the mechanism is, and nothing more: it locates, and it argues nothing
 the tier or the feature the test runs under. On a token it names the shape, or what the reviewer
 reads.
 
-**Seven tokens must carry one**: `type-level`, `structural`, `exhaustive-match`, `crate-graph`,
-`target-build`, `qa-manual` and `human-review`. A path locates itself, and `cargo-deny` names one
-file. These seven name a shape or a habit, so the bare token tells a reader nothing to go and read.
+**Eight tokens must carry one**: `type-level`, `structural`, `exhaustive-match`, `crate-graph`,
+`target-build`, `ci-gate`, `qa-manual` and `human-review`. A path locates itself, and `cargo-deny`
+names one file. These eight name a shape, a habit or one script of fifteen, so the bare token
+tells a reader nothing to go and read.
 **Two tokens must not**: `none` and `not built` name no mechanism for a clause to locate. What
 follows either one is an argument, and it belongs in `Gap`.
 

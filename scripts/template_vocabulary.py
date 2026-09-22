@@ -210,7 +210,7 @@ MECHANISM_TOKENS = _mechanism_tokens()
 # The tokens a reader cannot grep for, and the two that name no mechanism at
 # all. Both sets are the template's own sentences, which say why each is what it
 # is; neither is a subset a script may widen.
-LOCATED_TOKENS = _sentence_tokens("**Seven tokens must carry one**")
+LOCATED_TOKENS = _sentence_tokens("**Eight tokens must carry one**")
 BARE_TOKENS = _sentence_tokens("**Two tokens must not**")
 
 # The three questions a contract table does not answer, in the order the

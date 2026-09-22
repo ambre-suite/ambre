@@ -278,6 +278,18 @@ spec-answers-detail:
 prose:
     python3 scripts/prose.py --check
 
+# Each application freezes, under its compiled `SCHEMA_VERSION`, the key set and
+# the value types a build writes. A belt in the crate holds a build against that
+# text, and the belt alone is weak: regenerating the section in place turns it
+# green with the version never raised, while every peer on the old version reads
+# a document it cannot parse. A section is the record of what one version wrote,
+# so this refuses any section the base revision carries whose body moved. Pass
+# `--base` to name another revision.
+
+# append-only schema freezes: a published shape section never moves.
+schema-freeze:
+    python3 scripts/schema_freeze.py --check
+
 # The checks in `scripts/` guard every Rust comment, every document and every
 # contract row, and nothing guarded the checks. Three defects shipped in the
 # prose one, and the worst produced no symptom: a table row left the reader's
