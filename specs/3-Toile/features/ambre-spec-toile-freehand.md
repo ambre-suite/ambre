@@ -24,7 +24,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-038` | `INV` | A stroke MUST NOT be mutated after it is committed, so two strokes MUST NOT conflict. | this spec section 3 | structural -- no command names a stroke's sample vector, so a stroke is an insert and nothing else; `ambre_toile::logic::convergence_tests::two_peers_converge` -- it drives concurrent stroke commits | none | verified |
 | `TOILE-039` | `INV` | The smoothed outline MUST pass through every sample. | this spec section 3 | none | unheld -- `ambre_toile::logic::stroke::tests::passes_through_samples_and_is_denser` reads back the first and the last output point only, so a pass that cut the corner at every interior sample would satisfy it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-103` | `INV` | The smoothed outline MUST be denser than the samples. | this spec section 3 | `ambre_toile::logic::stroke::tests::passes_through_samples_and_is_denser` -- it reads the output length, and this is the half the row above was carrying | none | verified |
-| `TOILE-104` | `INV` | Smoothing MUST survive a stroke too short to curve: no sample MUST give nothing, and one sample MUST give exactly that point. | this spec section 3 | `ambre_toile::logic::stroke::tests::empty_and_single_point` -- the only thing that drives either degenerate input, and it was cited as though it held the density rule | none | verified |
+| `TOILE-104` | `INV` | A stroke of no sample MUST smooth to nothing. | this spec section 3 | `ambre_toile::logic::stroke::tests::empty_and_single_point` -- its first half smooths an empty slice and requires an empty result, so a smoother that seeded a point fails it | none | verified |
+| `TOILE-259` | `INV` | A stroke of one sample MUST smooth to exactly that point. | this spec section 3 | `ambre_toile::logic::stroke::tests::empty_and_single_point` -- its second half smooths one sample and compares the output against that point, so neither a dropped nor a moved point passes | none | verified |
 
 ### 1.2 Draw a stroke
 
@@ -44,11 +45,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the samples enter the document and leave as bytes the Sync worker
   seals (`ZK-001`). What streams during the gesture is an ephemeral frame, sealed the same way
   (`ZK-005`).
-* **Verification.** 5 `verified`, 6 `untested`. What holds is the committed stroke: the samples it
-  carries and the element it becomes. The smoothing is a property of the construction rather than a
-  test. What is loose is the span, the minimum area, the abandoned gesture and the degenerate
-  smoothing input. The in-flight stroke is held at both ends and not in the middle, where the
-  per-frame sampler lives (`TOILE-106`).
+* **Verification.** 6 `verified`, 6 `untested`. What holds is the committed stroke: the samples
+  it carries, the element it becomes, and both degenerate smoothing inputs, which now have a row
+  each. The density of a curved stroke rests on the construction. What is loose is the span, the
+  minimum area, the abandoned gesture, and the middle of an in-flight one (`TOILE-106`).
 
 ---
 

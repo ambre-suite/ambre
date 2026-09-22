@@ -665,6 +665,58 @@ mod tests {
         assert_eq!(replay.text_of(&block).as_deref(), Some("hello"));
     }
 
+    /// The reader's own scaffolding does not survive a snapshot
+    /// (`PROSE-055`). A peer that opened a document grew one paragraph for
+    /// want of any. What arrives brings its own, so the grown one is dropped
+    /// rather than left standing above the imported text.
+    #[test]
+    fn an_imported_snapshot_drops_the_paragraph_the_reader_grew() {
+        let mut state = ProseState::new().expect("a document is built");
+        let block = state.root_blocks()[0];
+        state.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "a paragraph".to_owned(),
+        });
+        let snapshot = state.export_snapshot();
+
+        let mut reader = ProseState::new().expect("a document is built");
+        let grown = reader.root_blocks()[0];
+        reader
+            .import_snapshot(&snapshot)
+            .expect("the snapshot imports");
+        assert!(!reader.root_blocks().contains(&grown));
+        assert_eq!(reader.root_blocks(), state.root_blocks());
+    }
+
+    /// A block the reader wrote in is not scaffolding (`PROSE-104`). A
+    /// snapshot merges, and dropping the root would lose an edit made while
+    /// the whole document was still on its way.
+    #[test]
+    fn an_imported_snapshot_keeps_a_root_the_reader_wrote_in() {
+        let mut state = ProseState::new().expect("a document is built");
+        let block = state.root_blocks()[0];
+        state.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "a paragraph".to_owned(),
+        });
+        let snapshot = state.export_snapshot();
+
+        let mut reader = ProseState::new().expect("a document is built");
+        let mine = reader.root_blocks()[0];
+        reader.handle_command(ProseCommand::InsertText {
+            block_id: mine,
+            pos: 0,
+            text: "mine".to_owned(),
+        });
+        reader
+            .import_snapshot(&snapshot)
+            .expect("the snapshot imports");
+        assert!(reader.root_blocks().contains(&mine));
+        assert_eq!(reader.text_of(&mine).as_deref(), Some("mine"));
+    }
+
     #[test]
     fn a_snapshot_round_trips_what_the_document_held() {
         let mut state = ProseState::new().expect("a document is built");

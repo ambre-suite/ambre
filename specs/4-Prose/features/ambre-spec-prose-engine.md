@@ -73,7 +73,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-055` | `POST` | An imported snapshot MUST carry the whole document, and the scaffolding the reading peer grew MUST NOT survive it. | this spec section 3 | `ambre_prose::logic::tests::a_snapshot_round_trips_what_the_document_held`; `ambre_logic::tests::the_round_trip_is_stable_on_every_doc_state_variant` | none | verified |
+| `PROSE-055` | `POST` | The root paragraph the reading peer grew MUST NOT survive an imported snapshot, while it is still empty, childless and the only root. | this spec section 3 | `ambre_prose::logic::tests::an_imported_snapshot_drops_the_paragraph_the_reader_grew` -- it reads the grown id out of the reader's roots and requires it gone, so a drop that kept it above the imported text fails | none | verified |
+| `PROSE-104` | `POST` | Every other root the reading peer holds MUST survive an imported snapshot. | this spec section 3 | `ambre_prose::logic::tests::an_imported_snapshot_keeps_a_root_the_reader_wrote_in` -- the reader types into its root before importing, and both the block and its text are required afterwards | none | verified |
 | `PROSE-056` | `FRAME` | Importing a snapshot MUST NOT produce a delta. | this spec section 3 | type-level -- `ambre_prose::logic::ProseState::import_snapshot` answers display events and no outcome; `ambre_prose::logic::tests::importing_a_snapshot_produces_no_delta`; `::the_first_edit_after_an_import_exports_only_what_this_peer_wrote` | none | verified |
 
 ### 1.7 Take in a peer's cursor
@@ -111,7 +112,7 @@ status values are normative in `ambre-spec-template.md`.
   No benchmark runs.
 * **Boundary.** none of its own. `PROSE-025` bans a network call, and `PROSE-043` refuses this
   crate a dependency on `ambre-crypto` or `ambre-sync`. It holds no key and opens no socket.
-* **Verification.** 39 `verified`, nothing else. Seven rows are compiler-held: the crate graph, the
+* **Verification.** 40 `verified`, nothing else. Seven rows are compiler-held: the crate graph, the
   lint wall, the closed command enum, the one return type. Two rows bind a shape no command builds
   yet: the image block, and the block under a table cell. Each is read through the format rather
   than through a gesture. The fan-out is driven across the real dispatcher.
@@ -258,6 +259,18 @@ impl ProseState {
     pub fn on_media_downloaded(&mut self, content_hash: String, data: Vec<u8>) -> Vec<ProseEvent>;
 }
 ```
+
+**A snapshot merges, so the reader's scaffolding is dropped by hand.** A peer that opens a
+document grows one root paragraph for want of any (`PROSE-094`). The whole document then arrives
+and brings its own roots. A merge keeps both, so the reader would read an empty paragraph above
+text it never wrote. The import drops that one root first (`PROSE-055`).
+
+* **Only the paragraph nothing was done to.** The drop reads the grown marker, an empty body and
+  no child, and it runs only while that block is the single root. Anything else the reader holds
+  stays (`PROSE-104`). A snapshot merges rather than overwrites, and losing an edit made while the
+  document was still on its way is the worse answer.
+* **The marker is in the document.** Every peer reads the same three conditions off the same
+  containers, so two readers importing the same snapshot drop the same block.
 
 **The delta is a cursor, not a drain.** The export reads from the last exported version vector and
 then advances it. Exporting twice from the same vector yields the same bytes, and the stream cannot
