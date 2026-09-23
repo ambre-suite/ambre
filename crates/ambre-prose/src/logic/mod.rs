@@ -72,6 +72,7 @@ use crate::events::{
 };
 use crate::layout::pass::PageLayout;
 use crate::layout::reflow::Paginator;
+use crate::layout::run::ShapedLayout;
 use crate::mark;
 use crate::schema;
 
@@ -230,6 +231,26 @@ impl ProseState {
         let layout = paginator.reflow(&self.doc, dirty);
         self.word_count.pages = layout.page_count;
         layout
+    }
+
+    /// The layout as it stands, with the shaped runs the view draws on it
+    /// (`features/ambre-spec-prose-page-rendering.md section 2`).
+    ///
+    /// It lays out first, so a caller never hands over a layout older than
+    /// the document. Each call carries the paginator's version, and the view
+    /// drops one older than what it holds (`PROSE-UI-016`).
+    pub fn shaped_layout(&mut self) -> ShapedLayout {
+        self.paginate(&[]);
+        self.paginator
+            .as_ref()
+            .map(Paginator::shaped_layout)
+            .unwrap_or_default()
+    }
+
+    /// How many runs the paginator has shaped, over its life.
+    #[cfg(test)]
+    pub(crate) fn shaped_count(&self) -> u64 {
+        self.paginator.as_ref().map_or(0, Paginator::shaped)
     }
 
     /// How many faces this document measures on (`PROSE-115`).

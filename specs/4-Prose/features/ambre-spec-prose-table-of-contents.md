@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: TABLE OF CONTENTS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the block, the build and the settling are built; nothing paints it
+**Implementation:** implemented
 
 > A list of the document's headings, with the page each one starts on. Nothing about it is written
 > down. It is read off the headings and the page layout every time the document is laid out. It
@@ -45,17 +45,17 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-082` | `POST` | A click on an entry MUST bring the heading it reads into view. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-083` | `FRAME` | Following an entry MUST NOT write to the document: where this reader looks is not a change a peer receives. | derived | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-082` | `POST` | A click on an entry MUST bring the heading it reads into view. | this spec section 4 | `ambre_prose::view::tests::following_an_entry_brings_its_heading_to_the_top_and_sends_nothing` | none | verified |
+| `PROSE-UI-083` | `FRAME` | Following an entry MUST NOT write to the document: where this reader looks is not a change a peer receives. | derived | `ambre_prose::view::tests::following_an_entry_brings_its_heading_to_the_top_and_sends_nothing` | none | verified |
 
 * **Budget.** the table-of-contents build over fifty headings, one row of
   `ambre-spec-budgets.md section 1`. What the repeated build costs when the entries move the
   page count is the deferred pass of `features/ambre-spec-prose-pagination.md`, `PROSE-019`.
 * **Boundary.** none of its own: the block carries two settings and no text, and `ZK-001` seals
   every payload before it leaves the client.
-* **Verification.** 12 `verified`, 2 `unimplemented`: the build, the settings and the page numbers
-  are host tests in `crates/ambre-prose`, over a layout the host measures. `PROSE-UI-082` and `-083`
-  need a view that scrolls, which the "Page rendering" Story (`ambre-roadmap.md` E5) paints.
+* **Verification.** 14 `verified`, nothing else: the build, the settings and the page numbers are
+  host tests in `crates/ambre-prose`, over a layout the host measures. `PROSE-UI-082` and `-083` are
+  host tests of the view.
 
 ---
 
@@ -137,7 +137,7 @@ There is no command that edits an entry, because there is no entry to edit: an e
 changing the heading it reads.
 
 **Code:** `crates/ambre-prose/src/toc.rs` holds the build; `logic/derived.rs` holds the commands;
-`layout/reflow.rs` holds the settling.
+`layout/reflow.rs` holds the settling; `view/mod.rs` follows an entry.
 
 ---
 

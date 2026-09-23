@@ -84,7 +84,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Comments and track changes | MVP | anchored comments, and suggested changes a reviewer accepts or rejects |
 | `[ ]` Suggestions beyond typing | V1 | suggestion mode records typing and deleting only, and refuses a split, a join, a block command or a format change while it is on (`PROSE-FEAT-301`). A burst groups by adjacency alone, since the merge window it names rests on an undo interval no document defines (`PROSE-FEAT-085`) |
 | `[ ]` A note edit reflows only its page | V1 | every reflow reads the text of every note to decide whether the notes still hold, and an edit to one note's text lays the whole document out again, since its height moved. Past a few hundred notes each keystroke pays for both. Keeping each note's height with its text, and resuming placement at the first page that note sits on, would bound it to the page |
-| `[ ]` Page rendering | MVP | pages on the canvas with virtual scrolling and cached text |
+| `[x]` Page rendering | MVP | pages on the canvas with virtual scrolling and cached text |
+| `[ ]` Prose on screen | MVP | the host that mounts the page view on the canvas, fills its palette from the tokens and routes the layout event, naming the blocks each edit touched: today every caller lays out with an empty dirty set, so an edit that keeps its heights is never re-shaped; the status bar; the drawing of a table |
 | `[ ]` Input and cursor | MVP | typing, caret navigation, click and drag selection, optimistic display |
 | `[ ]` Toolbar, slash menu and composition | MVP | the contextual format bar, the slash menu, input-method composition, double-click word selection |
 | `[ ]` Collaborative cursors and annotations | MVP | remote carets, comment highlights, track-change highlights |
@@ -210,6 +211,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` A stroke in flight reaches the other users | MVP | nothing in the workspace sends a presence payload for a board: the in-flight sample field is written by tests only and the presence command has no sender, so a freehand stroke appears on the other screens once it is finished (`TOILE-106`) |
 | `[x]` A picture is measured before it is expanded | MVP | the decoder expands the whole picture before the dimension bound is read, so the bound protects the document and not the heap (`TOILE-IO-052`) |
 | `[ ]` Toile's snapshot command answers | -- | the command returns an empty outcome and no caller sends it; the dispatcher answers a Sync request from the document state instead (`TOILE-093`) |
+| `[ ]` Shaped runs bounded to the view | -- | every measured block keeps its shaped run for the life of the block, about 150 KB a page (`ambre-spec-budgets.md section 6`). The view could send the pages it shows, and the Logic thread keep runs near them alone, re-shaping on scroll. A click on a block with no run would then wait for it |
 | `[ ]` The memory budgets add up | -- | the UI-thread table of `ambre-spec-budgets.md section 6` totals forty-one megabytes over rows that sum to sixty-five: the picture upload budget was added beside the others and charged to no total. Prose then states fifty megabytes of video memory for three pages against a shared wgpu row of twenty, and the table records the arithmetic rather than settling it. A stated total its own rows exceed holds no regression |
 
 ---

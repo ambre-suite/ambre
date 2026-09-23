@@ -22,6 +22,7 @@ pub mod measure;
 pub mod pass;
 pub mod place;
 pub mod reflow;
+pub mod run;
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod footnote_pages;

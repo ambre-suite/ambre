@@ -25,6 +25,9 @@ pub struct PageBox {
     pub page_height_px: f32,
     pub content_width_px: f32,
     pub content_height_px: f32,
+    /// Where the content box starts on the sheet.
+    pub margin_left_px: f32,
+    pub margin_top_px: f32,
 }
 
 impl Default for PageBox {
@@ -59,6 +62,8 @@ impl PageBox {
             page_height_px,
             content_width_px: (page_width_px - horizontal).max(0.0),
             content_height_px: (page_height_px - vertical).max(0.0),
+            margin_left_px: format.margin_left_mm * PX_PER_MM,
+            margin_top_px: format.margin_top_mm * PX_PER_MM,
         }
     }
 

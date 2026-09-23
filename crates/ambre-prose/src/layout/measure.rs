@@ -11,11 +11,12 @@ use parley::{
 };
 
 use ambre_bus::app::prose::{Align, LineHeightMode, ParagraphStyle};
-use ambre_draw::ScriptSet;
+use ambre_draw::{ParleyBrush, ScriptSet};
 use loro::{LoroDoc, LoroTree, TreeID};
 
 use crate::doc;
 use crate::layout::fonts;
+use crate::layout::run::ShapedRun;
 
 /// Pixels per point at 96 DPI. Every length the document stores in points is
 /// converted here and nowhere else.
@@ -167,7 +168,7 @@ pub(crate) fn shipped_measurer() -> Measurer {
 /// being parsed once per paragraph.
 pub struct Measurer {
     font_cx: FontContext,
-    layout_cx: LayoutContext<()>,
+    layout_cx: LayoutContext<ParleyBrush>,
     /// How many runs have been shaped. It is what makes a reflow that
     /// re-shapes an untouched block observable (`PROSE-083`).
     shaped: u64,
@@ -245,7 +246,12 @@ impl Measurer {
     ///
     /// A script no loaded face covers is recorded rather than hidden: the run
     /// still shapes, into tofu, and [`missing`](Self::missing) names it.
-    pub fn shape(&mut self, text: &str, style: &EffectiveStyle, width_px: f32) -> Layout<()> {
+    pub fn shape(
+        &mut self,
+        text: &str,
+        style: &EffectiveStyle,
+        width_px: f32,
+    ) -> Layout<ParleyBrush> {
         self.shaped = self.shaped.saturating_add(1);
         let absent = fonts::missing_scripts(&mut self.font_cx, text);
         self.missing.extend(absent);
@@ -269,16 +275,34 @@ impl Measurer {
         layout
     }
 
-    /// Shape one run and keep its heights alone (`PROSE-036`).
+    /// Shape one run and keep its heights alone.
     ///
-    /// A block that does not split never needs its glyphs again, so the layout
-    /// is dropped here and only the line tops survive.
+    /// For a caller that needs no glyphs. A block the view draws is measured
+    /// with its run instead (`PROSE-036`).
     pub fn measure(&mut self, text: &str, style: &EffectiveStyle, width_px: f32) -> TextMetrics {
         metrics_of(&self.shape(text, style, width_px))
     }
 
-    /// Shape one run, keep its heights, and name the line each code-point
-    /// offset of `offsets` falls on.
+    /// Shape one run, keep its heights and the shaped run itself.
+    ///
+    /// The run is what the view draws and hit-tests, so the text is shaped
+    /// once, here, and never again on the thread that paints
+    /// (`PROSE-UI-006`).
+    pub fn measure_run(
+        &mut self,
+        text: &str,
+        style: &EffectiveStyle,
+        width_px: f32,
+    ) -> (TextMetrics, ShapedRun) {
+        let layout = self.shape(text, style, width_px);
+        (
+            metrics_of(&layout),
+            ShapedRun::new(text, layout, style.indent_left_px),
+        )
+    }
+
+    /// Shape one run, keep its heights and the run, and name the line each
+    /// code-point offset of `offsets` falls on.
     ///
     /// One shape serves both, so a block that calls a note pays nothing more
     /// than one that does not. An offset past the text is on the last line.
@@ -288,7 +312,7 @@ impl Measurer {
         style: &EffectiveStyle,
         width_px: f32,
         offsets: &[u32],
-    ) -> (TextMetrics, Vec<u32>) {
+    ) -> (TextMetrics, Vec<u32>, ShapedRun) {
         let layout = self.shape(text, style, width_px);
         let last = layout.len().saturating_sub(1);
         let lines = offsets
@@ -305,7 +329,11 @@ impl Measurer {
                 u32::try_from(line).unwrap_or(u32::MAX)
             })
             .collect();
-        (metrics_of(&layout), lines)
+        (
+            metrics_of(&layout),
+            lines,
+            ShapedRun::new(text, layout, style.indent_left_px),
+        )
     }
 
     /// Measure one block of the document, reading its text and its style.
@@ -331,7 +359,7 @@ impl Measurer {
         family: &str,
         line_height: LineHeight,
         width_px: f32,
-    ) -> Layout<()> {
+    ) -> Layout<ParleyBrush> {
         let mut builder = self
             .layout_cx
             .ranged_builder(&mut self.font_cx, text, 1.0, true);
@@ -346,7 +374,7 @@ impl Measurer {
         if style.italic {
             builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
         }
-        let mut layout: Layout<()> = builder.build(text);
+        let mut layout: Layout<ParleyBrush> = builder.build(text);
         layout.break_all_lines(Some(width_px));
         layout.align(
             Some(width_px),
@@ -367,7 +395,7 @@ fn at_least_floor_of(paragraph: &ParagraphStyle) -> Option<f32> {
 }
 
 /// The line tops and the height a shaped layout carries.
-fn metrics_of(layout: &Layout<()>) -> TextMetrics {
+fn metrics_of(layout: &Layout<ParleyBrush>) -> TextMetrics {
     let mut line_tops = Vec::with_capacity(layout.len() + 1);
     let mut top = 0.0;
     for line in layout.lines() {

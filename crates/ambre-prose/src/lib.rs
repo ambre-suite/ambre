@@ -54,6 +54,7 @@ pub mod style;
 pub mod suggest;
 pub mod toc;
 pub mod ui;
+pub mod view;
 pub mod xref;
 
 pub use events::{ProseCommand, ProseEvent, ProseOutcome};

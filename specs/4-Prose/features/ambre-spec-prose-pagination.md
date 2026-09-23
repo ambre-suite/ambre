@@ -34,7 +34,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-068` | `INV` | A footnote ordinal MUST be assigned from the position of its reference in the document flow. | this spec section 2 | `ambre_prose::layout::footnote_pages::every_note_is_numbered_from_its_call_before_any_block_is_placed` | none | verified |
 | `PROSE-099` | `INV` | A footnote ordinal MUST NOT change when placement moves the note to another page. | this spec section 2 | `ambre_prose::layout::footnote_pages::a_note_moved_to_another_page_keeps_its_ordinal` | none | verified |
 | `PROSE-034` | `INV` | Every font family label MUST be resolved to a loaded face before shaping; an unmatched label MUST NOT be handed to the shaper. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | `ambre_prose::layout::fonts::tests::a_family_no_face_carries_still_resolves_to_a_shipped_one`; `ambre_prose::layout::fonts::tests::a_monospace_label_falls_back_to_a_monospace_face` | none | verified |
-| `PROSE-036` | `INV` | A full shaped layout MUST be retained past measurement only for a block that splits across pages; every other block MUST keep its line metrics alone. | this spec section 2 | type-level -- `ambre_prose::layout::place::MeasuredBlock` declares no shaped layout: it carries `TextMetrics`, which is the per-line heights alone, so no measurement can retain more than the rule allows | none | verified |
+| `PROSE-036` | `INV` | A block's shaped layout MUST be kept once past measurement and handed to the view as that one run: a block no edit touched MUST NOT be shaped again or copied. | this spec section 2; `features/ambre-spec-prose-page-rendering.md section 2` | `ambre_prose::view::tests::a_block_not_edited_hands_the_view_the_run_it_was_measured_into` | none | verified |
 | `PROSE-012` | `OBS` | A manual page break MUST never be relaxed: it opens a page whatever else the placement is weighing. | this spec section 2 | `ambre_prose::layout::place::tests::a_break_is_honoured_even_where_the_page_had_room_to_spare`; `ambre_prose::layout::pass::tests::a_manual_break_puts_what_follows_it_on_the_next_page` | none | verified |
 | `PROSE-069` | `OBS` | Margin collapse MUST never be skipped: it sits above every heuristic in the constraint order. | this spec section 2 | `ambre_prose::layout::place::tests::a_leading_margin_collapses_against_the_trailing_one_before_it`; `ambre_prose::layout::place::tests::a_leading_margin_is_dropped_at_a_page_top` | none | verified |
 | `PROSE-013` | `OBS` | A heading MUST NOT be split across pages: it is pushed whole to the next page. | this spec section 2 | `ambre_prose::layout::place::tests::a_heading_is_never_cut_however_tall_it_is`; proptest -- `ambre_prose::layout::place::properties::a_heading_or_an_image_is_never_split` | none | verified |
@@ -225,8 +225,8 @@ effective style, deduct its indents from the content width, and measure against 
 | page break | zero: it is a signal, not a sized block |
 | table of contents | the qualified headings, each counted for the number of lines its title wraps to |
 
-Only a block that later splits keeps its full shaped layout. Every other block keeps the per-line
-heights alone (`PROSE-036`), which bounds the transient cost of the pass.
+Every block keeps its shaped layout as one shared run, which the view draws and hit-tests without
+shaping again (`PROSE-036`). The run costs about 150 KB a page (`ambre-spec-budgets.md section 6`).
 
 Two block kinds need a word more. A **merged table cell** is resolved to a grid rectangle by
 locating its two corner blocks in the current row and column order. A row or column inserted
@@ -353,6 +353,7 @@ everywhere (`features/ambre-spec-prose-page-rendering.md`).
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
+| Every block keeps its shaped run | keeping the run of a block that splits, and the line heights alone for the rest | the view must then shape again what the measurement just shaped, on the thread that paints or on a second pass here. Keeping the run costs about 150 KB a page, measured over paragraphs of eighty words; bounding it is the `Shaped runs bounded to the view` Story (`ambre-roadmap.md` E7) |
 | Pagination runs in the Logic thread | paginating in the UI thread | the frame budget forbids it there. A full recomputation exceeds a frame, and the render thread must never be blocked by computation |
 | Pagination runs in the Logic thread | paginating in the Sync worker | it knows nothing of typography and is reserved for crypto and network. Measuring where the document lives also means measuring once for the screen and for the PDF, which is what makes `PROSE-064` a single source of truth rather than two agreeing implementations |
 | Placement never backtracks | a whole-document optimization pass, as a typesetting engine does for a print run | it is quadratic in the block count and its output is unstable: one character typed at the top of a document re-breaks every page below on a different set of trade-offs. Local relaxation gives a break the reader can predict, and an edit whose effect stops where it converges |

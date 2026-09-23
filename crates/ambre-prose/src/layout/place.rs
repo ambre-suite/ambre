@@ -10,6 +10,7 @@ use ambre_core::Uuid;
 use loro::TreeID;
 
 use crate::layout::measure::TextMetrics;
+use crate::layout::run::ShapedRun;
 
 /// The lines a break leaves behind, and the lines it carries over
 /// (`PROSE-072`, `PROSE-073`).
@@ -44,7 +45,7 @@ pub struct FootnoteLayout {
 ///
 /// Placement reads heights and flags alone: the text is already shaped and no
 /// glyph reaches this far.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct MeasuredBlock {
     pub block_id: TreeID,
     pub block_type: BlockType,
@@ -59,6 +60,26 @@ pub struct MeasuredBlock {
     pub metrics: Option<TextMetrics>,
     /// The notes this block calls, in the order of their calls.
     pub notes: Vec<NoteCall>,
+    /// The text as it was shaped, for the view to draw. `None` for a block
+    /// that draws no text of its own: a rule, a break, an image, a table.
+    pub run: Option<ShapedRun>,
+}
+
+/// Two measurements are equal when placement would treat them alike. The run
+/// is left out: text edited to the same lines moves no block, and a reflow
+/// must not replace the tail for it (`PROSE-083`).
+impl PartialEq for MeasuredBlock {
+    fn eq(&self, other: &Self) -> bool {
+        self.block_id == other.block_id
+            && self.block_type == other.block_type
+            && self.height_px == other.height_px
+            && self.space_before_px == other.space_before_px
+            && self.space_after_px == other.space_after_px
+            && self.keep_together == other.keep_together
+            && self.keep_with_next == other.keep_with_next
+            && self.metrics == other.metrics
+            && self.notes == other.notes
+    }
 }
 
 impl MeasuredBlock {
@@ -592,6 +613,7 @@ mod tests {
             keep_with_next: false,
             metrics: Some(metrics(lines)),
             notes: Vec::new(),
+            run: None,
         }
     }
 
@@ -606,6 +628,7 @@ mod tests {
             keep_with_next: false,
             metrics: None,
             notes: Vec::new(),
+            run: None,
         }
     }
 

@@ -245,8 +245,8 @@
 | `LoroDoc` | < 10 MB target, per 100k cells | |
 | `LoroDoc` Prose | < 10 MB, per 100 pages and 50 000 words | |
 | Prose page layout, 100 pages | < 200 KB | About 300 blocks, 20 footnotes and the header and footer runs. Derived, so it is re-allocated whole on a full recompute |
-| Prose transient shaped layouts, during measurement | peak < 5 MB | Released once placement is done: only a block that splits keeps its full layout (`PROSE-036`) |
-| Prose run cache, 500 blocks | < 20 MB | Shaped runs plus their glyph state, about 50 pages (`features/ambre-spec-prose-page-rendering.md`) |
+| Prose shaped runs, Logic thread | ~150 KB per page, unbounded | One run per block, kept past measurement and shared with the view (`PROSE-036`). Measured at about 18 KB a paragraph of eighty words, eight to a page: 43 MB for 300 pages. Bounding it is the `Shaped runs bounded to the view` Story (`ambre-roadmap.md` E7) |
+| Prose run cache, 500 runs | < 1 MB | The drawing state of the runs painted lately, about 50 pages: an index into runs the Logic thread already holds (`features/ambre-spec-prose-page-rendering.md`) |
 | Prose view state, excluding the run cache | < 1 MB | |
 | Prose decoded pictures, per session | < 64 MiB | A bounded cache in the Logic thread, evicted least recently painted; it holds the pictures of a few pages and stays well inside the < 100 MB total (`features/ambre-spec-prose-images.md`) |
 | Prose vertex buffers and atlases, 3 pages | < 50 MB VRAM | Stated by the Prose design and larger than the shared wgpu row above, which is the arithmetic the two rows now make visible. Reconciled by the `The memory budgets add up` Story (`ambre-roadmap.md` E7) |

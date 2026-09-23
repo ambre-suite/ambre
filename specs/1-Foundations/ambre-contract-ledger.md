@@ -19,16 +19,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2544 rows: 2141 shipped, of which 774 loose. 403 unbuilt.**
+**2544 rows: 2170 shipped, of which 774 loose. 374 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 226 | 221 | 542 | 378 | 1367 |
+| `verified` | 226 | 221 | 542 | 407 | 1396 |
 | `failing` | 39 | 46 | 22 |  | 107 |
 | `untested` | 266 | 143 | 234 | 2 | 645 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
-| `unimplemented` | 54 | 56 | 23 | 270 | 403 |
+| `unimplemented` | 54 | 56 | 23 | 241 | 374 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -139,12 +139,14 @@
 | `ambre-spec-prose-headings.md` | 8 | 8 | 7 | 1 |  |
 | `ambre-spec-prose-inline-styles.md` | 25 | 25 | 24 | 1 |  |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
+| `ambre-spec-prose-page-rendering.md` | 19 | 17 | 17 |  | 2 |
 | `ambre-spec-prose-pagination.md` | 47 | 46 | 46 |  | 1 |
-| `ambre-spec-prose-table-of-contents.md` | 14 | 12 | 12 |  | 2 |
+| `ambre-spec-prose-table-of-contents.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-prose-tables.md` | 44 | 43 | 43 |  | 1 |
 | `ambre-spec-prose-text-editing.md` | 26 | 8 | 8 |  | 18 |
 | `ambre-spec-prose-track-changes.md` | 40 | 35 | 35 |  | 5 |
 | `ambre-spec-prose-undo.md` | 3 | 3 | 3 |  |  |
+| `ambre-spec-prose-viewport.md` | 17 | 10 | 10 |  | 7 |
 | `ambre-spec-prose-word-count.md` | 13 | 11 | 11 |  | 2 |
 
 ## WHICH DOCUMENT DECLARES AN ID

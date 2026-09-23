@@ -18,7 +18,10 @@
 //! Story. That is the re-anchor over a remote change, the input-method
 //! composition, and the collapse on a deleted block.
 
+use std::collections::HashMap;
+
 use ambre_core::DocumentId;
+use loro::TreeID;
 
 use ambre_bus::logic::{AppCommand, LogicCommand};
 
@@ -26,6 +29,12 @@ use crate::events::{
     BandSet, BlockId, CommentThread, CursorPosition, FindMatch, FootnoteEntry, ProseCommand,
     ProseEvent, RemoteCursor, ResolvedCrossRef, Suggestion, TableOfContents, WordCount,
 };
+use crate::layout::run::ShapedLayout;
+use crate::view::Highlight;
+use crate::view::cache::RunCache;
+use crate::view::column::PageColumn;
+
+pub use crate::view::column::Viewport;
 
 /// How long the text must stay still before the four tallies are recounted,
 /// in milliseconds (`PROSE-FEAT-124`).
@@ -74,13 +83,6 @@ impl DraftBuffer {
     }
 }
 
-/// Where the reader is looking. Local, and never sent (`PROSE-UI-010`).
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Viewport {
-    pub scroll_y: f32,
-    pub zoom: f32,
-}
-
 /// The UI thread's whole state for one open Prose document.
 ///
 /// Every field is either handed over by the Logic thread or local to this
@@ -117,9 +119,28 @@ pub struct ProseUiState {
     /// The page a followed reference asked to bring into view, until the
     /// view scrolls there.
     pub reveal_page: Option<u32>,
+    /// The layout in force and the runs it carries, as last taken
+    /// (`features/ambre-spec-prose-page-rendering.md`).
+    pub shaped: ShapedLayout,
 
     // Local, and never sent.
     pub viewport: Viewport,
+    /// The page column, rebuilt from each layout taken (`PROSE-UI-131`).
+    pub column: PageColumn,
+    /// The drawing state of the runs painted lately (`PROSE-UI-019`).
+    pub runs: RunCache,
+    /// Each block of the layout in force, by its place in the flow.
+    pub(crate) order: HashMap<TreeID, usize>,
+    /// The blocks each page shows, by their place in the flow, so a frame
+    /// reads its pages and never the whole document (`PROSE-UI-007`).
+    pub(crate) page_blocks: Vec<Vec<usize>>,
+    /// The inline highlights, by the block they sit in (`PROSE-UI-020`).
+    pub(crate) highlights: HashMap<BlockId, Vec<Highlight>>,
+    /// The other peers' carets, by the block each sits in (`PROSE-UI-020`).
+    pub(crate) remote_at: HashMap<BlockId, Vec<RemoteCursor>>,
+    /// How many highlights paints have read, for the tests to hold
+    /// `PROSE-UI-020` against.
+    pub(crate) highlights_walked: u64,
     pub cursor: Option<CursorPosition>,
     pub draft: DraftBuffer,
     /// A change arrived since the last tick.
@@ -205,13 +226,17 @@ impl ProseUiState {
             }
             ProseEvent::FootnotesUpdated { notes } => self.footnotes.clone_from(notes),
             ProseEvent::CrossRefsUpdated { refs } => self.cross_refs.clone_from(refs),
-            ProseEvent::CommentsUpdated { threads } => self.comments.clone_from(threads),
+            ProseEvent::CommentsUpdated { threads } => {
+                self.comments.clone_from(threads);
+                self.index_highlights();
+            }
             ProseEvent::SuggestionsUpdated {
                 suggesting,
                 suggestions,
             } => {
                 self.suggesting = *suggesting;
                 self.suggestions.clone_from(suggestions);
+                self.index_highlights();
             }
             ProseEvent::RevealBlock { page, .. } => self.reveal_page = Some(*page),
             ProseEvent::CaretPlaced { block, offset } => {
@@ -231,10 +256,20 @@ impl ProseUiState {
             ProseEvent::FindResults { matches, current } => {
                 self.find_matches = matches.clone();
                 self.find_current = *current;
+                self.index_highlights();
             }
             ProseEvent::FindUpdated { current } => self.find_current = *current,
             ProseEvent::BandsUpdated { bands } => self.bands = bands.clone(),
-            ProseEvent::RemoteCursors { cursors } => self.remote_cursors = cursors.clone(),
+            ProseEvent::RemoteCursors { cursors } => {
+                self.remote_cursors = cursors.clone();
+                self.remote_at.clear();
+                for cursor in cursors {
+                    self.remote_at
+                        .entry(cursor.position.block_id)
+                        .or_default()
+                        .push(cursor.clone());
+                }
+            }
             // A picture arriving, a masked cell, a refusal and an error each
             // repaint or warn, and none of them touches what is being typed
             // (`PROSE-UI-027`).

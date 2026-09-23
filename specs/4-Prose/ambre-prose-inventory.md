@@ -23,25 +23,25 @@
 | `prose-headings` | Six levels of section title. | implemented | 8 | 1 |
 | `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | implemented | 25 | 1 |
 | `prose-lists` | Bulleted, numbered and checkbox lists, nested to any depth. | implemented | 17 |  |
+| `prose-table-of-contents` | A list of the document's headings, with the page each one starts on. | implemented | 14 |  |
 | `prose-undo` | Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one item is in running text. | implemented | 3 |  |
 | `prose-comments` | A discussion attached to a passage of the text. | partial | 36 |  |
+| `prose-page-rendering` | What a page looks like on the canvas. | partial | 19 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | partial | 47 |  |
-| `prose-table-of-contents` | A list of the document's headings, with the page each one starts on. | partial | 14 |  |
 | `prose-tables` | A grid of cells inside the document. | partial | 44 |  |
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 26 |  |
 | `prose-track-changes` | A reviewer edits without changing the document. | partial | 40 |  |
+| `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | partial | 17 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | partial | 13 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 | `prose-clipboard` | Copy, cut and paste. | design-only | 14 |  |
 | `prose-images` | A picture in the document. | design-only | 38 |  |
 | `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | design-only | 47 |  |
-| `prose-page-rendering` | What a page looks like on the canvas. | design-only | 19 |  |
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | design-only | 8 |  |
 | `prose-ruler` | A horizontal scale above the page, carrying three handles. | design-only | 5 |  |
 | `prose-selection` | Where the caret is, where it goes, and what a drag selects. | design-only | 35 |  |
 | `prose-slash-command` | Type a slash at the start of an empty line and a short list appears: a heading, a list, a table, a page break. | design-only | 16 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 | `prose-toolbar` | Select a few words and a small bar appears above them. | design-only | 14 |  |
-| `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | design-only | 17 |  |
 
-**28 features: 9 implemented, 7 partial, 12 design-only. 622 contract rows, 2 loose.**
+**28 features: 10 implemented, 8 partial, 10 design-only. 622 contract rows, 2 loose.**

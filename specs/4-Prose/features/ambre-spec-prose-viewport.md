@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE PAGE VIEWPORT
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- the column, the culling and the scroll are built; the zoom is not
 
 > A document is a centred column of pages the reader scrolls through and zooms. Only the pages on
 > screen and their two neighbours are ever built, so a three-hundred-page document costs the same
@@ -21,14 +21,14 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-007` | `INV` | Only the visible pages plus one on each side MUST be built for a frame; the whole document MUST NOT be walked per frame. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-021` | `INV` | The visible page range MUST NOT be inverted, for every scroll offset and every layout, an empty one included. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-123` | `INV` | The visible page range MUST NOT name a page the layout does not have. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-022` | `INV` | Every document position inside the column MUST resolve to a page; only a layout with no page at all MUST resolve to none. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-124` | `INV` | A position falling in a gutter MUST resolve to the nearer of the two page edges it lies between. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-007` | `INV` | Only the visible pages plus one on each side MUST be built for a frame; the whole document MUST NOT be walked per frame. | this spec section 2 | `ambre_prose::view::column::tests::a_frame_builds_the_visible_pages_and_one_more_on_each_side`; `ambre_prose::view::paint::tests::a_long_document_builds_only_the_pages_around_the_canvas` | none | verified |
+| `PROSE-UI-021` | `INV` | The visible page range MUST NOT be inverted, for every scroll offset and every layout, an empty one included. | this spec section 2 | `ambre_prose::view::column::tests::the_visible_range_is_never_inverted_and_names_only_pages_the_layout_has` | none | verified |
+| `PROSE-UI-123` | `INV` | The visible page range MUST NOT name a page the layout does not have. | this spec section 2 | `ambre_prose::view::column::tests::the_visible_range_is_never_inverted_and_names_only_pages_the_layout_has` | none | verified |
+| `PROSE-UI-022` | `INV` | Every document position inside the column MUST resolve to a page; only a layout with no page at all MUST resolve to none. | this spec section 2 | `ambre_prose::view::column::tests::every_position_resolves_to_a_page_unless_there_is_none`; `ambre_prose::view::column::tests::a_layout_with_no_page_resolves_nothing` | none | verified |
+| `PROSE-UI-124` | `INV` | A position falling in a gutter MUST resolve to the nearer of the two page edges it lies between. | this spec section 2 | `ambre_prose::view::column::tests::a_position_in_a_gutter_goes_to_the_nearer_page_edge` | none | verified |
 | `PROSE-UI-023` | `INV` | A document point and a screen point MUST map to each other exactly: converting one to the other and back MUST return the point it started from. | this spec section 2 | not built | unbuilt -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
 | `PROSE-UI-024` | `INV` | Zoom MUST stay inside a quarter to four times, whatever the input. | this spec section 2 | not built | unbuilt -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-025` | `INV` | The scroll offset MUST stay between the top of the column and its last scrollable position, after a scroll, a zoom, a relayout or an autoscroll tick. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-025` | `INV` | The scroll offset MUST stay between the top of the column and its last scrollable position, after a scroll, a zoom, a relayout or an autoscroll tick. | this spec section 2 | not built | unbuilt -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
 | `PROSE-UI-026` | `INV` | The page column MUST stay centred at every zoom and every viewport width. | this spec section 2 | not built | unbuilt -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
 | `PROSE-UI-125` | `INV` | The left edge of the column MUST NOT go negative: a page wider than the viewport MUST pin the column to the left edge instead. | this spec section 2 | not built | unbuilt -- lands with the "One zoom model" Story (`ambre-roadmap.md` E8) | unimplemented |
 
@@ -36,8 +36,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-126` | `POST` | A scroll MUST move the column by the distance the gesture asks for, up to the clamp. | this spec section 3 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-127` | `FRAME` | A scroll MUST NOT change the zoom, MUST NOT rebuild the column and MUST NOT write to the document. | derived | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-126` | `POST` | A scroll MUST move the column by the distance the gesture asks for, up to the clamp. | this spec section 3 | `ambre_prose::view::tests::a_scroll_moves_by_the_gesture_up_to_the_ends_and_nothing_else` | none | verified |
+| `PROSE-UI-127` | `FRAME` | A scroll MUST NOT change the zoom, MUST NOT rebuild the column and MUST NOT write to the document. | derived | `ambre_prose::view::tests::a_scroll_moves_by_the_gesture_up_to_the_ends_and_nothing_else` | none | verified |
 
 ### 1.3 Zoom about a point
 
@@ -50,26 +50,24 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-130` | `FRAME` | A canvas resize MUST NOT change the scroll offset and MUST NOT change the zoom. | this spec section 3 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-130` | `FRAME` | A canvas resize MUST NOT change the scroll offset and MUST NOT change the zoom. | this spec section 3 | `ambre_prose::view::tests::a_resize_keeps_the_offset_and_the_zoom` | none | verified |
 
 ### 1.5 Rebuild the column from a new layout
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-131` | `POST` | A layout that arrives MUST rebuild the column: the page count, the page box and the total height MUST come from that layout. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-132` | `FRAME` | Rebuilding the column MUST NOT change the zoom and MUST NOT write to the document. | derived | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-131` | `POST` | A layout that arrives MUST rebuild the column: the page count, the page box and the total height MUST come from that layout. | this spec section 2 | `ambre_prose::view::tests::a_newer_layout_replaces_the_one_in_force_and_rebuilds_the_column` | none | verified |
+| `PROSE-UI-132` | `FRAME` | Rebuilding the column MUST NOT change the zoom and MUST NOT write to the document. | derived | `ambre_prose::view::tests::applying_a_layout_keeps_the_zoom_shapes_nothing_and_writes_nothing` | none | verified |
 
 * **Budget.** the scroll of one page, a row of `ambre-spec-budgets.md section 1`. The culling costs
   nothing worth a row: the visible range is arithmetic over a uniform page height, not a search.
 * **Boundary.** none: the scroll offset and the zoom are view state on the UI thread, where
   `UI-THREAD-004` bans a network, crypto or persistence path. `PROSE-UI-010`
   (`features/ambre-spec-prose-engine.md section 1`) keeps both out of the document.
-* **Verification.** 17 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. Six state
-  rows are the degenerate cases, and a property test reaches each directly, being arithmetic over
-  three numbers. They are an empty layout, a gutter, a scroll past the end, a zoom out of range,
-  an inverted range and an oversized page. `PROSE-UI-023` and
-  `PROSE-UI-128` are round trips over generated points. The frame conditions are the weak half:
-  nothing but a review holds them.
+* **Verification.** 10 `verified`, 7 `unimplemented`. The state rows are property tests over the
+  column in `crates/ambre-prose`, being arithmetic over three numbers; the others are host tests of
+  the view. `PROSE-UI-025` and the zoom rows wait on the
+  "One zoom model" Story (`ambre-roadmap.md` E8).
 
 ---
 
@@ -163,7 +161,8 @@ pub fn apply_zoom(state: &mut ProseUiState, factor: f32, focus_screen: Vec2);
 has to reveal, and a relayout that shortened the document. A relayout is the case that matters.
 Deleting the last twenty pages leaves an offset past the end of a column that no longer has one.
 
-**Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
+**Code:** `crates/ambre-prose/src/view/column.rs` holds the column and the viewport;
+`view/mod.rs` the scroll, the resize and the layout that rebuilds the column.
 
 ---
 

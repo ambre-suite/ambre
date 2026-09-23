@@ -13,6 +13,7 @@
 //! into step, off the keystroke path (`PROSE-019`, `PROSE-084`).
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use ambre_bus::app::prose::BlockType;
 use loro::{LoroDoc, TreeID};
@@ -22,6 +23,7 @@ use crate::layout::geometry::PageBox;
 use crate::layout::measure::Measurer;
 use crate::layout::pass::{self, PageLayout};
 use crate::layout::place::{self, BlockLayout, MeasuredBlock, Placement};
+use crate::layout::run::ShapedLayout;
 use crate::toc;
 
 /// The most layouts one settling of the tables of contents runs
@@ -51,6 +53,9 @@ pub struct Paginator {
     bands: pass::BandHeights,
     /// The footnotes the last layout was placed with (`PROSE-117`).
     notes: pass::NotePlan,
+    /// Stamped on each layout this paginator hands over, so the view can
+    /// tell a late one from a new one (`PROSE-UI-016`).
+    version: u64,
 }
 
 impl Default for Paginator {
@@ -78,6 +83,7 @@ impl Paginator {
             toc_pages: HashMap::new(),
             bands: pass::BandHeights::default(),
             notes: pass::NotePlan::default(),
+            version: 0,
         }
     }
 
@@ -99,6 +105,24 @@ impl Paginator {
     #[must_use]
     pub fn layout(&self) -> &PageLayout {
         &self.layout
+    }
+
+    /// The layout as it stands, with the runs the view draws on it.
+    ///
+    /// Nothing is shaped here: every run is the one the last pass kept
+    /// (`PROSE-UI-006`).
+    #[must_use]
+    pub fn shaped_layout(&self) -> ShapedLayout {
+        let body = self
+            .measured
+            .iter()
+            .filter_map(|block| Some((block.block_id, block.run.clone()?)));
+        ShapedLayout {
+            version: self.version,
+            layout: Arc::new(self.layout.clone()),
+            blocks: body.chain(self.bands.runs.iter().cloned()).collect(),
+            notes: self.notes.runs.clone(),
+        }
     }
 
     /// Lay the whole document out again, shaping every block.
@@ -158,11 +182,17 @@ impl Paginator {
             // (`PROSE-111`).
             return self.full(document);
         }
+        // Same heights, and perhaps new text: the view draws the runs just
+        // shaped.
+        self.bands = bands;
         let measured = self.remeasure(document, page_box, dirty);
         let from = first_difference(&self.measured, &measured);
         let Some(from) = from else {
-            // Nothing moved: the layout already on hand is the answer.
+            // Nothing moved: the layout already on hand is the answer. A
+            // run may have new text on the same lines, so the view still
+            // gets a new version to draw.
             self.measured = measured;
+            self.version = self.version.saturating_add(1);
             self.layout.first_dirty_page = None;
             return &self.layout;
         };
@@ -295,6 +325,7 @@ impl Paginator {
     ) {
         self.page_box = page_box;
         self.measured = measured;
+        self.version = self.version.saturating_add(1);
         self.layout = pass::layout_of(page_box, &placement);
         self.bands.stamp(&mut self.layout);
         self.layout.first_dirty_page = Some(first_dirty);

@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-151` | `INV` | Every reader of a selection MUST order its two ends before it uses them: a backwards selection MUST NOT reach a caller as it is held. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-034` | `INV` | A vertical move MUST keep the column the caret started from until a horizontal move, a click or an edit ends the run of vertical moves. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-152` | `INV` | A change from a collaborator MUST NOT move the anchor of a drag in flight: the anchor is a gesture, not a document position, for as long as the gesture lasts. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-033` | `INV` | Header, footer and footnote text MUST hit-test like body text, so the caret can enter it. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-033` | `INV` | Header, footer and footnote text MUST hit-test like body text, so the caret can enter it. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-153` | `OBS` | A pointer resting inside a link MUST show the link cursor, over the marked text alone. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Press in the text
@@ -98,7 +98,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: `PROSE-UI-010` (`features/ambre-spec-prose-engine.md section 1`) keeps the
   selection out of the document, and the UI thread reaches no network, crypto or persistence path
   (`UI-THREAD-004`).
-* **Verification.** 35 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
+* **Verification.** 35 `unimplemented`, nothing else.
   `PROSE-UI-008` has an oracle already: the layout draws a glyph at a position
   and the hit-test answers a position for a point. The round trip is then a property over the
   shaped runs, at any zoom and offset. `PROSE-UI-071` is compiler-held the day the crate exists, since a

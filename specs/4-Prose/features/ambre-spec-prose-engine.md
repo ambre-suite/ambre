@@ -175,7 +175,7 @@ converts at its own boundary, so the value is one identity and not two.
 | `parley` | the typographic layout the Logic thread measures with | pagination needs line breaking and glyph metrics, not just the run types `DrawSurface` exposes, so the dependency is direct and not through `ambre-draw` |
 | `ambre-core` | the identity and document types | `Uuid`, `DocType`, reached through the `ambre-bus` re-export |
 | `ambre-bus` | the typed IPC shapes | the two planes of sections 3.B and 3.C, and the envelopes that carry them |
-| `ambre-draw` | the `DrawSurface` trait and the geometry re-exports | one page-drawing path for the screen and for the exported page (`features/ambre-spec-prose-pdf-export.md`). Not linked yet: it lands with the `Page rendering` Story (`ambre-roadmap.md` E5) |
+| `ambre-draw` | the `DrawSurface` trait and the geometry re-exports | one page-drawing path for the screen and for the exported page (`features/ambre-spec-prose-pdf-export.md`). The page painter draws through it, and a test drives it on the recording surface |
 | `flume` | the UI-to-Logic channel the view sends on | shared memory between the two threads, so a command moves rather than serializes (`PROSE-UI-002`, `PROSE-UI-149`) |
 | `postcard` | the presence frame alone | the only Prose value serialized for the wire; a CRDT delta is already bytes |
 | `serde` | the derives that frame needs | on the wire types of section 3.D, and on nothing that travels between the two threads |

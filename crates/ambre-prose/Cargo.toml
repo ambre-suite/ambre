@@ -58,6 +58,10 @@ flume = { workspace = true }
 # the host target as ambre-toile and ambre-trame do.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
+# The recording surface: the painter is driven against it and its ordered
+# draw calls are asserted on, off any GPU (`PROSE-UI-117`, `PROSE-UI-118`).
+# The same crate as the runtime dependency, with its test double switched on.
+ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 
 [lints]
 workspace = true

@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: PAGE RENDERING
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- the painter is built; no host mounts it on the canvas yet
 
 > What a page looks like on the canvas. The text of every visible block, the caret, the selections,
 > the remote carets and the inline highlights, painted from runs the engine shaped once. The same
@@ -21,46 +21,45 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-006` | `INV` | A full text layout or a table-of-contents recompute MUST NOT run in the UI thread: both arrive already computed. | this spec section 2; `features/ambre-spec-prose-pagination.md` | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-113` | `INV` | A shaped run handed from the side that shapes to the side that draws MUST NOT carry a GPU handle or any other handle bound to one thread. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-114` | `INV` | Resolving the position under a pointer MUST read the runs already shaped, never shaping a block. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-172` | `INV` | A block that was culled and never painted MUST resolve a position like any other. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-019` | `INV` | The run cache MUST be bounded: it MUST evict rather than grow with the document. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-018` | `INV` | Block drawing MUST be written once against the drawing surface: the screen and the PDF MUST NOT be two implementations. | this spec section 2; `ambre-spec-drawing-surface.md section 2` | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5); `ambre-spec-pdf-export.md`, `PDF-001` is the export half of the same rule | unimplemented |
+| `PROSE-UI-006` | `INV` | A full text layout or a table-of-contents recompute MUST NOT run in the UI thread: both arrive already computed. | this spec section 2; `features/ambre-spec-prose-pagination.md` | not built | unbuilt -- lands with the "Prose on screen" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-113` | `INV` | A shaped run handed from the side that shapes to the side that draws MUST NOT carry a GPU handle or any other handle bound to one thread. | this spec section 4 | `ambre_prose::layout::run::tests::a_shaped_layout_moves_to_another_thread_and_draws_there` | none | verified |
+| `PROSE-UI-114` | `INV` | Resolving the position under a pointer MUST read the runs already shaped, never shaping a block. | this spec section 4 | `ambre_prose::view::hit::tests::a_block_never_painted_resolves_a_point_off_its_shaped_runs` | none | verified |
+| `PROSE-UI-172` | `INV` | A block that was culled and never painted MUST resolve a position like any other. | this spec section 4 | `ambre_prose::view::hit::tests::a_block_never_painted_resolves_a_point_off_its_shaped_runs` | none | verified |
+| `PROSE-UI-019` | `INV` | The run cache MUST be bounded: it MUST evict rather than grow with the document. | this spec section 2 | `ambre_prose::view::cache::tests::the_run_painted_least_recently_is_the_one_dropped`; `ambre_prose::view::paint::tests::the_run_cache_stays_bounded_over_a_long_scroll` | none | verified |
+| `PROSE-UI-018` | `INV` | Block drawing MUST be written once against the drawing surface: the screen and the PDF MUST NOT be two implementations. | this spec section 2; `ambre-spec-drawing-surface.md section 2` | `ambre_prose::view::paint::tests::a_long_document_builds_only_the_pages_around_the_canvas` | none | verified |
 | `PROSE-UI-017` | `INV` | Partial repaint MUST use the shared content-repaint contract; a second repaint mechanism MUST NOT exist beside it. | this spec section 2; `ambre-spec-frame.md section 2` | not built | unbuilt -- lands with the "One repaint contract" Story (`ambre-roadmap.md` E8) | unimplemented |
-| `PROSE-UI-014` | `INV` | Every colour drawn MUST come from the generated theme tokens; a literal colour MUST NOT appear in render code. | this spec section 3; `ambre-spec-design-tokens.md` | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-115` | `OBS` | A visible page MUST be drawn with its sheet, the blocks the layout places on it, and the header, the footer and the footnote band the layout carries for it. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-116` | `OBS` | A block the layout breaks across two pages MUST be drawn on both: the continuation MUST NOT be left out. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-117` | `OBS` | A selection MUST be drawn under the glyphs it covers, and an inline highlight over them. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-118` | `OBS` | A remote caret and its label MUST NOT hide local text: they MUST be drawn after the glyphs of the page. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-014` | `INV` | Every colour drawn MUST come from the generated theme tokens; a literal colour MUST NOT appear in render code. | this spec section 3; `ambre-spec-design-tokens.md` | `ambre_prose::view::paint::tests::every_colour_comes_from_the_palette_or_a_peer` | none | verified |
+| `PROSE-UI-115` | `OBS` | A visible page MUST be drawn with its sheet, the blocks the layout places on it, and the header, the footer and the footnote band the layout carries for it. | this spec section 2 | `ambre_prose::view::paint::tests::a_page_carries_its_bands_and_its_footnotes_below_a_separator` | none | verified |
+| `PROSE-UI-116` | `OBS` | A block the layout breaks across two pages MUST be drawn on both: the continuation MUST NOT be left out. | this spec section 2 | `ambre_prose::view::paint::tests::a_block_split_across_two_pages_is_drawn_on_both` | none | verified |
+| `PROSE-UI-117` | `OBS` | A selection MUST be drawn under the glyphs it covers, and an inline highlight over them. | this spec section 2 | `ambre_prose::view::paint::tests::selections_go_under_the_glyphs_and_highlights_over_them` | none | verified |
+| `PROSE-UI-118` | `OBS` | A remote caret and its label MUST NOT hide local text: they MUST be drawn after the glyphs of the page. | this spec section 2 | `ambre_prose::view::paint::tests::a_remote_caret_is_painted_after_every_glyph_of_its_page` | none | verified |
 
 ### 1.2 Paint a page
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-119` | `POST` | Painting a page MUST build the GPU state of a run the first time that run is drawn. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-173` | `POST` | Painting a page MUST reuse a run's GPU state after the first time that run is drawn. | this spec section 4 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-020` | `FRAME` | Painting a page MUST NOT walk an annotation anchored outside the pages it draws. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-120` | `FRAME` | Painting a page MUST NOT write to the document, and MUST NOT build the GPU state of a run it does not draw. | derived | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-119` | `POST` | Painting a page MUST build the GPU state of a run the first time that run is drawn. | this spec section 4 | `ambre_prose::view::paint::tests::a_run_is_built_on_its_first_paint_and_reused_after` | none | verified |
+| `PROSE-UI-173` | `POST` | Painting a page MUST reuse a run's GPU state after the first time that run is drawn. | this spec section 4 | `ambre_prose::view::paint::tests::a_run_is_built_on_its_first_paint_and_reused_after` | none | verified |
+| `PROSE-UI-020` | `FRAME` | Painting a page MUST NOT walk an annotation anchored outside the pages it draws. | this spec section 2 | `ambre_prose::view::paint::tests::highlights_are_walked_on_the_blocks_drawn_and_no_other` | none | verified |
+| `PROSE-UI-120` | `FRAME` | Painting a page MUST NOT write to the document, and MUST NOT build the GPU state of a run it does not draw. | derived | `ambre_prose::view::paint::tests::a_long_document_builds_only_the_pages_around_the_canvas`; `ambre_prose::view::paint::tests::a_run_is_built_on_its_first_paint_and_reused_after` | none | verified |
 
 ### 1.3 Apply a layout
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-121` | `POST` | A layout newer than the one in force MUST replace it, and the version it carries MUST become the version the view holds. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-016` | `FAIL` | A layout older than the one already applied MUST be dropped, so a late arrival MUST NOT replace a newer one. | this spec section 2 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-122` | `FRAME` | Applying a layout MUST NOT write to the document and MUST NOT shape a block. | derived | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-121` | `POST` | A layout newer than the one in force MUST replace it, and the version it carries MUST become the version the view holds. | this spec section 2 | `ambre_prose::view::tests::a_newer_layout_replaces_the_one_in_force_and_rebuilds_the_column` | none | verified |
+| `PROSE-UI-016` | `FAIL` | A layout older than the one already applied MUST be dropped, so a late arrival MUST NOT replace a newer one. | this spec section 2 | `ambre_prose::view::tests::a_late_layout_is_dropped_and_the_newer_one_stays` | none | verified |
+| `PROSE-UI-122` | `FRAME` | Applying a layout MUST NOT write to the document and MUST NOT shape a block. | derived | `ambre_prose::view::tests::applying_a_layout_keeps_the_zoom_shapes_nothing_and_writes_nothing` | none | verified |
 * **Budget.** the display-list build and the whole page paint (`ambre-spec-budgets.md section 2`);
   the run cache and the vertex buffers (`ambre-spec-budgets.md section 6`). The second of those
   exceeds the shared UI-thread total, and the register says so.
 * **Boundary.** none: this thread paints view state, where `UI-THREAD-004` bans a network, crypto
   or persistence path. What it draws arrives as an event and leaves as nothing.
-* **Verification.** 19 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. Two rows
-  a compiler holds before a test exists. A second drawing implementation cannot hide behind a
-  generic parameter (`PROSE-UI-018`), and a run carrying a device handle does not cross a thread
-  (`PROSE-UI-113`). The four drawn rows are screenshot work, the weakest mechanism this workspace
-  uses, and `PROSE-UI-116` is the one a layout fixture holds instead. A block broken across two
-  pages is drawn twice or it is not.
+* **Verification.** 17 `verified`, 2 `unimplemented`. Every verified row is a host test in
+  `crates/ambre-prose`, painting through the recording surface of `ambre-draw`. `PROSE-UI-113` is
+  also compiler-held: the run type must be `Send`, `Sync` and `'static`. `PROSE-UI-006` waits on the
+  host that mounts the view, in the "Prose on screen" Story (`ambre-roadmap.md` E5). `PROSE-UI-017`
+  waits on the shared repaint contract.
 
 ---
 
@@ -69,76 +68,72 @@ status values are normative in `ambre-spec-template.md`.
 **Containers.** None. Every colour is the theme's and every run is derived.
 
 **The shaped run, and what makes it crossable.** The engine shapes a block once, on the Logic
-thread, and hands the result over by move. Both threads share one heap, so nothing is serialized.
+thread, to measure it. It keeps the result and hands it over by move with the layout. Both threads
+share one heap, so nothing is serialized.
 
 ```rust
-/// One shaped run: the output of the shaper, complete enough to draw and to hit-test,
-/// and free of any GPU or thread-bound handle. Produced by pagination, consumed here.
-pub struct ParleyRunData {
-    /// The glyphs, in visual order, with the advance of each.
-    pub glyphs:      Vec<PositionedGlyph>,
-    /// Cluster boundaries, joining a glyph range to a byte range of the block body.
-    pub clusters:    Vec<Cluster>,
-    /// The line boxes the run was broken into, with the baseline of each.
-    pub lines:       Vec<LineBox>,
-    pub ascent:      f32,
-    pub descent:     f32,
-    /// The resolved face and size, so the raster stage needs no style lookup.
-    pub font:        FontKey,
-}
+/// One shaped block: the shaper's layout, the code-point starts of its text,
+/// and its left indent. Free of any GPU or thread-bound handle (`PROSE-UI-113`).
+pub struct ParleyRunData { /* private */ }
 
 impl ParleyRunData {
-    /// The byte offset under a horizontal position inside the run.
-    pub fn offset_for_x(&self, x: f32) -> u32;
-    /// The inverse: where a byte offset sits inside the run.
-    pub fn x_for_offset(&self, offset: u32) -> f32;
+    /// The code-point offset under a point of the run.
+    pub fn offset_at(&self, x: f32, y: f32) -> u32;
+    /// Where the caret sits for a code-point offset.
+    pub fn caret_box(&self, offset: u32) -> BoundingBox;
+    /// One box per line a code-point range covers.
+    pub fn range_boxes(&self, start: u32, end: u32) -> Vec<BoundingBox>;
+}
+
+/// A shared handle on one shaped block. Two handles are equal when they are one run.
+pub struct ShapedRun(Arc<ParleyRunData>);
+
+/// What the Logic thread hands the view: the page layout, and the runs of the blocks
+/// and the notes it places, stamped with the version the paginator reached.
+pub struct ShapedLayout {
+    pub version: u64,
+    pub layout:  Arc<PageLayout>,
+    pub blocks:  HashMap<TreeID, ShapedRun>,
+    pub notes:   HashMap<Uuid, ShapedRun>,
 }
 ```
 
-**The cache** (`ambre-prose`). One entry per block, holding the shaped runs, the block height and
-whether a delta has touched the block since it was shaped. It is capped at five hundred blocks,
-about fifty pages, and evicts least-recently-used beyond that (`PROSE-UI-019`).
+**The cache** (`ambre-prose`). The shaped data stays in the layout the view holds, so hit-testing
+and the caret read it on a block never painted (`PROSE-UI-172`). What the view caches is the drawing
+half: where each glyph run of a block sits. It is built on the first paint of a run
+(`PROSE-UI-119`) and reused after (`PROSE-UI-173`). It holds five hundred runs, about fifty pages,
+and drops the one painted least recently beyond that (`PROSE-UI-019`). The glyph atlas belongs to
+the drawing surface.
 
 ```rust
-/// The UI-side run: the shaped data, plus the GPU state built from it on first paint.
-pub struct ParleyRun {
-    pub data: ParleyRunData,
-    /// Atlas handles and a positioned quad buffer. `None` until the run is first painted;
-    /// a culled block never builds it. Building it is a raster and an upload, never a
-    /// shaping pass (`PROSE-UI-006`).
-    pub draw: Option<RunDrawState>,
+/// The drawing state of the runs painted lately, bounded.
+pub struct RunCache { /* private */ }
+
+/// The colours a page is painted with, filled by the host from the theme tokens.
+pub struct PagePalette {
+    pub sheet: Color, pub sheet_border: Color, pub shadow: Color, pub text: Color,
+    pub accent: Color, pub warning: Color, pub success: Color, pub error: Color,
+}
+
+impl ProseUiState {
+    /// Paint the pages the canvas shows, and one more on each side.
+    pub fn paint<S: DrawSurface>(&mut self, surface: &mut S, palette: &PagePalette);
+    /// The block and the offset under a canvas point.
+    pub fn hit_test(&self, x_px: f32, y_px: f32) -> Option<(BlockId, u32)>;
 }
 ```
 
-Caret geometry and hit-testing read `data`, so both work on a block that was culled and never
-painted (`features/ambre-spec-prose-viewport.md`).
+The steps, per page built:
 
-**Building a page's drawing.** The driver signature is the shared one of
-`ambre-spec-frame.md section 2`: the surface, the font context, the glyph cache, and the strip
-of what is dirty.
-
-```rust
-/// Called by the frame host as the Prose view's content paint.
-pub fn build_display_list<S: DrawSurface>(
-    state:   &ProseUiState,
-    surface: &mut S,
-    fc:      &mut FontContext,
-    tc:      &mut TextCache,
-    strip:   &RepaintStrip,
-);
-```
-
-The steps, per visible page:
-
-1. paint the page sheet and its shadow, at the page origin the viewport resolves;
+1. paint the page shadow, the sheet and its border, at the page origin the viewport resolves;
 2. walk the blocks the layout places on that page, continuations of split blocks included;
-3. for each block, take its runs from the cache, building the GPU state on first paint;
+3. for each block, clip to its fragment and take its drawing state from the cache;
 4. paint the selection rectangles under the glyphs, then the glyphs, then the inline highlights;
-5. paint the remote carets and their labels last, so a collaborator never hides local text;
-6. paint the header, the footer and the footnote band from the runs the layout carries.
+5. paint the header, the footer and the footnote band from the runs the layout carries;
+6. paint the remote carets last, so a collaborator never hides local text.
 
-Steps 4 and 5 skip any annotation anchored outside the visible page range, and the draft buffer
-returns immediately when it is empty (`PROSE-UI-020`).
+Step 4 reads the highlights indexed by block when they arrive, so a paint touches only the
+annotations of the blocks it draws (`PROSE-UI-020`).
 
 **What is repainted.** `RepaintStrip` is Prose's use of the shared content-repaint contract, not a
 mechanism beside it (`PROSE-UI-017`). The dirty pages map onto the shared full and reuse modes.
@@ -148,7 +143,8 @@ Prose does not use the scroll-band mode, because a page column reflows rather th
 view keeps the version it last applied. A layout arriving with an older version is dropped
 (`PROSE-UI-016`), which is what stops a slow recomputation from repainting over a newer one.
 
-**Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
+**Code:** `crates/ambre-prose/src/layout/run.rs` holds the shaped run; `view/paint.rs` the painter;
+`view/cache.rs` the run cache; `view/hit.rs` the hit-test; `view/mod.rs` applies a layout.
 
 ---
 
@@ -199,9 +195,9 @@ that sit over the canvas are DOM and are not painted here (`UI-THREAD-001`,
   (`ambre-spec-budgets.md section 2`). The two are not contradictory: a full page repaint
   is a busy case, as a full board paint is for the whiteboard. Nothing says which one a
   reviewer holds a regression against.
-* **The UI-thread memory figures do not fit the shared total.** The run cache alone is budgeted at
-  twenty megabytes, and the vertex buffers and atlases for three pages at fifty of video memory.
-  The shared UI-thread total is forty-one (`ambre-spec-budgets.md section 6`). The
+* **The UI-thread memory figures do not fit the shared total.** The vertex buffers and atlases
+  for three pages are budgeted at fifty megabytes of video memory. The shared UI-thread total is
+  forty-one (`ambre-spec-budgets.md section 6`). The
   rows now sit beside each other, which is the first time the arithmetic is visible. Settling it
   lands with the `The memory budgets add up` Story (`ambre-roadmap.md` E7).
 * **The table above names tokens the catalogue does not spell out.** The design started from seven
@@ -214,5 +210,12 @@ that sit over the canvas are DOM and are not painted here (`UI-THREAD-001`,
   highlight, a suggested insertion and a suggested deletion an opacity each, and a sentence can
   carry all three. `PROSE-UI-117` puts highlights over the glyphs and says nothing about which of
   them sits over which. Three overlapping marks have three orders and no rule between them.
+* **The shaped half of the runs is not bounded.** Each measured block keeps its run on the Logic
+  thread, about 150 KB a page. `PROSE-UI-019` bounds the drawing half only. The
+  `Shaped runs bounded to the view` Story (`ambre-roadmap.md` E7) holds the rest.
+* **A remote caret's label is a coloured tab, not a name.** Drawing the name would shape text on
+  the UI thread, which this spec rules out, and no row says who shapes it instead.
+* **A remote selection spanning blocks is indexed on the block of its focus.** The painter draws
+  its other blocks only when that block is also built.
 * **A page taller than the viewport at minimum zoom is not ruled.** The sheet is drawn whole and
   clipped by the viewport, and no rule says what a block overflowing its own page frame looks like.

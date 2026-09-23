@@ -17,6 +17,7 @@ use crate::doc;
 use crate::layout::geometry::PageBox;
 use crate::layout::measure::{EffectiveStyle, Measurer, TextMetrics};
 use crate::layout::place::{self, BlockLayout, FootnoteLayout, MeasuredBlock, NoteCall, Placement};
+use crate::layout::run::ShapedRun;
 use crate::note;
 
 /// The height of a horizontal rule, in pixels. One device pixel, per the
@@ -43,6 +44,9 @@ pub struct PageLayout {
     pub page_height_px: f32,
     pub content_width_px: f32,
     pub content_height_px: f32,
+    /// Where the content box starts on the sheet.
+    pub margin_left_px: f32,
+    pub margin_top_px: f32,
     pub page_count: u32,
     pub blocks: Vec<BlockLayout>,
     pub header_height_px: f32,
@@ -95,6 +99,13 @@ impl PageLayout {
         notes
     }
 
+    /// Where the body starts on a sheet, below the taller header. Every page
+    /// gets the same body, so every page starts it at the same height.
+    #[must_use]
+    pub fn body_top_px(&self) -> f32 {
+        self.margin_top_px + self.header_height_px.max(self.header_first_height_px)
+    }
+
     /// The height left for body content on a page, both bands deducted.
     #[must_use]
     pub fn body_height_px(&self) -> f32 {
@@ -142,6 +153,8 @@ pub(crate) struct NotePlan {
     calls: HashMap<TreeID, Vec<(u32, Uuid)>>,
     /// Each note's ordinal and shaped height.
     notes: HashMap<Uuid, (u32, f32)>,
+    /// Each note's text as it was shaped, its ordinal in front.
+    pub(crate) runs: HashMap<Uuid, ShapedRun>,
 }
 
 impl NotePlan {
@@ -174,17 +187,14 @@ impl NotePlan {
         let defaults = doc::read_defaults(document);
         let style = EffectiveStyle::from_parts(&defaults, &ParagraphStyle::default(), false);
         let width = style.text_width_px(content_width_px);
+        let mut runs = HashMap::with_capacity(key.len());
         let notes = key
             .iter()
             .map(|(id, ordinal, text)| {
                 let shown = format!("{ordinal} {text}");
-                (
-                    *id,
-                    (
-                        *ordinal,
-                        measurer.measure(&shown, &style, width).text_height_px,
-                    ),
-                )
+                let (metrics, run) = measurer.measure_run(&shown, &style, width);
+                runs.insert(*id, run);
+                (*id, (*ordinal, metrics.text_height_px))
             })
             .collect::<HashMap<_, _>>();
         let mut calls: HashMap<TreeID, Vec<(u32, Uuid)>> = HashMap::new();
@@ -199,7 +209,12 @@ impl NotePlan {
                     .push((anchor.offset, id));
             }
         }
-        Self { key, calls, notes }
+        Self {
+            key,
+            calls,
+            notes,
+            runs,
+        }
     }
 
     /// The calls of `block`, the line of each still to find.
@@ -220,13 +235,28 @@ impl NotePlan {
 }
 
 /// The four bands measured, and the settings they were measured under.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct BandHeights {
     pub(crate) bands: doc::Bands,
     header_px: f32,
     header_first_px: f32,
     footer_px: f32,
     footer_first_px: f32,
+    /// The text of each band shown, as it was shaped, for the view to draw.
+    pub(crate) runs: Vec<(TreeID, ShapedRun)>,
+}
+
+/// Two measurements are equal when they leave every page the same body. The
+/// runs are left out: a band edited to a text of the same height moves no
+/// block.
+impl PartialEq for BandHeights {
+    fn eq(&self, other: &Self) -> bool {
+        self.bands == other.bands
+            && self.header_px == other.header_px
+            && self.header_first_px == other.header_first_px
+            && self.footer_px == other.footer_px
+            && self.footer_first_px == other.footer_first_px
+    }
 }
 
 impl BandHeights {
@@ -237,17 +267,29 @@ impl BandHeights {
         content_width_px: f32,
     ) -> Self {
         let bands = doc::read_bands(document);
+        let mut runs = Vec::new();
         let mut height = |band: doc::Band, shown: bool| match band.block {
-            Some(id) if shown => measure_band(measurer, document, &id, content_width_px),
+            Some(id) if shown => {
+                let measured = measure_band(measurer, document, &id, content_width_px);
+                if let Some(run) = measured.run {
+                    runs.push((id, run));
+                }
+                measured.height_px
+            }
             _ => 0.0,
         };
         let first = bands.different_first_page;
+        let header_px = height(bands.header, bands.header_enabled);
+        let header_first_px = height(bands.header_first, bands.header_enabled && first);
+        let footer_px = height(bands.footer, bands.footer_enabled);
+        let footer_first_px = height(bands.footer_first, bands.footer_enabled && first);
         Self {
             bands,
-            header_px: height(bands.header, bands.header_enabled),
-            header_first_px: height(bands.header_first, bands.header_enabled && first),
-            footer_px: height(bands.footer, bands.footer_enabled),
-            footer_first_px: height(bands.footer_first, bands.footer_enabled && first),
+            header_px,
+            header_first_px,
+            footer_px,
+            footer_first_px,
+            runs,
         }
     }
 
@@ -283,6 +325,8 @@ pub(crate) fn layout_of(page_box: PageBox, placement: &Placement) -> PageLayout 
         page_height_px: page_box.page_height_px,
         content_width_px: page_box.content_width_px,
         content_height_px: page_box.content_height_px,
+        margin_left_px: page_box.margin_left_px,
+        margin_top_px: page_box.margin_top_px,
         page_count: placement.page_count,
         blocks: placement.blocks.clone(),
         header_height_px: 0.0,
@@ -297,17 +341,28 @@ pub(crate) fn layout_of(page_box: PageBox, placement: &Placement) -> PageLayout 
     }
 }
 
-/// The measured height of one band block against the content width, before
-/// the cap (`PROSE-016`).
+/// One band block measured against the content width, before the cap
+/// (`PROSE-016`).
 #[must_use]
 pub(crate) fn measure_band(
     measurer: &mut Measurer,
     document: &LoroDoc,
     id: &TreeID,
     content_width_px: f32,
-) -> f32 {
+) -> MeasuredBlock {
     let Some(tree) = doc::blocks_read(document) else {
-        return 0.0;
+        return MeasuredBlock {
+            block_id: *id,
+            block_type: BlockType::Paragraph,
+            height_px: 0.0,
+            space_before_px: 0.0,
+            space_after_px: 0.0,
+            keep_together: false,
+            keep_with_next: false,
+            metrics: None,
+            notes: Vec::new(),
+            run: None,
+        };
     };
     let defaults = doc::read_defaults(document);
     let (cached, toc_pages) = (HashMap::new(), HashMap::new());
@@ -320,7 +375,7 @@ pub(crate) fn measure_band(
         toc_pages: &toc_pages,
         notes: &NotePlan::default(),
     };
-    measure_one(measurer, &scope, id, BlockType::Paragraph).height_px
+    measure_one(measurer, &scope, id, BlockType::Paragraph)
 }
 
 /// Measure every block of the document, in flow order (`PROSE-077`).
@@ -422,6 +477,7 @@ fn measure_one(
     let style = EffectiveStyle::resolve(defaults, tree, id, bold);
     let text_width_px = style.text_width_px(content_width_px);
     let mut notes = Vec::new();
+    let mut run = None;
     let (height_px, metrics) = match block_type {
         // A signal, not a sized block.
         BlockType::PageBreak => (0.0, None),
@@ -445,7 +501,8 @@ fn measure_one(
             if text.is_empty() {
                 (0.0, None)
             } else {
-                let metrics = measurer.measure(&text, &style, text_width_px);
+                let (metrics, shaped) = measurer.measure_run(&text, &style, text_width_px);
+                run = Some(shaped);
                 (metrics.text_height_px, Some(metrics))
             }
         }
@@ -453,8 +510,9 @@ fn measure_one(
             let text = doc::get_block_text(document, id).to_string();
             let calls = scope.notes.calls_of(id);
             let offsets: Vec<u32> = calls.iter().map(|(offset, _)| *offset).collect();
-            let (metrics, lines) =
+            let (metrics, lines, shaped) =
                 measurer.measure_with_lines(&text, &style, text_width_px, &offsets);
+            run = Some(shaped);
             notes = calls
                 .iter()
                 .zip(lines)
@@ -473,6 +531,7 @@ fn measure_one(
         keep_with_next: style.keep_with_next,
         metrics,
         notes,
+        run,
     }
 }
 
