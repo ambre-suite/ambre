@@ -27,7 +27,7 @@
 | `prose-undo` | Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one item is in running text. | implemented | 3 |  |
 | `prose-comments` | A discussion attached to a passage of the text. | partial | 36 |  |
 | `prose-page-rendering` | What a page looks like on the canvas. | partial | 19 |  |
-| `prose-pagination` | A document becomes a sequence of measured pages. | partial | 47 |  |
+| `prose-pagination` | A document becomes a sequence of measured pages. | partial | 48 |  |
 | `prose-tables` | A grid of cells inside the document. | partial | 44 |  |
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 26 |  |
 | `prose-track-changes` | A reviewer edits without changing the document. | partial | 40 |  |
@@ -44,4 +44,4 @@
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 | `prose-toolbar` | Select a few words and a small bar appears above them. | design-only | 14 |  |
 
-**28 features: 10 implemented, 8 partial, 10 design-only. 622 contract rows, 2 loose.**
+**28 features: 10 implemented, 8 partial, 10 design-only. 623 contract rows, 2 loose.**

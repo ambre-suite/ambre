@@ -42,6 +42,7 @@ mod presence;
 mod suggestions;
 pub(crate) mod tables;
 mod text;
+mod touched;
 mod xrefs;
 
 /// The per-application half of `shape_of` and `canonical_dump`
@@ -136,6 +137,8 @@ pub struct ProseState {
     /// This peer's own operation counter when the last-modified stamp was
     /// last written. A stamp is owed only past it (`PROSE-FEAT-066`).
     stamped_counter: i32,
+    /// The blocks written to since the last layout, whoever wrote them.
+    touched: touched::Touched,
 }
 
 impl ProseState {
@@ -190,6 +193,8 @@ impl ProseState {
         undo.add_exclude_origin_prefix(bands::STAMP_ORIGIN);
         undo.add_exclude_origin_prefix(comments::COMMENT_ORIGIN);
         let stamped_counter = doc.oplog_vv().get(&peer).copied().unwrap_or(0);
+        // After the scaffolding: a document never laid out measures whole.
+        let touched = touched::Touched::watch(&doc);
         Some(Self {
             doc,
             undo,
@@ -207,6 +212,7 @@ impl ProseState {
             word_count: crate::events::WordCount::default(),
             find: None,
             stamped_counter,
+            touched,
         })
     }
 
@@ -214,12 +220,19 @@ impl ProseState {
     ///
     /// The one place a page number, a break position or a measured height
     /// comes from. Each is derived on every call, never read back from the
-    /// document (`PROSE-033`, `PROSE-064`). `dirty` names the blocks an
-    /// edit touched; an empty slice re-measures nothing (`PROSE-083`). The
+    /// document (`PROSE-033`, `PROSE-064`). Every block written to since the
+    /// last layout is re-measured, whoever wrote it (`PROSE-123`). `dirty`
+    /// adds to those, and a layout with nothing written re-measures nothing
+    /// (`PROSE-083`). The
     /// first call builds the paginator, since loading the faces costs more
     /// than a document that is never laid out should pay. The page count of
     /// the word count is stamped from the layout taken (`PROSE-FEAT-126`).
     pub fn paginate(&mut self, dirty: &[TreeID]) -> &PageLayout {
+        let mut dirty = dirty.to_vec();
+        // Loro hands over the events of an import at the next commit, so
+        // flush them first. A commit with nothing pending writes nothing.
+        self.doc.commit();
+        dirty.extend(self.touched.take(&self.doc));
         let faces = &self.faces;
         let paginator = self.paginator.get_or_insert_with(|| {
             let mut paginator = Paginator::new();
@@ -228,7 +241,7 @@ impl ProseState {
             }
             paginator
         });
-        let layout = paginator.reflow(&self.doc, dirty);
+        let layout = paginator.reflow(&self.doc, &dirty);
         self.word_count.pages = layout.page_count;
         layout
     }
@@ -663,6 +676,9 @@ impl ProseState {
         // edit would otherwise send the whole imported history back out
         // (`PROSE-056`).
         self.absorb_imported();
+        // A whole document arrived: the layout is dropped and the next call
+        // to [`paginate`](Self::paginate) recomputes it whole (`PROSE-082`).
+        self.paginator = None;
         // An imported document carries containers this build has not configured
         // yet: the mark registry and the tree's ordering are settings, not
         // content.
@@ -877,10 +893,8 @@ impl ProseState {
     /// under a fresh peer id. Swallowing those operations would make the next
     /// local delta depend on operations no other peer holds.
     fn absorb_imported(&mut self) {
-        // Bytes that arrive name no block, so nothing says which measurement
-        // they invalidated. The layout is dropped and the next call to
-        // [`paginate`](Self::paginate) recomputes it whole (`PROSE-082`).
-        self.paginator = None;
+        // The layout survives a delta: the document reports the blocks it
+        // wrote, and the next layout re-measures those alone.
         // A collaborator can bring a mark back, so no orphan is taken on trust.
         self.orphans.clear();
         let ours = self.last_exported_vv.get(&self.peer).copied();

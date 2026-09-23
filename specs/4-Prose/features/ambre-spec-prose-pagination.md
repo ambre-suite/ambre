@@ -73,6 +73,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-035` | `POST` | An edit that inserts or removes a footnote reference MUST force a full recomputation: the incremental path MUST NOT leave an ordinal or a page reservation stale. | this spec section 2 | `ambre_prose::layout::footnote_pages::a_call_added_or_removed_lays_out_what_a_full_recomputation_would` | none | verified |
 | `PROSE-082` | `POST` | A change to the page box, to either band, to a document default, or a whole-document import MUST force a full recomputation. | this spec section 2 | `ambre_prose::layout::reflow::tests::a_page_box_change_forces_a_full_recomputation`; `ambre_prose::layout::reflow::tests::a_document_default_change_forces_a_full_recomputation`; `ambre_prose::logic::tests::a_snapshot_import_lays_the_document_out_again` | none | verified |
 | `PROSE-083` | `FRAME` | A partial reflow MUST NOT re-shape a block whose text and whose resolved style are both unchanged. | this spec section 2 | `ambre_prose::layout::reflow::tests::a_reflow_does_not_shape_a_block_it_was_not_told_about` -- it counts the runs shaped, so a reflow that re-shaped an untouched block fails it | none | verified |
+| `PROSE-123` | `POST` | A layout taken after an edit MUST re-shape the blocks the edit wrote, whether the edit is local or arrived from another peer, and whoever named them. | this spec section 2 | `ambre_prose::view::tests::a_block_not_edited_hands_the_view_the_run_it_was_measured_into`; `ambre_prose::view::tests::an_edit_from_another_peer_reshapes_the_block_it_wrote` | none | verified |
 
 ### 1.4 Settle the table of contents
 
@@ -95,7 +96,7 @@ status values are normative in `ambre-spec-template.md`.
   the document at open. Shaping and placement are budgeted apart, and section 4 says why.
 * **Boundary.** none: pagination runs on the Logic thread, reads the document and returns a value.
   `PROSE-025` (`features/ambre-spec-prose-engine.md section 1`) bans a network call from this crate.
-* **Verification.** 46 `verified`, 1 `unimplemented`: `PROSE-112`, which waits on the first
+* **Verification.** 47 `verified`, 1 `unimplemented`: `PROSE-112`, which waits on the first
   output to carry a page number off the screen. The five footnote rows run through the engine, since a note is
   written by its command. Termination rests on `PROSE-078` and `PROSE-017`, which a property over generated
   documents holds together. Two bans are structural, held by a test that reads the module's own
@@ -368,19 +369,14 @@ everywhere (`features/ambre-spec-prose-page-rendering.md`).
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The layout carries geometry alone, and no shaped run.** `PageLayout` names the pages, the
-  fragments, the heights and where each note sits. It carries no `ParleyRunData`, no header or
-  footer run and no shaped note. The type those runs travel in is the renderer's
-  (`features/ambre-spec-prose-page-rendering.md section 2`), and nothing draws yet. The runs land
-  with the Story that reads them, and pass 3 with them.
 * **A table is measured on its text alone.** Cell padding, the two horizontal borders and a
   merged cell's rectangle are in the measurement table of section 2 and in no code. A table
   breaks at a row, which is the rule that matters for a page, but it is measured shorter than it
   draws.
-* **A remote change lays the whole document out again.** Bytes that arrive name no block, so
-  nothing says which measurement they invalidated, and the incremental path is given up rather
-  than fed a guess. A delta that touches one paragraph of a hundred pages is charged to the full
-  budget, and no row states the cost.
+* **A concurrent tree edit re-measures every block once.** A subscription on the document names
+  the blocks each commit and each import wrote (`PROSE-123`). While a peer holds a tree operation
+  the other has not seen, Loro rewinds the tree on each import and reports every node. The window
+  closes when both peers hold each other's operations; until then, a remote edit costs a full pass.
 * **Nothing says what the reader is told while a face is still coming.** Two peers agree once
   both hold the faces the document needs, and `missing_scripts` names what a measurement was
   short of (`PROSE-110`, `PROSE-111`). Nothing says whether the one still waiting sees that its

@@ -19,11 +19,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2544 rows: 2170 shipped, of which 774 loose. 374 unbuilt.**
+**2545 rows: 2171 shipped, of which 774 loose. 374 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 226 | 221 | 542 | 407 | 1396 |
+| `verified` | 226 | 221 | 542 | 408 | 1397 |
 | `failing` | 39 | 46 | 22 |  | 107 |
 | `untested` | 266 | 143 | 234 | 2 | 645 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
@@ -140,7 +140,7 @@
 | `ambre-spec-prose-inline-styles.md` | 25 | 25 | 24 | 1 |  |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
 | `ambre-spec-prose-page-rendering.md` | 19 | 17 | 17 |  | 2 |
-| `ambre-spec-prose-pagination.md` | 47 | 46 | 46 |  | 1 |
+| `ambre-spec-prose-pagination.md` | 48 | 47 | 47 |  | 1 |
 | `ambre-spec-prose-table-of-contents.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-prose-tables.md` | 44 | 43 | 43 |  | 1 |
 | `ambre-spec-prose-text-editing.md` | 26 | 8 | 8 |  | 18 |
@@ -197,7 +197,7 @@
 | `ambre-spec-prose-inline-styles.md` | PROSE-FEAT-007..008,020..025,173..184,287..288,290,298..299 |
 | `ambre-spec-prose-lists.md` | PROSE-005; PROSE-FEAT-002,026..028,136..146,278 |
 | `ambre-spec-prose-page-rendering.md` | PROSE-UI-006,014,016..020,113..122,172..173 |
-| `ambre-spec-prose-pagination.md` | PROSE-010..019,033..036,064..084,099..100,107..115,117 |
+| `ambre-spec-prose-pagination.md` | PROSE-010..019,033..036,064..084,099..100,107..115,117,123 |
 | `ambre-spec-prose-pdf-export.md` | PROSE-IO-029,031..033,035,037..039 |
 | `ambre-spec-prose-ruler.md` | PROSE-UI-063..065,075..076 |
 | `ambre-spec-prose-schema.md` | PROSE-002,007..008,027..032,085..097,102..103,118..122 |

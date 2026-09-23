@@ -346,13 +346,57 @@ pub(crate) mod tests {
             pos: 0,
             text: "more ".to_owned(),
         });
-        // The edit names its block, as the path that routes the layout will.
-        let edited = crate::events::tree_id(edited);
-        let _ = state.paginate(&[edited]);
+        // No caller names the block: the document reports what it was written.
         let second = state.shaped_layout();
+        let edited = crate::events::tree_id(edited);
         for (id, run) in &first.blocks {
             let same = second.blocks.get(id) == Some(run);
             assert_eq!(same, *id != edited, "block {id:?}");
+        }
+    }
+
+    #[test]
+    fn an_edit_from_another_peer_reshapes_the_block_it_wrote() {
+        let (mut alice, _) = laid_out(4, 30);
+        let mut bob = ProseState::with_peer(2).expect("a document is built");
+        bob.load_faces(&crate::layout::fonts::shipped_faces());
+        bob.import_snapshot(&alice.export_snapshot())
+            .expect("the seed imports");
+        let edited = *alice.root_blocks().last().expect("a block");
+        let type_one = |alice: &mut ProseState, bob: &mut ProseState, pos: u32| {
+            let delta = alice
+                .handle_command(ProseCommand::InsertText {
+                    block_id: edited,
+                    pos,
+                    text: "x".to_owned(),
+                })
+                .update
+                .expect("the edit exports");
+            bob.apply_remote(&delta);
+        };
+        // Each peer grew a paragraph on opening. Until Alice holds Bob's
+        // removal of his, every import rewinds the tree and names each block.
+        type_one(&mut alice, &mut bob, 1);
+        let back = bob
+            .handle_command(ProseCommand::InsertText {
+                block_id: edited,
+                pos: 0,
+                text: "y".to_owned(),
+            })
+            .update
+            .expect("the edit exports");
+        alice.apply_remote(&back);
+        type_one(&mut alice, &mut bob, 2);
+        let before = bob.shaped_layout();
+        type_one(&mut alice, &mut bob, 3);
+        let after = bob.shaped_layout();
+        let edited = crate::events::tree_id(edited);
+        let old = before.blocks[&edited].data().len();
+        assert_eq!(after.blocks[&edited].data().len(), old + 1);
+        for (id, run) in &before.blocks {
+            if *id != edited {
+                assert!(after.blocks.get(id) == Some(run), "block {id:?}");
+            }
         }
     }
 }
