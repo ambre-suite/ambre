@@ -14,7 +14,9 @@
 
 use loro::{LoroDoc, LoroMap, LoroText, LoroTree, LoroValue, TreeID, TreeParentId};
 
-use ambre_bus::app::prose::{Align, BlockType, LineHeight, LineHeightMode, ParagraphStyle};
+use ambre_bus::app::prose::{
+    Align, BlockType, LineHeight, LineHeightMode, ListStyle, OrderedStyle, ParagraphStyle,
+};
 
 // -----------------------------------------------------------------------------
 // Container names and keys (`ambre-spec-prose-schema.md section 3`)
@@ -61,6 +63,13 @@ pub(crate) const K_REGROWN: &str = "rg";
 pub(crate) const A_LEVEL: &str = "level";
 /// The code block's language. An empty value reads as plain.
 pub(crate) const A_LANG: &str = "lang";
+
+/// A list item's marker kind: 0 bullet, 1 ordered, 2 checkbox.
+pub(crate) const A_MARKER: &str = "ls";
+/// How an ordered item's ordinal is spelled, on an ordered item alone.
+pub(crate) const A_SPELLING: &str = "lo";
+/// Whether a checkbox item is ticked, on a checkbox item alone.
+pub(crate) const A_TICKED: &str = "tc";
 
 /// The nine paragraph-style keys, flat in the node map, one key per property
 /// (`PROSE-030`).
@@ -163,6 +172,46 @@ pub fn block_type_of(tree: &LoroTree, id: &TreeID) -> Option<BlockType> {
     let node = node_of(tree, id)?;
     let code = u8::try_from(read_i64(&node, K_TYPE)?).ok()?;
     BlockType::from_code(code)
+}
+
+/// The level a live heading carries, exactly as the document holds it.
+///
+/// Raw on purpose. An import is the only way a level outside one to six reaches
+/// a document, and it stays as it came (`PROSE-FEAT-091`). The clamp belongs to
+/// the numbering, which is the one reader that cannot work outside the range
+/// (`PROSE-FEAT-029`). `None` for a block that is not a live heading, or whose
+/// level is missing or unreadable.
+#[must_use]
+pub(crate) fn heading_level_of(tree: &LoroTree, id: &TreeID) -> Option<u8> {
+    if block_type_of(tree, id) != Some(BlockType::Heading) {
+        return None;
+    }
+    let attrs = map_read(&node_of(tree, id)?, K_ATTRS)?;
+    u8::try_from(read_i64(&attrs, A_LEVEL)?).ok()
+}
+
+/// The marker a live list item carries.
+///
+/// A block that is no live list item answers `None`. So does one whose marker
+/// is missing or unreadable.
+///
+/// A block this build reads no marker on breaks a numbering run, the way a
+/// paragraph does (`PROSE-FEAT-026`). An unknown marker is not a run to join.
+#[must_use]
+pub(crate) fn list_style_of(tree: &LoroTree, id: &TreeID) -> Option<ListStyle> {
+    if block_type_of(tree, id) != Some(BlockType::ListItem) {
+        return None;
+    }
+    let attrs = map_read(&node_of(tree, id)?, K_ATTRS)?;
+    match u8::try_from(read_i64(&attrs, A_MARKER)?).ok()? {
+        0 => Some(ListStyle::Bullet),
+        1 => {
+            let code = u8::try_from(read_i64(&attrs, A_SPELLING)?).ok()?;
+            OrderedStyle::from_code(code).map(ListStyle::Ordered)
+        }
+        2 => Some(ListStyle::Todo(read_bool(&attrs, A_TICKED)?)),
+        _ => None,
+    }
 }
 
 /// The style id a block carries, or `None` when it carries none. An absent key
@@ -340,6 +389,35 @@ pub(crate) fn write_paragraph_style(
         map.insert(LH_VALUE, f64::from(line_height.value))?;
     }
     Ok(())
+}
+
+/// The properties of `wanted` whose value is not the one already stored
+/// (`PROSE-FEAT-025`).
+///
+/// A property the command did not carry stays absent, and so does one whose
+/// value is already in the document. The command is coarse and the storage is
+/// per key, which is what lets two authors change two properties of one
+/// paragraph at once (`PROSE-FEAT-176`).
+#[must_use]
+pub(crate) fn changed_paragraph_style(
+    stored: &ParagraphStyle,
+    wanted: &ParagraphStyle,
+) -> ParagraphStyle {
+    /// A property survives the diff when it was asked for and differs.
+    fn kept<T: PartialEq + Copy>(stored: Option<T>, wanted: Option<T>) -> Option<T> {
+        wanted.filter(|value| stored != Some(*value))
+    }
+    ParagraphStyle {
+        align: kept(stored.align, wanted.align),
+        indent_first: kept(stored.indent_first, wanted.indent_first),
+        indent_left: kept(stored.indent_left, wanted.indent_left),
+        indent_right: kept(stored.indent_right, wanted.indent_right),
+        space_before: kept(stored.space_before, wanted.space_before),
+        space_after: kept(stored.space_after, wanted.space_after),
+        line_height: kept(stored.line_height, wanted.line_height),
+        keep_together: kept(stored.keep_together, wanted.keep_together),
+        keep_with_next: kept(stored.keep_with_next, wanted.keep_with_next),
+    }
 }
 
 /// The paragraph style a block carries. An absent key is an unset property, and

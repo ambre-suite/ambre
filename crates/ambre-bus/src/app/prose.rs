@@ -146,6 +146,49 @@ impl BlockType {
     }
 }
 
+/// How a list item is marked (`features/ambre-spec-prose-lists.md section 3`).
+///
+/// There is no list container: nesting is the block tree's own parent chain,
+/// and the style is an attribute of the item. Two neighbours of different
+/// styles are two runs, which is what breaks a numbering run
+/// (`PROSE-FEAT-026`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ListStyle {
+    Bullet,
+    Ordered(OrderedStyle),
+    /// The checkbox, and whether it is ticked.
+    Todo(bool),
+}
+
+/// How an ordered item's ordinal is spelled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrderedStyle {
+    Decimal = 0,
+    LowerAlpha = 1,
+    UpperAlpha = 2,
+    LowerRoman = 3,
+    UpperRoman = 4,
+}
+
+impl OrderedStyle {
+    #[must_use]
+    pub fn code(self) -> u8 {
+        self as u8
+    }
+
+    #[must_use]
+    pub fn from_code(code: u8) -> Option<Self> {
+        Some(match code {
+            0 => Self::Decimal,
+            1 => Self::LowerAlpha,
+            2 => Self::UpperAlpha,
+            3 => Self::LowerRoman,
+            4 => Self::UpperRoman,
+            _ => return None,
+        })
+    }
+}
+
 /// The typed initializer of `InsertBlock`.
 ///
 /// Each variant carries exactly the creation attributes of its block type. The
@@ -158,6 +201,11 @@ pub enum BlockInit {
     /// The level is mandatory at creation, and the handler clamps it to 1..=6.
     Heading {
         level: u8,
+    },
+    /// The style is mandatory at creation, the way a heading's level is: an
+    /// item minted without one would need a default and a follow-up command.
+    ListItem {
+        style: ListStyle,
     },
     /// An empty language reads as plain.
     CodeBlock {
@@ -174,6 +222,7 @@ impl BlockInit {
         match self {
             Self::Paragraph => BlockType::Paragraph,
             Self::Heading { .. } => BlockType::Heading,
+            Self::ListItem { .. } => BlockType::ListItem,
             Self::CodeBlock { .. } => BlockType::CodeBlock,
             Self::HRule => BlockType::HRule,
             Self::PageBreak => BlockType::PageBreak,
@@ -409,13 +458,36 @@ pub enum ProseCommand {
         style_id: String,
     },
     /// `features/ambre-spec-prose-headings.md`; the level is clamped to 1..=6.
+    /// `None` takes the level away, and the block becomes a paragraph
+    /// (`PROSE-FEAT-092`). One command for the two directions of one control:
+    /// the style picker offers the six levels and the paragraph beside them.
     SetHeadingLevel {
         block_id: BlockId,
-        level: u8,
+        level: Option<u8>,
     },
     SetCodeLang {
         block_id: BlockId,
         lang: String,
+    },
+
+    // -- Lists (`features/ambre-spec-prose-lists.md`) --
+    /// Change an item's marker, which may break one numbering run into two
+    /// (`PROSE-FEAT-140`, `PROSE-FEAT-278`).
+    SetListStyle {
+        block_id: BlockId,
+        style: ListStyle,
+    },
+    /// Reparent the item under its previous neighbour. The first item of a run
+    /// has none, and the command is refused rather than ignored
+    /// (`PROSE-FEAT-028`).
+    IndentList {
+        block_id: BlockId,
+    },
+    /// Reparent the item under its grandparent, after its former parent's
+    /// subtree. A top-level item leaves the list and becomes a paragraph
+    /// (`PROSE-FEAT-027`).
+    UnindentList {
+        block_id: BlockId,
     },
     /// The command is coarse and the storage is per property: the handler
     /// writes only what the caller named (`PROSE-030`, `PROSE-092`).
@@ -468,6 +540,9 @@ impl ProseCommand {
             Self::MoveBlock { .. } => "moving the block",
             Self::SetBlockStyle { .. } => "setting the block style",
             Self::SetHeadingLevel { .. } => "setting the heading level",
+            Self::SetListStyle { .. } => "setting the list style",
+            Self::IndentList { .. } => "indenting a list item",
+            Self::UnindentList { .. } => "outdenting a list item",
             Self::SetCodeLang { .. } => "setting the code language",
             Self::SetParagraphStyle { .. } => "setting the paragraph style",
             Self::UpdateCursor { .. } => "moving the cursor",

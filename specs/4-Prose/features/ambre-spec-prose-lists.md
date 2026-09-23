@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: LISTS
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** implemented
 
 > Bulleted, numbered and checkbox lists, nested to any depth. The numbers are computed when the
 > page is drawn, so two authors adding items at once never see them fight over an ordinal.
@@ -17,69 +17,69 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-005` | `INV` | A list item's depth MUST be derived from its ancestors; it MUST NOT be stored in the document. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-002` | `INV` | List ordinals MUST be derived when the list is read; they MUST NOT be stored in the document. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-026` | `OBS` | The ordinal drawn on an ordered item MUST count only the unbroken run of neighbouring items that share one parent and one numbering style. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-136` | `OBS` | A run that resumes after an interruption MUST be drawn starting at one. | this spec section 5 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-137` | `CONC` | Two peers whose block trees have converged MUST draw the same ordinal on every item of a list. | this spec section 5 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-005` | `INV` | A list item's depth MUST be derived from its ancestors; it MUST NOT be stored in the document. | this spec section 3; `ambre-spec-prose-schema.md section 3` | `ambre_prose::numbering::tests::a_nested_run_is_numbered_and_measured_on_its_own_level` -- the depth is read from the parent chain; structural -- no key of `ambre-spec-prose-schema.md section 3` names a depth, and the freeze `crates/ambre-prose/schema/shapes.txt` carries none | none | verified |
+| `PROSE-FEAT-002` | `INV` | List ordinals MUST be derived when the list is read; they MUST NOT be stored in the document. | this spec section 3 | `ambre_prose::numbering::tests::reading_the_ordinals_leaves_the_document_untouched`; structural -- no key of `ambre-spec-prose-schema.md section 3` names an ordinal, and the freeze `crates/ambre-prose/schema/shapes.txt` carries none | none | verified |
+| `PROSE-FEAT-026` | `OBS` | The ordinal drawn on an ordered item MUST count only the unbroken run of neighbouring items that share one parent and one numbering style. | this spec section 3 | `ambre_prose::numbering::tests::an_ordinal_counts_the_unbroken_run_of_one_style` | none | verified |
+| `PROSE-FEAT-136` | `OBS` | A run that resumes after an interruption MUST be drawn starting at one. | this spec section 5 | `ambre_prose::numbering::tests::a_run_that_resumes_after_an_interruption_starts_at_one` | none | verified |
+| `PROSE-FEAT-137` | `CONC` | Two peers whose block trees have converged MUST draw the same ordinal on every item of a list. | this spec section 5 | `ambre_prose::logic::convergence_tests::two_peers_appending_to_one_list_draw_the_same_ordinals` | none | verified |
 
 ### 1.2 Add an item
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-138` | `POST` | The new item MUST be a child of the given parent, placed after the given sibling, and carry the requested style. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-139` | `FRAME` | Adding an item MUST NOT write to any other block: no ordinal, no depth and no text is written on the items that follow it. | derived | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-138` | `POST` | The new item MUST be a child of the given parent, placed after the given sibling, and carry the requested style. | this spec section 3 | `ambre_prose::logic::lists::tests::a_new_item_takes_its_place_and_its_style_and_writes_nothing_else` | none | verified |
+| `PROSE-FEAT-139` | `FRAME` | Adding an item MUST NOT write to any other block: no ordinal, no depth and no text is written on the items that follow it. | derived | `ambre_prose::logic::lists::tests::a_new_item_takes_its_place_and_its_style_and_writes_nothing_else` -- every other block is as it was; `ambre_prose::numbering::tests::an_inserted_item_renumbers_the_ones_after_it` -- the numbers that follow move with no write | none | verified |
 
 ### 1.3 Change an item's style
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-140` | `POST` | The item MUST carry the requested style. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-278` | `POST` | A checkbox item MUST carry the requested ticked state. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-141` | `FRAME` | Changing a style MUST NOT touch the item's text, its place in the block tree, or the style of any other item. | derived | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-140` | `POST` | The item MUST carry the requested style. | this spec section 3 | `ambre_prose::logic::lists::tests::a_style_change_reaches_the_marker_alone` | none | verified |
+| `PROSE-FEAT-278` | `POST` | A checkbox item MUST carry the requested ticked state. | this spec section 3 | `ambre_prose::logic::lists::tests::a_style_change_reaches_the_marker_alone` -- the ticked state is written and read back both ways | none | verified |
+| `PROSE-FEAT-141` | `FRAME` | Changing a style MUST NOT touch the item's text, its place in the block tree, or the style of any other item. | derived | `ambre_prose::logic::lists::tests::a_style_change_reaches_the_marker_alone` | none | verified |
 
 ### 1.4 Indent an item
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-142` | `POST` | The indented item MUST become a child of the item that preceded it. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-143` | `POST` | The item's descendants MUST follow it in the same operation, keeping their order and their parent chain below it. | this spec section 5 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-028` | `FAIL` | Indenting the first item of a run MUST be refused and reported; it MUST NOT be applied. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-144` | `FRAME` | Indenting an item MUST NOT touch its text or its style. | derived | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-142` | `POST` | The indented item MUST become a child of the item that preceded it. | this spec section 3 | `ambre_prose::logic::lists::tests::an_indented_item_carries_its_subtree_under_its_neighbour` | none | verified |
+| `PROSE-FEAT-143` | `POST` | The item's descendants MUST follow it in the same operation, keeping their order and their parent chain below it. | this spec section 5 | `ambre_prose::logic::lists::tests::an_indented_item_carries_its_subtree_under_its_neighbour` -- the child keeps the parent that moved | none | verified |
+| `PROSE-FEAT-028` | `FAIL` | Indenting the first item of a run MUST be refused and reported; it MUST NOT be applied. | this spec section 3 | `ambre_prose::logic::lists::tests::indenting_the_first_item_of_a_run_is_refused` | none | verified |
+| `PROSE-FEAT-144` | `FRAME` | Indenting an item MUST NOT touch its text or its style. | derived | `ambre_prose::logic::lists::tests::an_indented_item_carries_its_subtree_under_its_neighbour` | none | verified |
 
 ### 1.5 Outdent an item
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-027` | `POST` | Outdenting a top-level item MUST turn it into an ordinary paragraph; it MUST NOT leave it a list item. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-145` | `POST` | Outdenting a nested item MUST make it a child of its grandparent, placed after the subtree of its former parent. | this spec section 3 | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-146` | `FRAME` | Outdenting an item MUST NOT touch its text, nor the style of any item it leaves behind. | derived | not built | unbuilt -- lands with the "Styles, lists and headings" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-027` | `POST` | Outdenting a top-level item MUST turn it into an ordinary paragraph; it MUST NOT leave it a list item. | this spec section 3 | `ambre_prose::logic::lists::tests::outdenting_a_top_level_item_leaves_the_list` | none | verified |
+| `PROSE-FEAT-145` | `POST` | Outdenting a nested item MUST make it a child of its grandparent, placed after the subtree of its former parent. | this spec section 3 | `ambre_prose::logic::lists::tests::an_outdented_item_rises_after_the_subtree_it_leaves` | none | verified |
+| `PROSE-FEAT-146` | `FRAME` | Outdenting an item MUST NOT touch its text, nor the style of any item it leaves behind. | derived | `ambre_prose::logic::lists::tests::an_outdented_item_rises_after_the_subtree_it_leaves`; `ambre_prose::logic::lists::tests::outdenting_a_top_level_item_leaves_the_list` -- the item left behind keeps its marker | none | verified |
 
 * **Budget.** the ordinal and the section numbering, one row of
   `ambre-spec-budgets.md section 1`. Both are read-time walks over the block tree, and
   pagination pays for them once per layout.
 * **Boundary.** none of its own: a list item is a block like any other, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 17 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`.
-  `PROSE-005` and `PROSE-FEAT-002` are the two a reviewer can hold without a test. A stored depth
-  or a stored ordinal is a key in the schema table, and the schema table has neither.
-  `PROSE-FEAT-137` is the one that needs two peers, and it is the row the four commands are
-  designed to earn. It fails the moment any of them writes a number.
+* **Verification.** 17 `verified`, nothing else. The two `INV` rows are held twice over: a test
+  reads the depth and the ordinal from the tree, and the schema freeze names neither. Every other
+  row is one gesture against one document. `PROSE-FEAT-137` is the row the four commands were
+  designed to earn, and it is held by two peers appending at once. It fails the moment any command
+  writes a number.
 
 ---
 
 ## 2. WHAT EACH USER SEES
 
-Two peers in one list. No test resolves yet: the last column names the row each row rests on.
+Two peers in one list. The last column names the test each row rests on.
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| adds an item at the end | adds an item at the end at the same moment | both items, in the order the tree converged on | the same two items, numbered one after the other | none -- `PROSE-FEAT-137` |
-| inserts an item in the middle | -- | one more child, no number anywhere | every following item renumbered, on both screens | none -- `PROSE-FEAT-139` |
-| indents item three | indents item three at the same moment | one move, applied once | one nesting level deeper, and the same depth on both screens | none -- `PROSE-005` |
-| indents item four | outdents item four | one of the two moves | the item at one depth, the same for both | none -- `PROSE-005` |
-| outdents a top-level item | -- | a paragraph where the item was | the bullet gone, the text kept | none -- `PROSE-FEAT-027` |
-| turns item two into a bullet in a numbered list | -- | the item, with its style changed | two runs of numbers, the second restarting at one | none -- `PROSE-FEAT-136` |
+| adds an item at the end | adds an item at the end at the same moment | both items, in the order the tree converged on | the same two items, numbered one after the other | `ambre_prose::logic::convergence_tests::two_peers_appending_to_one_list_draw_the_same_ordinals` |
+| inserts an item in the middle | -- | one more child, no number anywhere | every following item renumbered, on both screens `ambre_prose::numbering::tests::an_inserted_item_renumbers_the_ones_after_it` |
+| indents item three | indents item three at the same moment | one move, applied once | one nesting level deeper, and the same depth on both screens | none -- `PROSE-005` holds where the depth is read from, not what two moves settle on: section 6 |
+| indents item four | outdents item four | one of the two moves | the item at one depth, the same for both | none -- as above: section 6 |
+| outdents a top-level item | -- | a paragraph where the item was | the bullet gone, the text kept `ambre_prose::logic::lists::tests::outdenting_a_top_level_item_leaves_the_list` |
+| turns item two into a bullet in a numbered list | -- | the item, with its style changed | two runs of numbers, the second restarting at one `ambre_prose::numbering::tests::a_run_that_resumes_after_an_interruption_starts_at_one` |
 
 ---
 
@@ -110,18 +110,24 @@ interrupted and resumes starts again at one (`PROSE-FEAT-026`).
 
 ```rust
 /// The one-based ordinal of an ordered item within its run (`PROSE-FEAT-002`).
-pub fn compute_ordinal(tree: &LoroMovableTree, item_id: &TreeID) -> u32;
+pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> u32;
+
+/// How deep an item sits in its list, counting the items above it in the parent chain
+/// (`PROSE-005`). A top-level item is at depth zero.
+pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> u32;
 
 /// The numbering style of a block, when it is an ordered item. A bullet, a checkbox and a
 /// block that is not a list item all answer `None`, and each of those breaks a run.
-fn ordered_style_of(tree: &LoroMovableTree, id: &TreeID) -> Option<OrderedStyle>;
+fn ordered_style_of(tree: &LoroTree, id: &TreeID) -> Option<OrderedStyle>;
 ```
 
-**The four commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`):
+**The commands** (`ambre-bus`, declared in `features/ambre-spec-prose-engine.md section 3`). An
+item is created by the one insertion command every block type goes through, carrying the
+initializer its type needs. Three commands of its own follow:
 
 | Shape | Behaviour |
 |---|---|
-| `InsertListItem { parent_id, after_id, style }` | a new item, at a place in the tree |
+| `InsertBlock { parent_id, after_id, init: ListItem { style } }` | a new item, at a place in the tree |
 | `SetListStyle { block_id, style }` | changes the style, which may break a run in two |
 | `IndentList { block_id }` | reparents the item under its previous neighbour |
 | `UnindentList { block_id }` | reparents the item under its grandparent, after its former parent's subtree |
@@ -132,7 +138,9 @@ become its parent. The command is refused and reported rather than silently igno
 ordinary paragraph and loses its style (`PROSE-FEAT-027`). That is the gesture by which a user
 leaves a list from the keyboard.
 
-**Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
+**Code:** `crates/ambre-prose/src/logic/lists.rs` for the three gestures, and
+`crates/ambre-prose/src/numbering.rs` for the ordinal and the depth, beside the section numbering
+that reads the same tree.
 
 ---
 
@@ -170,9 +178,9 @@ see section 6.
 
 * **A refusal travels, and nothing shows it.** `PROSE-FEAT-028` requires the refusal to be
   reported. The engine names the command and the reason
-  (`features/ambre-spec-prose-engine.md section 3`), and no list command exists to be refused yet.
-  Nor does a view that would show one. It lands with the `Styles, lists and headings`
-  Story (`ambre-roadmap.md` E5).
+  (`features/ambre-spec-prose-engine.md section 3`), and the refusal now travels. No view shows
+  one: the chrome that answers a refused keystroke lands with its own Story
+  (`ambre-roadmap.md` E5).
 * **Nothing rules on Enter in an empty item.** Every editor of this kind ends a list that way. No
   rule here says whether it outdents, leaves the list, or adds another empty item.
 * **Continuing a previous numbering has no design.** It is named as a future per-item override and

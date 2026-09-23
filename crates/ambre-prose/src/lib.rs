@@ -7,6 +7,8 @@
 //!
 //! * [`doc`] -- the persisted containers, their keys, and the reads the engine
 //!   reaches them through (`ambre-spec-prose-schema.md`).
+//! * [`numbering`] -- the number in front of a heading, read from the document
+//!   order and stored nowhere (`features/ambre-spec-prose-headings.md`).
 //! * [`mark`] -- the inline mark registry: the expansion policy and the
 //!   canonical value.
 //! * [`schema`] -- the persisted version register and the migration registry.
@@ -30,7 +32,9 @@ pub mod events;
 pub mod layout;
 pub mod logic;
 pub mod mark;
+pub mod numbering;
 pub mod schema;
+pub mod style;
 pub mod ui;
 
 pub use events::{ProseCommand, ProseEvent, ProseOutcome};

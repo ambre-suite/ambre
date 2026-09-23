@@ -336,14 +336,14 @@ pub enum ProseCommand {
     MoveBlock     { block_id: TreeID, new_parent: Option<TreeID>, after_id: Option<TreeID> },
     SetBlockStyle { block_id: TreeID, style_id: String },
     /// `features/ambre-spec-prose-headings.md`; the level is clamped to 1..=6.
-    SetHeadingLevel { block_id: TreeID, level: u8 },
+    SetHeadingLevel { block_id: TreeID, level: Option<u8> },
     SetCodeLang     { block_id: TreeID, lang: String },
     /// The command is coarse and the storage is per property: the handler writes only what
     /// changed (`PROSE-FEAT-025`, `features/ambre-spec-prose-inline-styles.md`).
     SetParagraphStyle { block_id: TreeID, style: ParagraphStyle },
 
-    // -- Lists (`features/ambre-spec-prose-lists.md`) --
-    InsertListItem { parent_id: Option<TreeID>, after_id: Option<TreeID>, style: ListStyle },
+    // -- Lists (`features/ambre-spec-prose-lists.md`). An item is created by `InsertBlock`
+    // carrying `BlockInit::ListItem`, like every other block type. --
     SetListStyle   { block_id: TreeID, style: ListStyle },
     IndentList     { block_id: TreeID },
     UnindentList   { block_id: TreeID },
@@ -468,6 +468,8 @@ pub enum BlockInit {
     Heading   { level: u8 },
     /// An empty language reads as plain.
     CodeBlock { lang: String },
+    /// The marker is mandatory at creation (`features/ambre-spec-prose-lists.md`).
+    ListItem  { style: ListStyle },
     HRule,
     PageBreak,
 }

@@ -55,6 +55,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-038` | `POST` | The new paragraph MUST carry the source's type and paragraph style. | this spec section 3 | `ambre_prose::logic::text::tests::the_new_paragraph_carries_the_sources_type_and_style` | none | verified |
 | `PROSE-UI-141` | `POST` | The caret MUST be left at the start of the new paragraph. | this spec section 3 | `ambre_prose::ui::tests::a_split_leaves_the_caret_at_the_start_of_the_new_paragraph` | none | verified |
+| `PROSE-116` | `POST` | A mark covering the point the paragraph parts MUST cover, on each half, exactly the characters it covered before. | this spec section 3 | `ambre_prose::logic::text::tests::a_mark_across_the_cut_reaches_both_halves` | none | verified |
 | `PROSE-042` | `FRAME` | The split MUST NOT change the text the two paragraphs carry between them, marks included, or the identity of the source paragraph. | this spec section 3 | `ambre_prose::logic::text::tests::a_split_leaves_the_text_the_two_paragraphs_carry_between_them`; `::a_split_carries_the_marks_of_the_text_it_moves`; `ambre_prose::logic::convergence_tests::a_split_and_a_concurrent_insertion_both_survive` | none | verified |
 
 ### 1.6 Compose with an input method
@@ -83,7 +84,7 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path.
-* **Verification.** 7 `verified`, 18 `unimplemented`. The join and the split are built; the draft's
+* **Verification.** 8 `verified`, and 18 `unimplemented`. The join and the split are built; the draft's
   state machine is not. `PROSE-101` reads two tests, because the paragraph the caret started in is
   the one a deletion does not remove.
 
@@ -246,11 +247,6 @@ toolbar and the slash command.
   (`features/ambre-spec-prose-page-rendering.md section 2`), and a caret advances by grapheme
   cluster. Both conversions belong to the view, and neither has code: they land with the
   `Input and cursor` Story (`ambre-roadmap.md` E5).
-* **Nothing rules on what a split does to a mark it cuts.** `PROSE-038` carries the type and the
-  paragraph style to the new paragraph, and `PROSE-042` holds the text. Neither says what becomes of
-  an inline mark, a comment or a footnote anchored across the point the paragraph parts. The engine
-  carries the text and leaves the marks on the source, and no row states that. It lands with the
-  `Styles, lists and headings` Story (`ambre-roadmap.md` E5).
 * **Nothing rules on how many pending characters a draft may hold.** A slow or blocked Logic
   thread grows the string without bound, and no rule caps it or says what happens when the
   confirmation never comes.
@@ -258,10 +254,6 @@ toolbar and the slash command.
   no rule says what the draft does when the confirmation that arrives contradicts what was typed.
   `PROSE-UI-005` rules on the confirming event alone, and section 1.7 has no `FAIL` row because
   no event reports a refusal.
-* **Nothing rules on what a split does to a mark it cuts.** `PROSE-038` carries the type and the
-  paragraph style to the new paragraph. It says nothing of an inline mark, a comment or a
-  footnote anchored across the point the paragraph parts. `PROSE-042` holds the text and leaves
-  the marks over it unruled.
 * **A protected range is designed and unbuilt, and its limit is the design.** The deferred design
   marks a range with the peers allowed to write it and has the dispatcher refuse a mutation from
   anyone else. The mark key is in no registry (`ambre-spec-prose-schema.md section 3`), and the

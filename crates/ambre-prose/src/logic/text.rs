@@ -562,6 +562,42 @@ mod tests {
         assert!(rendered.contains("\"b\""), "{rendered}");
     }
 
+    /// A mark that covered the point the paragraph parts covers, on each half,
+    /// exactly the characters it covered before (`PROSE-116`).
+    ///
+    /// An anchor is held beside a formatting mark. A comment spanning the cut
+    /// must reach both halves, or the range it was written over is lost.
+    #[test]
+    fn a_mark_across_the_cut_reaches_both_halves() {
+        let (mut state, ids) = document_of(&["hello world"]);
+        for key in ["b", "cm"] {
+            state.handle_command(ProseCommand::ApplyMark {
+                block_id: ids[0],
+                range: (0, 11),
+                key: key.to_owned(),
+                value: (key == "cm").then(|| "a-comment-id".to_owned()),
+            });
+        }
+        let outcome = state.handle_command(ProseCommand::SplitBlock {
+            block_id: ids[0],
+            pos: 5,
+        });
+        let new_block = outcome
+            .display
+            .iter()
+            .find_map(|e| match e {
+                crate::events::ProseEvent::BlockSplit { new_block, .. } => Some(*new_block),
+                _ => None,
+            })
+            .expect("the split names the new block");
+        for key in ["\"b\"", "\"cm\""] {
+            for block in [ids[0], new_block] {
+                let rendered = format!("{:?}", state.marks_of(&block));
+                assert!(rendered.contains(key), "{key} in {rendered}");
+            }
+        }
+    }
+
     /// The deletion joined the two halves, and the marks the tail carried are
     /// part of the text the head must end up holding.
     #[test]

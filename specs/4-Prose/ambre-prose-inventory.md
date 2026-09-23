@@ -16,9 +16,12 @@
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
 | `prose-engine` | An author types a word and every collaborator reads it. | implemented | 42 |  |
+| `prose-headings` | Six levels of section title. | implemented | 8 | 1 |
+| `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | implemented | 23 | 1 |
+| `prose-lists` | Bulleted, numbered and checkbox lists, nested to any depth. | implemented | 17 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | partial | 46 |  |
 | `prose-tables` | A grid of cells inside the document. | partial | 42 |  |
-| `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 25 |  |
+| `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 26 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 | `prose-clipboard` | Copy, cut and paste. | design-only | 14 |  |
 | `prose-comments` | A discussion attached to a passage of the text. | design-only | 33 |  |
@@ -26,11 +29,8 @@
 | `prose-find-replace` | Searching the document, walking the matches, and replacing one or all of them. | design-only | 15 |  |
 | `prose-footnotes` | A note at the foot of the page, called from a mark in the text. | design-only | 12 |  |
 | `prose-headers-footers` | A band at the top of every page and a band at the bottom, each holding ordinary text. | design-only | 27 |  |
-| `prose-headings` | Six levels of section title. | design-only | 8 |  |
 | `prose-images` | A picture in the document. | design-only | 38 |  |
 | `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | design-only | 47 |  |
-| `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | design-only | 23 |  |
-| `prose-lists` | Bulleted, numbered and checkbox lists, nested to any depth. | design-only | 17 |  |
 | `prose-page-rendering` | What a page looks like on the canvas. | design-only | 19 |  |
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | design-only | 8 |  |
 | `prose-ruler` | A horizontal scale above the page, carrying three handles. | design-only | 5 |  |
@@ -44,4 +44,4 @@
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | design-only | 17 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | design-only | 13 |  |
 
-**28 features: 1 implemented, 3 partial, 24 design-only. 607 contract rows, 0 loose.**
+**28 features: 4 implemented, 3 partial, 21 design-only. 608 contract rows, 2 loose.**

@@ -173,6 +173,11 @@ impl ProseState {
                 attrs(doc::A_LEVEL, i64::from(clamp_level(*level)).into())
             }
             BlockInit::CodeBlock { lang } => attrs(doc::A_LANG, lang.as_str().into()),
+            BlockInit::ListItem { style } => {
+                let map = doc::map_at(&node, doc::K_ATTRS)
+                    .ok_or_else(|| "the attribute map refused a container".to_owned())?;
+                Self::write_list_style(&map, *style)
+            }
             // The three remaining types carry no attribute, so they carry no
             // attribute map either (`PROSE-096`).
             BlockInit::Paragraph | BlockInit::HRule | BlockInit::PageBreak => Ok(()),
@@ -286,13 +291,61 @@ impl ProseState {
         self.commit_with(Vec::new())
     }
 
-    /// Set a heading's level, clamped to the six the format declares.
-    pub(super) fn set_heading_level(&mut self, id: &TreeID, level: u8) -> ProseOutcome {
-        if doc::block_type_of(&doc::blocks(&self.doc), id) != Some(BlockType::Heading) {
+    /// Set a heading's level, or take it away and leave a paragraph
+    /// (`PROSE-FEAT-092`).
+    ///
+    /// The level is clamped to the six the format declares, so no command
+    /// writes one outside them (`PROSE-FEAT-094`). An import is the other way
+    /// in, and what it carries is left as it came (`PROSE-FEAT-091`). A
+    /// paragraph and a heading are the two sides of this gesture. Any other
+    /// block type is refused, as a code language on a paragraph is.
+    pub(super) fn set_heading_level(&mut self, id: &TreeID, level: Option<u8>) -> ProseOutcome {
+        let tree = doc::blocks(&self.doc);
+        let was = doc::block_type_of(&tree, id);
+        if !matches!(was, Some(BlockType::Heading | BlockType::Paragraph)) {
             return Self::err_no_block(id);
         }
-        let level = clamp_level(level);
-        self.write_attr(id, doc::A_LEVEL, i64::from(level).into())
+        let Some(level) = level else {
+            return self.unmake_heading(id);
+        };
+        if was == Some(BlockType::Paragraph) {
+            let parent = match tree.parent(*id) {
+                Some(TreeParentId::Node(parent)) => Some(parent),
+                Some(TreeParentId::Root) => None,
+                _ => return Self::err_no_block(id),
+            };
+            if !doc::nesting_allows(&tree, parent, BlockType::Heading) {
+                return Self::err_nesting();
+            }
+            if let Some(node) = doc::node_of(&tree, id)
+                && let Err(e) = node.insert(doc::K_TYPE, i64::from(BlockType::Heading.code()))
+            {
+                return Self::err_write(&format!("{e:?}"));
+            }
+        }
+        self.write_attr(id, doc::A_LEVEL, i64::from(clamp_level(level)).into())
+    }
+
+    /// Turn a heading back into a paragraph, keeping its text and its place.
+    ///
+    /// The level attribute goes with the type. A paragraph carries no `a` map
+    /// at all, and absence is the value (`PROSE-096`). A block that is already
+    /// a paragraph is left as it is.
+    fn unmake_heading(&mut self, id: &TreeID) -> ProseOutcome {
+        let tree = doc::blocks(&self.doc);
+        let Some(node) = doc::node_of(&tree, id) else {
+            return Self::err_no_block(id);
+        };
+        if doc::block_type_of(&tree, id) == Some(BlockType::Paragraph) {
+            return self.commit_with(Vec::new());
+        }
+        if let Err(e) = node.insert(doc::K_TYPE, i64::from(BlockType::Paragraph.code())) {
+            return Self::err_write(&format!("{e:?}"));
+        }
+        if let Err(e) = node.delete(doc::K_ATTRS) {
+            return Self::err_write(&format!("{e:?}"));
+        }
+        self.commit_with(Vec::new())
     }
 
     /// Set a code block's language. An empty value reads as plain.
@@ -331,10 +384,14 @@ impl ProseState {
         let Some(node) = doc::node_of(&tree, id) else {
             return Self::err_no_block(id);
         };
-        if style.is_empty() {
+        // Only the properties whose value differs are written, so a write that
+        // changes nothing exports no delta (`PROSE-FEAT-025`, `PROSE-047`).
+        let stored = doc::read_paragraph_style(&tree, id);
+        let changed = doc::changed_paragraph_style(&stored, style);
+        if changed.is_empty() {
             return ProseOutcome::nothing();
         }
-        if let Err(e) = doc::write_paragraph_style(&node, style) {
+        if let Err(e) = doc::write_paragraph_style(&node, &changed) {
             return Self::err_write(&format!("{e:?}"));
         }
         self.commit_with(Vec::new())
@@ -387,6 +444,16 @@ impl ProseState {
         }
     }
 
+    /// The live children of a block, in document order, for a test and for the
+    /// view's own reads.
+    #[must_use]
+    pub fn child_blocks(&self, parent: &BlockId) -> Vec<BlockId> {
+        doc::children_of(&doc::blocks(&self.doc), Some(tree_id(*parent)))
+            .into_iter()
+            .map(crate::events::block_id)
+            .collect()
+    }
+
     /// Whether every live parentage is one section 4 declares (`PROSE-095`).
     ///
     /// A read, not a guard: the guard is the check each write already made.
@@ -411,7 +478,7 @@ impl ProseState {
 
 #[cfg(test)]
 mod tests {
-    use crate::events::{BlockInit, ProseCommand};
+    use crate::events::{BlockInit, BlockType, ProseCommand};
     use crate::logic::ProseState;
 
     #[test]
@@ -538,9 +605,95 @@ mod tests {
         assert_eq!(state.heading_level_of(&heading), Some(6));
         state.handle_command(ProseCommand::SetHeadingLevel {
             block_id: heading,
-            level: 0,
+            level: Some(0),
         });
         assert_eq!(state.heading_level_of(&heading), Some(1));
+    }
+
+    /// The gesture goes both ways (`PROSE-FEAT-092`). A paragraph becomes a
+    /// heading of the level asked for, and a heading whose level is taken away
+    /// becomes a paragraph again.
+    ///
+    /// One control offers the six levels and the paragraph beside them, so one
+    /// command carries both directions. A heading turned back keeps its text
+    /// and its place, and carries no level for a reader to find.
+    #[test]
+    fn a_level_makes_a_heading_and_taking_it_away_makes_a_paragraph() {
+        let mut state = ProseState::new().expect("a document is built");
+        let block = state.root_blocks()[0];
+        state.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "a title".to_owned(),
+        });
+
+        state.handle_command(ProseCommand::SetHeadingLevel {
+            block_id: block,
+            level: Some(3),
+        });
+        assert_eq!(state.block_type_of(&block), Some(BlockType::Heading));
+        assert_eq!(state.heading_level_of(&block), Some(3));
+
+        state.handle_command(ProseCommand::SetHeadingLevel {
+            block_id: block,
+            level: None,
+        });
+        assert_eq!(state.block_type_of(&block), Some(BlockType::Paragraph));
+        assert_eq!(state.heading_level_of(&block), None);
+        assert_eq!(state.text_of(&block).as_deref(), Some("a title"));
+        assert_eq!(state.root_blocks()[0], block, "the block kept its place");
+    }
+
+    /// Setting a level touches that block alone (`PROSE-FEAT-093`).
+    #[test]
+    fn setting_a_level_leaves_every_other_block_as_it_was() {
+        let mut state = ProseState::new().expect("a document is built");
+        let first = state.root_blocks()[0];
+        state.handle_command(ProseCommand::InsertBlock {
+            parent_id: None,
+            after_id: Some(first),
+            init: BlockInit::Heading { level: 2 },
+            style_id: None,
+        });
+        let neighbour = state.root_blocks()[1];
+        state.handle_command(ProseCommand::InsertText {
+            block_id: first,
+            pos: 0,
+            text: "kept".to_owned(),
+        });
+
+        let order_before = state.root_blocks();
+        state.handle_command(ProseCommand::SetHeadingLevel {
+            block_id: neighbour,
+            level: Some(5),
+        });
+
+        assert_eq!(state.heading_level_of(&neighbour), Some(5));
+        assert_eq!(state.text_of(&first).as_deref(), Some("kept"));
+        assert_eq!(state.block_type_of(&first), Some(BlockType::Paragraph));
+        assert_eq!(state.root_blocks(), order_before);
+    }
+
+    /// A block that is neither a paragraph nor a heading is refused, the way a
+    /// code language on a paragraph is.
+    #[test]
+    fn a_level_is_refused_on_a_block_that_is_neither() {
+        let mut state = ProseState::new().expect("a document is built");
+        let table = state
+            .insert_for_test(None, BlockType::Table)
+            .expect("a table");
+        let outcome = state.handle_command(ProseCommand::SetHeadingLevel {
+            block_id: table,
+            level: Some(1),
+        });
+        assert!(
+            matches!(
+                outcome.display.as_slice(),
+                [crate::events::ProseEvent::Error(_)]
+            ),
+            "a table takes no heading level"
+        );
+        assert_eq!(state.block_type_of(&table), Some(BlockType::Table));
     }
 
     #[test]

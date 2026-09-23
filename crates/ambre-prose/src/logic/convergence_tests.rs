@@ -6,7 +6,9 @@
 //! browser and no channel: a handler answers with a value, which is what makes
 //! this shape reachable at all (`PROSE-024`).
 
-use crate::events::{Align, BlockInit, ParagraphStyle, ProseCommand, ProseEvent};
+use crate::events::{
+    Align, BlockInit, ListStyle, OrderedStyle, ParagraphStyle, ProseCommand, ProseEvent,
+};
 use crate::logic::ProseState;
 
 /// Two peers over one seeded document, so both start from the same block ids.
@@ -413,4 +415,169 @@ fn a_join_and_a_concurrent_edit_converge() {
 
     assert_eq!(rendered(&alice), rendered(&bob));
     assert_eq!(alice.root_blocks(), vec![first]);
+}
+
+/// Two peers appending to one list read the same ordinal on every item
+/// (`PROSE-FEAT-137`).
+///
+/// Neither peer wrote a number, so there is none to merge. Both read the tree
+/// the two of them converged on, and the walk over one order has one answer.
+#[test]
+fn two_peers_appending_to_one_list_draw_the_same_ordinals() {
+    let (mut alice, mut bob, block) = two_peers();
+    let append = |state: &mut ProseState| {
+        state
+            .handle_command(ProseCommand::InsertBlock {
+                parent_id: None,
+                after_id: Some(block),
+                init: BlockInit::ListItem {
+                    style: ListStyle::Ordered(OrderedStyle::Decimal),
+                },
+                style_id: None,
+            })
+            .update
+            .expect("a delta")
+    };
+    let from_alice = append(&mut alice);
+    let from_bob = append(&mut bob);
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+
+    assert_eq!(ordinals(&alice), ordinals(&bob));
+    // Both items landed, and they are numbered one after the other.
+    assert_eq!(ordinals(&alice), vec![0, 1, 2]);
+}
+
+/// The ordinal of every live root block, in document order.
+fn ordinals(state: &ProseState) -> Vec<u32> {
+    let tree = crate::doc::blocks(state.document());
+    state
+        .root_blocks()
+        .into_iter()
+        .map(|id| crate::numbering::compute_ordinal(&tree, &crate::events::tree_id(id)))
+        .collect()
+}
+
+/// Two overlapping applications of one mark converge on one span
+/// (`PROSE-FEAT-008`).
+#[test]
+fn two_peers_bolding_overlapping_ranges_keep_one_run() {
+    let (mut alice, mut bob, block) = two_peers();
+    seed(&mut alice, &mut bob, block, "one two three four");
+    let from_alice = bold(&mut alice, block, (4, 11));
+    let from_bob = bold(&mut bob, block, (8, 18));
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+
+    let bolded = |state: &ProseState| -> String {
+        state
+            .resolved_runs(&block)
+            .into_iter()
+            .filter(|(_, style)| style.bold)
+            .map(|(text, _)| text)
+            .collect()
+    };
+    assert_eq!(bolded(&alice), bolded(&bob));
+    // One continuous run over the union of the two ranges, with no seam.
+    assert_eq!(bolded(&alice), "two three four");
+}
+
+/// Two peers holding both raised and lowered resolve one style, whichever
+/// order the marks arrived in (`PROSE-FEAT-173`, `PROSE-FEAT-021`).
+#[test]
+fn two_peers_raising_and_lowering_one_word_resolve_one_style() {
+    let (mut alice, mut bob, block) = two_peers();
+    seed(&mut alice, &mut bob, block, "one two");
+    let from_alice = mark(&mut alice, block, (0, 3), "sup", None);
+    let from_bob = mark(&mut bob, block, (0, 3), "sub", None);
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+
+    let first = alice.resolved_runs(&block).remove(0).1;
+    assert_eq!(first, bob.resolved_runs(&block).remove(0).1);
+    // Neither write cleared the other, and the raised one wins.
+    assert!(first.superscript);
+    assert!(!first.subscript);
+}
+
+/// Two values of one key converge on one, and both peers resolve that one
+/// (`PROSE-FEAT-184`).
+#[test]
+fn two_peers_setting_two_sizes_resolve_the_same_one() {
+    let (mut alice, mut bob, block) = two_peers();
+    seed(&mut alice, &mut bob, block, "one two");
+    let from_alice = mark(&mut alice, block, (0, 3), "fs", Some("12"));
+    let from_bob = mark(&mut bob, block, (0, 3), "fs", Some("14"));
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+
+    let size = alice.resolved_runs(&block).remove(0).1.font_size;
+    assert_eq!(size, bob.resolved_runs(&block).remove(0).1.font_size);
+    assert!(size == 12.0 || size == 14.0, "{size}");
+}
+
+/// Two authors setting two properties of one paragraph both keep theirs
+/// (`PROSE-FEAT-176`).
+#[test]
+fn two_peers_setting_two_paragraph_properties_both_keep_theirs() {
+    let (mut alice, mut bob, block) = two_peers();
+    let from_alice = alice
+        .handle_command(ProseCommand::SetParagraphStyle {
+            block_id: block,
+            style: ParagraphStyle {
+                space_before: Some(6.0),
+                ..ParagraphStyle::default()
+            },
+        })
+        .update
+        .expect("a delta");
+    let from_bob = bob
+        .handle_command(ProseCommand::SetParagraphStyle {
+            block_id: block,
+            style: ParagraphStyle {
+                align: Some(Align::Center),
+                ..ParagraphStyle::default()
+            },
+        })
+        .update
+        .expect("a delta");
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+
+    let style = alice.paragraph_style_of(&block);
+    assert_eq!(style, bob.paragraph_style_of(&block));
+    assert_eq!(style.space_before, Some(6.0));
+    assert_eq!(style.align, Some(Align::Center));
+}
+
+/// One sentence in both peers, so a range means the same thing on each.
+fn seed(alice: &mut ProseState, bob: &mut ProseState, block: crate::events::BlockId, text: &str) {
+    let typed = alice
+        .handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: text.to_owned(),
+        })
+        .update
+        .expect("a delta");
+    bob.apply_remote(&typed);
+}
+
+/// One mark, and the delta it exported.
+fn mark(
+    state: &mut ProseState,
+    block: crate::events::BlockId,
+    range: (u32, u32),
+    key: &str,
+    value: Option<&str>,
+) -> Vec<u8> {
+    state
+        .handle_command(ProseCommand::ApplyMark {
+            block_id: block,
+            range,
+            key: key.to_owned(),
+            value: value.map(str::to_owned),
+        })
+        .update
+        .expect("a delta")
+}
+
+/// The bold mark over one range, and the delta it exported.
+fn bold(state: &mut ProseState, block: crate::events::BlockId, range: (u32, u32)) -> Vec<u8> {
+    mark(state, block, range, "b", None)
 }

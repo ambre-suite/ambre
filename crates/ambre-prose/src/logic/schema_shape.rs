@@ -24,7 +24,10 @@ use std::collections::BTreeSet;
 use loro::{LoroDoc, LoroValue};
 
 use crate::doc;
-use crate::events::{Align, BlockInit, LineHeight, LineHeightMode, ParagraphStyle, ProseCommand};
+use crate::events::{
+    Align, BlockInit, LineHeight, LineHeightMode, ListStyle, OrderedStyle, ParagraphStyle,
+    ProseCommand,
+};
 use crate::logic::ProseState;
 use crate::schema::SCHEMA_VERSION;
 
@@ -305,6 +308,15 @@ fn document_of_every_key() -> ProseState {
     });
     for init in [
         BlockInit::Heading { level: 2 },
+        BlockInit::ListItem {
+            style: ListStyle::Bullet,
+        },
+        BlockInit::ListItem {
+            style: ListStyle::Ordered(OrderedStyle::LowerRoman),
+        },
+        BlockInit::ListItem {
+            style: ListStyle::Todo(true),
+        },
         BlockInit::CodeBlock {
             lang: "rust".to_owned(),
         },
@@ -323,7 +335,7 @@ fn document_of_every_key() -> ProseState {
             block_id: root,
             range: (0, 3),
             key: key.clone(),
-            value: Some(mark_value_for(&key)),
+            value: mark_value_for(&key),
         });
     }
     state
@@ -343,13 +355,16 @@ fn mark_roots_to_apply() -> Vec<String> {
     keys
 }
 
-/// A value a mark key accepts. Only the numeric key is re-spelled, so every
-/// other value may be any text (`PROSE-008`).
-fn mark_value_for(key: &str) -> String {
-    if key == "fs" {
-        "11".to_owned()
-    } else {
-        "x".to_owned()
+/// A value the key's own grammar accepts (`PROSE-FEAT-022`).
+///
+/// A flag key takes none, a colour takes a hexadecimal record and a size takes
+/// a number. Every other key takes any text.
+fn mark_value_for(key: &str) -> Option<String> {
+    match key {
+        "b" | "i" | "u" | "s" | "sup" | "sub" | "c" => None,
+        "fg" | "bg" => Some("#ff8800".to_owned()),
+        "fs" => Some("11".to_owned()),
+        _ => Some("x".to_owned()),
     }
 }
 

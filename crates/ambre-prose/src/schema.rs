@@ -29,7 +29,7 @@ use ambre_core::schema::{
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing document across it (`PROSE-029`, `SCHEMA-009`).
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Write the current version into a document's `meta` register.
 ///
@@ -76,11 +76,22 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 /// first document, so a version 0 document is one written by no released build.
 /// The step exists because the protocol walks a chain rather than a special
 /// case, and it stamps the number and changes nothing else.
-const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[SchemaMigration {
-    from: 0,
-    to: 1,
-    apply: stamp_step,
-}];
+///
+/// `1 -> 2` is the list marker. A list item gained three attribute keys, and a
+/// version 1 document holds no list item at all, so there is nothing to
+/// rewrite. The step stamps the number and leaves the containers alone.
+const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
+    SchemaMigration {
+        from: 0,
+        to: 1,
+        apply: stamp_step,
+    },
+    SchemaMigration {
+        from: 1,
+        to: 2,
+        apply: stamp_step,
+    },
+];
 
 /// The `0 -> 1` step. A free function rather than a closure because a registry
 /// row holds a plain `fn`.

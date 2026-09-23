@@ -25,6 +25,7 @@
 //! - [`presence`] -- the ephemeral cursor frame, outbound and inbound
 
 mod blocks;
+mod lists;
 mod marks;
 mod presence;
 mod text;
@@ -314,6 +315,11 @@ impl ProseState {
             ProseCommand::SetHeadingLevel { block_id, level } => {
                 self.set_heading_level(&tree_id(block_id), level)
             }
+            ProseCommand::SetListStyle { block_id, style } => {
+                self.set_list_style(&tree_id(block_id), style)
+            }
+            ProseCommand::IndentList { block_id } => self.indent_list(&tree_id(block_id)),
+            ProseCommand::UnindentList { block_id } => self.unindent_list(&tree_id(block_id)),
             ProseCommand::SetCodeLang { block_id, lang } => {
                 self.set_code_lang(&tree_id(block_id), &lang)
             }
@@ -652,6 +658,13 @@ impl ProseState {
     // -- refusals ----------------------------------------------------------
 
     /// The refusal a command that names no live block answers with.
+    /// The document itself, for a test that reads a container no command
+    /// exposes, or that plays an import by writing one directly.
+    #[cfg(test)]
+    pub(crate) fn document(&self) -> &loro::LoroDoc {
+        &self.doc
+    }
+
     fn err_no_block(id: &TreeID) -> ProseOutcome {
         ProseOutcome::refused(ProseRefusal::NoSuchBlock(block_id(*id)))
     }
