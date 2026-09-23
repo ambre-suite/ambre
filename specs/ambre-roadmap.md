@@ -79,9 +79,9 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Styles, lists and headings | MVP | character and paragraph styles, ordered and bulleted lists, numbered headings |
 | `[x]` Tables, table of contents and word count | MVP | tables with merged cells and styles, a generated table of contents, a live word count |
 | `[x]` Headers, footers, find and replace | MVP | page headers and footers with dynamic fields, and find and replace |
-| `[ ]` Comments and track changes | MVP | anchored comments, and suggested changes a reviewer accepts or rejects |
-| `[x]` Undo, footnotes and cross references | MVP | undo isolated to the local author, footnotes, cross references |
 | `[ ]` A deleted block comes back whole | MVP | an undo of a block deletion recreates the block under a new identity, and its body is keyed by the old one: the text comes back empty and a reference to the block stays broken (`PROSE-FEAT-133`). A deletion that keeps the node, hidden rather than removed, would hold both |
+| `[x]` Undo, footnotes and cross references | MVP | undo isolated to the local author, footnotes, cross references |
+| `[ ]` Comments and track changes | MVP | anchored comments, and suggested changes a reviewer accepts or rejects |
 | `[ ]` A note edit reflows only its page | V1 | every reflow reads the text of every note to decide whether the notes still hold, and an edit to one note's text lays the whole document out again, since its height moved. Past a few hundred notes each keystroke pays for both. Keeping each note's height with its text, and resuming placement at the first page that note sits on, would bound it to the page |
 | `[ ]` Page rendering | MVP | pages on the canvas with virtual scrolling and cached text |
 | `[ ]` Input and cursor | MVP | typing, caret navigation, click and drag selection, optimistic display |
