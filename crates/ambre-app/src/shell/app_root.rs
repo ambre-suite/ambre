@@ -59,7 +59,7 @@ fn set_web_link(
 fn follow_shell_nav(
     nav: toile_chrome::ShellNav,
     navigate: &impl Fn(&str, leptos_router::NavigateOptions),
-    boot_is_toile: bool,
+    booted: ambre_bus::DocType,
 ) {
     match nav {
         toile_chrome::ShellNav::Url(url) => {
@@ -76,7 +76,7 @@ fn follow_shell_nav(
             doc_type,
         } => {
             let path = crate::route::doc_path(doc_type, document_id);
-            if crate::route::needs_reload(doc_type, boot_is_toile) {
+            if crate::route::needs_reload(doc_type, booted) {
                 if let Some(window) = web_sys::window() {
                     let _ = window.location().set_href(&path);
                 }
@@ -116,6 +116,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
         find_state_toile,
         find_result_toile,
         boot_is_toile,
+        boot_is_prose,
+        prose_figures,
         formula_ref,
         formula_text,
         formula_action,
@@ -236,7 +238,11 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 return;
             };
             toile_followed_link.set(None);
-            follow_shell_nav(nav, &navigate, boot_is_toile);
+            follow_shell_nav(
+                nav,
+                &navigate,
+                crate::route::booted_kind(boot_is_toile, boot_is_prose),
+            );
         });
     }
     let link_text = RwSignal::new(String::new());
@@ -731,7 +737,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         docs,
         username,
         dev_mode,
-        boot_is_toile,
+        booted: crate::route::booted_kind(boot_is_toile, boot_is_prose),
         toasts,
     };
     let landing_tx = to_logic.clone();
@@ -841,7 +847,25 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 })}
             </Tabs>
             <StatusBar slot>
-                {if boot_is_toile {
+                {if boot_is_prose {
+                    // The five figures of the Prose document
+                    // (`PROSE-FEAT-040`), in the shared status band.
+                    view! {
+                        <ambre_chrome::StatusLabel label="Prose" />
+                        <span class="statusbar-stats">
+                            {move || {
+                                prose_figures.get().map(|figures| {
+                                    figures
+                                        .into_iter()
+                                        .map(|figure| view! { <span class="stat">{figure}</span> })
+                                        .collect_view()
+                                })
+                            }}
+                        </span>
+                        <span class="spacer"></span>
+                    }
+                    .into_any()
+                } else if boot_is_toile {
                     // Toile selection status bar: count/bounds + shared
                     // zoom & fps chips, styled identically to Trame's band.
                     view! {

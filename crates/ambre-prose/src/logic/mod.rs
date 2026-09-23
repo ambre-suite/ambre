@@ -127,6 +127,14 @@ pub struct ProseState {
     /// shapes on. They arrive from the Main thread, which is the only one that
     /// can fetch (`LogicCommand::LoadFonts`).
     faces: Vec<Vec<u8>>,
+    /// What the last layout handed to the view was computed from: the
+    /// document's state and how many faces it was shaped on. A layout from the
+    /// same basis is the same picture, so it is not handed over twice.
+    handed: Option<(loro::Frontiers, usize)>,
+    /// The version stamped on the last layout handed over. It only grows, even
+    /// across a snapshot import that rebuilds the paginator: the view drops a
+    /// layout older than the one it holds (`PROSE-UI-016`).
+    handed_version: u64,
     /// The five figures as last answered (`PROSE-FEAT-018`). Session state:
     /// the tallies move on a recount and the page count on a layout, and
     /// neither ever reaches the document.
@@ -209,6 +217,8 @@ impl ProseState {
             presence: HashMap::new(),
             paginator: None,
             faces: Vec::new(),
+            handed: None,
+            handed_version: 0,
             word_count: crate::events::WordCount::default(),
             find: None,
             stamped_counter,
@@ -258,6 +268,28 @@ impl ProseState {
             .as_ref()
             .map(Paginator::shaped_layout)
             .unwrap_or_default()
+    }
+
+    /// The layout for the view, when the document or its faces changed since
+    /// the last one handed over (`PROSE-UI-006`).
+    ///
+    /// The Logic thread calls it after every command, import and face
+    /// delivery. The view receives a layout already computed and shaped, and
+    /// never lays text out itself. A caret move writes nothing, so it lays
+    /// nothing out and sends nothing.
+    pub fn layout_event(&mut self) -> Option<ProseEvent> {
+        self.doc.commit();
+        let basis = (self.doc.state_frontiers(), self.faces.len());
+        if self.handed.as_ref() == Some(&basis) {
+            return None;
+        }
+        let mut shaped = self.shaped_layout();
+        self.handed_version = self.handed_version.saturating_add(1);
+        shaped.version = self.handed_version;
+        self.handed = Some(basis);
+        Some(ProseEvent::LayoutShaped {
+            layout: ambre_bus::app::prose::SharedLayout::new(shaped),
+        })
     }
 
     /// How many runs the paginator has shaped, over its life.

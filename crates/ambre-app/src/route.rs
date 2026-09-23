@@ -100,21 +100,29 @@ pub fn doc_path(doc_type: DocType, document_id: DocumentId) -> String {
 /// `AppView` is a binary split today (`lib.rs`, `boot_is_toile`): the Toile
 /// vector board vs. everything else (the Trame grid). Prose/Murmure have no view
 /// yet, so they fall on the non-Toile side like Trame.
-fn is_toile_kind(doc_type: DocType) -> bool {
-    matches!(doc_type, DocType::Toile)
-}
-
-/// Whether opening `target` from a page booted with `boot_is_toile` requires a
+/// Whether opening `target` from a page booted onto `booted` requires a
 /// **full page reload** rather than an in-place `AppView::set_document` swap.
 ///
 /// The booted canvas view is fixed per page load. `set_document` can swap the
-/// document id **within the same app kind**, but cannot switch kinds (Trame <->
-/// Toile). So a target whose render kind differs from the booted kind must
+/// document id **within the same app kind**, but cannot switch kinds (Trame,
+/// Toile, Prose). So a target whose render kind differs from the booted kind must
 /// hard-navigate (`location.set_href`) to re-boot the right `AppView`. A
 /// same-kind target uses a router pushState that keeps the Sync worker/session
 /// (`ambre-spec-launcher.md`, CHROME-039).
-pub fn needs_reload(target: DocType, boot_is_toile: bool) -> bool {
-    is_toile_kind(target) != boot_is_toile
+pub fn needs_reload(target: DocType, booted: DocType) -> bool {
+    target != booted
+}
+
+/// The type of the view a page booted with. The landing route boots the
+/// Trame view on a throwaway document.
+pub fn booted_kind(boot_is_toile: bool, boot_is_prose: bool) -> DocType {
+    if boot_is_toile {
+        DocType::Toile
+    } else if boot_is_prose {
+        DocType::Prose
+    } else {
+        DocType::Trame
+    }
 }
 
 // -- Tests (wasm tier) -------------------------------------------------------
@@ -200,10 +208,12 @@ mod tests {
     #[wasm_bindgen_test]
     fn cross_kind_open_needs_reload() {
         // Same render kind as the booted view -> in-place swap, no reload.
-        assert!(!needs_reload(DocType::Trame, false));
-        assert!(!needs_reload(DocType::Toile, true));
+        assert!(!needs_reload(DocType::Trame, DocType::Trame));
+        assert!(!needs_reload(DocType::Toile, DocType::Toile));
+        assert!(!needs_reload(DocType::Prose, DocType::Prose));
         // Different kind -> must hard-navigate to re-boot the right AppView.
-        assert!(needs_reload(DocType::Toile, false));
-        assert!(needs_reload(DocType::Trame, true));
+        assert!(needs_reload(DocType::Toile, DocType::Trame));
+        assert!(needs_reload(DocType::Trame, DocType::Toile));
+        assert!(needs_reload(DocType::Prose, DocType::Trame));
     }
 }

@@ -28,8 +28,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-120` | `INV` | The character count MUST exclude every whitespace cluster, including the break between two paragraphs. | this spec section 2 | `ambre_prose::count::tests::whitespace_and_the_break_between_paragraphs_count_only_with_the_spaces` | none | verified |
 | `PROSE-FEAT-121` | `OBS` | A second character count, taken over the same clusters and including the whitespace, MUST be shown beside it. | this spec section 2; this spec section 4 | `ambre_prose::count::tests::whitespace_and_the_break_between_paragraphs_count_only_with_the_spaces` | none | verified |
 | `PROSE-FEAT-122` | `OBS` | An empty document MUST answer zero for the four text tallies. | this spec section 2 | `ambre_prose::count::tests::an_empty_document_counts_zero_for_the_four_tallies`; `::an_empty_paragraph_between_two_is_neither_a_paragraph_nor_a_break` | none | verified |
-| `PROSE-FEAT-040` | `OBS` | The five figures MUST reach the reader through the status bar slot every application shares. | this spec section 3; `ambre-spec-chrome.md` | not built | unbuilt -- lands with the "Prose on screen" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-123` | `INV` | Prose MUST NOT carry a status bar of its own. | this spec section 3; `ambre-spec-chrome.md` | not built | unbuilt -- lands with the "Prose on screen" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-040` | `OBS` | The five figures MUST reach the reader through the status bar slot every application shares. | this spec section 3; `ambre-spec-chrome.md` | `ambre_prose::ui::tests::the_status_bar_reads_the_five_figures`; qa-manual -- open a Prose document and read the five figures in the status band, then type a word and see them change | none | verified |
+| `PROSE-FEAT-123` | `INV` | Prose MUST NOT carry a status bar of its own. | this spec section 3; `ambre-spec-chrome.md` | crate-graph -- `ambre-prose` names neither `leptos` nor a DOM binding, so it cannot build a bar | none | verified |
 
 ### 1.2 The text changes
 
@@ -49,9 +49,8 @@ status values are normative in `ambre-spec-template.md`.
   delay below exists to keep off the keystroke path.
 * **Boundary.** none: the count is derived in the Logic thread from the document already there,
   and it reaches the chrome as an event.
-* **Verification.** 11 `verified`, 2 `unimplemented`: host tests in `crates/ambre-prose`.
-  `PROSE-FEAT-040` and `-123` wait on the status bar of the
-  "Prose on screen" Story (`ambre-roadmap.md` E5).
+* **Verification.** 13 `verified`: host tests in `crates/ambre-prose`, and one manual
+  check of the status band. `PROSE-FEAT-123` holds by the crate graph.
 
 ---
 

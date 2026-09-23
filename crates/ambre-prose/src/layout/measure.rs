@@ -20,7 +20,7 @@ use crate::layout::run::ShapedRun;
 
 /// Pixels per point at 96 DPI. Every length the document stores in points is
 /// converted here and nowhere else.
-const PX_PER_PT: f32 = 96.0 / 72.0;
+pub(crate) const PX_PER_PT: f32 = 96.0 / 72.0;
 
 /// The height one point converts to.
 #[must_use]

@@ -55,10 +55,12 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 // FrameHost and `run_with` live in sibling modules; both reach the shared types
 // (AppView, DocSwitcher, helpers) via `use super::*`.
 mod frame;
+mod prose;
 mod run;
 mod web_embed;
 
 pub use frame::{FrameHost, MakeChild};
+pub use prose::ProseView;
 pub use run::run_with;
 
 /// Private clipboard MIME type carrying the base64 postcard
@@ -160,6 +162,8 @@ pub enum AppView {
     Trame(TrameView),
     /// A Toile (whiteboard) document.
     Toile(ToileView),
+    /// A Prose (text) document.
+    Prose(ProseView),
 }
 
 impl AppView {
@@ -168,6 +172,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.update(),
             AppView::Toile(v) => v.update(),
+            AppView::Prose(v) => v.update(),
         }
     }
 
@@ -176,6 +181,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.plan_repaint(now_ms, hud_tick),
             AppView::Toile(v) => v.plan_repaint(now_ms, hud_tick),
+            AppView::Prose(v) => v.plan_repaint(now_ms, hud_tick),
         }
     }
 
@@ -190,6 +196,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.paint_content(surface, font_cx, text_cache, strip),
             AppView::Toile(v) => v.paint_content(surface, font_cx, text_cache, strip),
+            AppView::Prose(v) => v.paint_content(surface, font_cx, text_cache, strip),
         }
     }
 
@@ -204,6 +211,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
             AppView::Toile(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
+            AppView::Prose(v) => v.paint_overlay(surface, font_cx, text_cache, stats),
         }
     }
 
@@ -212,6 +220,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.resize(width, height),
             AppView::Toile(v) => v.resize(width, height),
+            AppView::Prose(v) => v.resize(width, height),
         }
     }
 
@@ -220,6 +229,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.handle_input(ev),
             AppView::Toile(v) => v.handle_input(ev),
+            AppView::Prose(v) => v.handle_input(ev),
         }
     }
 
@@ -233,6 +243,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.clipboard_write(cut),
             AppView::Toile(v) => v.clipboard_write(cut),
+            AppView::Prose(v) => v.clipboard_write(cut),
         }
     }
 
@@ -243,6 +254,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.poll_clipboard(),
             AppView::Toile(v) => v.poll_clipboard(),
+            AppView::Prose(v) => v.poll_clipboard(),
         }
     }
 
@@ -255,6 +267,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.paste_clipboard(blob, own_copy),
             AppView::Toile(v) => v.paste_clipboard(blob, own_copy),
+            AppView::Prose(v) => v.paste_clipboard(blob, own_copy),
         }
     }
 
@@ -263,6 +276,7 @@ impl AppView {
         match self {
             AppView::Trame(v) => v.set_document(document_id),
             AppView::Toile(v) => v.set_document(document_id),
+            AppView::Prose(v) => v.set_document(document_id),
         }
     }
 
@@ -272,7 +286,7 @@ impl AppView {
     fn visible_embeds(&self) -> Vec<VisibleEmbed> {
         match self {
             AppView::Toile(v) => v.visible_embeds(),
-            AppView::Trame(_) => Vec::new(),
+            AppView::Trame(_) | AppView::Prose(_) => Vec::new(),
         }
     }
 
@@ -282,7 +296,7 @@ impl AppView {
     fn visible_web_embeds(&self) -> Vec<VisibleWebEmbed> {
         match self {
             AppView::Toile(v) => v.visible_web_embeds(),
-            AppView::Trame(_) => Vec::new(),
+            AppView::Trame(_) | AppView::Prose(_) => Vec::new(),
         }
     }
 
@@ -294,7 +308,7 @@ impl AppView {
     fn child_route(&self) -> Option<ElementId> {
         match self {
             AppView::Toile(v) => v.child_route(),
-            AppView::Trame(_) => None,
+            AppView::Trame(_) | AppView::Prose(_) => None,
         }
     }
 
@@ -303,7 +317,7 @@ impl AppView {
     fn embed_to_child_space(&self, screen: Point) -> Option<Point> {
         match self {
             AppView::Toile(v) => v.embed_to_child_space(screen),
-            AppView::Trame(_) => None,
+            AppView::Trame(_) | AppView::Prose(_) => None,
         }
     }
 }

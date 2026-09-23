@@ -122,6 +122,11 @@ impl Paginator {
             layout: Arc::new(self.layout.clone()),
             blocks: body.chain(self.bands.runs.iter().cloned()).collect(),
             notes: self.notes.runs.clone(),
+            tables: self
+                .measured
+                .iter()
+                .filter_map(|block| Some((block.block_id, Arc::clone(block.table.as_ref()?))))
+                .collect(),
         }
     }
 

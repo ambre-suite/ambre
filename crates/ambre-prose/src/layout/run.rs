@@ -190,6 +190,34 @@ pub struct ShapedLayout {
     pub blocks: HashMap<TreeID, ShapedRun>,
     /// The run of every footnote, its ordinal in front.
     pub notes: HashMap<Uuid, ShapedRun>,
+    /// The cells of every table, placed and shaped.
+    pub tables: HashMap<TreeID, Arc<TableShape>>,
+}
+
+/// A table as the view draws it: where each cell sits, and the text it holds
+/// (`features/ambre-spec-prose-tables.md section 3`).
+///
+/// A merged region is one cell here, anchored at its top-left cell and as wide
+/// and tall as the rectangle it covers. A covered cell is absent, so it is
+/// neither measured nor painted (`PROSE-FEAT-048`, `PROSE-UI-147`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TableShape {
+    /// The top of each row from the table's top, and the bottom of the last.
+    pub row_tops: Vec<f32>,
+    pub cells: Vec<CellShape>,
+}
+
+/// One cell drawn, or one merged region drawn as a single cell.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CellShape {
+    /// The cell the text sits in: a region's top-left cell.
+    pub cell: TreeID,
+    pub x_px: f32,
+    pub width_px: f32,
+    /// The rows the cell spans, the last one excluded.
+    pub rows: std::ops::Range<usize>,
+    /// The text blocks the cell holds, each with its top from the cell's top.
+    pub blocks: Vec<(TreeID, f32, ShapedRun)>,
 }
 
 // `PROSE-UI-113`: the run crosses from the thread that shapes to the thread
@@ -199,6 +227,7 @@ const _: () = {
     crosses::<ShapedRun>();
     crosses::<ParleyRunData>();
     crosses::<ShapedLayout>();
+    crosses::<TableShape>();
 };
 
 #[cfg(all(test, not(target_arch = "wasm32")))]

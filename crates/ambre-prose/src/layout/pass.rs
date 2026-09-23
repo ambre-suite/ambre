@@ -6,7 +6,8 @@
 //! what its type is, and the result is the flat sequence placement consumes.
 //! Nothing here writes to the document it reads (`PROSE-079`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use ambre_bus::app::prose::{BlockType, ParagraphStyle};
 use ambre_core::Uuid;
@@ -15,9 +16,10 @@ use loro::{LoroDoc, LoroMap, LoroTree, LoroValue, TreeID};
 
 use crate::doc;
 use crate::layout::geometry::PageBox;
-use crate::layout::measure::{EffectiveStyle, Measurer, TextMetrics};
+use crate::layout::measure::{EffectiveStyle, Measurer, PX_PER_PT, TextMetrics};
 use crate::layout::place::{self, BlockLayout, FootnoteLayout, MeasuredBlock, NoteCall, Placement};
-use crate::layout::run::ShapedRun;
+use crate::layout::run::{CellShape, ShapedRun, TableShape};
+use crate::logic::tables::{Grid, surviving_regions};
 use crate::note;
 
 /// The height of a horizontal rule, in pixels. One device pixel, per the
@@ -362,6 +364,7 @@ pub(crate) fn measure_band(
             metrics: None,
             notes: Vec::new(),
             run: None,
+            table: None,
         };
     };
     let defaults = doc::read_defaults(document);
@@ -478,6 +481,7 @@ fn measure_one(
     let text_width_px = style.text_width_px(content_width_px);
     let mut notes = Vec::new();
     let mut run = None;
+    let mut table = None;
     let (height_px, metrics) = match block_type {
         // A signal, not a sized block.
         BlockType::PageBreak => (0.0, None),
@@ -487,8 +491,10 @@ fn measure_one(
             None,
         ),
         BlockType::Table => {
-            let rows = table_metrics(measurer, document, tree, defaults, id, content_width_px);
+            let (rows, shape) =
+                table_metrics(measurer, document, tree, defaults, id, content_width_px);
             notes = table_calls(scope, id);
+            table = Some(Arc::new(shape));
             (rows.text_height_px, Some(rows))
         }
         // One line per entry, measured on the pages the layout before gave
@@ -532,6 +538,7 @@ fn measure_one(
         metrics,
         notes,
         run,
+        table,
     }
 }
 
@@ -591,8 +598,12 @@ fn image_height(
 ///
 /// The line tops the result carries are the row boundaries, which is what
 /// makes a table break between two rows and never inside one (`PROSE-071`).
-/// Cell padding and borders are not in the schema yet and count as nothing;
-/// they land with the tables Story (`ambre-roadmap.md` E5).
+///
+/// A column is as wide as the table's width list says. When the list does not
+/// match the grid, each column takes an equal share of the text width.
+/// A merged region is one cell as wide as its columns. When its text is taller than the rows it
+/// spans, the last of them grows. A covered cell is neither measured nor
+/// placed (`PROSE-FEAT-048`). Cell padding counts as nothing yet (`PROSE-UI-180`).
 fn table_metrics(
     measurer: &mut Measurer,
     document: &LoroDoc,
@@ -600,53 +611,130 @@ fn table_metrics(
     defaults: &doc::DocDefaults,
     table: &TreeID,
     content_width_px: f32,
-) -> TextMetrics {
-    let rows = doc::children_of(tree, Some(*table));
-    let cells_wide = rows
-        .iter()
-        .map(|row| doc::children_of(tree, Some(*row)).len())
-        .max()
-        .unwrap_or(0);
-    let cell_width_px = if cells_wide == 0 {
-        content_width_px
-    } else {
-        content_width_px / cells_wide as f32
+) -> (TextMetrics, TableShape) {
+    let Some(grid) = Grid::read(tree, table) else {
+        let empty = TextMetrics {
+            text_height_px: 0.0,
+            line_count: 0,
+            line_tops: vec![0.0],
+        };
+        return (empty, TableShape::default());
     };
-    let mut line_tops = vec![0.0];
-    let mut height_px = 0.0;
-    let mut line_count = 0;
-    for row in &rows {
-        let mut tallest = 0.0_f32;
-        for cell in doc::children_of(tree, Some(*row)) {
-            tallest = tallest.max(cell_height(
-                measurer,
-                document,
-                tree,
-                defaults,
-                &cell,
-                cell_width_px,
-            ));
-        }
-        height_px += tallest;
-        line_count += 1;
-        line_tops.push(height_px);
+    let cols = grid.cells.iter().map(Vec::len).max().unwrap_or(0);
+    let widths = column_widths_px(&doc::col_widths(tree, table), cols, content_width_px);
+    let mut col_x = Vec::with_capacity(cols + 1);
+    col_x.push(0.0_f32);
+    for width in &widths {
+        col_x.push(col_x.last().copied().unwrap_or(0.0) + width);
     }
-    TextMetrics {
+    let (regions, _) = surviving_regions(&grid, &doc::regions(tree, table));
+    let covered: HashSet<(usize, usize)> = regions
+        .iter()
+        .flat_map(|(_, rect)| {
+            (rect.top..=rect.bottom)
+                .flat_map(move |row| (rect.left..=rect.right).map(move |col| (row, col)))
+                .filter(move |at| *at != (rect.top, rect.left))
+        })
+        .collect();
+
+    let mut cells = Vec::new();
+    let mut heights = Vec::new();
+    for (row, row_cells) in grid.cells.iter().enumerate() {
+        for (col, cell) in row_cells.iter().enumerate() {
+            if covered.contains(&(row, col)) {
+                continue;
+            }
+            let (bottom, right) = regions
+                .iter()
+                .find(|(_, rect)| (rect.top, rect.left) == (row, col))
+                .map_or((row, col), |(_, rect)| (rect.bottom, rect.right));
+            let x_px = col_x.get(col).copied().unwrap_or(0.0);
+            let right_x = col_x.get(right + 1).copied().unwrap_or(x_px);
+            let width_px = right_x - x_px;
+            let stacked = cell_blocks(measurer, document, tree, defaults, cell, width_px);
+            let mut top = 0.0;
+            let mut blocks = Vec::new();
+            for block in stacked {
+                top += block.space_before_px;
+                if let Some(run) = block.run {
+                    blocks.push((block.block_id, top, run));
+                }
+                top += block.height_px + block.space_after_px;
+            }
+            heights.push(top);
+            cells.push(CellShape {
+                cell: *cell,
+                x_px,
+                width_px,
+                rows: row..bottom + 1,
+                blocks,
+            });
+        }
+    }
+
+    // Single-row cells first, then each region takes what it lacks from the
+    // last row it spans.
+    let mut row_heights = vec![0.0_f32; grid.rows.len()];
+    for (cell, height) in cells.iter().zip(&heights) {
+        if cell.rows.len() == 1
+            && let Some(slot) = row_heights.get_mut(cell.rows.start)
+        {
+            *slot = slot.max(*height);
+        }
+    }
+    for (cell, height) in cells.iter().zip(&heights) {
+        if cell.rows.len() > 1 {
+            let spanned: f32 = row_heights
+                .get(cell.rows.clone())
+                .map_or(0.0, |r| r.iter().sum());
+            if let Some(last) = row_heights.get_mut(cell.rows.end - 1) {
+                *last += (height - spanned).max(0.0);
+            }
+        }
+    }
+    let mut row_tops = vec![0.0];
+    let mut height_px = 0.0;
+    for row_height in &row_heights {
+        height_px += row_height;
+        row_tops.push(height_px);
+    }
+    let metrics = TextMetrics {
         text_height_px: height_px,
-        line_count,
-        line_tops,
+        line_count: u32::try_from(row_heights.len()).unwrap_or(u32::MAX),
+        line_tops: row_tops.clone(),
+    };
+    (metrics, TableShape { row_tops, cells })
+}
+
+/// Each column's width in pixels. The stored widths are points, one per
+/// column. A list that does not match the grid, or holds an unusable width,
+/// gives every column an equal share.
+fn column_widths_px(stored_pt: &[f32], cols: usize, content_width_px: f32) -> Vec<f32> {
+    let usable = stored_pt.len() == cols
+        && stored_pt
+            .iter()
+            .all(|width| width.is_finite() && *width > 0.0);
+    if usable {
+        stored_pt.iter().map(|width| width * PX_PER_PT).collect()
+    } else {
+        let share = if cols == 0 {
+            content_width_px
+        } else {
+            content_width_px / cols as f32
+        };
+        vec![share; cols]
     }
 }
 
-/// One cell: the blocks it holds, stacked with their margins.
-fn cell_height(
+/// One cell: the blocks it holds, measured at its width.
+fn cell_blocks(
     measurer: &mut Measurer,
     document: &LoroDoc,
     tree: &LoroTree,
     defaults: &doc::DocDefaults,
     cell: &TreeID,
     width_px: f32,
-) -> f32 {
+) -> Vec<MeasuredBlock> {
     let mut stacked = Vec::new();
     let empty = HashMap::new();
     let no_pages = HashMap::new();
@@ -663,9 +751,6 @@ fn cell_height(
         walk(measurer, &scope, &child, &mut stacked);
     }
     stacked
-        .iter()
-        .map(|block| block.height_px + block.space_before_px + block.space_after_px)
-        .sum()
 }
 
 /// A number an attribute holds, whichever number shape it was written in.

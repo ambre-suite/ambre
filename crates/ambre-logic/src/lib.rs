@@ -321,6 +321,15 @@ impl DocState {
         }
     }
 
+    /// The layout the view draws, when it changed since the last one handed
+    /// over (`PROSE-UI-006`). Only Prose lays text out on this thread.
+    fn layout_event(&mut self) -> Option<AppEvent> {
+        match self {
+            DocState::Prose(state) => state.layout_event().map(AppEvent::Prose),
+            DocState::Trame(_) | DocState::Toile(_) => None,
+        }
+    }
+
     /// How many faces this document measures on, zero for an engine that
     /// measures nothing on this thread (`PROSE-115`).
     #[cfg(test)]
@@ -469,6 +478,20 @@ impl LogicState {
                 std::mem::discriminant(&event),
             );
         }
+    }
+
+    /// Hand the view a document's layout, when it changed. Called after
+    /// every path that writes the document or its faces, so the view never
+    /// lays text out itself (`PROSE-UI-006`).
+    fn hand_layout(&mut self, document_id: DocumentId) {
+        let Some(event) = self
+            .docs
+            .get_mut(&document_id)
+            .and_then(|doc| doc.state.layout_event())
+        else {
+            return;
+        };
+        self.send_to_ui(UiEvent::Viewport { document_id, event });
     }
 
     fn send_to_sync(&self, cmd: SyncCommand) {

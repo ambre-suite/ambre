@@ -77,6 +77,7 @@ impl LogicState {
                 for event in events {
                     self.send_to_ui(UiEvent::Viewport { document_id, event });
                 }
+                self.hand_layout(document_id);
             }
 
             // -- P3 -- Service plane: forward verbatim, with state hooks --------
@@ -134,6 +135,9 @@ impl LogicState {
                     document_id,
                     doc_type,
                 });
+                // An empty document is one blank page (`PROSE-011`), and the
+                // view shows it before anything arrives.
+                self.hand_layout(document_id);
             }
             LogicCommand::CloseDocument { document_id } => {
                 self.docs.remove(&document_id);
@@ -169,6 +173,11 @@ impl LogicState {
                 // (`PROSE-114`, `PROSE-115`).
                 for doc in self.docs.values_mut() {
                     doc.state.load_faces(&faces);
+                }
+                // A new face re-shapes the runs it covers (`PROSE-111`).
+                let open: Vec<DocumentId> = self.docs.keys().copied().collect();
+                for document_id in open {
+                    self.hand_layout(document_id);
                 }
                 // The PDF-export context (`toile-pdf-export`), built on the
                 // first delivery and extended by each later one, so a script
@@ -558,6 +567,78 @@ mod tests {
         // One outcome, and the two halves carry the same bytes: the event is
         // not a re-export (`PROSE-023`).
         assert_eq!(confirmed, broadcast);
+    }
+
+    /// `PROSE-UI-006`: the layout reaches the view computed and shaped. The
+    /// view adopts it from the event alone, and holds nothing that could lay
+    /// text out. A caret move writes nothing, so it sends no layout.
+    #[test]
+    fn the_view_draws_a_layout_the_logic_thread_computed() {
+        use ambre_bus::app::prose::ProseEvent;
+        let (mut state, ui, _sync) = harness();
+        let document_id = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Prose,
+        });
+        let block = match &state.docs.get(&document_id).expect("a live document").state {
+            DocState::Prose(prose) => prose.root_blocks()[0],
+            other => panic!("the registry opened {other:?}"),
+        };
+        let prose = |command| LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(command),
+        };
+        state.handle_logic_command(prose(ambre_bus::app::prose::ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "typed".to_owned(),
+        }));
+        let drain = |ui: &flume::Receiver<UiEvent>| -> Vec<ProseEvent> {
+            std::iter::from_fn(|| ui.try_recv().ok())
+                .filter_map(|event| match event {
+                    UiEvent::Viewport {
+                        event: AppEvent::Prose(event),
+                        ..
+                    } => Some(event),
+                    _ => None,
+                })
+                .collect()
+        };
+        let events = drain(&ui);
+        let layouts = events
+            .iter()
+            .filter(|event| matches!(event, ProseEvent::LayoutShaped { .. }))
+            .count();
+        // One on opening, one for the edit.
+        assert_eq!(layouts, 2);
+        let mut view = ambre_prose::ui::ProseUiState::default();
+        for event in &events {
+            view.apply_event(event);
+        }
+        assert_eq!(
+            view.layout_version, 2,
+            "the later layout is the one in force"
+        );
+        assert_eq!(view.shaped.layout.page_count, 1);
+        assert!(
+            !view.shaped.blocks.is_empty(),
+            "the runs arrive shaped with the layout"
+        );
+
+        state.handle_logic_command(prose(ambre_bus::app::prose::ProseCommand::UpdateCursor {
+            pos: ambre_bus::app::prose::CursorPosition {
+                block_id: block,
+                offset: 1,
+                anchor: None,
+            },
+        }));
+        assert!(
+            !drain(&ui)
+                .iter()
+                .any(|event| matches!(event, ProseEvent::LayoutShaped { .. })),
+            "a caret move lays nothing out"
+        );
     }
 
     /// The other half of `PROSE-062`: the presence frame leaves as an

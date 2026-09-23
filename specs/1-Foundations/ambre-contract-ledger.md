@@ -19,16 +19,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2545 rows: 2171 shipped, of which 774 loose. 374 unbuilt.**
+**2548 rows: 2175 shipped, of which 774 loose. 373 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 226 | 221 | 542 | 408 | 1397 |
+| `verified` | 226 | 221 | 542 | 412 | 1401 |
 | `failing` | 39 | 46 | 22 |  | 107 |
 | `untested` | 266 | 143 | 234 | 2 | 645 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
-| `unimplemented` | 54 | 56 | 23 | 241 | 374 |
+| `unimplemented` | 54 | 56 | 23 | 240 | 373 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -139,15 +139,15 @@
 | `ambre-spec-prose-headings.md` | 8 | 8 | 7 | 1 |  |
 | `ambre-spec-prose-inline-styles.md` | 25 | 25 | 24 | 1 |  |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
-| `ambre-spec-prose-page-rendering.md` | 19 | 17 | 17 |  | 2 |
+| `ambre-spec-prose-page-rendering.md` | 19 | 18 | 18 |  | 1 |
 | `ambre-spec-prose-pagination.md` | 48 | 47 | 47 |  | 1 |
 | `ambre-spec-prose-table-of-contents.md` | 14 | 14 | 14 |  |  |
-| `ambre-spec-prose-tables.md` | 44 | 43 | 43 |  | 1 |
+| `ambre-spec-prose-tables.md` | 47 | 44 | 44 |  | 3 |
 | `ambre-spec-prose-text-editing.md` | 26 | 8 | 8 |  | 18 |
 | `ambre-spec-prose-track-changes.md` | 40 | 35 | 35 |  | 5 |
 | `ambre-spec-prose-undo.md` | 3 | 3 | 3 |  |  |
 | `ambre-spec-prose-viewport.md` | 17 | 10 | 10 |  | 7 |
-| `ambre-spec-prose-word-count.md` | 13 | 11 | 11 |  | 2 |
+| `ambre-spec-prose-word-count.md` | 13 | 13 | 13 |  |  |
 
 ## WHICH DOCUMENT DECLARES AN ID
 
@@ -205,7 +205,7 @@
 | `ambre-spec-prose-slash-command.md` | PROSE-UI-058..062,087..095,174..175 |
 | `ambre-spec-prose-spell-check.md` | PROSE-FEAT-019,041..043,102..112 |
 | `ambre-spec-prose-table-of-contents.md` | PROSE-FEAT-003,060..062,113..118,291..292; PROSE-UI-082..083 |
-| `ambre-spec-prose-tables.md` | PROSE-009,040; PROSE-FEAT-017,044..051,227..256,293..294; PROSE-UI-147 |
+| `ambre-spec-prose-tables.md` | PROSE-009,040; PROSE-FEAT-017,044..051,227..256,293..294; PROSE-UI-147,179..181 |
 | `ambre-spec-prose-text-editing.md` | PROSE-037..039,041..042,101,116; PROSE-UI-004..005,027..030,134..143,176..178 |
 | `ambre-spec-prose-toolbar.md` | PROSE-UI-053..057,096..104 |
 | `ambre-spec-prose-track-changes.md` | PROSE-FEAT-004,010..011,082..089,257..277,300..304; PROSE-UI-051..052,148 |

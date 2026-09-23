@@ -10,7 +10,7 @@ use ambre_draw::{Affine, Brush, Color, DrawSurface, PositionedLayoutItem, Rect};
 
 use crate::events::{BlockId, CursorPosition, block_id};
 use crate::layout::place::NOTE_SEPARATOR_PX;
-use crate::layout::run::{ParleyRunData, ShapedRun};
+use crate::layout::run::{ParleyRunData, ShapedRun, TableShape};
 use crate::ui::ProseUiState;
 use crate::view::HighlightKind;
 use crate::view::cache::{RunCache, RunKey};
@@ -182,6 +182,35 @@ impl ProseUiState {
             let Some(block) = layout.blocks.get(index) else {
                 continue;
             };
+            if let Some(table) = self.shaped.tables.get(&block.block_id).cloned() {
+                let Some(piece) = fragment(block, page, &table.row_tops) else {
+                    continue;
+                };
+                let clip_top = body_top + f64::from(piece.top);
+                // A table may be wider than the text: it grows to the right
+                // rather than squeezing its columns.
+                let right = table
+                    .cells
+                    .iter()
+                    .map(|cell| f64::from(cell.x_px + cell.width_px))
+                    .fold(content_width, f64::max);
+                let clip = Rect::new(
+                    left,
+                    clip_top,
+                    left + right + 1.0,
+                    clip_top + f64::from(piece.height) + 1.0,
+                );
+                surface.push_clip(clip);
+                self.paint_table(
+                    surface,
+                    palette,
+                    &table,
+                    left,
+                    clip_top - f64::from(piece.run_top),
+                );
+                surface.pop_clip();
+                continue;
+            }
             let Some(run) = self.shaped.blocks.get(&block.block_id).cloned() else {
                 continue;
             };
@@ -273,6 +302,45 @@ impl ProseUiState {
                 Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX, rect.y1),
                 palette.accent,
             );
+        }
+    }
+
+    /// A table: each cell's border, then the text it holds. A merged region
+    /// is one cell and is drawn once; a covered cell is not in the shape, so
+    /// nothing is drawn for it (`PROSE-UI-147`).
+    fn paint_table<S: DrawSurface>(
+        &mut self,
+        surface: &mut S,
+        palette: &PagePalette,
+        table: &TableShape,
+        left: f64,
+        top: f64,
+    ) {
+        for cell in &table.cells {
+            let (Some(y0), Some(y1)) = (
+                table.row_tops.get(cell.rows.start),
+                table.row_tops.get(cell.rows.end),
+            ) else {
+                continue;
+            };
+            let x0 = left + f64::from(cell.x_px);
+            let bounds = Rect::new(
+                x0,
+                top + f64::from(*y0),
+                x0 + f64::from(cell.width_px),
+                top + f64::from(*y1),
+            );
+            surface.stroke_rect(bounds, palette.sheet_border, 1.0);
+            surface.push_clip(bounds);
+            for (block, y, run) in &cell.blocks {
+                let placed = Placed {
+                    origin_x: x0 + f64::from(run.data().indent_px()),
+                    origin_y: bounds.y0 + f64::from(*y),
+                    clip: bounds,
+                };
+                self.paint_block(surface, palette, block_id(*block), run, &placed);
+            }
+            surface.pop_clip();
         }
     }
 
@@ -757,5 +825,59 @@ mod tests {
         let drawn: usize = built.map(|page| ui.blocks_on(page).len()).sum();
         assert_eq!(ui.highlights_walked, drawn as u64);
         assert!(drawn < ids.len());
+    }
+
+    /// `PROSE-UI-147`: a merged region is drawn once, as wide as the columns
+    /// it covers. A covered cell draws nothing, not even the text it kept
+    /// (`PROSE-FEAT-048`).
+    #[test]
+    fn a_merged_region_is_drawn_as_one_cell_and_a_covered_cell_not_at_all() {
+        use crate::logic::tables::tests::{cell_at, document_with_table, type_in};
+        let (mut state, table) = document_with_table(1, 2, 2);
+        state.load_faces(&crate::layout::fonts::shipped_faces());
+        let outcome = state.handle_command(ProseCommand::MergeTableCells {
+            table_id: block_id(table),
+            start: (0, 0),
+            end: (0, 1),
+        });
+        assert!(outcome.update.is_some(), "the merge is written");
+        let covered = cell_at(&state, table, 0, 1);
+        for (row, col, text) in [(0, 0, "merged"), (1, 0, "left"), (1, 1, "right")] {
+            let cell = cell_at(&state, table, row, col);
+            type_in(&mut state, cell, text);
+        }
+        // The covered cell keeps its text, and the region hides it.
+        type_in(&mut state, covered, "hidden");
+        let mut ui = view_of(&mut state);
+        assert!(
+            ui.shaped.tables[&table]
+                .cells
+                .iter()
+                .all(|cell| cell.cell != covered)
+        );
+
+        let surface = paint(&mut ui);
+        let border = palette().sheet_border;
+        let page_width = f64::from(ui.shaped.layout.page_width_px);
+        let widths: Vec<f64> = surface
+            .ops()
+            .iter()
+            .filter_map(|op| match op {
+                DrawOp::StrokeRect { rect, color, .. }
+                    if *color == border && rect.width() < page_width =>
+                {
+                    Some(rect.width())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(widths.len(), 3, "one region and two cells");
+        let region = widths.iter().copied().fold(0.0, f64::max);
+        let cell = widths.iter().copied().fold(f64::MAX, f64::min);
+        assert!(
+            (region - 2.0 * cell).abs() < 0.5,
+            "the region spans two columns"
+        );
+        assert_eq!(surface.count(glyphs), 3, "the covered text is not drawn");
     }
 }

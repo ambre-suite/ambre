@@ -7,10 +7,12 @@
 
 use ambre_bus::app::prose::BlockType;
 use ambre_core::Uuid;
+use std::sync::Arc;
+
 use loro::TreeID;
 
 use crate::layout::measure::TextMetrics;
-use crate::layout::run::ShapedRun;
+use crate::layout::run::{ShapedRun, TableShape};
 
 /// The lines a break leaves behind, and the lines it carries over
 /// (`PROSE-072`, `PROSE-073`).
@@ -63,6 +65,8 @@ pub struct MeasuredBlock {
     /// The text as it was shaped, for the view to draw. `None` for a block
     /// that draws no text of its own: a rule, a break, an image, a table.
     pub run: Option<ShapedRun>,
+    /// The cells of a table, for the view to draw. `None` for any other block.
+    pub table: Option<Arc<TableShape>>,
 }
 
 /// Two measurements are equal when placement would treat them alike. The run
@@ -614,6 +618,7 @@ mod tests {
             metrics: Some(metrics(lines)),
             notes: Vec::new(),
             run: None,
+            table: None,
         }
     }
 
@@ -629,6 +634,7 @@ mod tests {
             metrics: None,
             notes: Vec::new(),
             run: None,
+            table: None,
         }
     }
 

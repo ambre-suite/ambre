@@ -206,6 +206,13 @@ impl ProseUiState {
     /// event names the block the engine minted.
     pub fn apply_event(&mut self, event: &ProseEvent) {
         match event {
+            // Whole and already shaped: the view adopts it and lays nothing
+            // out (`PROSE-UI-006`). A handle of another type is not a layout.
+            ProseEvent::LayoutShaped { layout } => {
+                if let Some(shaped) = layout.get::<ShapedLayout>() {
+                    self.apply_layout(shaped.clone());
+                }
+            }
             ProseEvent::DocUpdated { .. } => {
                 self.draft.clear();
                 self.changed = true;
@@ -300,8 +307,47 @@ impl ProseUiState {
     }
 }
 
+/// The five figures as the shared status bar shows them (`PROSE-FEAT-040`).
+///
+/// Prose hands labels to the slot every application shares, and builds no bar
+/// of its own (`PROSE-FEAT-123`). The host renders them in that slot.
+#[must_use]
+pub fn status_figures(count: &WordCount) -> [String; 5] {
+    let plural = |n: u32, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
+    [
+        plural(count.words, "word", "words"),
+        plural(count.characters, "character", "characters"),
+        format!("{} with spaces", count.characters_with_spaces),
+        plural(count.paragraphs, "paragraph", "paragraphs"),
+        plural(count.pages, "page", "pages"),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
+    /// `PROSE-FEAT-040`: each of the five figures has its label, in the order
+    /// the status bar shows them.
+    #[test]
+    fn the_status_bar_reads_the_five_figures() {
+        let count = WordCount {
+            words: 12,
+            characters: 1,
+            characters_with_spaces: 70,
+            paragraphs: 3,
+            pages: 1,
+        };
+        assert_eq!(
+            super::status_figures(&count),
+            [
+                "12 words",
+                "1 character",
+                "70 with spaces",
+                "3 paragraphs",
+                "1 page"
+            ]
+        );
+    }
+
     use super::*;
 
     fn a_document() -> DocumentId {

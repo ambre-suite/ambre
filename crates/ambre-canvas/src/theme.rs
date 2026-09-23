@@ -5,6 +5,7 @@
 // wraps them in the runtime theme switch shared across the canvas/DOM boundary:
 //
 //   Palette / LIGHT / DARK / SPACE_* / RADIUS / FONT_*   (generated).
+//   ChromePalette / CHROME_LIGHT / CHROME_DARK           (generated).
 //   THEME_CSS        the DOM custom-property sheet, injected by the launcher.
 //   Theme            Light | Dark, selects a Palette and the `data-theme` value.
 //   ThemeControl     Send handle: the chrome toggles it, the canvas reads it.
@@ -38,6 +39,15 @@ impl Theme {
         match self {
             Theme::Light => &LIGHT,
             Theme::Dark => &DARK,
+        }
+    }
+
+    /// The chrome colours for this theme, for canvas content that shares
+    /// their meaning: an accent, a status.
+    pub fn chrome_palette(self) -> &'static ChromePalette {
+        match self {
+            Theme::Light => &CHROME_LIGHT,
+            Theme::Dark => &CHROME_DARK,
         }
     }
 

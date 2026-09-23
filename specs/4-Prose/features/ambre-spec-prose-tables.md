@@ -26,7 +26,10 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-017` | `CONC` | A row or column insert MUST converge with a concurrent edit inside the table. | this spec section 3 | `ambre_prose::logic::convergence_tests::a_row_insert_and_a_concurrent_edit_in_the_table_converge`; `::a_column_insert_and_a_concurrent_edit_in_the_table_converge` | none | verified |
 | `PROSE-FEAT-230` | `CONC` | A row or column inserted between a region's two corners MUST leave one region on those same two corners, widened by what fell between them. | this spec section 3 | `ambre_prose::logic::convergence_tests::a_row_inserted_between_the_corners_widens_the_region_on_both_peers`; `::a_column_inserted_between_the_corners_widens_the_region_on_both_peers` | none | verified |
 | `PROSE-FEAT-050` | `CONC` | Two merges covering one cell at the same moment MUST resolve to a single region, identically on every peer. | this spec section 3 | `ambre_prose::logic::convergence_tests::two_merges_over_one_cell_at_once_resolve_to_one_region_on_both_peers` | none | verified |
-| `PROSE-UI-147` | `OBS` | A covered cell MUST NOT be painted: a region MUST be drawn as one cell. | this spec section 3 | not built | unbuilt -- lands with the "Prose on screen" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-147` | `OBS` | A covered cell MUST NOT be painted: a region MUST be drawn as one cell. | this spec section 3 | `ambre_prose::view::paint::tests::a_merged_region_is_drawn_as_one_cell_and_a_covered_cell_not_at_all` | none | verified |
+| `PROSE-UI-179` | `OBS` | A cell MUST be painted with its stored fill, its four border widths and its border colour. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "Styled table cells" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-180` | `OBS` | A cell's text MUST sit inside its stored padding and at its stored vertical alignment, and the row height MUST count the padding. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "Styled table cells" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-181` | `OBS` | A table inside a cell MUST be measured and painted like a table at the root. | this spec section 3 | not built | unbuilt -- lands with the "Styled table cells" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Insert a row or a column
 
@@ -118,9 +121,9 @@ status values are normative in `ambre-spec-template.md`.
   measurement, and `features/ambre-spec-prose-pagination.md section 2` owns it.
 * **Boundary.** none of its own: a cell is a block like any other, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 43 `verified`, 1 `unimplemented`: every command is built and tested in
-  `crates/ambre-prose`. `PROSE-UI-147` waits on the painter of the
-  "Prose on screen" Story (`ambre-roadmap.md` E5).
+* **Verification.** 44 `verified`, 3 `unimplemented`: every command and the painter are built
+  and tested in `crates/ambre-prose`. `PROSE-UI-179` to `-181` wait on the "Styled table cells"
+  Story (`ambre-roadmap.md` E5).
   `PROSE-FEAT-017`, `-050` and `-230` run on two peers that merge their deltas; the rest a single
   writer reaches. `PROSE-009` also holds by the schema: a stored span would be a key in its table,
   and it has none.

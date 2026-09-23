@@ -86,7 +86,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` A note edit reflows only its page | V1 | every reflow reads the text of every note to decide whether the notes still hold, and an edit to one note's text lays the whole document out again, since its height moved. Past a few hundred notes each keystroke pays for both. Keeping each note's height with its text, and resuming placement at the first page that note sits on, would bound it to the page |
 | `[x]` Page rendering | MVP | pages on the canvas with virtual scrolling and cached text |
 | `[x]` An edit reaches the layout | MVP | every caller laid out with an empty dirty set and a remote delta dropped the layout whole, so a local edit that kept its heights was never re-shaped and a remote one re-measured the document. A subscription on the document now names the blocks each commit and each import wrote (`PROSE-123`) |
-| `[ ]` Prose on screen | MVP | the host that mounts the page view on the canvas, fills its palette from the tokens and routes the layout event; the status bar; the drawing of a table |
+| `[x]` Prose on screen | MVP | the host that mounts the page view on the canvas, fills its palette from the tokens and routes the layout event; the status bar; the drawing of a table |
+| `[ ]` Styled table cells | MVP | a cell drawn with its fill, its borders, its padding and its vertical alignment, and a table inside a cell drawn like any other |
 | `[ ]` Input and cursor | MVP | typing, caret navigation, click and drag selection, optimistic display |
 | `[ ]` Toolbar, slash menu and composition | MVP | the contextual format bar, the slash menu, input-method composition, double-click word selection |
 | `[ ]` Collaborative cursors and annotations | MVP | remote carets, comment highlights, track-change highlights |

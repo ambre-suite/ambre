@@ -249,6 +249,7 @@ impl LogicState {
                     // route lands with the "Images" Story.
                     Vec::new(),
                 );
+                self.hand_layout(document_id);
             }
             // A mismatched (state, command) pair is impossible by routing. The
             // `document_id` selects a single `DocState`, and the UI only ever
@@ -431,6 +432,7 @@ impl LogicState {
         if let Some(snapshot) = snapshot {
             self.send_to_persist(document_id, snapshot);
         }
+        self.hand_layout(document_id);
     }
 
     /// Apply a batch of remote deltas (a server history replay on open) as one
@@ -467,6 +469,7 @@ impl LogicState {
         if let Some(snapshot) = snapshot {
             self.send_to_persist(document_id, snapshot);
         }
+        self.hand_layout(document_id);
     }
 
     /// Apply a remote ephemeral payload to a document and forward presence events.

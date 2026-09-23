@@ -280,6 +280,12 @@ struct Wiring {
     /// `toile-find`) which replace their Trame equivalents. Cross-type
     /// in-session navigation reloads the page, so it is fixed per page load.
     boot_is_toile: bool,
+    /// Whether the booted document is a Prose document: the canvas mounts the
+    /// page view and the status bar shows the five figures.
+    boot_is_prose: bool,
+    /// The five figures of the open Prose document, for the status bar slot
+    /// (`PROSE-FEAT-040`). Published by the Prose view.
+    prose_figures: RwSignal<Option<[String; 5]>>,
     /// Toile Find panel open flag (`toile-find`); Ctrl+F sets it.
     find_state_toile: RwSignal<bool>,
     /// Last Toile `FindResults` (hits + focus), feeding the panel's counter and
@@ -679,9 +685,12 @@ pub fn main() {
     // and gates both the render view (below) and the app-specific chrome (Find
     // panel, keymap). Toile binds its own, smaller chord set.
     let boot_is_toile = matches!(boot_doc_typed, Some((ambre_bus::DocType::Toile, _)));
+    let boot_is_prose = matches!(boot_doc_typed, Some((ambre_bus::DocType::Prose, _)));
+    // The status bar slot the Prose view fills with its five figures.
+    let prose_figures = RwSignal::new(None::<[String; 5]>);
     if boot_is_toile {
         toile_chrome::bind_keys(&mut keymap);
-    } else {
+    } else if !boot_is_prose {
         trame_chrome::bind_keys(&mut keymap);
     }
     // The canvas needs a document from frame 0. Boot onto the routed one, or a
@@ -816,6 +825,8 @@ pub fn main() {
         Rc::clone(&find_state_toile_slot),
         Rc::clone(&find_result_toile_slot),
         boot_is_toile,
+        boot_is_prose,
+        prose_figures,
         Rc::clone(&style_slot),
         Rc::clone(&chrome_status_slot),
         formula_ref,
@@ -1732,7 +1743,17 @@ pub fn main() {
             // Pick the view by the booted document's type. Cross-type in-session
             // navigation is out of Phase 0: the `DocSwitcher` only swaps the id
             // within one `AppView`, so a Trame<->Toile hop reloads via the route.
-            if boot_is_toile {
+            if boot_is_prose {
+                AppView::Prose(host::ProseView::new(
+                    initial_doc,
+                    view_tx_logic,
+                    view_rx,
+                    w,
+                    h,
+                    theme_ctl,
+                    prose_figures,
+                ))
+            } else if boot_is_toile {
                 AppView::Toile(ToileView::new(
                     initial_doc,
                     view_tx_logic,

@@ -24,7 +24,9 @@
 //! with, so a command needs no conversion on the write path. A caret moves by
 //! grapheme cluster, which is a rule of the view and not of this plane.
 
+use std::any::Any;
 use std::fmt;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -1076,11 +1078,13 @@ impl ProseCommand {
 /// One thing the view is told. A second enum would put a document fact in two
 /// places and leave the dispatch with a hole (`PROSE-UI-001`).
 ///
-/// The layout and the shaped runs reach this enum later. So do the find
-/// results and the interop reports. Each arrives with the Story that builds it
+/// The interop reports reach this enum later, with the Story that builds them
 /// (`ambre-roadmap.md` E5).
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProseEvent {
+    /// A layout the Logic thread computed and shaped, whole. The view draws it
+    /// and never lays text out itself (`PROSE-UI-006`).
+    LayoutShaped { layout: SharedLayout },
     /// The confirmed change, local or imported. The bytes are the ones applied,
     /// never a re-export (`PROSE-023`, `PROSE-048`).
     DocUpdated { delta: Vec<u8> },
@@ -1312,5 +1316,41 @@ mod tests {
             }
             .is_mutating()
         );
+    }
+}
+
+/// A value handed from the Logic thread to the UI thread over the shared heap,
+/// opaque to this crate.
+///
+/// The layout type belongs to the engine crate, which depends on this one, so
+/// the envelope cannot name it. Both threads share one heap (`ARCH-001`), so the
+/// value moves as a pointer and is never copied or serialized. This envelope
+/// never crosses to the Sync worker.
+#[derive(Clone)]
+pub struct SharedLayout(Arc<dyn Any + Send + Sync>);
+
+impl SharedLayout {
+    pub fn new<T: Any + Send + Sync>(value: T) -> Self {
+        Self(Arc::new(value))
+    }
+
+    /// The value, when it is of the type asked for.
+    #[must_use]
+    pub fn get<T: Any>(&self) -> Option<&T> {
+        self.0.downcast_ref()
+    }
+}
+
+/// Two handles are equal when they point at the same value: a layout is a
+/// whole value, never compared field by field.
+impl PartialEq for SharedLayout {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl fmt::Debug for SharedLayout {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SharedLayout(..)")
     }
 }

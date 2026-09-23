@@ -197,8 +197,8 @@ fn usable(value: f32, zero_allowed: bool) -> bool {
     value.is_finite() && (value > 0.0 || (zero_allowed && value == 0.0))
 }
 
-/// The reads a test takes of a table. The view reads none of them yet: the
-/// painting lands with the "Page rendering" Story (`ambre-roadmap.md` E5).
+/// The reads a test takes of a table. The layout reads the grid and the
+/// regions itself, through [`Grid`] and [`surviving_regions`].
 #[cfg(test)]
 impl ProseState {
     /// The grid of a live table.
