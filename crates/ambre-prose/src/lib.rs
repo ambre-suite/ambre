@@ -9,6 +9,10 @@
 //!   reaches them through (`ambre-spec-prose-schema.md`).
 //! * [`numbering`] -- the number in front of a heading, read from the document
 //!   order and stored nowhere (`features/ambre-spec-prose-headings.md`).
+//! * [`toc`] -- the entries of a table of contents, read off the headings and
+//!   a layout (`features/ambre-spec-prose-table-of-contents.md`).
+//! * [`count`] -- the word count's four text tallies
+//!   (`features/ambre-spec-prose-word-count.md`).
 //! * [`mark`] -- the inline mark registry: the expansion policy and the
 //!   canonical value.
 //! * [`schema`] -- the persisted version register and the migration registry.
@@ -27,6 +31,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod count;
 pub mod doc;
 pub mod events;
 pub mod layout;
@@ -35,6 +40,7 @@ pub mod mark;
 pub mod numbering;
 pub mod schema;
 pub mod style;
+pub mod toc;
 pub mod ui;
 
 pub use events::{ProseCommand, ProseEvent, ProseOutcome};

@@ -78,8 +78,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-019` | `POST` | Table-of-contents stabilization MUST run as a bounded multi-pass step. | this spec section 2 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5), which mints the block the entries live in | unimplemented |
-| `PROSE-084` | `FRAME` | Settling the table of contents MUST NOT run on the path that answers a keystroke. | this spec section 2 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-019` | `POST` | Table-of-contents stabilization MUST run as a bounded multi-pass step. | this spec section 2 | `ambre_prose::layout::reflow::tests::settling_stops_once_the_pages_hold_and_never_runs_past_its_bound` | none | verified |
+| `PROSE-084` | `FRAME` | Settling the table of contents MUST NOT run on the path that answers a keystroke. | this spec section 2 | `ambre_prose::layout::reflow::tests::a_reflow_does_not_settle_the_table_of_contents` | none | verified |
 
 ### 1.5 Measure the same way on every device
 
@@ -95,8 +95,8 @@ status values are normative in `ambre-spec-template.md`.
   the document at open. Shaping and placement are budgeted apart, and section 4 says why.
 * **Boundary.** none: pagination runs on the Logic thread, reads the document and returns a value.
   `PROSE-025` (`features/ambre-spec-prose-engine.md section 1`) bans a network call from this crate.
-* **Verification.** 37 `verified`, 9 `unimplemented`. Eight are the bands, the footnotes and
-  the table of contents, the ninth `PROSE-112`, which waits on the first consumer to store a page
+* **Verification.** 39 `verified`, 7 `unimplemented`. Six are the bands and the footnotes, the
+  seventh `PROSE-112`, which waits on the first consumer to store a page
   number. Termination rests on `PROSE-078` and `PROSE-017`, which a property over generated
   documents holds together. Two bans are structural, held by a test that reads the module's own
   source. The schema holds `PROSE-065`.
@@ -261,6 +261,13 @@ emitted. For each block, in order:
 from the bottom of its body area upward, the separator drawn once. The header and footer of each
 page are resolved and shaped. The page number is the only field that varies per page, which is
 why a band without one is shaped once and shared.
+
+**Settling the table of contents.** A table of contents is measured on the entries it lists, and
+each entry carries the page its heading starts on. So its height moves the pages it reports. The
+settling pass lays the document out, reads each heading's start page, and lays it out again with
+those pages. It stops once two passes read the same pages, and never runs more than three
+(`PROSE-019`). An edit reflows with the pages the last settling read and never settles
+(`PROSE-084`); the engine settles after a table-of-contents command.
 
 **The constraint order.** When two rules cannot both hold, the higher row wins and the lower one is
 relaxed. The two absolutes are `PROSE-012`.

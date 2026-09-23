@@ -12,7 +12,9 @@
 //! renders as two decimal numbers joined by `@`, so neither half carries the
 //! separator (`PROSE-088`).
 
-use loro::{LoroDoc, LoroMap, LoroText, LoroTree, LoroValue, TreeID, TreeParentId};
+use loro::{
+    LoroDoc, LoroMap, LoroMovableList, LoroText, LoroTree, LoroValue, TreeID, TreeParentId,
+};
 
 use ambre_bus::app::prose::{
     Align, BlockType, LineHeight, LineHeightMode, ListStyle, OrderedStyle, ParagraphStyle,
@@ -70,6 +72,43 @@ pub(crate) const A_MARKER: &str = "ls";
 pub(crate) const A_SPELLING: &str = "lo";
 /// Whether a checkbox item is ticked, on a checkbox item alone.
 pub(crate) const A_TICKED: &str = "tc";
+
+/// A table's column widths in points: a movable list, one entry per column
+/// (`PROSE-FEAT-044`). A list container rather than a value, so a column
+/// inserted and a column resized at the same moment both survive the merge.
+pub(crate) const A_COL_WIDTHS: &str = "col_widths";
+/// A table's merged regions: a map from the anchor cell's id to a region
+/// record (`PROSE-009`). A map container, so two regions written at once are
+/// two keys rather than one value overwritten.
+pub(crate) const A_MERGED: &str = "merged";
+/// The region record's extent: the bottom-right cell's id.
+pub(crate) const R_EXTENT: &str = "e";
+/// The region record's stamp: the Lamport time it was written at, which is
+/// what "the later of two regions" reads (`PROSE-FEAT-254`).
+pub(crate) const R_STAMP: &str = "n";
+
+/// A cell's background, as `"#rrggbb"`.
+pub(crate) const A_CELL_BG: &str = "bg";
+/// The four border widths of a cell, in points.
+pub(crate) const A_EDGE_TOP: &str = "bt";
+pub(crate) const A_EDGE_BOTTOM: &str = "bb";
+pub(crate) const A_EDGE_LEFT: &str = "bl";
+pub(crate) const A_EDGE_RIGHT: &str = "br";
+/// The border colour of a cell, as `"#rrggbb"`.
+pub(crate) const A_EDGE_COLOR: &str = "bc";
+/// A cell's padding, in points.
+pub(crate) const A_PADDING: &str = "pad";
+/// A cell's vertical alignment: 0 top, 1 middle, 2 bottom.
+pub(crate) const A_VALIGN: &str = "va";
+
+/// The deepest heading level a table of contents lists, one to six.
+pub(crate) const A_MAX_LEVEL: &str = "max_level";
+/// Whether a table of contents numbers its entries.
+pub(crate) const A_NUMBERED: &str = "numbered";
+
+/// The width a column takes when the command that makes it names none
+/// (`PROSE-FEAT-232`): one inch, in points.
+pub const DEFAULT_COLUMN_WIDTH_PT: f32 = 72.0;
 
 /// The nine paragraph-style keys, flat in the node map, one key per property
 /// (`PROSE-030`).
@@ -214,6 +253,112 @@ pub(crate) fn list_style_of(tree: &LoroTree, id: &TreeID) -> Option<ListStyle> {
     }
 }
 
+/// A live block's attribute map, or `None` when it carries none. Read-only: it
+/// never mints the map it looked for (`PROSE-079`).
+#[must_use]
+pub(crate) fn attrs_read(tree: &LoroTree, id: &TreeID) -> Option<LoroMap> {
+    map_read(&node_of(tree, id)?, K_ATTRS)
+}
+
+/// The two settings a live table of contents carries: the deepest level it
+/// lists and whether it numbers its entries.
+///
+/// A missing or unreadable depth reads as six and a missing switch as off, so
+/// a block an older client wrote still lists something.
+#[must_use]
+pub(crate) fn toc_settings(tree: &LoroTree, id: &TreeID) -> Option<(u8, bool)> {
+    if block_type_of(tree, id) != Some(BlockType::Toc) {
+        return None;
+    }
+    let attrs = attrs_read(tree, id);
+    let level = attrs
+        .as_ref()
+        .and_then(|a| read_i64(a, A_MAX_LEVEL))
+        .and_then(|n| u8::try_from(n).ok())
+        .unwrap_or(6);
+    let numbered = attrs
+        .as_ref()
+        .and_then(|a| read_bool(a, A_NUMBERED))
+        .unwrap_or(false);
+    Some((level, numbered))
+}
+
+/// A table's column widths list, or `None` when the table carries none.
+#[must_use]
+pub(crate) fn col_widths_read(tree: &LoroTree, table: &TreeID) -> Option<LoroMovableList> {
+    attrs_read(tree, table)?
+        .get(A_COL_WIDTHS)
+        .and_then(|value| value.into_container().ok())
+        .and_then(|container| container.into_movable_list().ok())
+}
+
+/// A table's column widths, in points, in column order.
+#[must_use]
+pub(crate) fn col_widths(tree: &LoroTree, table: &TreeID) -> Vec<f32> {
+    let Some(list) = col_widths_read(tree, table) else {
+        return Vec::new();
+    };
+    (0..list.len())
+        .map(
+            |index| match list.get(index).and_then(|v| v.into_value().ok()) {
+                Some(LoroValue::Double(n)) => n as f32,
+                Some(LoroValue::I64(n)) => n as f32,
+                _ => DEFAULT_COLUMN_WIDTH_PT,
+            },
+        )
+        .collect()
+}
+
+/// A table's region map, or `None` when the table carries none.
+#[must_use]
+pub(crate) fn merged_read(tree: &LoroTree, table: &TreeID) -> Option<LoroMap> {
+    map_read(&attrs_read(tree, table)?, A_MERGED)
+}
+
+/// One merged region as the document holds it: two corners and a stamp,
+/// never a span (`PROSE-009`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Region {
+    pub anchor: TreeID,
+    pub extent: TreeID,
+    pub stamp: i64,
+}
+
+/// Every region a table's map holds, in anchor order. An entry whose record
+/// does not read is left out: it names no rectangle.
+#[must_use]
+pub(crate) fn regions(tree: &LoroTree, table: &TreeID) -> Vec<Region> {
+    let Some(map) = merged_read(tree, table) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    map.for_each(|key, value| {
+        let Ok(LoroValue::Map(record)) = value.into_value() else {
+            return;
+        };
+        let Ok(anchor) = TreeID::try_from(key) else {
+            return;
+        };
+        let extent = match record.get(R_EXTENT) {
+            Some(LoroValue::String(text)) => TreeID::try_from(text.as_str()).ok(),
+            _ => None,
+        };
+        let stamp = match record.get(R_STAMP) {
+            Some(LoroValue::I64(n)) => *n,
+            _ => 0,
+        };
+        if let Some(extent) = extent {
+            out.push(Region {
+                anchor,
+                extent,
+                stamp,
+            });
+        }
+    });
+    out.sort_by_key(|region| region.anchor);
+    out
+}
+
 /// The style id a block carries, or `None` when it carries none. An absent key
 /// means the block type's own built-in style (`PROSE-096`).
 #[must_use]
@@ -307,6 +452,22 @@ pub(crate) fn map_at(parent: &LoroMap, key: &str) -> Option<LoroMap> {
         None => parent
             .insert_container(key, LoroMap::new())
             .map_err(|e| tracing::warn!("Prose: the register {key} refused a container: {e}"))
+            .ok(),
+    }
+}
+
+/// The movable list a key holds, opened once and never replaced, for the same
+/// reason as [`map_at`].
+pub(crate) fn movable_list_at(parent: &LoroMap, key: &str) -> Option<LoroMovableList> {
+    let existing = parent
+        .get(key)
+        .and_then(|value| value.into_container().ok())
+        .and_then(|container| container.into_movable_list().ok());
+    match existing {
+        Some(list) => Some(list),
+        None => parent
+            .insert_container(key, LoroMovableList::new())
+            .map_err(|e| tracing::warn!("Prose: the list {key} refused a container: {e}"))
             .ok(),
     }
 }

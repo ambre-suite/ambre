@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: TABLES
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the nesting guard is built; no command creates a table
+**Implementation:** partial -- every command is built; nothing paints a table yet
 
 > A grid of cells inside the document. Cells hold ordinary text and ordinary paragraphs, and a
 > merged region is described by its two corners. A row inserted at the same moment widens the
@@ -18,92 +18,94 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-009` | `INV` | A merged region MUST be held as its two corner cells alone: a row count, a column count and a grid position MUST NOT be stored, and the span MUST be worked out from the grid the table has now. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-227` | `INV` | Every row of a table MUST hold one cell per column. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-044` | `INV` | The stored column widths MUST hold exactly one entry per column. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-228` | `INV` | A table of no columns MUST NOT exist. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-229` | `INV` | The validation pass MUST read the merge map and the liveness of the cells, and nothing else. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-017` | `CONC` | A row or column insert MUST converge with a concurrent edit inside the table. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-230` | `CONC` | A row or column inserted between a region's two corners MUST leave one region on those same two corners, widened by what fell between them. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-050` | `CONC` | Two merges covering one cell at the same moment MUST resolve to a single region, identically on every peer. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5); needs a 2-peer convergence regression test, like Trame's `TRAME-022` | unimplemented |
-| `PROSE-UI-147` | `OBS` | A covered cell MUST NOT be painted: a region MUST be drawn as one cell. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-009` | `INV` | A merged region MUST be held as its two corner cells alone: a row count, a column count and a grid position MUST NOT be stored, and the span MUST be worked out from the grid the table has now. | this spec section 3; `ambre-spec-prose-schema.md section 3` | `ambre_prose::logic::tables::tests::a_region_is_stored_as_two_corners_and_a_stamp_alone`; `::a_region_a_delete_crosses_keeps_its_corners_and_narrows` | none | verified |
+| `PROSE-FEAT-227` | `INV` | Every table command MUST leave each row of its table holding one cell per column. | this spec section 3 | `ambre_prose::logic::tables::tests::a_new_table_holds_one_cell_per_column_in_every_row`; `::every_table_command_leaves_every_row_one_cell_per_column` | none | verified |
+| `PROSE-FEAT-044` | `INV` | The stored column widths MUST hold exactly one entry per column. | this spec section 3 | `ambre_prose::logic::tables::tests::every_table_command_leaves_every_row_one_cell_per_column`; `::a_column_insert_splices_one_width_beside_the_cells`; `::a_column_delete_removes_one_width_beside_the_cells` | none | verified |
+| `PROSE-FEAT-228` | `INV` | A table of no columns MUST NOT exist. | this spec section 3 | `ambre_prose::logic::tables::tests::a_table_of_no_row_or_no_column_is_refused`; `::deleting_the_last_column_deletes_the_table`; `::deleting_the_last_row_deletes_the_table` | none | verified |
+| `PROSE-FEAT-229` | `INV` | Which regions stand MUST be decided by the merge map and the liveness of the cells alone. | this spec section 3 | `ambre_prose::logic::tables::tests::the_regions_that_stand_are_decided_by_the_records_and_the_grid` | none | verified |
+| `PROSE-FEAT-017` | `CONC` | A row or column insert MUST converge with a concurrent edit inside the table. | this spec section 3 | `ambre_prose::logic::convergence_tests::a_row_insert_and_a_concurrent_edit_in_the_table_converge`; `::a_column_insert_and_a_concurrent_edit_in_the_table_converge` | none | verified |
+| `PROSE-FEAT-230` | `CONC` | A row or column inserted between a region's two corners MUST leave one region on those same two corners, widened by what fell between them. | this spec section 3 | `ambre_prose::logic::convergence_tests::a_row_inserted_between_the_corners_widens_the_region_on_both_peers`; `::a_column_inserted_between_the_corners_widens_the_region_on_both_peers` | none | verified |
+| `PROSE-FEAT-050` | `CONC` | Two merges covering one cell at the same moment MUST resolve to a single region, identically on every peer. | this spec section 3 | `ambre_prose::logic::convergence_tests::two_merges_over_one_cell_at_once_resolve_to_one_region_on_both_peers` | none | verified |
+| `PROSE-UI-147` | `OBS` | A covered cell MUST NOT be painted: a region MUST be drawn as one cell. | this spec section 3 | not built | unbuilt -- lands with the "Page rendering" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Insert a row or a column
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-231` | `POST` | A column insert MUST splice the matching width entry in the same operation that writes the cells. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-232` | `POST` | A column insert carrying no width MUST take the document's default width. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-233` | `FAIL` | An insert naming a column index past the grid MUST be refused, and the refusal MUST be reported. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-234` | `FRAME` | An insert MUST NOT change the width of an existing column, the text of an existing cell, or either corner of a region. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-231` | `POST` | A column insert MUST splice the matching width entry in the same operation that writes the cells. | this spec section 3 | `ambre_prose::logic::tables::tests::a_column_insert_splices_one_width_beside_the_cells` | none | verified |
+| `PROSE-FEAT-232` | `POST` | A column insert carrying no width MUST take the document's default width. | this spec section 3 | `ambre_prose::logic::tables::tests::a_column_insert_carrying_no_width_takes_the_default` | none | verified |
+| `PROSE-FEAT-233` | `FAIL` | An insert naming a column index past the grid MUST be refused, and the refusal MUST be reported. | this spec section 3 | `ambre_prose::logic::tables::tests::a_column_insert_past_the_grid_is_refused_and_reported` | none | verified |
+| `PROSE-FEAT-234` | `FRAME` | An insert MUST NOT change the width of an existing column, the text of an existing cell, or either corner of a region. | this spec section 3 | `ambre_prose::logic::tables::tests::an_insert_leaves_widths_texts_and_corners_alone` | none | verified |
 
 ### 1.3 Delete a row or a column
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-235` | `POST` | A column delete MUST remove the matching width entry in the same operation that removes the cells. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-049` | `POST` | A merged region MUST be dropped when either of its corners is deleted. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-236` | `POST` | The cells a dropped region covered MUST become ordinary cells again. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-237` | `POST` | A region the deleted row or column merely crosses MUST keep both corners and narrow by one. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-045` | `POST` | Deleting the last column MUST delete the whole table. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-238` | `FRAME` | A delete MUST NOT change the width of a surviving column, or the text of a surviving cell. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-235` | `POST` | A column delete MUST remove the matching width entry in the same operation that removes the cells. | this spec section 3 | `ambre_prose::logic::tables::tests::a_column_delete_removes_one_width_beside_the_cells` | none | verified |
+| `PROSE-FEAT-049` | `POST` | A merged region MUST be dropped when either of its corners is deleted. | this spec section 3 | `ambre_prose::logic::tables::tests::deleting_a_corner_drops_the_region_and_frees_its_cells`; `::a_column_delete_drops_a_region_cornered_in_it` | none | verified |
+| `PROSE-FEAT-236` | `POST` | The cells a dropped region covered MUST become ordinary cells again. | this spec section 3 | `ambre_prose::logic::tables::tests::deleting_a_corner_drops_the_region_and_frees_its_cells` | none | verified |
+| `PROSE-FEAT-237` | `POST` | A region the deleted row or column merely crosses MUST keep both corners and narrow by one. | this spec section 3 | `ambre_prose::logic::tables::tests::a_region_a_delete_crosses_keeps_its_corners_and_narrows` | none | verified |
+| `PROSE-FEAT-045` | `POST` | Deleting the last column MUST delete the whole table. | this spec section 3 | `ambre_prose::logic::tables::tests::deleting_the_last_column_deletes_the_table` | none | verified |
+| `PROSE-FEAT-293` | `POST` | Deleting the last row MUST delete the whole table. | this spec section 3 | `ambre_prose::logic::tables::tests::deleting_the_last_row_deletes_the_table` | none | verified |
+| `PROSE-FEAT-238` | `FRAME` | A delete MUST NOT change the width of a surviving column, or the text of a surviving cell. | this spec section 3 | `ambre_prose::logic::tables::tests::a_delete_leaves_surviving_widths_and_texts_alone` | none | verified |
 
 ### 1.4 Resize a column
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-239` | `POST` | A resize MUST rewrite the width entry of the column it names. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-240` | `FRAME` | A resize MUST NOT change the number of width entries, the width of another column, or the text of any cell. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-239` | `POST` | A resize MUST rewrite the width entry of the column it names. | this spec section 3 | `ambre_prose::logic::tables::tests::a_resize_rewrites_one_width_and_nothing_else` | none | verified |
+| `PROSE-FEAT-240` | `FRAME` | A resize MUST NOT change the number of width entries, the width of another column, or the text of any cell. | this spec section 3 | `ambre_prose::logic::tables::tests::a_resize_rewrites_one_width_and_nothing_else` | none | verified |
 
 ### 1.5 Merge cells
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-047` | `FAIL` | A merge whose covered cells are not a solid rectangle MUST be refused. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-046` | `FAIL` | A merge MUST be refused while any covered cell holds text, and nothing MUST be written. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-241` | `POST` | The grid positions the command carries MUST be resolved to two corner block ids before anything is written. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-242` | `POST` | Every existing region the covered set intersects MUST be removed: a merge supersedes the merges it overlaps. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-243` | `POST` | A merge MUST write one entry, keyed on the anchor's block id. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-048` | `POST` | A covered cell's text MUST survive the merge. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-244` | `FRAME` | A merge over a selection of one cell MUST NOT write to the document. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-047` | `FAIL` | A merge whose covered cells are not a solid rectangle MUST be refused. | this spec section 3 | `ambre_prose::logic::tables::tests::a_merge_over_a_ragged_grid_is_refused` | none | verified |
+| `PROSE-FEAT-046` | `FAIL` | A merge MUST be refused while any covered cell holds text, and nothing MUST be written. | this spec section 3 | `ambre_prose::logic::tables::tests::a_merge_over_a_cell_holding_text_is_refused_and_writes_nothing` | none | verified |
+| `PROSE-FEAT-241` | `POST` | The grid positions the command carries MUST be resolved to two corner block ids before anything is written. | this spec section 3 | `ambre_prose::logic::tables::tests::a_merge_resolves_its_positions_to_two_corner_ids` | none | verified |
+| `PROSE-FEAT-242` | `POST` | Every existing region the covered set intersects MUST be removed: a merge supersedes the merges it overlaps. | this spec section 3 | `ambre_prose::logic::tables::tests::a_merge_supersedes_the_regions_it_overlaps` | none | verified |
+| `PROSE-FEAT-243` | `POST` | A merge MUST write one entry, keyed on the anchor's block id. | this spec section 3 | `ambre_prose::logic::tables::tests::a_merge_writes_one_entry_keyed_on_the_anchor` | none | verified |
+| `PROSE-FEAT-048` | `POST` | A covered cell's text MUST survive the merge. | this spec section 3 | `ambre_prose::logic::convergence_tests::a_merge_over_text_typed_at_once_masks_it_and_reports_it`; `::unmerging_brings_a_masked_text_back_verbatim` | none | verified |
+| `PROSE-FEAT-244` | `FRAME` | A merge over a selection of one cell MUST NOT write to the document. | this spec section 3 | `ambre_prose::logic::tables::tests::a_merge_of_one_cell_writes_nothing` | none | verified |
 
 ### 1.6 Unmerge a region
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-245` | `POST` | An unmerge MUST remove the region the named cell anchors, or the one covering it. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-246` | `POST` | A covered cell's text MUST reappear verbatim when the region is unmerged. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-247` | `FRAME` | An unmerge of a cell that neither anchors a region nor is covered by one MUST NOT write to the document. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-245` | `POST` | An unmerge MUST remove the region the named cell anchors, or the one covering it. | this spec section 3 | `ambre_prose::logic::tables::tests::an_unmerge_from_any_cell_of_a_region_removes_it` | none | verified |
+| `PROSE-FEAT-246` | `POST` | A covered cell's text MUST reappear verbatim when the region is unmerged. | this spec section 3 | `ambre_prose::logic::convergence_tests::unmerging_brings_a_masked_text_back_verbatim` | none | verified |
+| `PROSE-FEAT-247` | `FRAME` | An unmerge of a cell that neither anchors a region nor is covered by one MUST NOT write to the document. | this spec section 3 | `ambre_prose::logic::tables::tests::an_unmerge_of_a_cell_in_no_region_writes_nothing` | none | verified |
 
 ### 1.7 Style a cell
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-248` | `POST` | A cell style MUST be written on the cell the command names, and on no other. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-249` | `FRAME` | Styling a cell MUST NOT change its text, the column widths, or the merge map. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-248` | `POST` | A cell style MUST be written on the cell the command names, and on no other. | this spec section 3 | `ambre_prose::logic::tables::tests::a_cell_style_lands_on_the_named_cell_alone` | none | verified |
+| `PROSE-FEAT-294` | `FAIL` | A colour past 24 bits, or a width or a padding that is not a finite number above zero, MUST be refused, and nothing MUST be written. | this spec section 3 | `ambre_prose::logic::tables::tests::a_colour_past_24_bits_or_a_bad_width_or_padding_is_refused` | none | verified |
+| `PROSE-FEAT-249` | `FRAME` | Styling a cell MUST NOT change its text, the column widths, or the merge map. | this spec section 3 | `ambre_prose::logic::tables::tests::a_cell_style_lands_on_the_named_cell_alone` | none | verified |
 
 ### 1.8 Move the caret to another cell
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-250` | `POST` | Traversal MUST land on a region's anchor and skip the cells it covers. | this spec section 4 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-051` | `FRAME` | Moving the caret between cells MUST NOT change the document. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-250` | `POST` | Traversal MUST land on a region's anchor and skip the cells it covers. | this spec section 4 | `ambre_prose::logic::tables::tests::traversal_lands_on_an_anchor_and_skips_what_it_covers` | none | verified |
+| `PROSE-FEAT-051` | `FRAME` | Moving the caret between cells MUST NOT change the document. | this spec section 3 | `ambre_prose::logic::tables::tests::stepping_between_cells_writes_nothing` | none | verified |
 
 ### 1.9 Move the caret past the last cell
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-251` | `POST` | Moving past the last cell MUST append a row and put the caret in its first cell. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-252` | `FRAME` | Appending that row MUST NOT change the text of an existing cell, the column widths, or the merge map. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-251` | `POST` | Moving past the last cell MUST append a row and put the caret in its first cell. | this spec section 3 | `ambre_prose::logic::tables::tests::stepping_past_the_last_cell_appends_a_row_and_enters_it` | none | verified |
+| `PROSE-FEAT-252` | `FRAME` | Appending that row MUST NOT change the text of an existing cell, the column widths, or the merge map. | this spec section 3 | `ambre_prose::logic::tables::tests::stepping_past_the_last_cell_appends_a_row_and_enters_it` | none | verified |
 
 ### 1.10 Validate the table after a remote change
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-253` | `POST` | Each region whose anchor or extent no longer resolves to a live cell MUST be dropped. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-254` | `POST` | Two regions covering one cell MUST resolve to the later of the two, and the other MUST be dropped. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-255` | `POST` | A cell found covered while it still holds text MUST be reported to the view. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-256` | `FRAME` | The pass MUST NOT change the text of a cell, and MUST NOT hold a change back on what it reports. | this spec section 3 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-253` | `POST` | Each region whose anchor or extent no longer resolves to a live cell MUST be dropped. | this spec section 3 | `ambre_prose::logic::tables::tests::a_region_whose_corner_is_gone_is_dropped_by_validation` | none | verified |
+| `PROSE-FEAT-254` | `POST` | Two regions covering one cell MUST resolve to the later of the two, and the other MUST be dropped. | this spec section 3 | `ambre_prose::logic::tables::tests::of_two_regions_over_one_cell_the_later_stands` | none | verified |
+| `PROSE-FEAT-255` | `POST` | A cell found covered while it still holds text MUST be reported to the view. | this spec section 3 | `ambre_prose::logic::convergence_tests::a_merge_over_text_typed_at_once_masks_it_and_reports_it` | none | verified |
+| `PROSE-FEAT-256` | `FRAME` | The pass MUST NOT change the text of a cell, and MUST NOT hold a change back on what it reports. | this spec section 3 | `ambre_prose::logic::convergence_tests::a_merge_over_text_typed_at_once_masks_it_and_reports_it` | none | verified |
 
 ### 1.11 Insert or move a block
 
@@ -113,31 +115,32 @@ status values are normative in `ambre-spec-template.md`.
 
 * **Budget.** none of its own: a table is measured with the rest of the page, the pagination row of
   `ambre-spec-budgets.md section 1`. Resolving a merged region to a rectangle is part of that
-  measurement, and `features/ambre-spec-prose-pagination.md section 3` owns it.
+  measurement, and `features/ambre-spec-prose-pagination.md section 2` owns it.
 * **Boundary.** none of its own: a cell is a block like any other, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 41 `unimplemented`, 1 `verified`: no command of `crates/ambre-prose` builds a
-  table yet. The `verified` row is the nesting guard, which the engine core built. What the refusal
-  names, rather than that it happens, is the typed error of a later Story.
-  `PROSE-009` is what a reviewer holds without a test: a stored span would be a key in the
-  schema table, and it has none. `PROSE-FEAT-017`, `-050` and `-230` need two peers
-  rather than one, and the rest a single writer reaches.
+* **Verification.** 43 `verified`, 1 `unimplemented`: every command is built and tested in
+  `crates/ambre-prose`. `PROSE-UI-147` waits on the painter of the
+  "Page rendering" Story (`ambre-roadmap.md` E5).
+  `PROSE-FEAT-017`, `-050` and `-230` run on two peers that merge their deltas; the rest a single
+  writer reaches. `PROSE-009` also holds by the schema: a stored span would be a key in its table,
+  and it has none.
 
 ---
 
 ## 2. WHAT EACH USER SEES
 
-Two peers in one table. No test resolves yet: the last column names the row each row rests on.
+Two peers in one table. The last column names the test that plays the row, under
+`ambre_prose::logic`.
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| merges four cells | inserts a row between the two corners at the same moment | the same two corners, one row further apart | one region, one row taller, on both screens | none -- `PROSE-FEAT-230` |
-| merges four cells | types in a cell of that region at the same moment | the region, and Bob's text under it | the merged cell; Bob's text returns if the region is unmerged | none -- `PROSE-FEAT-048`, `PROSE-FEAT-246` |
-| merges cells one to four | merges cells three to six at the same moment | one of the two regions | the same region on both screens, never a half of each | none -- `PROSE-FEAT-050` |
-| deletes the row holding a region's top-left cell | -- | no region, and the surviving cells | the merge gone, the cells back, on both screens | none -- `PROSE-FEAT-049`, `PROSE-FEAT-236` |
-| inserts a column | resizes another column at the same moment | one more width entry, and Bob's width | the same grid on both screens | none -- `PROSE-FEAT-017`, `PROSE-FEAT-231` |
-| deletes the only column left | -- | no table | the table gone, the surrounding text kept | none -- `PROSE-FEAT-045` |
-| presses Tab in the last cell | -- | one more row | the caret at the start of a new row, on Alice's screen and in Bob's document | none -- `PROSE-FEAT-251` |
+| merges four cells | inserts a row between the two corners at the same moment | the same two corners, one row further apart | one region, one row taller, on both screens | `convergence_tests::a_row_inserted_between_the_corners_widens_the_region_on_both_peers` |
+| merges four cells | types in a cell of that region at the same moment | the region, and Bob's text under it | the merged cell; Bob's text returns if the region is unmerged | `convergence_tests::unmerging_brings_a_masked_text_back_verbatim` |
+| merges cells one to four | merges cells three to six at the same moment | one of the two regions | the same region on both screens, never a half of each | `convergence_tests::two_merges_over_one_cell_at_once_resolve_to_one_region_on_both_peers` |
+| deletes the row holding a region's top-left cell | -- | no region, and the surviving cells | the merge gone, the cells back, on both screens | `tables::tests::deleting_a_corner_drops_the_region_and_frees_its_cells` |
+| inserts a column | types in a cell at the same moment | one more column, and Bob's text | the same grid on both screens | `convergence_tests::a_column_insert_and_a_concurrent_edit_in_the_table_converge` |
+| deletes the only column left | -- | no table | the table gone, the surrounding text kept | `tables::tests::deleting_the_last_column_deletes_the_table` |
+| presses Tab in the last cell | -- | one more row | the caret at the start of a new row, on Alice's screen and in Bob's document | `tables::tests::stepping_past_the_last_cell_appends_a_row_and_enters_it` |
 
 ---
 
@@ -148,10 +151,12 @@ tree, and their attributes are the node's own. The column widths and the merge m
 node's attributes. All four are declared in `ambre-spec-prose-schema.md section 3`, and what may
 nest under what is `section 4` of that document.
 
-**A merged region is two corners.** The merge map holds one entry per region: the top-left cell's
-block id, and the bottom-right cell's. It holds no row count, no column count and no grid position.
-The number of rows and columns a region spans is worked out at layout time. The two
-corners are found in the grid the table has now (`PROSE-009`). A cell inside the rectangle the two corners
+**A merged region is two corners.** The merge map holds one entry per region, keyed on the
+top-left cell's block id. The entry holds the bottom-right cell's block id and a stamp: the Lamport
+time of the write. It holds no row count, no column count and no grid position.
+
+The number of rows and columns a region spans is worked out at layout time. The two corners are
+found in the grid the table has now (`PROSE-009`). A cell inside the rectangle the two corners
 describe is **covered**: it is not painted, it is not measured, and it keeps its text
 (`PROSE-FEAT-048`).
 
@@ -159,15 +164,16 @@ describe is **covered**: it is not painted, it is not measured, and it keeps its
 
 | Shape | Behaviour |
 |---|---|
+| `InsertTable { parent_id, after_id, rows, cols }` | a table of that size, one empty paragraph per cell, every column at the default width |
 | `InsertTableRow { table_id, after_row }` | a row of one cell per column, at a place in the table |
 | `DeleteTableRow { row_id }` | removes the row, after the merge pass below |
-| `InsertTableCol { table_id, after_col, width_pt }` | a cell in every row, and one width entry beside them |
+| `InsertTableCol { table_id, at_col, width_pt }` | a cell in every row, and one width entry beside them |
 | `DeleteTableCol { table_id, col_index }` | removes the cell in every row and the width entry |
 | `ResizeTableCol { table_id, col_index, width_pt }` | rewrites one width entry, and never the count |
 | `MergeTableCells { table_id, start, end }` | the two selection corners, resolved to two block ids |
 | `UnmergeTableCell { cell_id }` | removes the region that cell anchors, or the one covering it |
 | `SetCellStyle { cell_id, bg, valign, border, padding_pt }` | the background, the alignment, the four borders and the padding |
-| `SetTableStyle { table_id, style }` | the header row and the two banding flags |
+| `StepTableCell { cell_id, backwards }` | Tab and Shift-Tab: the next or previous stop, and a new row past the last one |
 
 `MergeTableCells` carries grid positions, because that is what a selection is. The dispatcher
 resolves them to the two corner block ids before it writes, so the *stored* region is never
@@ -182,7 +188,8 @@ positional.
    wider rather than taking width from its neighbours.
 4. on a delete, drop every region whose top-left or bottom-right cell sat in that column
    (`PROSE-FEAT-049`). A region merely crossed by the column keeps both corners and narrows by one.
-5. on a delete of the last column, delete the table node itself (`PROSE-FEAT-045`).
+5. on a delete of the last column or the last row, delete the table node itself (`PROSE-FEAT-045`,
+   `PROSE-FEAT-293`).
 
 A row insert and a row delete follow the same five steps, without the width list.
 
@@ -204,10 +211,11 @@ no-op too, so unmerging twice costs nothing.
 
 1. drop each region whose anchor or extent no longer resolves to a live cell (`PROSE-FEAT-049`).
 2. resolve two regions covering one cell to the later of the two, and drop the other
-   (`PROSE-FEAT-050`).
+   (`PROSE-FEAT-050`). The later is the higher stamp, and the anchor's block id breaks a tie.
 3. rebuild the covered set from what survives.
 
-The pass reads the merge map and the liveness of the cells, and nothing else. That is what makes
+The pass walks every table at the root of the document. It reads the merge map and the liveness of
+the cells, and nothing else. That is what makes
 every peer land on the same table (`PROSE-FEAT-017`). A cell found covered while it still holds
 text is reported to the view as a hint, and it blocks nothing.
 
@@ -219,10 +227,11 @@ lifts an illegal node instead of refusing the whole file
 (`features/ambre-spec-prose-images.md section 3`).
 
 **Where a table is measured.** Row height, the split at a row boundary and the rectangle a merged
-cell resolves to are `features/ambre-spec-prose-pagination.md section 3`. This document owns the
+cell resolves to are `features/ambre-spec-prose-pagination.md section 2`. This document owns the
 structure; that one owns the page.
 
-**Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
+**Code:** `crates/ambre-prose/src/logic/tables.rs` holds the commands and the validation pass;
+`crates/ambre-prose/src/doc.rs` holds the readers of the two table attributes.
 
 ---
 
@@ -265,19 +274,14 @@ traversal lands on the anchor and skips the cells it covers.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The table style has no key.** `SetTableStyle` writes a header-row flag and two banding flags,
-  and the table node of `ambre-spec-prose-schema.md section 3` declares two attributes: the column
-  widths and the merge map. Nothing says where the three flags live, and nothing says what they
-  paint, so section 1 carries no row for the command.
-* **A cell background crosses the command plane as a number and is stored as text.**
-  `SetCellStyle` carries the background and the border colour as packed integers, and the schema
-  stores both as `"#rrggbb"` strings. Nothing states the conversion, and it is the same two-unit
-  shape `features/ambre-spec-prose-text-editing.md section 6` records for positions.
-* **A refusal travels, and nothing shows it.** `PROSE-040`, `PROSE-FEAT-046` and `PROSE-FEAT-047`
-  each require the refusal to be reported. The engine names the command and the reason
-  (`features/ambre-spec-prose-engine.md section 3`), and a nesting break is one of the reasons it
-  states. What is missing is the view, and the table commands themselves. Both land with the
-  `Tables, table of contents and word count` Story (`ambre-roadmap.md` E5).
+* **The table style is not built.** A header row and two banding flags have no key in
+  `ambre-spec-prose-schema.md section 3` and no rule on what they paint, so no command writes them.
+* **A row insert and a column insert at the same moment leave one row short.** Each peer adds its
+  cells to the rows it saw, so the new row lacks the new column's cell. `PROSE-FEAT-227` binds a
+  command, not a merge, and nothing repairs the row after the merge.
+* **Two column inserts at one place keep no promised order of widths.** The width list and the rows
+  are two sequences, and the merge orders each on its own. The counts agree; which width sits on
+  which column is not ruled.
 * **Nothing rules on a caret inside a cell a merge covers.** Traversal skips a covered cell
   (section 4), and no row says where a caret already sitting in one goes when the merge lands.
 * **Nothing rules on the selection inside a table.** Every gesture above needs a rectangle of

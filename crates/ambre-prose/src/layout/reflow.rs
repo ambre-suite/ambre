@@ -6,9 +6,15 @@
 //! (`PROSE-081`). It stops at the first later block that lands where it
 //! already was (`PROSE-100`). What it produces is what a full recomputation
 //! would have produced (`PROSE-080`).
+//!
+//! A table of contents lists the pages its headings start on, and its own
+//! height moves them. A reflow measures it on the pages the layout before
+//! gave. Then [`Paginator::settle_toc`] is the bounded pass that brings the two
+//! into step, off the keystroke path (`PROSE-019`, `PROSE-084`).
 
 use std::collections::HashMap;
 
+use ambre_bus::app::prose::BlockType;
 use loro::{LoroDoc, TreeID};
 
 use crate::doc;
@@ -16,6 +22,15 @@ use crate::layout::geometry::PageBox;
 use crate::layout::measure::Measurer;
 use crate::layout::pass::{self, PageLayout};
 use crate::layout::place::{self, BlockLayout, MeasuredBlock, Placement};
+use crate::toc;
+
+/// The most layouts one settling of the tables of contents runs
+/// (`PROSE-019`).
+///
+/// A document whose entries move the pages they list, which move the entries,
+/// could otherwise lay itself out without end. The bound makes it cheap rather
+/// than fatal: the last layout stands, one page number possibly off.
+pub const TOC_SETTLE_PASSES: usize = 3;
 
 /// The layout of one document, and what it takes to update it in place.
 ///
@@ -29,6 +44,9 @@ pub struct Paginator {
     defaults: doc::DocDefaults,
     measured: Vec<MeasuredBlock>,
     layout: PageLayout,
+    /// The page each heading started on when the tables of contents were
+    /// last measured. Only [`Paginator::settle_toc`] moves it.
+    toc_pages: HashMap<TreeID, u32>,
 }
 
 impl Default for Paginator {
@@ -53,6 +71,7 @@ impl Paginator {
             defaults: doc::DocDefaults::default(),
             measured: Vec::new(),
             layout: PageLayout::default(),
+            toc_pages: HashMap::new(),
         }
     }
 
@@ -86,8 +105,13 @@ impl Paginator {
         // Every block is about to be shaped again, so what an earlier run was
         // missing says nothing about this one (`PROSE-110`).
         self.measurer.forget_missing();
-        let measured =
-            pass::measure_document(&mut self.measurer, document, page_box.content_width_px);
+        let measured = pass::measure_document_with(
+            &mut self.measurer,
+            document,
+            page_box.content_width_px,
+            &HashMap::new(),
+            &self.toc_pages,
+        );
         let placement = place::place(&measured, page_box.body_height_px(0.0, 0.0));
         self.commit(page_box, measured, placement, 0);
         &self.layout
@@ -125,7 +149,44 @@ impl Paginator {
         &self.layout
     }
 
+    /// Bring every table of contents into step with the pages it lists
+    /// (`PROSE-019`).
+    ///
+    /// Each pass reads the page every heading starts on and, when one moved,
+    /// lays the document out again with the entries measured on it. It stops
+    /// once no page moved, or after [`TOC_SETTLE_PASSES`] layouts, and answers
+    /// how many it ran. No reflow calls it: a keystroke never pays for it
+    /// (`PROSE-084`).
+    pub fn settle_toc(&mut self, document: &LoroDoc) -> usize {
+        let Some(tree) = doc::blocks_read(document) else {
+            return 0;
+        };
+        if self.measured.is_empty() {
+            let _ = self.full(document);
+        }
+        let mut passes = 0;
+        while passes < TOC_SETTLE_PASSES {
+            let pages = toc::heading_pages(&tree, &self.layout.blocks);
+            if pages == self.toc_pages {
+                break;
+            }
+            self.toc_pages = pages;
+            let _ = self.reflow(document, &[]);
+            passes += 1;
+        }
+        passes
+    }
+
+    /// The heading pages the tables of contents were last measured on.
+    #[cfg(test)]
+    pub(crate) fn toc_pages(&self) -> &HashMap<TreeID, u32> {
+        &self.toc_pages
+    }
+
     /// Shape the dirty blocks, and keep what the others already measured.
+    ///
+    /// A table of contents is always shaped again: it reads every heading, so
+    /// any edit may have changed it.
     fn remeasure(
         &mut self,
         document: &LoroDoc,
@@ -136,6 +197,7 @@ impl Paginator {
             .measured
             .iter()
             .filter(|block| !dirty.contains(&block.block_id))
+            .filter(|block| block.block_type != BlockType::Toc)
             .map(|block| (block.block_id, block))
             .collect();
         pass::measure_document_with(
@@ -143,6 +205,7 @@ impl Paginator {
             document,
             page_box.content_width_px,
             &cached,
+            &self.toc_pages,
         )
     }
 
@@ -403,6 +466,84 @@ mod tests {
         let _ = body.insert(0, "a paragraph that was not there before");
         let reflowed = paginator.reflow(&document, &[added]).clone();
         assert_eq!(reflowed.blocks, full_layout(&document).blocks);
+    }
+
+    /// A document opening on a table of contents, then `headings` headings,
+    /// each followed by a paragraph long enough to fill part of a page.
+    fn outline(headings: usize) -> (LoroDoc, Vec<TreeID>) {
+        let document = LoroDoc::new();
+        let mut ids = Vec::new();
+        let Some(toc) = crate::doc::create_block(&document, None, BlockType::Toc) else {
+            return (document, ids);
+        };
+        let mut last = toc;
+        for index in 0..headings {
+            let Some(heading) = crate::doc::create_block(&document, None, BlockType::Heading)
+            else {
+                break;
+            };
+            let tree = crate::doc::blocks(&document);
+            let _ = tree.mov_after(heading, last);
+            let attrs = crate::doc::node_of(&tree, &heading)
+                .and_then(|node| crate::doc::map_at(&node, crate::doc::K_ATTRS));
+            if let Some(attrs) = attrs {
+                let _ = attrs.insert(crate::doc::A_LEVEL, 1_i64);
+            }
+            let body = crate::doc::get_block_text(&document, &heading);
+            let _ = body.insert(0, &format!("Heading {index}"));
+            let Some(paragraph) = crate::doc::create_block(&document, None, BlockType::Paragraph)
+            else {
+                break;
+            };
+            let _ = crate::doc::blocks(&document).mov_after(paragraph, heading);
+            grow(&document, &paragraph, 12);
+            ids.push(heading);
+            last = paragraph;
+        }
+        (document, ids)
+    }
+
+    #[test]
+    fn settling_stops_once_the_pages_hold_and_never_runs_past_its_bound() {
+        let (document, headings) = outline(40);
+        let mut paginator = super::shipped_paginator();
+        let _ = paginator.full(&document);
+        let passes = paginator.settle_toc(&document);
+        // `PROSE-019`: at least one pass, since the first layout measured the
+        // entries on no page at all, and never more than the bound.
+        assert!((1..=TOC_SETTLE_PASSES).contains(&passes), "{passes}");
+        let tree = crate::doc::blocks(&document);
+        let pages = crate::toc::heading_pages(&tree, &paginator.layout().blocks);
+        assert_eq!(&pages, paginator.toc_pages());
+        assert_eq!(pages.len(), headings.len());
+        // Settled, a second call finds nothing to move.
+        assert_eq!(paginator.settle_toc(&document), 0);
+    }
+
+    #[test]
+    fn a_reflow_does_not_settle_the_table_of_contents() {
+        let (document, headings) = outline(20);
+        let mut paginator = super::shipped_paginator();
+        let _ = paginator.full(&document);
+        let _ = paginator.settle_toc(&document);
+        let settled = paginator.toc_pages().clone();
+        let Some(first) = headings.first() else {
+            return;
+        };
+        // A page break ahead of the first heading moves every heading a page
+        // down.
+        let Some(page_break) = crate::doc::create_block(&document, None, BlockType::PageBreak)
+        else {
+            return;
+        };
+        let _ = crate::doc::blocks(&document).mov_before(page_break, *first);
+        let _ = paginator.reflow(&document, &[page_break]);
+        // `PROSE-084`: the keystroke path laid the document out and left the
+        // entries on the pages they had.
+        assert_eq!(paginator.toc_pages(), &settled);
+        let tree = crate::doc::blocks(&document);
+        let moved = crate::toc::heading_pages(&tree, &paginator.layout().blocks);
+        assert_ne!(&moved, paginator.toc_pages());
     }
 }
 

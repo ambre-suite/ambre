@@ -22,7 +22,16 @@ use ambre_core::DocumentId;
 
 use ambre_bus::logic::{AppCommand, LogicCommand};
 
-use crate::events::{BlockId, CursorPosition, ProseCommand, ProseEvent, RemoteCursor};
+use crate::events::{
+    BlockId, CursorPosition, ProseCommand, ProseEvent, RemoteCursor, TableOfContents, WordCount,
+};
+
+/// How long the text must stay still before the four tallies are recounted,
+/// in milliseconds (`PROSE-FEAT-124`).
+///
+/// A fast typist then pays for one recount per pause rather than one per
+/// keystroke (`features/ambre-spec-prose-word-count.md section 4`).
+pub const RECOUNT_DELAY_MS: f64 = 500.0;
 
 /// What was typed and not yet confirmed, held apart from the document rather
 /// than written into a second copy of it.
@@ -83,11 +92,19 @@ pub struct ProseUiState {
     pub layout_version: u64,
     /// The whole live peer set, replaced on each event (`PRESENCE-009`).
     pub remote_cursors: Vec<RemoteCursor>,
+    /// The five figures as last answered, for the shared status bar slot.
+    pub word_count: WordCount,
+    /// The entries of every table of contents, as last answered, by block.
+    pub tocs: Vec<(BlockId, TableOfContents)>,
 
     // Local, and never sent.
     pub viewport: Viewport,
     pub cursor: Option<CursorPosition>,
     pub draft: DraftBuffer,
+    /// A change arrived since the last tick.
+    changed: bool,
+    /// When the text was last seen changing, while a recount is owed.
+    quiet_since_ms: Option<f64>,
 }
 
 /// What a send to the Logic thread did.
@@ -147,7 +164,24 @@ impl ProseUiState {
     /// event names the block the engine minted.
     pub fn apply_event(&mut self, event: &ProseEvent) {
         match event {
-            ProseEvent::DocUpdated { .. } => self.draft.clear(),
+            ProseEvent::DocUpdated { .. } => {
+                self.draft.clear();
+                self.changed = true;
+            }
+            ProseEvent::CellEntered { block, .. } => {
+                self.cursor = Some(CursorPosition {
+                    block_id: *block,
+                    offset: 0,
+                    anchor: None,
+                });
+            }
+            ProseEvent::WordCountUpdated { count } => self.word_count = *count,
+            ProseEvent::TocUpdated { block_id, toc } => {
+                match self.tocs.iter_mut().find(|(id, _)| id == block_id) {
+                    Some(entry) => entry.1 = toc.clone(),
+                    None => self.tocs.push((*block_id, toc.clone())),
+                }
+            }
             ProseEvent::BlockSplit { new_block, .. } => {
                 self.cursor = Some(CursorPosition {
                     block_id: *new_block,
@@ -156,12 +190,33 @@ impl ProseUiState {
                 });
             }
             ProseEvent::RemoteCursors { cursors } => self.remote_cursors = cursors.clone(),
-            // A picture arriving, a refusal and an error each repaint or warn,
-            // and none of them touches what is being typed (`PROSE-UI-027`).
+            // A picture arriving, a masked cell, a refusal and an error each
+            // repaint or warn, and none of them touches what is being typed
+            // (`PROSE-UI-027`).
             ProseEvent::MediaArrived { .. }
+            | ProseEvent::MergeConflictDetected { .. }
             | ProseEvent::DocumentRefused { .. }
             | ProseEvent::Error(_) => {}
         }
+    }
+
+    /// Advance the recount clock by one frame, and answer the recount when
+    /// one is due (`PROSE-FEAT-124`).
+    ///
+    /// A frame that saw a change restarts the wait, so a run of changes costs
+    /// one recount, [`RECOUNT_DELAY_MS`] after the last of them. The caller
+    /// sends the command it gets back.
+    pub fn tick(&mut self, now_ms: f64) -> Option<ProseCommand> {
+        if std::mem::take(&mut self.changed) {
+            self.quiet_since_ms = Some(now_ms);
+            return None;
+        }
+        let since = self.quiet_since_ms?;
+        if now_ms - since < RECOUNT_DELAY_MS {
+            return None;
+        }
+        self.quiet_since_ms = None;
+        Some(ProseCommand::CountWords)
     }
 }
 
@@ -270,5 +325,32 @@ mod tests {
         draft.push_str("x", &other, 0);
         assert_eq!(draft.pending_text, "x");
         assert_eq!(draft.block_id, Some(other));
+    }
+
+    #[test]
+    fn a_run_of_changes_costs_one_recount_after_it_stops() {
+        let mut state = ProseUiState::default();
+        let mut recounts = 0;
+        // A change on every frame for a second, one frame every sixteen
+        // milliseconds: no recount while the run lasts.
+        let mut now = 0.0;
+        while now < 1000.0 {
+            state.apply_event(&ProseEvent::DocUpdated { delta: vec![1] });
+            recounts += usize::from(state.tick(now).is_some());
+            now += 16.0;
+        }
+        assert_eq!(recounts, 0);
+        // Then the text stays still for two seconds: one recount, once the
+        // delay has run out, and no second one.
+        let stopped = now;
+        while now < stopped + 2000.0 {
+            if let Some(command) = state.tick(now) {
+                assert_eq!(command, ProseCommand::CountWords);
+                assert!(now - stopped >= RECOUNT_DELAY_MS - 16.0);
+                recounts += 1;
+            }
+            now += 16.0;
+        }
+        assert_eq!(recounts, 1);
     }
 }

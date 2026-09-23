@@ -39,6 +39,13 @@ postcard = { workspace = true }
 # whole GPU canvas crate -- so the Logic worker's wasm stays lean.
 parley = { workspace = true }
 
+# Word and grapheme boundaries for the word count (UAX #29). A character is a
+# grapheme cluster and a word is a word segment holding a letter or a digit
+# (`features/ambre-spec-prose-word-count.md section 2`), and neither can be
+# answered from `char` alone. Already in the graph through `convert_case`, and
+# budgeted in `ambre-spec-budgets.md section 5`.
+unicode-segmentation = { workspace = true }
+
 # The UI -> Logic channel the view sends on. Shared memory between the two
 # threads, so a command moves rather than serializes.
 flume = { workspace = true }

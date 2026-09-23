@@ -158,14 +158,14 @@ attribute carries no `a` map.
 | Paragraph | 0 | -- |
 | Heading | 1 | `level` (`u8`, `1..=6`) |
 | ListItem | 2 | `ls` (`u8`: 0 bullet, 1 ordered, 2 todo), `lo` (`u8` when `ls` is 1: 0 decimal, 1 lower alpha, 2 upper alpha, 3 lower roman, 4 upper roman), `tc` (`bool` when `ls` is 2) |
-| Table | 3 | `col_widths` (a list of `f32`), `merged` (anchor `TreeID` to extent `TreeID`) |
+| Table | 3 | `col_widths` (a list of `f32`, one per column), `merged` (a map keyed on the anchor `TreeID`, each entry a map of `e`, the extent `TreeID`, and `n`, the Lamport stamp of the merge) |
 | TableRow | 4 | -- |
-| TableCell | 5 | `bg` (String), `bt`, `bb`, `bl`, `br` (`f32`, the four border widths), `bc` (String, the border colour), `pad` (`f32`), `va` (`u8`) |
+| TableCell | 5 | `bg` (`"#rrggbb"`), `bt`, `bb`, `bl`, `br` (`f32`, the four border widths), `bc` (`"#rrggbb"`, the border colour), `pad` (`f32`), `va` (`u8`: 0 top, 1 middle, 2 bottom) |
 | CodeBlock | 6 | `lang` (String) |
 | Image | 7 | `content_hash` (String), `alt` (String), `w`, `h` (`u32`, the display size, never the native one), `align` (`u8`: 0 block, 1 left, 2 right, 3 centre), `caption` (String) |
 | PageBreak | 8 | -- |
 | HRule | 9 | -- |
-| Toc | 10 | `max_level` (`u8`), `numbered` (`bool`) |
+| Toc | 10 | `max_level` (`u8`, `1..=6`), `numbered` (`bool`) |
 
 **The inline mark registry.** A mark's key, the grammar of its String value, and the expansion an
 adjacent insertion gets. `ExpandType` is read from the key alone, and the last row is why the

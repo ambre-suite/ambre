@@ -118,19 +118,28 @@ pub fn measure_document(
     document: &LoroDoc,
     content_width_px: f32,
 ) -> Vec<MeasuredBlock> {
-    measure_document_with(measurer, document, content_width_px, &HashMap::new())
+    measure_document_with(
+        measurer,
+        document,
+        content_width_px,
+        &HashMap::new(),
+        &HashMap::new(),
+    )
 }
 
 /// Measure every block, reusing a measurement the caller already holds.
 ///
 /// A block found in `cached` is not shaped again (`PROSE-083`). The caller
 /// decides what belongs there, which is every block its edit did not touch.
+/// `toc_pages` holds the page each heading started on in the layout before,
+/// which is what a table of contents is measured with (`PROSE-019`).
 #[must_use]
 pub fn measure_document_with(
     measurer: &mut Measurer,
     document: &LoroDoc,
     content_width_px: f32,
     cached: &HashMap<TreeID, &MeasuredBlock>,
+    toc_pages: &HashMap<TreeID, u32>,
 ) -> Vec<MeasuredBlock> {
     let Some(tree) = doc::blocks_read(document) else {
         return Vec::new();
@@ -143,6 +152,7 @@ pub fn measure_document_with(
         defaults: &defaults,
         content_width_px,
         cached,
+        toc_pages,
     };
     for root in doc::roots(&tree) {
         walk(measurer, &scope, &root, &mut measured);
@@ -157,6 +167,7 @@ struct Walk<'a> {
     defaults: &'a doc::DocDefaults,
     content_width_px: f32,
     cached: &'a HashMap<TreeID, &'a MeasuredBlock>,
+    toc_pages: &'a HashMap<TreeID, u32>,
 }
 
 /// Measure one block and then its children, in that order.
@@ -170,15 +181,7 @@ fn walk(measurer: &mut Measurer, scope: &Walk<'_>, id: &TreeID, out: &mut Vec<Me
     };
     match scope.cached.get(id) {
         Some(block) => out.push((*block).clone()),
-        None => out.push(measure_one(
-            measurer,
-            scope.document,
-            scope.tree,
-            scope.defaults,
-            id,
-            block_type,
-            scope.content_width_px,
-        )),
+        None => out.push(measure_one(measurer, scope, id, block_type)),
     }
     if block_type == BlockType::Table {
         return;
@@ -191,13 +194,12 @@ fn walk(measurer: &mut Measurer, scope: &Walk<'_>, id: &TreeID, out: &mut Vec<Me
 /// What one block costs, measured against what its type is.
 fn measure_one(
     measurer: &mut Measurer,
-    document: &LoroDoc,
-    tree: &LoroTree,
-    defaults: &doc::DocDefaults,
+    scope: &Walk<'_>,
     id: &TreeID,
     block_type: BlockType,
-    content_width_px: f32,
 ) -> MeasuredBlock {
+    let (document, tree, defaults) = (scope.document, scope.tree, scope.defaults);
+    let content_width_px = scope.content_width_px;
     let bold = block_type == BlockType::Heading;
     let style = EffectiveStyle::resolve(defaults, tree, id, bold);
     let text_width_px = style.text_width_px(content_width_px);
@@ -213,10 +215,20 @@ fn measure_one(
             let rows = table_metrics(measurer, document, tree, defaults, id, content_width_px);
             (rows.text_height_px, Some(rows))
         }
-        // The entries are the qualified headings, and the generated block that
-        // holds them lands with the table-of-contents Story
-        // (`ambre-roadmap.md` E5). An empty one measures as nothing.
-        BlockType::Toc => (0.0, None),
+        // One line per entry, measured on the pages the layout before gave
+        // the headings. A table of contents that lists nothing measures as
+        // nothing.
+        BlockType::Toc => {
+            let text = crate::toc::build(document, tree, id, scope.toc_pages)
+                .map(|toc| crate::toc::lines(&toc))
+                .unwrap_or_default();
+            if text.is_empty() {
+                (0.0, None)
+            } else {
+                let metrics = measurer.measure(&text, &style, text_width_px);
+                (metrics.text_height_px, Some(metrics))
+            }
+        }
         _ => {
             let text = doc::get_block_text(document, id).to_string();
             let metrics = measurer.measure(&text, &style, text_width_px);
@@ -325,12 +337,14 @@ fn cell_height(
 ) -> f32 {
     let mut stacked = Vec::new();
     let empty = HashMap::new();
+    let no_pages = HashMap::new();
     let scope = Walk {
         document,
         tree,
         defaults,
         content_width_px: width_px,
         cached: &empty,
+        toc_pages: &no_pages,
     };
     for child in doc::children_of(tree, Some(*cell)) {
         walk(measurer, &scope, &child, &mut stacked);

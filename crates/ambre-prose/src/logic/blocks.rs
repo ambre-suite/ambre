@@ -120,41 +120,63 @@ impl ProseState {
         init: &BlockInit,
         style_id: Option<&str>,
     ) -> ProseOutcome {
-        let tree = doc::blocks(&self.doc);
-        if let Some(parent) = parent_id
-            && doc::node_of(&tree, &parent).is_none()
-        {
-            return Self::err_no_block(&parent);
-        }
-        if let Some(after) = after_id
-            && doc::node_of(&tree, &after).is_none()
-        {
-            return Self::err_no_block(&after);
-        }
-        let Ok(parent_id) = landing_parent(&tree, parent_id, after_id) else {
-            return Self::err_nesting();
-        };
-        if !doc::nesting_allows(&tree, parent_id, init.block_type()) {
-            return Self::err_nesting();
-        }
-        let Some(id) = doc::create_block(&self.doc, parent_id, init.block_type()) else {
-            return Self::err_write("the tree refused a block");
+        let id = match self.mint_placed(parent_id, after_id, init.block_type()) {
+            Ok(id) => id,
+            Err(refused) => return refused,
         };
         if let Err(e) = self.write_init(&id, init) {
             return Self::err_write(&e);
         }
+        let tree = doc::blocks(&self.doc);
         if let Some(style_id) = style_id
             && let Some(node) = doc::node_of(&tree, &id)
             && let Err(e) = node.insert(doc::K_STYLE, style_id)
         {
             return Self::err_write(&format!("{e:?}"));
         }
+        self.commit_with(Vec::new())
+    }
+
+    /// Mint one block of `block_type` under a parent, after a sibling, once
+    /// the nesting table has accepted it (`PROSE-040`).
+    ///
+    /// The shared front half of every insert. A paragraph, a table and a table
+    /// of contents all land through it, so none of them can skip the guard.
+    ///
+    /// # Errors
+    /// The refusal to answer with, before anything is written.
+    pub(super) fn mint_placed(
+        &self,
+        parent_id: Option<TreeID>,
+        after_id: Option<TreeID>,
+        block_type: BlockType,
+    ) -> Result<TreeID, ProseOutcome> {
+        let tree = doc::blocks(&self.doc);
+        if let Some(parent) = parent_id
+            && doc::node_of(&tree, &parent).is_none()
+        {
+            return Err(Self::err_no_block(&parent));
+        }
+        if let Some(after) = after_id
+            && doc::node_of(&tree, &after).is_none()
+        {
+            return Err(Self::err_no_block(&after));
+        }
+        let Ok(parent_id) = landing_parent(&tree, parent_id, after_id) else {
+            return Err(Self::err_nesting());
+        };
+        if !doc::nesting_allows(&tree, parent_id, block_type) {
+            return Err(Self::err_nesting());
+        }
+        let Some(id) = doc::create_block(&self.doc, parent_id, block_type) else {
+            return Err(Self::err_write("the tree refused a block"));
+        };
         if let Some(after) = after_id
             && let Err(e) = tree.mov_after(id, after)
         {
-            return Self::err_write(&format!("{e:?}"));
+            return Err(Self::err_write(&format!("{e:?}")));
         }
-        self.commit_with(Vec::new())
+        Ok(id)
     }
 
     /// Write the attributes one initializer carries.

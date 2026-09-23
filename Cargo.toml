@@ -205,6 +205,10 @@ ruzstd = "0.8"
 # CRDT
 loro = "1.10"
 
+# Text: word and grapheme boundaries (UAX #29), budgeted in
+# `ambre-spec-budgets.md section 5`.
+unicode-segmentation = "1.13"
+
 # Formula parsing
 nom = "8.0"
 

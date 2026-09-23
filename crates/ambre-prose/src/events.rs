@@ -11,9 +11,9 @@
 //! which the engine does not hold (`PROSE-024`).
 
 pub use ambre_bus::app::prose::{
-    Align, BlockId, BlockInit, BlockType, CursorPosition, LineHeight, LineHeightMode, ListStyle,
-    OrderedStyle, ParagraphStyle, PresencePayload, ProseCommand, ProseError, ProseEvent,
-    ProseRefusal, RemoteCursor,
+    Align, BlockId, BlockInit, BlockType, CellBorder, CursorPosition, LineHeight, LineHeightMode,
+    ListStyle, OrderedStyle, ParagraphStyle, PresencePayload, ProseCommand, ProseError, ProseEvent,
+    ProseRefusal, RemoteCursor, TableOfContents, TocEntry, VAlign, WordCount,
 };
 
 use loro::TreeID;

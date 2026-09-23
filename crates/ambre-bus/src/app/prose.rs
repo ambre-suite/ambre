@@ -372,6 +372,86 @@ pub struct RemoteCursor {
 }
 
 // =============================================================================
+// Tables, the table of contents and the word count
+// =============================================================================
+
+/// Where a cell's content sits between its top and bottom edges
+/// (`features/ambre-spec-prose-tables.md`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VAlign {
+    Top = 0,
+    Middle = 1,
+    Bottom = 2,
+}
+
+impl VAlign {
+    #[must_use]
+    pub fn code(self) -> u8 {
+        self as u8
+    }
+
+    #[must_use]
+    pub fn from_code(code: u8) -> Option<Self> {
+        Some(match code {
+            0 => Self::Top,
+            1 => Self::Middle,
+            2 => Self::Bottom,
+            _ => return None,
+        })
+    }
+}
+
+/// One border, applied to the four edges of a cell at once.
+///
+/// `color` is `0xRRGGBB`. The document stores it as the `"#rrggbb"` record the
+/// mark registry uses, and a value past 24 bits is refused.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CellBorder {
+    pub width_pt: f32,
+    pub color: u32,
+}
+
+/// The five figures of the status bar (`features/ambre-spec-prose-word-count.md`).
+///
+/// Four are tallies of the text. The fifth is read off the layout, and each
+/// half is refreshed by its own trigger.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WordCount {
+    pub words: u32,
+    /// Grapheme clusters that are not whitespace (`PROSE-FEAT-039`).
+    pub characters: u32,
+    /// The same clusters, whitespace and paragraph breaks included
+    /// (`PROSE-FEAT-121`).
+    pub characters_with_spaces: u32,
+    pub paragraphs: u32,
+    /// From the layout, never from the tally (`PROSE-FEAT-038`).
+    pub pages: u32,
+}
+
+/// One line of a table of contents. Nothing here is persisted
+/// (`features/ambre-spec-prose-table-of-contents.md`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TocEntry {
+    pub block_id: BlockId,
+    pub level: u8,
+    pub text: String,
+    /// Present only while the block is configured as numbered
+    /// (`PROSE-FEAT-062`).
+    pub section_number: Option<Vec<u32>>,
+    /// The one-based page the heading starts on (`PROSE-FEAT-060`).
+    pub page: u32,
+}
+
+/// The entries one table-of-contents block lists, built from the headings and
+/// a layout.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TableOfContents {
+    pub entries: Vec<TocEntry>,
+    pub max_level: u8,
+    pub numbered: bool,
+}
+
+// =============================================================================
 // Commands -- the content plane, UI thread -> Logic thread
 // =============================================================================
 
@@ -381,9 +461,9 @@ pub struct RemoteCursor {
 /// memory, so no shape here derives `serde`. Every offset is a count of Unicode
 /// code points into the body of the block the command names (`PROSE-045`).
 ///
-/// The variants are the ones the engine core answers. Tables, comments,
-/// footnotes, find, interop and the clipboard reach this enum with the Story
-/// that builds each of them (`ambre-roadmap.md` E5).
+/// The variants are the ones the engine answers today. Comments, footnotes,
+/// find, interop and the clipboard reach this enum with the Story that builds
+/// each of them (`ambre-roadmap.md` E5).
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProseCommand {
     /// Changes nothing, and is the one command a test drives the empty outcome
@@ -496,6 +576,84 @@ pub enum ProseCommand {
         style: ParagraphStyle,
     },
 
+    // -- Tables (`features/ambre-spec-prose-tables.md`) --
+    /// A table of `rows` by `cols`, each cell holding one empty paragraph,
+    /// every column at the document's default width. A table carries more
+    /// than `BlockInit` holds, so it keeps a command of its own.
+    InsertTable {
+        parent_id: Option<BlockId>,
+        after_id: Option<BlockId>,
+        rows: u32,
+        cols: u32,
+    },
+    /// A row of one cell per column. `None` puts it first.
+    InsertTableRow {
+        table_id: BlockId,
+        after_row: Option<BlockId>,
+    },
+    DeleteTableRow {
+        row_id: BlockId,
+    },
+    /// `at_col` is the index the new column takes, from zero to the column
+    /// count. `None` takes the document's default width (`PROSE-FEAT-232`).
+    InsertTableCol {
+        table_id: BlockId,
+        at_col: u32,
+        width_pt: Option<f32>,
+    },
+    DeleteTableCol {
+        table_id: BlockId,
+        col_index: u32,
+    },
+    ResizeTableCol {
+        table_id: BlockId,
+        col_index: u32,
+        width_pt: f32,
+    },
+    /// Two grid positions, `(row, column)`, in either order. The handler
+    /// resolves them to two block ids before it writes (`PROSE-FEAT-241`).
+    MergeTableCells {
+        table_id: BlockId,
+        start: (u32, u32),
+        end: (u32, u32),
+    },
+    UnmergeTableCell {
+        cell_id: BlockId,
+    },
+    /// Each `None` leaves that property alone.
+    SetCellStyle {
+        cell_id: BlockId,
+        bg: Option<u32>,
+        valign: Option<VAlign>,
+        border: Option<CellBorder>,
+        padding_pt: Option<f32>,
+    },
+    /// Tab and Shift-Tab: the next or the previous stop in reading order.
+    /// Past the last cell, a row is appended (`PROSE-FEAT-251`).
+    StepTableCell {
+        cell_id: BlockId,
+        backwards: bool,
+    },
+
+    // -- Table of contents (`features/ambre-spec-prose-table-of-contents.md`) --
+    /// `max_level` is clamped to one to six (`PROSE-FEAT-292`).
+    InsertToc {
+        parent_id: Option<BlockId>,
+        after_id: Option<BlockId>,
+        max_level: u8,
+        numbered: bool,
+    },
+    UpdateTocConfig {
+        block_id: BlockId,
+        max_level: u8,
+        numbered: bool,
+    },
+
+    // -- Word count (`features/ambre-spec-prose-word-count.md`) --
+    /// Recount the four text tallies. The view sends it once a run of changes
+    /// has stopped (`PROSE-FEAT-124`); it writes nothing.
+    CountWords,
+
     // -- Presence (`1-Foundations/ambre-spec-presence.md`) --
     /// The handler builds the wire frame and returns it as the outcome's
     /// ephemeral half. No user id is ever put on the wire.
@@ -518,7 +676,10 @@ impl ProseCommand {
     /// viewer still shows a cursor.
     #[must_use]
     pub fn is_mutating(&self) -> bool {
-        !matches!(self, Self::Noop | Self::UpdateCursor { .. })
+        !matches!(
+            self,
+            Self::Noop | Self::UpdateCursor { .. } | Self::CountWords
+        )
     }
 
     /// What a refusal calls this command when it tells the author
@@ -545,6 +706,19 @@ impl ProseCommand {
             Self::UnindentList { .. } => "outdenting a list item",
             Self::SetCodeLang { .. } => "setting the code language",
             Self::SetParagraphStyle { .. } => "setting the paragraph style",
+            Self::InsertTable { .. } => "inserting a table",
+            Self::InsertTableRow { .. } => "inserting a row",
+            Self::DeleteTableRow { .. } => "deleting the row",
+            Self::InsertTableCol { .. } => "inserting a column",
+            Self::DeleteTableCol { .. } => "deleting the column",
+            Self::ResizeTableCol { .. } => "resizing the column",
+            Self::MergeTableCells { .. } => "merging the cells",
+            Self::UnmergeTableCell { .. } => "unmerging the cells",
+            Self::SetCellStyle { .. } => "styling the cell",
+            Self::StepTableCell { .. } => "moving to another cell",
+            Self::InsertToc { .. } => "inserting a table of contents",
+            Self::UpdateTocConfig { .. } => "changing the table of contents",
+            Self::CountWords => "counting the words",
             Self::UpdateCursor { .. } => "moving the cursor",
             Self::Undo => "undoing",
             Self::Redo => "redoing",
@@ -559,9 +733,9 @@ impl ProseCommand {
 /// One thing the view is told. A second enum would put a document fact in two
 /// places and leave the dispatch with a hole (`PROSE-UI-001`).
 ///
-/// The layout, the shaped runs, the table of contents and the word count reach
-/// this enum later. So do the find results and the interop reports. Each arrives
-/// with the Story that builds it (`ambre-roadmap.md` E5).
+/// The layout and the shaped runs reach this enum later. So do the find
+/// results and the interop reports. Each arrives with the Story that builds it
+/// (`ambre-roadmap.md` E5).
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProseEvent {
     /// The confirmed change, local or imported. The bytes are the ones applied,
@@ -582,6 +756,20 @@ pub enum ProseEvent {
     },
     /// A full-state read the schema gate refused (`SCHEMA-008`).
     DocumentRefused { reason: String },
+    /// The entries of one table-of-contents block, rebuilt from a layout
+    /// (`PROSE-FEAT-003`).
+    TocUpdated {
+        block_id: BlockId,
+        toc: TableOfContents,
+    },
+    /// The five figures, after a recount or a new layout.
+    WordCountUpdated { count: WordCount },
+    /// A cell a merge covers still holds text: masked, not destroyed. A hint,
+    /// and it blocks nothing (`PROSE-FEAT-255`).
+    MergeConflictDetected { cell_id: BlockId },
+    /// Where the caret lands after a step between cells: the first text block
+    /// of `cell`, at its start (`PROSE-FEAT-250`, `PROSE-FEAT-251`).
+    CellEntered { cell: BlockId, block: BlockId },
     /// A command the engine could not honour. The value names what was
     /// refused and why (`PROSE-105`).
     Error(ProseError),
@@ -643,6 +831,20 @@ pub enum ProseRefusal {
     /// A collaborator's change this peer could not apply.
     #[error("a collaborator's change could not be applied; the document may be behind")]
     RemoteImportFailed,
+    /// A row or a column index outside the grid the table has now
+    /// (`PROSE-FEAT-233`).
+    #[error("that row or column is not in the table")]
+    OutsideTheGrid,
+    /// A merge whose covered cells do not form a solid rectangle
+    /// (`PROSE-FEAT-047`).
+    #[error("the cells to merge do not form a rectangle")]
+    MergeNotRectangular,
+    /// A merge over a cell that still holds text (`PROSE-FEAT-046`).
+    #[error("a cell to merge still holds text")]
+    MergeOverText,
+    /// A table dimension, a width or a colour the format cannot hold.
+    #[error("{0} is not a value a table takes")]
+    BadTableValue(String),
     /// A write the CRDT engine itself refused.
     #[error("the document engine could not write the change: {0}")]
     WriteFailed(String),

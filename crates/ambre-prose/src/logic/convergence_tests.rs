@@ -10,6 +10,7 @@ use crate::events::{
     Align, BlockInit, ListStyle, OrderedStyle, ParagraphStyle, ProseCommand, ProseEvent,
 };
 use crate::logic::ProseState;
+use crate::logic::tables::tests::{cell_at, document_with_table, texts, type_in};
 
 /// Two peers over one seeded document, so both start from the same block ids.
 ///
@@ -580,4 +581,190 @@ fn mark(
 /// The bold mark over one range, and the delta it exported.
 fn bold(state: &mut ProseState, block: crate::events::BlockId, range: (u32, u32)) -> Vec<u8> {
     mark(state, block, range, "b", None)
+}
+
+// -- tables (`features/ambre-spec-prose-tables.md`) ----------------------------
+
+/// Two peers over one document holding a table of `rows` by `cols`.
+fn two_peers_with_table(rows: u32, cols: u32) -> (ProseState, ProseState, loro::TreeID) {
+    let (alice, table) = document_with_table(1, rows, cols);
+    let seed = alice.export_snapshot();
+    let mut bob = ProseState::with_peer(2).expect("a document is built");
+    bob.import_snapshot(&seed).expect("the seed imports");
+    (alice, bob, table)
+}
+
+fn merge_cells(
+    state: &mut ProseState,
+    table: loro::TreeID,
+    start: (u32, u32),
+    end: (u32, u32),
+) -> Vec<u8> {
+    state
+        .handle_command(ProseCommand::MergeTableCells {
+            table_id: crate::events::block_id(table),
+            start,
+            end,
+        })
+        .update
+        .expect("a delta")
+}
+
+/// The row count of a table, and the rectangle of every region that stands.
+fn grid_and_regions(
+    state: &ProseState,
+    table: loro::TreeID,
+) -> (usize, Vec<(usize, usize, usize, usize)>) {
+    let rows = state.grid_of(&table).map_or(0, |grid| grid.rows.len());
+    let rects = state
+        .merged_rects(&table)
+        .into_iter()
+        .map(|(_, rect)| (rect.top, rect.left, rect.bottom, rect.right))
+        .collect();
+    (rows, rects)
+}
+
+#[test]
+fn a_row_insert_and_a_concurrent_edit_in_the_table_converge() {
+    let (mut alice, mut bob, table) = two_peers_with_table(2, 2);
+    let first_row = alice.grid_of(&table).expect("a table").rows[0];
+    let from_alice = alice
+        .handle_command(ProseCommand::InsertTableRow {
+            table_id: crate::events::block_id(table),
+            after_row: Some(crate::events::block_id(first_row)),
+        })
+        .update
+        .expect("a delta");
+    let cell = cell_at(&bob, table, 1, 1);
+    let from_bob = type_in(&mut bob, cell, "Bob's cell").expect("a delta");
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+    assert_eq!(texts(&alice, table), texts(&bob, table));
+    // The row landed between the two, and the text moved down with its cell.
+    assert_eq!(texts(&alice, table).len(), 3);
+    assert_eq!(texts(&alice, table)[2][1], "Bob's cell");
+}
+
+#[test]
+fn a_column_insert_and_a_concurrent_edit_in_the_table_converge() {
+    let (mut alice, mut bob, table) = two_peers_with_table(2, 2);
+    let from_alice = alice
+        .handle_command(ProseCommand::InsertTableCol {
+            table_id: crate::events::block_id(table),
+            at_col: 1,
+            width_pt: None,
+        })
+        .update
+        .expect("a delta");
+    let cell = cell_at(&bob, table, 0, 1);
+    let from_bob = type_in(&mut bob, cell, "moved right").expect("a delta");
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+    assert_eq!(texts(&alice, table), texts(&bob, table));
+    assert_eq!(texts(&alice, table)[0], ["", "", "moved right"]);
+    assert_eq!(alice.column_widths(&table), bob.column_widths(&table));
+    assert_eq!(alice.column_widths(&table).len(), 3);
+}
+
+#[test]
+fn a_row_inserted_between_the_corners_widens_the_region_on_both_peers() {
+    let (mut alice, mut bob, table) = two_peers_with_table(3, 3);
+    let merged = merge_cells(&mut alice, table, (0, 0), (1, 1));
+    bob.apply_remote(&merged);
+    let first_row = alice.grid_of(&table).expect("a table").rows[0];
+    let from_alice = alice
+        .handle_command(ProseCommand::InsertTableRow {
+            table_id: crate::events::block_id(table),
+            after_row: Some(crate::events::block_id(first_row)),
+        })
+        .update
+        .expect("a delta");
+    let anchor = cell_at(&bob, table, 0, 0);
+    let from_bob = type_in(&mut bob, anchor, "anchor text").expect("a delta");
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+    let seen = grid_and_regions(&alice, table);
+    assert_eq!(seen, grid_and_regions(&bob, table));
+    // One region, on the same two corners, now three rows tall.
+    assert_eq!(seen, (4, vec![(0, 0, 2, 1)]));
+    assert_eq!(alice.regions_of(&table), bob.regions_of(&table));
+}
+
+#[test]
+fn a_column_inserted_between_the_corners_widens_the_region_on_both_peers() {
+    let (mut alice, mut bob, table) = two_peers_with_table(2, 3);
+    let merged = merge_cells(&mut alice, table, (0, 0), (1, 1));
+    bob.apply_remote(&merged);
+    let from_alice = alice
+        .handle_command(ProseCommand::InsertTableCol {
+            table_id: crate::events::block_id(table),
+            at_col: 1,
+            width_pt: None,
+        })
+        .update
+        .expect("a delta");
+    let anchor = cell_at(&bob, table, 0, 0);
+    let from_bob = type_in(&mut bob, anchor, "anchor text").expect("a delta");
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+    let seen = grid_and_regions(&alice, table);
+    assert_eq!(seen, grid_and_regions(&bob, table));
+    assert_eq!(seen, (2, vec![(0, 0, 1, 2)]));
+}
+
+#[test]
+fn two_merges_over_one_cell_at_once_resolve_to_one_region_on_both_peers() {
+    let (mut alice, mut bob, table) = two_peers_with_table(2, 2);
+    let from_alice = merge_cells(&mut alice, table, (0, 0), (0, 1));
+    let from_bob = merge_cells(&mut bob, table, (0, 1), (1, 1));
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+    let seen = grid_and_regions(&alice, table);
+    assert_eq!(seen, grid_and_regions(&bob, table));
+    assert_eq!(seen.1.len(), 1);
+    // Each peer dropped the losing record on its own, and the two drops
+    // agree: the stored map holds the same single entry on both.
+    assert_eq!(alice.regions_of(&table), bob.regions_of(&table));
+    assert_eq!(alice.regions_of(&table).len(), 1);
+}
+
+#[test]
+fn a_merge_over_text_typed_at_once_masks_it_and_reports_it() {
+    let (mut alice, mut bob, table) = two_peers_with_table(2, 2);
+    let from_alice = merge_cells(&mut alice, table, (0, 0), (0, 1));
+    let covered = cell_at(&bob, table, 0, 1);
+    let from_bob = type_in(&mut bob, covered, "typed meanwhile").expect("a delta");
+    let seen_by_bob = bob.apply_remote(&from_alice);
+    let seen_by_alice = alice.apply_remote(&from_bob);
+    for events in [&seen_by_alice, &seen_by_bob] {
+        // The change is applied whatever the pass finds, and the masked cell
+        // is named (`PROSE-FEAT-255`, `PROSE-FEAT-256`).
+        assert!(matches!(
+            events.first(),
+            Some(ProseEvent::DocUpdated { .. })
+        ));
+        let reported = events.iter().any(|event| {
+            matches!(event, ProseEvent::MergeConflictDetected { cell_id }
+                if *cell_id == crate::events::block_id(covered))
+        });
+        assert!(reported, "{events:?}");
+    }
+    // The region stands and the text under it survives, on both peers.
+    assert_eq!(grid_and_regions(&alice, table), (2, vec![(0, 0, 0, 1)]));
+    assert_eq!(
+        grid_and_regions(&alice, table),
+        grid_and_regions(&bob, table)
+    );
+    assert_eq!(texts(&alice, table)[0][1], "typed meanwhile");
+    assert_eq!(texts(&alice, table), texts(&bob, table));
+}
+
+#[test]
+fn unmerging_brings_a_masked_text_back_verbatim() {
+    let (mut alice, mut bob, table) = two_peers_with_table(2, 2);
+    let from_alice = merge_cells(&mut alice, table, (0, 0), (0, 1));
+    let covered = cell_at(&bob, table, 0, 1);
+    let from_bob = type_in(&mut bob, covered, "Kept, verbatim.").expect("a delta");
+    exchange(&mut alice, &mut bob, &from_alice, &from_bob);
+    let anchor = cell_at(&alice, table, 0, 0);
+    alice.handle_command(ProseCommand::UnmergeTableCell {
+        cell_id: crate::events::block_id(anchor),
+    });
+    assert!(alice.merged_rects(&table).is_empty());
+    assert_eq!(texts(&alice, table)[0][1], "Kept, verbatim.");
 }

@@ -21,12 +21,12 @@
 
 use std::collections::BTreeSet;
 
-use loro::{LoroDoc, LoroValue};
+use loro::{LoroDoc, LoroValue, TreeID};
 
 use crate::doc;
 use crate::events::{
-    Align, BlockInit, LineHeight, LineHeightMode, ListStyle, OrderedStyle, ParagraphStyle,
-    ProseCommand,
+    Align, BlockInit, CellBorder, LineHeight, LineHeightMode, ListStyle, OrderedStyle,
+    ParagraphStyle, ProseCommand, VAlign, tree_id,
 };
 use crate::logic::ProseState;
 use crate::schema::SCHEMA_VERSION;
@@ -80,15 +80,22 @@ impl Shape {
 
 /// Walk a map, recording every key and descending into the nested maps.
 ///
-/// A list is recorded and not entered. No register of the schema holds one,
-/// and the tree and the rich text have their own readers below.
+/// A list is recorded and not entered: a table's column widths is the one
+/// the schema holds, and its entries are numbers alone. The tree and the rich
+/// text have their own readers below. A key naming a block, as a table's
+/// region map does, collapses to [`ANY`].
 fn walk_map(prefix: &str, value: &LoroValue, shape: &mut Shape) {
     let LoroValue::Map(entries) = value else {
         return;
     };
     for (key, child) in entries.iter() {
+        let key = if TreeID::try_from(key.as_str()).is_ok() {
+            ANY.to_owned()
+        } else {
+            key.clone()
+        };
         let path = format!("{prefix}/{key}");
-        shape.keys.insert(key.clone());
+        shape.keys.insert(key);
         shape.record(&path, child);
         if matches!(child, LoroValue::Map(_)) {
             walk_map(&path, child, shape);
@@ -330,6 +337,13 @@ fn document_of_every_key() -> ProseState {
             style_id: None,
         });
     }
+    write_a_table(&mut state, root);
+    state.handle_command(ProseCommand::InsertToc {
+        parent_id: None,
+        after_id: Some(root),
+        max_level: 3,
+        numbered: true,
+    });
     for key in mark_roots_to_apply() {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: root,
@@ -339,6 +353,41 @@ fn document_of_every_key() -> ProseState {
         });
     }
     state
+}
+
+/// A two by two table after `root`, its first row merged and its last cell
+/// carrying every cell property.
+fn write_a_table(state: &mut ProseState, root: crate::events::BlockId) {
+    state.handle_command(ProseCommand::InsertTable {
+        parent_id: None,
+        after_id: Some(root),
+        rows: 2,
+        cols: 2,
+    });
+    let Some(table) = state
+        .root_blocks()
+        .into_iter()
+        .find(|id| state.block_type_of(id) == Some(crate::events::BlockType::Table))
+    else {
+        panic!("the scenario inserted a table");
+    };
+    state.handle_command(ProseCommand::MergeTableCells {
+        table_id: table,
+        start: (0, 0),
+        end: (0, 1),
+    });
+    let last = crate::logic::tables::tests::cell_at(state, tree_id(table), 1, 1);
+    let cell = crate::events::block_id(last);
+    state.handle_command(ProseCommand::SetCellStyle {
+        cell_id: cell,
+        bg: Some(0x00ff_8800),
+        valign: Some(VAlign::Middle),
+        border: Some(CellBorder {
+            width_pt: 0.5,
+            color: 0x0000_0000,
+        }),
+        padding_pt: Some(4.0),
+    });
 }
 
 /// The mark key written for each registered root.

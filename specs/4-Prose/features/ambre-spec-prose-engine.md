@@ -349,23 +349,30 @@ pub enum ProseCommand {
     UnindentList   { block_id: TreeID },
 
     // -- Tables (`features/ambre-spec-prose-tables.md`) --
+    /// A table of `rows` by `cols`, one empty paragraph per cell.
+    InsertTable      { parent_id: Option<TreeID>, after_id: Option<TreeID>, rows: u32, cols: u32 },
     InsertTableRow   { table_id: TreeID, after_row: Option<TreeID> },
     DeleteTableRow   { row_id: TreeID },
-    /// `width_pt` is the new column's width; `None` takes the document default
-    /// (`PROSE-FEAT-044`).
-    InsertTableCol   { table_id: TreeID, after_col: u32, width_pt: Option<f32> },
+    /// `at_col` is the index the new column takes; `None` width takes the document default
+    /// (`PROSE-FEAT-232`).
+    InsertTableCol   { table_id: TreeID, at_col: u32, width_pt: Option<f32> },
     DeleteTableCol   { table_id: TreeID, col_index: u32 },
     ResizeTableCol   { table_id: TreeID, col_index: u32, width_pt: f32 },
     MergeTableCells  { table_id: TreeID, start: (u32, u32), end: (u32, u32) },
     UnmergeTableCell { cell_id: TreeID },
     SetCellStyle     { cell_id: TreeID, bg: Option<u32>, valign: Option<VAlign>,
                        border: Option<CellBorder>, padding_pt: Option<f32> },
-    SetTableStyle    { table_id: TreeID, style: TableStyle },
+    /// Tab and Shift-Tab; past the last cell, a row is appended (`PROSE-FEAT-251`).
+    StepTableCell    { cell_id: TreeID, backwards: bool },
 
     // -- Table of contents (`features/ambre-spec-prose-table-of-contents.md`) --
     InsertToc       { parent_id: Option<TreeID>, after_id: Option<TreeID>,
                       max_level: u8, numbered: bool },
     UpdateTocConfig { block_id: TreeID, max_level: u8, numbered: bool },
+
+    // -- Word count (`features/ambre-spec-prose-word-count.md`) --
+    /// The view sends it once a run of changes stops; it writes nothing.
+    CountWords,
 
     // -- Pictures (`features/ambre-spec-prose-images.md`) --
     InsertImage      { parent_id: Option<TreeID>, after_id: Option<TreeID>,
@@ -511,14 +518,16 @@ pub enum ProseEvent {
     Clipboard     { text: String, ambre: Vec<u8> },
 
     // -- Features --
-    TocUpdated       { toc: TableOfContents },
+    TocUpdated       { block_id: BlockId, toc: TableOfContents },
     WordCountUpdated { count: WordCount },
     FindResults      { matches: Vec<FindMatch>, current: usize },
     FindUpdated      { current: usize },
     SpellErrors      { block_id: TreeID, errors: Vec<SpellError> },
     /// A concurrent edit left a cell covered by a merge while it still holds content: masked,
     /// not destroyed (`features/ambre-spec-prose-tables.md`).
-    MergeConflictDetected { cell_id: TreeID },
+    MergeConflictDetected { cell_id: BlockId },
+    /// Where the caret lands after a step between cells: the cell, and its first block.
+    CellEntered { cell: BlockId, block: BlockId },
 
     // -- Interoperability --
     ImportCompleted { report: ConversionReport },

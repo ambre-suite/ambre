@@ -13,9 +13,9 @@
 //! all (`PROSE-063`).
 //!
 //! **Engine-core scope** (`ARCH P2`). The document model: text, blocks, marks
-//! and nesting, plus the remote, snapshot, presence and picture paths. The page
-//! layout, the tables, the comments, the interop filters and the find machinery
-//! each land with their own Story (`ambre-roadmap.md` E5).
+//! and nesting, the tables, plus the remote, snapshot, presence and picture
+//! paths. The comments, the interop filters and the find machinery each land
+//! with their own Story (`ambre-roadmap.md` E5).
 //!
 //! The `impl` splits across the sibling modules, and each of them reaches the
 //! struct's fields and shared helpers through `super::`:
@@ -23,11 +23,16 @@
 //! - [`blocks`] -- the block lifecycle, the nesting guard and the styles
 //! - [`marks`] -- the inline mark registry's write path
 //! - [`presence`] -- the ephemeral cursor frame, outbound and inbound
+//! - [`tables`] -- the grid, its column widths and its merged regions
+//! - [`derived`] -- the tables of contents and the word count, read and never
+//!   stored
 
 mod blocks;
+mod derived;
 mod lists;
 mod marks;
 mod presence;
+pub(crate) mod tables;
 mod text;
 
 /// The per-application half of `shape_of` and `canonical_dump`
@@ -103,6 +108,10 @@ pub struct ProseState {
     /// shapes on. They arrive from the Main thread, which is the only one that
     /// can fetch (`LogicCommand::LoadFonts`).
     faces: Vec<Vec<u8>>,
+    /// The five figures as last answered (`PROSE-FEAT-018`). Session state:
+    /// the tallies move on a recount and the page count on a layout, and
+    /// neither ever reaches the document.
+    word_count: crate::events::WordCount,
 }
 
 impl ProseState {
@@ -165,6 +174,7 @@ impl ProseState {
             presence: HashMap::new(),
             paginator: None,
             faces: Vec::new(),
+            word_count: crate::events::WordCount::default(),
         })
     }
 
@@ -175,7 +185,8 @@ impl ProseState {
     /// document (`PROSE-033`, `PROSE-064`). `dirty` names the blocks an
     /// edit touched; an empty slice re-measures nothing (`PROSE-083`). The
     /// first call builds the paginator, since loading the faces costs more
-    /// than a document that is never laid out should pay.
+    /// than a document that is never laid out should pay. The page count of
+    /// the word count is stamped from the layout taken (`PROSE-FEAT-126`).
     pub fn paginate(&mut self, dirty: &[TreeID]) -> &PageLayout {
         let faces = &self.faces;
         let paginator = self.paginator.get_or_insert_with(|| {
@@ -185,7 +196,9 @@ impl ProseState {
             }
             paginator
         });
-        paginator.reflow(&self.doc, dirty)
+        let layout = paginator.reflow(&self.doc, dirty);
+        self.word_count.pages = layout.page_count;
+        layout
     }
 
     /// How many faces this document measures on (`PROSE-115`).
@@ -326,6 +339,66 @@ impl ProseState {
             ProseCommand::SetParagraphStyle { block_id, style } => {
                 self.set_paragraph_style(&tree_id(block_id), &style)
             }
+            ProseCommand::InsertTable {
+                parent_id,
+                after_id,
+                rows,
+                cols,
+            } => self.insert_table(parent_id.map(tree_id), after_id.map(tree_id), rows, cols),
+            ProseCommand::InsertTableRow {
+                table_id,
+                after_row,
+            } => self.insert_table_row(&tree_id(table_id), after_row.map(tree_id)),
+            ProseCommand::DeleteTableRow { row_id } => self.delete_table_row(&tree_id(row_id)),
+            ProseCommand::InsertTableCol {
+                table_id,
+                at_col,
+                width_pt,
+            } => self.insert_table_col(&tree_id(table_id), at_col, width_pt),
+            ProseCommand::DeleteTableCol {
+                table_id,
+                col_index,
+            } => self.delete_table_col(&tree_id(table_id), col_index),
+            ProseCommand::ResizeTableCol {
+                table_id,
+                col_index,
+                width_pt,
+            } => self.resize_table_col(&tree_id(table_id), col_index, width_pt),
+            ProseCommand::MergeTableCells {
+                table_id,
+                start,
+                end,
+            } => self.merge_table_cells(&tree_id(table_id), start, end),
+            ProseCommand::UnmergeTableCell { cell_id } => {
+                self.unmerge_table_cell(&tree_id(cell_id))
+            }
+            ProseCommand::SetCellStyle {
+                cell_id,
+                bg,
+                valign,
+                border,
+                padding_pt,
+            } => self.set_cell_style(&tree_id(cell_id), bg, valign, border, padding_pt),
+            ProseCommand::StepTableCell { cell_id, backwards } => {
+                self.step_table_cell(&tree_id(cell_id), backwards)
+            }
+            ProseCommand::InsertToc {
+                parent_id,
+                after_id,
+                max_level,
+                numbered,
+            } => self.insert_toc(
+                parent_id.map(tree_id),
+                after_id.map(tree_id),
+                max_level,
+                numbered,
+            ),
+            ProseCommand::UpdateTocConfig {
+                block_id,
+                max_level,
+                numbered,
+            } => self.update_toc_config(&tree_id(block_id), max_level, numbered),
+            ProseCommand::CountWords => self.count_words(),
             ProseCommand::UpdateCursor { pos } => self.update_cursor(&pos),
             ProseCommand::Undo => self.apply_history(true),
             ProseCommand::Redo => self.apply_history(false),
@@ -349,6 +422,7 @@ impl ProseState {
         let mut events = vec![ProseEvent::DocUpdated {
             delta: payload.to_vec(),
         }];
+        events.extend(self.validate_tables());
         events.extend(self.regrow_root());
         // The repair is a write of this peer's own, so it needs a commit. The
         // next local command flushes it to the other peers.
@@ -384,6 +458,7 @@ impl ProseState {
             return vec![Self::err_remote()];
         }
         self.absorb_imported();
+        events.extend(self.validate_tables());
         events.extend(self.regrow_root());
         self.doc.commit();
         if any_failed {
@@ -444,6 +519,7 @@ impl ProseState {
         let mut events = vec![ProseEvent::DocUpdated {
             delta: payload.into_owned(),
         }];
+        events.extend(self.validate_tables());
         events.extend(self.regrow_root());
         self.doc.commit();
         Ok(events)
