@@ -48,7 +48,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-074` | `OBS` | A heading, or a block that asks to stay with its successor, MUST NOT be placed where fewer than two lines of what follows it fit under it, unless moving it would waste over a quarter of the page. | this spec section 2 | `ambre_prose::layout::place::tests::a_heading_moves_rather_than_standing_alone_at_a_page_bottom`; `ambre_prose::layout::place::tests::a_heading_with_room_under_it_stays_where_it_is` | none | verified |
 | `PROSE-075` | `OBS` | A block MUST NOT be broken across pages unless no page of its own holds it whole. | this spec section 2 | `ambre_prose::layout::place::tests::a_block_a_whole_page_holds_moves_rather_than_splits`; `ambre_prose::layout::place::tests::a_block_kept_together_and_taller_than_a_page_splits_all_the_same` | none | verified |
 
-| `PROSE-107` | `INV` | Pagination MUST measure on the faces the application ships and on those alone: a face the device happens to carry MUST NOT enter a measurement. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | structural -- `ambre_prose::layout::belts::only_the_font_module_asks_a_context_what_it_holds` reads every source of the module and fails on a collection lookup outside `ambre_prose::layout::fonts::resolve` | none | verified |
+| `PROSE-107` | `INV` | Pagination MUST measure on the faces the application ships and on those alone: a face the device happens to carry MUST NOT enter a measurement. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | structural -- `ambre_prose::layout::belts::only_the_font_module_asks_a_context_what_it_holds` reads every source of the module and fails on a collection lookup outside `ambre_prose::layout::fonts::resolve`, over a context `PROSE-114` seals | none | verified |
 | `PROSE-108` | `INV` | A family label MUST resolve to one shipped face by the label alone: the resolution MUST NOT read the faces a context holds. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | type-level -- `ambre_prose::layout::fonts::resolve` takes a label and no context, so no device can reach it; `ambre_prose::layout::fonts::tests::resolution_reads_the_label_and_nothing_else` | none | verified |
 | `PROSE-110` | `OBS` | A layout MUST name every script the document uses that had no face when it was measured. | this spec section 2 | `ambre_prose::layout::reflow::convergence::a_latin_document_names_no_missing_script`; `ambre_prose::layout::reflow::convergence::a_script_with_no_face_is_named_in_the_layout` | none | verified |
 | `PROSE-112` | `INV` | A page number that leaves the screen -- a comment anchor, a cross reference, a table-of-contents entry, an exported file -- MUST NOT be taken from a layout that names a missing script. | this spec section 2 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5), which mints the first consumer that stores a page number | unimplemented |
@@ -87,13 +87,14 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-109` | `POST` | Two peers whose font contexts cover the same scripts MUST paginate one document alike: the same page count, and every block on the same page at the same offset. | this spec section 2 | proptest -- `ambre_prose::layout::reflow::convergence::two_peers_covering_the_same_scripts_paginate_alike` paginates a generated document on two contexts holding different faces | none | verified |
 | `PROSE-111` | `POST` | A face registered after a layout was measured MUST force a full recomputation. | this spec section 2 | `ambre_prose::layout::reflow::convergence::a_face_that_arrives_forces_a_full_recomputation` | none | verified |
 | `PROSE-113` | `FRAME` | Measuring MUST NOT read anything that tells one peer from another: no peer identity, no clock and no device setting MUST reach a measurement. | this spec section 2 | structural -- `ambre_prose::layout::belts::nothing_identifying_a_peer_reaches_a_measurement` reads every source of the module and fails on a peer id, a clock or a random draw | none | verified |
+| `PROSE-114` | `FRAME` | The context a measurement runs on MUST hold only the faces the application registered into it: a face of the device MUST NOT be discoverable from it. | this spec section 2; `ambre-spec-render-assets.md` | type-level -- `ambre_prose::layout::measure::Measurer::new` is the only way to build one and it takes what `ambre_prose::layout::fonts::sealed_context` returns, which `ambre_prose::layout::fonts::tests::a_sealed_context_discovers_no_face_of_the_machine` asks for families a desktop carries | none | verified |
 
 * **Budget.** five rows of `ambre-spec-budgets.md section 1`. Three are the full recomputation of
   100 pages, the partial reflow and the layout handoff. Two are cold shapes: ten dirty blocks, and
   the document at open. Shaping and placement are budgeted apart, and section 4 says why.
 * **Boundary.** none: pagination runs on the Logic thread, reads the document and returns a value.
   `PROSE-025` (`features/ambre-spec-prose-engine.md section 1`) bans a network call from this crate.
-* **Verification.** 35 `verified`, 9 `unimplemented`. Eight are the bands, the footnotes and the
+* **Verification.** 36 `verified`, 9 `unimplemented`. Eight are the bands, the footnotes and the
   table of contents, the ninth `PROSE-112`, which waits on the first consumer to store a page
   number. Termination rests on `PROSE-078` and `PROSE-017`, which a property over generated
   documents holds together. Two bans are structural, held by a test that reads the module's own
@@ -286,6 +287,11 @@ the faces are pinned instead. Ambre ships its own set and none is taken from the
 `ambre-draw` maps a family label to one of them by the label alone (`PROSE-107`, `PROSE-108`).
 The renderers reach that same mapping, so the page the UI paints is the page the paginator
 measured (`CANVAS-017`).
+
+The measuring context is sealed on top of that: it discovers nothing, and holds only what was
+registered into it (`PROSE-114`). Pinning the mapping alone would leave the shaper free. It falls
+back to a device face for any codepoint the asked family misses, below every rule the mapping
+states.
 
 What is left is script coverage. A face outside the base set is fetched when text needing it
 appears (`CANVAS-006`). A peer that has not fetched it yet shapes that text into tofu, and

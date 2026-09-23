@@ -11,6 +11,26 @@
 
 use ambre_draw::{BundledFamily, ScriptSet};
 use parley::FontContext;
+use parley::fontique::{Collection, CollectionOptions, SourceCache};
+
+/// A font context holding nothing but what a caller registers into it
+/// (`PROSE-114`).
+///
+/// A default context discovers the faces of the machine it runs on, and parley
+/// falls back to them for any codepoint the asked family misses. That fallback
+/// happens inside the shaper, below every rule this module states. A device
+/// font would bend a measurement with nothing to catch it. Sealing the
+/// collection is the only place the ban can hold.
+#[must_use]
+pub fn sealed_context() -> FontContext {
+    FontContext {
+        collection: Collection::new(CollectionOptions {
+            shared: false,
+            system_fonts: false,
+        }),
+        source_cache: SourceCache::default(),
+    }
+}
 
 /// Resolve a family label to the face the application ships.
 ///
@@ -58,9 +78,31 @@ pub fn coverage_grew(font_cx: &mut FontContext, missing: ScriptSet) -> bool {
         .any(|script| font_cx.collection.family_id(script.face_name()).is_some())
 }
 
+/// The faces the application ships, read from the workspace tree.
+///
+/// Tests only. A running peer receives the same bytes over the message bus,
+/// fetched by the Main thread (`LogicCommand::LoadFonts`). The Logic thread
+/// has no way of its own to read a file.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+pub(crate) fn shipped_faces() -> Vec<Vec<u8>> {
+    const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
+    const FILES: [&str; 6] = [
+        "NotoSans-Regular.ttf",
+        "NotoSans-Bold.ttf",
+        "NotoSans-Italic.ttf",
+        "NotoSans-BoldItalic.ttf",
+        "DejaVuSerif.ttf",
+        "DejaVuSansMono.ttf",
+    ];
+    FILES
+        .iter()
+        .filter_map(|file| std::fs::read(format!("{DIR}{file}")).ok())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{coverage_grew, missing_scripts, resolve};
+    use super::{coverage_grew, missing_scripts, resolve, sealed_context};
     use ambre_draw::{BundledFamily, LazyFont, ScriptSet};
     use parley::FontContext;
 
@@ -106,6 +148,30 @@ mod tests {
             .is_none()
         {
             assert!(missing.contains(LazyFont::Cjk));
+        }
+    }
+
+    /// A sealed context holds nothing the machine happens to carry
+    /// (`PROSE-114`).
+    ///
+    /// The families below ship with common desktop distributions and with none
+    /// of Ambre's own faces. A default context finds them where they exist, so
+    /// a sealed one finding none is the ban holding.
+    #[test]
+    fn a_sealed_context_discovers_no_face_of_the_machine() {
+        let mut sealed = sealed_context();
+        for family in [
+            "Liberation Sans",
+            "FreeSans",
+            "Bitstream Charter",
+            "IPAGothic",
+            "Arial",
+            "Helvetica",
+        ] {
+            assert!(
+                sealed.collection.family_id(family).is_none(),
+                "a sealed context found `{family}`"
+            );
         }
     }
 

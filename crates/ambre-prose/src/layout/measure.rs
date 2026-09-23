@@ -149,6 +149,18 @@ impl TextMetrics {
     }
 }
 
+/// A measurer holding the faces the application ships.
+///
+/// Tests only: it stands in for the `LoadFonts` delivery a running peer gets.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+pub(crate) fn shipped_measurer() -> Measurer {
+    let mut measurer = Measurer::new();
+    for bytes in fonts::shipped_faces() {
+        measurer.register_faces(bytes);
+    }
+    measurer
+}
+
 /// The shaper, and the two contexts parley reuses between blocks.
 ///
 /// One per layout pass. Holding it across a pass is what keeps a font from
@@ -172,22 +184,15 @@ impl Default for Measurer {
 }
 
 impl Measurer {
-    /// A measurer over the system faces.
+    /// A measurer over a sealed context: no face is in it until one is
+    /// registered (`PROSE-114`).
+    ///
+    /// This is the only way to build one, so no caller can hand in a context
+    /// that reads the device.
     #[must_use]
     pub fn new() -> Self {
         Self {
-            font_cx: FontContext::new(),
-            layout_cx: LayoutContext::new(),
-            shaped: 0,
-            missing: ScriptSet::new(),
-        }
-    }
-
-    /// A measurer over a font context the caller already loaded faces into.
-    #[must_use]
-    pub fn with_fonts(font_cx: FontContext) -> Self {
-        Self {
-            font_cx,
+            font_cx: fonts::sealed_context(),
             layout_cx: LayoutContext::new(),
             shaped: 0,
             missing: ScriptSet::new(),
@@ -374,7 +379,7 @@ mod tests {
 
     #[test]
     fn a_narrow_width_breaks_a_run_into_more_lines_than_a_wide_one() {
-        let mut measurer = Measurer::new();
+        let mut measurer = super::shipped_measurer();
         let style = style();
         let wide = measurer.measure(LONG, &style, 2000.0);
         let narrow = measurer.measure(LONG, &style, 120.0);
@@ -384,7 +389,7 @@ mod tests {
 
     #[test]
     fn the_line_tops_climb_and_end_at_the_measured_height() {
-        let mut measurer = Measurer::new();
+        let mut measurer = super::shipped_measurer();
         let metrics = measurer.measure(LONG, &style(), 200.0);
         assert!(metrics.line_count >= 2);
         for pair in metrics.line_tops.windows(2) {
@@ -397,7 +402,7 @@ mod tests {
 
     #[test]
     fn a_height_holding_no_whole_line_fits_none_of_them() {
-        let mut measurer = Measurer::new();
+        let mut measurer = super::shipped_measurer();
         let metrics = measurer.measure(LONG, &style(), 200.0);
         assert_eq!(metrics.lines_fitting_in(0.0), 0);
         assert_eq!(
@@ -426,7 +431,7 @@ mod tests {
 
     #[test]
     fn an_exact_line_height_is_the_height_every_line_takes() {
-        let mut measurer = Measurer::new();
+        let mut measurer = super::shipped_measurer();
         let mut style = style();
         style.line_height = LineHeight::Absolute(30.0);
         style.at_least_floor_px = None;
@@ -438,7 +443,7 @@ mod tests {
 
     #[test]
     fn an_at_least_floor_taller_than_the_font_raises_every_line() {
-        let mut measurer = Measurer::new();
+        let mut measurer = super::shipped_measurer();
         let mut style = style();
         style.line_height = LineHeight::MetricsRelative(1.0);
         style.at_least_floor_px = None;
@@ -451,7 +456,7 @@ mod tests {
 
     #[test]
     fn an_at_least_floor_below_the_font_leaves_the_lines_alone() {
-        let mut measurer = Measurer::new();
+        let mut measurer = super::shipped_measurer();
         let mut style = style();
         style.line_height = LineHeight::MetricsRelative(1.0);
         style.at_least_floor_px = None;

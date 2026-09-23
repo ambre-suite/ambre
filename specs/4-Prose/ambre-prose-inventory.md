@@ -16,7 +16,7 @@
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
 | `prose-engine` | An author types a word and every collaborator reads it. | implemented | 42 |  |
-| `prose-pagination` | A document becomes a sequence of measured pages. | partial | 44 |  |
+| `prose-pagination` | A document becomes a sequence of measured pages. | partial | 45 |  |
 | `prose-tables` | A grid of cells inside the document. | partial | 42 |  |
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 25 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
@@ -44,4 +44,4 @@
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | design-only | 17 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | design-only | 13 |  |
 
-**28 features: 1 implemented, 3 partial, 24 design-only. 605 contract rows, 0 loose.**
+**28 features: 1 implemented, 3 partial, 24 design-only. 606 contract rows, 0 loose.**

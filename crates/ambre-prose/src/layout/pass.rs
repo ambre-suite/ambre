@@ -393,7 +393,7 @@ mod tests {
         let Some(second) = doc::create_block(&document, None, BlockType::Paragraph) else {
             return;
         };
-        let mut measurer = Measurer::new();
+        let mut measurer = crate::layout::measure::shipped_measurer();
         let measured = measure_document(&mut measurer, &document, 400.0);
         let mut expected = vec![first];
         expected.extend(nested);
@@ -405,7 +405,7 @@ mod tests {
     #[test]
     fn a_page_break_costs_nothing_and_a_rule_costs_one_pixel() {
         let (document, _) = document_of(&[BlockType::PageBreak, BlockType::HRule]);
-        let mut measurer = Measurer::new();
+        let mut measurer = crate::layout::measure::shipped_measurer();
         let measured = measure_document(&mut measurer, &document, 400.0);
         assert_eq!(measured.len(), 2);
         assert_eq!(measured[0].height_px, 0.0);
@@ -415,7 +415,7 @@ mod tests {
     #[test]
     fn an_image_that_declares_no_size_is_measured_on_what_it_carries() {
         let (document, _) = document_of(&[BlockType::Image]);
-        let mut measurer = Measurer::new();
+        let mut measurer = crate::layout::measure::shipped_measurer();
         let measured = measure_document(&mut measurer, &document, 400.0);
         assert_eq!(measured.len(), 1);
         // Nothing here decodes the file, so an image with no display height
@@ -443,7 +443,7 @@ mod tests {
             };
             write_text(&document, &paragraph, "a cell of one short line");
         }
-        let mut measurer = Measurer::new();
+        let mut measurer = crate::layout::measure::shipped_measurer();
         let measured = measure_document(&mut measurer, &document, 400.0);
         // The rows and the cells are inside the table's own height, so the
         // walk emits the table and stops there.
@@ -463,7 +463,7 @@ mod tests {
             write_text(&document, id, "a line of text long enough to be shaped");
         }
         let before = format!("{:?}", document.get_deep_value());
-        let mut measurer = Measurer::new();
+        let mut measurer = crate::layout::measure::shipped_measurer();
         let _ = lay_out(&mut measurer, &document);
         // `PROSE-079`: laying out reads, and reading never mints a container.
         assert_eq!(format!("{:?}", document.get_deep_value()), before);
@@ -473,7 +473,7 @@ mod tests {
     fn an_empty_document_lays_out_on_one_blank_page() {
         let document = LoroDoc::new();
         let before = format!("{:?}", document.get_deep_value());
-        let mut measurer = Measurer::new();
+        let mut measurer = crate::layout::measure::shipped_measurer();
         let layout = lay_out(&mut measurer, &document);
         // A document with no register at all is the case a reader that mints
         // one would be caught by (`PROSE-079`).
@@ -494,7 +494,7 @@ mod tests {
         for id in [&ids[0], &ids[2]] {
             write_text(&document, id, "a paragraph of one line");
         }
-        let mut measurer = Measurer::new();
+        let mut measurer = crate::layout::measure::shipped_measurer();
         let layout = lay_out(&mut measurer, &document);
         assert_eq!(layout.page_count, 2);
         let Some(last) = layout.blocks.last() else {
@@ -511,7 +511,7 @@ mod tests {
         for id in &ids {
             write_text(&document, id, "a paragraph that takes a line of its own");
         }
-        let mut measurer = Measurer::new();
+        let mut measurer = crate::layout::measure::shipped_measurer();
         let layout = lay_out(&mut measurer, &document);
         assert!(layout.page_count > 1);
         // Every page the layout reports is one a reader can ask for

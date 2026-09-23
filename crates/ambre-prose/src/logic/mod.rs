@@ -97,6 +97,11 @@ pub struct ProseState {
     /// (`PROSE-064`). It lives here so measuring runs where the document does
     /// (`PROSE-010`).
     paginator: Option<Paginator>,
+    /// The font faces every peer holds, as bytes (`PROSE-114`). A measurer
+    /// discovers none on its own, so these are the whole of what pagination
+    /// shapes on. They arrive from the Main thread, which is the only one that
+    /// can fetch (`LogicCommand::LoadFonts`).
+    faces: Vec<Vec<u8>>,
 }
 
 impl ProseState {
@@ -158,6 +163,7 @@ impl ProseState {
             my_name: None,
             presence: HashMap::new(),
             paginator: None,
+            faces: Vec::new(),
         })
     }
 
@@ -170,8 +176,30 @@ impl ProseState {
     /// first call builds the paginator, since loading the faces costs more
     /// than a document that is never laid out should pay.
     pub fn paginate(&mut self, dirty: &[TreeID]) -> &PageLayout {
-        let paginator = self.paginator.get_or_insert_with(Paginator::new);
+        let faces = &self.faces;
+        let paginator = self.paginator.get_or_insert_with(|| {
+            let mut paginator = Paginator::new();
+            for bytes in faces {
+                paginator.register_faces(bytes.clone());
+            }
+            paginator
+        });
         paginator.reflow(&self.doc, dirty)
+    }
+
+    /// Hand the document the faces pagination measures on (`PROSE-114`).
+    ///
+    /// A measurer holds nothing until this is called, so a layout taken before
+    /// it shapes every run into tofu. A face that arrives after a layout was
+    /// measured invalidates it, and the next call recomputes in full
+    /// (`PROSE-111`).
+    pub fn load_faces(&mut self, faces: Vec<Vec<u8>>) {
+        for bytes in &faces {
+            if let Some(paginator) = self.paginator.as_mut() {
+                paginator.register_faces(bytes.clone());
+            }
+        }
+        self.faces.extend(faces);
     }
 
     /// The two settings a document needs before its first operation, and after
@@ -833,6 +861,7 @@ mod tests {
     #[test]
     fn a_snapshot_import_lays_the_document_out_again() {
         let mut source = ProseState::new().expect("a document is built");
+        source.load_faces(crate::layout::fonts::shipped_faces());
         let block = source.root_blocks()[0];
         source.handle_command(ProseCommand::InsertText {
             block_id: block,
@@ -841,6 +870,7 @@ mod tests {
         });
         let snapshot = source.export_snapshot();
         let mut target = ProseState::new().expect("a document is built");
+        target.load_faces(crate::layout::fonts::shipped_faces());
         let empty = target.paginate(&[]).page_count;
         target
             .import_snapshot(&snapshot)

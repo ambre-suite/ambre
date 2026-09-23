@@ -245,6 +245,18 @@ fn first_dirty_page(before: &[BlockLayout], after: &[BlockLayout]) -> u32 {
     0
 }
 
+/// A paginator holding the faces the application ships.
+///
+/// Tests only: it stands in for the `LoadFonts` delivery a running peer gets.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+pub(crate) fn shipped_paginator() -> Paginator {
+    let mut paginator = Paginator::new();
+    for bytes in crate::layout::fonts::shipped_faces() {
+        paginator.register_faces(bytes);
+    }
+    paginator
+}
+
 #[cfg(test)]
 mod tests {
     use ambre_bus::app::prose::BlockType;
@@ -275,14 +287,14 @@ mod tests {
     }
 
     fn full_layout(document: &LoroDoc) -> PageLayout {
-        let mut fresh = Paginator::new();
+        let mut fresh = super::shipped_paginator();
         fresh.full(document).clone()
     }
 
     #[test]
     fn a_reflow_of_an_untouched_document_moves_nothing() {
         let (document, _) = document_of(8);
-        let mut paginator = Paginator::new();
+        let mut paginator = super::shipped_paginator();
         let before = paginator.full(&document).clone();
         let after = paginator.reflow(&document, &[]);
         assert_eq!(after.blocks, before.blocks);
@@ -293,7 +305,7 @@ mod tests {
     #[test]
     fn a_reflow_produces_what_a_full_recomputation_would_have() {
         let (document, ids) = document_of(40);
-        let mut paginator = Paginator::new();
+        let mut paginator = super::shipped_paginator();
         let _ = paginator.full(&document);
         let Some(edited) = ids.get(12) else {
             return;
@@ -312,7 +324,7 @@ mod tests {
     #[test]
     fn a_reflow_does_not_shape_a_block_it_was_not_told_about() {
         let (document, ids) = document_of(20);
-        let mut paginator = Paginator::new();
+        let mut paginator = super::shipped_paginator();
         let _ = paginator.full(&document);
         let after_full = paginator.shaped();
         let Some(edited) = ids.get(5) else {
@@ -327,7 +339,7 @@ mod tests {
     #[test]
     fn a_document_default_change_forces_a_full_recomputation() {
         let (document, ids) = document_of(10);
-        let mut paginator = Paginator::new();
+        let mut paginator = super::shipped_paginator();
         let _ = paginator.full(&document);
         let after_full = paginator.shaped();
         let meta = document.get_map(crate::doc::META);
@@ -344,7 +356,7 @@ mod tests {
     #[test]
     fn a_page_box_change_forces_a_full_recomputation() {
         let (document, ids) = document_of(10);
-        let mut paginator = Paginator::new();
+        let mut paginator = super::shipped_paginator();
         let _ = paginator.full(&document);
         let after_full = paginator.shaped();
         let meta = document.get_map(crate::doc::META);
@@ -360,7 +372,7 @@ mod tests {
     #[test]
     fn the_layout_names_the_first_page_it_changed() {
         let (document, ids) = document_of(60);
-        let mut paginator = Paginator::new();
+        let mut paginator = super::shipped_paginator();
         let before = paginator.full(&document).clone();
         assert!(before.page_count > 1);
         let Some(edited) = ids.last() else {
@@ -378,7 +390,7 @@ mod tests {
     #[test]
     fn a_block_inserted_in_the_middle_reflows_the_whole_tail() {
         let (document, ids) = document_of(12);
-        let mut paginator = Paginator::new();
+        let mut paginator = super::shipped_paginator();
         let _ = paginator.full(&document);
         let Some(anchor) = ids.get(4) else {
             return;
@@ -407,11 +419,9 @@ mod convergence {
     use ambre_bus::app::prose::BlockType;
     use ambre_draw::LazyFont;
     use loro::LoroDoc;
-    use parley::FontContext;
     use proptest::prelude::*;
 
     use super::Paginator;
-    use crate::layout::measure::Measurer;
 
     /// Where the faces the application ships sit in the workspace.
     const FONT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
@@ -429,29 +439,16 @@ mod convergence {
         document
     }
 
-    /// A font context holding the base faces plus the named files.
-    fn context_with(files: &[&str]) -> FontContext {
-        let mut font_cx = FontContext::new();
+    /// A paginator whose measurer holds the base faces plus the named files.
+    fn paginator_with(files: &[&str]) -> Paginator {
+        let mut paginator = super::shipped_paginator();
         for file in files {
             let Ok(bytes) = std::fs::read(format!("{FONT_DIR}{file}")) else {
                 continue;
             };
-            font_cx.collection.register_fonts(bytes.into(), None);
+            paginator.register_faces(bytes);
         }
-        font_cx
-    }
-
-    fn paginator_with(files: &[&str]) -> Paginator {
-        Paginator::with_measurer(Measurer::with_fonts(context_with(files)))
-    }
-
-    /// Whether a bare context already covers a script, which would leave the
-    /// two tests below with nothing to observe.
-    fn already_covers(script: LazyFont) -> bool {
-        FontContext::new()
-            .collection
-            .family_id(script.face_name())
-            .is_some()
+        paginator
     }
 
     /// A latin paragraph, of a length the generator picks.
@@ -501,9 +498,6 @@ mod convergence {
     /// (`PROSE-110`).
     #[test]
     fn a_script_with_no_face_is_named_in_the_layout() {
-        if already_covers(LazyFont::Cjk) {
-            return;
-        }
         let document = document_of(&["\u{4e00}\u{4e8c}\u{4e09}".repeat(40)]);
         let mut paginator = paginator_with(&[]);
         let layout = paginator.full(&document);
@@ -517,9 +511,6 @@ mod convergence {
     /// takes the full path however little the edit named.
     #[test]
     fn a_face_that_arrives_forces_a_full_recomputation() {
-        if already_covers(LazyFont::Cjk) {
-            return;
-        }
         let paragraphs: Vec<String> = (0..6)
             .map(|_| "\u{4e00}\u{4e8c}\u{4e09}".repeat(40))
             .collect();
