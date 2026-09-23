@@ -216,8 +216,47 @@ pub struct CellShape {
     pub width_px: f32,
     /// The rows the cell spans, the last one excluded.
     pub rows: std::ops::Range<usize>,
-    /// The text blocks the cell holds, each with its top from the cell's top.
+    /// The text blocks the cell holds, each with its top from the top of the
+    /// padded box, before the vertical alignment moves them.
     pub blocks: Vec<(TreeID, f32, ShapedRun)>,
+    /// The height of that text, padding excluded: what the alignment places.
+    pub content_px: f32,
+    pub style: CellStyle,
+}
+
+/// What a cell stores about its own look (`ambre-spec-prose-schema.md
+/// section 3`), in pixels and packed colours.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CellStyle {
+    /// The fill as `0xRRGGBBAA`. None leaves the sheet showing.
+    pub fill: Option<u32>,
+    /// The stored border. None draws the theme's hairline (`PROSE-UI-181`).
+    pub border: Option<CellBorderPx>,
+    /// The inset on each of the four sides.
+    pub padding_px: f32,
+    pub valign: ambre_bus::app::prose::VAlign,
+}
+
+impl Default for CellStyle {
+    fn default() -> Self {
+        Self {
+            fill: None,
+            border: None,
+            padding_px: 0.0,
+            valign: ambre_bus::app::prose::VAlign::Top,
+        }
+    }
+}
+
+/// The four border widths of a cell, and their colour.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct CellBorderPx {
+    pub top: f32,
+    pub bottom: f32,
+    pub left: f32,
+    pub right: f32,
+    /// As `0xRRGGBBAA`. None takes the theme's border colour.
+    pub color: Option<u32>,
 }
 
 // `PROSE-UI-113`: the run crosses from the thread that shapes to the thread

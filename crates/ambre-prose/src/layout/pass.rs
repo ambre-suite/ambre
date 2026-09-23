@@ -18,7 +18,7 @@ use crate::doc;
 use crate::layout::geometry::PageBox;
 use crate::layout::measure::{EffectiveStyle, Measurer, PX_PER_PT, TextMetrics};
 use crate::layout::place::{self, BlockLayout, FootnoteLayout, MeasuredBlock, NoteCall, Placement};
-use crate::layout::run::{CellShape, ShapedRun, TableShape};
+use crate::layout::run::{CellBorderPx, CellShape, CellStyle, ShapedRun, TableShape};
 use crate::logic::tables::{Grid, surviving_regions};
 use crate::note;
 
@@ -601,9 +601,10 @@ fn image_height(
 ///
 /// A column is as wide as the table's width list says. When the list does not
 /// match the grid, each column takes an equal share of the text width.
-/// A merged region is one cell as wide as its columns. When its text is taller than the rows it
-/// spans, the last of them grows. A covered cell is neither measured nor
-/// placed (`PROSE-FEAT-048`). Cell padding counts as nothing yet (`PROSE-UI-180`).
+/// A merged region is one cell as wide as its columns. When its text is
+/// taller than the rows it spans, the last of them grows. A covered cell is
+/// neither measured nor placed (`PROSE-FEAT-048`). The padding narrows the
+/// text and adds to the cell's height on both sides (`PROSE-UI-180`).
 fn table_metrics(
     measurer: &mut Measurer,
     document: &LoroDoc,
@@ -651,7 +652,9 @@ fn table_metrics(
             let x_px = col_x.get(col).copied().unwrap_or(0.0);
             let right_x = col_x.get(right + 1).copied().unwrap_or(x_px);
             let width_px = right_x - x_px;
-            let stacked = cell_blocks(measurer, document, tree, defaults, cell, width_px);
+            let style = cell_style(tree, cell);
+            let text_px = (width_px - 2.0 * style.padding_px).max(0.0);
+            let stacked = cell_blocks(measurer, document, tree, defaults, cell, text_px);
             let mut top = 0.0;
             let mut blocks = Vec::new();
             for block in stacked {
@@ -661,13 +664,15 @@ fn table_metrics(
                 }
                 top += block.height_px + block.space_after_px;
             }
-            heights.push(top);
+            heights.push(top + 2.0 * style.padding_px);
             cells.push(CellShape {
                 cell: *cell,
                 x_px,
                 width_px,
                 rows: row..bottom + 1,
                 blocks,
+                content_px: top,
+                style,
             });
         }
     }
@@ -723,6 +728,45 @@ fn column_widths_px(stored_pt: &[f32], cols: usize, content_width_px: f32) -> Ve
             content_width_px / cols as f32
         };
         vec![share; cols]
+    }
+}
+
+/// The look a cell stores. A value that does not parse, or a width that is
+/// negative or not finite, reads as absent.
+fn cell_style(tree: &LoroTree, cell: &TreeID) -> CellStyle {
+    let Some(attrs) = doc::node_of(tree, cell).and_then(|node| doc::map_read(&node, doc::K_ATTRS))
+    else {
+        return CellStyle::default();
+    };
+    let length = |key| {
+        number_at(&attrs, key)
+            .filter(|pt| pt.is_finite() && *pt >= 0.0)
+            .map(|pt| pt * PX_PER_PT)
+    };
+    let colour = |key| string_at(&attrs, key).and_then(|raw| crate::mark::parse_color(&raw).ok());
+    let edges = [
+        length(doc::A_EDGE_TOP),
+        length(doc::A_EDGE_BOTTOM),
+        length(doc::A_EDGE_LEFT),
+        length(doc::A_EDGE_RIGHT),
+    ];
+    let [top, bottom, left, right] = edges;
+    let border = edges.iter().any(Option::is_some).then(|| CellBorderPx {
+        top: top.unwrap_or(0.0),
+        bottom: bottom.unwrap_or(0.0),
+        left: left.unwrap_or(0.0),
+        right: right.unwrap_or(0.0),
+        color: colour(doc::A_EDGE_COLOR),
+    });
+    let valign = number_at(&attrs, doc::A_VALIGN)
+        .and_then(|code| u8::try_from(code as i64).ok())
+        .and_then(ambre_bus::app::prose::VAlign::from_code)
+        .unwrap_or(ambre_bus::app::prose::VAlign::Top);
+    CellStyle {
+        fill: colour(doc::A_CELL_BG),
+        border,
+        padding_px: length(doc::A_PADDING).unwrap_or(0.0),
+        valign,
     }
 }
 

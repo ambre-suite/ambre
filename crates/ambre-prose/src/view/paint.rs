@@ -10,11 +10,12 @@ use ambre_draw::{Affine, Brush, Color, DrawSurface, PositionedLayoutItem, Rect};
 
 use crate::events::{BlockId, CursorPosition, block_id};
 use crate::layout::place::NOTE_SEPARATOR_PX;
-use crate::layout::run::{ParleyRunData, ShapedRun, TableShape};
+use crate::layout::run::{CellStyle, ParleyRunData, ShapedRun, TableShape};
 use crate::ui::ProseUiState;
 use crate::view::HighlightKind;
 use crate::view::cache::{RunCache, RunKey};
 use crate::view::hit::fragment;
+use ambre_bus::app::prose::VAlign;
 
 /// The colours a page is painted with, filled by the host from the generated
 /// theme tokens (`ambre-spec-design-tokens.md`). The painter holds no colour
@@ -305,9 +306,10 @@ impl ProseUiState {
         }
     }
 
-    /// A table: each cell's border, then the text it holds. A merged region
-    /// is one cell and is drawn once; a covered cell is not in the shape, so
-    /// nothing is drawn for it (`PROSE-UI-147`).
+    /// A table: each cell's fill and border, then the text it holds. A merged
+    /// region is one cell and is drawn once; a covered cell is not in the
+    /// shape, so nothing is drawn for it (`PROSE-UI-147`). The text sits
+    /// inside the padding, at the cell's vertical alignment (`PROSE-UI-180`).
     fn paint_table<S: DrawSurface>(
         &mut self,
         surface: &mut S,
@@ -330,12 +332,19 @@ impl ProseUiState {
                 x0 + f64::from(cell.width_px),
                 top + f64::from(*y1),
             );
-            surface.stroke_rect(bounds, palette.sheet_border, 1.0);
+            paint_cell_box(surface, palette, &cell.style, bounds);
+            let pad = f64::from(cell.style.padding_px);
+            let room = (bounds.height() - 2.0 * pad - f64::from(cell.content_px)).max(0.0);
+            let shift = match cell.style.valign {
+                VAlign::Top => 0.0,
+                VAlign::Middle => room / 2.0,
+                VAlign::Bottom => room,
+            };
             surface.push_clip(bounds);
             for (block, y, run) in &cell.blocks {
                 let placed = Placed {
-                    origin_x: x0 + f64::from(run.data().indent_px()),
-                    origin_y: bounds.y0 + f64::from(*y),
+                    origin_x: x0 + pad + f64::from(run.data().indent_px()),
+                    origin_y: bounds.y0 + pad + shift + f64::from(*y),
                     clip: bounds,
                 };
                 self.paint_block(surface, palette, block_id(*block), run, &placed);
@@ -468,6 +477,44 @@ impl ProseUiState {
             );
         }
     }
+}
+
+/// A cell's fill, then its border. A stored border draws each edge at its own
+/// width, inside the cell; none draws the theme's hairline (`PROSE-UI-179`,
+/// `PROSE-UI-181`).
+fn paint_cell_box<S: DrawSurface>(
+    surface: &mut S,
+    palette: &PagePalette,
+    style: &CellStyle,
+    bounds: Rect,
+) {
+    if let Some(fill) = style.fill {
+        surface.fill_rect(bounds, packed(fill));
+    }
+    let Some(border) = style.border else {
+        surface.stroke_rect(bounds, palette.sheet_border, 1.0);
+        return;
+    };
+    let colour = border.color.map_or(palette.sheet_border, packed);
+    let (top, bottom) = (f64::from(border.top), f64::from(border.bottom));
+    let (left, right) = (f64::from(border.left), f64::from(border.right));
+    let edges = [
+        Rect::new(bounds.x0, bounds.y0, bounds.x1, bounds.y0 + top),
+        Rect::new(bounds.x0, bounds.y1 - bottom, bounds.x1, bounds.y1),
+        Rect::new(bounds.x0, bounds.y0, bounds.x0 + left, bounds.y1),
+        Rect::new(bounds.x1 - right, bounds.y0, bounds.x1, bounds.y1),
+    ];
+    for edge in edges {
+        if edge.width() > 0.0 && edge.height() > 0.0 {
+            surface.fill_rect(edge, colour);
+        }
+    }
+}
+
+/// A colour packed as `0xRRGGBBAA`.
+fn packed(rgba: u32) -> Color {
+    let [r, g, b, a] = rgba.to_be_bytes();
+    Color::from_rgba8(r, g, b, a)
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -879,5 +926,143 @@ mod tests {
             "the region spans two columns"
         );
         assert_eq!(surface.count(glyphs), 3, "the covered text is not drawn");
+    }
+
+    /// A styled table: two cells, the first one typed, both laid out and
+    /// painted with the shipped faces.
+    fn styled_table() -> (ProseState, loro::TreeID, loro::TreeID) {
+        use crate::logic::tables::tests::{cell_at, document_with_table, type_in};
+        let (mut state, table) = document_with_table(1, 1, 2);
+        state.load_faces(&crate::layout::fonts::shipped_faces());
+        let first = cell_at(&state, table, 0, 0);
+        let second = cell_at(&state, table, 0, 1);
+        type_in(&mut state, first, "a");
+        type_in(&mut state, second, "b");
+        (state, first, second)
+    }
+
+    fn style(state: &mut ProseState, cell: loro::TreeID, edit: impl FnOnce(&mut ProseCommand)) {
+        let mut command = ProseCommand::SetCellStyle {
+            cell_id: block_id(cell),
+            bg: None,
+            valign: None,
+            border: None,
+            padding_pt: None,
+        };
+        edit(&mut command);
+        assert!(
+            state.handle_command(command).update.is_some(),
+            "the style is written"
+        );
+    }
+
+    /// Where the leftmost glyph run is drawn: the first cell's text.
+    fn first_text_at(surface: &RecordingSurface) -> (f64, f64) {
+        surface
+            .ops()
+            .iter()
+            .filter_map(|op| match op {
+                DrawOp::Glyphs { transform, .. } => {
+                    let at = transform.translation();
+                    Some((at.x, at.y))
+                }
+                _ => None,
+            })
+            .fold(
+                (f64::MAX, 0.0),
+                |best, at| if at.0 < best.0 { at } else { best },
+            )
+    }
+
+    /// `PROSE-UI-179`, `PROSE-UI-181`: a styled cell draws its fill and its
+    /// four edges in its colour; the cell beside it keeps the hairline.
+    #[test]
+    fn a_cell_draws_its_fill_and_its_border_and_a_plain_one_the_hairline() {
+        use ambre_bus::app::prose::CellBorder;
+        let (mut state, first, _) = styled_table();
+        style(&mut state, first, |command| {
+            if let ProseCommand::SetCellStyle { bg, border, .. } = command {
+                *bg = Some(0x00ff_8800);
+                *border = Some(CellBorder {
+                    width_pt: 3.0,
+                    color: 0x0012_3456,
+                });
+            }
+        });
+        let mut ui = view_of(&mut state);
+        let surface = paint(&mut ui);
+        let fill = Color::from_rgba8(0xff, 0x88, 0x00, 0xff);
+        let edge = Color::from_rgba8(0x12, 0x34, 0x56, 0xff);
+        let fills = |colour: Color| {
+            surface
+                .ops()
+                .iter()
+                .filter(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == colour))
+                .count()
+        };
+        assert_eq!(fills(fill), 1, "one fill");
+        assert_eq!(fills(edge), 4, "four edges");
+        let page_width = f64::from(ui.shaped.layout.page_width_px);
+        let hairlines = surface
+            .ops()
+            .iter()
+            .filter(|op| {
+                matches!(op, DrawOp::StrokeRect { rect, color, .. }
+                    if *color == palette().sheet_border && rect.width() < page_width)
+            })
+            .count();
+        assert_eq!(hairlines, 1, "the plain cell alone keeps the hairline");
+    }
+
+    /// `PROSE-UI-180`: the padding moves the text in and makes the row taller
+    /// by twice its width. The bottom alignment drops the text in a row a
+    /// taller neighbour sized.
+    #[test]
+    fn the_padding_insets_the_text_and_the_alignment_places_it() {
+        let (mut state, first, second) = styled_table();
+        let mut ui = view_of(&mut state);
+        let (x0, y0) = first_text_at(&paint(&mut ui));
+        let table = |ui: &ProseUiState| {
+            ui.shaped
+                .tables
+                .values()
+                .next()
+                .map_or(0.0, |t| t.row_tops.last().copied().unwrap_or(0.0))
+        };
+        let height0 = table(&ui);
+
+        style(&mut state, first, |command| {
+            if let ProseCommand::SetCellStyle { padding_pt, .. } = command {
+                *padding_pt = Some(12.0);
+            }
+        });
+        let mut ui = view_of(&mut state);
+        let (x1, y1) = first_text_at(&paint(&mut ui));
+        let pad = f64::from(12.0 * crate::layout::measure::PX_PER_PT);
+        assert!(
+            (x1 - x0 - pad).abs() < 0.5,
+            "the text moves in by the padding"
+        );
+        assert!((y1 - y0 - pad).abs() < 0.5, "and down by it");
+        assert!(
+            (f64::from(table(&ui) - height0) - 2.0 * pad).abs() < 0.5,
+            "the row grows by both sides"
+        );
+
+        // The neighbour pads more, so the first cell has room below its text.
+        style(&mut state, second, |command| {
+            if let ProseCommand::SetCellStyle { padding_pt, .. } = command {
+                *padding_pt = Some(48.0);
+            }
+        });
+        style(&mut state, first, |command| {
+            if let ProseCommand::SetCellStyle { valign, .. } = command {
+                *valign = Some(ambre_bus::app::prose::VAlign::Bottom);
+            }
+        });
+        let mut ui = view_of(&mut state);
+        let (_, y2) = first_text_at(&paint(&mut ui));
+        let room = 2.0 * f64::from(36.0 * crate::layout::measure::PX_PER_PT);
+        assert!((y2 - y1 - room).abs() < 0.5, "the text sits at the bottom");
     }
 }
