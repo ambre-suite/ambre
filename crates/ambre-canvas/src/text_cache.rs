@@ -18,21 +18,13 @@ use rustc_hash::FxHashMap;
 
 use crate::fonts::LazyFontLoader;
 
-/// Map a toolbar font-family label (`"Sans"`/`"Serif"`/`"Monospace"`/`"Default"`)
-/// to the actually-registered face (`host.rs` loads Noto Sans + DejaVu Serif +
-/// DejaVu Sans Mono). Shared so the canvas renderers and the inline editors (grid
-/// / whiteboard) resolve the same face for the same label. An unknown label falls
-/// back to the default sans.
+/// Map a font-family label to the face the application ships.
+///
+/// A thin wrapper over [`ambre_draw::resolve_family`], which is where the
+/// mapping lives. The canvas renderers, the inline editors and the Prose
+/// paginator all reach the same face for one label (`CANVAS-017`).
 pub fn registered_family_name(label: Option<&str>) -> &'static str {
-    match label {
-        // Toolbar labels AND the already-loaded serif / mono face names both map
-        // to their face, so routing every family through here is idempotent.
-        Some("Serif" | "DejaVu Serif") => "DejaVu Serif",
-        Some("Monospace" | "DejaVu Sans Mono") => "DejaVu Sans Mono",
-        // Sans / Default / None, the CSS generic "sans-serif", and any unknown
-        // label fall back to the bundled sans.
-        _ => "Noto Sans",
-    }
+    ambre_draw::resolve_family(label).face_name()
 }
 
 // -----------------------------------------------------------------------------

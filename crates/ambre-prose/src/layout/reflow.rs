@@ -62,6 +62,14 @@ impl Paginator {
         self.measurer.shaped()
     }
 
+    /// Load a face into the measurer this paginator holds.
+    ///
+    /// The next reflow recomputes in full when the face covers a script an
+    /// earlier run was missing (`PROSE-111`).
+    pub fn register_faces(&mut self, bytes: Vec<u8>) {
+        self.measurer.register_faces(bytes);
+    }
+
     /// The layout as it stands.
     #[must_use]
     pub fn layout(&self) -> &PageLayout {
@@ -75,6 +83,9 @@ impl Paginator {
     pub fn full(&mut self, document: &LoroDoc) -> &PageLayout {
         let page_box = PageBox::read(document);
         self.defaults = doc::read_defaults(document);
+        // Every block is about to be shaped again, so what an earlier run was
+        // missing says nothing about this one (`PROSE-110`).
+        self.measurer.forget_missing();
         let measured =
             pass::measure_document(&mut self.measurer, document, page_box.content_width_px);
         let placement = place::place(&measured, page_box.body_height_px(0.0, 0.0));
@@ -93,7 +104,11 @@ impl Paginator {
         if page_box != self.page_box
             || doc::read_defaults(document) != self.defaults
             || self.measured.is_empty()
+            || self.measurer.coverage_grew(self.layout.missing_scripts)
         {
+            // A face that arrived since the last run re-shapes every block of
+            // its script, wherever they sit, so no tail survives
+            // (`PROSE-111`).
             return self.full(document);
         }
         let measured = self.remeasure(document, page_box, dirty);
@@ -195,6 +210,7 @@ impl Paginator {
         self.measured = measured;
         self.layout = pass::layout_of(page_box, &placement);
         self.layout.first_dirty_page = Some(first_dirty);
+        self.layout.missing_scripts = self.measurer.missing();
     }
 }
 
@@ -375,5 +391,151 @@ mod tests {
         let _ = body.insert(0, "a paragraph that was not there before");
         let reflowed = paginator.reflow(&document, &[added]).clone();
         assert_eq!(reflowed.blocks, full_layout(&document).blocks);
+    }
+}
+
+/// What two peers on one document have to agree on (`PROSE-109`, `PROSE-110`,
+/// `PROSE-111`).
+///
+/// The faces are the only input a document does not carry. Ambre ships its
+/// own, so the base set is the same bytes everywhere and only script coverage
+/// can differ. These hold the three consequences. A context holding extra
+/// faces measures no differently. A measurement short of a face says so, and
+/// a face that arrives throws the layout away.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod convergence {
+    use ambre_bus::app::prose::BlockType;
+    use ambre_draw::LazyFont;
+    use loro::LoroDoc;
+    use parley::FontContext;
+    use proptest::prelude::*;
+
+    use super::Paginator;
+    use crate::layout::measure::Measurer;
+
+    /// Where the faces the application ships sit in the workspace.
+    const FONT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
+
+    /// A document of one paragraph per entry.
+    fn document_of(paragraphs: &[String]) -> LoroDoc {
+        let document = LoroDoc::new();
+        for text in paragraphs {
+            let Some(id) = crate::doc::create_block(&document, None, BlockType::Paragraph) else {
+                break;
+            };
+            let body = crate::doc::get_block_text(&document, &id);
+            let _ = body.insert(0, text);
+        }
+        document
+    }
+
+    /// A font context holding the base faces plus the named files.
+    fn context_with(files: &[&str]) -> FontContext {
+        let mut font_cx = FontContext::new();
+        for file in files {
+            let Ok(bytes) = std::fs::read(format!("{FONT_DIR}{file}")) else {
+                continue;
+            };
+            font_cx.collection.register_fonts(bytes.into(), None);
+        }
+        font_cx
+    }
+
+    fn paginator_with(files: &[&str]) -> Paginator {
+        Paginator::with_measurer(Measurer::with_fonts(context_with(files)))
+    }
+
+    /// Whether a bare context already covers a script, which would leave the
+    /// two tests below with nothing to observe.
+    fn already_covers(script: LazyFont) -> bool {
+        FontContext::new()
+            .collection
+            .family_id(script.face_name())
+            .is_some()
+    }
+
+    /// A latin paragraph, of a length the generator picks.
+    fn any_paragraph() -> impl Strategy<Value = String> {
+        (1usize..30).prop_map(|words| {
+            let mut text = String::new();
+            for word in 0..words {
+                text.push_str(&format!("word{word} "));
+            }
+            text
+        })
+    }
+
+    proptest! {
+        /// Two peers covering the same scripts break one document alike
+        /// (`PROSE-109`).
+        ///
+        /// The second peer holds two faces the first does not, and the text
+        /// asks for neither. A resolution that read the context would answer
+        /// differently on the two, and the layouts would part.
+        #[test]
+        fn two_peers_covering_the_same_scripts_paginate_alike(
+            paragraphs in proptest::collection::vec(any_paragraph(), 0..20)
+        ) {
+            let document = document_of(&paragraphs);
+            let mut one = paginator_with(&[]);
+            let mut other = paginator_with(&[
+                "NotoSansArabic-Regular.ttf",
+                "NotoSansDevanagari-Regular.ttf",
+            ]);
+            let here = one.full(&document).clone();
+            let there = other.full(&document).clone();
+            prop_assert_eq!(here.page_count, there.page_count);
+            prop_assert_eq!(here.blocks, there.blocks);
+        }
+    }
+
+    /// A document the base faces cover names no missing script (`PROSE-110`).
+    #[test]
+    fn a_latin_document_names_no_missing_script() {
+        let document = document_of(&["a plain latin paragraph".to_owned()]);
+        let mut paginator = paginator_with(&[]);
+        assert!(paginator.full(&document).missing_scripts.is_empty());
+    }
+
+    /// A measurement short of a face says which script it was short of
+    /// (`PROSE-110`).
+    #[test]
+    fn a_script_with_no_face_is_named_in_the_layout() {
+        if already_covers(LazyFont::Cjk) {
+            return;
+        }
+        let document = document_of(&["\u{4e00}\u{4e8c}\u{4e09}".repeat(40)]);
+        let mut paginator = paginator_with(&[]);
+        let layout = paginator.full(&document);
+        assert!(layout.missing_scripts.contains(LazyFont::Cjk));
+    }
+
+    /// A face that arrives after a layout was measured throws it away
+    /// (`PROSE-111`).
+    ///
+    /// Every block of that script re-shapes, wherever it sits, so the reflow
+    /// takes the full path however little the edit named.
+    #[test]
+    fn a_face_that_arrives_forces_a_full_recomputation() {
+        if already_covers(LazyFont::Cjk) {
+            return;
+        }
+        let paragraphs: Vec<String> = (0..6)
+            .map(|_| "\u{4e00}\u{4e8c}\u{4e09}".repeat(40))
+            .collect();
+        let document = document_of(&paragraphs);
+        let mut paginator = paginator_with(&[]);
+        let after_full = {
+            let layout = paginator.full(&document);
+            assert!(layout.missing_scripts.contains(LazyFont::Cjk));
+            paginator.shaped()
+        };
+        let Ok(bytes) = std::fs::read(format!("{FONT_DIR}NotoSansSC-Regular.otf")) else {
+            return;
+        };
+        paginator.register_faces(bytes);
+        let layout = paginator.reflow(&document, &[]).clone();
+        assert_eq!(paginator.shaped(), after_full + paragraphs.len() as u64);
+        assert!(layout.missing_scripts.is_empty());
     }
 }

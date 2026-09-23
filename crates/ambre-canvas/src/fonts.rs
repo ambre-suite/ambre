@@ -104,79 +104,12 @@ pub fn font_context_from_bytes(faces: impl IntoIterator<Item = Vec<u8>>) -> parl
     font_cx
 }
 
-/// A script whose coverage is absent from the base fonts and is fetched on
-/// demand from the Ambre static server.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum LazyFont {
-    /// Han ideographs, Kana, Hangul, CJK symbols and full/half-width forms.
-    Cjk,
-    /// Arabic, its supplements, and the Arabic presentation forms.
-    Arabic,
-    /// Devanagari.
-    Devanagari,
-    /// Full-color emoji (Noto Color Emoji, CBDT bitmap build). Cross-app
-    /// capability: reaction badges (Toile), message reactions (Murmure), and
-    /// any inline emoji. Rasterized into the RGBA color atlas (see `atlas.rs`).
-    Emoji,
-}
-
-impl LazyFont {
-    /// Classify a codepoint into the lazy script that covers it, or `None` when
-    /// the base fonts already cover it (Latin, Cyrillic, Greek, punctuation,
-    /// symbols...). Only a `Some` codepoint can ever trigger a fetch.
-    ///
-    /// Ranges follow the Unicode blocks. They intentionally err on the side of
-    /// the common blocks per script rather than exhaustively. A rare unassigned
-    /// codepoint in a covered block simply maps to that script's face. That is
-    /// harmless: it still renders tofu, but from the right family.
-    pub fn for_char(c: char) -> Option<LazyFont> {
-        match c as u32 {
-            // Arabic, Arabic Supplement, Arabic Extended-A, and the two
-            // presentation-forms blocks.
-            0x0600..=0x06FF
-            | 0x0750..=0x077F
-            | 0x08A0..=0x08FF
-            | 0xFB50..=0xFDFF
-            | 0xFE70..=0xFEFF => Some(LazyFont::Arabic),
-            // Devanagari.
-            0x0900..=0x097F => Some(LazyFont::Devanagari),
-            // CJK: symbols & punctuation, Hiragana, Katakana (0x3000..0x30FF),
-            // Han ext-A (0x3400..0x4DBF), Han unified (0x4E00..0x9FFF), Hangul
-            // syllables (0xAC00..0xD7AF), CJK compatibility ideographs
-            // (0xF900..0xFAFF), half/full-width forms (0xFF00..0xFFEF).
-            0x3000..=0x30FF
-            | 0x3400..=0x4DBF
-            | 0x4E00..=0x9FFF
-            | 0xAC00..=0xD7AF
-            | 0xF900..=0xFAFF
-            | 0xFF00..=0xFFEF => Some(LazyFont::Cjk),
-            // Emoji: the supplementary-plane pictograph blocks (symbols &
-            // pictographs, supplemental, extended-A), the enclosed/symbol
-            // blocks incl. regional indicators (0x1F000..=0x1F2FF), plus the
-            // BMP Miscellaneous Symbols + Dingbats (0x2600..=0x27BF) and the
-            // Misc Symbols and Arrows subset that is emoji (0x2B00..=0x2BFF).
-            // The BMP text-arrows block (0x2190..=0x21FF) is deliberately left
-            // to the base fonts. Those glyphs render as monochrome symbols, not
-            // color emoji, so claiming them here would fetch the emoji face and
-            // still tofu. ZWJ sequences and skin-tone modifiers are handled by
-            // font shaping once the face is loaded.
-            0x1F000..=0x1FAFF | 0x2600..=0x27BF | 0x2B00..=0x2BFF => Some(LazyFont::Emoji),
-            _ => None,
-        }
-    }
-
-    /// Same-origin asset URL for this script's on-demand face. These files must
-    /// be present under `crates/ambre-app/fonts/` (copied to `dist/fonts/` by
-    /// Trunk) -- a missing file simply logs a warning and leaves tofu boxes.
-    fn asset_url(self) -> &'static str {
-        match self {
-            LazyFont::Cjk => "/fonts/NotoSansSC-Regular.otf",
-            LazyFont::Arabic => "/fonts/NotoSansArabic-Regular.ttf",
-            LazyFont::Devanagari => "/fonts/NotoSansDevanagari-Regular.ttf",
-            LazyFont::Emoji => "/fonts/NotoColorEmoji.ttf",
-        }
-    }
-}
+/// A script the base faces do not cover, fetched on demand.
+///
+/// Defined in `ambre-draw` so the Logic thread reaches the same classification
+/// without the graphics stack: Prose names the scripts a measurement was
+/// missing (`PROSE-110`).
+pub use ambre_draw::LazyFont;
 
 /// Font blobs fetched since the last drain, awaiting registration into the
 /// `FontContext`. Shared with the in-flight fetch tasks (same thread).

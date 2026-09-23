@@ -11,6 +11,7 @@ use parley::{
 };
 
 use ambre_bus::app::prose::{Align, LineHeightMode, ParagraphStyle};
+use ambre_draw::ScriptSet;
 use loro::{LoroDoc, LoroTree, TreeID};
 
 use crate::doc;
@@ -158,6 +159,10 @@ pub struct Measurer {
     /// How many runs have been shaped. It is what makes a reflow that
     /// re-shapes an untouched block observable (`PROSE-083`).
     shaped: u64,
+    /// The scripts met since the last full run that no loaded face covers
+    /// (`PROSE-110`). A layout carries it so a consumer can tell a settled
+    /// measurement from one still waiting for a face.
+    missing: ScriptSet,
 }
 
 impl Default for Measurer {
@@ -174,6 +179,7 @@ impl Measurer {
             font_cx: FontContext::new(),
             layout_cx: LayoutContext::new(),
             shaped: 0,
+            missing: ScriptSet::new(),
         }
     }
 
@@ -184,6 +190,7 @@ impl Measurer {
             font_cx,
             layout_cx: LayoutContext::new(),
             shaped: 0,
+            missing: ScriptSet::new(),
         }
     }
 
@@ -193,28 +200,52 @@ impl Measurer {
         self.shaped
     }
 
-    /// Whether the family this style names is one the collection holds
-    /// (`PROSE-034`).
+    /// The scripts this measurer met and had no face for (`PROSE-110`).
     ///
-    /// The answer is false when the text was shaped on a fallback face, which
-    /// is a layout another device need not agree with.
-    pub fn family_matches(&mut self, style: &EffectiveStyle) -> bool {
-        fonts::resolve(&mut self.font_cx, &style.font_family)
-            .is_some_and(|resolved| resolved.matched)
+    /// It accumulates over every run shaped since the last [`forget_missing`]
+    /// call. Empty means every measurement had the faces it asked for.
+    ///
+    /// [`forget_missing`]: Self::forget_missing
+    #[must_use]
+    pub fn missing(&self) -> ScriptSet {
+        self.missing
+    }
+
+    /// Drop what the measurer recorded as missing, before a full run.
+    pub fn forget_missing(&mut self) {
+        self.missing = ScriptSet::new();
+    }
+
+    /// Load a face into the measurer, from the bytes of a font file.
+    ///
+    /// The path a lazily fetched script face takes to the paginator
+    /// (`CANVAS-006`). The layout measured before it arrived is stale, and
+    /// the next reflow recomputes in full (`PROSE-111`).
+    pub fn register_faces(&mut self, bytes: Vec<u8>) {
+        fonts::register_faces(&mut self.font_cx, bytes);
+    }
+
+    /// Whether a face has arrived for a script a past run was missing.
+    ///
+    /// The layout it produced is stale the moment one does (`PROSE-111`).
+    pub fn coverage_grew(&mut self, missing: ScriptSet) -> bool {
+        fonts::coverage_grew(&mut self.font_cx, missing)
     }
 
     /// Shape one run to a width, and hand back the layout.
     ///
-    /// The family is resolved against the loaded collection before the text
-    /// reaches the shaper (`PROSE-034`). A label no face carries is replaced by
-    /// one that has glyphs, rather than shaped into nothing.
+    /// The family is resolved to a shipped face before the text reaches the
+    /// shaper (`PROSE-034`, `PROSE-108`). A label no shipped face carries is
+    /// replaced by one that has glyphs, rather than shaped into nothing.
+    ///
+    /// A script no loaded face covers is recorded rather than hidden: the run
+    /// still shapes, into tofu, and [`missing`](Self::missing) names it.
     pub fn shape(&mut self, text: &str, style: &EffectiveStyle, width_px: f32) -> Layout<()> {
         self.shaped = self.shaped.saturating_add(1);
-        let family = fonts::resolve(&mut self.font_cx, &style.font_family)
-            .and_then(|resolved| self.font_cx.collection.family_name(resolved.family))
-            .map(str::to_string)
-            .unwrap_or_else(|| style.font_family.clone());
-        let mut layout = self.build(text, style, &family, style.line_height, width_px);
+        let absent = fonts::missing_scripts(&mut self.font_cx, text);
+        self.missing.extend(absent);
+        let family = fonts::resolve(&style.font_family).face_name();
+        let mut layout = self.build(text, style, family, style.line_height, width_px);
         // `AtLeast` is a floor on the height the font asked for, so it takes a
         // measured line to apply. One re-shape, and only for that one mode.
         if let Some(floor_px) = style.at_least_floor_px
@@ -225,7 +256,7 @@ impl Measurer {
             layout = self.build(
                 text,
                 style,
-                &family,
+                family,
                 LineHeight::Absolute(floor_px),
                 width_px,
             );

@@ -20,6 +20,9 @@ pub use types::*;
 pub mod peer;
 pub use peer::peer_color;
 
+pub mod text;
+pub use text::{BundledFamily, LazyFont, ScriptSet, resolve_family};
+
 #[cfg(feature = "testing")]
 pub mod testing;
 

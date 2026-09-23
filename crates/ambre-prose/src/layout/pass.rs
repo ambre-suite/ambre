@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::app::prose::BlockType;
+use ambre_draw::ScriptSet;
 use loro::{LoroDoc, LoroMap, LoroTree, LoroValue, TreeID};
 
 use crate::doc;
@@ -50,6 +51,14 @@ pub struct PageLayout {
     /// (`PROSE-067`). `None` when nothing moved, and `Some(0)` for a layout
     /// that replaces nothing.
     pub first_dirty_page: Option<u32>,
+    /// The scripts the document uses that no loaded face covered when this
+    /// layout was measured (`PROSE-110`).
+    ///
+    /// Empty is the settled case. Every run shaped on a face that has the
+    /// glyphs, so a peer with the same shipped faces measures the same
+    /// heights. A non-empty set means some text shaped into tofu, so a page
+    /// number taken from here is not one to store (`PROSE-112`).
+    pub missing_scripts: ScriptSet,
 }
 
 impl PageLayout {
@@ -96,6 +105,9 @@ pub(crate) fn layout_of(page_box: PageBox, placement: &Placement) -> PageLayout 
         footer_height_px: 0.0,
         footer_first_height_px: 0.0,
         first_dirty_page: Some(0),
+        // The caller knows what its measurer was missing; this one assembles
+        // geometry and placement alone.
+        missing_scripts: ScriptSet::new(),
     }
 }
 

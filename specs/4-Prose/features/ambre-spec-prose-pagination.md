@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-017` | `INV` | A fresh page MUST accept at least one line: the layout MUST NOT produce a degenerate empty page. | this spec section 2 | proptest -- `ambre_prose::layout::place::properties::every_block_reaches_a_page`; `ambre_prose::layout::place::tests::a_body_of_zero_places_every_block_and_terminates` | none | verified |
 | `PROSE-068` | `INV` | A footnote ordinal MUST be assigned from the position of its reference in the document flow. | this spec section 2 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-099` | `INV` | A footnote ordinal MUST NOT change when placement moves the note to another page. | this spec section 2 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-034` | `INV` | Every font family label MUST be resolved to a loaded face before shaping; an unmatched label MUST NOT be handed to the shaper. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | `ambre_prose::layout::fonts::tests::a_family_no_face_carries_still_resolves_to_a_loaded_one`; `ambre_prose::layout::fonts::tests::a_monospace_label_falls_back_to_a_monospace_face` | none | verified |
+| `PROSE-034` | `INV` | Every font family label MUST be resolved to a loaded face before shaping; an unmatched label MUST NOT be handed to the shaper. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | `ambre_prose::layout::fonts::tests::a_family_no_face_carries_still_resolves_to_a_shipped_one`; `ambre_prose::layout::fonts::tests::a_monospace_label_falls_back_to_a_monospace_face` | none | verified |
 | `PROSE-036` | `INV` | A full shaped layout MUST be retained past measurement only for a block that splits across pages; every other block MUST keep its line metrics alone. | this spec section 2 | type-level -- `ambre_prose::layout::place::MeasuredBlock` declares no shaped layout: it carries `TextMetrics`, which is the per-line heights alone, so no measurement can retain more than the rule allows | none | verified |
 | `PROSE-012` | `OBS` | A manual page break MUST never be relaxed: it opens a page whatever else the placement is weighing. | this spec section 2 | `ambre_prose::layout::place::tests::a_break_is_honoured_even_where_the_page_had_room_to_spare`; `ambre_prose::layout::pass::tests::a_manual_break_puts_what_follows_it_on_the_next_page` | none | verified |
 | `PROSE-069` | `OBS` | Margin collapse MUST never be skipped: it sits above every heuristic in the constraint order. | this spec section 2 | `ambre_prose::layout::place::tests::a_leading_margin_collapses_against_the_trailing_one_before_it`; `ambre_prose::layout::place::tests::a_leading_margin_is_dropped_at_a_page_top` | none | verified |
@@ -47,6 +47,11 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-073` | `OBS` | A block broken across pages MUST carry at least two of its lines onto the page it continues on, unless honouring that would leave fewer than two behind. | this spec section 2 | proptest -- `ambre_prose::layout::place::properties::a_cut_leaves_two_lines_on_each_side`; `ambre_prose::layout::place::tests::a_split_never_leaves_fewer_than_two_lines_on_either_side` | none | verified |
 | `PROSE-074` | `OBS` | A heading, or a block that asks to stay with its successor, MUST NOT be placed where fewer than two lines of what follows it fit under it, unless moving it would waste over a quarter of the page. | this spec section 2 | `ambre_prose::layout::place::tests::a_heading_moves_rather_than_standing_alone_at_a_page_bottom`; `ambre_prose::layout::place::tests::a_heading_with_room_under_it_stays_where_it_is` | none | verified |
 | `PROSE-075` | `OBS` | A block MUST NOT be broken across pages unless no page of its own holds it whole. | this spec section 2 | `ambre_prose::layout::place::tests::a_block_a_whole_page_holds_moves_rather_than_splits`; `ambre_prose::layout::place::tests::a_block_kept_together_and_taller_than_a_page_splits_all_the_same` | none | verified |
+
+| `PROSE-107` | `INV` | Pagination MUST measure on the faces the application ships and on those alone: a face the device happens to carry MUST NOT enter a measurement. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | structural -- `ambre_prose::layout::belts::only_the_font_module_asks_a_context_what_it_holds` reads every source of the module and fails on a collection lookup outside `ambre_prose::layout::fonts::resolve` | none | verified |
+| `PROSE-108` | `INV` | A family label MUST resolve to one shipped face by the label alone: the resolution MUST NOT read the faces a context holds. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | type-level -- `ambre_prose::layout::fonts::resolve` takes a label and no context, so no device can reach it; `ambre_prose::layout::fonts::tests::resolution_reads_the_label_and_nothing_else` | none | verified |
+| `PROSE-110` | `OBS` | A layout MUST name every script the document uses that had no face when it was measured. | this spec section 2 | `ambre_prose::layout::reflow::convergence::a_latin_document_names_no_missing_script`; `ambre_prose::layout::reflow::convergence::a_script_with_no_face_is_named_in_the_layout` | none | verified |
+| `PROSE-112` | `INV` | A page number that leaves the screen -- a comment anchor, a cross reference, a table-of-contents entry, an exported file -- MUST NOT be taken from a layout that names a missing script. | this spec section 2 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5), which mints the first consumer that stores a page number | unimplemented |
 
 ### 1.2 Lay the whole document out again
 
@@ -75,15 +80,24 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-019` | `POST` | Table-of-contents stabilization MUST run as a bounded multi-pass step. | this spec section 2 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5), which mints the block the entries live in | unimplemented |
 | `PROSE-084` | `FRAME` | Settling the table of contents MUST NOT run on the path that answers a keystroke. | this spec section 2 | not built | unbuilt -- lands with the "Tables, table of contents and word count" Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.5 Measure the same way on every device
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-109` | `POST` | Two peers whose font contexts cover the same scripts MUST paginate one document alike: the same page count, and every block on the same page at the same offset. | this spec section 2 | proptest -- `ambre_prose::layout::reflow::convergence::two_peers_covering_the_same_scripts_paginate_alike` paginates a generated document on two contexts holding different faces | none | verified |
+| `PROSE-111` | `POST` | A face registered after a layout was measured MUST force a full recomputation. | this spec section 2 | `ambre_prose::layout::reflow::convergence::a_face_that_arrives_forces_a_full_recomputation` | none | verified |
+| `PROSE-113` | `FRAME` | Measuring MUST NOT read anything that tells one peer from another: no peer identity, no clock and no device setting MUST reach a measurement. | this spec section 2 | structural -- `ambre_prose::layout::belts::nothing_identifying_a_peer_reaches_a_measurement` reads every source of the module and fails on a peer id, a clock or a random draw | none | verified |
+
 * **Budget.** five rows of `ambre-spec-budgets.md section 1`. Three are the full recomputation of
   100 pages, the partial reflow and the layout handoff. Two are cold shapes: ten dirty blocks, and
   the document at open. Shaping and placement are budgeted apart, and section 4 says why.
 * **Boundary.** none: pagination runs on the Logic thread, reads the document and returns a value.
   `PROSE-025` (`features/ambre-spec-prose-engine.md section 1`) bans a network call from this crate.
-* **Verification.** 29 `verified`, 8 `unimplemented`. The eight are the bands, the footnotes and
-  the table of contents, each bound to the Story that builds it. Termination rests on two rows.
-  `PROSE-078` never reopens a page, `PROSE-017` puts a line on every page opened, and a property
-  over generated documents holds both. The schema holds `PROSE-065`.
+* **Verification.** 35 `verified`, 9 `unimplemented`. Eight are the bands, the footnotes and the
+  table of contents, the ninth `PROSE-112`, which waits on the first consumer to store a page
+  number. Termination rests on `PROSE-078` and `PROSE-017`, which a property over generated
+  documents holds together. Two bans are structural, held by a test that reads the module's own
+  source. The schema holds `PROSE-065`.
 
 ---
 
@@ -125,6 +139,9 @@ pub struct PageLayout {
     pub first_dirty_page: Option<u32>,
     /// One entry per page, empty where the page carries no footnote (`PROSE-011`).
     pub footnotes_per_page: Vec<Vec<FootnoteLayout>>,
+    /// The scripts this document uses that no loaded face covered when it was measured
+    /// (`PROSE-110`). Empty is the settled case.
+    pub missing_scripts: ScriptSet,
     pub header_runs:  PageRuns,
     pub footer_runs:  PageRuns,
 }
@@ -263,8 +280,23 @@ already were, and from there the tail is unchanged. Seven changes force the whol
 instead: the page box, either band being enabled or disabled, and the document defaults. So do a
 full snapshot import and any edit that inserts or removes a footnote reference (`PROSE-035`).
 
+**The same measurement on every device.** A layout is a function of the text, the page box and
+the faces it was measured on. The first two are shared through the CRDT and the third is not, so
+the faces are pinned instead. Ambre ships its own set and none is taken from the device.
+`ambre-draw` maps a family label to one of them by the label alone (`PROSE-107`, `PROSE-108`).
+The renderers reach that same mapping, so the page the UI paints is the page the paginator
+measured (`CANVAS-017`).
+
+What is left is script coverage. A face outside the base set is fetched when text needing it
+appears (`CANVAS-006`). A peer that has not fetched it yet shapes that text into tofu, and
+measures it short. The layout says so rather than hiding it: `missing_scripts` names every script
+the document used that had no face (`PROSE-110`). A face arriving afterwards invalidates the whole
+layout, since every block of that script re-shapes wherever it sits (`PROSE-111`). Two peers
+therefore converge as they fetch, and a page number taken from a layout that names a script is not
+one to store (`PROSE-112`).
+
 **Code:** `crates/ambre-prose/src/layout/`. `geometry` reads the page box and `fonts` resolves a
-family label to a loaded face. `measure` shapes one block and reports its line heights, `pass`
+family label to a shipped face. `measure` shapes one block and reports its line heights, `pass`
 walks the tree, and `place` is pass 2. `reflow` holds the layout between edits.
 `ambre_prose::logic::ProseState::paginate` is the one way in, so the document is measured where it
 lives. Pass 0 and pass 3 are not built, and section 5 says what that costs.
@@ -327,14 +359,10 @@ everywhere (`features/ambre-spec-prose-page-rendering.md`).
   nothing says which measurement they invalidated, and the incremental path is given up rather
   than fed a guess. A delta that touches one paragraph of a hundred pages is charged to the full
   budget, and no row states the cost.
-* **Nothing rules on whether two peers break pages at the same place.** The layout is derived from
-  the document and the page format, both shared. It is also derived from the faces loaded on the
-  device, and family resolution maps an unknown label to whichever base face is there
-  (`PROSE-034`). A collaborator with a different font set can measure the same paragraph
-  differently and land on a different page count. That matters the moment a page number leaves the
-  screen: a comment naming a page, a cross reference, or a shared PDF.
-  No row states the guarantee and no decision refuses it, and it lands with the `Two peers read the
-  same page number` Story (`ambre-roadmap.md` E5).
+* **Nothing says what the reader is told while a face is still coming.** Two peers agree once
+  both hold the faces the document needs, and `missing_scripts` names what a measurement was
+  short of (`PROSE-110`, `PROSE-111`). Nothing says whether the one still waiting sees that its
+  page numbers are provisional, or reads them as settled.
 * **The layout has no version rule of its own.** The engine stamps each layout so the UI thread can
   drop a stale one (`PROSE-UI-016`, `features/ambre-spec-prose-page-rendering.md`). Nothing
   here says what the stamp counts, or that it never goes backwards.

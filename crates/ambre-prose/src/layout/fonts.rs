@@ -1,105 +1,117 @@
-//! Family resolution: every label the document carries becomes a face the
-//! shaper actually holds (`PROSE-034`).
+//! What the paginator is allowed to measure on (`PROSE-107`, `PROSE-108`).
 //!
-//! A label reaches here from `meta/defaults` or from a paragraph style, and
-//! neither is checked against anything when it is written. An unmatched label
-//! hands the shaper a layout with no glyphs in it. That measures as an empty
-//! block and paginates as a blank page. So the label is resolved against the
-//! loaded collection first, and an unmatched one falls back.
+//! A layout is a function of the text, the page box and the faces it was
+//! measured on. The first two are shared through the CRDT and the third is
+//! not, so two peers can break pages differently on one document.
+//!
+//! Family resolution is therefore pinned: `ambre-draw` maps a label to a
+//! shipped face by the label alone, reading no context and no device. What is
+//! left is script coverage, which a peer gains as it fetches faces, and
+//! [`missing_scripts`] names what a measurement did not have.
 
+use ambre_draw::{BundledFamily, ScriptSet};
 use parley::FontContext;
-use parley::fontique::{FamilyId, GenericFamily};
 
-/// The face a family label resolves to, and whether the label was found.
+/// Resolve a family label to the face the application ships.
 ///
-/// The flag is what a caller reports on: a document laid out on fallback faces
-/// breaks its pages where another device would not. Nothing acts on it yet,
-/// and the `Two peers read the same page number` Story is where it lands
-/// (`ambre-roadmap.md` E5).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ResolvedFamily {
-    pub family: FamilyId,
-    pub matched: bool,
-}
-
-/// Resolve a family label to a loaded face.
-///
-/// The label is tried as it is written, then as the generic families a
-/// collection always answers. `None` only when the collection holds no face at
-/// all, which is a context nothing seeded.
+/// The whole of family resolution for Prose (`PROSE-108`). It reads the label
+/// and nothing else, so two peers resolve one label alike whatever faces their
+/// contexts hold.
 #[must_use]
-pub fn resolve(font_cx: &mut FontContext, label: &str) -> Option<ResolvedFamily> {
-    if let Some(family) = font_cx.collection.family_id(label) {
-        return Some(ResolvedFamily {
-            family,
-            matched: true,
-        });
-    }
-    let generic = generic_for(label);
-    let guessed = font_cx.collection.generic_families(generic).next();
-    let family = match guessed {
-        Some(family) => family,
-        None => font_cx
-            .collection
-            .generic_families(GenericFamily::SansSerif)
-            .next()?,
-    };
-    Some(ResolvedFamily {
-        family,
-        matched: false,
-    })
+pub fn resolve(label: &str) -> BundledFamily {
+    ambre_draw::resolve_family(Some(label))
 }
 
-/// The generic family a label falls back to when no face carries its name.
+/// The scripts this text asks for that `font_cx` cannot cover (`PROSE-110`).
 ///
-/// A label the document wrote is a human name, so the only reading available
-/// is its own spelling. It is a guess, and it is marked as one by the
-/// `matched` flag the caller gets back.
-fn generic_for(label: &str) -> GenericFamily {
-    let lowered = label.to_ascii_lowercase();
-    if lowered.contains("mono") || lowered.contains("code") {
-        GenericFamily::Monospace
-    } else if lowered.contains("serif") && !lowered.contains("sans") {
-        GenericFamily::Serif
-    } else {
-        GenericFamily::SansSerif
+/// The base faces cover Latin, Cyrillic and Greek, so an empty answer is the
+/// ordinary case. A non-empty one means the text was shaped into tofu, and the
+/// heights it measured are not what a peer holding the face would get.
+#[must_use]
+pub fn missing_scripts(font_cx: &mut FontContext, text: &str) -> ScriptSet {
+    let asked = ScriptSet::of_text(text);
+    let mut missing = ScriptSet::new();
+    for script in asked.iter() {
+        if font_cx.collection.family_id(script.face_name()).is_none() {
+            missing.insert(script);
+        }
     }
+    missing
+}
+
+/// Load a face into `font_cx`, from the bytes of a font file.
+///
+/// Registration lives here with the two lookups above, so this module stays
+/// the one place that touches a collection at all (`PROSE-107`).
+pub fn register_faces(font_cx: &mut FontContext, bytes: Vec<u8>) {
+    font_cx.collection.register_fonts(bytes.into(), None);
+}
+
+/// Whether `font_cx` now covers any script of `missing`.
+///
+/// A face registered since a layout was measured invalidates it whole
+/// (`PROSE-111`): every block of that script re-shapes to different heights.
+#[must_use]
+pub fn coverage_grew(font_cx: &mut FontContext, missing: ScriptSet) -> bool {
+    missing
+        .iter()
+        .any(|script| font_cx.collection.family_id(script.face_name()).is_some())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    /// A context holding the system faces, which every generic family answers
-    /// from. Nothing here registers a face of its own.
-    fn context() -> FontContext {
-        FontContext::new()
-    }
+    use super::{coverage_grew, missing_scripts, resolve};
+    use ambre_draw::{BundledFamily, LazyFont, ScriptSet};
+    use parley::FontContext;
 
     #[test]
-    fn a_family_no_face_carries_still_resolves_to_a_loaded_one() {
-        let mut font_cx = context();
-        let seeded = font_cx
-            .collection
-            .generic_families(GenericFamily::SansSerif)
-            .next()
-            .is_some();
-        let resolved = resolve(&mut font_cx, "No Face Named This 12345");
-        // An empty collection is a context nothing seeded, and the only case
-        // the function is allowed to answer nothing for.
-        assert_eq!(resolved.is_some(), seeded);
-        let Some(resolved) = resolved else {
-            return;
-        };
-        assert!(!resolved.matched);
-        assert!(font_cx.collection.family_name(resolved.family).is_some());
+    fn a_family_no_face_carries_still_resolves_to_a_shipped_one() {
+        assert_eq!(resolve("No Face Named This 12345"), BundledFamily::Sans);
+        assert_eq!(resolve("Serif"), BundledFamily::Serif);
     }
 
     #[test]
     fn a_monospace_label_falls_back_to_a_monospace_face() {
-        assert_eq!(generic_for("Absent Mono"), GenericFamily::Monospace);
-        assert_eq!(generic_for("Absent Code Pro"), GenericFamily::Monospace);
-        assert_eq!(generic_for("Absent Serif"), GenericFamily::Serif);
-        assert_eq!(generic_for("Absent Sans Serif"), GenericFamily::SansSerif);
+        assert_eq!(resolve("Monospace"), BundledFamily::Mono);
+        assert_eq!(resolve("DejaVu Sans Mono"), BundledFamily::Mono);
+    }
+
+    #[test]
+    fn resolution_reads_the_label_and_nothing_else() {
+        // Two contexts, each seeded differently, resolve one label alike.
+        // The function takes no context at all, which is the point of the
+        // rule: a signature that cannot read a device cannot diverge on one.
+        let empty = FontContext::new();
+        drop(empty);
+        for label in ["Serif", "Monospace", "Sans", "Unknown Face"] {
+            assert_eq!(resolve(label), resolve(label));
+        }
+    }
+
+    #[test]
+    fn latin_text_asks_for_no_face_at_all() {
+        let mut font_cx = FontContext::new();
+        assert!(missing_scripts(&mut font_cx, "Hello, world 123.").is_empty());
+    }
+
+    #[test]
+    fn a_script_the_context_cannot_cover_is_named() {
+        let mut font_cx = FontContext::new();
+        let missing = missing_scripts(&mut font_cx, "\u{4e00}");
+        // A context that happens to hold the CJK face reports nothing, and the
+        // rule is about what a context without it says.
+        if font_cx
+            .collection
+            .family_id(LazyFont::Cjk.face_name())
+            .is_none()
+        {
+            assert!(missing.contains(LazyFont::Cjk));
+        }
+    }
+
+    #[test]
+    fn coverage_that_never_grew_is_reported_as_such() {
+        let mut font_cx = FontContext::new();
+        assert!(!coverage_grew(&mut font_cx, ScriptSet::new()));
     }
 }

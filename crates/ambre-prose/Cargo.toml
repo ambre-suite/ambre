@@ -15,6 +15,12 @@ fixtures = ["ambre-core/fixtures"]
 [dependencies]
 ambre-core = { path = "../ambre-core" }
 ambre-bus = { path = "../ambre-bus" }
+
+# Family resolution and script classification, shared with the renderers
+# (`CANVAS-017`). Pagination must resolve a label exactly as the UI thread
+# does, or two peers break pages differently (`PROSE-108`). ambre-draw is the
+# lightest crate that holds it: geometry, colour and text, no graphics stack.
+ambre-draw = { path = "../ambre-draw" }
 serde = { workspace = true }
 tracing = { workspace = true }
 
