@@ -369,6 +369,12 @@ everywhere (`features/ambre-spec-prose-page-rendering.md`).
   both hold the faces the document needs, and `missing_scripts` names what a measurement was
   short of (`PROSE-110`, `PROSE-111`). Nothing says whether the one still waiting sees that its
   page numbers are provisional, or reads them as settled.
+* **Nothing says that two architectures measure one paragraph to the same pixel.** The peers run
+  the same shaper over the same bytes, so the code is not the risk. The arithmetic under it is:
+  hinting, curve evaluation and the accumulations of a maths library are free to differ between
+  x86-64, aarch64 and wasm32. `PROSE-109` compares two contexts on one host, which says nothing
+  about two machines. Ruling it needs a layout produced on one target and replayed on another.
+  The repository has no headless wasm run to replay it in (`ambre-roadmap.md` E5).
 * **The layout has no version rule of its own.** The engine stamps each layout so the UI thread can
   drop a stale one (`PROSE-UI-016`, `features/ambre-spec-prose-page-rendering.md`). Nothing
   here says what the stamp counts, or that it never goes backwards.
