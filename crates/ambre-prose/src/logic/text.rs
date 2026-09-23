@@ -193,6 +193,11 @@ impl ProseState {
         let Some(body) = self.body_of(id) else {
             return Self::err_no_block(id);
         };
+        // A band is one block the metadata names. A split would put its tail
+        // in the body flow.
+        if doc::is_band(&doc::blocks(&self.doc), id) {
+            return Self::err_nesting();
+        }
         let pos = pos as usize;
         let len = body.len_unicode();
         if pos > len {

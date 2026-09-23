@@ -59,9 +59,19 @@ pub struct PageLayout {
     /// heights. A non-empty set means some text shaped into tofu, so a page
     /// number taken from here is not one to store (`PROSE-112`).
     pub missing_scripts: ScriptSet,
+    /// The bands as the document held them when this layout was taken.
+    pub bands: doc::Bands,
 }
 
 impl PageLayout {
+    /// The header and the footer drawn on the zero-based `page`, each with
+    /// its block and its alignment (`PROSE-FEAT-169`, `PROSE-UI-133`,
+    /// `PROSE-FEAT-285`). `None` for a hidden side.
+    #[must_use]
+    pub fn bands_on_page(&self, page: u32) -> (Option<doc::Band>, Option<doc::Band>) {
+        self.bands.on_page(page)
+    }
+
     /// Every fragment visible on a page, continuations of split blocks
     /// included (`PROSE-066`). Empty for a page that carries nothing, and for
     /// one out of range (`PROSE-011`).
@@ -72,22 +82,81 @@ impl PageLayout {
     /// The height left for body content on a page, both bands deducted.
     #[must_use]
     pub fn body_height_px(&self) -> f32 {
-        (self.content_height_px - self.header_height_px - self.footer_height_px).max(0.0)
+        let header = self.header_height_px.max(self.header_first_height_px);
+        let footer = self.footer_height_px.max(self.footer_first_height_px);
+        (self.content_height_px - header - footer).max(0.0)
     }
 }
 
 /// Lay the whole document out.
 ///
 /// The one entry point of a full recomputation: read the page box, measure
-/// every block, then place them. The two bands measure zero until the headers
-/// Story lands (`ambre-roadmap.md` E5), and section 5 of the spec carries that
-/// gap.
+/// every block, then place them. The bands are measured before the first
+/// block is placed (`PROSE-076`).
 pub fn lay_out(measurer: &mut Measurer, document: &LoroDoc) -> PageLayout {
     let page_box = PageBox::read(document);
+    let bands = BandHeights::measure(measurer, document, page_box.content_width_px);
     let blocks = measure_document(measurer, document, page_box.content_width_px);
-    let body_height_px = page_box.body_height_px(0.0, 0.0);
-    let placement = place::place(&blocks, body_height_px);
-    layout_of(page_box, &placement)
+    let placement = place::place(&blocks, bands.body_height_px(&page_box));
+    let mut layout = layout_of(page_box, &placement);
+    bands.stamp(&mut layout);
+    layout
+}
+
+/// The four bands measured, and the settings they were measured under.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct BandHeights {
+    pub(crate) bands: doc::Bands,
+    header_px: f32,
+    header_first_px: f32,
+    footer_px: f32,
+    footer_first_px: f32,
+}
+
+impl BandHeights {
+    /// Measure every band a page may draw. A hidden side measures zero.
+    pub(crate) fn measure(
+        measurer: &mut Measurer,
+        document: &LoroDoc,
+        content_width_px: f32,
+    ) -> Self {
+        let bands = doc::read_bands(document);
+        let mut height = |band: doc::Band, shown: bool| match band.block {
+            Some(id) if shown => measure_band(measurer, document, &id, content_width_px),
+            _ => 0.0,
+        };
+        let first = bands.different_first_page;
+        Self {
+            bands,
+            header_px: height(bands.header, bands.header_enabled),
+            header_first_px: height(bands.header_first, bands.header_enabled && first),
+            footer_px: height(bands.footer, bands.footer_enabled),
+            footer_first_px: height(bands.footer_first, bands.footer_enabled && first),
+        }
+    }
+
+    /// The body height every page gets, each band capped at a quarter of the
+    /// content height (`PROSE-016`).
+    ///
+    /// One height for every page: the taller of the regular band and the
+    /// first page's own. A page never overflows its bands. The price is
+    /// some room lost after the first page when its own bands are the taller.
+    pub(crate) fn body_height_px(&self, page_box: &PageBox) -> f32 {
+        page_box.body_height_px(
+            self.header_px.max(self.header_first_px),
+            self.footer_px.max(self.footer_first_px),
+        )
+    }
+
+    /// Write the heights, capped, and the settings into a layout.
+    pub(crate) fn stamp(&self, layout: &mut PageLayout) {
+        let cap = (layout.content_height_px * crate::layout::geometry::BAND_SHARE).max(0.0);
+        layout.header_height_px = self.header_px.min(cap);
+        layout.header_first_height_px = self.header_first_px.min(cap);
+        layout.footer_height_px = self.footer_px.min(cap);
+        layout.footer_first_height_px = self.footer_first_px.min(cap);
+        layout.bands = self.bands;
+    }
 }
 
 /// Assemble the result from the page box and what placement returned.
@@ -108,7 +177,33 @@ pub(crate) fn layout_of(page_box: PageBox, placement: &Placement) -> PageLayout 
         // The caller knows what its measurer was missing; this one assembles
         // geometry and placement alone.
         missing_scripts: ScriptSet::new(),
+        bands: doc::Bands::default(),
     }
+}
+
+/// The measured height of one band block against the content width, before
+/// the cap (`PROSE-016`).
+#[must_use]
+pub(crate) fn measure_band(
+    measurer: &mut Measurer,
+    document: &LoroDoc,
+    id: &TreeID,
+    content_width_px: f32,
+) -> f32 {
+    let Some(tree) = doc::blocks_read(document) else {
+        return 0.0;
+    };
+    let defaults = doc::read_defaults(document);
+    let (cached, toc_pages) = (HashMap::new(), HashMap::new());
+    let scope = Walk {
+        document,
+        tree: &tree,
+        defaults: &defaults,
+        content_width_px,
+        cached: &cached,
+        toc_pages: &toc_pages,
+    };
+    measure_one(measurer, &scope, id, BlockType::Paragraph).height_px
 }
 
 /// Measure every block of the document, in flow order (`PROSE-077`).

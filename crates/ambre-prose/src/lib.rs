@@ -11,6 +11,8 @@
 //!   order and stored nowhere (`features/ambre-spec-prose-headings.md`).
 //! * [`toc`] -- the entries of a table of contents, read off the headings and
 //!   a layout (`features/ambre-spec-prose-table-of-contents.md`).
+//! * [`band`] -- the text a header or a footer shows on one page, its fields
+//!   resolved (`features/ambre-spec-prose-headers-footers.md`).
 //! * [`count`] -- the word count's four text tallies
 //!   (`features/ambre-spec-prose-word-count.md`).
 //! * [`mark`] -- the inline mark registry: the expansion policy and the
@@ -31,6 +33,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod band;
 pub mod count;
 pub mod doc;
 pub mod events;

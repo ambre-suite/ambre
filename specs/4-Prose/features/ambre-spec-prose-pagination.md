@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-011` | `INV` | Every in-range page index MUST resolve to a list, empty if the page holds nothing: a reader MUST NOT hit a missing entry. | this spec section 2 | `ambre_prose::layout::place::properties::no_block_claims_a_page_out_of_range`; `ambre_prose::layout::place::tests::every_page_index_a_layout_reports_is_one_it_has` -- it asks a page that carries nothing and requires an empty answer | none | verified |
 | `PROSE-066` | `INV` | What a page carries MUST include the continuation of a block broken onto it, not the blocks that start there alone. | this spec section 2 | `ambre_prose::layout::place::tests::a_block_taller_than_a_page_splits_and_its_continuation_starts_at_the_top` -- the page the continuation lands on lists it | none | verified |
 | `PROSE-067` | `INV` | A layout MUST carry the first page on which it differs from the layout it replaces. | this spec section 2 | `ambre_prose::layout::reflow::tests::the_layout_names_the_first_page_it_changed`; `ambre_prose::layout::reflow::tests::a_reflow_of_an_untouched_document_moves_nothing` -- the second requires no page at all | none | verified |
-| `PROSE-016` | `INV` | A header or footer MUST NOT consume more than a quarter of the page height. | this spec section 2 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5). The cap is written in `ambre_prose::layout::geometry::PageBox::band_cap_px` and no band is measured against it | unimplemented |
+| `PROSE-016` | `INV` | A header or footer MUST NOT consume more than a quarter of the content height. | this spec section 2 | `ambre_prose::logic::bands::tests::a_band_taller_than_a_quarter_of_the_page_is_clipped_to_it`; `ambre_prose::layout::geometry::tests::a_band_taller_than_a_quarter_is_clipped_and_never_grows_the_page` | none | verified |
 | `PROSE-017` | `INV` | A fresh page MUST accept at least one line: the layout MUST NOT produce a degenerate empty page. | this spec section 2 | proptest -- `ambre_prose::layout::place::properties::every_block_reaches_a_page`; `ambre_prose::layout::place::tests::a_body_of_zero_places_every_block_and_terminates` | none | verified |
 | `PROSE-068` | `INV` | A footnote ordinal MUST be assigned from the position of its reference in the document flow. | this spec section 2 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-099` | `INV` | A footnote ordinal MUST NOT change when placement moves the note to another page. | this spec section 2 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -58,7 +58,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-076` | `POST` | A full recomputation MUST measure both bands and assign every footnote ordinal before it places its first block. | this spec section 2 | not built | unbuilt -- lands with the "Headers, footers, find and replace" Story (`ambre-roadmap.md` E5), which builds the bands, and the ordinals arrive with the footnotes | unimplemented |
+| `PROSE-076` | `POST` | A full recomputation MUST measure both bands before it places its first block. | this spec section 2 | `ambre_prose::logic::bands::tests::a_shown_band_is_measured_before_the_body_is_placed` | none | verified |
+| `PROSE-117` | `POST` | A full recomputation MUST assign every footnote ordinal before it places its first block. | this spec section 2 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-077` | `POST` | A full recomputation MUST place blocks in the order of a depth-first walk of the block tree: that walk is the document flow. | this spec section 2 | `ambre_prose::layout::pass::tests::the_walk_visits_the_tree_depth_first` | none | verified |
 | `PROSE-078` | `POST` | Placement MUST resolve a constraint it cannot meet by moving forward: it MUST NOT revisit a page it has already emitted. | this spec section 2 | proptest -- `ambre_prose::layout::place::properties::pages_only_ever_move_forward`; `ambre_prose::layout::place::tests::placement_never_goes_back_to_a_page_it_left` | none | verified |
 | `PROSE-079` | `FRAME` | Laying the document out MUST NOT write to the document it measures. | this spec section 2 | `ambre_prose::layout::pass::tests::measuring_the_document_writes_nothing_to_it` -- it compares the whole document before and after, so a read that attaches a container fails it | none | verified |
@@ -95,8 +96,8 @@ status values are normative in `ambre-spec-template.md`.
   the document at open. Shaping and placement are budgeted apart, and section 4 says why.
 * **Boundary.** none: pagination runs on the Logic thread, reads the document and returns a value.
   `PROSE-025` (`features/ambre-spec-prose-engine.md section 1`) bans a network call from this crate.
-* **Verification.** 39 `verified`, 7 `unimplemented`. Six are the bands and the footnotes, the
-  seventh `PROSE-112`, which waits on the first consumer to store a page
+* **Verification.** 41 `verified`, 6 `unimplemented`. Five are the footnotes, the
+  sixth `PROSE-112`, which waits on the first consumer to store a page
   number. Termination rests on `PROSE-078` and `PROSE-017`, which a property over generated
   documents holds together. Two bans are structural, held by a test that reads the module's own
   source. The schema holds `PROSE-065`.
@@ -365,10 +366,6 @@ everywhere (`features/ambre-spec-prose-page-rendering.md`).
   footnote list. The type those runs travel in is the renderer's
   (`features/ambre-spec-prose-page-rendering.md section 2`), and nothing draws yet. The three
   fields land with the Story that reads them, and pass 3 with them.
-* **Both bands measure zero.** Placement deducts a header and a footer of no height from every
-  page, so a document with either one lays out one band too tall. The cap of `PROSE-016` is
-  written and nothing is measured against it. It lands with the `Headers, footers, find and
-  replace` Story (`ambre-roadmap.md` E5).
 * **A table is measured on its text alone.** Cell padding, the two horizontal borders and a
   merged cell's rectangle are in the measurement table of section 2 and in no code. A table
   breaks at a row, which is the rule that matters for a page, but it is measured shorter than it

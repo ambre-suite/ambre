@@ -29,7 +29,11 @@ pub fn compute_word_count(document: &LoroDoc) -> WordCount {
         return count;
     };
     let mut flow = Vec::new();
-    collect(&tree, None, &mut flow);
+    // The flow starts at the body roots, so a band is never counted.
+    for root in doc::roots(&tree) {
+        flow.push(root);
+        collect(&tree, Some(root), &mut flow);
+    }
     for id in flow {
         let has_body = doc::block_type_of(&tree, &id).is_some_and(|t| t.has_body());
         if has_body {

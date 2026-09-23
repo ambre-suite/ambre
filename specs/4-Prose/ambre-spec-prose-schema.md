@@ -113,11 +113,11 @@ the container, `--` where no feature does.
 
 | Container | Loro type | Key | Value | LWW unit | Owning feature | State |
 |---|---|---|---|---|---|---|
-| `meta` | Map | `schema_version`, `title`, `created_at`, `updated_at`, `lang`, `pageless` | `u32`, String, `u64` and `u64` as Unix milliseconds, a BCP 47 tag, `bool` | the key | -- (foundation; this spec section 7) | built |
+| `meta` | Map | `schema_version`, `title`, `created_at`, `updated_at`, `lang`, `pageless`, `different_first_page` | `u32`, String, `u64` and `u64` as Unix milliseconds, a BCP 47 tag, `bool`, `bool` | the key | -- (foundation; this spec section 7) | built |
 | `meta/page` | Map | `orientation`, `width_mm`, `height_mm`, `margin_top_mm`, `margin_bottom_mm`, `margin_left_mm`, `margin_right_mm` | `"portrait"` or `"landscape"` (`PROSE-032`), and `f32` for the six | the key | pagination | built |
 | `meta/defaults` | Map | `font_family`, `font_size_pt`, `line_height` | the picker's label, resolved through `registered_family_name`; `f32` points; `f32` multiple | the key | inline-styles | built |
-| `meta/header`, `meta/footer` | Map | `enabled`, `block_id`, `align`, `different_first_page` | `bool`, String, String, `bool` | the key | headers-footers | design |
-| `meta/header_first`, `meta/footer_first` | Map | `block_id` | String | the key | headers-footers | design |
+| `meta/header`, `meta/footer` | Map | `enabled`, `block_id`, `align` | `bool`, String, String | the key | headers-footers | built |
+| `meta/header_first`, `meta/footer_first` | Map | `block_id` | String | the key | headers-footers | built |
 | `meta/line_numbers` | Map | `enabled`, `start`, `step`, `restart_each_page` | `bool`, `u32`, `u32`, `bool` | the key | -- (deferred; section 5) | design |
 | `meta/version_history` | List | position | one `{name, created_at, snapshot_id}` map | list order, no LWW | -- (deferred; section 5) | design |
 | `blocks` | MovableTree | a `TreeID`, minted by the tree | one block node map | tree order and parentage, no LWW | -- (structure; section 4) | built |
@@ -143,6 +143,7 @@ block always carries.
 | `t` | `u8` | the block type discriminant, per the table below | every | built |
 | `s` | String | the `style_id`: a key in `styles`, or one of the nine built-in names -- `body`, `heading-1` to `heading-6`, `code`, `quote`; absent means the type's own built-in | every | built |
 | `a` | Map | the type-specific attributes; absent means the type has none | the types below | built |
+| `hb` | `bool` | that the block holds a header or a footer, named by `meta`; kept out of the body flow (`PROSE-006`) | Paragraph, at the root | built |
 | `rg` | `bool` | that a peer grew this block for want of any root block, and not the author; absent on every block the author asked for (`PROSE-094`) | Paragraph, at the root | built |
 | `align` | `u8` | left, center, right or justify | every text block | built |
 | `indent_first`, `indent_left`, `indent_right` | `f32` | the three indents, in points | every text block | built |
@@ -182,7 +183,7 @@ function is total (`PROSE-007`).
 | `si`, `sd` | a `Uuid` into `annots`, the suggested insertion and the suggested deletion | `None` | track-changes |
 | `fn` | a `Uuid` into `annots` | `None` | footnotes |
 | `ref` | the hex of a postcard record: the target `TreeID` and the reference kind | `None` | cross-references |
-| `f:pn`, `f:pc`, `f:dt`, `f:ti` | none: the key is the field -- the page number, the page count, `meta.updated_at`, `meta.title` | `None` | headers-footers |
+| `f:pn`, `f:pc`, `f:dt`, `f:ti` | the key is the field -- the page number, the page count, `meta.updated_at`, `meta.title`; `f:dt` holds its format, `short`, `long` or `iso` | `None` | headers-footers |
 | any other key | -- | `After` | -- |
 
 **The annotation entry, field by field.** `Kinds` names the annotation kinds that carry the field.

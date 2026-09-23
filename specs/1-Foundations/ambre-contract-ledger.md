@@ -19,16 +19,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2528 rows: 1985 shipped, of which 774 loose. 543 unbuilt.**
+**2529 rows: 2029 shipped, of which 774 loose. 500 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 226 | 221 | 542 | 222 | 1211 |
+| `verified` | 226 | 221 | 542 | 266 | 1255 |
 | `failing` | 39 | 46 | 22 |  | 107 |
 | `untested` | 266 | 143 | 234 | 2 | 645 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
-| `unimplemented` | 54 | 56 | 23 | 410 | 543 |
+| `unimplemented` | 54 | 56 | 23 | 367 | 500 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -131,10 +131,12 @@
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 7 | 9 |  |
 | `ambre-spec-prose-schema.md` | 24 | 22 | 21 | 1 | 2 |
 | `ambre-spec-prose-engine.md` | 42 | 42 | 42 |  |  |
+| `ambre-spec-prose-find-replace.md` | 15 | 15 | 15 |  |  |
+| `ambre-spec-prose-headers-footers.md` | 27 | 27 | 27 |  |  |
 | `ambre-spec-prose-headings.md` | 8 | 8 | 7 | 1 |  |
 | `ambre-spec-prose-inline-styles.md` | 23 | 23 | 22 | 1 |  |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
-| `ambre-spec-prose-pagination.md` | 46 | 39 | 39 |  | 7 |
+| `ambre-spec-prose-pagination.md` | 47 | 41 | 41 |  | 6 |
 | `ambre-spec-prose-table-of-contents.md` | 14 | 12 | 12 |  | 2 |
 | `ambre-spec-prose-tables.md` | 44 | 43 | 43 |  | 1 |
 | `ambre-spec-prose-text-editing.md` | 26 | 8 | 8 |  | 18 |
@@ -188,7 +190,7 @@
 | `ambre-spec-prose-inline-styles.md` | PROSE-FEAT-007..008,020..025,173..184,287..288,290 |
 | `ambre-spec-prose-lists.md` | PROSE-005; PROSE-FEAT-002,026..028,136..146,278 |
 | `ambre-spec-prose-page-rendering.md` | PROSE-UI-006,014,016..020,113..122,172..173 |
-| `ambre-spec-prose-pagination.md` | PROSE-010..019,033..036,064..084,099..100,107..115 |
+| `ambre-spec-prose-pagination.md` | PROSE-010..019,033..036,064..084,099..100,107..115,117 |
 | `ambre-spec-prose-pdf-export.md` | PROSE-IO-029,031..033,035,037..039 |
 | `ambre-spec-prose-ruler.md` | PROSE-UI-063..065,075..076 |
 | `ambre-spec-prose-schema.md` | PROSE-002,007..008,027..032,085..097,102..103 |

@@ -78,7 +78,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` The same page on two architectures | V1 | two peers pin the same faces and the same shaper, and `PROSE-109` compares two font contexts on one host. Nothing compares two machines, where hinting, curve evaluation and a maths library may not accumulate alike. An `insta` snapshot of a layout measured on the host, replayed under `wasm-bindgen-test` in a browser and compared byte for byte. The Story carries the headless wasm run the repository does not have yet |
 | `[x]` Styles, lists and headings | MVP | character and paragraph styles, ordered and bulleted lists, numbered headings |
 | `[x]` Tables, table of contents and word count | MVP | tables with merged cells and styles, a generated table of contents, a live word count |
-| `[ ]` Headers, footers, find and replace | MVP | page headers and footers with dynamic fields, and find and replace |
+| `[x]` Headers, footers, find and replace | MVP | page headers and footers with dynamic fields, and find and replace |
 | `[ ]` Comments and track changes | MVP | anchored comments, and suggested changes a reviewer accepts or rejects |
 | `[ ]` Undo, footnotes and cross references | MVP | undo isolated to the local author, footnotes, cross references |
 | `[ ]` Page rendering | MVP | pages on the canvas with virtual scrolling and cached text |

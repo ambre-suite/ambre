@@ -152,6 +152,9 @@ impl ProseState {
         block_type: BlockType,
     ) -> Result<TreeID, ProseOutcome> {
         let tree = doc::blocks(&self.doc);
+        if Self::names_a_band(&tree, &[parent_id, after_id]) {
+            return Err(Self::err_nesting());
+        }
         if let Some(parent) = parent_id
             && doc::node_of(&tree, &parent).is_none()
         {
@@ -237,6 +240,9 @@ impl ProseState {
         if doc::node_of(&tree, id).is_none() {
             return Self::err_no_block(id);
         }
+        if Self::names_a_band(&tree, &[Some(*id)]) {
+            return Self::err_nesting();
+        }
         if let Err(e) = tree.delete(*id) {
             return Self::err_write(&format!("{e:?}"));
         }
@@ -258,6 +264,9 @@ impl ProseState {
         let Some(block_type) = doc::block_type_of(&tree, id) else {
             return Self::err_no_block(id);
         };
+        if Self::names_a_band(&tree, &[Some(*id), new_parent, after_id]) {
+            return Self::err_nesting();
+        }
         if let Some(parent) = new_parent
             && doc::node_of(&tree, &parent).is_none()
         {

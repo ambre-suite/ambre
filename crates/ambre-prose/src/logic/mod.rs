@@ -26,9 +26,13 @@
 //! - [`tables`] -- the grid, its column widths and its merged regions
 //! - [`derived`] -- the tables of contents and the word count, read and never
 //!   stored
+//! - [`bands`] -- the headers, the footers and their fields
+//! - [`find`] -- the search session and its two replacements
 
+mod bands;
 mod blocks;
 mod derived;
+mod find;
 mod lists;
 mod marks;
 mod presence;
@@ -112,6 +116,12 @@ pub struct ProseState {
     /// the tallies move on a recount and the page count on a layout, and
     /// neither ever reaches the document.
     word_count: crate::events::WordCount,
+    /// The open search, if any. Session state: it never enters the document
+    /// and no other peer sees it (`FIND-001`, `PROSE-FEAT-148`).
+    find: Option<find::FindSession>,
+    /// This peer's own operation counter when the last-modified stamp was
+    /// last written. A stamp is owed only past it (`PROSE-FEAT-066`).
+    stamped_counter: i32,
 }
 
 impl ProseState {
@@ -163,6 +173,8 @@ impl ProseState {
         // Excluded by origin, an undo on a restored document retracts the
         // author's own edits and never the load (`UNDO-001`).
         undo.add_exclude_origin_prefix(LOAD_ORIGIN);
+        undo.add_exclude_origin_prefix(bands::STAMP_ORIGIN);
+        let stamped_counter = doc.oplog_vv().get(&peer).copied().unwrap_or(0);
         Some(Self {
             doc,
             undo,
@@ -175,6 +187,8 @@ impl ProseState {
             paginator: None,
             faces: Vec::new(),
             word_count: crate::events::WordCount::default(),
+            find: None,
+            stamped_counter,
         })
     }
 
@@ -399,6 +413,31 @@ impl ProseState {
                 numbered,
             } => self.update_toc_config(&tree_id(block_id), max_level, numbered),
             ProseCommand::CountWords => self.count_words(),
+            ProseCommand::SetHeaderEnabled { enabled } => {
+                self.set_side_enabled(bands::Side::Header, enabled)
+            }
+            ProseCommand::SetFooterEnabled { enabled } => {
+                self.set_side_enabled(bands::Side::Footer, enabled)
+            }
+            ProseCommand::SetDifferentFirstPage { enabled } => {
+                self.set_different_first_page(enabled)
+            }
+            ProseCommand::InsertHeaderField { field, target, pos } => {
+                self.insert_field(bands::Side::Header, field, target, pos)
+            }
+            ProseCommand::InsertFooterField { field, target, pos } => {
+                self.insert_field(bands::Side::Footer, field, target, pos)
+            }
+            ProseCommand::SetBandAlign { block_id, align } => {
+                self.set_band_align(&tree_id(block_id), align)
+            }
+            ProseCommand::StampModified { now_ms } => self.stamp_modified(now_ms),
+            ProseCommand::FindStart { query } => self.find_start(query),
+            ProseCommand::FindNext => self.find_step(false),
+            ProseCommand::FindPrev => self.find_step(true),
+            ProseCommand::FindClose => self.find_close(),
+            ProseCommand::ReplaceOne { replacement } => self.replace_one(&replacement),
+            ProseCommand::ReplaceAll { replacement } => self.replace_all(&replacement),
             ProseCommand::UpdateCursor { pos } => self.update_cursor(&pos),
             ProseCommand::Undo => self.apply_history(true),
             ProseCommand::Redo => self.apply_history(false),
@@ -739,6 +778,12 @@ impl ProseState {
     #[cfg(test)]
     pub(crate) fn document(&self) -> &loro::LoroDoc {
         &self.doc
+    }
+
+    /// Whether one of the named blocks holds a band, which no structural
+    /// command may delete, move, or place a block beside (`PROSE-006`).
+    fn names_a_band(tree: &loro::LoroTree, ids: &[Option<TreeID>]) -> bool {
+        ids.iter().flatten().any(|id| doc::is_band(tree, id))
     }
 
     fn err_no_block(id: &TreeID) -> ProseOutcome {

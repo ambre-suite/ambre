@@ -23,7 +23,8 @@ use ambre_core::DocumentId;
 use ambre_bus::logic::{AppCommand, LogicCommand};
 
 use crate::events::{
-    BlockId, CursorPosition, ProseCommand, ProseEvent, RemoteCursor, TableOfContents, WordCount,
+    BandSet, BlockId, CursorPosition, FindMatch, ProseCommand, ProseEvent, RemoteCursor,
+    TableOfContents, WordCount,
 };
 
 /// How long the text must stay still before the four tallies are recounted,
@@ -96,6 +97,13 @@ pub struct ProseUiState {
     pub word_count: WordCount,
     /// The entries of every table of contents, as last answered, by block.
     pub tocs: Vec<(BlockId, TableOfContents)>,
+    /// The matches of this peer's own search, to highlight, and the current
+    /// one. Empty once the search closes (`PROSE-FEAT-289`).
+    pub find_matches: Vec<FindMatch>,
+    pub find_current: Option<u32>,
+    /// The four band blocks and their settings, as last answered: the blocks
+    /// the ordinary text commands aim at to edit a band.
+    pub bands: BandSet,
 
     // Local, and never sent.
     pub viewport: Viewport,
@@ -189,6 +197,12 @@ impl ProseUiState {
                     anchor: None,
                 });
             }
+            ProseEvent::FindResults { matches, current } => {
+                self.find_matches = matches.clone();
+                self.find_current = *current;
+            }
+            ProseEvent::FindUpdated { current } => self.find_current = *current,
+            ProseEvent::BandsUpdated { bands } => self.bands = bands.clone(),
             ProseEvent::RemoteCursors { cursors } => self.remote_cursors = cursors.clone(),
             // A picture arriving, a masked cell, a refusal and an error each
             // repaint or warn, and none of them touches what is being typed
@@ -352,5 +366,25 @@ mod tests {
             now += 16.0;
         }
         assert_eq!(recounts, 1);
+    }
+
+    #[test]
+    fn a_closed_search_leaves_nothing_highlighted() {
+        let mut ui = ProseUiState::default();
+        let hit = FindMatch {
+            block_id: BlockId::new(1, 0),
+            range: (0, 3),
+        };
+        ui.apply_event(&ProseEvent::FindResults {
+            matches: vec![hit],
+            current: Some(0),
+        });
+        assert_eq!(ui.find_matches, vec![hit]);
+        ui.apply_event(&ProseEvent::FindResults {
+            matches: Vec::new(),
+            current: None,
+        });
+        assert!(ui.find_matches.is_empty());
+        assert_eq!(ui.find_current, None);
     }
 }

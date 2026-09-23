@@ -428,6 +428,69 @@ pub struct WordCount {
     pub pages: u32,
 }
 
+/// A value a band resolves when its page is drawn, and never stores
+/// (`features/ambre-spec-prose-headers-footers.md`, `PROSE-FEAT-065`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HeaderField {
+    PageNumber,
+    PageCount,
+    Date(DateFieldFormat),
+    Title,
+}
+
+/// What the date field stores: a format, never a rendered date and never a
+/// locale (`PROSE-FEAT-162`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DateFieldFormat {
+    /// The language's short form.
+    Short,
+    /// The language's long form.
+    Long,
+    /// The calendar date, the same in every language.
+    Iso,
+}
+
+/// Which of the two blocks of a side a field insertion targets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HfTarget {
+    Regular,
+    FirstPage,
+}
+
+/// The four band blocks and their settings, as the view needs them to aim
+/// the ordinary text commands at a band (`PROSE-FEAT-160`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BandSet {
+    pub header: Option<BlockId>,
+    pub footer: Option<BlockId>,
+    pub header_first: Option<BlockId>,
+    pub footer_first: Option<BlockId>,
+    pub header_enabled: bool,
+    pub footer_enabled: bool,
+    pub different_first_page: bool,
+}
+
+/// What a search looks for (`features/ambre-spec-prose-find-replace.md`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FindQuery {
+    pub text: String,
+    pub case_sensitive: bool,
+    /// A match must not touch a letter, a digit or an underscore on either
+    /// side.
+    pub whole_word: bool,
+    /// The regular-expression search, unbuilt: the engine refuses a query
+    /// that sets it.
+    pub use_regex: bool,
+}
+
+/// One match: a range of code points inside the body of one block
+/// (`PROSE-FEAT-034`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FindMatch {
+    pub block_id: BlockId,
+    pub range: (u32, u32),
+}
+
 /// One line of a table of contents. Nothing here is persisted
 /// (`features/ambre-spec-prose-table-of-contents.md`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -654,6 +717,65 @@ pub enum ProseCommand {
     /// has stopped (`PROSE-FEAT-124`); it writes nothing.
     CountWords,
 
+    // -- Headers and footers (`features/ambre-spec-prose-headers-footers.md`) --
+    /// Show or hide the top band (`PROSE-FEAT-167`).
+    SetHeaderEnabled {
+        enabled: bool,
+    },
+    /// Show or hide the bottom band (`PROSE-FEAT-167`).
+    SetFooterEnabled {
+        enabled: bool,
+    },
+    /// Turn the first page's own header and footer on or off, together
+    /// (`PROSE-FEAT-063`).
+    SetDifferentFirstPage {
+        enabled: bool,
+    },
+    /// A field in the header block `target` names. A position past the end
+    /// is clamped to it (`PROSE-FEAT-068`).
+    InsertHeaderField {
+        field: HeaderField,
+        target: HfTarget,
+        pos: u32,
+    },
+    InsertFooterField {
+        field: HeaderField,
+        target: HfTarget,
+        pos: u32,
+    },
+    /// Align the band whose block is `block_id`, the one the caret is in
+    /// (`PROSE-FEAT-171`). Justified is not a band alignment and is refused.
+    SetBandAlign {
+        block_id: BlockId,
+        align: Align,
+    },
+    /// The view's wall clock, sent once a run of local changes stops. The
+    /// engine writes it as the document's last-modified stamp when this peer
+    /// wrote since the last one (`PROSE-FEAT-066`).
+    StampModified {
+        now_ms: u64,
+    },
+
+    // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
+    /// Open a search, or replace the one open. It writes nothing
+    /// (`PROSE-FEAT-151`).
+    FindStart {
+        query: FindQuery,
+    },
+    FindNext,
+    FindPrev,
+    /// End the session: the query, the matches and the index are dropped
+    /// (`PROSE-FEAT-158`).
+    FindClose,
+    /// Replace the current match with `replacement`.
+    ReplaceOne {
+        replacement: String,
+    },
+    /// Replace every match, as one write and one undo item (`FIND-006`).
+    ReplaceAll {
+        replacement: String,
+    },
+
     // -- Presence (`1-Foundations/ambre-spec-presence.md`) --
     /// The handler builds the wire frame and returns it as the outcome's
     /// ephemeral half. No user id is ever put on the wire.
@@ -678,7 +800,13 @@ impl ProseCommand {
     pub fn is_mutating(&self) -> bool {
         !matches!(
             self,
-            Self::Noop | Self::UpdateCursor { .. } | Self::CountWords
+            Self::Noop
+                | Self::UpdateCursor { .. }
+                | Self::CountWords
+                | Self::FindStart { .. }
+                | Self::FindNext
+                | Self::FindPrev
+                | Self::FindClose
         )
     }
 
@@ -719,6 +847,19 @@ impl ProseCommand {
             Self::InsertToc { .. } => "inserting a table of contents",
             Self::UpdateTocConfig { .. } => "changing the table of contents",
             Self::CountWords => "counting the words",
+            Self::SetHeaderEnabled { .. } => "showing or hiding the header",
+            Self::SetFooterEnabled { .. } => "showing or hiding the footer",
+            Self::SetDifferentFirstPage { .. } => "changing the first page's bands",
+            Self::InsertHeaderField { .. } => "inserting a header field",
+            Self::InsertFooterField { .. } => "inserting a footer field",
+            Self::SetBandAlign { .. } => "aligning the band",
+            Self::StampModified { .. } => "stamping the document",
+            Self::FindStart { .. } => "searching",
+            Self::FindNext => "going to the next match",
+            Self::FindPrev => "going to the previous match",
+            Self::FindClose => "closing the search",
+            Self::ReplaceOne { .. } => "replacing the match",
+            Self::ReplaceAll { .. } => "replacing every match",
             Self::UpdateCursor { .. } => "moving the cursor",
             Self::Undo => "undoing",
             Self::Redo => "redoing",
@@ -770,6 +911,18 @@ pub enum ProseEvent {
     /// Where the caret lands after a step between cells: the first text block
     /// of `cell`, at its start (`PROSE-FEAT-250`, `PROSE-FEAT-251`).
     CellEntered { cell: BlockId, block: BlockId },
+    /// The four band blocks and their settings, after a band command
+    /// (`PROSE-FEAT-160`).
+    BandsUpdated { bands: BandSet },
+    /// Every match of the open search, in document order, and the index of
+    /// the current one. An empty list clears the highlight (`PROSE-FEAT-289`).
+    /// It goes to the peer that searched and to no other (`PROSE-FEAT-148`).
+    FindResults {
+        matches: Vec<FindMatch>,
+        current: Option<u32>,
+    },
+    /// The current match moved; the list did not (`PROSE-FEAT-152`).
+    FindUpdated { current: Option<u32> },
     /// A command the engine could not honour. The value names what was
     /// refused and why (`PROSE-105`).
     Error(ProseError),
@@ -845,6 +998,14 @@ pub enum ProseRefusal {
     /// A table dimension, a width or a colour the format cannot hold.
     #[error("{0} is not a value a table takes")]
     BadTableValue(String),
+    /// A field aimed at the first page's own block while the setting is off
+    /// (`PROSE-FEAT-067`).
+    #[error("the first page has no band of its own while the setting is off")]
+    FirstPageBandOff,
+    /// A search or a replacement with no search open, or a query this build
+    /// cannot run.
+    #[error("{0}")]
+    FindRefused(&'static str),
     /// A write the CRDT engine itself refused.
     #[error("the document engine could not write the change: {0}")]
     WriteFailed(String),

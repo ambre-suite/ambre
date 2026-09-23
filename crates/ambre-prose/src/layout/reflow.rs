@@ -47,6 +47,8 @@ pub struct Paginator {
     /// The page each heading started on when the tables of contents were
     /// last measured. Only [`Paginator::settle_toc`] moves it.
     toc_pages: HashMap<TreeID, u32>,
+    /// The bands the last layout was placed under (`PROSE-076`).
+    bands: pass::BandHeights,
 }
 
 impl Default for Paginator {
@@ -72,6 +74,7 @@ impl Paginator {
             measured: Vec::new(),
             layout: PageLayout::default(),
             toc_pages: HashMap::new(),
+            bands: pass::BandHeights::default(),
         }
     }
 
@@ -105,6 +108,10 @@ impl Paginator {
         // Every block is about to be shaped again, so what an earlier run was
         // missing says nothing about this one (`PROSE-110`).
         self.measurer.forget_missing();
+        // The bands first: they decide the height every page leaves the body
+        // (`PROSE-076`).
+        self.bands =
+            pass::BandHeights::measure(&mut self.measurer, document, page_box.content_width_px);
         let measured = pass::measure_document_with(
             &mut self.measurer,
             document,
@@ -112,7 +119,7 @@ impl Paginator {
             &HashMap::new(),
             &self.toc_pages,
         );
-        let placement = place::place(&measured, page_box.body_height_px(0.0, 0.0));
+        let placement = place::place(&measured, self.bands.body_height_px(&page_box));
         self.commit(page_box, measured, placement, 0);
         &self.layout
     }
@@ -125,7 +132,13 @@ impl Paginator {
     /// takes: it falls back to a full recomputation (`PROSE-082`).
     pub fn reflow(&mut self, document: &LoroDoc, dirty: &[TreeID]) -> &PageLayout {
         let page_box = PageBox::read(document);
+        // A band is out of the flow, so no dirty set names it. Measuring the
+        // four again is a few short paragraphs, and a band that moved changes
+        // every page's body height: that is a full recomputation.
+        let bands =
+            pass::BandHeights::measure(&mut self.measurer, document, page_box.content_width_px);
         if page_box != self.page_box
+            || bands != self.bands
             || doc::read_defaults(document) != self.defaults
             || self.measured.is_empty()
             || self.measurer.coverage_grew(self.layout.missing_scripts)
@@ -219,7 +232,7 @@ impl Paginator {
         page_box: PageBox,
         from: usize,
     ) -> Placement {
-        let body_height_px = page_box.body_height_px(0.0, 0.0);
+        let body_height_px = self.bands.body_height_px(&page_box);
         let Some(resume) = self.cursor_before(from, body_height_px) else {
             return place::place(measured, body_height_px);
         };
@@ -272,6 +285,7 @@ impl Paginator {
         self.page_box = page_box;
         self.measured = measured;
         self.layout = pass::layout_of(page_box, &placement);
+        self.bands.stamp(&mut self.layout);
         self.layout.first_dirty_page = Some(first_dirty);
         self.layout.missing_scripts = self.measurer.missing();
     }

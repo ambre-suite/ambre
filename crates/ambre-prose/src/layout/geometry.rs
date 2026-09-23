@@ -13,7 +13,7 @@ use crate::doc;
 const PX_PER_MM: f32 = 96.0 / 25.4;
 
 /// The share of the content height either band may take (`PROSE-016`).
-const BAND_SHARE: f32 = 0.25;
+pub(crate) const BAND_SHARE: f32 = 0.25;
 
 /// The page a document is laid out on, in pixels.
 ///

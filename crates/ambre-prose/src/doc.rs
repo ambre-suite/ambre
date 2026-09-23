@@ -377,7 +377,10 @@ pub(crate) fn children_of(tree: &LoroTree, parent: Option<TreeID>) -> Vec<TreeID
 /// The live root blocks of the body tree.
 #[must_use]
 pub(crate) fn roots(tree: &LoroTree) -> Vec<TreeID> {
-    children_of(tree, None)
+    let mut roots = children_of(tree, None);
+    // A band is a root and no part of the flow (`PROSE-006`).
+    roots.retain(|id| !is_band(tree, id));
+    roots
 }
 
 /// The root blocks a peer grew for want of any, still empty and still childless,
@@ -892,6 +895,173 @@ pub(crate) fn create_block(
         let _ = get_block_text(doc, &id);
     }
     Some(id)
+}
+
+// -----------------------------------------------------------------------------
+// The bands (`features/ambre-spec-prose-headers-footers.md`)
+// -----------------------------------------------------------------------------
+
+/// The band marker, `true` on a block that holds a header or a footer. Such a
+/// block is a root of the block tree kept out of the body flow (`PROSE-006`).
+pub(crate) const K_BAND: &str = "hb";
+/// The four band registers of [`META`].
+pub(crate) const HEADER: &str = "header";
+pub(crate) const FOOTER: &str = "footer";
+pub(crate) const HEADER_FIRST: &str = "header_first";
+pub(crate) const FOOTER_FIRST: &str = "footer_first";
+/// The one setting that turns both first-page bands on (`PROSE-FEAT-063`).
+pub(crate) const DIFFERENT_FIRST_PAGE: &str = "different_first_page";
+/// Whether a side is shown, in the header and footer registers alone.
+pub(crate) const BAND_ENABLED: &str = "enabled";
+/// The band block's `TreeID`, as the string Loro prints it.
+pub(crate) const BAND_BLOCK: &str = "block_id";
+/// The last-modified stamp, Unix milliseconds by the clock of the peer that
+/// wrote last (`PROSE-FEAT-066`).
+pub(crate) const UPDATED_AT: &str = "updated_at";
+
+/// One band: the block that holds its text and its alignment. Nothing of the
+/// text is here (`PROSE-FEAT-281`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Band {
+    pub block: Option<TreeID>,
+    pub align: Align,
+}
+
+impl Default for Band {
+    fn default() -> Self {
+        Self {
+            block: None,
+            align: Align::Left,
+        }
+    }
+}
+
+/// The four bands and the three settings over them, as the document holds
+/// them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Bands {
+    pub header: Band,
+    pub footer: Band,
+    pub header_first: Band,
+    pub footer_first: Band,
+    pub header_enabled: bool,
+    pub footer_enabled: bool,
+    pub different_first_page: bool,
+}
+
+impl Bands {
+    /// The header and the footer drawn on one zero-based page. The first
+    /// page's own pair while the setting is on, the regular pair otherwise
+    /// (`PROSE-FEAT-169`, `PROSE-UI-133`). A hidden side draws nothing.
+    #[must_use]
+    pub fn on_page(&self, page: u32) -> (Option<Band>, Option<Band>) {
+        let first = page == 0 && self.different_first_page;
+        let (header, footer) = if first {
+            (self.header_first, self.footer_first)
+        } else {
+            (self.header, self.footer)
+        };
+        let drawn = |band: Band, shown: bool| (shown && band.block.is_some()).then_some(band);
+        (
+            drawn(header, self.header_enabled),
+            drawn(footer, self.footer_enabled),
+        )
+    }
+
+    /// The register key of the band whose block is `id`, if one names it.
+    #[must_use]
+    pub(crate) fn register_of(&self, id: &TreeID) -> Option<&'static str> {
+        [
+            (self.header, HEADER),
+            (self.footer, FOOTER),
+            (self.header_first, HEADER_FIRST),
+            (self.footer_first, FOOTER_FIRST),
+        ]
+        .into_iter()
+        .find(|(band, _)| band.block == Some(*id))
+        .map(|(_, key)| key)
+    }
+}
+
+/// The spelling of a band alignment in the document.
+#[must_use]
+pub(crate) fn band_align_name(align: Align) -> Option<&'static str> {
+    match align {
+        Align::Left => Some("left"),
+        Align::Center => Some("center"),
+        Align::Right => Some("right"),
+        Align::Justify => None,
+    }
+}
+
+fn read_band(meta: &LoroMap, key: &str) -> Band {
+    let Some(map) = map_read(meta, key) else {
+        return Band::default();
+    };
+    let block = read_string(&map, BAND_BLOCK).and_then(|s| TreeID::try_from(s.as_str()).ok());
+    let align = match read_string(&map, K_ALIGN).as_deref() {
+        Some("center") => Align::Center,
+        Some("right") => Align::Right,
+        _ => Align::Left,
+    };
+    Band { block, align }
+}
+
+/// The bands as the document holds them. A document written before them
+/// reads as two hidden sides and no block (`PROSE-FEAT-064`).
+#[must_use]
+pub fn read_bands(doc: &LoroDoc) -> Bands {
+    let Some(meta) = meta_read(doc) else {
+        return Bands::default();
+    };
+    let enabled = |key: &str| {
+        map_read(&meta, key).is_some_and(|map| read_bool(&map, BAND_ENABLED) == Some(true))
+    };
+    let tree = blocks_read(doc);
+    let live = |band: Band| Band {
+        block: band.block.filter(|id| {
+            tree.as_ref()
+                .is_some_and(|tree| tree.contains(*id) && !tree.is_node_deleted(id).unwrap_or(true))
+        }),
+        ..band
+    };
+    Bands {
+        header: live(read_band(&meta, HEADER)),
+        footer: live(read_band(&meta, FOOTER)),
+        header_first: live(read_band(&meta, HEADER_FIRST)),
+        footer_first: live(read_band(&meta, FOOTER_FIRST)),
+        header_enabled: enabled(HEADER),
+        footer_enabled: enabled(FOOTER),
+        different_first_page: read_bool(&meta, DIFFERENT_FIRST_PAGE) == Some(true),
+    }
+}
+
+/// Whether a block holds a band rather than body text.
+#[must_use]
+pub(crate) fn is_band(tree: &LoroTree, id: &TreeID) -> bool {
+    node_of(tree, id).is_some_and(|node| read_bool(&node, K_BAND) == Some(true))
+}
+
+/// The last-modified stamp, or `None` before any peer wrote one.
+#[must_use]
+pub fn read_updated_at(doc: &LoroDoc) -> Option<i64> {
+    meta_read(doc).and_then(|meta| read_i64(&meta, UPDATED_AT))
+}
+
+/// The document title, empty when none was set.
+#[must_use]
+pub fn read_title(doc: &LoroDoc) -> String {
+    meta_read(doc)
+        .and_then(|meta| read_string(&meta, "title"))
+        .unwrap_or_default()
+}
+
+/// The document language, a BCP 47 tag.
+#[must_use]
+pub fn read_lang(doc: &LoroDoc) -> String {
+    meta_read(doc)
+        .and_then(|meta| read_string(&meta, "lang"))
+        .unwrap_or_default()
 }
 
 // -----------------------------------------------------------------------------

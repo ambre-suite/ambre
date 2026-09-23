@@ -344,6 +344,7 @@ fn document_of_every_key() -> ProseState {
         max_level: 3,
         numbered: true,
     });
+    write_the_bands(&mut state);
     for key in mark_roots_to_apply() {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: root,
@@ -353,6 +354,28 @@ fn document_of_every_key() -> ProseState {
         });
     }
     state
+}
+
+/// Both sides shown, the first page's own bands on, one band aligned, a
+/// field in it, and the last-modified stamp.
+fn write_the_bands(state: &mut ProseState) {
+    use crate::events::{DateFieldFormat, HeaderField, HfTarget};
+    state.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
+    state.handle_command(ProseCommand::SetFooterEnabled { enabled: true });
+    state.handle_command(ProseCommand::SetDifferentFirstPage { enabled: true });
+    let Some(header) = state.bands().header else {
+        panic!("the scenario showed the header");
+    };
+    state.handle_command(ProseCommand::SetBandAlign {
+        block_id: header,
+        align: Align::Center,
+    });
+    state.handle_command(ProseCommand::InsertHeaderField {
+        field: HeaderField::Date(DateFieldFormat::Iso),
+        target: HfTarget::FirstPage,
+        pos: 0,
+    });
+    state.handle_command(ProseCommand::StampModified { now_ms: 1 });
 }
 
 /// A two by two table after `root`, its first row merged and its last cell

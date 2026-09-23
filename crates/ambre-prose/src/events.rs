@@ -11,8 +11,9 @@
 //! which the engine does not hold (`PROSE-024`).
 
 pub use ambre_bus::app::prose::{
-    Align, BlockId, BlockInit, BlockType, CellBorder, CursorPosition, LineHeight, LineHeightMode,
-    ListStyle, OrderedStyle, ParagraphStyle, PresencePayload, ProseCommand, ProseError, ProseEvent,
+    Align, BandSet, BlockId, BlockInit, BlockType, CellBorder, CursorPosition, DateFieldFormat,
+    FindMatch, FindQuery, HeaderField, HfTarget, LineHeight, LineHeightMode, ListStyle,
+    OrderedStyle, ParagraphStyle, PresencePayload, ProseCommand, ProseError, ProseEvent,
     ProseRefusal, RemoteCursor, TableOfContents, TocEntry, VAlign, WordCount,
 };
 
