@@ -38,6 +38,7 @@
 #![forbid(unsafe_code)]
 
 pub mod band;
+pub mod comment;
 pub mod count;
 pub mod doc;
 pub mod events;

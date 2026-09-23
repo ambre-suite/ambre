@@ -31,6 +31,7 @@
 
 mod bands;
 mod blocks;
+mod comments;
 mod derived;
 mod find;
 mod history;
@@ -100,6 +101,9 @@ pub struct ProseState {
     /// This session's display name, stamped on every outbound presence frame.
     /// Cosmetic: it decides neither identity nor colour (`PRESENCE-004`).
     my_name: Option<String>,
+    /// The threads the last whole-text walk found with no mark. A keystroke
+    /// does not walk the text again for them (`comments::refresh_anchors`).
+    orphans: std::collections::HashSet<ambre_core::Uuid>,
     /// Every remote peer's latest caret and self-asserted name, keyed by the
     /// Sync-resolved `UserId`. Ephemeral: never in the CRDT, never persisted
     /// (`PROSE-058`). The name is cosmetic and decides nothing
@@ -177,6 +181,7 @@ impl ProseState {
         // author's own edits and never the load (`UNDO-001`).
         undo.add_exclude_origin_prefix(LOAD_ORIGIN);
         undo.add_exclude_origin_prefix(bands::STAMP_ORIGIN);
+        undo.add_exclude_origin_prefix(comments::COMMENT_ORIGIN);
         let stamped_counter = doc.oplog_vv().get(&peer).copied().unwrap_or(0);
         Some(Self {
             doc,
@@ -186,6 +191,7 @@ impl ProseState {
             peer,
             my_user_id: None,
             my_name: None,
+            orphans: std::collections::HashSet::new(),
             presence: HashMap::new(),
             paginator: None,
             faces: Vec::new(),
@@ -451,6 +457,29 @@ impl ProseState {
                 new_text,
             } => self.edit_footnote(&footnote_id, &new_text),
             ProseCommand::DeleteFootnote { footnote_id } => self.delete_footnote(&footnote_id),
+            ProseCommand::AddComment {
+                block_id,
+                range,
+                text,
+                now_ms,
+            } => self.add_comment(&tree_id(block_id), range, &text, now_ms),
+            ProseCommand::ReplyToComment {
+                comment_id,
+                text,
+                now_ms,
+            } => self.reply_to_comment(&comment_id, &text, now_ms),
+            ProseCommand::ResolveComment { comment_id } => self.set_resolved(&comment_id, true),
+            ProseCommand::ReopenComment { comment_id } => self.set_resolved(&comment_id, false),
+            ProseCommand::DeleteComment { comment_id } => self.delete_comment(&comment_id),
+            ProseCommand::DeleteReply {
+                comment_id,
+                reply_id,
+            } => self.delete_reply(&comment_id, &reply_id),
+            ProseCommand::EditCommentReply {
+                comment_id,
+                reply_id,
+                new_text,
+            } => self.edit_reply(&comment_id, &reply_id, &new_text),
             ProseCommand::InsertCrossRef {
                 block_id,
                 pos,
@@ -733,6 +762,13 @@ impl ProseState {
     /// the bytes that were exported and never a re-export (`PROSE-023`).
     fn commit_with(&mut self, mut display: Vec<ProseEvent>) -> ProseOutcome {
         self.doc.commit();
+        // The anchor cache follows the edit in a commit of its own, out of the
+        // undo stack. An undo takes the edit back, and the next commit
+        // re-reads the mark (`PROSE-FEAT-076`).
+        if self.refresh_anchors() {
+            self.doc.set_next_commit_origin(comments::COMMENT_ORIGIN);
+            self.doc.commit();
+        }
         display.extend(self.regrow_root());
         self.doc.commit();
         let update = self.flush_delta();
@@ -784,6 +820,8 @@ impl ProseState {
         // they invalidated. The layout is dropped and the next call to
         // [`paginate`](Self::paginate) recomputes it whole (`PROSE-082`).
         self.paginator = None;
+        // A collaborator can bring a mark back, so no orphan is taken on trust.
+        self.orphans.clear();
         let ours = self.last_exported_vv.get(&self.peer).copied();
         self.last_exported_vv = self.doc.oplog_vv();
         match ours {

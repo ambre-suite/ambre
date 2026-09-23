@@ -36,6 +36,9 @@ impl ProseState {
         let Some(body) = self.body_of(id) else {
             return Self::err_no_block(id);
         };
+        if mark::is_owned_anchor(key) {
+            return ProseOutcome::refused(ProseRefusal::AnchorKey(key.to_owned()));
+        }
         let (start, end) = ordered(range);
         if end > body.len_unicode() || start == end {
             return Self::err_bad_range();
@@ -64,6 +67,9 @@ impl ProseState {
         };
         if !mark::is_registered(key) {
             return ProseOutcome::refused(ProseRefusal::UnknownMark(key.to_owned()));
+        }
+        if mark::is_owned_anchor(key) {
+            return ProseOutcome::refused(ProseRefusal::AnchorKey(key.to_owned()));
         }
         let (start, end) = ordered(range);
         if end > body.len_unicode() || start == end {
@@ -188,7 +194,7 @@ fn ordered(range: (u32, u32)) -> (usize, usize) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use crate::events::{Align, ParagraphStyle, ProseCommand, ProseEvent};
     use crate::logic::ProseState;
 
@@ -242,12 +248,7 @@ mod tests {
             key: "b".to_owned(),
             value: None,
         });
-        state.handle_command(ProseCommand::ApplyMark {
-            block_id: block,
-            range: (0, 5),
-            key: "cm".to_owned(),
-            value: Some("a-comment-id".to_owned()),
-        });
+        anchor(&mut state, &block, 0..5);
         state.handle_command(ProseCommand::ClearInlineMarks {
             block_id: block,
             range: (0, 5),
@@ -271,6 +272,27 @@ mod tests {
     /// Whether an outcome is the refusal rather than a change.
     fn refused(outcome: &crate::events::ProseOutcome) -> bool {
         matches!(outcome.display.as_slice(), [ProseEvent::Error(_)])
+    }
+
+    /// Anchors a comment over `range` the way its own command does: straight
+    /// on the text, since a style command refuses the key.
+    pub(crate) fn anchor(
+        state: &mut ProseState,
+        block: &crate::events::BlockId,
+        range: std::ops::Range<usize>,
+    ) {
+        let text = crate::doc::get_block_text(&state.doc, &crate::events::tree_id(*block));
+        text.mark(range, "cm", "a-comment-id")
+            .expect("the anchor lands");
+        state.doc.commit();
+    }
+
+    /// The reason an outcome was refused for, when it was.
+    fn refusal(outcome: &crate::events::ProseOutcome) -> Option<crate::events::ProseRefusal> {
+        outcome.display.iter().find_map(|event| match event {
+            ProseEvent::Error(error) => Some(error.reason.clone()),
+            _ => None,
+        })
     }
 
     /// The runs of one block, as text and resolved style.
@@ -361,6 +383,61 @@ mod tests {
         assert_eq!(state.export_snapshot(), before);
     }
 
+    /// The style path refuses every anchor its own command owns, and takes
+    /// the link, which it owns (`PROSE-FEAT-298`).
+    #[test]
+    fn a_style_command_never_writes_an_anchor_it_does_not_own() {
+        let (mut state, block) = document_with_text("hello");
+        let before = state.export_snapshot();
+        let thread = format!("cm:{}", ambre_core::Uuid::new().to_hyphenated());
+        for key in ["cm", thread.as_str(), "si", "sd", "fn", "ref", "f:pn"] {
+            let outcome = state.handle_command(ProseCommand::ApplyMark {
+                block_id: block,
+                range: (0, 5),
+                key: key.to_owned(),
+                value: Some("x".to_owned()),
+            });
+            assert!(
+                matches!(
+                    refusal(&outcome),
+                    Some(crate::events::ProseRefusal::AnchorKey(_))
+                ),
+                "{key} was written"
+            );
+        }
+        assert_eq!(state.export_snapshot(), before);
+        let link = state.handle_command(ProseCommand::ApplyMark {
+            block_id: block,
+            range: (0, 5),
+            key: "a".to_owned(),
+            value: Some("https://example.org".to_owned()),
+        });
+        assert!(link.update.is_some(), "the link is a style command's");
+    }
+
+    /// The style path cannot take an anchor off: a footnote call keeps its
+    /// mark (`PROSE-FEAT-299`).
+    #[test]
+    fn a_style_command_never_removes_an_anchor_it_does_not_own() {
+        let (mut state, block) = document_with_text("hello");
+        state.handle_command(ProseCommand::InsertFootnote {
+            block_id: block,
+            pos: 5,
+            note_text: "A note.".to_owned(),
+        });
+        let before = state.export_snapshot();
+        let outcome = state.handle_command(ProseCommand::RemoveMark {
+            block_id: block,
+            range: (0, 6),
+            key: "fn".to_owned(),
+        });
+        assert!(matches!(
+            refusal(&outcome),
+            Some(crate::events::ProseRefusal::AnchorKey(_))
+        ));
+        assert_eq!(state.export_snapshot(), before);
+    }
+
     /// Applying one mark leaves the text, the other marks over the range, and
     /// the paragraph settings alone (`PROSE-FEAT-179`).
     #[test]
@@ -440,7 +517,6 @@ mod tests {
             ("i", None),
             ("fg", Some("#3366cc")),
             ("a", Some("https://example.org")),
-            ("cm", Some("a-comment-id")),
         ] {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: block,
@@ -450,6 +526,7 @@ mod tests {
             });
         }
 
+        anchor(&mut state, &block, 0..5);
         state.handle_command(ProseCommand::ClearInlineMarks {
             block_id: block,
             range: (0, 5),

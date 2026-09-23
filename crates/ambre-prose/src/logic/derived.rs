@@ -131,11 +131,14 @@ impl ProseState {
         let mut display = vec![ProseEvent::WordCountUpdated {
             count: self.word_count,
         }];
-        // The same pause refreshes the two lists read off the whole text: a
-        // note orphaned by a deletion, a reference whose target moved. One
-        // walk per pause, never one per keystroke.
+        // The same pause refreshes the three lists read off the whole text.
+        // A deletion orphans a note or a thread, and a reference's target
+        // moves. One walk per pause, never one per keystroke.
         display.push(ProseEvent::FootnotesUpdated {
             notes: crate::note::entries(&self.doc),
+        });
+        display.push(ProseEvent::CommentsUpdated {
+            threads: crate::comment::threads(&self.doc),
         });
         display.push(self.cross_refs_event());
         ProseOutcome::display_only(display)

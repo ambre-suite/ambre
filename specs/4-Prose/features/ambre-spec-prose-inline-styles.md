@@ -37,6 +37,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-178` | `POST` | The mark MUST cover the given range and no character outside it. | this spec section 3 | `ambre_prose::logic::marks::tests::a_mark_covers_the_range_and_no_character_outside_it` | none | verified |
 | `PROSE-FEAT-290` | `POST` | The value stored MUST be the canonical form of the value supplied. | this spec section 3 | `ambre_prose::logic::marks::tests::a_colour_reaches_the_document_in_one_spelling`; `ambre_prose::logic::marks::tests::a_size_reaches_the_document_in_its_canonical_spelling` | none | verified |
 | `PROSE-FEAT-022` | `FAIL` | A mark value that fails the grammar of its key MUST be refused before the document is written, and MUST be reported to the author. | this spec section 3 | `ambre_prose::logic::marks::tests::a_value_the_grammar_refuses_never_reaches_the_document` | none | verified |
+| `PROSE-FEAT-298` | `FAIL` | Applying a mark MUST be refused under an anchor key: a comment, a suggestion, a footnote, a cross reference or a header field. | this spec section 3; `ambre-spec-prose-schema.md section 3` | `ambre_prose::logic::marks::tests::a_style_command_never_writes_an_anchor_it_does_not_own` | none | verified |
 | `PROSE-FEAT-179` | `FRAME` | Applying a mark MUST NOT change the text of the block, any other key of the registry over that range, or the block's paragraph settings. | this spec section 3 | `ambre_prose::logic::marks::tests::applying_a_mark_leaves_the_text_and_the_other_keys_alone` | none | verified |
 
 ### 1.3 Remove a mark from a range
@@ -46,6 +47,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-180` | `POST` | After removal the named key MUST cover no character of the range. | this spec section 3 | `ambre_prose::logic::marks::tests::removing_one_key_clears_the_range_and_keeps_the_rest` | none | verified |
 | `PROSE-FEAT-287` | `POST` | After removal the named key MUST still cover every character outside the range that it covered before. | this spec section 3 | `ambre_prose::logic::marks::tests::removing_one_key_clears_the_range_and_keeps_the_rest` | none | verified |
 | `PROSE-FEAT-181` | `FRAME` | Removing one key MUST NOT change the text of the block, or any other key of the registry over that range. | this spec section 3 | `ambre_prose::logic::marks::tests::removing_one_key_clears_the_range_and_keeps_the_rest` | none | verified |
+| `PROSE-FEAT-299` | `FAIL` | Removing a mark MUST be refused under an anchor key: only the command that owns the anchor takes it off. | this spec section 3; `ambre-spec-prose-schema.md section 3` | `ambre_prose::logic::marks::tests::a_style_command_never_removes_an_anchor_it_does_not_own` | none | verified |
 
 ### 1.4 Clear the formatting of a range
 
@@ -67,11 +69,12 @@ status values are normative in `ambre-spec-template.md`.
   pagination path rather than beside it.
 * **Boundary.** none of its own: a mark is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 22 `verified`, and 1 `untested`. `PROSE-FEAT-020` is the one: three levels of
-  the cascade resolve, and the named paragraph style is the fourth. No command writes one, so the
-  level is read from an empty store. `PROSE-FEAT-021`, `PROSE-FEAT-008`, `PROSE-FEAT-184` and
-  `PROSE-FEAT-176` are the four the two-peer table below is written for. The four `FRAME` rows are
-  each held by the same test as their own command: it asserts on what did not move.
+* **Verification.** 24 `verified`, 1 `untested`. `PROSE-FEAT-020` is the `untested` one: three levels of
+  the cascade resolve, and the named paragraph style is the fourth. No command writes one yet.
+
+  `PROSE-FEAT-021`, `PROSE-FEAT-008`, `PROSE-FEAT-184` and `PROSE-FEAT-176` are the four the
+  two-peer table below is written for. The four `FRAME` rows are each held by the same test as
+  their own command: it asserts on what did not move.
 
 ---
 

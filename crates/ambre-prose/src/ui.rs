@@ -23,8 +23,8 @@ use ambre_core::DocumentId;
 use ambre_bus::logic::{AppCommand, LogicCommand};
 
 use crate::events::{
-    BandSet, BlockId, CursorPosition, FindMatch, FootnoteEntry, ProseCommand, ProseEvent,
-    RemoteCursor, ResolvedCrossRef, TableOfContents, WordCount,
+    BandSet, BlockId, CommentThread, CursorPosition, FindMatch, FootnoteEntry, ProseCommand,
+    ProseEvent, RemoteCursor, ResolvedCrossRef, TableOfContents, WordCount,
 };
 
 /// How long the text must stay still before the four tallies are recounted,
@@ -106,6 +106,8 @@ pub struct ProseUiState {
     pub bands: BandSet,
     /// Every footnote, numbered or orphaned, as last answered.
     pub footnotes: Vec<FootnoteEntry>,
+    /// Every comment thread, marked or orphaned, as last answered.
+    pub comments: Vec<CommentThread>,
     /// Every cross reference, as last resolved.
     pub cross_refs: Vec<ResolvedCrossRef>,
     /// The page a followed reference asked to bring into view, until the
@@ -199,6 +201,7 @@ impl ProseUiState {
             }
             ProseEvent::FootnotesUpdated { notes } => self.footnotes.clone_from(notes),
             ProseEvent::CrossRefsUpdated { refs } => self.cross_refs.clone_from(refs),
+            ProseEvent::CommentsUpdated { threads } => self.comments.clone_from(threads),
             ProseEvent::RevealBlock { page, .. } => self.reveal_page = Some(*page),
             ProseEvent::CaretPlaced { block, offset } => {
                 self.cursor = Some(CursorPosition {

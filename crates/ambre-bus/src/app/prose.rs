@@ -503,6 +503,34 @@ pub struct FootnoteEntry {
     pub text: String,
 }
 
+/// One reply of a comment thread (`features/ambre-spec-prose-comments.md`).
+///
+/// The author is the one the writing session stamped, never a field the
+/// command carried (`PROSE-FEAT-077`). The stamp is display only.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommentReply {
+    pub reply_id: Uuid,
+    pub author: String,
+    pub user_id: UserId,
+    pub created_at: u64,
+    pub text: String,
+}
+
+/// One comment thread as the view lists it.
+///
+/// The anchor is the live mark's span, or the last one it held when
+/// `orphaned` is set (`PROSE-FEAT-202`, `PROSE-FEAT-203`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommentThread {
+    pub comment_id: Uuid,
+    pub anchor_block: Option<BlockId>,
+    pub anchor_start: u32,
+    pub anchor_end: u32,
+    pub orphaned: bool,
+    pub resolved: bool,
+    pub replies: Vec<CommentReply>,
+}
+
 /// What a cross reference shows (`features/ambre-spec-prose-cross-references.md`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CrossRefKind {
@@ -828,6 +856,46 @@ pub enum ProseCommand {
         footnote_id: Uuid,
     },
 
+    // -- Comments (`features/ambre-spec-prose-comments.md`) --
+    /// A thread over `range` in `block_id`, opened by a reply holding `text`.
+    /// `now_ms` is the display stamp: the Logic thread reads no clock.
+    AddComment {
+        block_id: BlockId,
+        range: (u32, u32),
+        text: String,
+        now_ms: u64,
+    },
+    /// A reply at the end of the thread, which reopens it (`PROSE-FEAT-079`).
+    ReplyToComment {
+        comment_id: Uuid,
+        text: String,
+        now_ms: u64,
+    },
+    /// Close a thread.
+    ResolveComment {
+        comment_id: Uuid,
+    },
+    /// Reopen a thread, with no reply added.
+    ReopenComment {
+        comment_id: Uuid,
+    },
+    /// Remove a thread and its mark, and leave the text.
+    DeleteComment {
+        comment_id: Uuid,
+    },
+    /// Remove one of the caller's replies, or the thread when it is the head
+    /// (`PROSE-FEAT-081`).
+    DeleteReply {
+        comment_id: Uuid,
+        reply_id: Uuid,
+    },
+    /// Rewrite one of the caller's replies (`PROSE-FEAT-080`).
+    EditCommentReply {
+        comment_id: Uuid,
+        reply_id: Uuid,
+        new_text: String,
+    },
+
     // -- Cross references (`features/ambre-spec-prose-cross-references.md`) --
     /// A reference at `pos` in `block_id`, naming `target_block_id`
     /// (`PROSE-FEAT-134`).
@@ -932,6 +1000,13 @@ impl ProseCommand {
             Self::InsertFootnote { .. } => "inserting a footnote",
             Self::EditFootnote { .. } => "editing the footnote",
             Self::DeleteFootnote { .. } => "deleting the footnote",
+            Self::AddComment { .. } => "adding a comment",
+            Self::ReplyToComment { .. } => "replying to the comment",
+            Self::ResolveComment { .. } => "resolving the comment",
+            Self::ReopenComment { .. } => "reopening the comment",
+            Self::DeleteComment { .. } => "deleting the comment",
+            Self::DeleteReply { .. } => "deleting the reply",
+            Self::EditCommentReply { .. } => "editing the reply",
             Self::InsertCrossRef { .. } => "inserting a cross reference",
             Self::FollowCrossRef { .. } => "following the cross reference",
             Self::UpdateCursor { .. } => "moving the cursor",
@@ -992,6 +1067,8 @@ pub enum ProseEvent {
     /// Every footnote, in the order of its calls, orphans last
     /// (`PROSE-FEAT-013`, `PROSE-FEAT-098`).
     FootnotesUpdated { notes: Vec<FootnoteEntry> },
+    /// Every comment thread, in document order of its anchor, orphans last.
+    CommentsUpdated { threads: Vec<CommentThread> },
     /// Every cross reference, resolved against the last layout.
     CrossRefsUpdated { refs: Vec<ResolvedCrossRef> },
     /// Bring a block into view, from its first page (`PROSE-UI-085`).
@@ -1063,6 +1140,10 @@ pub enum ProseRefusal {
     /// not declare (`PROSE-008`).
     #[error("the mark registry declares no key {0}")]
     UnknownMark(String),
+    /// A style command aimed at an anchor key, which only its own command
+    /// writes (`PROSE-FEAT-298`, `PROSE-FEAT-299`).
+    #[error("{0} is not a style, and only its own command writes it")]
+    AnchorKey(String),
     /// A mark value the key's own grammar refuses (`PROSE-008`).
     #[error("{value} is not a value the {key} style takes")]
     BadMarkValue { key: String, value: String },
@@ -1097,6 +1178,22 @@ pub enum ProseRefusal {
     /// The command names a footnote the document does not hold.
     #[error("footnote {0} is not in the document")]
     NoSuchFootnote(Uuid),
+    /// A comment asked for in a header or a footer, drawn on every page.
+    #[error("a header or a footer cannot hold a comment")]
+    CommentInBand,
+    /// The command names a comment thread the document does not hold.
+    #[error("comment {0} is not in the document")]
+    NoSuchComment(Uuid),
+    /// The command names a reply the thread does not hold.
+    #[error("reply {0} is not in the thread")]
+    NoSuchReply(Uuid),
+    /// A reply edited or deleted by someone other than its author
+    /// (`PROSE-FEAT-080`, `PROSE-FEAT-198`).
+    #[error("only its author can change a reply")]
+    NotYourReply,
+    /// A comment written before the session named its user.
+    #[error("the session has no user to sign the comment")]
+    NoIdentity,
     /// The position holds no cross reference to follow.
     #[error("no cross reference sits there")]
     NoCrossRef,

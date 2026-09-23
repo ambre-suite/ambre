@@ -565,14 +565,13 @@ mod tests {
     #[test]
     fn a_mark_across_the_cut_reaches_both_halves() {
         let (mut state, ids) = document_of(&["hello world"]);
-        for key in ["b", "cm"] {
-            state.handle_command(ProseCommand::ApplyMark {
-                block_id: ids[0],
-                range: (0, 11),
-                key: key.to_owned(),
-                value: (key == "cm").then(|| "a-comment-id".to_owned()),
-            });
-        }
+        state.handle_command(ProseCommand::ApplyMark {
+            block_id: ids[0],
+            range: (0, 11),
+            key: "b".to_owned(),
+            value: None,
+        });
+        crate::logic::marks::tests::anchor(&mut state, &ids[0], 0..11);
         let outcome = state.handle_command(ProseCommand::SplitBlock {
             block_id: ids[0],
             pos: 5,

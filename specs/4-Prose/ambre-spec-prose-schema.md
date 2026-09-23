@@ -140,9 +140,9 @@ the container, `--` where no feature does.
 | `annots` | Map | a `Uuid` | one annotation map | the entry | comments, track-changes, footnotes | built |
 | `annots/{id}` | Map | a field name, per the table below | per field | the field | comments, track-changes, footnotes | built |
 | `annots/{id}/text` | Text | -- | a footnote's body | none: char-CRDT | footnotes | built |
-| `annots/{id}/replies` | List | position | one reply map | list order, no LWW | comments | design |
-| `annots/{id}/replies/{n}` | Map | `id`, `author`, `peer_id`, `created_at` | String, String, `u64`, `u64` | the key | comments | design |
-| `annots/{id}/replies/{n}/text` | Text | -- | a reply's body | none: char-CRDT | comments | design |
+| `annots/{id}/replies` | List | position | one reply map | list order, no LWW | comments | built |
+| `annots/{id}/replies/{n}` | Map | `id`, `author`, `user_id`, `created_at` | String, String, String, `i64` | the key | comments | built |
+| `annots/{id}/replies/{n}/text` | Text | -- | a reply's body | none: char-CRDT | comments | built |
 | `bibliography` | Map | `source_id` | one map of CSL fields | the source entry | -- (deferred; section 5) | design |
 
 **The block node map, field by field.** `Kinds` names the block types that carry the field. The nine
@@ -191,7 +191,7 @@ function is total (`PROSE-007`).
 | `fg`, `bg` | `"#rrggbb"`, or `"#rrggbbaa"` when the alpha is not opaque | `After` | inline-styles |
 | `fs` | the size in points: base 10, `.` separator, no exponent, no trailing zero, no unit -- `"11"` and `"11.5"`, never `"11.0pt"` (`PROSE-008`) | `After` | inline-styles |
 | `ff` | the family name, as the picker labels it | `After` | inline-styles |
-| `cm` | a `Uuid` into `annots` | `None` | comments |
+| `cm:{id}` | the thread's `Uuid` into `annots`, one key per thread so two threads over one character never share a value | `None` | comments |
 | `si`, `sd` | a `Uuid` into `annots`, the suggested insertion and the suggested deletion | `None` | track-changes |
 | `fn` | a `Uuid` into `annots`, laid on one U+FFFC the insert writes | `None` | footnotes |
 | `ref` | the hex of a postcard record: the target `TreeID` and the reference kind, laid on one U+FFFC the insert writes | `None` | cross-references |
@@ -202,14 +202,14 @@ function is total (`PROSE-007`).
 
 | Field | Type | Holds | Kinds | State |
 |---|---|---|---|---|
-| `kind` | String | the kind, which every entry names: `"footnote"` today. No kind is read from an absent field (`PROSE-031`) | every kind | built |
-| `anchor_block` | String | the `TreeID` of the annotated block, a cache of where the live mark sits | comment | design |
-| `anchor_start`, `anchor_end` | `u32` | the cached span, in the block's own offsets | comment | design |
-| `resolved` | `bool` | whether the thread is closed | comment | design |
-| `author` | String | the self-asserted display name, stamped by the local peer | comment, suggestion | design |
-| `peer_id` | `u64` | the document peer that minted the entry | comment, suggestion | design |
-| `created_at` | `u64` | the stamp, display only: a clock is untrusted | comment, suggestion | design |
-| `replies` | List | the thread, the opening comment first | comment | design |
+| `kind` | String | the kind, which every entry names: `"footnote"` or `"comment"` today. No kind is read from an absent field (`PROSE-031`) | every kind | built |
+| `anchor_block` | String | the `TreeID` of the annotated block, a cache of where the live mark sits | comment | built |
+| `anchor_start`, `anchor_end` | `i64` | the cached span, in the block's own offsets | comment | built |
+| `resolved` | `bool` | whether the thread is closed | comment | built |
+| `author` | String | the self-asserted display name, stamped by the local peer | suggestion | design |
+| `peer_id` | `u64` | the document peer that minted the entry | suggestion | design |
+| `created_at` | `u64` | the stamp, display only: a clock is untrusted | suggestion | design |
+| `replies` | List | the thread, the opening comment first. A comment's author is the one its opening reply names | comment | built |
 | `text` | Text | the note body | footnote | design |
 | `name`, `block_id`, `range` | -- | the deferred bookmark fields | bookmark | design |
 

@@ -29,6 +29,19 @@ const ANCHOR_KEYS: [&str; 6] = ["a", "cm", "si", "sd", "fn", "ref"];
 /// The header-field root, registered alone for the reason above.
 const FIELD_ROOT: &str = "f";
 
+/// The roots a command of their own owns: a comment, a suggestion, a
+/// footnote, a cross reference and a header field. The link is an anchor too,
+/// and the one the style path writes.
+const OWNED_ROOTS: [&str; 6] = ["cm", "si", "sd", "fn", "ref", FIELD_ROOT];
+
+/// Whether a key belongs to an anchor its own command writes and removes, so
+/// the style path must refuse it (`PROSE-FEAT-298`, `PROSE-FEAT-299`).
+#[must_use]
+pub fn is_owned_anchor(mark_key: &str) -> bool {
+    let root = mark_key.split(':').next().unwrap_or(mark_key);
+    OWNED_ROOTS.contains(&root)
+}
+
 /// The expansion an insertion at the edge of a mark gets.
 ///
 /// Total over every key (`PROSE-090`): a key no build knows answers the

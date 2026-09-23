@@ -21,9 +21,10 @@
 | `prose-footnotes` | A note at the foot of the page, called from a mark in the text. | implemented | 12 |  |
 | `prose-headers-footers` | A band at the top of every page and a band at the bottom, each holding ordinary text. | implemented | 27 |  |
 | `prose-headings` | Six levels of section title. | implemented | 8 | 1 |
-| `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | implemented | 23 | 1 |
+| `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | implemented | 25 | 1 |
 | `prose-lists` | Bulleted, numbered and checkbox lists, nested to any depth. | implemented | 17 |  |
 | `prose-undo` | Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one item is in running text. | implemented | 3 |  |
+| `prose-comments` | A discussion attached to a passage of the text. | partial | 36 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | partial | 47 |  |
 | `prose-table-of-contents` | A list of the document's headings, with the page each one starts on. | partial | 14 |  |
 | `prose-tables` | A grid of cells inside the document. | partial | 44 |  |
@@ -31,7 +32,6 @@
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | partial | 13 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 | `prose-clipboard` | Copy, cut and paste. | design-only | 14 |  |
-| `prose-comments` | A discussion attached to a passage of the text. | design-only | 33 |  |
 | `prose-images` | A picture in the document. | design-only | 38 |  |
 | `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | design-only | 47 |  |
 | `prose-page-rendering` | What a page looks like on the canvas. | design-only | 19 |  |
@@ -44,4 +44,4 @@
 | `prose-track-changes` | A reviewer edits without changing the document. | design-only | 35 |  |
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | design-only | 17 |  |
 
-**28 features: 9 implemented, 5 partial, 14 design-only. 612 contract rows, 2 loose.**
+**28 features: 9 implemented, 6 partial, 13 design-only. 617 contract rows, 2 loose.**

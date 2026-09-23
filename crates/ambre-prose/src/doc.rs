@@ -1111,7 +1111,7 @@ pub fn read_lang(doc: &LoroDoc) -> String {
 // Value readers
 // -----------------------------------------------------------------------------
 
-fn read_i64(map: &LoroMap, key: &str) -> Option<i64> {
+pub(crate) fn read_i64(map: &LoroMap, key: &str) -> Option<i64> {
     match map.get(key)?.into_value() {
         Ok(LoroValue::I64(n)) => Some(n),
         _ => None,
@@ -1130,14 +1130,14 @@ fn read_f32(map: &LoroMap, key: &str) -> Option<f32> {
     read_f64(map, key).map(|n| n as f32)
 }
 
-fn read_bool(map: &LoroMap, key: &str) -> Option<bool> {
+pub(crate) fn read_bool(map: &LoroMap, key: &str) -> Option<bool> {
     match map.get(key)?.into_value() {
         Ok(LoroValue::Bool(b)) => Some(b),
         _ => None,
     }
 }
 
-fn read_string(map: &LoroMap, key: &str) -> Option<String> {
+pub(crate) fn read_string(map: &LoroMap, key: &str) -> Option<String> {
     match map.get(key)?.into_value() {
         Ok(LoroValue::String(s)) => Some(s.to_string()),
         _ => None,
@@ -1162,8 +1162,29 @@ pub(crate) const K_CROSS_REF: &str = "ref";
 /// An annotation's kind, in one field of one type (`PROSE-031`).
 pub(crate) const ANNOT_KIND: &str = "kind";
 
-/// The text child of an annotation entry: a footnote's body.
+/// The text child of an annotation entry: a footnote's body, or a reply's.
 pub(crate) const ANNOT_TEXT: &str = "text";
+
+/// The root of a comment's mark. Each thread writes its own key under it,
+/// `cm:{id}`, so two threads over one character never share a value.
+pub(crate) const K_COMMENT: &str = "cm";
+
+/// The cached anchor of a comment: the block, and the span in its offsets.
+pub(crate) const ANNOT_ANCHOR_BLOCK: &str = "anchor_block";
+pub(crate) const ANNOT_ANCHOR_START: &str = "anchor_start";
+pub(crate) const ANNOT_ANCHOR_END: &str = "anchor_end";
+
+/// Whether a comment thread is closed.
+pub(crate) const ANNOT_RESOLVED: &str = "resolved";
+
+/// A comment's list of replies, the opening one first.
+pub(crate) const ANNOT_REPLIES: &str = "replies";
+
+/// The fields of one reply.
+pub(crate) const REPLY_ID: &str = "id";
+pub(crate) const REPLY_AUTHOR: &str = "author";
+pub(crate) const REPLY_USER: &str = "user_id";
+pub(crate) const REPLY_CREATED: &str = "created_at";
 
 /// Every live block, in document order: the depth-first pre-order walk of the
 /// tree, which is the document flow. The bands are left out.

@@ -99,8 +99,20 @@ fn walk_map(prefix: &str, value: &LoroValue, shape: &mut Shape) {
         let path = format!("{prefix}/{key}");
         shape.keys.insert(key);
         shape.record(&path, child);
-        if matches!(child, LoroValue::Map(_)) {
-            walk_map(&path, child, shape);
+        match child {
+            LoroValue::Map(_) => walk_map(&path, child, shape),
+            // A list of maps, as a thread's replies are: each item is one
+            // record of the same shape, read under [`ANY`].
+            LoroValue::List(items) => {
+                for item in items.iter() {
+                    let item_path = format!("{path}/{ANY}");
+                    if matches!(item, LoroValue::Map(_)) {
+                        shape.record(&item_path, item);
+                        walk_map(&item_path, item, shape);
+                    }
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -187,6 +199,14 @@ fn walk_marks(doc: &LoroDoc, shape: &mut Shape) {
                 continue;
             };
             for (key, value) in marks.iter() {
+                // A comment's key carries its thread, `cm:{id}`: the id
+                // collapses as an annotation's identity does.
+                let key = match key.split_once(':') {
+                    Some((root, id)) if ambre_core::Uuid::parse_str(id).is_ok() => {
+                        format!("{root}:{ANY}")
+                    }
+                    _ => key.clone(),
+                };
                 shape.keys.insert(key.clone());
                 shape.record(&format!("{ANY_BODY}/@{key}"), value);
             }
@@ -349,7 +369,20 @@ fn document_of_every_key() -> ProseState {
     write_the_bands(&mut state);
     write_a_note_and_a_reference(&mut state, root);
     hide_the_rule(&mut state);
+    write_a_thread(&mut state, root);
     for key in mark_roots_to_apply() {
+        // The style path refuses an anchor its own command owns
+        // (`PROSE-FEAT-298`). The scenario still has to reach every root, so
+        // it lays those marks on the body directly.
+        if crate::mark::is_owned_anchor(&key) {
+            let body = doc::get_block_text(&state.doc, &crate::events::tree_id(root));
+            let value = mark_value_for(&key).unwrap_or_default();
+            if body.mark(0..3, &key, value.as_str()).is_err() {
+                panic!("the scenario could not lay the {key} mark");
+            }
+            state.doc.commit();
+            continue;
+        }
         state.handle_command(ProseCommand::ApplyMark {
             block_id: root,
             range: (0, 3),
@@ -392,6 +425,25 @@ fn hide_the_rule(state: &mut ProseState) {
         panic!("the scenario inserted a rule");
     };
     state.handle_command(ProseCommand::DeleteBlock { block_id: rule });
+}
+
+/// A comment thread on `root`, with one reply after its opening one.
+fn write_a_thread(state: &mut ProseState, root: crate::events::BlockId) {
+    state.set_user_id(ambre_core::UserId::from_bytes([7; 16]));
+    state.handle_command(ProseCommand::AddComment {
+        block_id: root,
+        range: (0, 1),
+        text: "A comment.".to_owned(),
+        now_ms: 1,
+    });
+    let Some(thread) = state.comments().into_iter().next() else {
+        panic!("the scenario opened a thread");
+    };
+    state.handle_command(ProseCommand::ReplyToComment {
+        comment_id: thread.comment_id,
+        text: "A reply.".to_owned(),
+        now_ms: 2,
+    });
 }
 
 /// A footnote and a cross reference to `root`, both called from `root`.
