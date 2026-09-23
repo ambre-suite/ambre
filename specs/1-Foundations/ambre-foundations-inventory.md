@@ -48,11 +48,11 @@
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 12 | 9 |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 11 | 5 |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | partial | 6 | 5 |
-| `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 14 | 8 |
+| `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 16 | 8 |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | partial | 19 | 13 |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 13 | 7 |
 | `ui` | The page's own thread. | partial | 17 | 9 |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**39 features: 23 implemented, 14 partial, 2 design-only. 592 contract rows, 316 loose.**
+**39 features: 23 implemented, 14 partial, 2 design-only. 594 contract rows, 316 loose.**

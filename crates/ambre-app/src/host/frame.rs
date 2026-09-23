@@ -99,6 +99,12 @@ pub struct FrameHost {
     /// Drained once per frame and routed to the active view (`UI-THREAD-024`).
     paste_rx: flume::Receiver<ClipboardPaste>,
 
+    /// The command channel to the Logic thread, held for one purpose. A font
+    /// face fetched after boot has to reach the threads that measure on a
+    /// context of their own (`CANVAS-068`). Only this thread can fetch, and
+    /// Prose paginates on the Logic thread.
+    to_logic: flume::Sender<LogicCommand>,
+
     /// The live child views behind the top-level document's visible `doc_embed`s,
     /// keyed by the **board element** that carries each reference. Reconciled
     /// every frame against [`AppView::visible_embeds`]: a child appears when its
@@ -149,6 +155,7 @@ impl FrameHost {
         make_child: Option<MakeChild>,
         clip_token: String,
         paste_rx: flume::Receiver<ClipboardPaste>,
+        to_logic: flume::Sender<LogicCommand>,
     ) -> Self {
         Self {
             gpu: None,
@@ -156,6 +163,7 @@ impl FrameHost {
             perf,
             clip_token,
             paste_rx,
+            to_logic,
             children: HashMap::new(),
             child_sizes: HashMap::new(),
             make_child,
@@ -413,11 +421,19 @@ impl FrameHost {
         // layers still hold tofu pixels for the affected strings. Force a
         // full view repaint to re-shape and redraw them. Scoped so the short
         // GPU borrow ends before we touch `self.view`.
-        let fonts_changed = {
+        let new_faces = {
             let Some(gpu) = self.gpu.as_mut() else { return };
             gpu.text_cache.poll_lazy_fonts(&mut gpu.font_cx)
         };
-        if fonts_changed {
+        if !new_faces.is_empty() {
+            // The same face, to the Logic thread. It measures Prose pages on a
+            // sealed context and cannot fetch, so a script it never receives
+            // paginates into tofu (`CANVAS-068`, `PROSE-115`). A full channel
+            // drops the face rather than stall the frame; the next lazy fetch
+            // is a fresh delivery.
+            let _ = self
+                .to_logic
+                .try_send(LogicCommand::LoadFonts { faces: new_faces });
             if let Some((w, h)) = self.gpu.as_ref().map(|g| (g.width, g.height)) {
                 self.view.resize(w, h);
             }

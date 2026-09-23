@@ -308,6 +308,29 @@ impl DocState {
         }
     }
 
+    /// Hand the document the font faces the application has loaded
+    /// (`CANVAS-067`, `PROSE-115`).
+    ///
+    /// Only Prose measures text on the Logic thread: pagination shapes on a
+    /// sealed context, which holds nothing until these arrive (`PROSE-114`).
+    /// Trame and Toile measure on the UI thread, which owns its own context.
+    fn load_faces(&mut self, faces: &[Vec<u8>]) {
+        match self {
+            DocState::Prose(state) => state.load_faces(faces),
+            DocState::Trame(_) | DocState::Toile(_) => {}
+        }
+    }
+
+    /// How many faces this document measures on, zero for an engine that
+    /// measures nothing on this thread (`PROSE-115`).
+    #[cfg(test)]
+    fn face_count(&self) -> usize {
+        match self {
+            DocState::Prose(state) => state.face_count(),
+            DocState::Trame(_) | DocState::Toile(_) => 0,
+        }
+    }
+
     /// Seed the session's display name beside the `UserId`, from the same
     /// `SessionReady`. Toile stamps it on every outbound presence sample, so a
     /// collaborator reads a name rather than a hex prefix (`TOILE-UI-076`). It
@@ -399,6 +422,11 @@ struct LogicState {
     /// Cleared with the document that owns it, so a seal outlived by its
     /// document answers nothing rather than downloading into a closed tab.
     pending_seals: HashMap<RequestId, (DocumentId, String)>,
+    /// Every font face the Main thread has fetched and shipped over
+    /// (`LogicCommand::LoadFonts`). Kept as bytes, so a document opened later
+    /// gets the same set (`CANVAS-067`, `PROSE-115`). The Logic thread cannot
+    /// fetch, so this is the whole of what it can measure on.
+    base_faces: Vec<Vec<u8>>,
     /// Base fonts for PDF export (`toile-pdf-export`), seeded once by
     /// [`LogicCommand::LoadFonts`]. `None` until the Main thread's boot-time
     /// fetch lands; a fresh `FontContext` here would have zero faces and emit no
@@ -426,6 +454,7 @@ impl LogicState {
             my_display_name: None,
             rest_routes: HashMap::new(),
             pending_seals: HashMap::new(),
+            base_faces: Vec::new(),
             export_cx: None,
         }
     }

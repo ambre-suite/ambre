@@ -22,6 +22,10 @@ use super::*;
 /// relay, the dispatcher, the SPA route poll. So this driver knows nothing about
 /// commands or Leptos. `raf` gates only the render (a modal / landing overlay
 /// freezes the canvas), never the relay.
+///
+/// `to_logic` carries the one command this driver sends itself. A font face
+/// fetched on demand is forwarded to the Logic thread (`CANVAS-068`). That
+/// thread measures Prose pages on a context of its own, and cannot fetch.
 #[allow(clippy::too_many_arguments)]
 pub fn run_with<F, C, P>(
     canvas_id: &str,
@@ -30,6 +34,7 @@ pub fn run_with<F, C, P>(
     mut pre_frame: P,
     raf: RafControl,
     paste_rx: flume::Receiver<ClipboardPaste>,
+    to_logic: flume::Sender<LogicCommand>,
 ) -> DocSwitcher
 where
     F: FnOnce(f64, f64, TextInput) -> AppView,
@@ -95,6 +100,7 @@ where
         Some(make_child),
         clip_token,
         paste_rx,
+        to_logic,
     )));
 
     // -- Async GPU init, then start the rAF loop. -----------------------------

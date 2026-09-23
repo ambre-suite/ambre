@@ -92,15 +92,17 @@ impl TextCache {
     /// into `font_cx`. If any did, clear the layout cache. Strings that shaped
     /// before the face was available (as tofu) then re-shape with real glyphs.
     ///
-    /// Returns `true` when coverage changed: the caller must then force a full
-    /// repaint (the cached GPU layers still hold the tofu pixels).
-    pub fn poll_lazy_fonts(&mut self, font_cx: &mut FontContext) -> bool {
-        if self.lazy_fonts.drain_into(font_cx) {
+    /// Returns the faces registered, empty when coverage did not change. A
+    /// non-empty return means the caller must force a full repaint: the cached
+    /// GPU layers still hold the tofu pixels. It must also hand the same bytes
+    /// to the threads that keep a context of their own (`CANVAS-068`).
+    #[must_use]
+    pub fn poll_lazy_fonts(&mut self, font_cx: &mut FontContext) -> Vec<Vec<u8>> {
+        let faces = self.lazy_fonts.drain_into(font_cx);
+        if !faces.is_empty() {
             self.layouts.clear();
-            true
-        } else {
-            false
         }
+        faces
     }
 
     pub fn reset_frame_stats(&mut self) {

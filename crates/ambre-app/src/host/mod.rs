@@ -36,7 +36,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
 use ambre_bus::app::toile::ElementId;
-use ambre_bus::{DocType, DocumentId};
+use ambre_bus::{DocType, DocumentId, LogicCommand};
 use ambre_canvas::theme::{FONT_BODY, FONT_HEADING};
 use ambre_canvas::{
     ContentRepaint, FrameStats, GpuState, InputEvent, Layer, OverlayRepaint, RafControl,

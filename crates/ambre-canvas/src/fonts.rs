@@ -15,8 +15,9 @@
 //   2. The fetch resolves on this same thread (spawn_local) and drops the bytes
 //      into a shared inbox.
 //   3. Each frame `drain_into(font_cx)` registers any arrived faces into the
-//      shared `FontContext` and reports whether coverage changed. The caller
-//      can then drop the stale (tofu) layouts and force a repaint.
+//      shared `FontContext` and hands their bytes back. The caller drops the
+//      stale (tofu) layouts and forces a repaint. It also ships the same bytes
+//      to the Logic thread, which measures on a context of its own.
 //
 // A script is fetched at most once regardless of the outcome (success, HTTP
 // failure, or still in flight): `requested` latches on the first sighting.
@@ -158,21 +159,28 @@ impl LazyFontLoader {
         }
     }
 
-    /// Register any fetched faces into `font_cx`. Returns `true` when at least
-    /// one new face was registered. The caller then drops stale layouts, which
-    /// shaped as tofu, and forces a repaint so they re-shape with glyphs.
-    pub fn drain_into(&mut self, font_cx: &mut parley::FontContext) -> bool {
+    /// Register any fetched faces into `font_cx` and return their bytes. An
+    /// empty return means nothing arrived. A non-empty one means coverage
+    /// changed: the caller drops the stale layouts, which shaped as tofu, and
+    /// forces a repaint so they re-shape with glyphs.
+    ///
+    /// The bytes come back because this thread is not the only one that
+    /// measures on them. The Logic thread paginates Prose on a sealed context
+    /// of its own, and cannot fetch. So the same face travels to it over the
+    /// bus (`CANVAS-068`). One clone per lazy script, once, against a
+    /// document that would otherwise paginate on tofu.
+    #[must_use]
+    pub fn drain_into(&mut self, font_cx: &mut parley::FontContext) -> Vec<Vec<u8>> {
         let pending = std::mem::take(&mut self.inbox.borrow_mut().pending);
-        if pending.is_empty() {
-            return false;
-        }
-        for bytes in pending {
+        for bytes in &pending {
             // Registered as an additional family in the shared collection;
             // Parley's script-based fallback then selects it for runs the base
             // families cannot shape.
-            font_cx.collection.register_fonts(bytes.into(), None);
+            font_cx
+                .collection
+                .register_fonts(bytes.clone().into(), None);
         }
-        true
+        pending
     }
 
     /// Number of scripts a fetch has been started for (test/diagnostic hook).
@@ -204,6 +212,13 @@ impl LazyFontLoader {
     #[cfg(not(target_arch = "wasm32"))]
     fn request(&self, font: LazyFont) {
         let _ = font.asset_url();
+    }
+
+    /// Stand in for a resolved fetch, so a test can drain what a browser would
+    /// have delivered.
+    #[cfg(test)]
+    fn deliver(&self, bytes: Vec<u8>) {
+        self.inbox.borrow_mut().pending.push(bytes);
     }
 }
 
@@ -250,12 +265,36 @@ mod tests {
         assert_eq!(loader.requested_count(), 2);
     }
 
+    /// A drained face comes back to the caller, which owes it to the threads
+    /// that keep a `FontContext` of their own (`CANVAS-068`).
+    ///
+    /// The Logic thread paginates Prose on a sealed context and cannot fetch.
+    /// A face this thread keeps to itself leaves that context short, and the
+    /// pages measure on tofu.
+    #[test]
+    fn a_drained_face_comes_back_for_the_other_threads() {
+        let mut loader = LazyFontLoader::new();
+        // Any blob will do: `register_fonts` ignores what it cannot parse,
+        // and what this holds is the hand-over, not the parsing.
+        let face = b"not a real face".to_vec();
+        loader.deliver(face.clone());
+
+        let mut font_cx = parley::FontContext::new();
+        let drained = loader.drain_into(&mut font_cx);
+
+        assert_eq!(drained, vec![face], "the bytes registered here travel on");
+        assert!(
+            loader.drain_into(&mut font_cx).is_empty(),
+            "a face is handed over once"
+        );
+    }
+
     #[test]
     fn drain_is_empty_without_fetches() {
         // Native builds never populate the inbox, so a drain is always a no-op.
         let mut loader = LazyFontLoader::new();
         loader.observe("中文");
         let mut font_cx = parley::FontContext::new();
-        assert!(!loader.drain_into(&mut font_cx));
+        assert!(loader.drain_into(&mut font_cx).is_empty());
     }
 }

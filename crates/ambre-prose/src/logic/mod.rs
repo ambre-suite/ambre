@@ -187,19 +187,28 @@ impl ProseState {
         paginator.reflow(&self.doc, dirty)
     }
 
+    /// How many faces this document measures on (`PROSE-115`).
+    ///
+    /// Zero means every run shapes into tofu: the measuring context is sealed
+    /// and nothing has been handed to it yet.
+    #[must_use]
+    pub fn face_count(&self) -> usize {
+        self.faces.len()
+    }
+
     /// Hand the document the faces pagination measures on (`PROSE-114`).
     ///
     /// A measurer holds nothing until this is called, so a layout taken before
     /// it shapes every run into tofu. A face that arrives after a layout was
     /// measured invalidates it, and the next call recomputes in full
     /// (`PROSE-111`).
-    pub fn load_faces(&mut self, faces: Vec<Vec<u8>>) {
-        for bytes in &faces {
+    pub fn load_faces(&mut self, faces: &[Vec<u8>]) {
+        for bytes in faces {
             if let Some(paginator) = self.paginator.as_mut() {
                 paginator.register_faces(bytes.clone());
             }
+            self.faces.push(bytes.clone());
         }
-        self.faces.extend(faces);
     }
 
     /// The two settings a document needs before its first operation, and after
@@ -861,7 +870,7 @@ mod tests {
     #[test]
     fn a_snapshot_import_lays_the_document_out_again() {
         let mut source = ProseState::new().expect("a document is built");
-        source.load_faces(crate::layout::fonts::shipped_faces());
+        source.load_faces(&crate::layout::fonts::shipped_faces());
         let block = source.root_blocks()[0];
         source.handle_command(ProseCommand::InsertText {
             block_id: block,
@@ -870,7 +879,7 @@ mod tests {
         });
         let snapshot = source.export_snapshot();
         let mut target = ProseState::new().expect("a document is built");
-        target.load_faces(crate::layout::fonts::shipped_faces());
+        target.load_faces(&crate::layout::fonts::shipped_faces());
         let empty = target.paginate(&[]).page_count;
         target
             .import_snapshot(&snapshot)

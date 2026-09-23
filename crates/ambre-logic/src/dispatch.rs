@@ -47,6 +47,11 @@ impl LogicState {
                     if let Some(name) = &self.my_display_name {
                         state.set_display_name(name);
                     }
+                    // The faces that already arrived, so a document opened after
+                    // boot measures on the same set as one opened before it
+                    // (`PROSE-115`). A sealed measuring context holds nothing
+                    // until this runs (`PROSE-114`).
+                    state.load_faces(&self.base_faces);
                     slot.insert(LiveDoc::new(state));
                 }
                 let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
@@ -118,6 +123,11 @@ impl LogicState {
                     if let Some(name) = &self.my_display_name {
                         state.set_display_name(name);
                     }
+                    // The faces that already arrived, so a document opened after
+                    // boot measures on the same set as one opened before it
+                    // (`PROSE-115`). A sealed measuring context holds nothing
+                    // until this runs (`PROSE-114`).
+                    state.load_faces(&self.base_faces);
                     slot.insert(LiveDoc::new(state));
                 }
                 self.send_to_sync(SyncCommand::OpenDocument {
@@ -150,21 +160,27 @@ impl LogicState {
                 });
             }
             LogicCommand::LoadFonts { faces } => {
-                // Seed the PDF-export FontContext once with the base faces the
-                // Main thread fetched (`toile-pdf-export`). Local-only: nothing
-                // is sent to Sync. A second seeding is ignored -- the faces are
-                // already registered and export needs them exactly once.
-                if self.export_cx.is_none() {
-                    tracing::info!(
-                        "Logic: seeding export FontContext with {} faces",
-                        faces.len()
-                    );
-                    let mut font_cx = parley::FontContext::new();
-                    for bytes in faces {
-                        font_cx.collection.register_fonts(bytes.into(), None);
-                    }
-                    self.export_cx = Some(font_cx);
+                // The Logic thread cannot fetch, so this is the only way a face
+                // reaches it (`CANVAS-067`). Local-only: nothing is sent to
+                // Sync. Two consumers take the same bytes.
+                tracing::info!("Logic: {} faces delivered", faces.len());
+                // Every open document that measures text. A Prose paginator
+                // shapes on a sealed context and holds nothing until now
+                // (`PROSE-114`, `PROSE-115`).
+                for doc in self.docs.values_mut() {
+                    doc.state.load_faces(&faces);
                 }
+                // The PDF-export context (`toile-pdf-export`), built on the
+                // first delivery and extended by each later one, so a script
+                // face that arrived after boot exports too.
+                let export_cx = self.export_cx.get_or_insert_with(parley::FontContext::new);
+                for bytes in &faces {
+                    export_cx
+                        .collection
+                        .register_fonts(bytes.clone().into(), None);
+                }
+                // Kept for the documents opened after this point.
+                self.base_faces.extend(faces);
             }
         }
     }
@@ -1445,9 +1461,76 @@ mod tests {
         assert!(ui_rx.drain().next().is_none(), "no UI event");
         assert!(sync_rx.try_recv().is_err(), "nothing forwarded to Sync");
 
-        // A second delivery is ignored -- the guard keeps the first context.
+        // A second delivery extends the same context rather than replacing it:
+        // a script face fetched after boot must export too (`CANVAS-068`).
         state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
         assert!(state.export_cx.is_some());
+    }
+
+    /// The faces the workspace ships, read off the tree. A running peer gets
+    /// the same bytes over the bus; here the test plays the Main thread.
+    fn shipped_faces() -> Vec<Vec<u8>> {
+        const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
+        ["NotoSans-Regular.ttf", "DejaVuSerif.ttf"]
+            .iter()
+            .filter_map(|file| std::fs::read(format!("{DIR}{file}")).ok())
+            .collect()
+    }
+
+    /// A delivery reaches the documents already open, and a document opened
+    /// afterwards takes the same set (`CANVAS-067`, `PROSE-115`).
+    ///
+    /// A Prose measuring context is sealed, so a document that misses the
+    /// delivery shapes every run into tofu and paginates on nothing
+    /// (`PROSE-114`).
+    #[test]
+    fn every_prose_document_takes_the_faces_whenever_it_was_opened() {
+        let (mut state, _ui, _sync) = harness();
+        let faces = shipped_faces();
+        assert!(!faces.is_empty(), "the workspace ships its faces");
+
+        let before = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id: before,
+            doc_type: DocType::Prose,
+        });
+        assert_eq!(
+            state.docs[&before].state.face_count(),
+            0,
+            "nothing has been delivered yet"
+        );
+
+        state.handle_logic_command(LogicCommand::LoadFonts {
+            faces: faces.clone(),
+        });
+        assert_eq!(
+            state.docs[&before].state.face_count(),
+            faces.len(),
+            "a document open at delivery takes the faces"
+        );
+
+        let after = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id: after,
+            doc_type: DocType::Prose,
+        });
+        assert_eq!(
+            state.docs[&after].state.face_count(),
+            faces.len(),
+            "a document opened afterwards takes the same set"
+        );
+
+        // A later delivery (a script face) reaches both (`CANVAS-068`).
+        state.handle_logic_command(LogicCommand::LoadFonts {
+            faces: vec![faces[0].clone()],
+        });
+        for id in [before, after] {
+            assert_eq!(
+                state.docs[&id].state.face_count(),
+                faces.len() + 1,
+                "a face fetched later reaches an open document too"
+            );
+        }
     }
 
     // -- The deck's PDF export (`toile-pdf-export`, `TOILE-IO-029`) ------------

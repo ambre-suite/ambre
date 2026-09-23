@@ -51,6 +51,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-107` | `INV` | Pagination MUST measure on the faces the application ships and on those alone: a face the device happens to carry MUST NOT enter a measurement. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | structural -- `ambre_prose::layout::belts::only_the_font_module_asks_a_context_what_it_holds` reads every source of the module and fails on a collection lookup outside `ambre_prose::layout::fonts::resolve`, over a context `PROSE-114` seals | none | verified |
 | `PROSE-108` | `INV` | A family label MUST resolve to one shipped face by the label alone: the resolution MUST NOT read the faces a context holds. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | type-level -- `ambre_prose::layout::fonts::resolve` takes a label and no context, so no device can reach it; `ambre_prose::layout::fonts::tests::resolution_reads_the_label_and_nothing_else` | none | verified |
 | `PROSE-110` | `OBS` | A layout MUST name every script the document uses that had no face when it was measured. | this spec section 2 | `ambre_prose::layout::reflow::convergence::a_latin_document_names_no_missing_script`; `ambre_prose::layout::reflow::convergence::a_script_with_no_face_is_named_in_the_layout` | none | verified |
+| `PROSE-115` | `INV` | A document MUST be paginated on every face the application has loaded, whether the document was opened before that face arrived or after it. | this spec section 2; `1-Foundations/ambre-spec-render-assets.md`, `CANVAS-067` | `ambre_logic::dispatch::tests::every_prose_document_takes_the_faces_whenever_it_was_opened` -- it opens one document before the delivery and one after, and reads the face count back off both | none | verified |
 | `PROSE-112` | `INV` | A page number that leaves the screen -- a comment anchor, a cross reference, a table-of-contents entry, an exported file -- MUST NOT be taken from a layout that names a missing script. | this spec section 2 | not built | unbuilt -- lands with the "Comments and track changes" Story (`ambre-roadmap.md` E5), which mints the first consumer that stores a page number | unimplemented |
 
 ### 1.2 Lay the whole document out again
@@ -94,8 +95,8 @@ status values are normative in `ambre-spec-template.md`.
   the document at open. Shaping and placement are budgeted apart, and section 4 says why.
 * **Boundary.** none: pagination runs on the Logic thread, reads the document and returns a value.
   `PROSE-025` (`features/ambre-spec-prose-engine.md section 1`) bans a network call from this crate.
-* **Verification.** 36 `verified`, 9 `unimplemented`. Eight are the bands, the footnotes and the
-  table of contents, the ninth `PROSE-112`, which waits on the first consumer to store a page
+* **Verification.** 37 `verified`, 9 `unimplemented`. Eight are the bands, the footnotes and
+  the table of contents, the ninth `PROSE-112`, which waits on the first consumer to store a page
   number. Termination rests on `PROSE-078` and `PROSE-017`, which a property over generated
   documents holds together. Two bans are structural, held by a test that reads the module's own
   source. The schema holds `PROSE-065`.
@@ -292,6 +293,10 @@ The measuring context is sealed on top of that: it discovers nothing, and holds 
 registered into it (`PROSE-114`). Pinning the mapping alone would leave the shaper free. It falls
 back to a device face for any codepoint the asked family misses, below every rule the mapping
 states.
+
+A sealed context also holds nothing until a face is handed to it. The Logic thread cannot fetch,
+so the faces reach it over the bus, and every open document takes them (`PROSE-115`,
+`CANVAS-067`). A document opened later takes the same set on its way in.
 
 What is left is script coverage. A face outside the base set is fetched when text needing it
 appears (`CANVAS-006`). A peer that has not fetched it yet shapes that text into tofu, and

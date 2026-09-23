@@ -1789,6 +1789,9 @@ pub fn main() {
         pre_frame,
         raf,
         paste_rx,
+        // A lazily fetched script face reaches the Logic thread over this
+        // channel, the way a base face does at boot (`CANVAS-068`).
+        ui_to_logic_tx.clone(),
     );
     // Publish the canvas swap handle for the per-frame route poll. The poll
     // reruns every frame, so it binds the routed document as soon as this lands.

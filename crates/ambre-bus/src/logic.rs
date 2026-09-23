@@ -119,12 +119,14 @@ pub enum LogicCommand {
     },
 
     // -- Local -- Logic-thread resource seeding (no Sync involvement) ------------
-    /// Seed the Logic thread's PDF-export `FontContext` with base font faces
-    /// (`toile-pdf-export`). Fetched by the Main thread at boot and
-    /// delivered here because the Logic worker cannot fetch: it blocks on its
-    /// inbound selector and has no browser event loop. Local-only -- it never
-    /// reaches Sync or the server. Each entry is one already-fetched font file's
-    /// bytes.
+    /// Hand the Logic thread font faces the UI thread has fetched
+    /// (`CANVAS-067`, `CANVAS-068`). It cannot fetch any itself: it blocks on
+    /// its inbound selector and has no browser event loop. Every open Prose
+    /// document takes them, so pagination measures on real glyphs
+    /// (`PROSE-115`), and the PDF-export `FontContext` takes them too
+    /// (`toile-pdf-export`). Sent at boot with the base faces, and again for
+    /// each script face fetched on demand. Local-only -- it never reaches Sync
+    /// or the server. Each entry is one font file's bytes.
     LoadFonts { faces: Vec<Vec<u8>> },
 }
 

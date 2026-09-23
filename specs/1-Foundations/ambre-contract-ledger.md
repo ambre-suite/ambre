@@ -19,11 +19,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2519 rows: 1864 shipped, of which 772 loose. 655 unbuilt.**
+**2522 rows: 1867 shipped, of which 772 loose. 655 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 222 | 221 | 542 | 107 | 1092 |
+| `verified` | 224 | 221 | 542 | 108 | 1095 |
 | `failing` | 39 | 46 | 22 |  | 107 |
 | `untested` | 266 | 143 | 234 |  | 643 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
@@ -61,7 +61,7 @@
 | `ambre-spec-organizations.md` | 11 | 10 | 5 | 5 | 1 |
 | `ambre-spec-pdf-export.md` | 6 | 5 | 0 | 5 | 1 |
 | `ambre-spec-presence.md` | 14 | 14 | 10 | 4 |  |
-| `ambre-spec-render-assets.md` | 14 | 11 | 3 | 8 | 3 |
+| `ambre-spec-render-assets.md` | 16 | 13 | 5 | 8 | 3 |
 | `ambre-spec-schema-version.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-sealed-envelope.md` | 17 | 17 | 8 | 9 |  |
 | `ambre-spec-sequencer.md` | 19 | 18 | 5 | 13 | 1 |
@@ -131,7 +131,7 @@
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 7 | 9 |  |
 | `ambre-spec-prose-schema.md` | 24 | 22 | 21 | 1 | 2 |
 | `ambre-spec-prose-engine.md` | 42 | 42 | 42 |  |  |
-| `ambre-spec-prose-pagination.md` | 45 | 36 | 36 |  | 9 |
+| `ambre-spec-prose-pagination.md` | 46 | 37 | 37 |  | 9 |
 | `ambre-spec-prose-tables.md` | 42 | 1 | 1 |  | 41 |
 | `ambre-spec-prose-text-editing.md` | 25 | 7 | 7 |  | 18 |
 
@@ -183,7 +183,7 @@
 | `ambre-spec-prose-inline-styles.md` | PROSE-FEAT-007..008,020..025,173..184,287..288,290 |
 | `ambre-spec-prose-lists.md` | PROSE-005; PROSE-FEAT-002,026..028,136..146,278 |
 | `ambre-spec-prose-page-rendering.md` | PROSE-UI-006,014,016..020,113..122,172..173 |
-| `ambre-spec-prose-pagination.md` | PROSE-010..019,033..036,064..084,099..100,107..114 |
+| `ambre-spec-prose-pagination.md` | PROSE-010..019,033..036,064..084,099..100,107..115 |
 | `ambre-spec-prose-pdf-export.md` | PROSE-IO-029,031..033,035,037..039 |
 | `ambre-spec-prose-ruler.md` | PROSE-UI-063..065,075..076 |
 | `ambre-spec-prose-schema.md` | PROSE-002,007..008,027..032,085..097,102..103 |
@@ -198,7 +198,7 @@
 | `ambre-spec-prose-undo.md` | PROSE-UI-045,073..074 |
 | `ambre-spec-prose-viewport.md` | PROSE-UI-007,021..026,123..132 |
 | `ambre-spec-prose-word-count.md` | PROSE-FEAT-018,038..040,119..127 |
-| `ambre-spec-render-assets.md` | CANVAS-006..007,017..024,051..054 |
+| `ambre-spec-render-assets.md` | CANVAS-006..007,017..024,051..054,067..068 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..016 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086 |
