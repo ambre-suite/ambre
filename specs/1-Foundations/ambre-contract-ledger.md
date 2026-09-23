@@ -19,11 +19,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2523 rows: 1916 shipped, of which 774 loose. 607 unbuilt.**
+**2525 rows: 1918 shipped, of which 774 loose. 607 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 224 | 221 | 542 | 155 | 1142 |
+| `verified` | 226 | 221 | 542 | 155 | 1144 |
 | `failing` | 39 | 46 | 22 |  | 107 |
 | `untested` | 266 | 143 | 234 | 2 | 645 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
@@ -59,9 +59,9 @@
 | `ambre-spec-message-bus.md` | 24 | 24 | 11 | 13 |  |
 | `ambre-spec-object-store.md` | 12 | 12 | 3 | 9 |  |
 | `ambre-spec-organizations.md` | 11 | 10 | 5 | 5 | 1 |
-| `ambre-spec-pdf-export.md` | 6 | 5 | 0 | 5 | 1 |
+| `ambre-spec-pdf-export.md` | 7 | 6 | 1 | 5 | 1 |
 | `ambre-spec-presence.md` | 14 | 14 | 10 | 4 |  |
-| `ambre-spec-render-assets.md` | 16 | 13 | 5 | 8 | 3 |
+| `ambre-spec-render-assets.md` | 17 | 14 | 6 | 8 | 3 |
 | `ambre-spec-schema-version.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-sealed-envelope.md` | 17 | 17 | 8 | 9 |  |
 | `ambre-spec-sequencer.md` | 19 | 18 | 5 | 13 | 1 |
@@ -170,7 +170,7 @@
 | `ambre-spec-message-bus.md` | BUS-001..024 |
 | `ambre-spec-object-store.md` | SRV-002,004,052..059,078..079 |
 | `ambre-spec-organizations.md` | SRV-060..067,071,076..077 |
-| `ambre-spec-pdf-export.md` | PDF-001..006 |
+| `ambre-spec-pdf-export.md` | PDF-001..007 |
 | `ambre-spec-presence.md` | PRESENCE-001..014 |
 | `ambre-spec-prose-accessibility.md` | PROSE-UI-066..069,077..081 |
 | `ambre-spec-prose-clipboard.md` | PROSE-UI-013,040..044,105..112 |
@@ -201,7 +201,7 @@
 | `ambre-spec-prose-undo.md` | PROSE-UI-045,073..074 |
 | `ambre-spec-prose-viewport.md` | PROSE-UI-007,021..026,123..132 |
 | `ambre-spec-prose-word-count.md` | PROSE-FEAT-018,038..040,119..127 |
-| `ambre-spec-render-assets.md` | CANVAS-006..007,017..024,051..054,067..068 |
+| `ambre-spec-render-assets.md` | CANVAS-006..007,017..024,051..054,067..069 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..016 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086 |

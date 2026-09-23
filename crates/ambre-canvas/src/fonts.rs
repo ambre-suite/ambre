@@ -50,55 +50,40 @@ const BASE_FONTS: [(&str, &str); 6] = [
     ("/fonts/DejaVuSansMono.ttf", "DejaVuSansMono.ttf"),
 ];
 
-/// Fetch the [`BASE_FONTS`] same-origin and register every face that resolves
-/// into `font_cx`. Shared by the UI-thread GPU bootstrap and any other consumer
-/// that needs a text-capable `FontContext`. The PDF export pass is one: its
-/// fresh context would otherwise have zero faces and emit no glyphs. Fetch runs
-/// where a browser event loop exists; a face that fails to fetch is skipped.
-#[cfg(target_arch = "wasm32")]
-pub async fn load_base_fonts(font_cx: &mut parley::FontContext) {
-    for (url, label) in BASE_FONTS {
-        match crate::host::fetch_bytes(url).await {
-            Some(bytes) => {
-                font_cx.collection.register_fonts(bytes.into(), None);
-                tracing::info!("{label} loaded");
-            }
-            None => tracing::warn!("Failed to fetch {url}"),
-        }
-    }
-}
-
 /// Fetch the [`BASE_FONTS`] same-origin and return each face's bytes that
-/// resolved. Used by the Main thread to seed the Logic thread's PDF-export
-/// `FontContext` (`LogicCommand::LoadFonts`). The Logic worker cannot fetch.
-/// The Main thread -- which has a browser event loop -- fetches on its behalf
-/// and ships the bytes across. A face that fails to fetch is simply omitted.
+/// resolved. The UI thread builds its own context from them, and the Main
+/// thread ships the same bytes to the Logic thread (`LogicCommand::LoadFonts`),
+/// which cannot fetch. A face that fails to fetch is logged and omitted.
 #[cfg(target_arch = "wasm32")]
 pub async fn fetch_base_font_faces() -> Vec<Vec<u8>> {
     let mut faces = Vec::new();
-    for (url, _) in BASE_FONTS {
-        if let Some(bytes) = crate::host::fetch_bytes(url).await {
-            faces.push(bytes);
+    for (url, label) in BASE_FONTS {
+        match crate::host::fetch_bytes(url).await {
+            Some(bytes) => {
+                tracing::info!("{label} loaded");
+                faces.push(bytes);
+            }
+            None => tracing::warn!("Failed to fetch {url}"),
         }
     }
     faces
 }
 
-/// Build a fresh [`parley::FontContext`] with the [`BASE_FONTS`] registered.
+/// Build the UI thread's [`parley::FontContext`] with the [`BASE_FONTS`]
+/// registered, on the one constructor [`font_context_from_bytes`].
 #[cfg(target_arch = "wasm32")]
 pub async fn font_context_from() -> parley::FontContext {
-    let mut font_cx = parley::FontContext::new();
-    load_base_fonts(&mut font_cx).await;
-    font_cx
+    font_context_from_bytes(fetch_base_font_faces().await)
 }
 
-/// Build a [`parley::FontContext`] by registering each already-fetched face in
-/// `faces`. Cross-platform and fetch-free, unlike [`font_context_from`]. The
-/// Logic thread cannot fetch: it blocks on its inbound selector and has no
-/// browser event loop. It builds its PDF-export context from the base-font
-/// bytes the Main thread fetched and delivered (`LogicCommand::LoadFonts`).
+/// Build a [`parley::FontContext`] holding the faces in `faces` and nothing else
+/// (`CANVAS-069`).
+///
+/// The context is sealed, so no face of the machine is discoverable from it. A
+/// codepoint the shipped faces miss draws as tofu here and on every peer alike.
+/// Fetch-free, so a host test reaches the same constructor the browser runs.
 pub fn font_context_from_bytes(faces: impl IntoIterator<Item = Vec<u8>>) -> parley::FontContext {
-    let mut font_cx = parley::FontContext::new();
+    let mut font_cx = ambre_draw::sealed_font_context();
     for bytes in faces {
         font_cx.collection.register_fonts(bytes.into(), None);
     }
@@ -287,6 +272,22 @@ mod tests {
             loader.drain_into(&mut font_cx).is_empty(),
             "a face is handed over once"
         );
+    }
+
+    /// The UI thread's context holds the faces it was built from and nothing
+    /// of the machine (`CANVAS-069`).
+    ///
+    /// The families below ship with common desktop distributions and none is
+    /// one of Ambre's own faces. A default context finds them where they exist.
+    #[test]
+    fn a_built_context_discovers_no_face_of_the_machine() {
+        let mut font_cx = super::font_context_from_bytes(Vec::new());
+        for family in ["DejaVu Sans", "Liberation Sans", "FreeSans", "Arial"] {
+            assert!(
+                font_cx.collection.family_id(family).is_none(),
+                "the UI context found `{family}` on the machine"
+            );
+        }
     }
 
     #[test]

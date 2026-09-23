@@ -247,6 +247,75 @@ mod tests {
         assert_eq!(run(), run(), "identical input must yield identical bytes");
     }
 
+    /// The faces the application ships, read off the tree. A running peer gets
+    /// the same bytes from the Main thread (`LogicCommand::LoadFonts`).
+    fn shipped_faces() -> Vec<Vec<u8>> {
+        const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
+        ["NotoSans-Regular.ttf", "DejaVuSerif.ttf"]
+            .iter()
+            .filter_map(|file| std::fs::read(format!("{DIR}{file}")).ok())
+            .collect()
+    }
+
+    /// One page holding a word, so the export has something to shape.
+    fn a_page_with_text() -> PdfPage {
+        let mut page = one_page();
+        page.viewport
+            .nodes
+            .push(DisplayNode::Element(DisplayElement {
+                id: ElementId("t".to_owned()),
+                kind: ElementKind::Text,
+                transform: Affine::IDENTITY,
+                bounds: Rect::new(100.0, 10.0, 190.0, 40.0),
+                locked: false,
+                style: ElementStyle::default(),
+                geom: DisplayGeom::Text("Ambre".to_owned()),
+                link: None,
+                group: None,
+            }));
+        page
+    }
+
+    /// Two peers holding the same faces export one file (`PDF-004`,
+    /// `PDF-007`).
+    ///
+    /// Each run builds its own sealed context, as a second peer would, and
+    /// feeds it the shipped faces. A sealed context discovers nothing of the
+    /// machine, so what shapes the word is what was registered and nothing
+    /// else. The empty context is the control: its file differs, so the faces
+    /// really reached the page and the equality is not two empty pages.
+    #[test]
+    fn two_peers_holding_the_same_faces_export_one_file() {
+        let palette = Theme::Light.palette();
+        let faces = shipped_faces();
+        assert!(!faces.is_empty(), "the workspace ships its faces");
+        let run = |faces: &[Vec<u8>]| {
+            let mut font_cx = ambre_draw::sealed_font_context();
+            for bytes in faces {
+                font_cx
+                    .collection
+                    .register_fonts(bytes.clone().into(), None);
+            }
+            let mut tc = TextCache::new(1.0);
+            export_pdf(
+                &[a_page_with_text()],
+                PageSize::default(),
+                palette,
+                &mut font_cx,
+                &mut tc,
+                &ImageStore::new(),
+            )
+            .expect("export must succeed")
+        };
+        let alice = run(&faces);
+        let bob = run(&faces);
+        assert_eq!(
+            alice, bob,
+            "one document and one set of faces make one file"
+        );
+        assert_ne!(alice, run(&[]), "the shipped faces shaped the word");
+    }
+
     /// An empty page list is rejected rather than producing a zero-page PDF.
     #[test]
     fn empty_pages_is_an_error() {

@@ -431,7 +431,8 @@ struct LogicState {
     /// [`LogicCommand::LoadFonts`]. `None` until the Main thread's boot-time
     /// fetch lands; a fresh `FontContext` here would have zero faces and emit no
     /// glyphs, so export waits on this. Lives on the Logic thread because that is
-    /// where the export pass runs, and the thread cannot fetch it itself.
+    /// where the export pass runs, and the thread cannot fetch it itself. It is
+    /// sealed (`PDF-007`): no face of the machine is discoverable from it.
     ///
     /// Read by the PDF-export handler (`data::export_toile_pdf`), and seeded at
     /// boot so the faces are warm before the first export rather than fetched

@@ -21,7 +21,7 @@ pub mod peer;
 pub use peer::peer_color;
 
 pub mod text;
-pub use text::{BundledFamily, LazyFont, ScriptSet, resolve_family};
+pub use text::{BundledFamily, LazyFont, ScriptSet, resolve_family, sealed_font_context};
 
 #[cfg(feature = "testing")]
 pub mod testing;

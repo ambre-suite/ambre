@@ -234,9 +234,28 @@ impl ScriptSet {
     }
 }
 
+/// A font context holding nothing but what a caller registers into it
+/// (`PROSE-114`, `PDF-007`, `CANVAS-069`).
+///
+/// A default context discovers the faces of the machine it runs on. Parley
+/// then falls back to them for any codepoint the asked family misses, inside
+/// the shaper and below every rule a caller states. A device face would bend a
+/// measurement or a page with nothing to catch it. Sealing the collection is
+/// the only place the ban can hold, so every thread builds its context here.
+#[must_use]
+pub fn sealed_font_context() -> parley::FontContext {
+    parley::FontContext {
+        collection: parley::fontique::Collection::new(parley::fontique::CollectionOptions {
+            shared: false,
+            system_fonts: false,
+        }),
+        source_cache: parley::fontique::SourceCache::default(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{BundledFamily, LazyFont, ScriptSet, resolve_family};
+    use super::{BundledFamily, LazyFont, ScriptSet, resolve_family, sealed_font_context};
 
     #[test]
     fn a_face_name_resolves_to_itself() {
@@ -294,5 +313,30 @@ mod tests {
         let missing = asked.difference(held);
         assert!(missing.contains(LazyFont::Arabic));
         assert!(!missing.contains(LazyFont::Cjk));
+    }
+
+    /// A sealed context holds nothing the machine happens to carry
+    /// (`PROSE-114`, `PDF-007`, `CANVAS-069`).
+    ///
+    /// The families below ship with common desktop distributions and none is
+    /// one of Ambre's own faces. A default context finds them where they exist,
+    /// so a sealed one finding none is the ban holding.
+    #[test]
+    fn a_sealed_context_discovers_no_face_of_the_machine() {
+        let mut sealed = sealed_font_context();
+        for family in [
+            "DejaVu Sans",
+            "Liberation Sans",
+            "FreeSans",
+            "Bitstream Charter",
+            "IPAGothic",
+            "Arial",
+            "Helvetica",
+        ] {
+            assert!(
+                sealed.collection.family_id(family).is_none(),
+                "a sealed context found `{family}`"
+            );
+        }
     }
 }

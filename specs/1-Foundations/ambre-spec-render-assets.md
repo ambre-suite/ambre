@@ -26,6 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 |---|---|---|---|---|---|---|
 | `CANVAS-017` | `INV` | Every font family label MUST resolve to a loaded face before shaping; an unmatched label MUST NOT reach the shaper. | this spec section 2 | `ambre_canvas::text_cache::tests::family_labels_map_to_registered_faces`; `::registered_face_names_pass_through` | none | verified |
 | `CANVAS-067` | `INV` | A face the application has loaded MUST be held by every thread that measures text, never by the thread that fetched it alone. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_logic::dispatch::tests::every_prose_document_takes_the_faces_whenever_it_was_opened` -- it opens one document before the delivery and one after, and reads the face count back off both | none | verified |
+| `CANVAS-069` | `INV` | The context the UI thread shapes on MUST hold only the faces the application loaded into it: a face of the machine MUST NOT be discoverable from it. | this spec section 2; `PROSE-114` | `ambre_canvas::fonts::tests::a_built_context_discovers_no_face_of_the_machine` -- it asks for families a desktop carries; structural -- `font_context_from` builds on `font_context_from_bytes`, the one constructor, which starts from `ambre_draw::sealed_font_context` | none | verified |
 | `CANVAS-018` | `INV` | A font MUST NOT be embedded in a binary. | this spec section 3; `ambre-spec-budgets.md section 5` | none | unheld -- no manifest and no source names a font file, so the rule holds by absence. Nothing refuses the `include_bytes!` that would break it, and the binary budget it would break is read by no check; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-051` | `INV` | A font MUST be fetched from the same origin. | this spec section 3; `UI-THREAD-004` | none | unheld -- `UI-THREAD-004` names the font fetch as the UI thread's single network exception and holds the origin half there. This document restates neither the ban nor its exception; what it needs is that no third party learns which scripts a user reads; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-019` | `OBS` | A layout mixing text and colour emoji MUST paint both: a colour glyph through the colour atlas, a mask glyph through the alpha atlas. | this spec section 2 | none | unheld -- an `is_color` flag on the atlas slot routes each glyph to its pipeline, and no test reads a pixel back. A regression paints a black box where an emoji belongs; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -63,9 +64,9 @@ keep the allocation where it is.
 * **Boundary.** the font fetch is the one network path this layer opens, same-origin by
   `CANVAS-018` and the single exception `UI-THREAD-004` names to the UI thread's ban. This layer
   holds no key and reaches no relay.
-* **Verification.** 5 `verified`, 8 `untested`, 3 `unimplemented`. What holds is what a pure
-  function of a string decides; every gap is GPU-resident state a test cannot read back
-  (`ambre-spec-testing.md section 8`).
+* **Verification.** 6 `verified`, 8 `untested`, 3 `unimplemented`. What holds is what a pure
+  function of a string decides, and the faces a sealed context refuses to find. Every gap is
+  GPU-resident state a test cannot read back (`ambre-spec-testing.md section 8`).
 
 ---
 
@@ -73,7 +74,8 @@ keep the allocation where it is.
 
 **CRDT containers.** none. An asset is derived from the document, never stored in it.
 
-**The three font tiers.** One shape, three lifetimes.
+**The two font tiers.** One shape, two lifetimes. There is no third: a face of the machine is
+never read, on any thread (`CANVAS-069`, `PDF-007`, `PROSE-114`).
 
 ```rust
 pub struct FontConfig {
@@ -81,8 +83,6 @@ pub struct FontConfig {
     pub base: Vec<FontData>,
     /// Additional fonts loaded on demand (CJK, Arabic, Devanagari, color emoji...)
     pub lazy: Vec<FontData>,
-    /// System fonts detected (native only -- not available on WASM)
-    pub system: Vec<FontData>,
 }
 ```
 
@@ -90,7 +90,6 @@ pub struct FontConfig {
 |---|---|---|---|
 | base | Noto Sans in four styles, DejaVu Serif, DejaVu Sans Mono | at startup, one `fetch` on the UI thread | Latin, Latin Extended, Cyrillic, Greek |
 | lazy | CJK, Arabic, Devanagari, and Noto Color Emoji | the first time Parley meets a codepoint the base faces do not cover (`CANVAS-006`) | one face per script, fetched once |
-| system | whatever `fontdb` finds | never on the web target | a native desktop, which is not a target today |
 
 The UI thread is the only one that can fetch. It fetches once and hands the bytes to the Logic
 thread over the bus (`CANVAS-067`, `CANVAS-068`). Two `FontContext` in one linear memory
@@ -218,9 +217,9 @@ exist: an image reaches a surface only through the path
   and the frame passes 5 000. The bound is a literal in the render path rather than a budget.
 * **Nothing rules on a font that fails to load.** A `fetch` for a lazy face can 404 or time out,
   and no row says what the text does then.
-* **System fonts are named and unreachable.** `FontConfig::system` exists in the shape and the web
-  target can never fill it. It stays for a native desktop that is not a target
-  (`README.md`).
+* **System fonts are banned, not merely absent.** Every context is sealed in `ambre-draw`, so a
+  native build discovers no face either. A native desktop that wanted them would lift the ban in a
+  row of its own, and give up that two peers shape alike (`README.md`).
 
 ---
 

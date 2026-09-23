@@ -64,6 +64,10 @@ futures-util  = { workspace = true }
 # by `LogicCommand::LoadFonts`. Only parley -- not the whole GPU canvas crate --
 # so the Logic worker's wasm stays lean.
 parley        = { workspace = true }
+# The sealed font context (`PDF-007`): the export shapes on what `LoadFonts`
+# delivered and on no face of the machine. Already in the graph through every
+# application crate, so the edge adds no code to the worker.
+ambre-draw    = { path = "../ambre-draw" }
 
 wasm-bindgen        = { workspace = true }
 wasm-bindgen-futures = { workspace = true }

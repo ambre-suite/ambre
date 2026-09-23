@@ -182,6 +182,7 @@ dependencies = [
  "ambre-bus",
  "ambre-core",
  "ambre-crypto",
+ "ambre-draw",
  "ambre-prose",
  "ambre-toile",
  "ambre-trame",

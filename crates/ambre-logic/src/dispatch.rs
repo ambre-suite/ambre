@@ -172,8 +172,12 @@ impl LogicState {
                 }
                 // The PDF-export context (`toile-pdf-export`), built on the
                 // first delivery and extended by each later one, so a script
-                // face that arrived after boot exports too.
-                let export_cx = self.export_cx.get_or_insert_with(parley::FontContext::new);
+                // face that arrived after boot exports too. Sealed, so the page
+                // is shaped on these faces and on none the machine carries
+                // (`PDF-007`).
+                let export_cx = self
+                    .export_cx
+                    .get_or_insert_with(ambre_draw::sealed_font_context);
                 for bytes in &faces {
                     export_cx
                         .collection
@@ -1475,6 +1479,33 @@ mod tests {
             .iter()
             .filter_map(|file| std::fs::read(format!("{DIR}{file}")).ok())
             .collect()
+    }
+
+    /// The export context holds what was delivered and nothing of the machine
+    /// (`PDF-007`).
+    ///
+    /// The families below ship with common desktop distributions and none is
+    /// one of Ambre's own faces. A context that discovered the device would
+    /// find them, and shape a missing codepoint on one of them.
+    #[test]
+    fn the_export_context_holds_only_the_faces_delivered_to_it() {
+        let (mut state, _ui, _sync) = harness();
+        let faces = shipped_faces();
+        assert!(!faces.is_empty(), "the workspace ships its faces");
+        state.handle_logic_command(LogicCommand::LoadFonts { faces });
+        let Some(export_cx) = state.export_cx.as_mut() else {
+            panic!("a delivery seeds the export context");
+        };
+        assert!(
+            export_cx.collection.family_id("Noto Sans").is_some(),
+            "a delivered face is there"
+        );
+        for family in ["DejaVu Sans", "Liberation Sans", "FreeSans", "Arial"] {
+            assert!(
+                export_cx.collection.family_id(family).is_none(),
+                "the export context found `{family}` on the machine"
+            );
+        }
     }
 
     /// A delivery reaches the documents already open, and a document opened

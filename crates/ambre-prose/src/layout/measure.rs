@@ -192,7 +192,7 @@ impl Measurer {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            font_cx: fonts::sealed_context(),
+            font_cx: ambre_draw::sealed_font_context(),
             layout_cx: LayoutContext::new(),
             shaped: 0,
             missing: ScriptSet::new(),

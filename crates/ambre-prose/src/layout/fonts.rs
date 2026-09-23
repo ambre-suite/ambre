@@ -7,30 +7,11 @@
 //! Family resolution is therefore pinned: `ambre-draw` maps a label to a
 //! shipped face by the label alone, reading no context and no device. What is
 //! left is script coverage, which a peer gains as it fetches faces, and
-//! [`missing_scripts`] names what a measurement did not have.
+//! [`missing_scripts`] names what a measurement did not have. The context
+//! itself is sealed in `ambre-draw` (`PROSE-114`), which every thread shares.
 
 use ambre_draw::{BundledFamily, ScriptSet};
 use parley::FontContext;
-use parley::fontique::{Collection, CollectionOptions, SourceCache};
-
-/// A font context holding nothing but what a caller registers into it
-/// (`PROSE-114`).
-///
-/// A default context discovers the faces of the machine it runs on, and parley
-/// falls back to them for any codepoint the asked family misses. That fallback
-/// happens inside the shaper, below every rule this module states. A device
-/// font would bend a measurement with nothing to catch it. Sealing the
-/// collection is the only place the ban can hold.
-#[must_use]
-pub fn sealed_context() -> FontContext {
-    FontContext {
-        collection: Collection::new(CollectionOptions {
-            shared: false,
-            system_fonts: false,
-        }),
-        source_cache: SourceCache::default(),
-    }
-}
 
 /// Resolve a family label to the face the application ships.
 ///
@@ -102,7 +83,7 @@ pub(crate) fn shipped_faces() -> Vec<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{coverage_grew, missing_scripts, resolve, sealed_context};
+    use super::{coverage_grew, missing_scripts, resolve};
     use ambre_draw::{BundledFamily, LazyFont, ScriptSet};
     use parley::FontContext;
 
@@ -148,30 +129,6 @@ mod tests {
             .is_none()
         {
             assert!(missing.contains(LazyFont::Cjk));
-        }
-    }
-
-    /// A sealed context holds nothing the machine happens to carry
-    /// (`PROSE-114`).
-    ///
-    /// The families below ship with common desktop distributions and with none
-    /// of Ambre's own faces. A default context finds them where they exist, so
-    /// a sealed one finding none is the ban holding.
-    #[test]
-    fn a_sealed_context_discovers_no_face_of_the_machine() {
-        let mut sealed = sealed_context();
-        for family in [
-            "Liberation Sans",
-            "FreeSans",
-            "Bitstream Charter",
-            "IPAGothic",
-            "Arial",
-            "Helvetica",
-        ] {
-            assert!(
-                sealed.collection.family_id(family).is_none(),
-                "a sealed context found `{family}`"
-            );
         }
     }
 
