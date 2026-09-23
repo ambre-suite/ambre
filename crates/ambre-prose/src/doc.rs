@@ -61,6 +61,12 @@ pub(crate) const K_ATTRS: &str = "a";
 /// the surplus alike.
 pub(crate) const K_REGROWN: &str = "rg";
 
+/// The hiding marker, holding the Loro peer id of the session that deleted
+/// the block, in decimal (`PROSE-122`). A user's deletion writes it rather
+/// than removing the node (`PROSE-118`). An undo removes the key, and the
+/// block comes back under its own `TreeID` with its body (`PROSE-120`).
+pub(crate) const K_HIDDEN: &str = "gn";
+
 /// The heading level attribute, `1..=6`.
 pub(crate) const A_LEVEL: &str = "level";
 /// The code block's language. An empty value reads as plain.
@@ -198,10 +204,44 @@ pub(crate) fn blocks(doc: &LoroDoc) -> LoroTree {
 /// concerned, and no path of this module reaches one.
 #[must_use]
 pub(crate) fn node_of(tree: &LoroTree, id: &TreeID) -> Option<LoroMap> {
-    if tree.is_node_deleted(id).unwrap_or(true) {
+    if tree.is_node_deleted(id).unwrap_or(true) || is_hidden(tree, id) {
         return None;
     }
     tree.get_meta(*id).ok()
+}
+
+/// Whether the block, or a block on its parent chain, carries the hiding
+/// marker (`PROSE-119`). The walk is as long as the nesting is deep.
+#[must_use]
+pub(crate) fn is_hidden(tree: &LoroTree, id: &TreeID) -> bool {
+    let mut current = *id;
+    loop {
+        if carries_hiding(tree, &current) {
+            return true;
+        }
+        match tree.parent(current) {
+            Some(TreeParentId::Node(parent)) => current = parent,
+            _ => return false,
+        }
+    }
+}
+
+/// Whether the block itself carries the hiding marker.
+fn carries_hiding(tree: &LoroTree, id: &TreeID) -> bool {
+    tree.get_meta(*id)
+        .is_ok_and(|node| node.get(K_HIDDEN).is_some())
+}
+
+/// Hide a block and the subtree under it, in place of removing it
+/// (`PROSE-118`). The marker names the session that hid it, the one peer whose
+/// undo can bring it back.
+///
+/// # Errors
+/// The CRDT engine's refusal, as text.
+pub(crate) fn hide_block(doc: &LoroDoc, tree: &LoroTree, id: &TreeID) -> Result<(), String> {
+    let node = tree.get_meta(*id).map_err(|e| format!("{e:?}"))?;
+    node.insert(K_HIDDEN, doc.peer_id().to_string())
+        .map_err(|e| format!("{e:?}"))
 }
 
 /// The type a live block carries, or `None` when the id names no live block or
@@ -371,7 +411,10 @@ pub fn style_of(tree: &LoroTree, id: &TreeID) -> Option<String> {
 #[must_use]
 pub(crate) fn children_of(tree: &LoroTree, parent: Option<TreeID>) -> Vec<TreeID> {
     let parent: TreeParentId = parent.into();
-    tree.children(parent).unwrap_or_default()
+    let mut children = tree.children(parent).unwrap_or_default();
+    // A hidden block reads as gone (`PROSE-119`).
+    children.retain(|id| !carries_hiding(tree, id));
+    children
 }
 
 /// The live root blocks of the body tree.
@@ -1021,7 +1064,7 @@ pub fn read_bands(doc: &LoroDoc) -> Bands {
     let live = |band: Band| Band {
         block: band.block.filter(|id| {
             tree.as_ref()
-                .is_some_and(|tree| tree.contains(*id) && !tree.is_node_deleted(id).unwrap_or(true))
+                .is_some_and(|tree| tree.contains(*id) && node_of(tree, id).is_some())
         }),
         ..band
     };

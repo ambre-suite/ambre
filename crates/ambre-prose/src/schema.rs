@@ -29,7 +29,7 @@ use ambre_core::schema::{
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing document across it (`PROSE-029`, `SCHEMA-009`).
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 
 /// Write the current version into a document's `meta` register.
 ///
@@ -84,6 +84,9 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 /// `2 -> 3` is the table grid, the cell styles and the table of contents
 /// settings. A version 2 document holds no table and no table of contents,
 /// since no command could write either, so this step stamps the number too.
+///
+/// `5 -> 6` is the hiding marker. A version 5 document holds no hidden block,
+/// since its deletions removed the node, so this step stamps the number too.
 const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
         from: 0,
@@ -108,6 +111,11 @@ const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
         from: 4,
         to: 5,
+        apply: stamp_step,
+    },
+    SchemaMigration {
+        from: 5,
+        to: 6,
         apply: stamp_step,
     },
 ];

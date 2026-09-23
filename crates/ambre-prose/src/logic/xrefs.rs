@@ -191,6 +191,37 @@ mod tests {
     }
 
     #[test]
+    fn a_target_an_undo_restores_resolves_again_on_the_other_peer() {
+        let (mut alice, ids) = document();
+        refer(&mut alice, ids[1], ids[2], CrossRefKind::SectionNumber);
+        let mut bob = ProseState::with_peer(2).expect("a document");
+        bob.load_faces(&crate::layout::fonts::shipped_faces());
+        bob.import_snapshot(&alice.export_snapshot())
+            .expect("the seed imports");
+        assert_eq!(shown(&mut bob), vec![Some("2".to_owned())]);
+
+        let deleted = alice
+            .handle_command(ProseCommand::DeleteBlock { block_id: ids[2] })
+            .update
+            .expect("a delta");
+        bob.apply_remote(&deleted);
+        assert_eq!(shown(&mut bob), vec![None], "the target is gone");
+
+        let undone = alice
+            .handle_command(ProseCommand::Undo)
+            .update
+            .expect("a delta");
+        bob.apply_remote(&undone);
+        assert_eq!(
+            shown(&mut bob),
+            vec![Some("2".to_owned())],
+            "the reference resolves again"
+        );
+        assert_eq!(bob.text_of(&ids[2]).as_deref(), Some("Details"));
+        assert_eq!(bob.root_blocks(), alice.root_blocks());
+    }
+
+    #[test]
     fn a_gone_target_breaks_the_reference_and_the_reference_stays() {
         let (mut state, ids) = document();
         refer(&mut state, ids[1], ids[2], CrossRefKind::SectionNumber);

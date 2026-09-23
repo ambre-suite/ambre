@@ -44,6 +44,11 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-086` | `INV` | A reference to a block MUST still resolve after a move, an indent and a move into a table cell. | this spec section 2 | `ambre_prose::logic::blocks::tests::a_reference_survives_an_indent_and_a_move_into_a_table_cell`; `::a_reference_to_a_block_survives_a_move`; `ambre_prose::logic::convergence_tests::a_block_a_peer_moved_keeps_every_reference_to_it` | none | verified |
 | `PROSE-087` | `INV` | An annotation's identity MUST be a `Uuid` minted by the peer that creates it, carried as the value of the mark that anchors it. | this spec section 2 | `ambre_prose::logic::notes::tests::a_note_lands_as_one_call_and_an_entry_holding_its_text`; `::a_note_keeps_its_identity_through_a_move_an_edit_and_a_remote_change` | none | verified |
 | `PROSE-088` | `INV` | A body key MUST re-read as the pair it joins -- the tag and the tree id -- split on a separator neither half can carry. | this spec section 2 | `ambre_prose::doc::tests::a_body_key_re_reads_as_the_pair_it_joins`; `::neither_half_of_a_body_key_carries_the_separator`; `::a_name_that_is_not_a_body_key_reads_as_none` | none | verified |
+| `PROSE-118` | `INV` | A user's deletion of a block MUST keep the node and its `TreeID`. | this spec section 2 | `ambre_prose::logic::blocks::tests::a_deleted_block_keeps_its_node_and_names_the_session_that_hid_it` | none | verified |
+| `PROSE-122` | `INV` | A hidden block MUST carry the peer id of the session that deleted it. | this spec section 2 | `ambre_prose::logic::blocks::tests::a_deleted_block_keeps_its_node_and_names_the_session_that_hid_it` | none | verified |
+| `PROSE-119` | `INV` | A hidden block, and every block under it, MUST read as gone to every reader of the document. | this spec section 2 | `ambre_prose::logic::blocks::tests::a_hidden_table_hides_every_block_under_it` | none | verified |
+| `PROSE-120` | `INV` | An undo of a deletion MUST bring the block back under its own `TreeID`, with its body. | this spec section 2 | `ambre_prose::logic::blocks::tests::an_undone_deletion_brings_the_block_back_whole` | none | verified |
+| `PROSE-121` | `INV` | A hidden block MUST NOT be removed for good while the session named in its marker still runs. | this spec section 2 | not built | unbuilt -- lands with the "A document is compacted as its history grows" Story (`ambre-roadmap.md` E7) | unimplemented |
 | `PROSE-002` | `INV` | All editable text MUST live in `LoroText`; a `LoroMap` MUST NOT hold body text. | this spec section 3 | structural -- `ambre_prose::doc::get_block_text` opens one root `LoroText` per leaf block, and `ambre_prose::doc::create_block` writes no text into the node map; `ambre_prose::logic::convergence_tests::two_peers_typing_in_one_paragraph_keep_both_sentences` | none | verified |
 | `PROSE-089` | `CONC` | Two peers typing in the same paragraph MUST both keep their text: one author's sentence MUST NOT be lost to the other's write. | this spec section 3; this spec section 6 | `ambre_prose::logic::convergence_tests::two_peers_typing_in_one_paragraph_keep_both_sentences`; `::an_offline_edit_and_a_concurrent_one_both_land` | none | verified |
 | `PROSE-007` | `INV` | A mark's expansion behaviour MUST come from `expand_type_for` alone: no call site MUST decide it. | this spec section 3 | structural -- `ambre_prose::mark::configure` builds the document's whole style configuration from `expand_type_for`, and no write path names an expansion; `ambre_prose::mark::tests::a_formatting_mark_swallows_an_insertion_at_its_edge`; `::an_anchor_mark_never_swallows_an_insertion` | none | verified |
@@ -70,9 +75,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and an image node holds a content hash, never the pixels
   (`features/ambre-spec-prose-images.md`).
-* **Verification.** 23 `verified`, 1 `human-review`. The bump obligation splits in two. A key or a
-  type moving is red against the frozen shape, which a CI gate holds append-only. A meaning moving
-  under an unchanged key stays a human read. The four convergence rows each run a two-peer test.
+* **Verification.** 27 `verified`, 1 `human-review`, 1 `unimplemented`. The bump obligation
+  splits in two. A key or a type moving is red against the frozen shape, which a CI gate holds
+  append-only. A meaning moving under an unchanged key stays a human read. The four convergence
+  rows each run a two-peer test.
   * The two annotation rows are held by the footnote, the first entry a command writes.
   * The `human-review` row binds a code change to a constant, which no test can read.
 
@@ -87,6 +93,12 @@ names the style's, and the blob's own bytes decide the image's.
   through `move_to`, so an indent, a reorder and a move into a table cell all keep it
   (`PROSE-086`). The command plane carries the same pair under `BlockId`, so `ambre-bus` names no
   CRDT type (`features/ambre-spec-prose-engine.md section 3`).
+* A user's deletion hides a block rather than removing it (`PROSE-118`). Loro would recreate a
+  removed node under a new `TreeID` on undo, and the body and every reference would keep naming
+  the old one. The hidden block and its subtree read as gone (`PROSE-119`). An undo drops the
+  marker, and the block comes back with its identity and its body (`PROSE-120`).
+* A hidden block is never removed while the session that hid it runs, since only that session's
+  undo can restore it. Removing it for good is the compaction's work (`PROSE-121`).
 * A block's body is a **root** Text container whose name joins the tag `t` and the tree id with `:`
   -- `"t:{tree_id}"`. A `TreeID` renders as two decimal numbers joined by `@`, so it cannot contain
   the separator (`PROSE-088`).
@@ -143,6 +155,7 @@ block always carries.
 | `s` | String | the `style_id`: a key in `styles`, or one of the nine built-in names -- `body`, `heading-1` to `heading-6`, `code`, `quote`; absent means the type's own built-in | every | built |
 | `a` | Map | the type-specific attributes; absent means the type has none | the types below | built |
 | `hb` | `bool` | that the block holds a header or a footer, named by `meta`; kept out of the body flow (`PROSE-006`) | Paragraph, at the root | built |
+| `gn` | String | that a user deleted the block: the Loro peer id of the session that did, in decimal; absent on every live block (`PROSE-118`, `PROSE-122`) | every | built |
 | `rg` | `bool` | that a peer grew this block for want of any root block, and not the author; absent on every block the author asked for (`PROSE-094`) | Paragraph, at the root | built |
 | `align` | `u8` | left, center, right or justify | every text block | built |
 | `indent_first`, `indent_left`, `indent_right` | `f32` | the three indents, in points | every text block | built |

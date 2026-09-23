@@ -348,6 +348,7 @@ fn document_of_every_key() -> ProseState {
     });
     write_the_bands(&mut state);
     write_a_note_and_a_reference(&mut state, root);
+    hide_the_rule(&mut state);
     for key in mark_roots_to_apply() {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: root,
@@ -379,6 +380,18 @@ fn write_the_bands(state: &mut ProseState) {
         pos: 0,
     });
     state.handle_command(ProseCommand::StampModified { now_ms: 1 });
+}
+
+/// The horizontal rule deleted, so the hiding marker is written.
+fn hide_the_rule(state: &mut ProseState) {
+    let Some(rule) = state
+        .root_blocks()
+        .into_iter()
+        .find(|id| state.block_type_of(id) == Some(crate::events::BlockType::HRule))
+    else {
+        panic!("the scenario inserted a rule");
+    };
+    state.handle_command(ProseCommand::DeleteBlock { block_id: rule });
 }
 
 /// A footnote and a cross reference to `root`, both called from `root`.

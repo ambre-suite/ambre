@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `prose-cross-references` | A pointer from one place in the document to another: "see page 4", "see section 2.1", or a label the author chose. | implemented | 16 | 1 |
+| `prose-cross-references` | A pointer from one place in the document to another: "see page 4", "see section 2.1", or a label the author chose. | implemented | 16 |  |
 | `prose-engine` | An author types a word and every collaborator reads it. | implemented | 42 |  |
 | `prose-find-replace` | Searching the document, walking the matches, and replacing one or all of them. | implemented | 15 |  |
 | `prose-footnotes` | A note at the foot of the page, called from a mark in the text. | implemented | 12 |  |
@@ -44,4 +44,4 @@
 | `prose-track-changes` | A reviewer edits without changing the document. | design-only | 35 |  |
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | design-only | 17 |  |
 
-**28 features: 9 implemented, 5 partial, 14 design-only. 612 contract rows, 3 loose.**
+**28 features: 9 implemented, 5 partial, 14 design-only. 612 contract rows, 2 loose.**

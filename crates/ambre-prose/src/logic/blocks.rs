@@ -243,8 +243,8 @@ impl ProseState {
         if Self::names_a_band(&tree, &[Some(*id)]) {
             return Self::err_nesting();
         }
-        if let Err(e) = tree.delete(*id) {
-            return Self::err_write(&format!("{e:?}"));
+        if let Err(e) = doc::hide_block(&self.doc, &tree, id) {
+            return Self::err_write(&e);
         }
         self.commit_with(Vec::new())
     }
@@ -810,5 +810,78 @@ mod tests {
             after_id: Some(second),
         });
         assert!(outcome.update.is_none());
+    }
+
+    #[test]
+    fn a_deleted_block_keeps_its_node_and_names_the_session_that_hid_it() {
+        let mut state = ProseState::with_peer(7).expect("a document is built");
+        let first = state.root_blocks()[0];
+        state.handle_command(ProseCommand::InsertBlock {
+            parent_id: None,
+            after_id: Some(first),
+            init: BlockInit::Paragraph,
+            style_id: None,
+        });
+        let second = state.root_blocks()[1];
+        state.handle_command(ProseCommand::DeleteBlock { block_id: second });
+
+        let tree = crate::doc::blocks(state.document());
+        let id = crate::events::tree_id(second);
+        assert!(tree.contains(id), "the node stays in the tree");
+        assert_eq!(tree.is_node_deleted(&id).ok(), Some(false));
+        let marker = tree
+            .get_meta(id)
+            .ok()
+            .and_then(|node| node.get(crate::doc::K_HIDDEN))
+            .and_then(|value| value.into_value().ok())
+            .and_then(|value| value.into_string().ok())
+            .map(|value| value.to_string());
+        assert_eq!(marker.as_deref(), Some("7"), "the marker names the session");
+        assert_eq!(state.root_blocks(), vec![first]);
+        assert_eq!(state.block_type_of(&second), None);
+    }
+
+    #[test]
+    fn a_hidden_table_hides_every_block_under_it() {
+        use crate::logic::tables::tests::{cell_at, document_with_table, first_block_of};
+        let (mut state, table) = document_with_table(1, 2, 2);
+        let cell = cell_at(&state, table, 1, 1);
+        let paragraph = first_block_of(&state, cell);
+        let table_id = crate::events::block_id(table);
+        state.handle_command(ProseCommand::DeleteBlock { block_id: table_id });
+
+        assert!(!state.root_blocks().contains(&table_id));
+        for id in [table, cell, paragraph] {
+            assert_eq!(state.block_type_of(&crate::events::block_id(id)), None);
+        }
+        assert_eq!(state.text_of(&crate::events::block_id(paragraph)), None);
+    }
+
+    #[test]
+    fn an_undone_deletion_brings_the_block_back_whole() {
+        let mut state = ProseState::new().expect("a document is built");
+        let first = state.root_blocks()[0];
+        state.handle_command(ProseCommand::InsertBlock {
+            parent_id: None,
+            after_id: Some(first),
+            init: BlockInit::Heading { level: 2 },
+            style_id: None,
+        });
+        let second = state.root_blocks()[1];
+        state.handle_command(ProseCommand::InsertText {
+            block_id: second,
+            pos: 0,
+            text: "Kept".to_owned(),
+        });
+        state.handle_command(ProseCommand::DeleteBlock { block_id: second });
+        state.handle_command(ProseCommand::Undo);
+
+        assert_eq!(
+            state.root_blocks(),
+            vec![first, second],
+            "the same identity"
+        );
+        assert_eq!(state.text_of(&second).as_deref(), Some("Kept"));
+        assert_eq!(state.block_type_of(&second), Some(BlockType::Heading));
     }
 }

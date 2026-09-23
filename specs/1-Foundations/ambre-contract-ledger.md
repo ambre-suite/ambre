@@ -19,16 +19,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2529 rows: 2067 shipped, of which 775 loose. 462 unbuilt.**
+**2534 rows: 2071 shipped, of which 774 loose. 463 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 226 | 221 | 542 | 303 | 1292 |
-| `failing` | 39 | 46 | 22 | 1 | 108 |
+| `verified` | 226 | 221 | 542 | 308 | 1297 |
+| `failing` | 39 | 46 | 22 |  | 107 |
 | `untested` | 266 | 143 | 234 | 2 | 645 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
-| `unimplemented` | 54 | 56 | 23 | 329 | 462 |
+| `unimplemented` | 54 | 56 | 23 | 330 | 463 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -129,8 +129,8 @@
 | `ambre-spec-toile-vector-paths.md` | 13 | 13 | 4 | 9 |  |
 | `ambre-spec-toile-viewport.md` | 32 | 30 | 16 | 14 | 2 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 7 | 9 |  |
-| `ambre-spec-prose-schema.md` | 24 | 24 | 23 | 1 |  |
-| `ambre-spec-prose-cross-references.md` | 16 | 16 | 15 | 1 |  |
+| `ambre-spec-prose-schema.md` | 29 | 28 | 27 | 1 | 1 |
+| `ambre-spec-prose-cross-references.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-prose-engine.md` | 42 | 42 | 42 |  |  |
 | `ambre-spec-prose-find-replace.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-prose-footnotes.md` | 12 | 12 | 12 |  |  |
@@ -196,7 +196,7 @@
 | `ambre-spec-prose-pagination.md` | PROSE-010..019,033..036,064..084,099..100,107..115,117 |
 | `ambre-spec-prose-pdf-export.md` | PROSE-IO-029,031..033,035,037..039 |
 | `ambre-spec-prose-ruler.md` | PROSE-UI-063..065,075..076 |
-| `ambre-spec-prose-schema.md` | PROSE-002,007..008,027..032,085..097,102..103 |
+| `ambre-spec-prose-schema.md` | PROSE-002,007..008,027..032,085..097,102..103,118..122 |
 | `ambre-spec-prose-selection.md` | PROSE-UI-008..009,031..039,070..072,151..171 |
 | `ambre-spec-prose-slash-command.md` | PROSE-UI-058..062,087..095,174..175 |
 | `ambre-spec-prose-spell-check.md` | PROSE-FEAT-019,041..043,102..112 |

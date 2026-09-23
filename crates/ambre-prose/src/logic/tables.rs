@@ -400,8 +400,8 @@ impl ProseState {
         if let Err(e) = self.drop_regions_cornered_in(&grid, |(r, _)| r == index) {
             return Self::err_write(&e);
         }
-        if let Err(e) = tree.delete(doomed) {
-            return Self::err_write(&format!("{e:?}"));
+        if let Err(e) = doc::hide_block(&self.doc, &tree, &doomed) {
+            return Self::err_write(&e);
         }
         self.commit_with(Vec::new())
     }
@@ -461,8 +461,8 @@ impl ProseState {
             return ProseOutcome::refused(ProseRefusal::OutsideTheGrid);
         }
         if widths.len() == 1 {
-            if let Err(e) = tree.delete(*table) {
-                return Self::err_write(&format!("{e:?}"));
+            if let Err(e) = doc::hide_block(&self.doc, &tree, table) {
+                return Self::err_write(&e);
             }
             return self.commit_with(Vec::new());
         }
@@ -471,9 +471,9 @@ impl ProseState {
         }
         for row in 0..grid.rows.len() {
             if let Some(cell) = grid.cell(row, col)
-                && let Err(e) = tree.delete(cell)
+                && let Err(e) = doc::hide_block(&self.doc, &tree, &cell)
             {
-                return Self::err_write(&format!("{e:?}"));
+                return Self::err_write(&e);
             }
         }
         if let Err(e) = widths.delete(col, 1) {

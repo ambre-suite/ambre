@@ -165,8 +165,8 @@ impl ProseState {
             })
             .collect();
         for id in emptied {
-            if let Err(e) = tree.delete(id) {
-                tracing::warn!("Prose: the tree refused to drop an emptied block: {e:?}");
+            if let Err(e) = doc::hide_block(&self.doc, &tree, &id) {
+                tracing::warn!("Prose: the tree refused to hide an emptied block: {e}");
             }
         }
         self.commit_with(Vec::new())

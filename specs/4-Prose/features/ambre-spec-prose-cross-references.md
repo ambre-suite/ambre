@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-014` | `OBS` | A reference whose target is gone MUST be drawn as a broken mark. | this spec section 3 | `ambre_prose::logic::xrefs::tests::a_gone_target_breaks_the_reference_and_the_reference_stays` | none | verified |
 | `PROSE-FEAT-132` | `INV` | A reference MUST NOT resolve to any block but the one it names. | this spec section 5 | `ambre_prose::logic::xrefs::tests::a_gone_target_breaks_the_reference_and_the_reference_stays` | none | verified |
 | `PROSE-FEAT-074` | `INV` | A reference whose target is gone MUST stay in the document. | this spec section 3; this spec section 5 | `ambre_prose::logic::xrefs::tests::a_gone_target_breaks_the_reference_and_the_reference_stays` | none | verified |
-| `PROSE-FEAT-133` | `CONC` | A target restored by an undo MUST make the reference resolve again on every peer. | this spec section 2; this spec section 3 | none | fails -- an undo of the deletion recreates the target under a new identity, so the reference names a block that never comes back; lands with the "A deleted block comes back whole" Story (`ambre-roadmap.md` E5) | failing |
+| `PROSE-FEAT-133` | `CONC` | A target restored by an undo MUST make the reference resolve again on every peer. | this spec section 2; this spec section 3 | `ambre_prose::logic::xrefs::tests::a_target_an_undo_restores_resolves_again_on_the_other_peer` | none | verified |
 | `PROSE-UI-048` | `OBS` | A reference carrying its own label MUST keep showing that label when its target is gone. | this spec section 4 | `ambre_prose::logic::xrefs::tests::a_gone_target_breaks_the_reference_and_the_reference_stays` | none | verified |
 | `PROSE-UI-084` | `INV` | A caret position MUST NOT fall inside the value a reference is drawn as. | this spec section 4; this spec section 5 | `ambre_prose::logic::xrefs::tests::a_reference_is_one_character_to_the_caret` | none | verified |
 
@@ -50,9 +50,9 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 1`, owned by pagination and by the headings.
 * **Boundary.** none of its own: a reference is a mark on the text, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 15 `verified`, 1 `failing`. The record's round trip is a unit test with no
-  document (`PROSE-FEAT-072`, `PROSE-FEAT-128`); the rest drive the engine. `PROSE-FEAT-133` fails:
-  an undone deletion brings the target back under a new identity, so the reference stays broken.
+* **Verification.** 16 `verified`. The record's round trip is a unit test with no document
+  (`PROSE-FEAT-072`, `PROSE-FEAT-128`); the rest drive the engine. `PROSE-FEAT-133` runs two peers:
+  one deletes the target and undoes it, and the other sees the reference resolve again.
 
 ---
 
@@ -67,7 +67,7 @@ rests on where none does.
 | types a page of text above the target | -- | the text | the reference's page number one higher, on both screens | `a_page_reference_follows_its_target_to_a_later_page` |
 | moves the target heading to another chapter | -- | the same identity, in a new place | the reference showing the new page, on both screens | `a_reference_shows_the_section_number_and_the_page_of_its_target` |
 | deletes the target | -- | the reference, with nothing to resolve | a broken reference on both screens, not a neighbour's number | `a_gone_target_breaks_the_reference_and_the_reference_stays` |
-| undoes that deletion | -- | the target again | the reference resolving again, on both screens | none -- `PROSE-FEAT-133` |
+| undoes that deletion | -- | the target again | the reference resolving again, on both screens | `a_target_an_undo_restores_resolves_again_on_the_other_peer` |
 | refers to a heading with a label of her own containing a colon | -- | the label, whole | the label as she typed it, on both screens | `a_label_holding_any_character_reads_back_whole` |
 
 ---
@@ -180,9 +180,6 @@ selected whole and deleted whole, and no caret position falls inside it (`PROSE-
   their agreeing. The gap is `features/ambre-spec-prose-pagination.md section 5`, and the table of
   contents and the comments rest on it too. It lands with the `Two peers read the same page number`
   Story (`ambre-roadmap.md` E5).
-* **A restored block does not keep its identity.** An undo of a block deletion recreates the node
-  under a new identity, and the body keyed by the old one is not brought back. `PROSE-FEAT-133`
-  fails on it. It lands with the "A deleted block comes back whole" Story (`ambre-roadmap.md` E5).
 * **Nothing lists the references to a block.** An author deleting a heading is told nothing about
   the references that will break, and no command answers the question.
 * **A bookmark is a second kind of target, designed and unbuilt.** The deferred design marks a
