@@ -29,6 +29,7 @@
 | `prose-table-of-contents` | A list of the document's headings, with the page each one starts on. | partial | 14 |  |
 | `prose-tables` | A grid of cells inside the document. | partial | 44 |  |
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 26 |  |
+| `prose-track-changes` | A reviewer edits without changing the document. | partial | 40 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | partial | 13 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 | `prose-clipboard` | Copy, cut and paste. | design-only | 14 |  |
@@ -41,7 +42,6 @@
 | `prose-slash-command` | Type a slash at the start of an empty line and a short list appears: a heading, a list, a table, a page break. | design-only | 16 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 | `prose-toolbar` | Select a few words and a small bar appears above them. | design-only | 14 |  |
-| `prose-track-changes` | A reviewer edits without changing the document. | design-only | 35 |  |
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | design-only | 17 |  |
 
-**28 features: 9 implemented, 6 partial, 13 design-only. 617 contract rows, 2 loose.**
+**28 features: 9 implemented, 7 partial, 12 design-only. 622 contract rows, 2 loose.**

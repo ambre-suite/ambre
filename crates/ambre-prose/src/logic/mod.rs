@@ -39,6 +39,7 @@ mod lists;
 mod marks;
 mod notes;
 mod presence;
+mod suggestions;
 pub(crate) mod tables;
 mod text;
 mod xrefs;
@@ -104,6 +105,11 @@ pub struct ProseState {
     /// The threads the last whole-text walk found with no mark. A keystroke
     /// does not walk the text again for them (`comments::refresh_anchors`).
     orphans: std::collections::HashSet<ambre_core::Uuid>,
+    /// Whether this session turns typing and deleting into suggestions.
+    /// Per session, never shared (`features/ambre-spec-prose-engine.md`).
+    suggesting: bool,
+    /// The suggestion the next adjacent edit joins (`PROSE-FEAT-085`).
+    burst: Option<suggestions::Burst>,
     /// Every remote peer's latest caret and self-asserted name, keyed by the
     /// Sync-resolved `UserId`. Ephemeral: never in the CRDT, never persisted
     /// (`PROSE-058`). The name is cosmetic and decides nothing
@@ -192,6 +198,8 @@ impl ProseState {
             my_user_id: None,
             my_name: None,
             orphans: std::collections::HashSet::new(),
+            suggesting: false,
+            burst: None,
             presence: HashMap::new(),
             paginator: None,
             faces: Vec::new(),
@@ -296,6 +304,29 @@ impl ProseState {
     }
 
     fn dispatch(&mut self, command: ProseCommand) -> ProseOutcome {
+        if self.suggesting {
+            if !suggestions::passes_while_suggesting(&command) {
+                return ProseOutcome::refused(ProseRefusal::NotWhileSuggesting);
+            }
+            match command {
+                ProseCommand::InsertText {
+                    block_id,
+                    pos,
+                    text,
+                } => return self.suggest_insert(&tree_id(block_id), pos, &text),
+                ProseCommand::DeleteText { block_id, range } => {
+                    let block = tree_id(block_id);
+                    return self.suggest_delete((block, range.0), (block, range.1));
+                }
+                ProseCommand::DeleteRange { anchor, focus } => {
+                    return self.suggest_delete(
+                        (tree_id(anchor.0), anchor.1),
+                        (tree_id(focus.0), focus.1),
+                    );
+                }
+                _ => {}
+            }
+        }
         match command {
             ProseCommand::Noop => ProseOutcome::nothing(),
             ProseCommand::InsertText {
@@ -489,6 +520,15 @@ impl ProseState {
             ProseCommand::FollowCrossRef { block_id, pos } => {
                 self.follow_cross_ref(&tree_id(block_id), pos)
             }
+            ProseCommand::EnableTrackChanges { enabled } => self.enable_track_changes(enabled),
+            ProseCommand::AcceptSuggestion { suggestion_id } => {
+                self.resolve_suggestion(&suggestion_id, true)
+            }
+            ProseCommand::RejectSuggestion { suggestion_id } => {
+                self.resolve_suggestion(&suggestion_id, false)
+            }
+            ProseCommand::AcceptAllSuggestions => self.resolve_all(true),
+            ProseCommand::RejectAllSuggestions => self.resolve_all(false),
             ProseCommand::UpdateCursor { pos } => self.update_cursor(&pos),
             ProseCommand::Undo => self.apply_history(true),
             ProseCommand::Redo => self.apply_history(false),

@@ -192,7 +192,7 @@ function is total (`PROSE-007`).
 | `fs` | the size in points: base 10, `.` separator, no exponent, no trailing zero, no unit -- `"11"` and `"11.5"`, never `"11.0pt"` (`PROSE-008`) | `After` | inline-styles |
 | `ff` | the family name, as the picker labels it | `After` | inline-styles |
 | `cm:{id}` | the thread's `Uuid` into `annots`, one key per thread so two threads over one character never share a value | `None` | comments |
-| `si`, `sd` | a `Uuid` into `annots`, the suggested insertion and the suggested deletion | `None` | track-changes |
+| `si:{id}`, `sd:{id}` | the suggestion's `Uuid` into `annots`, a suggested insertion and a suggested deletion, one key per suggestion so a span can carry both | `None` | track-changes |
 | `fn` | a `Uuid` into `annots`, laid on one U+FFFC the insert writes | `None` | footnotes |
 | `ref` | the hex of a postcard record: the target `TreeID` and the reference kind, laid on one U+FFFC the insert writes | `None` | cross-references |
 | `f:pn`, `f:pc`, `f:dt`, `f:ti` | the key is the field -- the page number, the page count, `meta.updated_at`, `meta.title`; `f:dt` holds its format, `short`, `long` or `iso` | `None` | headers-footers |
@@ -202,13 +202,12 @@ function is total (`PROSE-007`).
 
 | Field | Type | Holds | Kinds | State |
 |---|---|---|---|---|
-| `kind` | String | the kind, which every entry names: `"footnote"` or `"comment"` today. No kind is read from an absent field (`PROSE-031`) | every kind | built |
+| `kind` | String | the kind, which every entry names: `"footnote"`, `"comment"` or `"suggestion"` today. No kind is read from an absent field (`PROSE-031`) | every kind | built |
 | `anchor_block` | String | the `TreeID` of the annotated block, a cache of where the live mark sits | comment | built |
 | `anchor_start`, `anchor_end` | `i64` | the cached span, in the block's own offsets | comment | built |
 | `resolved` | `bool` | whether the thread is closed | comment | built |
-| `author` | String | the self-asserted display name, stamped by the local peer | suggestion | design |
-| `peer_id` | `u64` | the document peer that minted the entry | suggestion | design |
-| `created_at` | `u64` | the stamp, display only: a clock is untrusted | suggestion | design |
+| `author` | String | the self-asserted display name, stamped by the local session | suggestion | built |
+| `user_id` | String | the canonical `UserId` of the author, from the session identity. Ownership is read from it | suggestion | built |
 | `replies` | List | the thread, the opening comment first. A comment's author is the one its opening reply names | comment | built |
 | `text` | Text | the note body | footnote | design |
 | `name`, `block_id`, `range` | -- | the deferred bookmark fields | bookmark | design |

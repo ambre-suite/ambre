@@ -672,8 +672,9 @@ pub struct ProseUiState {
     toc:             TableOfContents,
     /// At resolved positions (`features/ambre-spec-prose-comments.md`).
     comments:        Vec<UiComment>,
-    /// At resolved positions (`features/ambre-spec-prose-track-changes.md`).
-    suggestions:     Vec<UiSuggestion>,
+    /// Every pending suggestion and its spans, from `SuggestionsUpdated`
+    /// (`features/ambre-spec-prose-track-changes.md`).
+    suggestions:     Vec<Suggestion>,
     /// Per block (`features/ambre-spec-prose-spell-check.md`).
     spell_errors:    HashMap<TreeID, Vec<SpellError>>,
 

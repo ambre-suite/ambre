@@ -531,6 +531,35 @@ pub struct CommentThread {
     pub replies: Vec<CommentReply>,
 }
 
+/// Which edit a suggestion proposes (`features/ambre-spec-prose-track-changes.md`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SuggestionKind {
+    /// Text a reviewer typed: accepting keeps it, rejecting removes it.
+    Insertion,
+    /// Text a reviewer deleted: accepting removes it, rejecting keeps it.
+    Deletion,
+}
+
+/// One marked span of a suggestion, in its block's own offsets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SuggestionSpan {
+    pub block_id: BlockId,
+    pub start: u32,
+    pub end: u32,
+}
+
+/// One pending suggestion as the view lists it, derived from its marks and its
+/// entry (`PROSE-FEAT-261`). A change across a paragraph break holds several
+/// spans and stays one suggestion (`PROSE-FEAT-259`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Suggestion {
+    pub suggestion_id: Uuid,
+    pub kind: SuggestionKind,
+    pub author: String,
+    pub user_id: UserId,
+    pub spans: Vec<SuggestionSpan>,
+}
+
 /// What a cross reference shows (`features/ambre-spec-prose-cross-references.md`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CrossRefKind {
@@ -896,6 +925,25 @@ pub enum ProseCommand {
         new_text: String,
     },
 
+    // -- Track changes (`features/ambre-spec-prose-track-changes.md`) --
+    /// Turn suggestion mode on or off for this session. Nothing pending is
+    /// applied or cancelled (`PROSE-FEAT-089`).
+    EnableTrackChanges {
+        enabled: bool,
+    },
+    /// Apply every span of one suggestion (`PROSE-FEAT-083`).
+    AcceptSuggestion {
+        suggestion_id: Uuid,
+    },
+    /// Cancel every span of one suggestion (`PROSE-FEAT-273`).
+    RejectSuggestion {
+        suggestion_id: Uuid,
+    },
+    /// Apply every pending suggestion.
+    AcceptAllSuggestions,
+    /// Cancel every pending suggestion.
+    RejectAllSuggestions,
+
     // -- Cross references (`features/ambre-spec-prose-cross-references.md`) --
     /// A reference at `pos` in `block_id`, naming `target_block_id`
     /// (`PROSE-FEAT-134`).
@@ -1007,6 +1055,11 @@ impl ProseCommand {
             Self::DeleteComment { .. } => "deleting the comment",
             Self::DeleteReply { .. } => "deleting the reply",
             Self::EditCommentReply { .. } => "editing the reply",
+            Self::EnableTrackChanges { .. } => "switching suggestion mode",
+            Self::AcceptSuggestion { .. } => "accepting the suggestion",
+            Self::RejectSuggestion { .. } => "rejecting the suggestion",
+            Self::AcceptAllSuggestions => "accepting every suggestion",
+            Self::RejectAllSuggestions => "rejecting every suggestion",
             Self::InsertCrossRef { .. } => "inserting a cross reference",
             Self::FollowCrossRef { .. } => "following the cross reference",
             Self::UpdateCursor { .. } => "moving the cursor",
@@ -1069,6 +1122,12 @@ pub enum ProseEvent {
     FootnotesUpdated { notes: Vec<FootnoteEntry> },
     /// Every comment thread, in document order of its anchor, orphans last.
     CommentsUpdated { threads: Vec<CommentThread> },
+    /// Every pending suggestion, in document order of its first span, and
+    /// whether this session is suggesting.
+    SuggestionsUpdated {
+        suggesting: bool,
+        suggestions: Vec<Suggestion>,
+    },
     /// Every cross reference, resolved against the last layout.
     CrossRefsUpdated { refs: Vec<ResolvedCrossRef> },
     /// Bring a block into view, from its first page (`PROSE-UI-085`).
@@ -1194,6 +1253,11 @@ pub enum ProseRefusal {
     /// A comment written before the session named its user.
     #[error("the session has no user to sign the comment")]
     NoIdentity,
+    /// A command suggestion mode does not intercept: only typing and deleting
+    /// become suggestions, so structure and formatting wait for the mode to
+    /// be off.
+    #[error("suggestion mode records typing and deleting only")]
+    NotWhileSuggesting,
     /// The position holds no cross reference to follow.
     #[error("no cross reference sits there")]
     NoCrossRef,

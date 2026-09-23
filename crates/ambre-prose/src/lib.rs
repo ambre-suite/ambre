@@ -17,6 +17,8 @@
 //!   the order of its calls, or orphaned (`features/ambre-spec-prose-footnotes.md`).
 //! * [`xref`] -- a cross reference's stored record and the value it shows
 //!   (`features/ambre-spec-prose-cross-references.md`).
+//! * [`suggest`] -- the pending suggestions, read off their marks and entries
+//!   (`features/ambre-spec-prose-track-changes.md`).
 //! * [`count`] -- the word count's four text tallies
 //!   (`features/ambre-spec-prose-word-count.md`).
 //! * [`mark`] -- the inline mark registry: the expansion policy and the
@@ -49,6 +51,7 @@ pub mod note;
 pub mod numbering;
 pub mod schema;
 pub mod style;
+pub mod suggest;
 pub mod toc;
 pub mod ui;
 pub mod xref;

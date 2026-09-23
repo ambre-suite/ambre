@@ -141,6 +141,7 @@ impl ProseState {
             threads: crate::comment::threads(&self.doc),
         });
         display.push(self.cross_refs_event());
+        display.push(self.suggestions_event());
         ProseOutcome::display_only(display)
     }
 

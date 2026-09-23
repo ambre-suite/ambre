@@ -81,7 +81,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Headers, footers, find and replace | MVP | page headers and footers with dynamic fields, and find and replace |
 | `[x]` A deleted block comes back whole | MVP | an undo of a block deletion recreates the block under a new identity, and its body is keyed by the old one: the text comes back empty and a reference to the block stays broken (`PROSE-FEAT-133`). A deletion that keeps the node, hidden rather than removed, would hold both |
 | `[x]` Undo, footnotes and cross references | MVP | undo isolated to the local author, footnotes, cross references |
-| `[ ]` Comments and track changes | MVP | anchored comments, and suggested changes a reviewer accepts or rejects |
+| `[x]` Comments and track changes | MVP | anchored comments, and suggested changes a reviewer accepts or rejects |
+| `[ ]` Suggestions beyond typing | V1 | suggestion mode records typing and deleting only, and refuses a split, a join, a block command or a format change while it is on (`PROSE-FEAT-301`). A burst groups by adjacency alone, since the merge window it names rests on an undo interval no document defines (`PROSE-FEAT-085`) |
 | `[ ]` A note edit reflows only its page | V1 | every reflow reads the text of every note to decide whether the notes still hold, and an edit to one note's text lays the whole document out again, since its height moved. Past a few hundred notes each keystroke pays for both. Keeping each note's height with its text, and resuming placement at the first page that note sits on, would bound it to the page |
 | `[ ]` Page rendering | MVP | pages on the canvas with virtual scrolling and cached text |
 | `[ ]` Input and cursor | MVP | typing, caret navigation, click and drag selection, optimistic display |

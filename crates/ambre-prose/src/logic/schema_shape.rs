@@ -370,6 +370,7 @@ fn document_of_every_key() -> ProseState {
     write_a_note_and_a_reference(&mut state, root);
     hide_the_rule(&mut state);
     write_a_thread(&mut state, root);
+    write_a_suggestion(&mut state, root);
     for key in mark_roots_to_apply() {
         // The style path refuses an anchor its own command owns
         // (`PROSE-FEAT-298`). The scenario still has to reach every root, so
@@ -444,6 +445,22 @@ fn write_a_thread(state: &mut ProseState, root: crate::events::BlockId) {
         text: "A reply.".to_owned(),
         now_ms: 2,
     });
+}
+
+/// A suggested insertion and a suggested deletion on `root`, the mode off
+/// again after them.
+fn write_a_suggestion(state: &mut ProseState, root: crate::events::BlockId) {
+    state.handle_command(ProseCommand::EnableTrackChanges { enabled: true });
+    state.handle_command(ProseCommand::InsertText {
+        block_id: root,
+        pos: 0,
+        text: "S".to_owned(),
+    });
+    state.handle_command(ProseCommand::DeleteText {
+        block_id: root,
+        range: (3, 4),
+    });
+    state.handle_command(ProseCommand::EnableTrackChanges { enabled: false });
 }
 
 /// A footnote and a cross reference to `root`, both called from `root`.

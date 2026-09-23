@@ -70,6 +70,11 @@ impl ProseState {
         if let Err(e) = body.insert(pos, text) {
             return Self::err_write(&format!("{e:?}"));
         }
+        // Plain text typed inside a suggestion is no part of it
+        // (`PROSE-FEAT-304`).
+        if let Err(e) = crate::suggest::strip_inherited(&body, pos, pos + text.chars().count()) {
+            return Self::err_write(&e);
+        }
         self.commit_with(Vec::new())
     }
 
