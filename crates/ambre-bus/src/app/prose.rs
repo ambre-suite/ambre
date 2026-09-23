@@ -28,7 +28,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use ambre_core::UserId;
+use ambre_core::{UserId, Uuid};
 
 // =============================================================================
 // Block identity (`ambre-spec-prose-schema.md section 2`)
@@ -491,6 +491,41 @@ pub struct FindMatch {
     pub range: (u32, u32),
 }
 
+/// One footnote as the view lists it (`features/ambre-spec-prose-footnotes.md`).
+///
+/// The ordinal is counted from the calls in document order and never stored
+/// (`PROSE-FEAT-013`, `PROSE-FEAT-095`). `None` marks a note no call reaches,
+/// kept for the author to review (`PROSE-FEAT-098`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FootnoteEntry {
+    pub footnote_id: Uuid,
+    pub ordinal: Option<u32>,
+    pub text: String,
+}
+
+/// What a cross reference shows (`features/ambre-spec-prose-cross-references.md`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CrossRefKind {
+    /// The page the target starts on.
+    PageNumber,
+    /// The target heading's derived section number.
+    SectionNumber,
+    /// A label the author wrote, whatever characters it holds.
+    CustomText(String),
+}
+
+/// One cross reference as drawn from the last layout. Nothing here is stored
+/// (`PROSE-FEAT-129`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedCrossRef {
+    /// Where the reference sits: its block and its code-point offset.
+    pub block_id: BlockId,
+    pub offset: u32,
+    pub target: BlockId,
+    /// The value drawn. `None` is the broken mark (`PROSE-FEAT-014`).
+    pub shown: Option<String>,
+}
+
 /// One line of a table of contents. Nothing here is persisted
 /// (`features/ambre-spec-prose-table-of-contents.md`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -776,6 +811,39 @@ pub enum ProseCommand {
         replacement: String,
     },
 
+    // -- Footnotes (`features/ambre-spec-prose-footnotes.md`) --
+    /// A note, and one call to it at `pos` in `block_id` (`PROSE-FEAT-099`).
+    InsertFootnote {
+        block_id: BlockId,
+        pos: u32,
+        note_text: String,
+    },
+    /// Rewrite a note's body.
+    EditFootnote {
+        footnote_id: Uuid,
+        new_text: String,
+    },
+    /// Remove a note and every call to it (`PROSE-FEAT-070`).
+    DeleteFootnote {
+        footnote_id: Uuid,
+    },
+
+    // -- Cross references (`features/ambre-spec-prose-cross-references.md`) --
+    /// A reference at `pos` in `block_id`, naming `target_block_id`
+    /// (`PROSE-FEAT-134`).
+    InsertCrossRef {
+        block_id: BlockId,
+        pos: u32,
+        target_block_id: BlockId,
+        kind: CrossRefKind,
+    },
+    /// Bring the target of the reference at `pos` in `block_id` into view. It
+    /// writes nothing (`PROSE-UI-086`).
+    FollowCrossRef {
+        block_id: BlockId,
+        pos: u32,
+    },
+
     // -- Presence (`1-Foundations/ambre-spec-presence.md`) --
     /// The handler builds the wire frame and returns it as the outcome's
     /// ephemeral half. No user id is ever put on the wire.
@@ -807,6 +875,7 @@ impl ProseCommand {
                 | Self::FindNext
                 | Self::FindPrev
                 | Self::FindClose
+                | Self::FollowCrossRef { .. }
         )
     }
 
@@ -860,6 +929,11 @@ impl ProseCommand {
             Self::FindClose => "closing the search",
             Self::ReplaceOne { .. } => "replacing the match",
             Self::ReplaceAll { .. } => "replacing every match",
+            Self::InsertFootnote { .. } => "inserting a footnote",
+            Self::EditFootnote { .. } => "editing the footnote",
+            Self::DeleteFootnote { .. } => "deleting the footnote",
+            Self::InsertCrossRef { .. } => "inserting a cross reference",
+            Self::FollowCrossRef { .. } => "following the cross reference",
             Self::UpdateCursor { .. } => "moving the cursor",
             Self::Undo => "undoing",
             Self::Redo => "redoing",
@@ -911,6 +985,17 @@ pub enum ProseEvent {
     /// Where the caret lands after a step between cells: the first text block
     /// of `cell`, at its start (`PROSE-FEAT-250`, `PROSE-FEAT-251`).
     CellEntered { cell: BlockId, block: BlockId },
+    /// Where the caret lands after an undo or a redo: the edit taken back or
+    /// put back (`PROSE-UI-045`). The view collapses any selection to it
+    /// (`PROSE-UI-073`) and writes nothing back (`PROSE-UI-074`).
+    CaretPlaced { block: BlockId, offset: u32 },
+    /// Every footnote, in the order of its calls, orphans last
+    /// (`PROSE-FEAT-013`, `PROSE-FEAT-098`).
+    FootnotesUpdated { notes: Vec<FootnoteEntry> },
+    /// Every cross reference, resolved against the last layout.
+    CrossRefsUpdated { refs: Vec<ResolvedCrossRef> },
+    /// Bring a block into view, from its first page (`PROSE-UI-085`).
+    RevealBlock { block: BlockId, page: u32 },
     /// The four band blocks and their settings, after a band command
     /// (`PROSE-FEAT-160`).
     BandsUpdated { bands: BandSet },
@@ -1006,6 +1091,15 @@ pub enum ProseRefusal {
     /// cannot run.
     #[error("{0}")]
     FindRefused(&'static str),
+    /// A footnote asked for in a header or a footer (`PROSE-FEAT-071`).
+    #[error("a header or a footer cannot hold a footnote")]
+    FootnoteInBand,
+    /// The command names a footnote the document does not hold.
+    #[error("footnote {0} is not in the document")]
+    NoSuchFootnote(Uuid),
+    /// The position holds no cross reference to follow.
+    #[error("no cross reference sits there")]
+    NoCrossRef,
     /// A write the CRDT engine itself refused.
     #[error("the document engine could not write the change: {0}")]
     WriteFailed(String),

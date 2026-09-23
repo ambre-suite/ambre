@@ -19,16 +19,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2529 rows: 2029 shipped, of which 774 loose. 500 unbuilt.**
+**2529 rows: 2067 shipped, of which 775 loose. 462 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 226 | 221 | 542 | 266 | 1255 |
-| `failing` | 39 | 46 | 22 |  | 107 |
+| `verified` | 226 | 221 | 542 | 303 | 1292 |
+| `failing` | 39 | 46 | 22 | 1 | 108 |
 | `untested` | 266 | 143 | 234 | 2 | 645 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
-| `unimplemented` | 54 | 56 | 23 | 367 | 500 |
+| `unimplemented` | 54 | 56 | 23 | 329 | 462 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -129,17 +129,20 @@
 | `ambre-spec-toile-vector-paths.md` | 13 | 13 | 4 | 9 |  |
 | `ambre-spec-toile-viewport.md` | 32 | 30 | 16 | 14 | 2 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 7 | 9 |  |
-| `ambre-spec-prose-schema.md` | 24 | 22 | 21 | 1 | 2 |
+| `ambre-spec-prose-schema.md` | 24 | 24 | 23 | 1 |  |
+| `ambre-spec-prose-cross-references.md` | 16 | 16 | 15 | 1 |  |
 | `ambre-spec-prose-engine.md` | 42 | 42 | 42 |  |  |
 | `ambre-spec-prose-find-replace.md` | 15 | 15 | 15 |  |  |
+| `ambre-spec-prose-footnotes.md` | 12 | 12 | 12 |  |  |
 | `ambre-spec-prose-headers-footers.md` | 27 | 27 | 27 |  |  |
 | `ambre-spec-prose-headings.md` | 8 | 8 | 7 | 1 |  |
 | `ambre-spec-prose-inline-styles.md` | 23 | 23 | 22 | 1 |  |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
-| `ambre-spec-prose-pagination.md` | 47 | 41 | 41 |  | 6 |
+| `ambre-spec-prose-pagination.md` | 47 | 46 | 46 |  | 1 |
 | `ambre-spec-prose-table-of-contents.md` | 14 | 12 | 12 |  | 2 |
 | `ambre-spec-prose-tables.md` | 44 | 43 | 43 |  | 1 |
 | `ambre-spec-prose-text-editing.md` | 26 | 8 | 8 |  | 18 |
+| `ambre-spec-prose-undo.md` | 3 | 3 | 3 |  |  |
 | `ambre-spec-prose-word-count.md` | 13 | 11 | 11 |  | 2 |
 
 ## WHICH DOCUMENT DECLARES AN ID

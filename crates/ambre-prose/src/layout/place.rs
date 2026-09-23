@@ -6,6 +6,7 @@
 //! and the constraint order of section 2 decides which one gives way.
 
 use ambre_bus::app::prose::BlockType;
+use ambre_core::Uuid;
 use loro::TreeID;
 
 use crate::layout::measure::TextMetrics;
@@ -13,6 +14,31 @@ use crate::layout::measure::TextMetrics;
 /// The lines a break leaves behind, and the lines it carries over
 /// (`PROSE-072`, `PROSE-073`).
 const MIN_LINES_AT_BREAK: u32 = 2;
+
+/// The band drawn once above the notes of a page, rule and gap together.
+pub const NOTE_SEPARATOR_PX: f32 = 8.0;
+
+/// One footnote a block calls, as pass 0 numbered and measured it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NoteCall {
+    pub footnote_id: Uuid,
+    /// Counted before placement, from the calls in document order
+    /// (`PROSE-117`).
+    pub ordinal: u32,
+    /// The line of the block the call sits on: a table's row, a text's line.
+    pub line: u32,
+    /// The note's shaped text, its ordinal in front.
+    pub height_px: f32,
+}
+
+/// A footnote placed at the foot of a page (`PROSE-015`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct FootnoteLayout {
+    pub footnote_id: Uuid,
+    pub ordinal: u32,
+    pub page: u32,
+    pub height_px: f32,
+}
 
 /// What one block costs, as pass 1 measured it.
 ///
@@ -31,6 +57,8 @@ pub struct MeasuredBlock {
     /// The line tops a split may be taken at (`PROSE-071`). Empty for a block
     /// that has no line structure, which is a block that cannot split.
     pub metrics: Option<TextMetrics>,
+    /// The notes this block calls, in the order of their calls.
+    pub notes: Vec<NoteCall>,
 }
 
 impl MeasuredBlock {
@@ -96,6 +124,11 @@ pub struct BlockLayout {
     /// continuation starts at y = 0 (`PROSE-018`) and carries no leading
     /// margin (`PROSE-070`).
     pub continuation_heights: Vec<f32>,
+    /// The notes this block calls, each on the page its calling line took.
+    pub notes: Vec<FootnoteLayout>,
+    /// The height the notes take at the foot of the block's last page once
+    /// this block is placed. Earlier blocks' notes on that page count too.
+    pub foot_px: f32,
 }
 
 impl BlockLayout {
@@ -145,6 +178,9 @@ pub(crate) struct Cursor {
     /// (`PROSE-069`).
     pub(crate) pending_margin_px: f32,
     pub(crate) body_height_px: f32,
+    /// The height the current page's notes hold at its foot, separator
+    /// included.
+    pub(crate) foot_px: f32,
 }
 
 impl Cursor {
@@ -154,6 +190,7 @@ impl Cursor {
             y: 0.0,
             pending_margin_px: 0.0,
             body_height_px,
+            foot_px: 0.0,
         }
     }
 
@@ -171,15 +208,42 @@ impl Cursor {
         }
     }
 
-    /// What is left on this page once the gap is spent.
+    /// What is left on this page once the gap and the notes are spent.
     fn room_after_gap(&self, block: &MeasuredBlock) -> f32 {
-        self.body_height_px - self.y - self.gap_before(block)
+        self.body_height_px - self.foot_px - self.y - self.gap_before(block)
+    }
+
+    /// The height `notes` would add to this page's foot, the separator
+    /// counted when they are the page's first.
+    fn foot_cost<'a>(&self, notes: impl Iterator<Item = &'a NoteCall>) -> f32 {
+        let height: f32 = notes.map(|note| note.height_px).sum();
+        if height > 0.0 && self.foot_px <= 0.0 {
+            height + NOTE_SEPARATOR_PX
+        } else {
+            height
+        }
+    }
+
+    /// Reserve `notes` at this page's foot (`PROSE-015`).
+    fn reserve<'a>(
+        &mut self,
+        notes: impl Iterator<Item = &'a NoteCall> + Clone,
+        out: &mut Vec<FootnoteLayout>,
+    ) {
+        self.foot_px += self.foot_cost(notes.clone());
+        out.extend(notes.map(|note| FootnoteLayout {
+            footnote_id: note.footnote_id,
+            ordinal: note.ordinal,
+            page: self.page,
+            height_px: note.height_px,
+        }));
     }
 
     fn open_new_page(&mut self) {
         self.page = self.page.saturating_add(1);
         self.y = 0.0;
         self.pending_margin_px = 0.0;
+        self.foot_px = 0.0;
     }
 }
 
@@ -267,6 +331,7 @@ pub(crate) fn cursor_after(
         y,
         pending_margin_px: block.space_after_px,
         body_height_px,
+        foot_px: entry.foot_px,
     }
 }
 
@@ -279,7 +344,7 @@ fn place_one(
     placed: &mut Vec<BlockLayout>,
 ) {
     let room = cursor.room_after_gap(block);
-    if block.height_px <= room {
+    if block.height_px + cursor.foot_cost(block.notes.iter()) <= room {
         if moves_to_keep_with_successor(block, successor, room, cursor) {
             cursor.open_new_page();
         }
@@ -287,14 +352,16 @@ fn place_one(
         return;
     }
     // It does not fit. A block a whole page holds moves rather than splits
-    // (`PROSE-075`), and so does one that may not be cut at all.
-    let whole_page_holds_it = block.height_px <= cursor.body_height_px;
+    // (`PROSE-075`), and so does one that may not be cut at all. Its notes
+    // move with it.
+    let whole = block.height_px + Cursor::new(0.0).foot_cost(block.notes.iter());
+    let whole_page_holds_it = whole <= cursor.body_height_px;
     if (whole_page_holds_it || block.keep_together || !block.splittable()) && !cursor.at_page_top()
     {
         cursor.open_new_page();
         // On a fresh page it is placed whether or not it fits: the page it
         // would move to is no larger (`PROSE-017`).
-        if block.height_px <= cursor.body_height_px || !block.splittable() {
+        if whole <= cursor.body_height_px || !block.splittable() {
             emit_whole(block, cursor, placed);
             return;
         }
@@ -347,6 +414,8 @@ fn moves_to_keep_with_successor(
 fn emit_whole(block: &MeasuredBlock, cursor: &mut Cursor, placed: &mut Vec<BlockLayout>) {
     let gap = cursor.gap_before(block);
     let y = cursor.y + gap;
+    let mut notes = Vec::with_capacity(block.notes.len());
+    cursor.reserve(block.notes.iter(), &mut notes);
     placed.push(BlockLayout {
         block_id: block.block_id,
         block_type: block.block_type,
@@ -356,6 +425,8 @@ fn emit_whole(block: &MeasuredBlock, cursor: &mut Cursor, placed: &mut Vec<Block
         is_split: false,
         split_points: Vec::new(),
         continuation_heights: Vec::new(),
+        notes,
+        foot_px: cursor.foot_px,
     });
     cursor.y = y + block.height_px;
     cursor.pending_margin_px = block.space_after_px;
@@ -372,13 +443,14 @@ fn split(block: &MeasuredBlock, cursor: &mut Cursor, placed: &mut Vec<BlockLayou
     let gap = cursor.gap_before(block);
     let first_y = cursor.y + gap;
     let page_start = cursor.page;
-    let mut taken = lines_for(block, cursor.body_height_px - first_y, 0, total_lines);
+    let mut notes = Vec::with_capacity(block.notes.len());
+    let mut taken = fragment(block, cursor, first_y, 0, &mut notes);
     let mut split_points = Vec::new();
     let mut continuation_heights = Vec::new();
     let first_height = height_between(block, 0, taken);
     while taken < total_lines {
         cursor.open_new_page();
-        let next = lines_for(block, cursor.body_height_px, taken, total_lines);
+        let next = fragment(block, cursor, 0.0, taken, &mut notes);
         split_points.push(taken);
         continuation_heights.push(height_between(block, taken, taken + next));
         taken += next;
@@ -398,7 +470,39 @@ fn split(block: &MeasuredBlock, cursor: &mut Cursor, placed: &mut Vec<BlockLayou
         is_split: !split_points.is_empty(),
         split_points,
         continuation_heights,
+        notes,
+        foot_px: cursor.foot_px,
     });
+}
+
+/// The lines one fragment takes from `from`, at `y` on the cursor's page, and
+/// the notes those lines call reserved on that page (`PROSE-015`).
+///
+/// The fragment is first cut to the room the page's foot leaves. When its own
+/// notes do not fit beside it, it is cut again to the room they leave. The
+/// second cut calls no more notes than the first, so it fits.
+fn fragment(
+    block: &MeasuredBlock,
+    cursor: &mut Cursor,
+    y: f32,
+    from: u32,
+    notes: &mut Vec<FootnoteLayout>,
+) -> u32 {
+    let total = block.line_count();
+    let room = cursor.body_height_px - cursor.foot_px - y;
+    let calls = |lines: u32| {
+        block
+            .notes
+            .iter()
+            .filter(move |note| note.line >= from && note.line < from.saturating_add(lines))
+    };
+    let mut lines = lines_for(block, room, from, total);
+    let cost = cursor.foot_cost(calls(lines));
+    if height_between(block, from, from.saturating_add(lines)) + cost > room {
+        lines = lines_for(block, room - cost, from, total);
+    }
+    cursor.reserve(calls(lines), notes);
+    lines
 }
 
 /// How many lines one fragment takes, starting at `from`.
@@ -449,6 +553,8 @@ fn zero_height_at(block: &MeasuredBlock, cursor: &Cursor) -> BlockLayout {
         is_split: false,
         split_points: Vec::new(),
         continuation_heights: Vec::new(),
+        notes: Vec::new(),
+        foot_px: cursor.foot_px,
     }
 }
 
@@ -485,6 +591,7 @@ mod tests {
             keep_together: false,
             keep_with_next: false,
             metrics: Some(metrics(lines)),
+            notes: Vec::new(),
         }
     }
 
@@ -498,6 +605,7 @@ mod tests {
             keep_together: false,
             keep_with_next: false,
             metrics: None,
+            notes: Vec::new(),
         }
     }
 

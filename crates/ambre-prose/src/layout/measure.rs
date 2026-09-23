@@ -277,6 +277,37 @@ impl Measurer {
         metrics_of(&self.shape(text, style, width_px))
     }
 
+    /// Shape one run, keep its heights, and name the line each code-point
+    /// offset of `offsets` falls on.
+    ///
+    /// One shape serves both, so a block that calls a note pays nothing more
+    /// than one that does not. An offset past the text is on the last line.
+    pub fn measure_with_lines(
+        &mut self,
+        text: &str,
+        style: &EffectiveStyle,
+        width_px: f32,
+        offsets: &[u32],
+    ) -> (TextMetrics, Vec<u32>) {
+        let layout = self.shape(text, style, width_px);
+        let last = layout.len().saturating_sub(1);
+        let lines = offsets
+            .iter()
+            .map(|offset| {
+                let byte = text
+                    .char_indices()
+                    .nth(*offset as usize)
+                    .map_or(text.len(), |(at, _)| at);
+                let line = layout
+                    .lines()
+                    .position(|line| line.text_range().contains(&byte))
+                    .unwrap_or(last);
+                u32::try_from(line).unwrap_or(u32::MAX)
+            })
+            .collect();
+        (metrics_of(&layout), lines)
+    }
+
     /// Measure one block of the document, reading its text and its style.
     pub fn measure_block(
         &mut self,

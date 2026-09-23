@@ -83,13 +83,15 @@ impl Shape {
 /// A list is recorded and not entered: a table's column widths is the one
 /// the schema holds, and its entries are numbers alone. The tree and the rich
 /// text have their own readers below. A key naming a block, as a table's
-/// region map does, collapses to [`ANY`].
+/// region map does, or an annotation's identity, collapses to [`ANY`].
 fn walk_map(prefix: &str, value: &LoroValue, shape: &mut Shape) {
     let LoroValue::Map(entries) = value else {
         return;
     };
     for (key, child) in entries.iter() {
-        let key = if TreeID::try_from(key.as_str()).is_ok() {
+        let names_one =
+            TreeID::try_from(key.as_str()).is_ok() || ambre_core::Uuid::parse_str(key).is_ok();
+        let key = if names_one {
             ANY.to_owned()
         } else {
             key.clone()
@@ -345,6 +347,7 @@ fn document_of_every_key() -> ProseState {
         numbered: true,
     });
     write_the_bands(&mut state);
+    write_a_note_and_a_reference(&mut state, root);
     for key in mark_roots_to_apply() {
         state.handle_command(ProseCommand::ApplyMark {
             block_id: root,
@@ -376,6 +379,21 @@ fn write_the_bands(state: &mut ProseState) {
         pos: 0,
     });
     state.handle_command(ProseCommand::StampModified { now_ms: 1 });
+}
+
+/// A footnote and a cross reference to `root`, both called from `root`.
+fn write_a_note_and_a_reference(state: &mut ProseState, root: crate::events::BlockId) {
+    state.handle_command(ProseCommand::InsertFootnote {
+        block_id: root,
+        pos: 0,
+        note_text: "A note.".to_owned(),
+    });
+    state.handle_command(ProseCommand::InsertCrossRef {
+        block_id: root,
+        pos: 0,
+        target_block_id: root,
+        kind: crate::events::CrossRefKind::PageNumber,
+    });
 }
 
 /// A two by two table after `root`, its first row merged and its last cell

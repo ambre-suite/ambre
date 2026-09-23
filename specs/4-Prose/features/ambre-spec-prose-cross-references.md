@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: CROSS REFERENCES
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- an undone deletion leaves its references broken
 
 > A pointer from one place in the document to another: "see page 4", "see section 2.1", or a label
 > the author chose. The pointer names the block it refers to, so moving that block anywhere keeps
@@ -18,60 +18,57 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-073` | `INV` | A reference MUST name its target by the target's own identity, never by the text the target reads. | this spec section 3; `ambre-spec-prose-schema.md section 2` | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-072` | `INV` | A reference's stored value MUST be a record whose parts are delimited by their length; it MUST NOT be a string split on a separator. | this spec section 3; `ambre-spec-prose-schema.md section 3` | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-128` | `IO` | A reference read back MUST carry the label the author typed, whatever characters it holds. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-129` | `INV` | The value a reference is drawn as MUST NOT be stored in the document. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-130` | `OBS` | A reference to a page MUST show the page its target starts on in the layout being drawn. | this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-131` | `OBS` | A reference to a section MUST show the section number the headings feature derives for its target. | this spec section 3; `PROSE-FEAT-030` | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-014` | `OBS` | A reference whose target is gone MUST be drawn as a broken mark. | this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-132` | `INV` | A reference MUST NOT resolve to any block but the one it names. | this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-074` | `INV` | A reference whose target is gone MUST stay in the document. | this spec section 3; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-133` | `CONC` | A target restored by an undo MUST make the reference resolve again on every peer. | this spec section 2; this spec section 3 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-048` | `OBS` | A reference carrying its own label MUST keep showing that label when its target is gone. | this spec section 4 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-084` | `INV` | A caret position MUST NOT fall inside the value a reference is drawn as. | this spec section 4; this spec section 5 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-073` | `INV` | A reference MUST name its target by the target's own identity, never by the text the target reads. | this spec section 3; `ambre-spec-prose-schema.md section 2` | `ambre_prose::logic::xrefs::tests::a_reference_names_its_target_by_identity_and_writes_nothing_there` | none | verified |
+| `PROSE-FEAT-072` | `INV` | A reference's stored value MUST be a record whose parts are delimited by their length; it MUST NOT be a string split on a separator. | this spec section 3; `ambre-spec-prose-schema.md section 3` | `ambre_prose::xref::tests::a_value_is_a_length_prefixed_record_and_never_a_joined_string` | none | verified |
+| `PROSE-FEAT-128` | `IO` | A reference read back MUST carry the label the author typed, whatever characters it holds. | this spec section 3; this spec section 5 | `ambre_prose::xref::tests::a_label_holding_any_character_reads_back_whole` | none | verified |
+| `PROSE-FEAT-129` | `INV` | The value a reference is drawn as MUST NOT be stored in the document. | this spec section 3; this spec section 5 | `ambre_prose::logic::xrefs::tests::a_page_reference_follows_its_target_to_a_later_page` | none | verified |
+| `PROSE-FEAT-130` | `OBS` | A reference to a page MUST show the page its target starts on in the layout being drawn. | this spec section 3 | `ambre_prose::logic::xrefs::tests::a_page_reference_follows_its_target_to_a_later_page`; `::a_reference_shows_the_section_number_and_the_page_of_its_target` | none | verified |
+| `PROSE-FEAT-131` | `OBS` | A reference to a section MUST show the section number the headings feature derives for its target. | this spec section 3; `PROSE-FEAT-030` | `ambre_prose::logic::xrefs::tests::a_reference_shows_the_section_number_and_the_page_of_its_target` | none | verified |
+| `PROSE-FEAT-014` | `OBS` | A reference whose target is gone MUST be drawn as a broken mark. | this spec section 3 | `ambre_prose::logic::xrefs::tests::a_gone_target_breaks_the_reference_and_the_reference_stays` | none | verified |
+| `PROSE-FEAT-132` | `INV` | A reference MUST NOT resolve to any block but the one it names. | this spec section 5 | `ambre_prose::logic::xrefs::tests::a_gone_target_breaks_the_reference_and_the_reference_stays` | none | verified |
+| `PROSE-FEAT-074` | `INV` | A reference whose target is gone MUST stay in the document. | this spec section 3; this spec section 5 | `ambre_prose::logic::xrefs::tests::a_gone_target_breaks_the_reference_and_the_reference_stays` | none | verified |
+| `PROSE-FEAT-133` | `CONC` | A target restored by an undo MUST make the reference resolve again on every peer. | this spec section 2; this spec section 3 | none | fails -- an undo of the deletion recreates the target under a new identity, so the reference names a block that never comes back; lands with the "A deleted block comes back whole" Story (`ambre-roadmap.md` E5) | failing |
+| `PROSE-UI-048` | `OBS` | A reference carrying its own label MUST keep showing that label when its target is gone. | this spec section 4 | `ambre_prose::logic::xrefs::tests::a_gone_target_breaks_the_reference_and_the_reference_stays` | none | verified |
+| `PROSE-UI-084` | `INV` | A caret position MUST NOT fall inside the value a reference is drawn as. | this spec section 4; this spec section 5 | `ambre_prose::logic::xrefs::tests::a_reference_is_one_character_to_the_caret` | none | verified |
 
 ### 1.2 Insert a cross reference
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-FEAT-134` | `POST` | After the command, a reference naming the chosen target MUST sit at the position it was given. | this spec section 3; this spec section 4 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-FEAT-135` | `FRAME` | Inserting a reference MUST NOT touch the target block: no anchor, no mark and no text is written there. | derived | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-FEAT-134` | `POST` | After the command, a reference naming the chosen target MUST sit at the position it was given. | this spec section 3; this spec section 4 | `ambre_prose::logic::xrefs::tests::a_reference_names_its_target_by_identity_and_writes_nothing_there`; `::the_resolved_list_names_where_each_reference_sits` | none | verified |
+| `PROSE-FEAT-135` | `FRAME` | Inserting a reference MUST NOT touch the target block: no anchor, no mark and no text is written there. | derived | `ambre_prose::logic::xrefs::tests::a_reference_names_its_target_by_identity_and_writes_nothing_there` | none | verified |
 
 ### 1.3 Click a reference
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-085` | `POST` | A click on a reference MUST bring its target into view. | this spec section 4 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-086` | `FRAME` | A click on a reference MUST NOT write to the document. | derived | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-085` | `POST` | A click on a reference MUST bring its target into view. | this spec section 4 | `ambre_prose::logic::xrefs::tests::following_a_reference_reveals_its_target_and_writes_nothing` | none | verified |
+| `PROSE-UI-086` | `FRAME` | A click on a reference MUST NOT write to the document. | derived | `ambre_prose::logic::xrefs::tests::following_a_reference_reveals_its_target_and_writes_nothing` | none | verified |
 
 * **Budget.** none of its own: a reference is resolved with the page it is drawn on, from the
   layout and the section numbers the headings derive. Both figures are rows of
   `ambre-spec-budgets.md section 1`, owned by pagination and by the headings.
 * **Boundary.** none of its own: a reference is a mark on the text, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 16 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line
-  `lib.rs`. The one row a host test reaches with a fixture and no document is the stored value's
-  round trip (`PROSE-FEAT-128`). What a reference shows is derived and never written back
-  (`PROSE-FEAT-129`), which is the section 5 decision that keeps it out of the merge path. The
-  repair of a broken mark rests on a restored block keeping its identity, which nothing in the
-  corpus states -- section 6.
+* **Verification.** 15 `verified`, 1 `failing`. The record's round trip is a unit test with no
+  document (`PROSE-FEAT-072`, `PROSE-FEAT-128`); the rest drive the engine. `PROSE-FEAT-133` fails:
+  an undone deletion brings the target back under a new identity, so the reference stays broken.
 
 ---
 
 ## 2. WHAT EACH USER SEES
 
-Two peers over one reference. No test resolves yet: the last column names the row each row rests
-on.
+Two peers over one reference. The last column names the test that plays the row, or the row it
+rests on where none does.
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| refers to a heading further down | -- | the reference and the heading's identity | the heading's page number, on both screens | none -- `PROSE-FEAT-130` |
-| types a page of text above the target | -- | the text | the reference's page number one higher, on both screens | none -- `PROSE-FEAT-129` |
-| moves the target heading to another chapter | -- | the same identity, in a new place | the reference showing the new page, on both screens | none -- `PROSE-FEAT-073` |
-| deletes the target | -- | the reference, with nothing to resolve | a broken reference on both screens, not a neighbour's number | none -- `PROSE-FEAT-014` |
+| refers to a heading further down | -- | the reference and the heading's identity | the heading's page number, on both screens | `a_reference_shows_the_section_number_and_the_page_of_its_target` |
+| types a page of text above the target | -- | the text | the reference's page number one higher, on both screens | `a_page_reference_follows_its_target_to_a_later_page` |
+| moves the target heading to another chapter | -- | the same identity, in a new place | the reference showing the new page, on both screens | `a_reference_shows_the_section_number_and_the_page_of_its_target` |
+| deletes the target | -- | the reference, with nothing to resolve | a broken reference on both screens, not a neighbour's number | `a_gone_target_breaks_the_reference_and_the_reference_stays` |
 | undoes that deletion | -- | the target again | the reference resolving again, on both screens | none -- `PROSE-FEAT-133` |
-| refers to a heading with a label of her own containing a colon | -- | the label, whole | the label as she typed it, on both screens | none -- `PROSE-FEAT-128` |
+| refers to a heading with a label of her own containing a colon | -- | the label, whole | the label as she typed it, on both screens | `a_label_holding_any_character_reads_back_whole` |
 
 ---
 
@@ -128,7 +125,13 @@ showing that label, because the label is in the reference and needs no target to
 There is no command that edits a reference. A reference is changed by removing it and inserting
 another, and it is deleted as one character with the text it sits in.
 
-**Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
+**The reference is a carrier character.** The insert writes one U+FFFC and marks it with the
+record, so the reference is one character to the caret and is deleted whole (`PROSE-UI-084`). A
+note's call is written the same way.
+
+**Code:** `crates/ambre-prose/src/xref.rs` encodes the record and resolves what it shows.
+`crates/ambre-prose/src/logic/xrefs.rs` holds the insert and the follow. The resolved list reaches
+the view as `CrossRefsUpdated`, after an insert and at each pause in typing.
 
 ---
 
@@ -177,17 +180,9 @@ selected whole and deleted whole, and no caret position falls inside it (`PROSE-
   their agreeing. The gap is `features/ambre-spec-prose-pagination.md section 5`, and the table of
   contents and the comments rest on it too. It lands with the `Two peers read the same page number`
   Story (`ambre-roadmap.md` E5).
-* **Nothing says that a restored block keeps its identity.** `PROSE-FEAT-133` rests on an undo of
-  a deletion bringing the target back under the same identity a reference names. `ambre-spec-undo.md`
-  states that an undo reverts this peer's own operation and says nothing about what identity the
-  revert produces. `ambre-spec-prose-schema.md section 2` states only that the id survives a
-  move. The repair this feature promises is a property of the CRDT no row asserts.
-* **What the reference is a mark on is not settled.** Section 3 makes it an inline mark deleted as
-  one character with the text it sits in. Section 4 draws it as a resolved value selected whole
-  (`PROSE-UI-084`). Either the mark rides a character the author typed or the insert writes a
-  carrier character no rule declares. `features/ambre-spec-prose-footnotes.md section 6` records the
-  same question for a note's call, and the schema holds neither shape
-  (`ambre-spec-prose-schema.md section 3`).
+* **A restored block does not keep its identity.** An undo of a block deletion recreates the node
+  under a new identity, and the body keyed by the old one is not brought back. `PROSE-FEAT-133`
+  fails on it. It lands with the "A deleted block comes back whole" Story (`ambre-roadmap.md` E5).
 * **Nothing lists the references to a block.** An author deleting a heading is told nothing about
   the references that will break, and no command answers the question.
 * **A bookmark is a second kind of target, designed and unbuilt.** The deferred design marks a

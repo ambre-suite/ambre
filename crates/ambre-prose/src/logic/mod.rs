@@ -33,11 +33,14 @@ mod bands;
 mod blocks;
 mod derived;
 mod find;
+mod history;
 mod lists;
 mod marks;
+mod notes;
 mod presence;
 pub(crate) mod tables;
 mod text;
+mod xrefs;
 
 /// The per-application half of `shape_of` and `canonical_dump`
 /// (`ambre-spec-fixtures.md`). Fixture code, so the whole module is behind the
@@ -438,6 +441,25 @@ impl ProseState {
             ProseCommand::FindClose => self.find_close(),
             ProseCommand::ReplaceOne { replacement } => self.replace_one(&replacement),
             ProseCommand::ReplaceAll { replacement } => self.replace_all(&replacement),
+            ProseCommand::InsertFootnote {
+                block_id,
+                pos,
+                note_text,
+            } => self.insert_footnote(&tree_id(block_id), pos, &note_text),
+            ProseCommand::EditFootnote {
+                footnote_id,
+                new_text,
+            } => self.edit_footnote(&footnote_id, &new_text),
+            ProseCommand::DeleteFootnote { footnote_id } => self.delete_footnote(&footnote_id),
+            ProseCommand::InsertCrossRef {
+                block_id,
+                pos,
+                target_block_id,
+                kind,
+            } => self.insert_cross_ref(&tree_id(block_id), pos, &tree_id(target_block_id), &kind),
+            ProseCommand::FollowCrossRef { block_id, pos } => {
+                self.follow_cross_ref(&tree_id(block_id), pos)
+            }
             ProseCommand::UpdateCursor { pos } => self.update_cursor(&pos),
             ProseCommand::Undo => self.apply_history(true),
             ProseCommand::Redo => self.apply_history(false),
@@ -629,6 +651,7 @@ impl ProseState {
     /// One undo or one redo step. It commits the inverse operations, and the
     /// delta they produce is broadcast like any other mutation.
     fn apply_history(&mut self, undo: bool) -> ProseOutcome {
+        let before = self.doc.state_frontiers();
         let changed = if undo {
             self.undo.undo()
         } else {
@@ -643,6 +666,9 @@ impl ProseState {
         // is about to move past them: an uncommitted repair would never reach a
         // peer.
         self.doc.commit();
+        if let Some((block, offset)) = history::edit_point(&self.doc, &before) {
+            events.push(ProseEvent::CaretPlaced { block, offset });
+        }
         let update = self.flush_delta();
         if let Some(delta) = update.clone() {
             events.insert(0, ProseEvent::DocUpdated { delta });

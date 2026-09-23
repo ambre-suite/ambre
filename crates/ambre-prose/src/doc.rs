@@ -1101,6 +1101,89 @@ fn read_string(map: &LoroMap, key: &str) -> Option<String> {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Anchors: a footnote call and a cross reference
+// -----------------------------------------------------------------------------
+
+/// The character an anchor occupies in a body: a footnote call, a cross
+/// reference, a band field. The mark on it says which, and one deletion takes
+/// it whole.
+pub const CARRIER: char = '\u{fffc}';
+
+/// The mark a footnote call carries: the note's identity in `annots`.
+pub(crate) const K_FOOTNOTE: &str = "fn";
+
+/// The mark a cross reference carries: its record, in hex (`PROSE-FEAT-072`).
+pub(crate) const K_CROSS_REF: &str = "ref";
+
+/// An annotation's kind, in one field of one type (`PROSE-031`).
+pub(crate) const ANNOT_KIND: &str = "kind";
+
+/// The text child of an annotation entry: a footnote's body.
+pub(crate) const ANNOT_TEXT: &str = "text";
+
+/// Every live block, in document order: the depth-first pre-order walk of the
+/// tree, which is the document flow. The bands are left out.
+#[must_use]
+pub(crate) fn flow(tree: &LoroTree) -> Vec<TreeID> {
+    let mut order = Vec::new();
+    let mut stack = roots(tree);
+    stack.reverse();
+    while let Some(id) = stack.pop() {
+        order.push(id);
+        let mut children = children_of(tree, Some(id));
+        children.reverse();
+        stack.extend(children);
+    }
+    order
+}
+
+/// One character carrying an anchor mark: where it sits and the mark's value.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Anchor {
+    pub block: TreeID,
+    /// A count of code points into the block's body.
+    pub offset: u32,
+    pub value: String,
+}
+
+/// Every character carrying `key`, in document order.
+#[must_use]
+pub(crate) fn anchors(document: &LoroDoc, key: &str) -> Vec<Anchor> {
+    let tree = blocks(document);
+    let mut out = Vec::new();
+    for id in flow(&tree) {
+        if !block_type_of(&tree, &id).is_some_and(BlockType::has_body) {
+            continue;
+        }
+        let mut offset: u32 = 0;
+        for span in get_block_text(document, &id).to_delta() {
+            let loro::TextDelta::Insert { insert, attributes } = span else {
+                continue;
+            };
+            let length = u32::try_from(insert.chars().count()).unwrap_or(u32::MAX);
+            let value = attributes
+                .as_ref()
+                .and_then(|attributes| attributes.get(key))
+                .and_then(|value| match value {
+                    LoroValue::String(value) => Some(value.to_string()),
+                    _ => None,
+                });
+            if let Some(value) = value {
+                for step in 0..length {
+                    out.push(Anchor {
+                        block: id,
+                        offset: offset.saturating_add(step),
+                        value: value.clone(),
+                    });
+                }
+            }
+            offset = offset.saturating_add(length);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

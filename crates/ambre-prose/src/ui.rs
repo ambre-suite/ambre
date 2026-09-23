@@ -23,8 +23,8 @@ use ambre_core::DocumentId;
 use ambre_bus::logic::{AppCommand, LogicCommand};
 
 use crate::events::{
-    BandSet, BlockId, CursorPosition, FindMatch, ProseCommand, ProseEvent, RemoteCursor,
-    TableOfContents, WordCount,
+    BandSet, BlockId, CursorPosition, FindMatch, FootnoteEntry, ProseCommand, ProseEvent,
+    RemoteCursor, ResolvedCrossRef, TableOfContents, WordCount,
 };
 
 /// How long the text must stay still before the four tallies are recounted,
@@ -104,6 +104,13 @@ pub struct ProseUiState {
     /// The four band blocks and their settings, as last answered: the blocks
     /// the ordinary text commands aim at to edit a band.
     pub bands: BandSet,
+    /// Every footnote, numbered or orphaned, as last answered.
+    pub footnotes: Vec<FootnoteEntry>,
+    /// Every cross reference, as last resolved.
+    pub cross_refs: Vec<ResolvedCrossRef>,
+    /// The page a followed reference asked to bring into view, until the
+    /// view scrolls there.
+    pub reveal_page: Option<u32>,
 
     // Local, and never sent.
     pub viewport: Viewport,
@@ -189,6 +196,16 @@ impl ProseUiState {
                     Some(entry) => entry.1 = toc.clone(),
                     None => self.tocs.push((*block_id, toc.clone())),
                 }
+            }
+            ProseEvent::FootnotesUpdated { notes } => self.footnotes.clone_from(notes),
+            ProseEvent::CrossRefsUpdated { refs } => self.cross_refs.clone_from(refs),
+            ProseEvent::RevealBlock { page, .. } => self.reveal_page = Some(*page),
+            ProseEvent::CaretPlaced { block, offset } => {
+                self.cursor = Some(CursorPosition {
+                    block_id: *block,
+                    offset: *offset,
+                    anchor: None,
+                });
             }
             ProseEvent::BlockSplit { new_block, .. } => {
                 self.cursor = Some(CursorPosition {

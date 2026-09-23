@@ -1,10 +1,10 @@
 # AMBRE -- FEATURE: PROSE UNDO AND REDO
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** implemented
 
 > Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one
-> item is in running text. None of it is built.
+> item is in running text.
 
 ---
 
@@ -21,9 +21,9 @@ shared steps once for both.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-045` | `POST` | After an undo or a redo, the caret MUST be placed at the edit that was taken back or put back. | this spec section 2 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-073` | `POST` | A selection open when the undo or the redo runs MUST collapse to that caret. | this spec section 2 | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-074` | `FRAME` | Moving the caret after an undo or a redo MUST NOT write to the document: where this author looks is not a change a peer receives. | derived | not built | unbuilt -- lands with the "Undo, footnotes and cross references" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-045` | `POST` | After an undo or a redo, the caret MUST be placed at the edit that was taken back or put back. | this spec section 2 | `ambre_prose::logic::history::tests::an_undo_puts_the_caret_where_the_text_was_taken_out`; `::an_undone_deletion_puts_the_caret_after_the_restored_text` | none | verified |
+| `PROSE-UI-073` | `POST` | A selection open when the undo or the redo runs MUST collapse to that caret. | this spec section 2 | `ambre_prose::logic::history::tests::an_open_selection_collapses_to_the_placed_caret` | none | verified |
+| `PROSE-UI-074` | `FRAME` | Moving the caret after an undo or a redo MUST NOT write to the document: where this author looks is not a change a peer receives. | derived | `ambre_prose::logic::history::tests::placing_the_caret_writes_nothing_beyond_the_inverse` | none | verified |
 
 * **Budget.** none: an undo applies one inverse operation and exports the delta it produced, the
   local-write row of `ambre-spec-budgets.md section 1` and no cost of its own. The unbounded
@@ -31,11 +31,9 @@ shared steps once for both.
 * **Boundary.** none of its own: an undo is a document write like any other, and `ZK-001` seals
   every payload before it leaves the client. The history lives in memory on the Logic thread and is
   never persisted or sent.
-* **Verification.** 3 `unimplemented`, nothing else: `crates/ambre-prose` is a seven-line `lib.rs`,
-  so no row can be held either way. `PROSE-UI-073` says what an open selection becomes.
-  `PROSE-UI-074` is the frame condition the other two lean on. A caret placed by an undo is this
-  author's view state, and an implementation recording it in the document would satisfy the rows
-  above it. The shared rules and their scenarios stay in `ambre-spec-undo.md`.
+* **Verification.** 3 `verified`, nothing else. `PROSE-UI-074` is the frame the other two lean on:
+  an engine that recorded the caret in the document would satisfy the rows above it. The shared
+  rules stay in `ambre-spec-undo.md`.
 
 ---
 
@@ -46,14 +44,16 @@ shared steps once for both.
 **The manager** is the shared `undo_manager` (`ambre-spec-undo.md section 3`), a field of the engine
 state (`features/ambre-spec-prose-engine.md section 3`) recording local transactions on the document.
 
-**Where the caret lands.** The confirming change carries the delta, and the view reads the edit
-point from it. The caret moves there (`PROSE-UI-045`), and an open selection collapses to it
+**Where the caret lands.** The engine reads the edit point from the step's diff and sends it
+beside the delta. The view holds no document to read it from. A text edit wins over
+a structural one: the caret goes after restored text, or where text was taken out.
+The caret moves there (`PROSE-UI-045`), and an open selection collapses to it
 (`PROSE-UI-073`). Both are view state, and neither is written back (`PROSE-UI-074`).
 
 **What is one undo item.** A replace-all is one (`ambre-spec-find.md`, `FIND-006`;
 `features/ambre-spec-prose-find-replace.md`); everything else is section 5.
 
-**Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
+**Code:** `crates/ambre-prose/src/logic/history.rs`.
 
 ---
 

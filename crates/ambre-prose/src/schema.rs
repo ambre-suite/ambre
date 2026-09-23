@@ -29,7 +29,7 @@ use ambre_core::schema::{
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing document across it (`PROSE-029`, `SCHEMA-009`).
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 
 /// Write the current version into a document's `meta` register.
 ///
@@ -103,6 +103,11 @@ const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
         from: 3,
         to: 4,
+        apply: stamp_step,
+    },
+    SchemaMigration {
+        from: 4,
+        to: 5,
         apply: stamp_step,
     },
 ];

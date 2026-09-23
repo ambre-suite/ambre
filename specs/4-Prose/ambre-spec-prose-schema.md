@@ -1,6 +1,6 @@
 # AMBRE -- SPEC: PROSE CRDT SCHEMA
 **Type:** Schema (persistence format, one document per application)
-**Implementation:** partial -- the containers and the merge granularity are built; the annotation entry is not
+**Implementation:** partial -- a footnote is the one annotation entry written
 
 > The persisted shape of a Prose document: every Loro container, its key, its value, and the
 > granularity at which two peers race. It owns identity, keys, merge granularity and the convergence
@@ -42,7 +42,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-085` | `INV` | A block's identity MUST be the `TreeID` the tree mints; a position among siblings MUST NOT be used as a key. | this spec section 2 | structural -- `ambre_prose::doc::body_key` addresses a block by the `TreeID` alone, and no key of the node map holds a sibling position; `ambre_prose::logic::convergence_tests::a_block_a_peer_moved_keeps_every_reference_to_it` | none | verified |
 | `PROSE-086` | `INV` | A reference to a block MUST still resolve after a move, an indent and a move into a table cell. | this spec section 2 | `ambre_prose::logic::blocks::tests::a_reference_survives_an_indent_and_a_move_into_a_table_cell`; `::a_reference_to_a_block_survives_a_move`; `ambre_prose::logic::convergence_tests::a_block_a_peer_moved_keeps_every_reference_to_it` | none | verified |
-| `PROSE-087` | `INV` | An annotation's identity MUST be a `Uuid` minted by the peer that creates it, carried as the value of the mark that anchors it. | this spec section 2 | not built | unbuilt -- lands with the `Comments and track changes` Story (`ambre-roadmap.md` E5), which is what mints an annotation at all. The engine core built the mark registry the id rides, and no annotation | unimplemented |
+| `PROSE-087` | `INV` | An annotation's identity MUST be a `Uuid` minted by the peer that creates it, carried as the value of the mark that anchors it. | this spec section 2 | `ambre_prose::logic::notes::tests::a_note_lands_as_one_call_and_an_entry_holding_its_text`; `::a_note_keeps_its_identity_through_a_move_an_edit_and_a_remote_change` | none | verified |
 | `PROSE-088` | `INV` | A body key MUST re-read as the pair it joins -- the tag and the tree id -- split on a separator neither half can carry. | this spec section 2 | `ambre_prose::doc::tests::a_body_key_re_reads_as_the_pair_it_joins`; `::neither_half_of_a_body_key_carries_the_separator`; `::a_name_that_is_not_a_body_key_reads_as_none` | none | verified |
 | `PROSE-002` | `INV` | All editable text MUST live in `LoroText`; a `LoroMap` MUST NOT hold body text. | this spec section 3 | structural -- `ambre_prose::doc::get_block_text` opens one root `LoroText` per leaf block, and `ambre_prose::doc::create_block` writes no text into the node map; `ambre_prose::logic::convergence_tests::two_peers_typing_in_one_paragraph_keep_both_sentences` | none | verified |
 | `PROSE-089` | `CONC` | Two peers typing in the same paragraph MUST both keep their text: one author's sentence MUST NOT be lost to the other's write. | this spec section 3; this spec section 6 | `ambre_prose::logic::convergence_tests::two_peers_typing_in_one_paragraph_keep_both_sentences`; `::an_offline_edit_and_a_concurrent_one_both_land` | none | verified |
@@ -53,7 +53,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-030` | `INV` | A block's paragraph style MUST be stored one key per property. | this spec section 3; architecture section 2.D | `ambre_prose::doc::tests::an_unset_property_is_the_absence_of_its_key` -- it reads one written key back and the eight others absent | none | verified |
 | `PROSE-092` | `CONC` | Two concurrent edits to two different paragraph-style properties MUST both survive: neither MUST clobber the other. | this spec section 3; architecture section 2.D | `ambre_prose::logic::convergence_tests::two_peers_setting_two_paragraph_properties_lose_neither` | none | verified |
 | `PROSE-093` | `INV` | `styles` MUST hold the user's own styles alone: the nine built-in names MUST NOT be stored. | this spec section 5 | structural -- `ambre_prose` opens `styles` and writes no entry into it: the nine names are the compiled list `ambre_prose::doc::BUILT_IN_STYLES`; `ambre_prose::doc::tests::the_nine_built_in_style_names_are_not_user_styles` | none | verified |
-| `PROSE-031` | `INV` | An `annots` entry MUST declare its kind in one field of one type; a reader MUST NOT infer the kind from the presence of another field. | this spec section 3 | not built | unbuilt -- lands with the `Comments and track changes` Story (`ambre-roadmap.md` E5). The engine core opens the container and writes no entry, so the defect the row names has no reader yet | unimplemented |
+| `PROSE-031` | `INV` | An `annots` entry MUST declare its kind in one field of one type; a reader MUST NOT infer the kind from the presence of another field. | this spec section 3 | `ambre_prose::logic::notes::tests::an_entry_is_a_note_by_its_declared_kind_and_by_nothing_else` | none | verified |
 | `PROSE-096` | `INV` | An unset property MUST be the absence of its key; no container MUST carry a "cleared" marker. | this spec section 3 | structural -- `ambre_prose::doc::write_paragraph_style` writes the properties the caller named and no other key, and `ambre_prose::doc::read_paragraph_style` reads an absent key as an unset property rather than a cleared one; `ambre_prose::doc::tests::an_unset_property_is_the_absence_of_its_key` | none | verified |
 | `PROSE-032` | `INV` | `meta.page.orientation` MUST agree with `width_mm` and `height_mm`; a document whose orientation contradicts its two dimensions MUST NOT be written. | this spec section 3 | `ambre_prose::doc::tests::a_portrait_page_wider_than_it_is_tall_is_refused`; structural -- `ambre_prose::doc::write_page_format` is the one path that writes the three keys, and it writes them together | none | verified |
 | `PROSE-027` | `INV` | A document MUST hold at least one root body block: an empty `blocks` tree is invalid. | this spec section 4 | `ambre_prose::logic::text::tests::a_deletion_that_empties_the_tree_keeps_one_block`; `ambre_prose::logic::tests::a_fresh_document_holds_one_paragraph_and_a_version` | none | verified |
@@ -70,11 +70,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and an image node holds a content hash, never the pixels
   (`features/ambre-spec-prose-images.md`).
-* **Verification.** 21 `verified`, 2 `unimplemented`, 1 `human-review`. The bump obligation
-  splits in two. A key or a type moving is red against the frozen shape, which a CI gate holds
-  append-only. A meaning moving under an unchanged key stays a human read. The four
-  convergence rows each run a two-peer test.
-  * The two `unimplemented` rows are the annotation entry's, and no command writes one yet.
+* **Verification.** 23 `verified`, 1 `human-review`. The bump obligation splits in two. A key or a
+  type moving is red against the frozen shape, which a CI gate holds append-only. A meaning moving
+  under an unchanged key stays a human read. The four convergence rows each run a two-peer test.
+  * The two annotation rows are held by the footnote, the first entry a command writes.
   * The `human-review` row binds a code change to a constant, which no test can read.
 
 ---
@@ -127,8 +126,8 @@ the container, `--` where no feature does.
 | `styles` | Map | `style_id` | one style map | the style entry | inline-styles | built |
 | `styles/{id}` | Map | a paragraph-style field name, per the table below | per field | the field | inline-styles | design |
 | `annots` | Map | a `Uuid` | one annotation map | the entry | comments, track-changes, footnotes | built |
-| `annots/{id}` | Map | a field name, per the table below | per field | the field | comments, track-changes, footnotes | design |
-| `annots/{id}/text` | Text | -- | a footnote's body | none: char-CRDT | footnotes | design |
+| `annots/{id}` | Map | a field name, per the table below | per field | the field | comments, track-changes, footnotes | built |
+| `annots/{id}/text` | Text | -- | a footnote's body | none: char-CRDT | footnotes | built |
 | `annots/{id}/replies` | List | position | one reply map | list order, no LWW | comments | design |
 | `annots/{id}/replies/{n}` | Map | `id`, `author`, `peer_id`, `created_at` | String, String, `u64`, `u64` | the key | comments | design |
 | `annots/{id}/replies/{n}/text` | Text | -- | a reply's body | none: char-CRDT | comments | design |
@@ -181,8 +180,8 @@ function is total (`PROSE-007`).
 | `ff` | the family name, as the picker labels it | `After` | inline-styles |
 | `cm` | a `Uuid` into `annots` | `None` | comments |
 | `si`, `sd` | a `Uuid` into `annots`, the suggested insertion and the suggested deletion | `None` | track-changes |
-| `fn` | a `Uuid` into `annots` | `None` | footnotes |
-| `ref` | the hex of a postcard record: the target `TreeID` and the reference kind | `None` | cross-references |
+| `fn` | a `Uuid` into `annots`, laid on one U+FFFC the insert writes | `None` | footnotes |
+| `ref` | the hex of a postcard record: the target `TreeID` and the reference kind, laid on one U+FFFC the insert writes | `None` | cross-references |
 | `f:pn`, `f:pc`, `f:dt`, `f:ti` | the key is the field -- the page number, the page count, `meta.updated_at`, `meta.title`; `f:dt` holds its format, `short`, `long` or `iso` | `None` | headers-footers |
 | any other key | -- | `After` | -- |
 
@@ -190,7 +189,7 @@ function is total (`PROSE-007`).
 
 | Field | Type | Holds | Kinds | State |
 |---|---|---|---|---|
-| `type` | `u8`, or String | the kind: `0` or `1` for a suggestion, `"footnote"` for a footnote, absent for a comment (`PROSE-031`) | suggestion, footnote | design |
+| `kind` | String | the kind, which every entry names: `"footnote"` today. No kind is read from an absent field (`PROSE-031`) | every kind | built |
 | `anchor_block` | String | the `TreeID` of the annotated block, a cache of where the live mark sits | comment | design |
 | `anchor_start`, `anchor_end` | `u32` | the cached span, in the block's own offsets | comment | design |
 | `resolved` | `bool` | whether the thread is closed | comment | design |

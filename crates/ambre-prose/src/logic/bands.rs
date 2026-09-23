@@ -22,7 +22,7 @@ use crate::events::{
 use super::ProseState;
 
 /// The character a field occupies in its block's text.
-pub const FIELD_CHAR: char = '\u{fffc}';
+pub const FIELD_CHAR: char = doc::CARRIER;
 
 /// The commit origin of the last-modified stamp. The undo manager excludes it:
 /// `Ctrl+Z` retracts an edit, never the clock that dated it.

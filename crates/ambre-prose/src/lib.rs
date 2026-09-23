@@ -13,6 +13,10 @@
 //!   a layout (`features/ambre-spec-prose-table-of-contents.md`).
 //! * [`band`] -- the text a header or a footer shows on one page, its fields
 //!   resolved (`features/ambre-spec-prose-headers-footers.md`).
+//! * [`note`] -- the footnotes as the view lists them: each one numbered from
+//!   the order of its calls, or orphaned (`features/ambre-spec-prose-footnotes.md`).
+//! * [`xref`] -- a cross reference's stored record and the value it shows
+//!   (`features/ambre-spec-prose-cross-references.md`).
 //! * [`count`] -- the word count's four text tallies
 //!   (`features/ambre-spec-prose-word-count.md`).
 //! * [`mark`] -- the inline mark registry: the expansion policy and the
@@ -40,11 +44,13 @@ pub mod events;
 pub mod layout;
 pub mod logic;
 pub mod mark;
+pub mod note;
 pub mod numbering;
 pub mod schema;
 pub mod style;
 pub mod toc;
 pub mod ui;
+pub mod xref;
 
 pub use events::{ProseCommand, ProseEvent, ProseOutcome};
 pub use logic::ProseState;

@@ -23,6 +23,9 @@ pub mod pass;
 pub mod place;
 pub mod reflow;
 
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod footnote_pages;
+
 #[cfg(test)]
 mod belts {
     //! What holds the two rules no single call site can (`PROSE-107`,

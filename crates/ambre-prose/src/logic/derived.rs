@@ -128,9 +128,17 @@ impl ProseState {
         let pages = self.word_count.pages;
         self.word_count = count::compute_word_count(&self.doc);
         self.word_count.pages = pages;
-        ProseOutcome::display_only(vec![ProseEvent::WordCountUpdated {
+        let mut display = vec![ProseEvent::WordCountUpdated {
             count: self.word_count,
-        }])
+        }];
+        // The same pause refreshes the two lists read off the whole text: a
+        // note orphaned by a deletion, a reference whose target moved. One
+        // walk per pause, never one per keystroke.
+        display.push(ProseEvent::FootnotesUpdated {
+            notes: crate::note::entries(&self.doc),
+        });
+        display.push(self.cross_refs_event());
+        ProseOutcome::display_only(display)
     }
 
     /// Take the page count of the layout on hand into the figures, and leave

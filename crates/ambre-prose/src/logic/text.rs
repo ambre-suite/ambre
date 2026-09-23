@@ -26,17 +26,7 @@ impl ProseState {
     /// A selection's two endpoints arrive in either order, and this is what
     /// tells the head from the tail.
     pub(super) fn document_order(&self) -> Vec<TreeID> {
-        let tree = doc::blocks(&self.doc);
-        let mut order = Vec::new();
-        let mut stack: Vec<TreeID> = doc::roots(&tree);
-        stack.reverse();
-        while let Some(id) = stack.pop() {
-            order.push(id);
-            let mut children = doc::children_of(&tree, Some(id));
-            children.reverse();
-            stack.extend(children);
-        }
-        order
+        doc::flow(&doc::blocks(&self.doc))
     }
 
     /// The body text of a live block that carries one.

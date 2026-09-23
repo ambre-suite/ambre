@@ -8,14 +8,16 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::app::prose::BlockType;
+use ambre_bus::app::prose::{BlockType, ParagraphStyle};
+use ambre_core::Uuid;
 use ambre_draw::ScriptSet;
 use loro::{LoroDoc, LoroMap, LoroTree, LoroValue, TreeID};
 
 use crate::doc;
 use crate::layout::geometry::PageBox;
 use crate::layout::measure::{EffectiveStyle, Measurer, TextMetrics};
-use crate::layout::place::{self, BlockLayout, MeasuredBlock, Placement};
+use crate::layout::place::{self, BlockLayout, FootnoteLayout, MeasuredBlock, NoteCall, Placement};
+use crate::note;
 
 /// The height of a horizontal rule, in pixels. One device pixel, per the
 /// measurement table of section 2.
@@ -79,6 +81,20 @@ impl PageLayout {
         self.blocks.iter().filter(move |block| block.shows_on(page))
     }
 
+    /// The footnotes drawn at the foot of `page`, in the order of their
+    /// ordinals (`PROSE-015`). Empty for a page that carries none.
+    #[must_use]
+    pub fn footnotes_on_page(&self, page: u32) -> Vec<&FootnoteLayout> {
+        let mut notes: Vec<&FootnoteLayout> = self
+            .blocks
+            .iter()
+            .flat_map(|block| block.notes.iter())
+            .filter(|note| note.page == page)
+            .collect();
+        notes.sort_by_key(|note| note.ordinal);
+        notes
+    }
+
     /// The height left for body content on a page, both bands deducted.
     #[must_use]
     pub fn body_height_px(&self) -> f32 {
@@ -96,11 +112,111 @@ impl PageLayout {
 pub fn lay_out(measurer: &mut Measurer, document: &LoroDoc) -> PageLayout {
     let page_box = PageBox::read(document);
     let bands = BandHeights::measure(measurer, document, page_box.content_width_px);
-    let blocks = measure_document(measurer, document, page_box.content_width_px);
+    let notes = NotePlan::read(measurer, document, page_box.content_width_px);
+    let blocks = measure_document_with(
+        measurer,
+        document,
+        page_box.content_width_px,
+        &HashMap::new(),
+        &HashMap::new(),
+        &notes,
+    );
     let placement = place::place(&blocks, bands.body_height_px(&page_box));
     let mut layout = layout_of(page_box, &placement);
     bands.stamp(&mut layout);
     layout
+}
+
+/// Every footnote numbered and measured, before any block is placed
+/// (`PROSE-117`).
+///
+/// The ordinals are counted from the calls in document order (`PROSE-068`),
+/// so where placement later puts a note never changes its number
+/// (`PROSE-099`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct NotePlan {
+    /// What the plan was read from: each reachable note, its ordinal and its
+    /// text. A reflow compares it to decide whether the plan still holds.
+    pub(crate) key: Vec<(Uuid, u32, String)>,
+    /// The calls of each block: the code-point offset and the note.
+    calls: HashMap<TreeID, Vec<(u32, Uuid)>>,
+    /// Each note's ordinal and shaped height.
+    notes: HashMap<Uuid, (u32, f32)>,
+}
+
+impl NotePlan {
+    /// What the plan of `document` would be read from, without shaping a
+    /// note. The cheap half a reflow runs on every edit (`PROSE-035`).
+    pub(crate) fn key_of(document: &LoroDoc) -> Vec<(Uuid, u32, String)> {
+        // A document with no tree holds no call, and reading one would mint
+        // the tree (`PROSE-079`).
+        if doc::blocks_read(document).is_none() {
+            return Vec::new();
+        }
+        note::ordinals(document)
+            .into_iter()
+            .map(|(id, ordinal)| {
+                let text = note::body(document, &id)
+                    .map(|body| body.to_string())
+                    .unwrap_or_default();
+                (id, ordinal, text)
+            })
+            .collect()
+    }
+
+    /// Number every note, then shape each one against the content width, its
+    /// ordinal in front.
+    pub(crate) fn read(measurer: &mut Measurer, document: &LoroDoc, content_width_px: f32) -> Self {
+        let key = Self::key_of(document);
+        if key.is_empty() {
+            return Self::default();
+        }
+        let defaults = doc::read_defaults(document);
+        let style = EffectiveStyle::from_parts(&defaults, &ParagraphStyle::default(), false);
+        let width = style.text_width_px(content_width_px);
+        let notes = key
+            .iter()
+            .map(|(id, ordinal, text)| {
+                let shown = format!("{ordinal} {text}");
+                (
+                    *id,
+                    (
+                        *ordinal,
+                        measurer.measure(&shown, &style, width).text_height_px,
+                    ),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        let mut calls: HashMap<TreeID, Vec<(u32, Uuid)>> = HashMap::new();
+        for anchor in doc::anchors(document, doc::K_FOOTNOTE) {
+            let Ok(id) = Uuid::parse_str(&anchor.value) else {
+                continue;
+            };
+            if notes.contains_key(&id) {
+                calls
+                    .entry(anchor.block)
+                    .or_default()
+                    .push((anchor.offset, id));
+            }
+        }
+        Self { key, calls, notes }
+    }
+
+    /// The calls of `block`, the line of each still to find.
+    fn calls_of(&self, block: &TreeID) -> &[(u32, Uuid)] {
+        self.calls.get(block).map_or(&[], Vec::as_slice)
+    }
+
+    /// One call, placed on `line`.
+    fn call(&self, id: &Uuid, line: u32) -> Option<NoteCall> {
+        let (ordinal, height_px) = *self.notes.get(id)?;
+        Some(NoteCall {
+            footnote_id: *id,
+            ordinal,
+            line,
+            height_px,
+        })
+    }
 }
 
 /// The four bands measured, and the settings they were measured under.
@@ -202,6 +318,7 @@ pub(crate) fn measure_band(
         content_width_px,
         cached: &cached,
         toc_pages: &toc_pages,
+        notes: &NotePlan::default(),
     };
     measure_one(measurer, &scope, id, BlockType::Paragraph).height_px
 }
@@ -213,12 +330,14 @@ pub fn measure_document(
     document: &LoroDoc,
     content_width_px: f32,
 ) -> Vec<MeasuredBlock> {
+    let notes = NotePlan::read(measurer, document, content_width_px);
     measure_document_with(
         measurer,
         document,
         content_width_px,
         &HashMap::new(),
         &HashMap::new(),
+        &notes,
     )
 }
 
@@ -227,14 +346,16 @@ pub fn measure_document(
 /// A block found in `cached` is not shaped again (`PROSE-083`). The caller
 /// decides what belongs there, which is every block its edit did not touch.
 /// `toc_pages` holds the page each heading started on in the layout before,
-/// which is what a table of contents is measured with (`PROSE-019`).
+/// which is what a table of contents is measured with (`PROSE-019`). `notes`
+/// is the plan pass 0 read, and every call is measured against it.
 #[must_use]
-pub fn measure_document_with(
+pub(crate) fn measure_document_with(
     measurer: &mut Measurer,
     document: &LoroDoc,
     content_width_px: f32,
     cached: &HashMap<TreeID, &MeasuredBlock>,
     toc_pages: &HashMap<TreeID, u32>,
+    notes: &NotePlan,
 ) -> Vec<MeasuredBlock> {
     let Some(tree) = doc::blocks_read(document) else {
         return Vec::new();
@@ -248,6 +369,7 @@ pub fn measure_document_with(
         content_width_px,
         cached,
         toc_pages,
+        notes,
     };
     for root in doc::roots(&tree) {
         walk(measurer, &scope, &root, &mut measured);
@@ -263,6 +385,7 @@ struct Walk<'a> {
     content_width_px: f32,
     cached: &'a HashMap<TreeID, &'a MeasuredBlock>,
     toc_pages: &'a HashMap<TreeID, u32>,
+    notes: &'a NotePlan,
 }
 
 /// Measure one block and then its children, in that order.
@@ -298,6 +421,7 @@ fn measure_one(
     let bold = block_type == BlockType::Heading;
     let style = EffectiveStyle::resolve(defaults, tree, id, bold);
     let text_width_px = style.text_width_px(content_width_px);
+    let mut notes = Vec::new();
     let (height_px, metrics) = match block_type {
         // A signal, not a sized block.
         BlockType::PageBreak => (0.0, None),
@@ -308,6 +432,7 @@ fn measure_one(
         ),
         BlockType::Table => {
             let rows = table_metrics(measurer, document, tree, defaults, id, content_width_px);
+            notes = table_calls(scope, id);
             (rows.text_height_px, Some(rows))
         }
         // One line per entry, measured on the pages the layout before gave
@@ -326,7 +451,15 @@ fn measure_one(
         }
         _ => {
             let text = doc::get_block_text(document, id).to_string();
-            let metrics = measurer.measure(&text, &style, text_width_px);
+            let calls = scope.notes.calls_of(id);
+            let offsets: Vec<u32> = calls.iter().map(|(offset, _)| *offset).collect();
+            let (metrics, lines) =
+                measurer.measure_with_lines(&text, &style, text_width_px, &offsets);
+            notes = calls
+                .iter()
+                .zip(lines)
+                .filter_map(|((_, note), line)| scope.notes.call(note, line))
+                .collect();
             (metrics.text_height_px, Some(metrics))
         }
     };
@@ -339,7 +472,32 @@ fn measure_one(
         keep_together: style.keep_together,
         keep_with_next: style.keep_with_next,
         metrics,
+        notes,
     }
+}
+
+/// The calls the blocks of a table's cells hold, each on its cell's row. A
+/// row is the line a table breaks at (`PROSE-071`).
+fn table_calls(scope: &Walk<'_>, table: &TreeID) -> Vec<NoteCall> {
+    let mut out = Vec::new();
+    for (row_index, row) in doc::children_of(scope.tree, Some(*table))
+        .iter()
+        .enumerate()
+    {
+        let line = u32::try_from(row_index).unwrap_or(u32::MAX);
+        for cell in doc::children_of(scope.tree, Some(*row)) {
+            for block in doc::children_of(scope.tree, Some(cell)) {
+                out.extend(
+                    scope
+                        .notes
+                        .calls_of(&block)
+                        .iter()
+                        .filter_map(|(_, note)| scope.notes.call(note, line)),
+                );
+            }
+        }
+    }
+    out
 }
 
 /// An image box, plus its caption when it has one.
@@ -440,6 +598,7 @@ fn cell_height(
         content_width_px: width_px,
         cached: &empty,
         toc_pages: &no_pages,
+        notes: &NotePlan::default(),
     };
     for child in doc::children_of(tree, Some(*cell)) {
         walk(measurer, &scope, &child, &mut stacked);

@@ -49,6 +49,8 @@ pub struct Paginator {
     toc_pages: HashMap<TreeID, u32>,
     /// The bands the last layout was placed under (`PROSE-076`).
     bands: pass::BandHeights,
+    /// The footnotes the last layout was placed with (`PROSE-117`).
+    notes: pass::NotePlan,
 }
 
 impl Default for Paginator {
@@ -75,6 +77,7 @@ impl Paginator {
             layout: PageLayout::default(),
             toc_pages: HashMap::new(),
             bands: pass::BandHeights::default(),
+            notes: pass::NotePlan::default(),
         }
     }
 
@@ -112,12 +115,15 @@ impl Paginator {
         // (`PROSE-076`).
         self.bands =
             pass::BandHeights::measure(&mut self.measurer, document, page_box.content_width_px);
+        // Every note numbered before the first block is placed (`PROSE-117`).
+        self.notes = pass::NotePlan::read(&mut self.measurer, document, page_box.content_width_px);
         let measured = pass::measure_document_with(
             &mut self.measurer,
             document,
             page_box.content_width_px,
             &HashMap::new(),
             &self.toc_pages,
+            &self.notes,
         );
         let placement = place::place(&measured, self.bands.body_height_px(&page_box));
         self.commit(page_box, measured, placement, 0);
@@ -142,6 +148,10 @@ impl Paginator {
             || doc::read_defaults(document) != self.defaults
             || self.measured.is_empty()
             || self.measurer.coverage_grew(self.layout.missing_scripts)
+            // A call added or removed renumbers every later note, and a note
+            // edited changes its reservation: no cached block answers for
+            // either (`PROSE-035`).
+            || pass::NotePlan::key_of(document) != self.notes.key
         {
             // A face that arrived since the last run re-shapes every block of
             // its script, wherever they sit, so no tail survives
@@ -219,6 +229,7 @@ impl Paginator {
             page_box.content_width_px,
             &cached,
             &self.toc_pages,
+            &self.notes,
         )
     }
 
