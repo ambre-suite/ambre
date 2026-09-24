@@ -35,7 +35,7 @@ impl ProseState {
         if at > body.len_unicode() {
             return Self::err_bad_range();
         }
-        let id = Uuid::new();
+        let id = self.ids.mint();
         if let Err(e) = self.write_note(&id, text) {
             return Self::err_write(&e);
         }

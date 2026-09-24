@@ -22,7 +22,7 @@
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 | 5 |
 | `docfile` | The file a user saves a document into, and opens back. | implemented | 17 | 1 |
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | implemented | 10 | 6 |
-| `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 34 | 3 |
+| `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 35 | 3 |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 18 | 13 |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 17 | 10 |
 | `media` | A picture in a document travels apart from it. | implemented | 11 | 11 |
@@ -55,4 +55,4 @@
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**39 features: 23 implemented, 14 partial, 2 design-only. 596 contract rows, 316 loose.**
+**39 features: 23 implemented, 14 partial, 2 design-only. 597 contract rows, 316 loose.**

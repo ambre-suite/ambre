@@ -492,13 +492,20 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
 
 #[test]
 fn a_doc_type_with_no_engine_degrades_cleanly() {
-    // Unreachable for any fixture this spec produces, which excludes Prose
-    // and Murmure. Present so the loader degrades when they arrive: a panic
-    // here would be a corpus that cannot be inspected at all.
+    // Unreachable for any fixture this spec produces, which excludes Murmure.
+    // Present so the loader degrades when it arrives: a panic here would be a
+    // corpus that cannot be inspected at all.
+    let murmure = write_ambre_plaintext(DocType::Murmure, Uuid::from_bytes([0x44; 16]), b"payload");
+    match fixtures::import_fixture(&murmure) {
+        Err(FixtureError::NoEngine { doc_type }) => assert_eq!(doc_type, DocType::Murmure),
+        other => panic!("expected NoEngine, got {other:?}"),
+    }
+    // Prose has an engine now: a Prose header over bytes it refuses is a
+    // container failure, typed like any other.
     let prose = write_ambre_plaintext(DocType::Prose, Uuid::from_bytes([0x44; 16]), b"payload");
     match fixtures::import_fixture(&prose) {
-        Err(FixtureError::NoEngine { doc_type }) => assert_eq!(doc_type, DocType::Prose),
-        other => panic!("expected NoEngine, got {other:?}"),
+        Err(FixtureError::Container(DocFileError::PayloadRejected)) => {}
+        other => panic!("expected PayloadRejected, got {other:?}"),
     }
 }
 

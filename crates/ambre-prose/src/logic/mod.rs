@@ -36,6 +36,7 @@ mod comments;
 mod derived;
 mod docfile;
 mod find;
+mod ids;
 mod history;
 mod lists;
 mod marks;
@@ -47,11 +48,11 @@ mod text;
 mod touched;
 mod xrefs;
 
-/// The per-application half of `shape_of` and `canonical_dump`
-/// (`ambre-spec-fixtures.md`). Fixture code, so the whole module is behind the
-/// non-default `fixtures` feature and no client build reaches it.
+/// The per-application half of `shape_of` and `canonical_dump`, and Prose's
+/// generators (`ambre-spec-fixtures.md`). Fixture code, so the whole module is
+/// behind the non-default `fixtures` feature and no client build reaches it.
 #[cfg(feature = "fixtures")]
-mod fixtures;
+pub mod fixtures;
 
 #[cfg(test)]
 mod convergence_tests;
@@ -137,6 +138,9 @@ pub struct ProseState {
     /// across a snapshot import that rebuilds the paginator: the view drops a
     /// layout older than the one it holds (`PROSE-UI-016`).
     handed_version: u64,
+    /// Where the ids of notes, threads, replies and suggestions come from:
+    /// fresh on a live document, a sequence on a pinned one (`FIXTURE-002`).
+    ids: ids::IdSource,
     /// The five figures as last answered (`PROSE-FEAT-018`). Session state:
     /// the tallies move on a recount and the page count on a layout, and
     /// neither ever reaches the document.
@@ -163,7 +167,7 @@ impl ProseState {
     /// one would break `PROSE-027` on the first read.
     #[must_use]
     pub fn new() -> Option<Self> {
-        Self::from_doc(LoroDoc::new())
+        Self::from_doc(LoroDoc::new(), ids::IdSource::Random)
     }
 
     /// A document with a **pinned** CRDT identity and commit clock, so the same
@@ -182,12 +186,13 @@ impl ProseState {
         // No wall clock in the operations: a recorded timestamp would differ
         // between two runs of the same generator.
         doc.set_record_timestamp(false);
-        Self::from_doc(doc)
+        // The ids the engine mints are pinned by the same peer.
+        Self::from_doc(doc, ids::IdSource::seeded(peer))
     }
 
     /// The shared body of the two constructors, over a `LoroDoc` the caller has
     /// already configured.
-    fn from_doc(doc: LoroDoc) -> Option<Self> {
+    fn from_doc(doc: LoroDoc, ids: ids::IdSource) -> Option<Self> {
         Self::prepare(&doc);
         doc::seed(&doc)?;
         // The version is scaffolding too, and rides the same commit, so no
@@ -224,6 +229,7 @@ impl ProseState {
             faces: Vec::new(),
             handed: None,
             handed_version: 0,
+            ids,
             word_count: crate::events::WordCount::default(),
             find: None,
             stamped_counter,

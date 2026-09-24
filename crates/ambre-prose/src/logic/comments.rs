@@ -51,7 +51,7 @@ impl ProseState {
         if self.my_user_id.is_none() {
             return ProseOutcome::refused(ProseRefusal::NoIdentity);
         }
-        let id = Uuid::new();
+        let id = self.ids.mint();
         let span = Span {
             block: *block,
             start,
@@ -258,7 +258,7 @@ impl ProseState {
             .push_container(LoroMap::new())
             .map_err(|e| format!("{e:?}"))?;
         reply
-            .insert(doc::REPLY_ID, Uuid::new().to_hyphenated())
+            .insert(doc::REPLY_ID, self.ids.mint().to_hyphenated())
             .map_err(|e| format!("{e:?}"))?;
         reply
             .insert(doc::REPLY_AUTHOR, self.my_name.clone().unwrap_or_default())

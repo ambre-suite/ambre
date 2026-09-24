@@ -438,7 +438,7 @@ impl ProseState {
     /// `PROSE-FEAT-082`).
     fn write_entry(&self) -> Result<Uuid, String> {
         let user = self.my_user_id.ok_or("no identity")?;
-        let id = Uuid::new();
+        let id = self.ids.mint();
         let entry: LoroMap = self
             .doc
             .get_map(doc::ANNOTS)

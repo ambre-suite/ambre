@@ -1,0 +1,18 @@
+{
+  "generator": "prose/styled_document",
+  "generator_version": 1,
+  "seed": 6840291655799537665,
+  "doc_type": "Prose",
+  "ambre_version": 1,
+  "schema_version": 9,
+  "digest": "7847d1ce3f92d7926f5a5181904dbb09019944ce75959dc909a67ef000aa13b1",
+  "shape": {
+    "peers": 1,
+    "body": {
+      "Prose": {
+        "blocks": 13,
+        "characters": 81
+      }
+    }
+  }
+}
