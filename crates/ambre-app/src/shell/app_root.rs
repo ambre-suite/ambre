@@ -118,7 +118,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         boot_is_toile,
         boot_is_prose,
         prose_figures,
-        prose_annotations,
+        prose_signals,
         formula_ref,
         formula_text,
         formula_action,
@@ -244,6 +244,37 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 &navigate,
                 crate::route::booted_kind(boot_is_toile, boot_is_prose),
             );
+        });
+    }
+    // A Prose link followed with the modifier leaves through the same shell
+    // path (`PROSE-UI-071`): the page hands the target over and never opens it.
+    if boot_is_prose {
+        let navigate = leptos_router::hooks::use_navigate();
+        Effect::new(move |_| {
+            let Some(url) = prose_signals.followed.get() else {
+                return;
+            };
+            prose_signals.followed.set(None);
+            follow_shell_nav(
+                toile_chrome::ShellNav::Url(url),
+                &navigate,
+                crate::route::booted_kind(boot_is_toile, boot_is_prose),
+            );
+        });
+        // The link cursor over a link's text, the text cursor elsewhere
+        // (`PROSE-UI-153`).
+        Effect::new(move |_| {
+            let cursor = if prose_signals.over_link.get() {
+                "pointer"
+            } else {
+                "text"
+            };
+            if let Some(doc) = web_sys::window().and_then(|w| w.document())
+                && let Some(el) = doc.get_element_by_id("ambre-canvas")
+                && let Some(html) = el.dyn_ref::<web_sys::HtmlElement>()
+            {
+                let _ = html.style().set_property("cursor", cursor);
+            }
         });
     }
     let link_text = RwSignal::new(String::new());
@@ -1516,8 +1547,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
         // Prose annotations: the comment panel and the suggestion popover,
         // both DOM chrome (`PROSE-UI-050`, `PROSE-UI-052`).
         {boot_is_prose.then(|| view! {
-            <ambre_prose::chrome::ProseCommentsPanel signals=prose_annotations />
-            <ambre_prose::chrome::ProseSuggestionPopover signals=prose_annotations />
+            <ambre_prose::chrome::ProseCommentsPanel signals=prose_signals />
+            <ambre_prose::chrome::ProseSuggestionPopover signals=prose_signals />
         })}
 
         // The deck panel (`toile-presentation`): the surface that adds a frame

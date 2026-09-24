@@ -14,31 +14,38 @@ use leptos::prelude::*;
 use crate::events::SuggestionKind;
 use crate::view::annotate::{AnnotationIntent, HoveredSuggestion, PanelThread};
 
-/// The signals the chrome shares with the view. Every position is in CSS
-/// pixels of the window.
+/// The signals the chrome and the shell share with the view. Every position
+/// is in CSS pixels of the window.
 #[derive(Clone, Copy)]
-pub struct ProseAnnotations {
+pub struct ProseSignals {
     /// The threads the panel lists, each at its anchor's height.
     pub threads: RwSignal<Vec<PanelThread>>,
     /// The suggestion under the pointer, for the popover.
     pub hovered: RwSignal<Option<HoveredSuggestion>>,
     /// What the chrome asked for, until the view drains it.
     pub intent: RwSignal<Option<AnnotationIntent>>,
+    /// The pointer rests on a link: the canvas shows the link cursor
+    /// (`PROSE-UI-153`).
+    pub over_link: RwSignal<bool>,
+    /// A link target to open, until the shell takes it (`PROSE-UI-071`).
+    pub followed: RwSignal<Option<String>>,
 }
 
-impl Default for ProseAnnotations {
+impl Default for ProseSignals {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ProseAnnotations {
+impl ProseSignals {
     #[must_use]
     pub fn new() -> Self {
         Self {
             threads: RwSignal::new(Vec::new()),
             hovered: RwSignal::new(None),
             intent: RwSignal::new(None),
+            over_link: RwSignal::new(false),
+            followed: RwSignal::new(None),
         }
     }
 }
@@ -51,7 +58,7 @@ const POPOVER_LIFT_PX: f32 = 30.0;
 /// The comment panel, right of the page: each open thread at the height of
 /// its anchor. A click on a thread's text brings the anchor into view.
 #[component]
-pub fn ProseCommentsPanel(signals: ProseAnnotations) -> impl IntoView {
+pub fn ProseCommentsPanel(signals: ProseSignals) -> impl IntoView {
     let send = move |intent| signals.intent.set(Some(intent));
     move || {
         let threads = signals.threads.get();
@@ -131,7 +138,7 @@ fn thread_card(
 /// The accept and reject buttons over the suggestion under the pointer, and
 /// over no other (`PROSE-UI-148`).
 #[component]
-pub fn ProseSuggestionPopover(signals: ProseAnnotations) -> impl IntoView {
+pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
     move || {
         signals.hovered.get().map(|hovered| {
             let suggestion_id = hovered.suggestion_id;

@@ -12,7 +12,7 @@ use loro::TreeID;
 use loro::LoroValue;
 
 use crate::doc;
-use crate::events::{BlockId, BlockType, ProseOutcome, ProseRefusal, tree_id};
+use crate::events::{BlockId, BlockType, ProseEvent, ProseOutcome, ProseRefusal, tree_id};
 use crate::mark;
 use crate::style::{BlockContext, MarkSet, ResolvedStyle, resolve};
 
@@ -52,7 +52,18 @@ impl ProseState {
         if let Err(e) = body.mark(start..end, key, stored.as_str()) {
             return Self::err_write(&format!("{e:?}"));
         }
-        self.commit_with(Vec::new())
+        self.commit_with(self.links_touched(Some(key)))
+    }
+
+    /// The link list, when the command touched links: a mark under the link
+    /// key, or a clear, which takes links along. Nothing otherwise.
+    fn links_touched(&self, key: Option<&str>) -> Vec<ProseEvent> {
+        if key.is_some_and(|key| key != "a") {
+            return Vec::new();
+        }
+        vec![ProseEvent::LinksUpdated {
+            links: crate::link::links(&self.doc),
+        }]
     }
 
     /// Remove one mark from a range.
@@ -78,7 +89,7 @@ impl ProseState {
         if let Err(e) = body.unmark(start..end, key) {
             return Self::err_write(&format!("{e:?}"));
         }
-        self.commit_with(Vec::new())
+        self.commit_with(self.links_touched(Some(key)))
     }
 
     /// Remove every formatting mark from a range.
@@ -99,7 +110,7 @@ impl ProseState {
                 tracing::warn!("Prose: the text refused to clear the mark {key}: {e:?}");
             }
         }
-        self.commit_with(Vec::new())
+        self.commit_with(self.links_touched(None))
     }
 
     /// One block's text, run by run, each with the style the cascade resolves

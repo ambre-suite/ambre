@@ -550,6 +550,16 @@ pub struct SuggestionSpan {
     pub end: u32,
 }
 
+/// One run of a link mark, in its block's own offsets, and the target it
+/// names (`features/ambre-spec-prose-selection.md section 2`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LinkSpan {
+    pub block_id: BlockId,
+    pub start: u32,
+    pub end: u32,
+    pub url: String,
+}
+
 /// One pending suggestion as the view lists it, derived from its marks and its
 /// entry (`PROSE-FEAT-261`). A change across a paragraph break holds several
 /// spans and stays one suggestion (`PROSE-FEAT-259`).
@@ -1162,6 +1172,8 @@ pub enum ProseEvent {
         suggesting: bool,
         suggestions: Vec<Suggestion>,
     },
+    /// Every run of a link mark, in document order.
+    LinksUpdated { links: Vec<LinkSpan> },
     /// Every cross reference, resolved against the last layout.
     CrossRefsUpdated { refs: Vec<ResolvedCrossRef> },
     /// Bring a block into view, from its first page (`PROSE-UI-085`).

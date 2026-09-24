@@ -675,6 +675,9 @@ pub struct ProseUiState {
     /// Every pending suggestion and its spans, from `SuggestionsUpdated`
     /// (`features/ambre-spec-prose-track-changes.md`).
     suggestions:     Vec<Suggestion>,
+    /// Every run of a link mark and its target, from `LinksUpdated`
+    /// (`features/ambre-spec-prose-selection.md`).
+    links:           Vec<LinkSpan>,
     /// Per block (`features/ambre-spec-prose-spell-check.md`).
     spell_errors:    HashMap<TreeID, Vec<SpellError>>,
 

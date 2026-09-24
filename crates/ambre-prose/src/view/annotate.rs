@@ -7,7 +7,7 @@
 
 use ambre_core::Uuid;
 
-use crate::events::{BlockId, CommentThread, ProseCommand, SuggestionKind, tree_id};
+use crate::events::{BlockId, CommentThread, LinkSpan, ProseCommand, SuggestionKind, tree_id};
 use crate::ui::ProseUiState;
 use crate::view::column::DocPos;
 use crate::view::hit::{Fragment, fragment};
@@ -120,55 +120,72 @@ impl ProseUiState {
         )
     }
 
-    /// The suggestion drawn under a canvas point, if any
-    /// (`PROSE-UI-148`). Only the text of a suggestion answers: the rest of
-    /// its line does not.
+    /// The piece of the text `start..end` of `block` drawn under a canvas
+    /// point on `page`, if the point is on it. Only the text answers: the
+    /// rest of its line does not.
+    fn span_under(
+        &self,
+        block: BlockId,
+        (start, end): (u32, u32),
+        page: u32,
+        (x_px, y_px): (f32, f32),
+    ) -> Option<ScreenRect> {
+        let index = self.flow_index(&tree_id(block))?;
+        let layout = self.shaped.layout.blocks.get(index)?;
+        let run = self.shaped.blocks.get(&layout.block_id)?.data();
+        let piece = fragment(layout, page, &run.line_tops())?;
+        let bottom = piece.run_top + piece.height;
+        run.range_boxes(start, end).into_iter().find_map(|part| {
+            let (y0, y1) = (part.y0 as f32, part.y1 as f32);
+            if y1 <= piece.run_top || y0 >= bottom {
+                return None;
+            }
+            let (x0, top) = self.to_screen(block, page, piece, part.x0 as f32, y0);
+            let (x1, low) = self.to_screen(block, page, piece, part.x1 as f32, y1);
+            let rect = ScreenRect {
+                x0,
+                y0: top,
+                x1,
+                y1: low,
+            };
+            rect.contains(x_px, y_px).then_some(rect)
+        })
+    }
+
+    /// The page under a canvas point, if any.
+    fn page_under(&self, x_px: f32, y_px: f32) -> Option<u32> {
+        match self.column.screen_to_doc(&self.viewport, x_px, y_px) {
+            DocPos::OnPage { page, .. } => Some(page),
+            _ => None,
+        }
+    }
+
+    /// The suggestion drawn under a canvas point, if any (`PROSE-UI-148`).
     #[must_use]
     pub fn suggestion_at(&self, x_px: f32, y_px: f32) -> Option<HoveredSuggestion> {
-        let DocPos::OnPage { page, .. } = self.column.screen_to_doc(&self.viewport, x_px, y_px)
-        else {
-            return None;
-        };
-        for suggestion in &self.suggestions {
-            for span in &suggestion.spans {
-                let Some(index) = self.flow_index(&tree_id(span.block_id)) else {
-                    continue;
-                };
-                let Some(block) = self.shaped.layout.blocks.get(index) else {
-                    continue;
-                };
-                let Some(run) = self.shaped.blocks.get(&block.block_id) else {
-                    continue;
-                };
-                let run = run.data();
-                let Some(piece) = fragment(block, page, &run.line_tops()) else {
-                    continue;
-                };
-                let bottom = piece.run_top + piece.height;
-                for part in run.range_boxes(span.start, span.end) {
-                    let (y0, y1) = (part.y0 as f32, part.y1 as f32);
-                    if y1 <= piece.run_top || y0 >= bottom {
-                        continue;
-                    }
-                    let (x0, top) = self.to_screen(span.block_id, page, piece, part.x0 as f32, y0);
-                    let (x1, low) = self.to_screen(span.block_id, page, piece, part.x1 as f32, y1);
-                    let rect = ScreenRect {
-                        x0,
-                        y0: top,
-                        x1,
-                        y1: low,
-                    };
-                    if rect.contains(x_px, y_px) {
-                        return Some(HoveredSuggestion {
-                            suggestion_id: suggestion.suggestion_id,
-                            kind: suggestion.kind,
-                            rect,
-                        });
-                    }
-                }
-            }
-        }
-        None
+        let page = self.page_under(x_px, y_px)?;
+        self.suggestions.iter().find_map(|suggestion| {
+            suggestion.spans.iter().find_map(|span| {
+                let rect =
+                    self.span_under(span.block_id, (span.start, span.end), page, (x_px, y_px))?;
+                Some(HoveredSuggestion {
+                    suggestion_id: suggestion.suggestion_id,
+                    kind: suggestion.kind,
+                    rect,
+                })
+            })
+        })
+    }
+
+    /// The link drawn under a canvas point, if any: over its marked text
+    /// alone (`PROSE-UI-153`).
+    #[must_use]
+    pub fn link_at(&self, x_px: f32, y_px: f32) -> Option<&LinkSpan> {
+        let page = self.page_under(x_px, y_px)?;
+        self.links.iter().find(|link| {
+            self.span_under(link.block_id, (link.start, link.end), page, (x_px, y_px))
+                .is_some()
+        })
     }
 
     /// Track the pointer: the suggestion under it becomes the hovered one.

@@ -26,7 +26,8 @@ use ambre_bus::{Outbox, SendOutcome};
 
 use crate::events::{
     BandSet, BlockId, CommentThread, CursorPosition, FindMatch, FootnoteEntry, ProseCommand,
-    ProseEvent, RemoteCursor, ResolvedCrossRef, Suggestion, TableOfContents, TextEdit, WordCount,
+    LinkSpan, ProseEvent, RemoteCursor, ResolvedCrossRef, Suggestion, TableOfContents, TextEdit,
+    WordCount,
 };
 use crate::layout::run::{ShapedLayout, ShapedRun};
 use crate::rebase;
@@ -202,6 +203,8 @@ pub struct ProseUiState {
     /// last answered.
     pub suggestions: Vec<Suggestion>,
     pub suggesting: bool,
+    /// Every run of a link mark and its target, as last answered.
+    pub links: Vec<LinkSpan>,
     /// Every cross reference, as last resolved.
     pub cross_refs: Vec<ResolvedCrossRef>,
     /// The page a followed reference asked to bring into view, until the
@@ -229,6 +232,9 @@ pub struct ProseUiState {
     /// How many highlights paints have read, for the tests to hold
     /// `PROSE-UI-020` against.
     pub(crate) highlights_walked: u64,
+    /// A link target a press asked to open, until the host takes it
+    /// (`PROSE-UI-071`).
+    pub followed: Option<String>,
     /// The suggestion under the pointer, for the accept or reject popover
     /// (`PROSE-UI-148`).
     pub hovered: Option<crate::view::annotate::HoveredSuggestion>,
@@ -392,6 +398,7 @@ impl ProseUiState {
             }
             ProseEvent::FootnotesUpdated { notes } => self.footnotes.clone_from(notes),
             ProseEvent::CrossRefsUpdated { refs } => self.cross_refs.clone_from(refs),
+            ProseEvent::LinksUpdated { links } => self.links.clone_from(links),
             ProseEvent::CommentsUpdated { threads } => {
                 self.comments.clone_from(threads);
                 self.index_highlights();

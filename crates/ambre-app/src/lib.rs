@@ -288,7 +288,7 @@ struct Wiring {
     prose_figures: RwSignal<Option<[String; 5]>>,
     /// The comment panel and the suggestion popover of the open Prose
     /// document (`PROSE-UI-050`, `PROSE-UI-052`). Published by the Prose view.
-    prose_annotations: host::ProseAnnotations,
+    prose_signals: host::ProseSignals,
     /// Toile Find panel open flag (`toile-find`); Ctrl+F sets it.
     find_state_toile: RwSignal<bool>,
     /// Last Toile `FindResults` (hits + focus), feeding the panel's counter and
@@ -691,7 +691,7 @@ pub fn main() {
     let boot_is_prose = matches!(boot_doc_typed, Some((ambre_bus::DocType::Prose, _)));
     // The status bar slot the Prose view fills with its five figures.
     let prose_figures = RwSignal::new(None::<[String; 5]>);
-    let prose_annotations = host::ProseAnnotations::new();
+    let prose_signals = host::ProseSignals::new();
     if boot_is_toile {
         toile_chrome::bind_keys(&mut keymap);
     } else if !boot_is_prose {
@@ -831,7 +831,7 @@ pub fn main() {
         boot_is_toile,
         boot_is_prose,
         prose_figures,
-        prose_annotations,
+        prose_signals,
         Rc::clone(&style_slot),
         Rc::clone(&chrome_status_slot),
         formula_ref,
@@ -1757,7 +1757,7 @@ pub fn main() {
                     h,
                     theme_ctl,
                     prose_figures,
-                    prose_annotations,
+                    prose_signals,
                     busy_pub.clone(),
                 ))
             } else if boot_is_toile {

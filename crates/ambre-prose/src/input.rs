@@ -77,6 +77,9 @@ pub enum ProseInput {
         x: f32,
         y: f32,
         shift: bool,
+        /// The platform's modifier is held: `Ctrl`, or `Cmd` on a Mac. A press
+        /// with it on a link follows the link (`PROSE-UI-071`).
+        follow: bool,
         now_ms: f64,
     },
     Drag {
@@ -235,8 +238,26 @@ impl ProseUiState {
                 x,
                 y,
                 shift,
+                follow,
                 now_ms,
-            } => self.press(*x, *y, *shift, *now_ms, send),
+            } => {
+                let target = follow
+                    .then(|| self.link_at(*x, *y).map(|link| link.url.clone()))
+                    .flatten();
+                match target {
+                    // The target goes to the host, and the caret and the
+                    // selection stay as they are (`PROSE-UI-170`). A target
+                    // that could run code in the page's stead is held back
+                    // (`PROSE-UI-186`).
+                    Some(url) => {
+                        if crate::link::openable(&url) {
+                            self.followed = Some(url);
+                        }
+                        true
+                    }
+                    None => self.press(*x, *y, *shift, *now_ms, send),
+                }
+            }
             ProseInput::Drag { x, y } => {
                 self.update_drag(*x, *y);
                 self.dragging.is_some()

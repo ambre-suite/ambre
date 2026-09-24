@@ -50,6 +50,7 @@ pub mod doc;
 pub mod events;
 pub mod input;
 pub mod layout;
+pub mod link;
 pub mod logic;
 pub mod mark;
 pub mod note;

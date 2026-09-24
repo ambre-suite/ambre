@@ -74,6 +74,7 @@ impl Rig {
             x,
             y,
             shift,
+            follow: false,
             now_ms,
         })
     }
@@ -559,6 +560,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
         x: 600.0,
         y: 100.0,
         shift: false,
+        follow: false,
         now_ms: 0.0,
     };
     assert!(ui.handle_input(&press, &mut |command| {
@@ -597,6 +599,7 @@ fn a_press_on_a_layout_with_no_page_leaves_the_caret() {
             x: 10.0,
             y: 10.0,
             shift: false,
+            follow: false,
             now_ms: 0.0,
         },
         &mut |_| SendResult::Sent,
@@ -889,4 +892,110 @@ fn a_refused_insertion_leaves_the_view_on_the_documents_text() {
     rig.type_text("s");
     rig.deliver();
     assert_eq!(rig.logic.text_of(&first).as_deref(), Some("ones"));
+}
+
+// -- Links ------------------------------------------------------------------
+
+const TARGET: &str = "https://example.org/";
+
+/// A paragraph whose word `link` (offsets 6 to 10) is a link, its list in the
+/// view.
+fn linked() -> (Rig, BlockId) {
+    let mut rig = Rig::new(&["go to link and back"]);
+    let block = rig.blocks()[0];
+    rig.outbox.push(ProseCommand::ApplyMark {
+        block_id: block,
+        range: (6, 10),
+        key: "a".to_owned(),
+        value: Some(TARGET.to_owned()),
+    });
+    rig.deliver();
+    rig.lay();
+    (rig, block)
+}
+
+fn press_follow(rig: &mut Rig, (x, y): (f32, f32), follow: bool) -> bool {
+    rig.input(ProseInput::Press {
+        x,
+        y,
+        shift: false,
+        follow,
+        now_ms: 0.0,
+    })
+}
+
+/// `PROSE-UI-153`: the link answers over its marked text, and the text beside
+/// it on the same line does not.
+#[test]
+fn a_link_answers_over_its_marked_text_alone() {
+    let (rig, block) = linked();
+    assert_eq!(rig.ui.links.len(), 1);
+    let (x, y) = rig.point_of(block, 7);
+    assert_eq!(rig.ui.link_at(x, y).map(|l| l.url.as_str()), Some(TARGET));
+    let (x, y) = rig.point_of(block, 2);
+    assert_eq!(rig.ui.link_at(x, y), None);
+    let (x, y) = rig.point_of(block, 12);
+    assert_eq!(rig.ui.link_at(x, y), None);
+}
+
+/// `PROSE-UI-070`, `PROSE-UI-169`: a plain press inside a link places the
+/// caret there and asks the host for nothing.
+#[test]
+fn a_plain_press_inside_a_link_places_the_caret_and_opens_nothing() {
+    let (mut rig, block) = linked();
+    let at = rig.point_of(block, 8);
+    assert!(press_follow(&mut rig, at, false));
+    assert_eq!((rig.caret().block_id, rig.caret().offset), (block, 8));
+    assert_eq!(rig.ui.followed, None);
+    assert!(
+        rig.sent
+            .iter()
+            .all(|c| !matches!(c, ProseCommand::ApplyMark { .. }))
+    );
+}
+
+/// `PROSE-UI-071`, `PROSE-UI-170`: a press with the modifier hands the target
+/// to the host, and the caret and the selection stay where they were.
+#[test]
+fn a_press_with_the_modifier_hands_the_target_over_and_moves_nothing() {
+    let (mut rig, block) = linked();
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: block,
+        offset: 2,
+        anchor: Some((block, 0)),
+    });
+    let before = rig.ui.cursor;
+    let sent = rig.sent.len();
+    let at = rig.point_of(block, 8);
+    assert!(press_follow(&mut rig, at, true));
+    assert_eq!(rig.ui.followed.as_deref(), Some(TARGET));
+    assert_eq!(rig.ui.cursor, before);
+    assert_eq!(rig.sent.len(), sent, "nothing is written");
+    // Off a link, the modifier is an ordinary press.
+    let at = rig.point_of(block, 15);
+    rig.ui.followed = None;
+    assert!(press_follow(&mut rig, at, true));
+    assert_eq!(rig.ui.followed, None);
+    assert_eq!(rig.caret().offset, 15);
+}
+
+/// `PROSE-UI-186`: a peer's `javascript:` target never reaches the host, and
+/// the press that met it moves nothing either.
+#[test]
+fn a_target_that_could_run_code_is_held_back() {
+    let mut rig = Rig::new(&["go to link and back"]);
+    let block = rig.blocks()[0];
+    rig.outbox.push(ProseCommand::ApplyMark {
+        block_id: block,
+        range: (6, 10),
+        key: "a".to_owned(),
+        value: Some("javascript:alert(1)".to_owned()),
+    });
+    rig.deliver();
+    rig.lay();
+    let before = rig.ui.cursor;
+    let at = rig.point_of(block, 8);
+    assert!(press_follow(&mut rig, at, true));
+    assert_eq!(rig.ui.followed, None);
+    assert_eq!(rig.ui.cursor, before);
 }

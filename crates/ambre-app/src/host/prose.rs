@@ -29,7 +29,7 @@ use ambre_canvas::{
     WgpuSurface,
 };
 use ambre_draw::{DrawSurface, ParleyBrush, Rect};
-pub use ambre_prose::chrome::ProseAnnotations;
+pub use ambre_prose::chrome::ProseSignals;
 use ambre_prose::input::{ProseInput, ProseKey};
 use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
 use ambre_prose::view::annotate::{HoveredSuggestion, PanelThread, ScreenRect};
@@ -99,7 +99,7 @@ pub struct ProseView {
     /// The five figures as the status bar slot shows them.
     figures: RwSignal<Option<[String; 5]>>,
     shown: Option<WordCount>,
-    annotations: ProseAnnotations,
+    annotations: ProseSignals,
     /// The layout context the draft is shaped with.
     layout_cx: LayoutContext<ParleyBrush>,
     /// The clock of the last frame, to count presses in place.
@@ -115,7 +115,7 @@ impl ProseView {
         height: f64,
         theme_ctl: ThemeControl,
         figures: RwSignal<Option<[String; 5]>>,
-        annotations: ProseAnnotations,
+        annotations: ProseSignals,
         busy_pub: BusyPublisher,
     ) -> Self {
         let theme = theme_ctl.get();
@@ -338,10 +338,15 @@ impl ProseView {
                 true
             }
             _ => {
-                if let InputEvent::PointerMove { x, y } = ev
-                    && self.state.hover(*x as f32, *y as f32)
-                {
-                    self.publish_hover();
+                if let InputEvent::PointerMove { x, y } = ev {
+                    let (x, y) = (*x as f32, *y as f32);
+                    if self.state.hover(x, y) {
+                        self.publish_hover();
+                    }
+                    let over_link = self.state.link_at(x, y).is_some();
+                    if self.annotations.over_link.get_untracked() != over_link {
+                        self.annotations.over_link.set(over_link);
+                    }
                 }
                 let Some(input) = self.translate(ev) else {
                     return false;
@@ -349,6 +354,11 @@ impl ProseView {
                 let (outbox, document_id) = (&mut self.outbox, self.document_id);
                 let mut send = |command| send_edit(outbox, document_id, command);
                 let consumed = self.state.handle_input(&input, &mut send);
+                // The shell's one open-URL path takes the target
+                // (`PROSE-UI-071`).
+                if let Some(url) = self.state.followed.take() {
+                    self.annotations.followed.set(Some(url));
+                }
                 self.busy_pub.publish(self.outbox.is_busy());
                 self.dirty |= consumed;
                 consumed
@@ -381,11 +391,14 @@ impl ProseView {
                 y,
                 button: 0,
                 shift,
+                ctrl,
                 ..
             } => ProseInput::Press {
                 x: *x as f32,
                 y: *y as f32,
                 shift: *shift,
+                // The canvas folds `Cmd` into `ctrl`.
+                follow: *ctrl,
                 now_ms: self.now_ms,
             },
             InputEvent::PointerMove { x, y } => ProseInput::Drag {

@@ -142,6 +142,9 @@ impl ProseState {
         });
         display.push(self.cross_refs_event());
         display.push(self.suggestions_event());
+        display.push(ProseEvent::LinksUpdated {
+            links: crate::link::links(&self.doc),
+        });
         ProseOutcome::display_only(display)
     }
 

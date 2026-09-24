@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-034` | `INV` | A vertical move MUST keep the column the caret started from until a horizontal move, a click or an edit ends the run of vertical moves. | this spec section 2 | `ambre_prose::input_tests::a_run_of_vertical_moves_keeps_its_column` | none | verified |
 | `PROSE-UI-152` | `INV` | A change from a collaborator MUST NOT move the anchor of a drag in flight: the anchor is a gesture, not a document position, for as long as the gesture lasts. | this spec section 2 | `ambre_prose::input_tests::a_remote_change_does_not_move_the_anchor_of_a_drag` | none | verified |
 | `PROSE-UI-033` | `INV` | Header, footer and footnote text MUST hit-test like body text, so the caret can enter it. | this spec section 2 | not built | unbuilt -- lands with the "Links and bands under the caret" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-153` | `OBS` | A pointer resting inside a link MUST show the link cursor, over the marked text alone. | this spec section 2 | not built | unbuilt -- lands with the "Links and bands under the caret" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-153` | `OBS` | A pointer resting inside a link MUST show the link cursor, over the marked text alone. | this spec section 2 | `ambre_prose::input_tests::a_link_answers_over_its_marked_text_alone` | none | verified |
 
 ### 1.2 Press in the text
 
@@ -88,20 +88,21 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-070` | `POST` | A press inside a link, without the platform's modifier, MUST place the caret. | this spec section 2 | not built | unbuilt -- lands with the "Links and bands under the caret" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-169` | `FRAME` | A press inside a link, without the platform's modifier, MUST NOT open the target. | this spec section 2 | not built | unbuilt -- lands with the "Links and bands under the caret" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-071` | `POST` | Opening a link's target MUST go through the shared open-URL affordance of the host, never a call made from the crate. | this spec section 2; `UI-THREAD-004` | not built | unbuilt -- lands with the "Links and bands under the caret" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-170` | `FRAME` | Opening a link's target MUST NOT move the caret and MUST NOT change the selection. | this spec section 2 | not built | unbuilt -- lands with the "Links and bands under the caret" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-070` | `POST` | A press inside a link, without the platform's modifier, MUST place the caret. | this spec section 2 | `ambre_prose::input_tests::a_plain_press_inside_a_link_places_the_caret_and_opens_nothing` | none | verified |
+| `PROSE-UI-169` | `FRAME` | A press inside a link, without the platform's modifier, MUST NOT open the target. | this spec section 2 | `ambre_prose::input_tests::a_plain_press_inside_a_link_places_the_caret_and_opens_nothing` | none | verified |
+| `PROSE-UI-071` | `POST` | Opening a link's target MUST go through the shared open-URL affordance of the host, never a call made from the crate. | this spec section 2; `UI-THREAD-004` | type-level -- the view only fills `ProseUi.followed`, and the one reader of it is the shell's `follow_shell_nav`; `ambre_prose::input_tests::a_press_with_the_modifier_hands_the_target_over_and_moves_nothing` | none | verified |
+| `PROSE-UI-170` | `FRAME` | Opening a link's target MUST NOT move the caret and MUST NOT change the selection. | this spec section 2 | `ambre_prose::input_tests::a_press_with_the_modifier_hands_the_target_over_and_moves_nothing` | none | verified |
+| `PROSE-UI-186` | `FRAME` | A link's target MUST reach the host only when its scheme is `http`, `https` or `mailto`, read with case folded and with leading control characters, tabs and newlines skipped. | this spec section 2; `UI-THREAD-004` | `ambre_prose::link::tests::only_a_web_or_mail_target_may_be_opened`; `ambre_prose::input_tests::a_target_that_could_run_code_is_held_back` | none | verified |
 
 * **Budget.** the hit-test of a pointer position, a row of `ambre-spec-budgets.md section 1`.
   The autoscroll tick costs one hit-test per frame and no row of its own.
 * **Boundary.** none: `PROSE-UI-010` (`features/ambre-spec-prose-engine.md section 1`) keeps the
   selection out of the document, and the UI thread reaches no network, crypto or persistence path
   (`UI-THREAD-004`).
-* **Verification.** 27 `verified`, and 8 `unimplemented`: the links, the bands and the drag's
-  scroll tick. `PROSE-UI-008` is a round trip: the point the layout draws an offset at resolves
-  back to that offset, at any zoom and scroll. `PROSE-UI-071` is compiler-held the day the link
-  path exists, since the crate names no browser binding.
+* **Verification.** 33 `verified`, and 3 `unimplemented`: the bands and the drag's scroll tick.
+  `PROSE-UI-008` is a round trip: the point the layout draws an offset at resolves back to that
+  offset, at any zoom and scroll. `PROSE-UI-071` holds by the shape of the view: it sets a field
+  and opens nothing, and the shell is the one reader of that field.
 
 ---
 
@@ -208,6 +209,12 @@ modifier resolves the target instead. It hands the target to the host's open-URL
 is where every application's outbound link goes (`PROSE-UI-071`). Hovering paints the link cursor
 (`PROSE-UI-153`). Neither path writes to the document, and what the mark holds is
 `features/ambre-spec-prose-inline-styles.md`.
+
+**A target from a peer.** Nothing rules on a link's target when it is written, so a peer may
+write `javascript:` or `data:`. Handed to the browser, such a target would run in the page's
+stead, with the session's keys in reach. The view hands over `http`, `https` and `mailto` alone,
+read the way a browser reads a scheme (`PROSE-UI-186`). Any other target stays in the mark, and
+the press moves nothing.
 
 **A press on an empty document.** A document with no block has nothing to hit-test. A caret
 placed in a block the view invented would be a second model of the document (`PROSE-UI-001`). The
