@@ -5,13 +5,13 @@
 
 > A working note, and not a specification. It records what users like and dislike in the
 > messaging part of Microsoft Teams, Slack and Discord. A second pass adds Zulip for threads and
-> Element for end-to-end encrypted (E2EE) messaging. Video, calls and file storage are out of
-> scope. It declares no contract row. `ambre-murmure.md` stays the sketch; this note is the
+> Element for end-to-end encrypted (E2EE) messaging. A third pass compares the bot systems and
+> their E2EE stakes. Video, calls and file storage are out of scope. It declares no contract row. `ambre-murmure.md` stays the sketch; this note is the
 > evidence that the sketch cites.
 
 ## 1. METHOD AND LIMITS
 
-* **Date:** read on 2026-09-24, through web searches. The sources are in section 6.
+* **Date:** read on 2026-09-24, through web searches. The sources are in section 7.
 * **Second pass:** read on 2026-09-24. It checks the first pass and adds two products.
   * Zulip: the product that users cite for threads that work.
   * Element: an E2EE client on Matrix. Its failures are the failures that Murmure can have.
@@ -138,7 +138,97 @@
 * **Decryption failures.** The sketch does not say what a client shows for a message whose key is
   missing. Element users rank that state as a main complaint. Row 17 above is the minimum answer.
 
-## 6. SOURCES
+## 6. BOTS AND INTEGRATIONS
+
+Third pass, read on 2026-09-24. It compares how each product lets a program read and post
+messages. Section 7 of `ambre-murmure.md` is the sketch that this pass challenges.
+
+### A. Comparison
+
+| Product | Bot model | What a bot can read | Interactive messages | Inbound webhook |
+| :--- | :--- | :--- | :--- | :--- |
+| Slack | An app with OAuth scopes. Events come by HTTP or Socket Mode. | Scopes per API method. Since 2025-05-29, an app outside the Marketplace reads 15 messages per request, one request per minute. | Block Kit. New blocks for AI agent answers in 2025-2026. | One webhook URL per channel. |
+| Microsoft Teams | A bot on the Bot Framework SDK. Microsoft archived the SDK at the end of 2025 for the Microsoft 365 Agents SDK. | Scopes in the app manifest, with admin consent. | Adaptive Cards. | Office 365 connectors retired. Workflows (Power Automate) replace them, and the deadline moved several times up to 2026. |
+| Discord | A bot user on the gateway, plus application commands. | Message content is a privileged intent. Without it, a bot reads its direct messages, the messages that mention it and its commands. | Buttons, select menus, modals. | One webhook URL per channel. |
+| Zulip | Incoming webhook bots, outgoing webhook bots, generic bots. | An outgoing webhook bot reads its direct messages and the messages that mention it. | Text commands through the Botserver. | One URL per integration. Most official integrations use it. |
+| Element on Matrix | A bot is a room member, or an application service. | In an encrypted room, a bot needs the room keys, as a human member does. | Text commands, widgets. | The Hookshot bridge. |
+| Wire | An app is a member of the Messaging Layer Security (MLS) group, through the Wire Integrations SDK. | The app decrypts locally with its own key material. | Not read in this pass. | Not read in this pass. |
+| WhatsApp Business | The Cloud API, hosted by Meta. The On-Premises API ended on 2025-10-23. | Meta decrypts each message at the API and forwards the plaintext to the business. | Templates and buttons. | Not applicable. |
+| Signal | No official bot API, by design. The unofficial `signal-cli` is the common tool. | A bot is a full client and reads every conversation that it is in. | None. | None. |
+| Telegram | A bot exists only in cloud chats. A secret chat, the E2EE mode, has no bot. | Telegram servers read every bot conversation. | Inline keyboards. | Not read in this pass. |
+| Threema Gateway | Two modes. In basic mode, Threema holds the key. In end-to-end mode, the business holds the private key. | In end-to-end mode, only the business server reads the messages, through an HTTPS callback. | None. | Not applicable. |
+| Keybase | A restricted bot is a team member without the team key. | Members derive a key per bot from the team key seed. They encrypt with it only the messages for the bot, for example `!meet`. The bot reads nothing else. | Text commands. | Not read in this pass. |
+
+### B. What users and developers dislike
+
+* **Forced migrations.** Teams retired the Office 365 connectors and archived the Bot Framework SDK.
+  Integrators rewrite integrations that work.
+* **Two card formats.** A bot for Slack and Teams translates between Block Kit and Adaptive Cards.
+  The two JSON schemas do not map one to one.
+* **Discord restrictions.** Bot developers resisted the move to slash commands and the privileged
+  message content intent. A bot has 100 top-level commands at most.
+* **Slack 2025 rate limit.** The limit breaks unvetted apps and AI agents that read history. Slack
+  gives bulk data exfiltration as the reason.
+* **Matrix bots in encrypted rooms.** A bot ignores a message when a room key is missing. Hookshot
+  fails to start after a Synapse change to the MSC3202 device identifier.
+
+### C. E2EE stakes
+
+1. **A key holder reads everything.** Slack, Discord and Zulip filter what a bot reads on the
+   server. A blind relay cannot filter content, so the scope of a bot must be cryptographic.
+   Keybase restricted bots are the one product in this pass with a cryptographic scope.
+2. **History.** Murmure gives the full history to a new member. The same rule gives a bot years of
+   messages. Slack throttles history reads by apps to stop exfiltration, without E2EE.
+3. **Plaintext lives where the bot runs.** With the WhatsApp Cloud API, E2EE ends at Meta. A bot
+   that calls a hosted AI model sends the plaintext to that model provider.
+4. **One symmetric key gives read and write together.** An inbound webhook bridge only posts. With
+   the Document Key, the bridge can also read the channel. A public HTTP endpoint then holds the
+   key of the channel.
+5. **A member bot removal costs a rotation.** Murmure rotates the Document Key when a member
+   leaves. A bot that holds the Document Key is a member, so its removal rotates the key for every
+   member.
+6. **The relay still sees metadata.** The relay knows which identity downloads which sealed
+   segment. The relay can rate-limit a bot identity, as Slack does on plaintext.
+7. **Optional encryption fails.** Matrix bots got E2EE years after the rooms did, and it stays
+   fragile. An SDK that makes encryption an option ships bots that fail in encrypted rooms.
+8. **A bot message is untrusted input.** The client renders an interactive message with wgpu. A
+   remote image in that message leaks the IP address and the read time of each viewer.
+
+### D. Do and do not for Murmure bots
+
+| # | Do | Do not | Stake |
+| :--- | :--- | :--- | :--- |
+| B1 | Give two bot classes. A restricted bot holds only a bot key, derived from the Document Key. A member bot holds the Document Key. Default to the restricted bot. | Give every bot the Document Key. | 1 |
+| B2 | Give a member bot the keys from its join onward. The admin grants history explicitly. | Send a bot the full history bundle by default. | 2 |
+| B3 | Give a write-only integration its own posting key. The members hold that key and read the posts with it. | Give an inbound webhook bridge the Document Key. | 4 |
+| B4 | Show where a bot runs, and each third party that receives content, before the admin invites the bot. | Hide that a bot sends plaintext to an external AI model. | 3 |
+| B5 | Let the relay rate-limit sealed segment downloads per bot identity. | Let a bot download every sealed segment at once, unseen. | 6 |
+| B6 | Put encryption inside the SDK. A bot cannot connect without the Murmure crypto. | Offer an SDK where encryption is an option. | 7 |
+| B7 | Keep one versioned declarative schema for interactive messages, with no remote content. | Load a remote image or a script from a bot message. | 8 |
+| B8 | Keep the bot protocol stable and versioned. | Retire an integration path with a forced migration. | 6.B |
+| B9 | Store the slash command registry in the encrypted `meta` document. The client autocompletes commands. | Register commands on the relay. | 1 |
+
+A restricted bot (B1) follows the Keybase model:
+
+1. Each member derives the bot key with HKDF, from the Document Key and the bot identifier.
+2. The client encrypts with the bot key only a message for the bot, for example a slash command.
+3. The bot answers with the same bot key, so the bot key is also its posting key (B3).
+4. A removal rotates no Document Key. The members stop using the bot key of the removed bot.
+
+A key rotation creates a new Document Key, so each member derives a new bot key.
+
+### E. What this challenges in the sketch
+
+* **Section 7.A.** The sketch shares the document session key with each invited bot. Rows B1 and
+  B2 replace that rule for most bots.
+* **Section 7.C, inbound webhooks.** The "Encryptor" receives plaintext JSON from GitHub or Stripe.
+  The organization runs it, never the relay operator. Rows B3 and B4 apply.
+* **Section 7.C, ephemeral bots, and section 7.B, WASM applets.** Both run on the client, so no
+  plaintext leaves the device. The research supports them as the default for automation.
+* **Section 7.D, trust indicator.** The badge certifies a key. It must also show where the bot
+  runs (row B4).
+
+## 7. SOURCES
 
 Read on 2026-09-24.
 
@@ -212,3 +302,46 @@ Second pass, read on 2026-09-24.
   <https://dev.to/progressier/how-to-fix-ios-push-subscriptions-being-terminated-after-3-notifications-39a7>
 * Apple Developer Forums, "usernotifications.filtering entitlement":
   <https://developer.apple.com/forums/thread/713997>
+
+Third pass (bots), read on 2026-09-24.
+
+* Slack Developer Docs, "Rate limit changes for non-Marketplace apps" (2025-05-29):
+  <https://docs.slack.dev/changelog/2025/05/29/rate-limit-changes-for-non-marketplace-apps/>
+* Slack Developers, "Build richer agent experiences with Block Kit":
+  <https://slack.dev/build-richer-agent-experiences-with-block-kit/>
+* Microsoft 365 Developer Blog, "Retirement of Office 365 connectors within Microsoft Teams":
+  <https://devblogs.microsoft.com/microsoft365dev/retirement-of-office-365-connectors-within-microsoft-teams/>
+* Microsoft 365 Message Center, "MC1181996 -- Migration update for Office 365 connectors retirement":
+  <https://mc.merill.net/message/MC1181996>
+* Microsoft, "botframework-sdk" repository README (archive notice):
+  <https://github.com/microsoft/botframework-sdk>
+* Syncrivo, "Slack Block Kit vs Adaptive Cards for Message Formatting":
+  <https://syncrivo.ai/en/blog/slack-block-kit-vs-adaptive-cards-cross-platform-formatting>
+* Discord Developers, "You Might Not Need a Privileged Intent":
+  <https://docs.discord.com/developers/gateway/you-might-not-need-a-privileged-intent>
+* Discord API Docs, discussion 3540, "Message Content Access Deprecation for Verified Bots":
+  <https://github.com/discord/discord-api-docs/discussions/3540>
+* Zulip Help, "Outgoing webhooks": <https://zulip.com/help/outgoing-webhooks>
+* Zulip API, "Incoming webhook integrations": <https://docs.zulip.com/api/incoming-webhooks-overview>
+* Matrix Hookshot, "Encryption":
+  <https://matrix-org.github.io/matrix-hookshot/latest/advanced/encryption.html>
+* Matrix Hookshot, issue 1398, "Hookshot fails to start against Synapse 1.161.0":
+  <https://github.com/matrix-org/matrix-hookshot/issues/1398>
+* matrix-bot-sdk, issue 208, "Encrypted appservices can't decrypt event":
+  <https://github.com/turt2live/matrix-bot-sdk/issues/208>
+* Wire, "Wire Integrations SDK: Build Secure Apps Inside Encrypted Conversations" (search summary
+  only, the page was not reachable):
+  <https://wire.com/en/blog/wire-integrations-sdk-secure-encrypted-apps>
+* Meta for Developers, "WhatsApp Cloud API -- Data Privacy & Security":
+  <https://developers.facebook.com/documentation/business-messaging/whatsapp/data-privacy-and-security/>
+* Meta for Developers, "On-Premises API Sunset":
+  <https://developers.facebook.com/docs/whatsapp/on-premises/sunset>
+* signal-cli, "An unofficial commandline and JSON-RPC interface for Signal":
+  <https://github.com/AsamK/signal-cli>
+* Telegram, "End-to-End Encryption, Secret Chats": <https://core.telegram.org/api/end-to-end>
+* Telegram, "FAQ": <https://telegram.org/faq>
+* Threema Gateway, "Products and prices": <https://gateway.threema.ch/en/products>
+* Threema Gateway, "API": <https://gateway.threema.ch/en/developer/api>
+* Keybase Book, "Restricted Bots in Chat": <https://book.keybase.io/docs/chat/restricted-bots>
+* Keybase Docs, "Chat -- Restricted Bots": <https://keybase.io/docs/chat/restricted_bots>
+* Keybase Blog, "Introducing Keybase bots": <https://keybase.io/blog/bots>
