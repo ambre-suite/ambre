@@ -6,6 +6,9 @@
 > A sketch, and not a specification: what Murmure would be, written before a crate exists. It
 > declares no contract row, so it binds nothing and no rule is cited from it. Real-time
 > communication, channels, and E2EE persistence.
+>
+> What users like and dislike in Teams, Slack and Discord is in
+> `ambre-murmure-user-research.md`, with a do and do-not table for Murmure.
 
 ## 1. VISION & FLOW
 Murmure is the command and discussion center. Unlike classic SaaS tools, every message is an encrypted CRDT mutation, ensuring that even the "Blind Relay" server cannot read the content.
