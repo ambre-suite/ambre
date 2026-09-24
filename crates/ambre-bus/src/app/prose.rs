@@ -52,7 +52,7 @@ pub struct BlockId {
 
 impl BlockId {
     #[must_use]
-    pub fn new(peer: u64, counter: i32) -> Self {
+    pub const fn new(peer: u64, counter: i32) -> Self {
         Self { peer, counter }
     }
 }
@@ -626,6 +626,12 @@ pub enum ProseCommand {
     /// Changes nothing, and is the one command a test drives the empty outcome
     /// with (`PROSE-047`).
     Noop,
+    /// The view has taken every text change up to `seen`, the number the
+    /// last one it applied carried. The Logic thread answers with
+    /// [`ProseEvent::Synced`] once everything sent before has landed.
+    Sync {
+        seen: u64,
+    },
 
     // -- Text editing (`features/ambre-spec-prose-text-editing.md`) --
     /// One committed run of text, at one position in one block.
@@ -987,6 +993,7 @@ impl ProseCommand {
         !matches!(
             self,
             Self::Noop
+                | Self::Sync { .. }
                 | Self::UpdateCursor { .. }
                 | Self::CountWords
                 | Self::FindStart { .. }
@@ -1004,6 +1011,7 @@ impl ProseCommand {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Noop => "nothing",
+            Self::Sync { .. } => "catching up",
             Self::InsertText { .. } => "typing",
             Self::DeleteText { .. } => "deleting text",
             Self::DeleteRange { .. } => "deleting the selection",
@@ -1092,8 +1100,17 @@ pub enum ProseEvent {
     /// holds no document (`PROSE-UI-001`). The draft and the caret follow it
     /// (`PROSE-UI-005`, `PROSE-UI-028`, `PROSE-UI-143`).
     TextChanged {
-        /// The change is this peer's own command, coming back.
+        /// The change is what a text command of the view did, as the view
+        /// already drew it. Any other change, remote or not, is `false`.
         local: bool,
+        /// The count of changes the view did not draw, this one included when
+        /// `local` is `false`. The view hands it back in
+        /// [`ProseCommand::Sync`].
+        seq: u64,
+        /// How many insertions and deletions of text the Logic thread has
+        /// taken from the view so far.
+        acked: u64,
+        /// One run after another, each in the text the previous one left.
         edits: Vec<TextEdit>,
         /// The blocks the change deleted.
         removed: Vec<BlockId>,
@@ -1102,6 +1119,9 @@ pub enum ProseEvent {
     /// needs the new block's identity to leave the caret at its start
     /// (`PROSE-UI-141`): it cannot mint the id and cannot read the document.
     BlockSplit { source: BlockId, new_block: BlockId },
+    /// Every command sent before the [`ProseCommand::Sync`] it answers has
+    /// landed, and `acked` counts the text commands among them.
+    Synced { acked: u64 },
     /// The whole live peer set, replaced rather than merged (`PRESENCE-009`).
     RemoteCursors { cursors: Vec<RemoteCursor> },
     /// A picture finished decrypting, and the blocks that show it are stale

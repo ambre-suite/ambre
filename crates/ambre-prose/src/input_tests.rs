@@ -14,7 +14,7 @@ struct Rig {
     logic: ProseState,
     ui: ProseUiState,
     outbox: Vec<ProseCommand>,
-    /// Every command the view ever sent, in order.
+    /// Every edit the view ever sent, in order: the syncs are left out.
     sent: Vec<ProseCommand>,
 }
 
@@ -49,9 +49,16 @@ impl Rig {
             sent.push(command);
             SendResult::Sent
         });
-        self.outbox.extend(sent.iter().cloned());
-        self.sent.extend(sent);
+        self.take_sent(sent);
         consumed
+    }
+
+    fn take_sent(&mut self, sent: Vec<ProseCommand>) {
+        self.outbox.extend(sent.iter().cloned());
+        self.sent.extend(
+            sent.into_iter()
+                .filter(|command| !matches!(command, ProseCommand::Sync { .. })),
+        );
     }
 
     fn key(&mut self, key: ProseKey, shift: bool, ctrl: bool) -> bool {
@@ -73,12 +80,21 @@ impl Rig {
 
     /// Hand the sent commands to the Logic side, and its display events back
     /// to the view, the layout apart.
+    /// The input the view held meanwhile is replayed, as the host does.
     fn deliver(&mut self) {
-        for command in std::mem::take(&mut self.outbox) {
-            let outcome = self.logic.handle_command(command);
-            for event in &outcome.display {
-                self.ui.apply_event(event);
+        while !self.outbox.is_empty() {
+            for command in std::mem::take(&mut self.outbox) {
+                let outcome = self.logic.handle_view_command(command);
+                for event in &outcome.display {
+                    self.ui.apply_event(event);
+                }
             }
+            let mut sent = Vec::new();
+            self.ui.replay(&mut |command| {
+                sent.push(command);
+                SendResult::Sent
+            });
+            self.take_sent(sent);
         }
     }
 
@@ -297,6 +313,62 @@ fn a_remote_insertion_before_the_draft_shifts_it() {
     );
     assert_eq!(rig.ui.draft.insert_pos, 9);
     assert_eq!(rig.caret().offset, 13);
+    // The insertion was sent before the view saw the collaborator's, and it
+    // still lands where it was typed.
+    rig.deliver();
+    rig.lay();
+    assert_eq!(
+        rig.logic.text_of(&block).as_deref(),
+        Some(">> hello big world")
+    );
+    assert!(rig.ui.draft.is_empty());
+}
+
+/// `PROSE-UI-182`: text sent before a collaborator's deletion reached the view
+/// lands where it was typed, and so does the next keystroke, both orders alike.
+#[test]
+fn typing_in_flight_and_a_remote_deletion_land_on_one_text() {
+    for remote_first in [true, false] {
+        let mut rig = Rig::new(&["hello world"]);
+        let block = rig.blocks()[0];
+        let mut other = a_collaborator(&rig);
+        rig.ui.set_caret((block, 6));
+        rig.type_text("big ");
+        let deletion = ProseCommand::DeleteText {
+            block_id: block,
+            range: (0, 6),
+        };
+        if remote_first {
+            receive(&mut rig, &mut other, deletion);
+        } else {
+            rig.deliver();
+            receive(&mut rig, &mut other, deletion);
+        }
+        assert_eq!(rig.caret().offset, 4);
+        rig.type_text("!");
+        rig.deliver();
+        rig.lay();
+        assert_eq!(rig.logic.text_of(&block).as_deref(), Some("big !world"));
+        assert!(rig.ui.inflight.is_empty());
+    }
+}
+
+/// `PROSE-UI-183`: typing right after Enter waits for the split, then lands in
+/// the new paragraph rather than in the one that parted.
+#[test]
+fn typing_right_after_enter_lands_in_the_new_paragraph() {
+    let mut rig = Rig::new(&["hello"]);
+    let block = rig.blocks()[0];
+    rig.ui.set_caret((block, 5));
+    rig.key(ProseKey::Enter, false, false);
+    assert!(rig.type_text("x"));
+    assert_eq!(rig.ui.queued.len(), 1);
+    rig.deliver();
+    rig.lay();
+    let blocks = rig.blocks();
+    assert_eq!(rig.logic.text_of(&blocks[0]).as_deref(), Some("hello"));
+    assert_eq!(rig.logic.text_of(&blocks[1]).as_deref(), Some("x"));
+    assert!(rig.ui.queued.is_empty());
 }
 
 /// `PROSE-UI-143`, `PROSE-UI-027`: a change elsewhere and an event carrying
@@ -331,6 +403,38 @@ fn the_draft_is_dropped_only_with_its_block() {
         ProseCommand::DeleteBlock { block_id: second },
     );
     assert!(rig.ui.draft.is_empty());
+}
+
+/// `PROSE-UI-143`, `PROSE-UI-178`: deleting a table takes its cells with it,
+/// so a draft in a cell is dropped and the caret leaves it.
+#[test]
+fn deleting_a_table_drops_the_draft_in_its_cell() {
+    use crate::logic::tables::tests::{cell_at, first_block_of, the_table};
+    let mut rig = Rig::new(&["one"]);
+    let first = rig.blocks()[0];
+    rig.logic.handle_command(ProseCommand::InsertTable {
+        parent_id: None,
+        after_id: Some(first),
+        rows: 1,
+        cols: 1,
+    });
+    rig.lay();
+    let table = the_table(&rig.logic);
+    let cell =
+        crate::events::block_id(first_block_of(&rig.logic, cell_at(&rig.logic, table, 0, 0)));
+    let mut other = a_collaborator(&rig);
+    rig.ui.set_caret((cell, 0));
+    rig.type_text("!");
+    rig.deliver();
+    receive(
+        &mut rig,
+        &mut other,
+        ProseCommand::DeleteBlock {
+            block_id: crate::events::block_id(table),
+        },
+    );
+    assert!(rig.ui.draft.is_empty());
+    assert_ne!(rig.caret().block_id, cell);
 }
 
 /// `PROSE-UI-178`: the caret in a deleted block collapses to the end of the
@@ -461,6 +565,8 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
         sent.push(command);
         SendResult::Sent
     }));
+    // The structural command is followed by the sync that holds the input.
+    assert!(matches!(sent.pop(), Some(ProseCommand::Sync { seen: 0 })));
     assert!(matches!(
         sent.as_slice(),
         [ProseCommand::InsertBlock {
@@ -525,8 +631,8 @@ fn a_backwards_selection_is_read_in_order() {
     assert_eq!(rig.caret().block_id, first);
 }
 
-/// Typing over a selection takes it first, and the insertion lands where it
-/// started.
+/// `PROSE-UI-030`, `PROSE-UI-137`, `PROSE-UI-140`, `PROSE-UI-177`: typing
+/// over a selection takes it first, and the insertion lands where it started.
 #[test]
 fn typing_over_a_selection_deletes_it_first() {
     let mut rig = Rig::new(&["hello world"]);
@@ -759,4 +865,28 @@ fn a_point_resolves_to_the_offset_drawn_there_under_zoom_and_scroll() {
             assert_eq!(rig.ui.hit_test(x, y), Some((block, offset)), "zoom {zoom}");
         }
     }
+}
+
+/// `PROSE-UI-184`: an insertion the document refuses, because its block was
+/// deleted meanwhile, leaves the view on the text the document holds.
+#[test]
+fn a_refused_insertion_leaves_the_view_on_the_documents_text() {
+    let mut rig = Rig::new(&["one", "two"]);
+    let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
+    let mut other = a_collaborator(&rig);
+    rig.ui.set_caret((second, 3));
+    rig.type_text("!");
+    receive(
+        &mut rig,
+        &mut other,
+        ProseCommand::DeleteBlock { block_id: second },
+    );
+    rig.deliver();
+    rig.lay();
+    assert!(rig.ui.inflight.is_empty());
+    assert!(rig.ui.draft.is_empty());
+    assert_eq!(rig.caret().block_id, first);
+    rig.type_text("s");
+    rig.deliver();
+    assert_eq!(rig.logic.text_of(&first).as_deref(), Some("ones"));
 }

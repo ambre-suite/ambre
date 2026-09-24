@@ -6,7 +6,7 @@
 //! function in. Every mutation leaves through that function (`PROSE-UI-004`);
 //! the view writes its draft and its caret, and nothing else.
 
-use crate::events::{BlockInit, ProseCommand};
+use crate::events::{BlockInit, ProseCommand, TextEdit};
 use crate::ui::{ProseUiState, SendResult, chars};
 use crate::view::caret::{Direction, Spot};
 
@@ -16,6 +16,10 @@ pub const MULTI_PRESS_MS: f64 = 500.0;
 /// How far a second press may land from the first and still be in place, in
 /// canvas pixels.
 const MULTI_PRESS_PX: f32 = 4.0;
+
+/// How many inputs the view holds while it waits on a structural command. A
+/// wait lasts one round trip, so the bound is never reached by a hand.
+const QUEUED_INPUTS: usize = 256;
 
 /// A key the view acts on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,6 +86,43 @@ pub enum ProseInput {
     Release,
 }
 
+/// A command sent, as the view keeps track of it.
+enum Sent {
+    /// An insertion or a deletion inside one block, in the text the view
+    /// shows.
+    Text(TextEdit),
+    /// A command that changes the blocks.
+    Barrier,
+}
+
+impl Sent {
+    fn of(command: &ProseCommand) -> Option<Self> {
+        Some(match command {
+            ProseCommand::InsertText {
+                block_id,
+                pos,
+                text,
+            } => Self::Text(TextEdit {
+                block_id: *block_id,
+                at: *pos,
+                delta: i64::from(chars(text)),
+            }),
+            ProseCommand::DeleteText { block_id, range } => {
+                let (start, end) = (range.0.min(range.1), range.0.max(range.1));
+                Self::Text(TextEdit {
+                    block_id: *block_id,
+                    at: start,
+                    delta: -i64::from(end - start),
+                })
+            }
+            ProseCommand::SplitBlock { .. }
+            | ProseCommand::DeleteRange { .. }
+            | ProseCommand::InsertBlock { .. } => Self::Barrier,
+            _ => return None,
+        })
+    }
+}
+
 /// The last press, to count a second and a third one in place.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Press {
@@ -94,7 +135,95 @@ pub(crate) struct Press {
 impl ProseUiState {
     /// Act on one input. Answers whether the view consumed it; a key it does
     /// not act on is left to the host.
+    ///
+    /// After a structural command the view no longer knows where its
+    /// positions fall, so it holds the input until the Logic thread answers
+    /// (`features/ambre-spec-prose-text-editing.md section 3`). The host
+    /// calls [`replay`](Self::replay) once events have been taken.
     pub fn handle_input(
+        &mut self,
+        input: &ProseInput,
+        send: &mut dyn FnMut(ProseCommand) -> SendResult,
+    ) -> bool {
+        if self.waiting() {
+            if self.queued.len() < QUEUED_INPUTS {
+                self.queued.push_back(input.clone());
+            } else {
+                tracing::warn!("Prose: too much input held, one is dropped");
+            }
+            return true;
+        }
+        let (seen, mut sent_seen) = (self.seen, self.sent_seen);
+        let mut synced = false;
+        let mut sent: Vec<Sent> = Vec::new();
+        let consumed = {
+            let mut tracked = |command: ProseCommand| {
+                let note = Sent::of(&command);
+                // The Logic thread hears what this view has applied before
+                // the edit that counts on it.
+                if note.is_some() && seen > sent_seen {
+                    if !send(ProseCommand::Sync { seen }).accepted() {
+                        return SendResult::Dropped;
+                    }
+                    sent_seen = seen;
+                    synced = true;
+                }
+                let result = send(command);
+                if result.accepted() {
+                    sent.extend(note);
+                }
+                result
+            };
+            self.act(input, &mut tracked)
+        };
+        self.sent_seen = sent_seen;
+        if synced {
+            self.syncs.push_back(false);
+        }
+        let mut barrier = false;
+        for note in sent {
+            match note {
+                Sent::Text(edit) => self.inflight.push_back(edit),
+                Sent::Barrier => barrier = true,
+            }
+        }
+        if barrier && send(ProseCommand::Sync { seen: self.seen }).accepted() {
+            self.sent_seen = self.seen;
+            self.syncs.push_back(true);
+        }
+        consumed
+    }
+
+    /// Whether a structural command is still unanswered.
+    fn waiting(&self) -> bool {
+        self.syncs.iter().any(|holds| *holds)
+    }
+
+    /// Act on the input held while a structural command was unanswered, in
+    /// order, until another one holds the rest. Answers whether any was
+    /// consumed.
+    ///
+    /// The Logic thread keeps each change until this view says it applied
+    /// it, so the view says so here, once per batch of events taken.
+    pub fn replay(&mut self, send: &mut dyn FnMut(ProseCommand) -> SendResult) -> bool {
+        if !self.waiting()
+            && self.seen > self.sent_seen
+            && send(ProseCommand::Sync { seen: self.seen }).accepted()
+        {
+            self.sent_seen = self.seen;
+            self.syncs.push_back(false);
+        }
+        let mut consumed = false;
+        while !self.waiting() {
+            let Some(input) = self.queued.pop_front() else {
+                break;
+            };
+            consumed |= self.handle_input(&input, send);
+        }
+        consumed
+    }
+
+    fn act(
         &mut self,
         input: &ProseInput,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,

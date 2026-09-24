@@ -31,7 +31,7 @@
 | `prose-page-rendering` | What a page looks like on the canvas. | partial | 19 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | partial | 48 |  |
 | `prose-selection` | Where the caret is, where it goes, and what a drag selects. | partial | 35 |  |
-| `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 26 |  |
+| `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 30 |  |
 | `prose-track-changes` | A reviewer edits without changing the document. | partial | 40 |  |
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | partial | 17 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
@@ -44,4 +44,4 @@
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 | `prose-toolbar` | Select a few words and a small bar appears above them. | design-only | 14 |  |
 
-**28 features: 12 implemented, 7 partial, 9 design-only. 626 contract rows, 2 loose.**
+**28 features: 12 implemented, 7 partial, 9 design-only. 630 contract rows, 2 loose.**

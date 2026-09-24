@@ -782,13 +782,14 @@ fn moved(
             local,
             edits,
             removed,
+            ..
         } => Some((*local, edits.clone(), removed.clone())),
         _ => None,
     })
 }
 
 /// `PROSE-UI-028`: the view is told each run a change inserted or deleted, in
-/// code points of the text before it. It also learns whether it was its own.
+/// code points of the text the runs before it left. It also learns whether it was its own.
 #[test]
 fn a_change_tells_the_view_what_it_did_to_the_text() {
     let (mut alice, mut bob, block) = two_peers();

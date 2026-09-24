@@ -24,8 +24,8 @@ type Moved = Arc<Mutex<TextMoves>>;
 /// caret by it (`PROSE-UI-028`).
 #[derive(Debug, Default)]
 pub(crate) struct TextMoves {
-    /// A block, where a run starts in the text before it, and its signed
-    /// length in code points.
+    /// A block, where a run starts in the text the runs before it left, and
+    /// its signed length in code points.
     pub(crate) edits: Vec<(TreeID, u32, i64)>,
     pub(crate) removed: Vec<TreeID>,
 }
@@ -99,8 +99,6 @@ impl Touched {
 
 /// The runs a body text gained or lost, and the blocks a change deleted or
 /// hid: a candidate the caller checks against the tree.
-/// A position is counted in the text as it stood before the run, which is
-/// how a delta walks it.
 fn record(change: &ContainerDiff<'_>, moves: &mut TextMoves) {
     match &change.diff {
         Diff::Text(delta) => {
@@ -110,6 +108,8 @@ fn record(change: &ContainerDiff<'_>, moves: &mut TextMoves) {
             let Some(block) = doc::parse_body_key(name) else {
                 return;
             };
+            // The walk counts positions in the text as the runs before
+            // leave it, so each run reads after the previous one.
             let mut at: u32 = 0;
             for item in delta {
                 match item {
@@ -117,17 +117,13 @@ fn record(change: &ContainerDiff<'_>, moves: &mut TextMoves) {
                         at = at.saturating_add(u32::try_from(*retain).unwrap_or(u32::MAX));
                     }
                     TextDelta::Insert { insert, .. } => {
-                        let len = insert.chars().count();
-                        moves
-                            .edits
-                            .push((block, at, i64::try_from(len).unwrap_or(i64::MAX)));
+                        let len = u32::try_from(insert.chars().count()).unwrap_or(u32::MAX);
+                        moves.edits.push((block, at, i64::from(len)));
+                        at = at.saturating_add(len);
                     }
-                    // An insertion is not in the text before, so the walk
-                    // stays put. A deletion is, and the walk steps over it.
                     TextDelta::Delete { delete } => {
                         let len = u32::try_from(*delete).unwrap_or(u32::MAX);
                         moves.edits.push((block, at, -i64::from(len)));
-                        at = at.saturating_add(len);
                     }
                 }
             }

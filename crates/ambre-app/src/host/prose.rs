@@ -141,6 +141,14 @@ impl ProseView {
                 }
             }
         }
+        // The input held behind a structural command goes out once the
+        // Logic thread answered it, unless an edit still waits in the outbox.
+        if !self.fatal && !self.outbox.is_busy() {
+            let (outbox, document_id) = (&mut self.outbox, self.document_id);
+            let mut send = |command| send_edit(outbox, document_id, command);
+            self.dirty |= self.state.replay(&mut send);
+            self.busy_pub.publish(self.outbox.is_busy());
+        }
         if self.shown != Some(self.state.word_count) {
             self.shown = Some(self.state.word_count);
             self.figures

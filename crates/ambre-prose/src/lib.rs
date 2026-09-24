@@ -50,6 +50,7 @@ pub mod logic;
 pub mod mark;
 pub mod note;
 pub mod numbering;
+pub(crate) mod rebase;
 pub mod schema;
 pub mod style;
 pub mod suggest;

@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-004` | `INV` | The view MUST NOT mutate shared state: what was typed and not yet confirmed MUST live in a draft held apart from the document, and every mutation MUST leave as a command. | this spec section 3 | `ambre_prose::input_tests::typing_fills_the_draft_and_sends_one_insertion_per_run`; `::a_dropped_insertion_leaves_no_echo` | none | verified |
 | `PROSE-UI-134` | `OBS` | The text a draft holds MUST be drawn under the caret over the confirmed runs, before the document has answered. | this spec section 3 | `ambre_prose::view::paint::tests::a_draft_is_drawn_before_the_document_answers` | none | verified |
 | `PROSE-UI-135` | `INV` | A draft MUST hold text and an anchor and no structure: it MUST NOT be able to express a split, a deletion or a mark. | this spec section 3 | `ambre_prose::input_tests::a_split_and_a_deletion_leave_as_commands_and_not_as_draft` | none | verified |
-| `PROSE-UI-137` | `INV` | One primitive MUST delete the active selection, and a second one MUST NOT exist per editing path. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-137` | `INV` | One primitive MUST delete the active selection, and a second one MUST NOT exist per editing path. | this spec section 3 | `ambre_prose::input_tests::typing_over_a_selection_deletes_it_first` | none | verified |
 | `PROSE-039` | `INV` | Joining two paragraphs MUST be expressed as the deletion below with an empty range; a second join operation MUST NOT exist. | this spec section 3 | exhaustive-match -- `ProseCommand` is closed and declares one deletion across blocks and no join variant; `ambre_prose::logic::text::tests::a_deletion_across_a_boundary_joins_the_two_paragraphs` | none | verified |
 
 ### 1.2 Type a run of text
@@ -37,9 +37,9 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-030` | `POST` | An edit that inserts or splits MUST delete the active selection first. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-177` | `POST` | After that deletion, the caret MUST collapse to the start of the range it deleted. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-140` | `FRAME` | Taking the selection MUST emit the deletion alone: the insertion or the split that follows MUST be the caller's, and MUST reach the document after it. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-030` | `POST` | An edit that inserts or splits MUST delete the active selection first. | this spec section 3 | `ambre_prose::input_tests::typing_over_a_selection_deletes_it_first` | none | verified |
+| `PROSE-UI-177` | `POST` | After that deletion, the caret MUST collapse to the start of the range it deleted. | this spec section 3 | `ambre_prose::input_tests::typing_over_a_selection_deletes_it_first` | none | verified |
+| `PROSE-UI-140` | `FRAME` | Taking the selection MUST emit the deletion alone: the insertion or the split that follows MUST be the caller's, and MUST reach the document after it. | this spec section 3 | `ambre_prose::input_tests::typing_over_a_selection_deletes_it_first` | none | verified |
 
 ### 1.4 Delete across a paragraph boundary
 
@@ -71,8 +71,12 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-UI-005` | `POST` | A confirmed run MUST leave the draft once the layout carrying it is in force: its text is then in the confirmed runs. | this spec section 3 | `ambre_prose::input_tests::a_confirmed_run_leaves_the_draft_once_it_is_laid_out` | none | verified |
 | `PROSE-UI-028` | `POST` | A remote change MUST shift the pending draft by what it applied at or before the draft position. | this spec section 3 | `ambre_prose::input_tests::a_remote_insertion_before_the_draft_shifts_it` | none | verified |
-| `PROSE-UI-143` | `POST` | The draft MUST be dropped only when the block it is anchored in is deleted. | this spec section 3 | `ambre_prose::input_tests::the_draft_is_dropped_only_with_its_block` | none | verified |
-| `PROSE-UI-178` | `POST` | When that block is deleted, the caret MUST collapse to the nearest confirmed position. | this spec section 3 | `ambre_prose::input_tests::the_caret_of_a_deleted_block_collapses_beside_it` | none | verified |
+| `PROSE-UI-143` | `POST` | The draft MUST be dropped only when the block it is anchored in, or a block holding it, is deleted. | this spec section 3 | `ambre_prose::input_tests::the_draft_is_dropped_only_with_its_block`; `::deleting_a_table_drops_the_draft_in_its_cell` | none | verified |
+| `PROSE-UI-178` | `POST` | When that block is deleted, the caret MUST collapse to the nearest confirmed position. | this spec section 3 | `ambre_prose::input_tests::the_caret_of_a_deleted_block_collapses_beside_it`; `::deleting_a_table_drops_the_draft_in_its_cell` | none | verified |
+| `PROSE-UI-182` | `POST` | An edit sent before the view took a concurrent change MUST land where it was typed, and the view and the document MUST end on one text. | this spec section 3 | `ambre_prose::input_tests::typing_in_flight_and_a_remote_deletion_land_on_one_text`; `::a_remote_insertion_before_the_draft_shifts_it`; `ambre_prose::rebase::tests::both_orders_land_on_one_text` | none | verified |
+| `PROSE-UI-183` | `FRAME` | Input that follows a split or a deletion across blocks MUST wait until the document has taken it, and MUST then land in the text it left. | this spec section 3 | `ambre_prose::input_tests::typing_right_after_enter_lands_in_the_new_paragraph` | none | verified |
+| `PROSE-UI-184` | `FAIL` | An edit the document refuses or turns into something else MUST leave the view on the text the document holds, with no draft left for it. | this spec section 3 | `ambre_prose::input_tests::a_refused_insertion_leaves_the_view_on_the_documents_text`; `ambre_prose::logic::catchup::tests::a_drawing_the_document_did_not_follow_is_taken_back` | none | verified |
+| `PROSE-UI-185` | `POST` | A command that carries a range the view does not draw, a mark applied from the toolbar among them, MUST be moved through the changes the view had not seen when it sent it. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-027` | `FRAME` | An event carrying no change MUST leave the draft untouched: a download or a presence update MUST NOT erase what is being typed. | this spec section 3 | `ambre_prose::input_tests::the_draft_is_dropped_only_with_its_block` | none | verified |
 
 * **Budget.** the keystroke to a local echo and the keystroke to a confirmed one, two rows of
@@ -80,11 +84,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. Every mutation leaves as a command (`PROSE-UI-002`,
   `features/ambre-spec-prose-engine.md section 1`).
-* **Budget.** the keystroke to a local echo and the keystroke to a confirmed one, two rows of
-  `ambre-spec-budgets.md section 1`.
-* **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
-  network, crypto or persistence path.
-* **Verification.** 20 `verified`, and 6 `unimplemented`. The draft, the join and the split are
+* **Verification.** 27 `verified`, and 3 `unimplemented`. The draft, the join and the split are
   built; the composition is not. `PROSE-101` reads two tests, because the paragraph the caret started in is
   the one a deletion does not remove.
 
@@ -101,6 +101,7 @@ Two peers in one paragraph. No test resolves yet: the last column names the row 
 | is mid-word | deletes the paragraph she is typing in | Bob's deletion | Alice's draft dropped, her caret at the nearest surviving position | none -- `PROSE-UI-143` |
 | is composing with an input method | inserts a word earlier | Bob's word alone, until the composition ends | Alice's preview unbroken; the committed text lands where her caret now is | none -- `PROSE-UI-029`, `PROSE-UI-142` |
 | selects a sentence and types over it | -- | the deletion, then the insertion, in that order | the sentence replaced | none -- `PROSE-UI-030` |
+| types a word while Bob's deletion is on its way | deletes the words before Alice's caret | both edits | Alice's word where she typed it, on both screens | none -- `PROSE-UI-182` |
 | presses Backspace at the start of a paragraph | -- | one deletion spanning the boundary | the two paragraphs joined, keeping the first one's style | none -- `PROSE-039`, `PROSE-041` |
 | presses Enter mid-paragraph | -- | a new sibling paragraph after the source | the tail on a new line, the caret at its start | none -- `PROSE-038`, `PROSE-UI-141` |
 
@@ -153,6 +154,18 @@ carries. Anything else erases keystrokes the user is still typing.
 | confirms the anchored block: the local edit came back | cleared, the text is in the confirmed runs (`PROSE-UI-005`) |
 | touches other blocks, or this one from another peer | reanchored over the applied shift (`PROSE-UI-028`) |
 | deleted the anchored block | dropped, the caret collapses to the confirmed position (`PROSE-UI-143`) |
+
+**Catching up.** The view draws an edit before the Logic thread takes it, so the two can cross.
+The Logic thread numbers each change the view did not draw and keeps it until the view says it
+applied it. An insertion or a deletion is transformed through the changes its sender had not seen,
+and each of those through it. The view transforms what it receives through its own edits still in
+flight, so both sides end on one text (`PROSE-UI-182`). At one position, the Logic thread's
+insertion goes first.
+
+A split or a deletion across blocks moves its positions through the same changes and is not
+transformed. The view then holds its input until the Logic thread answers a sync, and replays it
+in order (`PROSE-UI-183`). When the document does not do what the view drew, the Logic thread
+takes the drawing back and reports what it did.
 
 **The input path.** Printable text is never matched key by key. The shared transparent text field
 owns editing focus and normalizes the DOM events (`ambre-spec-text-input.md`). The view

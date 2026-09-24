@@ -29,6 +29,7 @@ use crate::events::{
     ProseEvent, RemoteCursor, ResolvedCrossRef, Suggestion, TableOfContents, TextEdit, WordCount,
 };
 use crate::layout::run::{ShapedLayout, ShapedRun};
+use crate::rebase;
 use crate::view::Highlight;
 use crate::view::cache::RunCache;
 use crate::view::column::PageColumn;
@@ -118,7 +119,7 @@ impl DraftBuffer {
     /// (`PROSE-UI-028`).
     pub fn shift(&mut self, edits: &[TextEdit]) {
         if let Some(block) = self.block_id {
-            self.insert_pos = shifted(self.insert_pos, block, edits);
+            self.insert_pos = rebase::through_all(self.insert_pos, block, edits);
         }
     }
 
@@ -168,32 +169,6 @@ fn byte_at(text: &str, offset: u32) -> usize {
     text.char_indices()
         .nth(offset as usize)
         .map_or(text.len(), |(at, _)| at)
-}
-
-/// Where a position of `block` sits once `edits` applied.
-///
-/// The edits count positions of the text before them. An insertion at the
-/// position or before it pushes it on. A deletion before it pulls it back,
-/// and one that straddles it pulls it to where the deletion started.
-pub(crate) fn shifted(pos: u32, block: BlockId, edits: &[TextEdit]) -> u32 {
-    let mut moved = i64::from(pos);
-    for edit in edits.iter().filter(|edit| edit.block_id == block) {
-        let at = i64::from(edit.at);
-        let p = i64::from(pos);
-        if edit.delta >= 0 {
-            if at <= p {
-                moved += edit.delta;
-            }
-        } else {
-            let end = at - edit.delta;
-            if end <= p {
-                moved += edit.delta;
-            } else if at < p {
-                moved -= p - at;
-            }
-        }
-    }
-    u32::try_from(moved.max(0)).unwrap_or(u32::MAX)
 }
 
 /// The UI thread's whole state for one open Prose document.
@@ -274,6 +249,19 @@ pub struct ProseUiState {
     changed: bool,
     /// When the text was last seen changing, while a recount is owed.
     quiet_since_ms: Option<f64>,
+    /// The number of the last change this view did not draw and applied.
+    pub(crate) seen: u64,
+    /// The number last handed back in a [`ProseCommand::Sync`].
+    pub(crate) sent_seen: u64,
+    /// The text commands sent and not yet taken, in the text this view shows.
+    pub(crate) inflight: VecDeque<TextEdit>,
+    /// How many text commands the Logic thread said it took.
+    pub(crate) popped: u64,
+    /// The syncs sent and not yet answered, oldest first. One sent after a
+    /// structural command holds the input until it is answered.
+    pub(crate) syncs: VecDeque<bool>,
+    /// The input held meanwhile, replayed in order once it is answered.
+    pub(crate) queued: VecDeque<crate::input::ProseInput>,
 }
 
 /// What a send to the Logic thread did.
@@ -375,9 +363,21 @@ impl ProseUiState {
             }
             ProseEvent::TextChanged {
                 local,
+                seq,
+                acked,
                 edits,
                 removed,
-            } => self.take_text_change(*local, edits, removed),
+            } => {
+                self.take_acked(*acked, *local);
+                if !*local {
+                    self.seen = *seq;
+                }
+                self.take_text_change(*local, edits, removed);
+            }
+            ProseEvent::Synced { acked } => {
+                self.take_acked(*acked, true);
+                self.syncs.pop_front();
+            }
             ProseEvent::DocUpdated { .. } => self.changed = true,
             ProseEvent::CellEntered { block, .. } => self.place_caret(*block, 0),
             ProseEvent::WordCountUpdated { count } => self.word_count = *count,
@@ -442,26 +442,47 @@ impl ProseUiState {
         self.x_goal = None;
     }
 
+    /// Drop the text commands the Logic thread took. A command it took
+    /// as drawn confirms the draft; one it did not ends the draft, whose
+    /// text the change takes back.
+    fn take_acked(&mut self, acked: u64, as_drawn: bool) {
+        let mut ends_draft = false;
+        while self.popped < acked {
+            self.popped += 1;
+            let Some(edit) = self.inflight.pop_front() else {
+                continue;
+            };
+            if as_drawn {
+                self.draft.confirm(&edit);
+            } else {
+                ends_draft |= edit.delta > 0;
+            }
+        }
+        if ends_draft {
+            self.draft.clear();
+        }
+    }
+
     /// What a change did to the text.
     ///
-    /// This peer's own change confirms the draft, and moves no caret: the view
-    /// placed it when it sent the command. A collaborator's change shifts the
-    /// draft and both ends of the selection, but never the anchor of a drag in
-    /// flight (`PROSE-UI-152`). A deleted block drops the draft anchored in it
-    /// (`PROSE-UI-143`), and the caret collapses beside it (`PROSE-UI-178`).
+    /// This peer's own change moves nothing: the view drew it when it sent
+    /// the command. Any other change is first rewritten past the commands
+    /// still in flight (`PROSE-UI-182`). It then shifts the draft and both
+    /// ends of the selection, but never the anchor of a drag in flight
+    /// (`PROSE-UI-028`, `PROSE-UI-152`).
+    /// A deleted block drops the draft anchored in it (`PROSE-UI-143`), and
+    /// the caret collapses beside it (`PROSE-UI-178`).
     fn take_text_change(&mut self, local: bool, edits: &[TextEdit], removed: &[BlockId]) {
-        if local {
-            for edit in edits {
-                self.draft.confirm(edit);
-            }
-        } else {
-            self.draft.shift(edits);
+        if !local {
+            let (inflight, edits) = rebase::transform_all(self.inflight.make_contiguous(), edits);
+            self.inflight = inflight.into();
+            self.draft.shift(&edits);
             if let Some(cursor) = &mut self.cursor {
-                cursor.offset = shifted(cursor.offset, cursor.block_id, edits);
+                cursor.offset = rebase::through_all(cursor.offset, cursor.block_id, &edits);
                 if self.dragging.is_none()
                     && let Some((block, offset)) = &mut cursor.anchor
                 {
-                    *offset = shifted(*offset, *block, edits);
+                    *offset = rebase::through_all(*offset, *block, &edits);
                 }
             }
         }
@@ -476,7 +497,13 @@ impl ProseUiState {
                 cursor.anchor = None;
             }
             if cursor.block_id == *gone {
-                self.cursor = self.nearest_confirmed(*gone);
+                // A cell is laid out inside its table: the caret goes beside
+                // the deleted block the flow holds.
+                self.cursor = self.nearest_confirmed(*gone).or_else(|| {
+                    removed
+                        .iter()
+                        .find_map(|block| self.nearest_confirmed(*block))
+                });
                 self.caret_upstream = false;
                 self.x_goal = None;
                 self.dragging = None;
@@ -659,15 +686,20 @@ mod tests {
         // A change alone keeps the draft: the text is not laid out yet.
         state.apply_event(&ProseEvent::DocUpdated { delta: vec![1] });
         assert_eq!(state.draft.pending_text, "hel");
+        let typed = TextEdit {
+            block_id: block,
+            at: 0,
+            delta: 3,
+        };
+        state.inflight.push_back(typed);
         state.apply_event(&ProseEvent::TextChanged {
             local: true,
-            edits: vec![TextEdit {
-                block_id: block,
-                at: 0,
-                delta: 3,
-            }],
+            seq: 0,
+            acked: 1,
+            edits: vec![typed],
             removed: Vec::new(),
         });
+        assert!(state.inflight.is_empty());
         assert_eq!(state.draft.unlaid(), 3);
         state.draft.laid();
         assert!(state.draft.is_empty());

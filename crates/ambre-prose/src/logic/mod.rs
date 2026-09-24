@@ -31,6 +31,7 @@
 
 mod bands;
 mod blocks;
+mod catchup;
 mod comments;
 mod derived;
 mod find;
@@ -147,6 +148,9 @@ pub struct ProseState {
     stamped_counter: i32,
     /// The blocks written to since the last layout, whoever wrote them.
     touched: touched::Touched,
+    /// The changes the view has not drawn yet, and what it drew for the
+    /// command in dispatch (`catchup`).
+    catchup: catchup::CatchUp,
 }
 
 impl ProseState {
@@ -223,6 +227,7 @@ impl ProseState {
             find: None,
             stamped_counter,
             touched,
+            catchup: catchup::CatchUp::default(),
         })
     }
 
@@ -366,7 +371,27 @@ impl ProseState {
         // refusal is known here and nowhere deeper, so the name is written in
         // on the way out (`PROSE-105`).
         let refused = command.name();
-        self.dispatch(command).named(refused)
+        self.catchup.predicting = catchup::Prediction::drawn_by(&command);
+        let outcome = self.dispatch(command).named(refused);
+        self.catchup.predicting = catchup::Prediction::None;
+        outcome
+    }
+
+    /// [`handle_command`](Self::handle_command) for a command the view sent
+    /// (`features/ambre-spec-prose-text-editing.md section 3`).
+    ///
+    /// The view's positions lag behind the changes it had not seen when it
+    /// sent the command, so the command is caught up with them first. What
+    /// the document did differently from what the view drew is told back.
+    pub fn handle_view_command(&mut self, command: ProseCommand) -> ProseOutcome {
+        let refused = command.name();
+        let command = match self.catch_up(command) {
+            Ok(command) => command,
+            Err(outcome) => return outcome,
+        };
+        let mut outcome = self.dispatch(command).named(refused);
+        self.settle(&mut outcome);
+        outcome
     }
 
     fn dispatch(&mut self, command: ProseCommand) -> ProseOutcome {
@@ -394,7 +419,8 @@ impl ProseState {
             }
         }
         match command {
-            ProseCommand::Noop => ProseOutcome::nothing(),
+            // Answered by `catch_up` before dispatch.
+            ProseCommand::Noop | ProseCommand::Sync { .. } => ProseOutcome::nothing(),
             ProseCommand::InsertText {
                 block_id,
                 pos,
@@ -901,31 +927,55 @@ impl ProseState {
 
     /// What the text did since the last answer, for the view that follows it
     /// (`PROSE-UI-028`). `None` when the change touched no text and deleted
-    /// no block.
-    fn text_changed(&mut self, local: bool) -> Option<ProseEvent> {
-        let mut moves = self.touched.take_moves();
-        // A tree diff reports a delete for a node an import re-creates or
-        // moves, so only a block that is gone now counts as removed.
-        let tree = doc::blocks(&self.doc);
-        moves.removed.retain(|id| doc::node_of(&tree, id).is_none());
-        moves.removed.sort_unstable();
-        moves.removed.dedup();
-        if moves.edits.is_empty() && moves.removed.is_empty() {
+    /// no block. `from_command` tells a command's change, which the view may
+    /// have drawn, from an import.
+    fn text_changed(&mut self, from_command: bool) -> Option<ProseEvent> {
+        let moves = self.touched.take_moves();
+        let removed = self.gone(moves.removed);
+        let edits: Vec<crate::events::TextEdit> = moves
+            .edits
+            .into_iter()
+            .map(|(block, at, delta)| crate::events::TextEdit {
+                block_id: block_id(block),
+                at,
+                delta,
+            })
+            .collect();
+        let (local, seq, acked, edits) = self.catchup.stamp(from_command, edits);
+        if edits.is_empty() && removed.is_empty() {
             return None;
         }
         Some(ProseEvent::TextChanged {
             local,
-            edits: moves
-                .edits
-                .into_iter()
-                .map(|(block, at, delta)| crate::events::TextEdit {
-                    block_id: block_id(block),
-                    at,
-                    delta,
-                })
-                .collect(),
-            removed: moves.removed.into_iter().map(block_id).collect(),
+            seq,
+            acked,
+            edits,
+            removed: removed.into_iter().map(block_id).collect(),
         })
+    }
+
+    /// The blocks a change deleted, out of those it reported, with every
+    /// block inside them.
+    ///
+    /// A tree diff reports a delete for a node an import re-creates or
+    /// moves, so only a block that is gone now counts. Deleting a table hides
+    /// the table alone, and its cells go with it.
+    fn gone(&self, reported: Vec<TreeID>) -> Vec<TreeID> {
+        let tree = doc::blocks(&self.doc);
+        let mut out = Vec::new();
+        let mut stack: Vec<TreeID> = reported
+            .into_iter()
+            .filter(|id| doc::node_of(&tree, id).is_none())
+            .collect();
+        while let Some(id) = stack.pop() {
+            if out.contains(&id) {
+                continue;
+            }
+            out.push(id);
+            stack.extend(tree.children(id).unwrap_or_default());
+        }
+        out.sort_unstable();
+        out
     }
 
     /// Export every operation past the export cursor, and advance the cursor

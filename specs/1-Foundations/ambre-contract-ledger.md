@@ -19,16 +19,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2548 rows: 2217 shipped, of which 774 loose. 331 unbuilt.**
+**2552 rows: 2224 shipped, of which 774 loose. 328 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 226 | 221 | 542 | 454 | 1443 |
+| `verified` | 226 | 221 | 542 | 461 | 1450 |
 | `failing` | 39 | 46 | 22 |  | 107 |
 | `untested` | 266 | 143 | 234 | 2 | 645 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
-| `unimplemented` | 54 | 56 | 23 | 198 | 331 |
+| `unimplemented` | 54 | 56 | 23 | 195 | 328 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -144,7 +144,7 @@
 | `ambre-spec-prose-selection.md` | 35 | 27 | 27 |  | 8 |
 | `ambre-spec-prose-table-of-contents.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-prose-tables.md` | 47 | 47 | 47 |  |  |
-| `ambre-spec-prose-text-editing.md` | 26 | 20 | 20 |  | 6 |
+| `ambre-spec-prose-text-editing.md` | 30 | 27 | 27 |  | 3 |
 | `ambre-spec-prose-track-changes.md` | 40 | 35 | 35 |  | 5 |
 | `ambre-spec-prose-undo.md` | 3 | 3 | 3 |  |  |
 | `ambre-spec-prose-viewport.md` | 17 | 10 | 10 |  | 7 |
@@ -207,7 +207,7 @@
 | `ambre-spec-prose-spell-check.md` | PROSE-FEAT-019,041..043,102..112 |
 | `ambre-spec-prose-table-of-contents.md` | PROSE-FEAT-003,060..062,113..118,291..292; PROSE-UI-082..083 |
 | `ambre-spec-prose-tables.md` | PROSE-009,040; PROSE-FEAT-017,044..051,227..256,293..294; PROSE-UI-147,179..181 |
-| `ambre-spec-prose-text-editing.md` | PROSE-037..039,041..042,101,116; PROSE-UI-004..005,027..030,134..143,176..178 |
+| `ambre-spec-prose-text-editing.md` | PROSE-037..039,041..042,101,116; PROSE-UI-004..005,027..030,134..143,176..178,182..185 |
 | `ambre-spec-prose-toolbar.md` | PROSE-UI-053..057,096..104 |
 | `ambre-spec-prose-track-changes.md` | PROSE-FEAT-004,010..011,082..089,257..277,300..304; PROSE-UI-051..052,148 |
 | `ambre-spec-prose-undo.md` | PROSE-UI-045,073..074 |

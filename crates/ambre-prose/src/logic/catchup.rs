@@ -1,0 +1,289 @@
+//! The view's commands caught up with the changes it had not seen when it sent
+//! them (`features/ambre-spec-prose-text-editing.md section 3`).
+//!
+//! The view draws its own edits before the Logic thread takes them, so its
+//! positions count a text that lags behind the document. The Logic thread
+//! keeps every change the view did not draw, numbered, until the view says it
+//! has seen it. A text command is transformed through the ones it had not
+//! seen, and each of those through it, so both sides land on one text. A
+//! structural command moves its positions through them and draws nothing
+//! ahead: the view waits for [`ProseEvent::Synced`] before it edits again.
+
+use std::collections::VecDeque;
+
+use crate::events::{ProseCommand, ProseEvent, ProseOutcome, TextEdit};
+use crate::rebase;
+
+use super::ProseState;
+
+/// What the view drew for the command being dispatched.
+#[derive(Debug, Default)]
+pub(super) enum Prediction {
+    /// Nothing: the change is new to the view.
+    #[default]
+    None,
+    /// A structural change the view took in whole.
+    Barrier,
+    /// The runs the view drew, in the text the Logic thread holds.
+    Text(Vec<TextEdit>),
+}
+
+impl Prediction {
+    /// What a view would have drawn for `command`, for a caller that holds
+    /// no view and keeps no count.
+    pub(super) fn drawn_by(command: &ProseCommand) -> Self {
+        match command {
+            ProseCommand::InsertText { .. }
+            | ProseCommand::DeleteText { .. }
+            | ProseCommand::SplitBlock { .. }
+            | ProseCommand::DeleteRange { .. }
+            | ProseCommand::InsertBlock { .. } => Self::Barrier,
+            _ => Self::None,
+        }
+    }
+}
+
+/// The Logic thread's side of the exchange.
+#[derive(Debug, Default)]
+pub(super) struct CatchUp {
+    /// How many changes the view did not draw so far.
+    seq: u64,
+    /// The last of them the view said it applied.
+    seen: u64,
+    /// How many text commands the view sent so far.
+    acked: u64,
+    /// The runs of the changes the view has not said it applied, each with
+    /// its number. Each counts positions after every text command taken.
+    queue: VecDeque<(u64, TextEdit)>,
+    /// What the view drew for the command in dispatch.
+    pub(super) predicting: Prediction,
+}
+
+impl CatchUp {
+    /// `edit` rewritten to apply after every change the view had not seen,
+    /// and those rewritten to apply after it. `None` when nothing is left.
+    fn rebase(&mut self, edit: TextEdit) -> Option<TextEdit> {
+        let seen = self.seen;
+        let mut edit = Some(edit);
+        let mut queue = VecDeque::with_capacity(self.queue.len());
+        for (seq, other) in self.queue.drain(..) {
+            match edit {
+                Some(held) if seq > seen => {
+                    let (after, parts) = rebase::transform(&held, &other);
+                    edit = after;
+                    queue.extend(parts.into_iter().map(|part| (seq, part)));
+                }
+                _ => queue.push_back((seq, other)),
+            }
+        }
+        self.queue = queue;
+        edit
+    }
+
+    /// The changes the view had not seen, in the order they applied.
+    fn unseen(&self) -> Vec<TextEdit> {
+        self.queue
+            .iter()
+            .filter(|(seq, _)| *seq > self.seen)
+            .map(|(_, edit)| *edit)
+            .collect()
+    }
+
+    /// A position the view sent, moved through what it had not seen.
+    fn position(&self, pos: u32, block: crate::events::BlockId) -> u32 {
+        rebase::through_all(pos, block, &self.unseen())
+    }
+
+    /// The end of a range the view sent: an insertion at it stays outside.
+    fn end(&self, pos: u32, block: crate::events::BlockId) -> u32 {
+        rebase::end_through_all(pos, block, &self.unseen())
+    }
+
+    /// Stamp a change of the text: whether the view drew it, its number, and
+    /// the runs the view applies. A change the view did not draw is queued.
+    pub(super) fn stamp(
+        &mut self,
+        from_command: bool,
+        edits: Vec<TextEdit>,
+    ) -> (bool, u64, u64, Vec<TextEdit>) {
+        let prediction = if from_command {
+            std::mem::take(&mut self.predicting)
+        } else {
+            Prediction::None
+        };
+        let (local, edits) = match prediction {
+            Prediction::None => (false, edits),
+            Prediction::Barrier => (true, edits),
+            Prediction::Text(drawn) if drawn == edits => (true, edits),
+            // The document did not do what the view drew: take the drawing
+            // back, then show what it did.
+            Prediction::Text(drawn) => {
+                let mut runs = rebase::inverse(&drawn);
+                runs.extend(edits);
+                (false, runs)
+            }
+        };
+        if !local && !edits.is_empty() {
+            self.seq += 1;
+            let seq = self.seq;
+            self.queue.extend(edits.iter().map(|edit| (seq, *edit)));
+        }
+        (local, self.seq, self.acked, edits)
+    }
+}
+
+impl ProseState {
+    /// Bring a command up to the text the Logic thread holds. `Err` carries
+    /// the whole answer when there is nothing left to dispatch.
+    pub(super) fn catch_up(&mut self, command: ProseCommand) -> Result<ProseCommand, ProseOutcome> {
+        let sync = &mut self.catchup;
+        sync.predicting = Prediction::None;
+        Ok(match command {
+            ProseCommand::Sync { seen } => {
+                sync.seen = sync.seen.max(seen);
+                let seen = sync.seen;
+                sync.queue.retain(|(seq, _)| *seq > seen);
+                let mut outcome = ProseOutcome::nothing();
+                outcome
+                    .display
+                    .push(ProseEvent::Synced { acked: sync.acked });
+                return Err(outcome);
+            }
+            ProseCommand::InsertText {
+                block_id,
+                pos,
+                text,
+            } => {
+                sync.acked += 1;
+                let n = crate::ui::chars(&text);
+                let drawn = TextEdit {
+                    block_id,
+                    at: pos,
+                    delta: i64::from(n),
+                };
+                let Some(edit) = sync.rebase(drawn) else {
+                    return Err(ProseOutcome::nothing());
+                };
+                sync.predicting = Prediction::Text(if n == 0 { Vec::new() } else { vec![edit] });
+                ProseCommand::InsertText {
+                    block_id,
+                    pos: edit.at,
+                    text,
+                }
+            }
+            ProseCommand::DeleteText { block_id, range } => {
+                sync.acked += 1;
+                let (start, end) = (range.0.min(range.1), range.0.max(range.1));
+                if start == end {
+                    sync.predicting = Prediction::Text(Vec::new());
+                    return Ok(ProseCommand::DeleteText { block_id, range });
+                }
+                let drawn = TextEdit {
+                    block_id,
+                    at: start,
+                    delta: -i64::from(end - start),
+                };
+                // Everything it was to delete is gone already.
+                let Some(edit) = sync.rebase(drawn) else {
+                    return Err(ProseOutcome::nothing());
+                };
+                sync.predicting = Prediction::Text(vec![edit]);
+                let len = u32::try_from(edit.delta.unsigned_abs()).unwrap_or(u32::MAX);
+                ProseCommand::DeleteText {
+                    block_id,
+                    range: (edit.at, edit.at.saturating_add(len)),
+                }
+            }
+            ProseCommand::SplitBlock { block_id, pos } => {
+                sync.predicting = Prediction::Barrier;
+                ProseCommand::SplitBlock {
+                    block_id,
+                    pos: sync.position(pos, block_id),
+                }
+            }
+            ProseCommand::DeleteRange { anchor, focus } => {
+                sync.predicting = Prediction::Barrier;
+                // The view sends the start first. Within one block the order
+                // is read off the offsets.
+                let (start, end) = if anchor.0 == focus.0 && focus.1 < anchor.1 {
+                    (focus, anchor)
+                } else {
+                    (anchor, focus)
+                };
+                ProseCommand::DeleteRange {
+                    anchor: (start.0, sync.position(start.1, start.0)),
+                    focus: (end.0, sync.end(end.1, end.0)),
+                }
+            }
+            ProseCommand::InsertBlock { .. } => {
+                sync.predicting = Prediction::Barrier;
+                command
+            }
+            other => other,
+        })
+    }
+
+    /// What is left of a text command that wrote nothing: the view drew it,
+    /// so it takes the drawing back.
+    pub(super) fn settle(&mut self, outcome: &mut ProseOutcome) {
+        let prediction = std::mem::take(&mut self.catchup.predicting);
+        if let Prediction::Text(drawn) = prediction
+            && !drawn.is_empty()
+        {
+            self.catchup.predicting = Prediction::Text(drawn);
+            let (local, seq, acked, edits) = self.catchup.stamp(true, Vec::new());
+            outcome.display.push(ProseEvent::TextChanged {
+                local,
+                seq,
+                acked,
+                edits,
+                removed: Vec::new(),
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::events::BlockId;
+
+    const A: BlockId = BlockId::new(1, 0);
+
+    fn run(at: u32, delta: i64) -> TextEdit {
+        TextEdit {
+            block_id: A,
+            at,
+            delta,
+        }
+    }
+
+    #[test]
+    fn a_change_the_view_did_not_draw_is_numbered_and_queued() {
+        let mut sync = CatchUp::default();
+        let (local, seq, _, _) = sync.stamp(false, vec![run(0, 3)]);
+        assert!(!local);
+        assert_eq!(seq, 1);
+        assert_eq!(sync.rebase(run(2, 1)), Some(run(5, 1)));
+    }
+
+    #[test]
+    fn a_change_the_view_has_seen_moves_nothing() {
+        let mut sync = CatchUp::default();
+        sync.stamp(false, vec![run(0, 3)]);
+        sync.seen = 1;
+        assert_eq!(sync.rebase(run(2, 1)), Some(run(2, 1)));
+    }
+
+    #[test]
+    fn a_drawing_the_document_did_not_follow_is_taken_back() {
+        let mut sync = CatchUp {
+            predicting: Prediction::Text(vec![run(4, 2)]),
+            ..CatchUp::default()
+        };
+        let (local, seq, _, edits) = sync.stamp(true, Vec::new());
+        assert!(!local);
+        assert_eq!(seq, 1);
+        assert_eq!(edits, vec![run(4, -2)]);
+    }
+}

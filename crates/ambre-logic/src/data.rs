@@ -237,7 +237,7 @@ impl LogicState {
                 );
             }
             (DocState::Prose(state), AppCommand::Prose(cmd)) => {
-                let outcome = state.handle_command(cmd);
+                let outcome = state.handle_view_command(cmd);
                 let snapshot = outcome.update.is_some().then(|| state.export_snapshot());
                 self.dispatch_outcome(
                     document_id,
