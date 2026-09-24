@@ -89,7 +89,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Prose on screen | MVP | the host that mounts the page view on the canvas, fills its palette from the tokens and routes the layout event; the status bar; the drawing of a table |
 | `[x]` Styled table cells | MVP | a cell drawn with its fill, its borders, its padding and its vertical alignment |
 | `[x]` Input and cursor | MVP | typing, caret navigation, click and drag selection, optimistic display |
-| `[ ]` Links and bands under the caret | MVP | a press inside a link places the caret and a modified one opens it through the host; the link cursor; the caret entering a header, a footer or a footnote |
+| `[x]` Links and bands under the caret | MVP | a press inside a link places the caret and a modified one opens it through the host; the link cursor; the caret entering a header or a footer |
+| `[ ]` The caret in a footnote | MVP | a note's text lives in its entry, not in a block, and the caret, the selection and every text command address a block. Putting the caret in a note needs an address for that text on the bus, and the edits typed there to reach it |
 | `[ ]` Toolbar, slash menu and composition | MVP | the contextual format bar, its ranges caught up with concurrent edits, the slash menu, input-method composition, double-click word selection |
 | `[x]` Collaborative cursors and annotations | MVP | remote carets, comment highlights, track-change highlights |
 | `[ ]` Ruler, clipboard and inertial scroll | MVP | the interactive ruler, copy and paste, inertial scroll |

@@ -153,7 +153,7 @@ impl ProseUiState {
     }
 
     /// The page under a canvas point, if any.
-    fn page_under(&self, x_px: f32, y_px: f32) -> Option<u32> {
+    pub(crate) fn page_under(&self, x_px: f32, y_px: f32) -> Option<u32> {
         match self.column.screen_to_doc(&self.viewport, x_px, y_px) {
             DocPos::OnPage { page, .. } => Some(page),
             _ => None,

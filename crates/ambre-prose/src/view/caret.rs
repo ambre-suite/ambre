@@ -294,7 +294,9 @@ impl ProseUiState {
     pub(crate) fn caret_span(&self) -> Option<(f32, f32)> {
         let cursor = self.cursor.as_ref()?;
         let laid = self.to_laid(cursor.block_id, cursor.offset);
-        let index = self.flow_index(&tree_id(cursor.block_id))?;
+        let Some(index) = self.flow_index(&tree_id(cursor.block_id)) else {
+            return self.band_caret_span(cursor.block_id, laid);
+        };
         let block = self.shaped.layout.blocks.get(index)?;
         let run = self.run_of(cursor.block_id)?;
         let caret = run.caret_box_at(laid, self.caret_upstream);
@@ -312,6 +314,24 @@ impl ProseUiState {
             }
         }
         None
+    }
+
+    /// Where the caret is drawn in a band, on the page it was placed on.
+    fn band_caret_span(&self, block: BlockId, laid: u32) -> Option<(f32, f32)> {
+        let page = self.band_page?;
+        let slot = self
+            .band_slots(page)
+            .into_iter()
+            .find(|slot| slot.block == tree_id(block))?;
+        let caret = self.run_of(block)?.caret_box_at(laid, self.caret_upstream);
+        let base = self.column.page_top_y(page) + slot.top;
+        Some((base + caret.y0 as f32, base + caret.y1 as f32))
+    }
+
+    /// Whether a selection may run from `anchor` to `focus`: a header or a
+    /// footer holds its own text, and no selection crosses its edge.
+    pub(crate) fn joins(&self, anchor: Spot, focus: Spot) -> bool {
+        anchor.0 == focus.0 || !(self.is_band(anchor.0) || self.is_band(focus.0))
     }
 
     /// Scroll the least that brings the caret back into the window
@@ -401,6 +421,9 @@ impl ProseUiState {
         let Some(focus) = self.place_at(x, y) else {
             return;
         };
+        if !self.joins(anchor, focus) {
+            return;
+        }
         self.cursor = Some(CursorPosition {
             block_id: focus.0,
             offset: focus.1,

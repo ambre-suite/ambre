@@ -520,12 +520,17 @@ impl ProseUiState {
             at_ms: now_ms,
             count,
         });
+        // A caret in a header or a footer shows on the page it was placed
+        // on, since every page draws the band (`PROSE-UI-033`).
+        if self.is_band(spot.0) {
+            self.band_page = self.page_under(x, y);
+        }
+        let anchor = self
+            .cursor
+            .as_ref()
+            .map_or(spot, |c| c.anchor.unwrap_or((c.block_id, c.offset)));
         match count {
-            1 if shift => {
-                let anchor = self
-                    .cursor
-                    .as_ref()
-                    .map_or(spot, |c| c.anchor.unwrap_or((c.block_id, c.offset)));
+            1 if shift && self.joins(anchor, spot) => {
                 self.start_drag(anchor);
                 self.update_drag(x, y);
             }

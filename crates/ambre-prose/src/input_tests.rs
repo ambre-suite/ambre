@@ -999,3 +999,101 @@ fn a_target_that_could_run_code_is_held_back() {
     assert_eq!(rig.ui.followed, None);
     assert_eq!(rig.ui.cursor, before);
 }
+
+/// A document whose one page carries a header and a footer, each with text.
+fn banded() -> (Rig, BlockId, BlockId) {
+    let mut rig = Rig::new(&["the body of the page"]);
+    rig.outbox
+        .push(ProseCommand::SetHeaderEnabled { enabled: true });
+    rig.outbox
+        .push(ProseCommand::SetFooterEnabled { enabled: true });
+    rig.deliver();
+    let bands = rig.logic.bands();
+    let header = bands.header.expect("the header block");
+    let footer = bands.footer.expect("the footer block");
+    for (block, text) in [(header, "the running head"), (footer, "the running foot")] {
+        rig.outbox.push(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: text.to_owned(),
+        });
+    }
+    rig.deliver();
+    rig.lay();
+    (rig, header, footer)
+}
+
+/// Where a band's offset is drawn on `page`, as the painter places it.
+fn band_point(rig: &Rig, block: BlockId, offset: u32, page: u32) -> (f32, f32) {
+    let ui = &rig.ui;
+    let layout = &ui.shaped.layout;
+    let slot = ui
+        .band_slots(page)
+        .into_iter()
+        .find(|slot| slot.block == crate::events::tree_id(block))
+        .expect("the band is drawn");
+    let run = ui.shaped.blocks[&slot.block].data();
+    let caret = run.caret_box(offset);
+    let x = layout.margin_left_px + run.indent_px() + caret.x0 as f32 + 0.5;
+    let y_doc = ui.column.page_top_y(page) + slot.top + (caret.y0 + caret.y1) as f32 / 2.0;
+    let scale = ui.viewport.scale();
+    (
+        ui.column.left_px(&ui.viewport) + x * scale,
+        (y_doc - ui.viewport.scroll_y) * scale,
+    )
+}
+
+/// `PROSE-UI-033`: a press in the header or the footer puts the caret in its
+/// text, on the page it was placed on. Typing then goes to that block.
+#[test]
+fn a_press_in_a_header_or_a_footer_lands_in_its_text() {
+    let (mut rig, header, footer) = banded();
+    for block in [header, footer] {
+        let at = band_point(&rig, block, 4, 0);
+        assert!(rig.press(at, false, 0.0));
+        assert_eq!((rig.caret().block_id, rig.caret().offset), (block, 4));
+        assert_eq!(rig.ui.band_page, Some(0));
+        assert!(
+            rig.ui.caret_span().is_some(),
+            "the caret is placed on its page"
+        );
+        rig.ui.last_press = None;
+    }
+    let sent = rig.sent.len();
+    assert!(rig.type_text("x"));
+    rig.deliver();
+    assert!(
+        rig.sent[sent..].iter().any(|command| matches!(
+            command,
+            ProseCommand::InsertText { block_id, pos: 4, text } if *block_id == footer && text == "x"
+        )),
+        "the text goes to the footer"
+    );
+}
+
+/// `PROSE-UI-033`: a band holds its own selection. A drag from it into the
+/// body, or a shift press across its edge, selects nothing across.
+#[test]
+fn a_selection_does_not_cross_the_edge_of_a_band() {
+    let (mut rig, header, _) = banded();
+    let body = rig.blocks()[0];
+    let at = band_point(&rig, header, 2, 0);
+    assert!(rig.press(at, false, 0.0));
+    let (x, y) = rig.point_of(body, 5);
+    rig.input(ProseInput::Drag { x, y });
+    assert_eq!(rig.caret().block_id, header);
+    assert_eq!(rig.caret().anchor, None);
+    // Within the band, a drag selects.
+    let (x, y) = band_point(&rig, header, 8, 0);
+    rig.input(ProseInput::Drag { x, y });
+    assert_eq!(rig.caret().anchor, Some((header, 2)));
+    assert_eq!(rig.ui.selection(), Some(((header, 2), (header, 8))));
+    // A shift press in the body is a plain press there.
+    rig.input(ProseInput::Release);
+    rig.ui.last_press = None;
+    assert!(rig.press(rig.point_of(body, 5), true, 0.0));
+    assert_eq!(
+        (rig.caret().block_id, rig.caret().offset, rig.caret().anchor),
+        (body, 5, None)
+    );
+}

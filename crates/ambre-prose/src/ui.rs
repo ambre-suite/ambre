@@ -25,9 +25,9 @@ use ambre_bus::logic::{AppCommand, LogicCommand};
 use ambre_bus::{Outbox, SendOutcome};
 
 use crate::events::{
-    BandSet, BlockId, CommentThread, CursorPosition, FindMatch, FootnoteEntry, ProseCommand,
-    LinkSpan, ProseEvent, RemoteCursor, ResolvedCrossRef, Suggestion, TableOfContents, TextEdit,
-    WordCount,
+    BandSet, BlockId, CommentThread, CursorPosition, FindMatch, FootnoteEntry, LinkSpan,
+    ProseCommand, ProseEvent, RemoteCursor, ResolvedCrossRef, Suggestion, TableOfContents,
+    TextEdit, WordCount,
 };
 use crate::layout::run::{ShapedLayout, ShapedRun};
 use crate::rebase;
@@ -244,6 +244,10 @@ pub struct ProseUiState {
     pub caret_upstream: bool,
     /// The column a run of vertical moves keeps (`PROSE-UI-034`).
     pub(crate) x_goal: Option<f32>,
+    /// The page whose header or footer holds the caret. A band is drawn on
+    /// every page, and the caret shows on the one it was placed on
+    /// (`PROSE-UI-033`).
+    pub(crate) band_page: Option<u32>,
     /// A drag in flight: its anchor is frozen while it lasts (`PROSE-UI-152`).
     pub(crate) dragging: Option<(BlockId, u32)>,
     /// The last press, to count a second and a third one in place.

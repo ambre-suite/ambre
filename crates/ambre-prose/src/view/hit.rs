@@ -5,7 +5,9 @@
 //! shaping pass (`PROSE-UI-114`). So a block the view culled and never painted
 //! answers like any other (`PROSE-UI-172`).
 
-use crate::events::{BlockId, block_id};
+use loro::TreeID;
+
+use crate::events::{BlockId, block_id, tree_id};
 use crate::layout::place::BlockLayout;
 use crate::ui::ProseUiState;
 use crate::view::column::DocPos;
@@ -40,7 +42,65 @@ pub(crate) fn fragment(block: &BlockLayout, page: u32, line_tops: &[f32]) -> Opt
     })
 }
 
+/// A band drawn on a page: its block, and its top and bottom from the top of
+/// the page.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct BandSlot {
+    pub block: TreeID,
+    pub top: f32,
+    pub bottom: f32,
+}
+
 impl ProseUiState {
+    /// The header and the footer `page` draws, where it draws them. The one
+    /// geometry the painter and the hit-test both read.
+    pub(crate) fn band_slots(&self, page: u32) -> Vec<BandSlot> {
+        let layout = &self.shaped.layout;
+        let first = page == 0 && layout.bands.different_first_page;
+        let (header_px, footer_px) = if first {
+            (layout.header_first_height_px, layout.footer_first_height_px)
+        } else {
+            (layout.header_height_px, layout.footer_height_px)
+        };
+        let top = layout.margin_top_px;
+        let bottom = top + layout.content_height_px;
+        let (header, footer) = layout.bands_on_page(page);
+        [
+            (header, top, top + header_px),
+            (footer, bottom - footer_px, bottom),
+        ]
+        .into_iter()
+        .filter_map(|(band, top, bottom)| {
+            Some(BandSlot {
+                block: band?.block?,
+                top,
+                bottom,
+            })
+        })
+        .collect()
+    }
+
+    /// Whether `block` is the text of a header or a footer.
+    pub(crate) fn is_band(&self, block: BlockId) -> bool {
+        self.shaped
+            .layout
+            .bands
+            .register_of(&tree_id(block))
+            .is_some()
+    }
+
+    /// The band text under a point of `page`, when the point is in a band.
+    fn band_hit(&self, page: u32, x_in_page: f32, y_in_page: f32) -> Option<(BlockId, u32)> {
+        let slot = self
+            .band_slots(page)
+            .into_iter()
+            .find(|slot| y_in_page >= slot.top && y_in_page < slot.bottom)?;
+        let run = self.shaped.blocks.get(&slot.block)?.data();
+        let x = x_in_page - self.shaped.layout.margin_left_px - run.indent_px();
+        let y = (y_in_page - slot.top).clamp(0.0, (slot.bottom - slot.top).max(0.0));
+        Some((block_id(slot.block), run.offset_at(x, y)))
+    }
+
     /// The indices of the blocks a page shows, in flow order. Read from the
     /// index built when the layout was taken, never by walking every block.
     pub(crate) fn blocks_on(&self, page: u32) -> &[usize] {
@@ -51,8 +111,9 @@ impl ProseUiState {
 
     /// The block and the offset under a canvas point.
     ///
-    /// A point above the first block of a page lands on that block, and one
-    /// below the last on the last. `None` for a layout with no page, or a
+    /// A point in a header or a footer lands in its text. Elsewhere, a point
+    /// above the first block of a page lands on that block, and one below
+    /// the last on the last. `None` for a layout with no page, or a
     /// page that shows no block.
     #[must_use]
     pub fn hit_test(&self, x_px: f32, y_px: f32) -> Option<(BlockId, u32)> {
@@ -64,6 +125,10 @@ impl ProseUiState {
         else {
             return None;
         };
+        // A header or a footer answers like body text (`PROSE-UI-033`).
+        if let Some(hit) = self.band_hit(page, x_in_page, y_in_page) {
+            return Some(hit);
+        }
         let layout = &self.shaped.layout;
         let y_body = y_in_page - layout.body_top_px();
         let mut chosen: Option<(&BlockLayout, Fragment)> = None;

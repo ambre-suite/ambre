@@ -74,6 +74,11 @@ fn covered(
     ends: ((BlockId, u32), (BlockId, u32)),
 ) -> Option<(u32, u32)> {
     let ((first, from), (last, to)) = ends;
+    // Within one block, the flow is not asked: a header or a footer holds
+    // its own selection and has no place in it.
+    if first == last {
+        return (first == block && from < to).then_some((from, to.min(len)));
+    }
     let here = ui.flow_index(&crate::events::tree_id(block))?;
     let first_index = ui.flow_index(&crate::events::tree_id(first))?;
     let last_index = ui.flow_index(&crate::events::tree_id(last))?;
@@ -269,7 +274,7 @@ impl ProseUiState {
             };
             let id = block_id(block.block_id);
             surface.push_clip(placed.clip);
-            self.paint_block(surface, palette, id, &run, &placed);
+            self.paint_block(surface, palette, id, &run, &placed, true);
             surface.pop_clip();
             drawn.push((id, run, placed));
         }
@@ -288,13 +293,15 @@ impl ProseUiState {
         id: BlockId,
         run: &ShapedRun,
         placed: &Placed,
+        local: bool,
     ) {
         let data = run.data();
         // Under the glyphs: the local selection, then each peer's.
-        if let Some(ends) = self
-            .cursor
-            .as_ref()
-            .and_then(|cursor| ordered(self, cursor))
+        if local
+            && let Some(ends) = self
+                .cursor
+                .as_ref()
+                .and_then(|cursor| ordered(self, cursor))
             && let Some((start, end)) = covered(self, id, data.len(), ends)
         {
             for rect in data.range_boxes(start, end) {
@@ -363,7 +370,8 @@ impl ProseUiState {
             draft_width = f64::from(shape.data().layout().full_width());
             draft_at = Some(at.saturating_add(crate::ui::chars(&text)));
         }
-        if let Some(cursor) = &self.cursor
+        if local
+            && let Some(cursor) = &self.cursor
             && cursor.block_id == id
             && cursor.anchor.is_none()
         {
@@ -421,51 +429,31 @@ impl ProseUiState {
                     origin_y: bounds.y0 + pad + shift + f64::from(*y),
                     clip: bounds,
                 };
-                self.paint_block(surface, palette, block_id(*block), run, &placed);
+                self.paint_block(surface, palette, block_id(*block), run, &placed, true);
             }
             surface.pop_clip();
         }
     }
 
     /// The header and the footer this page carries, from their own runs.
+    /// They draw like body text: the local caret and selection show on the
+    /// page the caret was placed on (`PROSE-UI-033`).
     fn paint_bands<S: DrawSurface>(&mut self, surface: &mut S, palette: &PagePalette, page: u32) {
-        let layout = std::sync::Arc::clone(&self.shaped.layout);
-        let first = page == 0 && layout.bands.different_first_page;
-        let (header_px, footer_px) = if first {
-            (layout.header_first_height_px, layout.footer_first_height_px)
-        } else {
-            (layout.header_height_px, layout.footer_height_px)
-        };
-        let left = f64::from(layout.margin_left_px);
-        let right = left + f64::from(layout.content_width_px);
-        let top = f64::from(layout.margin_top_px);
-        let bottom = top + f64::from(layout.content_height_px);
-        let (header, footer) = layout.bands_on_page(page);
-        let slots = [
-            (header, top, top + f64::from(header_px)),
-            (footer, bottom - f64::from(footer_px), bottom),
-        ];
-        for (band, from, to) in slots {
-            let Some(id) = band.and_then(|band| band.block) else {
+        let left = f64::from(self.shaped.layout.margin_left_px);
+        let right = left + f64::from(self.shaped.layout.content_width_px);
+        let local = self.band_page == Some(page);
+        for slot in self.band_slots(page) {
+            let Some(run) = self.shaped.blocks.get(&slot.block).cloned() else {
                 continue;
             };
-            let Some(run) = self.shaped.blocks.get(&id).cloned() else {
-                continue;
-            };
+            let (from, to) = (f64::from(slot.top), f64::from(slot.bottom));
             let placed = Placed {
                 origin_x: left + f64::from(run.data().indent_px()),
                 origin_y: from,
                 clip: Rect::new(left, from, right, to),
             };
             surface.push_clip(placed.clip);
-            draw_run(
-                surface,
-                &mut self.runs,
-                RunKey::Block(id),
-                &run,
-                &placed,
-                palette.text,
-            );
+            self.paint_block(surface, palette, block_id(slot.block), &run, &placed, local);
             surface.pop_clip();
         }
     }
