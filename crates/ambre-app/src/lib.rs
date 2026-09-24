@@ -694,7 +694,9 @@ pub fn main() {
     let prose_signals = host::ProseSignals::new();
     if boot_is_toile {
         toile_chrome::bind_keys(&mut keymap);
-    } else if !boot_is_prose {
+    } else if boot_is_prose {
+        ambre_prose::commands::bind_keys(&mut keymap);
+    } else {
         trame_chrome::bind_keys(&mut keymap);
     }
     // The canvas needs a document from frame 0. Boot onto the routed one, or a

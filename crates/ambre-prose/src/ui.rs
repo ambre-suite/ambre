@@ -213,6 +213,9 @@ pub struct ProseUiState {
     /// The layout in force and the runs it carries, as last taken
     /// (`features/ambre-spec-prose-page-rendering.md`).
     pub shaped: ShapedLayout,
+    /// A file the Logic thread wrote, waiting for the host to hand it to the
+    /// browser: filename, media type and bytes (`PROSE-IO-056`).
+    pub pending_export: Option<(String, &'static str, Vec<u8>)>,
 
     // Local, and never sent.
     pub viewport: Viewport,
@@ -358,6 +361,11 @@ pub fn send_edit(
 }
 
 impl ProseUiState {
+    /// Hand the file the Logic thread wrote to the host, once.
+    pub fn take_export(&mut self) -> Option<(String, &'static str, Vec<u8>)> {
+        self.pending_export.take()
+    }
+
     /// Take in one display event.
     ///
     /// A change to the text confirms what the draft sent, or shifts the draft
@@ -367,6 +375,14 @@ impl ProseUiState {
     /// paragraph (`PROSE-UI-141`), because the event names the block minted.
     pub fn apply_event(&mut self, event: &ProseEvent) {
         match event {
+            // The view does not interpret the bytes; the host saves them.
+            ProseEvent::ExportReady {
+                filename,
+                media_type,
+                data,
+            } => {
+                self.pending_export = Some((filename.clone(), media_type, data.clone()));
+            }
             // Whole and already shaped: the view adopts it and lays nothing
             // out (`PROSE-UI-006`). A handle of another type is not a layout.
             ProseEvent::LayoutShaped { layout } => {
@@ -601,6 +617,27 @@ pub fn status_figures(count: &WordCount) -> [String; 5] {
 mod tests {
     /// `PROSE-FEAT-040`: each of the five figures has its label, in the order
     /// the status bar shows them.
+    /// `PROSE-IO-056`: a written file waits for the host once, with the media
+    /// type the Logic thread named.
+    #[test]
+    fn a_written_file_is_handed_to_the_host_once() {
+        let mut state = ProseUiState::default();
+        state.apply_event(&ProseEvent::ExportReady {
+            filename: "document.ambre".to_owned(),
+            media_type: "application/octet-stream",
+            data: vec![1, 2, 3],
+        });
+        assert_eq!(
+            state.take_export(),
+            Some((
+                "document.ambre".to_owned(),
+                "application/octet-stream",
+                vec![1, 2, 3]
+            ))
+        );
+        assert_eq!(state.take_export(), None);
+    }
+
     #[test]
     fn the_status_bar_reads_the_five_figures() {
         let count = WordCount {

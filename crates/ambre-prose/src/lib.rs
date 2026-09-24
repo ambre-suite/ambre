@@ -44,6 +44,7 @@ pub mod band;
 /// build it.
 #[cfg(target_arch = "wasm32")]
 pub mod chrome;
+pub mod commands;
 pub mod comment;
 pub mod count;
 pub mod doc;

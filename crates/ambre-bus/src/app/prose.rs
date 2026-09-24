@@ -990,6 +990,33 @@ pub enum ProseCommand {
     /// broadcast like any other mutation.
     Undo,
     Redo,
+
+    // -- Import and export (`features/ambre-spec-prose-import-export.md`) --
+    /// Write the whole document out in `format`, and answer
+    /// [`ProseEvent::ExportReady`]. Read-only: an export emits no delta
+    /// (`PROSE-IO-017`). The Logic dispatcher serves it, because the native
+    /// header needs the identity its registry holds.
+    ExportDocument { format: ExportFormat },
+}
+
+/// The formats a document leaves the editor in
+/// (`features/ambre-spec-prose-import-export.md section 3`). A writer adds its
+/// variant on the day it lands, so the view never offers a format no code
+/// writes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExportFormat {
+    /// The native file: the shared header over the document's own snapshot.
+    Ambre,
+}
+
+impl ExportFormat {
+    /// The media type of the bytes this format writes (`PROSE-IO-020`).
+    #[must_use]
+    pub const fn media_type(self) -> &'static str {
+        match self {
+            Self::Ambre => "application/octet-stream",
+        }
+    }
 }
 
 impl ProseCommand {
@@ -1011,6 +1038,7 @@ impl ProseCommand {
                 | Self::FindPrev
                 | Self::FindClose
                 | Self::FollowCrossRef { .. }
+                | Self::ExportDocument { .. }
         )
     }
 
@@ -1085,6 +1113,7 @@ impl ProseCommand {
             Self::UpdateCursor { .. } => "moving the cursor",
             Self::Undo => "undoing",
             Self::Redo => "redoing",
+            Self::ExportDocument { .. } => "saving to a file",
         }
     }
 }
@@ -1143,6 +1172,14 @@ pub enum ProseEvent {
     },
     /// A full-state read the schema gate refused (`SCHEMA-008`).
     DocumentRefused { reason: String },
+    /// A finished export: the bytes, the name to save them under, and their
+    /// media type, so one download path serves every format (`PROSE-IO-020`).
+    /// The view hands them to the browser (`PROSE-IO-056`).
+    ExportReady {
+        filename: String,
+        media_type: &'static str,
+        data: Vec<u8>,
+    },
     /// The entries of one table-of-contents block, rebuilt from a layout
     /// (`PROSE-FEAT-003`).
     TocUpdated {

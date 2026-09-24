@@ -34,6 +34,7 @@ mod blocks;
 mod catchup;
 mod comments;
 mod derived;
+mod docfile;
 mod find;
 mod history;
 mod lists;
@@ -624,6 +625,17 @@ impl ProseState {
             ProseCommand::UpdateCursor { pos } => self.update_cursor(&pos),
             ProseCommand::Undo => self.apply_history(true),
             ProseCommand::Redo => self.apply_history(false),
+            // The native header needs the identity the registry holds, so the
+            // Logic dispatcher serves the export before the document is reached
+            // (`PROSE-IO-028`). A caller driving the engine directly is told so.
+            ProseCommand::ExportDocument { .. } => ProseOutcome::display_only(vec![
+                ProseEvent::Error(ProseError::new(
+                    "saving to a file",
+                    ProseRefusal::WriteFailed(
+                        "the file is written by the Logic thread, not by the document".to_owned(),
+                    ),
+                )),
+            ]),
         }
     }
 

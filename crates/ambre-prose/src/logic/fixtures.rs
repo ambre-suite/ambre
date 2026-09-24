@@ -11,9 +11,9 @@
 //! `ProseState::import_snapshot`.
 //!
 //! **No generator yet.** The corpus carries no Prose artifact: no `.ambre`
-//! container holds a Prose document. The native file lands with the "The native
-//! format" Story (`ambre-roadmap.md` E5), and this module answers the pair a
-//! loader needs that day.
+//! container in it holds a Prose document yet. The generator lands with the "A
+//! Prose fixture corpus" Story (`ambre-roadmap.md` E5), and this module answers
+//! the pair its loader needs.
 
 use ambre_core::{FixtureShape, ShapeBody, fixture_peer_count};
 

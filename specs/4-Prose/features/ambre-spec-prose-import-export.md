@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: PROSE IMPORT AND EXPORT
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial
 
 > A user opens a document that came from Word, from a web page or from a Markdown file. They hand
 > the document back as a file someone without Ambre can read. Every conversion runs on the user's
@@ -35,15 +35,15 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-047` | `INV` | A conversion that finished MUST answer with a report, and one that produced nothing MUST answer with an error: the two MUST NOT be one type. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-025` | `INV` | The reader an HTML import uses MUST be the reader a rich paste uses: they MUST NOT be two readers. | this spec section 3; `features/ambre-spec-prose-clipboard.md` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-049` | `INV` | The native file MUST reuse the shared container rather than restate it. | this spec section 3; `ambre-spec-docfile.md section 3` | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5), on top of `DOCFILE P0` (Epic `EF`) | unimplemented |
-| `PROSE-IO-012` | `IO` | The native file MUST be the only lossless round trip. | this spec section 3; `ambre-spec-docfile.md section 3` | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5), on top of `DOCFILE P0` (Epic `EF`) | unimplemented |
+| `PROSE-IO-049` | `INV` | The native file MUST reuse the shared container rather than restate it. | this spec section 3; `ambre-spec-docfile.md section 3` | structural -- `crates/ambre-prose/src/logic/docfile.rs` declares no header of its own and calls the shared writer and reader; `ambre_prose::logic::docfile::tests::the_header_names_prose_and_the_payload_is_the_snapshot` | none | verified |
+| `PROSE-IO-012` | `IO` | The native file MUST be the only lossless round trip. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_prose::logic::docfile::tests::the_round_trip_loses_nothing` -- a bare engine fed the payload re-exports the same file, and a live state reading it holds the same text and marks | none | verified |
 | `PROSE-IO-014` | `IO` | A Word round trip MUST keep every structure the intermediate form represents, or warn for each one it drops. | this spec section 3 | not built | unbuilt -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Bring a file into the document
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-027` | `POST` | A user MUST be able to bring a file into the document. | this spec section 4 | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-027` | `POST` | A user MUST be able to bring a file into the document. | this spec section 4 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-002` | `POST` | An import MUST write through typed commands. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-050` | `POST` | The commands MUST be built in tree order, parent before child. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-051` | `POST` | The whole file MUST apply as one batch: one undo MUST take the import back. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -61,26 +61,28 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-028` | `POST` | A user MUST be able to take the document out as a file. | this spec section 4 | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-056` | `POST` | The exported bytes MUST reach the browser download path. | this spec section 4 | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-028` | `POST` | A user MUST be able to take the document out as a file. | this spec section 4 | `ambre_logic::dispatch::tests::a_prose_document_saves_to_a_native_file_and_reopens` -- the save command goes through the real dispatcher; `ambre_prose::commands::tests::the_save_entry_is_declared_once` -- the palette lists the entry | none | verified |
+| `PROSE-IO-056` | `POST` | The exported bytes MUST reach the browser download path. | this spec section 4 | `ambre_prose::ui::tests::a_written_file_is_handed_to_the_host_once` -- the view holds the bytes for the host once | unheld -- the Blob hand-off in `crates/ambre-app/src/host/prose.rs` runs in a browser; lands with the "The browser-driven belt" Story (`ambre-roadmap.md` E9) | untested |
 | `PROSE-IO-003` | `POST` | An export MUST be idempotent: the same document exported twice MUST yield the same bytes, up to the stamp the format writes. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-020` | `POST` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-020` | `POST` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | `ambre_logic::dispatch::tests::a_prose_document_saves_to_a_native_file_and_reopens`; structural -- `ProseEvent::ExportReady` carries `media_type`, set from `ExportFormat::media_type` | none | verified |
 | `PROSE-IO-022` | `POST` | An export MUST omit the comments and the suggestions the user did not ask for. | this spec section 4; `ZK-001` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-057` | `POST` | An export of a large document MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-017` | `FRAME` | An export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-017` | `FRAME` | An export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | `ambre_prose::logic::docfile::tests::an_export_changes_nothing` -- the version vector is the same after the export | none | verified |
 
 ### 1.4 Save a native file
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-058` | `POST` | A native file MUST carry Prose's own document-type byte. | this spec section 3; `ambre-spec-docfile.md section 3` | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-059` | `FRAME` | A native export MUST NOT route the document through the intermediate form: its payload MUST be the snapshot itself. | this spec section 3; `ambre-spec-docfile.md section 3` | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-058` | `POST` | A native file MUST carry Prose's own document-type byte. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_prose::logic::docfile::tests::the_header_names_prose_and_the_payload_is_the_snapshot`; `ambre_logic::dispatch::tests::a_saved_file_carries_the_document_id_the_registry_keyed_it_under` | none | verified |
+| `PROSE-IO-059` | `FRAME` | A native export MUST NOT route the document through the intermediate form: its payload MUST be the snapshot itself. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_prose::logic::docfile::tests::the_header_names_prose_and_the_payload_is_the_snapshot` -- the payload equals the engine's snapshot byte for byte | none | verified |
 
 ### 1.5 Open a native file
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-013` | `FAIL` | A native file belonging to another application MUST be re-dispatched, never coerced into Prose. | this spec section 3; `ambre-spec-docfile.md section 3` | not built | unbuilt -- lands with the "The native format" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-013` | `FAIL` | A native file belonging to another application MUST be re-dispatched, never coerced into Prose. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_prose::logic::docfile::tests::a_file_of_another_application_is_handed_back` -- a Trame file comes back as `WrongDocType` and the document is unchanged | none | verified |
+| `PROSE-IO-065` | `POST` | A native Prose file MUST open from the home screen as a Prose document. | this spec section 4; `ambre-spec-docfile.md section 3` | not built | unbuilt -- lands with the "A Prose fixture corpus" Story (`ambre-roadmap.md` E5): the home screen accepts Prose, and no test drives it to a Prose view | unimplemented |
+| `PROSE-IO-066` | `FRAME` | Opening a native file MUST NOT write to the document: the opened document MUST export the bytes it was read from. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_prose::logic::docfile::tests::the_round_trip_loses_nothing` -- a bare engine fed the payload re-exports the file byte for byte | none | verified |
 
 ### 1.6 Import a Word file
 
@@ -117,11 +119,9 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread, `PROSE-IO-043` keeps the document off the relay, and `PROSE-
   IO-016` stops an imported file executing or fetching.
-* **Verification.** 47 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. Two rows a
-  compiler holds first. A reader that emits a command (`PROSE-IO-009`) and a writer that reads the
-  document (`PROSE-IO-045`) are type errors once both halves take the intermediate form. `PROSE-
-  IO-003` and `PROSE-IO-017` are the pair a host test reaches with no network and no file picker.
-  Nine frame conditions say what a conversion must not touch.
+* **Verification.** 9 `verified`, 1 `untested`, 39 `unimplemented`. The native file is built,
+  and no conversion is. `PROSE-IO-009` and `PROSE-IO-045` become type errors once both halves take
+  the intermediate form.
 
 ---
 
@@ -404,9 +404,9 @@ budget row rather than four, and what keeps a writer from reading the document (
 | Shape | Direction | Carries |
 |---|---|---|
 | `ProseCommand::ImportDocument` | UI to Logic | the format and the bytes |
-| `ProseCommand::ExportDocument` | UI to Logic | the format and the options |
+| `ProseCommand::ExportDocument` | UI to Logic | the format; the options join it with the first writer that reads one |
 | `ProseEvent::ImportCompleted` | Logic to UI | the report of what the file lost |
-| `ProseEvent::ExportReady` | Logic to UI | the bytes, their media type and the report |
+| `ProseEvent::ExportReady` | Logic to UI | the file name, the bytes and their media type; the report joins it with the first lossy writer |
 | `ProseEvent::ImportProgress`, `::ExportProgress` | Logic to UI | a percentage, past one megabyte (`PROSE-IO-021`) |
 
 ```rust
@@ -549,17 +549,18 @@ it (`PROSE-IO-023`).
 None of the four readers is in the manifest today: `crates/ambre-prose` declares none of them, and
 `ambre-spec-budgets.md section 5` already budgets three for the day they arrive.
 
-**Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
+**Code:** the native pair is `crates/ambre-prose/src/logic/docfile.rs`. The dispatcher in
+`crates/ambre-logic/src/data.rs` serves the save, because the header needs the document id the
+registry holds. `ExportFormat` has one variant today, `Ambre`. No reader, no writer and no
+intermediate form exist yet.
 
 ---
 
 ## 4. SURFACE
 
-**There is none** (`PROSE-IO-027`, `PROSE-IO-028`). The chrome Prose declares is the contextual
-toolbar (`features/ambre-spec-prose-toolbar.md`), the slash menu
-(`features/ambre-spec-prose-slash-command.md`), the ruler (`features/ambre-spec-prose-ruler.md`) and
-the comment panel (`features/ambre-spec-prose-comments.md`). No entry among them opens a file, and
-none saves one.
+**The save entry is in the command palette** (`PROSE-IO-028`), declared in
+`crates/ambre-prose/src/commands.rs`. A native file opens from the home screen, like a Trame or a
+Toile file (`PROSE-IO-065`). No entry imports a foreign format yet (`PROSE-IO-027`).
 
 | Trigger, once it exists | What must happen |
 |---|---|
@@ -602,10 +603,9 @@ unless the export leaves it out. The dialog states both, and the writer honours 
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No gesture reaches an import or an export** (`PROSE-IO-027`, `PROSE-IO-028`). Prose's chrome is
-  a toolbar, a slash menu, a ruler and a comment panel, and none of the four opens or saves a file.
-  Two commands are declared on the plane and nothing emits them. Same shape as the collaboration
-  features, which are specified from the second step onward.
+* **Only the native file has a gesture.** The palette saves it and the home screen opens it. No
+  gesture imports or exports a foreign format (`PROSE-IO-027`), and `ImportDocument` is not on the
+  plane yet.
 * **Where an import lands is not ruled.** A failed import leaves the document untouched
   (`PROSE-IO-011`). Nothing says what a successful one does to a document that already has
   content: replace it, append to it, or insert at the caret. Toile answers the same question with

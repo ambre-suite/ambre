@@ -94,7 +94,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Toolbar, slash menu and composition | MVP | the contextual format bar, its ranges caught up with concurrent edits, the slash menu, input-method composition, double-click word selection |
 | `[x]` Collaborative cursors and annotations | MVP | remote carets, comment highlights, track-change highlights |
 | `[ ]` Ruler, clipboard and inertial scroll | MVP | the interactive ruler, copy and paste, inertial scroll |
-| `[ ]` The native format | MVP | a Prose document saved to and read from an `.ambre` file |
+| `[x]` The native format | MVP | a Prose document saved to and read from an `.ambre` file |
 | `[ ]` A Prose fixture corpus | MVP | Trame and Toile each carry a fixture generator and Prose carries none, so `fixtures/` holds no Prose document and the schema has reached version 9 with no artifact frozen at any version. Each migration is held by one hand-built document in a unit test, never by a real file. A seeded generator writing a document with styled text, a table, a band, a footnote and a comment gives the current corpus, and the next schema bump its first frozen artifact (`ambre-spec-fixtures.md`) |
 | `[ ]` Markdown interop | MVP | Markdown import and export, with a report of what was lost |
 | `[ ]` HTML interop | V1 | HTML import and export, including a paste from a web page |

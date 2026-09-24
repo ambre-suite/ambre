@@ -232,6 +232,7 @@ name = "ambre-prose"
 version = "0.1.0"
 dependencies = [
  "ambre-bus",
+ "ambre-commands",
  "ambre-core",
  "ambre-draw",
  "flume",

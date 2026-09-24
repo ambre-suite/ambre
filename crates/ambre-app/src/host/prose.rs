@@ -163,6 +163,9 @@ impl ProseView {
                     },
                 ) if document_id == self.document_id => {
                     self.state.apply_event(&event);
+                    if let Some((filename, media_type, data)) = self.state.take_export() {
+                        download(&filename, media_type, &data);
+                    }
                     self.dirty = true;
                 }
                 Ok(UiEvent::FatalError { message }) => self.signal_fatal(&message),
@@ -430,4 +433,34 @@ impl ProseView {
         self.publish_hover();
         self.dirty = true;
     }
+}
+
+/// Hand a file the Logic thread wrote to the browser as a download, typed with
+/// its media type (`PROSE-IO-056`). A browser that refuses is logged: the
+/// document itself is untouched either way.
+fn download(filename: &str, media_type: &str, data: &[u8]) {
+    use wasm_bindgen::JsCast;
+    let parts = js_sys::Array::new();
+    parts.push(&js_sys::Uint8Array::from(data).buffer());
+    let options = web_sys::BlobPropertyBag::new();
+    options.set_type(media_type);
+    let url = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &options)
+        .and_then(|blob| web_sys::Url::create_object_url_with_blob(&blob));
+    let url = match url {
+        Ok(url) => url,
+        Err(e) => {
+            tracing::warn!("Prose: the download could not start: {e:?}");
+            return;
+        }
+    };
+    let anchor = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.create_element("a").ok())
+        .and_then(|e| e.dyn_into::<web_sys::HtmlAnchorElement>().ok());
+    if let Some(anchor) = anchor {
+        anchor.set_href(&url);
+        anchor.set_download(filename);
+        anchor.click();
+    }
+    let _ = web_sys::Url::revoke_object_url(&url);
 }

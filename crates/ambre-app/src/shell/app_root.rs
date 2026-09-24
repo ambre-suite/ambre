@@ -352,8 +352,29 @@ pub(crate) fn AppRoot() -> impl IntoView {
         move |id: CommandId| {
             // The palette is a UI-only intent in both applications: it opens an
             // overlay and reaches no Logic thread (`CHROME-008`).
-            if id == trame_chrome::PALETTE || id == toile_chrome::PALETTE {
+            if id == trame_chrome::PALETTE
+                || id == toile_chrome::PALETTE
+                || id == ambre_prose::commands::PALETTE
+            {
                 palette_open.set(true);
+                return;
+            }
+            // Prose declares one command beside the palette: the native save.
+            // It maps to one typed command, so it is built here rather than
+            // through a table (`PROSE-IO-020`).
+            if boot_is_prose {
+                if id == ambre_prose::commands::SAVE_FILE
+                    && let Some(document_id) = current_doc.get_untracked()
+                {
+                    let _ = tx.try_send(LogicCommand::App {
+                        document_id,
+                        command: AppCommand::Prose(
+                            ambre_bus::app::prose::ProseCommand::ExportDocument {
+                                format: ambre_bus::app::prose::ExportFormat::Ambre,
+                            },
+                        ),
+                    });
+                }
                 return;
             }
             // The sealed save is a UI-only intent in both applications: a
@@ -1436,6 +1457,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
             open=palette_open
             table=if boot_is_toile {
                 ambre_toile::ui::commands::COMMANDS
+            } else if boot_is_prose {
+                ambre_prose::commands::COMMANDS
             } else {
                 trame_chrome::COMMANDS
             }

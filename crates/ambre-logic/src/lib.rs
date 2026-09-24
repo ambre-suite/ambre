@@ -229,10 +229,10 @@ impl DocState {
                 "board.ambre".to_owned(),
                 state.export_ambre_plaintext(document_id.into())?,
             )),
-            // Prose writes no native file yet. It lands with "The native
-            // format" Story (`ambre-roadmap.md` E5), and until then the export
-            // says so rather than writing an empty container.
-            DocState::Prose(_) => None,
+            DocState::Prose(state) => Some((
+                "document.ambre".to_owned(),
+                state.export_ambre_plaintext(document_id.into())?,
+            )),
         }
     }
 
@@ -252,15 +252,11 @@ impl DocState {
                     skipped: Vec::new(),
                 })
             }
-            DocState::Prose(_) => AppEvent::Prose(ambre_bus::app::prose::ProseEvent::Error(
-                ambre_bus::app::prose::ProseError::new(
-                    "exporting",
-                    ambre_bus::app::prose::ProseRefusal::WriteFailed(format!(
-                        "{filename} holds {} bytes this build cannot write",
-                        data.len()
-                    )),
-                ),
-            )),
+            DocState::Prose(_) => AppEvent::Prose(ambre_bus::app::prose::ProseEvent::ExportReady {
+                filename,
+                media_type: ambre_bus::app::prose::ExportFormat::Ambre.media_type(),
+                data,
+            }),
         }
     }
 

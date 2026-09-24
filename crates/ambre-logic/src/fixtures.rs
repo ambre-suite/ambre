@@ -442,8 +442,8 @@ pub fn import_fixture(bytes: &[u8]) -> Result<(DocumentId, DocState), FixtureErr
     let mut state = match doc_type {
         DocType::Trame => DocState::Trame(Box::new(TrameState::with_peer(FIXTURE_IMPORT_PEER))),
         DocType::Toile => DocState::Toile(Box::new(ToileState::with_peer(FIXTURE_IMPORT_PEER))),
-        // Prose has no native container yet: the file lands with the
-        // "The native format" Story (`ambre-roadmap.md` E5).
+        // Prose reads its native file, and joins this arm with the "A Prose
+        // fixture corpus" Story (`ambre-roadmap.md` E5).
         DocType::Prose | DocType::Murmure => return Err(FixtureError::NoEngine { doc_type }),
     };
     // The same bytes, header included: each app re-reads the header through

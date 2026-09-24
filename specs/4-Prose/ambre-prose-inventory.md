@@ -28,6 +28,7 @@
 | `prose-tables` | A grid of cells inside the document. | implemented | 47 |  |
 | `prose-undo` | Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one item is in running text. | implemented | 3 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | implemented | 13 |  |
+| `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | partial | 49 | 1 |
 | `prose-page-rendering` | What a page looks like on the canvas. | partial | 19 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | partial | 48 |  |
 | `prose-selection` | Where the caret is, where it goes, and what a drag selects. | partial | 37 |  |
@@ -37,11 +38,10 @@
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 | `prose-clipboard` | Copy, cut and paste. | design-only | 14 |  |
 | `prose-images` | A picture in the document. | design-only | 38 |  |
-| `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | design-only | 47 |  |
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | design-only | 8 |  |
 | `prose-ruler` | A horizontal scale above the page, carrying three handles. | design-only | 5 |  |
 | `prose-slash-command` | Type a slash at the start of an empty line and a short list appears: a heading, a list, a table, a page break. | design-only | 16 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 | `prose-toolbar` | Select a few words and a small bar appears above them. | design-only | 14 |  |
 
-**28 features: 13 implemented, 6 partial, 9 design-only. 636 contract rows, 2 loose.**
+**28 features: 13 implemented, 7 partial, 8 design-only. 638 contract rows, 3 loose.**

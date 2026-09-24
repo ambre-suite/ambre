@@ -16,6 +16,11 @@ fixtures = ["ambre-core/fixtures"]
 ambre-core = { path = "../ambre-core" }
 ambre-bus = { path = "../ambre-bus" }
 
+# The command registry the shell's palette and keymap read: Prose's table
+# declares its entries there, as ambre-toile's and ambre-trame's do. A leaf
+# with an empty dependency table (`UI-THREAD-027`).
+ambre-commands = { path = "../ambre-commands" }
+
 # Family resolution and script classification, shared with the renderers
 # (`CANVAS-017`). Pagination must resolve a label exactly as the UI thread
 # does, or two peers break pages differently (`PROSE-108`). ambre-draw is the

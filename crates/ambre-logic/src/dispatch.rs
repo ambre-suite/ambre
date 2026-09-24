@@ -478,6 +478,11 @@ mod tests {
         let command = match doc_type {
             DocType::Trame => AppCommand::Trame(TrameCommand::ExportAmbreFile),
             DocType::Toile => AppCommand::Toile(ToileCommand::ExportAmbreFile),
+            DocType::Prose => {
+                AppCommand::Prose(ambre_bus::app::prose::ProseCommand::ExportDocument {
+                    format: ambre_bus::app::prose::ExportFormat::Ambre,
+                })
+            }
             other => panic!("no engine for {other:?}"),
         };
         state.handle_logic_command(LogicCommand::App {
@@ -498,6 +503,13 @@ mod tests {
                             data, ..
                         }),
                     ..
+                }
+                | UiEvent::Viewport {
+                    event:
+                        AppEvent::Prose(ambre_bus::app::prose::ProseEvent::ExportReady {
+                            data, ..
+                        }),
+                    ..
                 } => Some(data),
                 _ => None,
             })
@@ -511,11 +523,23 @@ mod tests {
         let doc = state.docs.get(&document_id).expect("a live document");
         match doc.state.ambre_file_event(document_id) {
             AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. })
-            | AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete { data, .. }) => {
-                data
-            }
+            | AppEvent::Toile(ambre_bus::app::toile::ToileEvent::ExportComplete { data, .. })
+            | AppEvent::Prose(ambre_bus::app::prose::ProseEvent::ExportReady { data, .. }) => data,
             other => panic!("the export answered with {other:?}"),
         }
+    }
+
+    /// `PROSE-IO-020`, `PROSE-IO-028`: the save command reaches the
+    /// dispatcher, and the file it writes opens in a fresh Prose document.
+    #[test]
+    fn a_prose_document_saves_to_a_native_file_and_reopens() {
+        let document_id = DocumentId::new();
+        let bytes = exported_file(DocType::Prose, document_id);
+        let mut reopened = ambre_prose::logic::ProseState::with_peer(9).expect("a document");
+        let (id, _) = reopened
+            .import_ambre_plaintext(&bytes)
+            .expect("the file opens");
+        assert_eq!(id, document_id.into());
     }
 
     /// `PROSE-062`: one outcome, three destinations.
@@ -685,7 +709,7 @@ mod tests {
     /// range at all.
     #[test]
     fn a_saved_file_carries_the_document_id_the_registry_keyed_it_under() {
-        for doc_type in [DocType::Trame, DocType::Toile] {
+        for doc_type in [DocType::Trame, DocType::Toile, DocType::Prose] {
             let document_id = DocumentId::new();
             let bytes = exported_file(doc_type, document_id);
             let header = ambre_core::docfile::read_ambre_plaintext(&bytes)

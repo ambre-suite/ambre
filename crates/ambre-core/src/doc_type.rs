@@ -81,12 +81,11 @@ impl DocType {
     /// hardcodes a type.
     ///
     /// Only types whose Logic state can actually be instantiated
-    /// (`ambre_logic::DocState::new`) are listed. `Prose` and `Murmure` return
-    /// `None` there (no engine yet -- `Prose` lands in Epic `E5`). Creating one
-    /// would yield a document that never renders. `Prose` joins this list the
-    /// moment its Logic state exists -- a one-entry change, no picker rework.
+    /// (`ambre_logic::DocState::new`) are listed. `Murmure` returns `None`
+    /// there (no engine yet), and creating one would yield a document that
+    /// never renders.
     pub const fn creatable() -> &'static [DocType] {
-        &[Self::Trame, Self::Toile]
+        &[Self::Trame, Self::Toile, Self::Prose]
     }
 
     /// Returns a short description of the document type.
@@ -147,9 +146,11 @@ mod tests {
     #[test]
     fn test_creatable_matches_logic_support() {
         // The picker offers exactly the launcher-creatable types, in order.
-        // Prose/Murmure are excluded until their Logic state exists.
-        assert_eq!(DocType::creatable(), &[DocType::Trame, DocType::Toile]);
-        assert!(!DocType::creatable().contains(&DocType::Prose));
+        // Murmure is excluded until its Logic state exists.
+        assert_eq!(
+            DocType::creatable(),
+            &[DocType::Trame, DocType::Toile, DocType::Prose]
+        );
         assert!(!DocType::creatable().contains(&DocType::Murmure));
     }
 
