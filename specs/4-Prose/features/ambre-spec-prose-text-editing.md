@@ -62,8 +62,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-029` | `POST` | The composed text MUST reach the document once, when the composition ends, at the position the draft holds then. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-142` | `FRAME` | While a composition is open the view MUST send no text to the document: a preview MUST reach the canvas and nothing else. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-029` | `POST` | The composed text MUST reach the document once, when the composition ends, at the position the draft holds then. | this spec section 3 | not built | unbuilt -- lands with the "Input-method composition" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-142` | `FRAME` | While a composition is open the view MUST send no text to the document: a preview MUST reach the canvas and nothing else. | this spec section 3 | not built | unbuilt -- lands with the "Input-method composition" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.7 Take in a document event
 
@@ -76,7 +76,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-182` | `POST` | An edit sent before the view took a concurrent change MUST land where it was typed, and the view and the document MUST end on one text. | this spec section 3 | `ambre_prose::input_tests::typing_in_flight_and_a_remote_deletion_land_on_one_text`; `::a_remote_insertion_before_the_draft_shifts_it`; `ambre_prose::rebase::tests::both_orders_land_on_one_text` | none | verified |
 | `PROSE-UI-183` | `FRAME` | Input that follows a split or a deletion across blocks MUST wait until the document has taken it, and MUST then land in the text it left. | this spec section 3 | `ambre_prose::input_tests::typing_right_after_enter_lands_in_the_new_paragraph` | none | verified |
 | `PROSE-UI-184` | `FAIL` | An edit the document refuses or turns into something else MUST leave the view on the text the document holds, with no draft left for it. | this spec section 3 | `ambre_prose::input_tests::a_refused_insertion_leaves_the_view_on_the_documents_text`; `ambre_prose::logic::catchup::tests::a_drawing_the_document_did_not_follow_is_taken_back` | none | verified |
-| `PROSE-UI-185` | `POST` | A command that carries a range the view does not draw, a mark applied from the toolbar among them, MUST be moved through the changes the view had not seen when it sent it. | this spec section 3 | not built | unbuilt -- lands with the "Toolbar, slash menu and composition" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-185` | `POST` | A command that carries a range the view does not draw, a mark applied from the toolbar among them, MUST be moved through the changes the view had not seen when it sent it. | this spec section 3 | not built | unbuilt -- lands with the "The format bar" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-027` | `FRAME` | An event carrying no change MUST leave the draft untouched: a download or a presence update MUST NOT erase what is being typed. | this spec section 3 | `ambre_prose::input_tests::the_draft_is_dropped_only_with_its_block` | none | verified |
 
 * **Budget.** the keystroke to a local echo and the keystroke to a confirmed one, two rows of
