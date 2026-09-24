@@ -81,6 +81,10 @@
 | user key | the key derived from the account passphrase | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | key rotation | replacing a document key, and what follows | | `1-Foundations/ambre-spec-key-rotation.md` |
 | fingerprint | the readable digest of a public key | | `1-Foundations/ambre-spec-key-verification.md` |
+| machine member | a program holding the document key, bound by its role | | `1-Foundations/ambre-spec-machine-access.md` |
+| inbox | the write-only drop box of one document | | `1-Foundations/ambre-spec-machine-access.md` |
+| inbox writer | a program that posts to an inbox and reads nothing | | `1-Foundations/ambre-spec-machine-access.md` |
+| addressed key | the key that opens only the frames sent to one machine | | `1-Foundations/ambre-spec-machine-access.md` |
 | container | the file wrapping a document on disk | | `1-Foundations/ambre-spec-docfile.md` |
 | doc_type | the header byte naming the owning application | | `1-Foundations/ambre-spec-docfile.md` |
 | magic | the four bytes opening every container | | `1-Foundations/ambre-spec-docfile.md` |

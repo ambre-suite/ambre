@@ -273,6 +273,9 @@ owns the subsystem.
 | `[ ]` Split-secret organization recovery | the escrow has a release path and no deposit path, and the quorum is clamped to one so the register advertises no guarantee the relay cannot keep. Threshold reconstruction, and a deposit, are what make the clamp liftable |
 | `[ ]` Rendez-Vous | end-to-end encrypted video |
 | `[ ]` Cross-app rich paste | a paste from one app into another keeps its structure instead of falling back to plain text |
+| `[ ]` Machine members | a program joins a document as a member, marked as a machine, with its declared host, and its removal rotates the key |
+| `[ ]` Write-only inboxes | a program posts into a document through an asymmetric inbox it cannot read, and a member client merges each post once |
+| `[ ]` Addressed machines | a program reads only the frames a user addresses to it, under a key derived from the document key, and answers through the inbox |
 
 ### Prose
 
