@@ -10,16 +10,30 @@
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex, PoisonError};
 
+use loro::TextDelta;
 use loro::event::{ContainerDiff, Diff, DiffEvent};
 use loro::{ContainerID, Index, LoroDoc, Subscription, TreeExternalDiff, TreeID, TreeParentId};
 
 use crate::doc;
 
 type Seen = Arc<Mutex<HashSet<TreeID>>>;
+type Moved = Arc<Mutex<TextMoves>>;
+
+/// What the text did since the last command answered: the runs each body
+/// gained or lost, and the blocks deleted. The view shifts its draft and its
+/// caret by it (`PROSE-UI-028`).
+#[derive(Debug, Default)]
+pub(crate) struct TextMoves {
+    /// A block, where a run starts in the text before it, and its signed
+    /// length in code points.
+    pub(crate) edits: Vec<(TreeID, u32, i64)>,
+    pub(crate) removed: Vec<TreeID>,
+}
 
 /// The blocks written to since the last layout took them.
 pub(crate) struct Touched {
     seen: Seen,
+    moved: Moved,
     /// Held so the subscription lives as long as the document state.
     _subscription: Subscription,
 }
@@ -28,15 +42,20 @@ impl Touched {
     /// Start noting what `document` is written, from now on.
     pub(crate) fn watch(document: &LoroDoc) -> Self {
         let seen: Seen = Arc::default();
+        let moved: Moved = Arc::default();
         let sink = Arc::clone(&seen);
+        let moves = Arc::clone(&moved);
         let subscription = document.subscribe_root(Arc::new(move |event: DiffEvent<'_>| {
             let mut blocks = sink.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut text = moves.lock().unwrap_or_else(PoisonError::into_inner);
             for change in &event.events {
                 note(change, &mut blocks);
+                record(change, &mut text);
             }
         }));
         Self {
             seen,
+            moved,
             _subscription: subscription,
         }
     }
@@ -68,6 +87,67 @@ impl Touched {
             }
         }
         out.into_iter().collect()
+    }
+}
+
+impl Touched {
+    /// What the text did since the last call.
+    pub(crate) fn take_moves(&self) -> TextMoves {
+        std::mem::take(&mut *self.moved.lock().unwrap_or_else(PoisonError::into_inner))
+    }
+}
+
+/// The runs a body text gained or lost, and the blocks a change deleted or
+/// hid: a candidate the caller checks against the tree.
+/// A position is counted in the text as it stood before the run, which is
+/// how a delta walks it.
+fn record(change: &ContainerDiff<'_>, moves: &mut TextMoves) {
+    match &change.diff {
+        Diff::Text(delta) => {
+            let ContainerID::Root { name, .. } = change.target else {
+                return;
+            };
+            let Some(block) = doc::parse_body_key(name) else {
+                return;
+            };
+            let mut at: u32 = 0;
+            for item in delta {
+                match item {
+                    TextDelta::Retain { retain, .. } => {
+                        at = at.saturating_add(u32::try_from(*retain).unwrap_or(u32::MAX));
+                    }
+                    TextDelta::Insert { insert, .. } => {
+                        let len = insert.chars().count();
+                        moves
+                            .edits
+                            .push((block, at, i64::try_from(len).unwrap_or(i64::MAX)));
+                    }
+                    // An insertion is not in the text before, so the walk
+                    // stays put. A deletion is, and the walk steps over it.
+                    TextDelta::Delete { delete } => {
+                        let len = u32::try_from(*delete).unwrap_or(u32::MAX);
+                        moves.edits.push((block, at, -i64::from(len)));
+                        at = at.saturating_add(len);
+                    }
+                }
+            }
+        }
+        Diff::Tree(tree) => {
+            for item in &tree.diff {
+                if let TreeExternalDiff::Delete { .. } = item.action {
+                    moves.removed.push(item.target);
+                }
+            }
+        }
+        // Deleting a block hides it: its node map gains the marker.
+        Diff::Map(map) if map.updated.contains_key(doc::K_HIDDEN) => {
+            let owner = change.path.iter().rev().find_map(|(_, index)| match index {
+                Index::Node(id) => Some(*id),
+                _ => None,
+            });
+            moves.removed.extend(owner);
+        }
+        _ => {}
     }
 }
 

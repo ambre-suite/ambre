@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-004` | `CONC` | After convergence, a cursor expressed as a `loro::Cursor` MUST resolve to the same absolute position on every peer. | this spec section 3 | `ambre_prose::logic::presence::tests::a_caret_resolves_to_the_same_place_on_both_peers` | none | verified |
 | `PROSE-IO-042` | `IO` | A document re-imported from its own snapshot MUST hold what the document that exported it held. | this spec section 3 | `ambre_prose::logic::tests::a_snapshot_round_trips_what_the_document_held` | none | verified |
 | `PROSE-UI-001` | `INV` | The UI thread MUST hold no document data: only view state and what arrives as an event. | this spec section 3 | structural -- `ambre_prose::ui::ProseUiState` declares no document container and no block content: every field is view state or an event's payload | none | verified |
-| `PROSE-UI-003` | `INV` | The UI thread MUST NOT block on the Logic channel. | this spec section 3; `ambre-spec-architecture.md section 2` | structural -- `ambre_prose::ui::send_command` is the one path out and it calls `try_send`; `ambre_prose::ui::tests::a_full_channel_drops_the_command_rather_than_holding_the_frame` | none | verified |
+| `PROSE-UI-003` | `INV` | The UI thread MUST NOT block on the Logic channel. | this spec section 3; `ambre-spec-architecture.md section 2` | structural -- `ambre_prose::ui::send_command` and `ambre_prose::ui::send_edit` are the two paths out, and both end in `try_send`; `ambre_prose::ui::tests::a_full_channel_drops_the_command_rather_than_holding_the_frame`; `::a_full_channel_holds_an_edit_rather_than_the_frame` | none | verified |
 | `PROSE-UI-010` | `INV` | The scroll position and the selection MUST stay local: neither MUST enter the document. | this spec section 3 | structural -- the viewport and the caret are fields of `ambre_prose::ui::ProseUiState`, and no variant of `ProseCommand` carries either; `ambre_prose::logic::presence::tests::a_caret_is_never_written_to_the_document` | none | verified |
 | `PROSE-UI-015` | `INV` | `ambre-prose`'s UI module MUST contain no `unsafe`. | README pillar "Security" | lint-wall -- `#![forbid(unsafe_code)]` on `crates/ambre-prose/src/lib.rs` covers every module of the crate | none | verified |
 
@@ -99,7 +99,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-002` | `POST` | Every mutation MUST leave the UI thread as a command. | this spec section 3 | structural -- `ambre_prose::ui::send_command` builds the one envelope, and `ProseUiState` holds no document to write to; `ambre_prose::ui::tests::the_draft_echo_never_reaches_the_wire` | none | verified |
-| `PROSE-UI-149` | `FAIL` | A full Logic channel MUST drop the command rather than hold the frame. | this spec section 3; `ambre-spec-architecture.md section 2` | `ambre_prose::ui::tests::a_full_channel_drops_the_command_rather_than_holding_the_frame`; `::a_closed_channel_is_told_apart_from_a_full_one` | none | verified |
+| `PROSE-UI-149` | `FAIL` | A full Logic channel MUST hold an edit in the outbox rather than hold the frame or drop the edit (`BUS-011`). | this spec section 3; `ambre-spec-architecture.md section 2` | `ambre_prose::ui::tests::a_full_channel_holds_an_edit_rather_than_the_frame`; `::a_closed_channel_is_told_apart_from_a_full_one` | none | verified |
 | `PROSE-UI-150` | `FRAME` | The draft echo a send paints MUST NOT reach the wire. | this spec section 3 | `ambre_prose::ui::tests::the_draft_echo_never_reaches_the_wire` | none | verified |
 
 ### 1.10 Fan one answer out
@@ -772,12 +772,10 @@ Prose view is an arm of the frame host's application enum, like Trame's.
   and the footnotes each land with their own Story (`ambre-roadmap.md` E5). So do the find
   machinery, the clipboard, the bands, the spell checker and the interop filters. Each one adds its
   commands to the plane of section 3.B and its events to section 3.C.
-* **The offset unit is decided, and one conversion is still unwritten.** The plane counts Unicode
-  code points, which is what the CRDT indexes (`PROSE-FEAT-006`). The view's hit-test answers UTF-8
-  byte ranges, because that is what a shaped run joins glyphs to
+* **The offset unit is decided, and the view converts.** The plane counts Unicode code points,
+  which is what the CRDT indexes (`PROSE-FEAT-006`). A shaped run joins glyphs to UTF-8 byte ranges
   (`features/ambre-spec-prose-page-rendering.md section 2`), and a caret advances by grapheme
-  cluster. Neither conversion has code: both belong to the view, and they land with the
-  `Input and cursor` Story (`ambre-roadmap.md` E5).
+  cluster. `crates/ambre-prose/src/view/caret.rs` holds both conversions.
 * **Nothing rules on what a view does with a refusal.** The engine names the command and the reason
   (`PROSE-105`, `PROSE-106`), and the view drops both on the floor. Nothing says where a refusal
   is shown, how long it stays, or whether two of them stack. The features that need an author told

@@ -8,21 +8,25 @@
 // nothing here lays text out. The five figures go to the shared status bar
 // slot (`PROSE-FEAT-040`); Prose builds no bar of its own (`PROSE-FEAT-123`).
 //
-// Input beyond scrolling lands with the "Input and cursor" Story
-// (`ambre-roadmap.md` E5).
+// Keys, presses and typed text are translated into `ProseInput` and handed to
+// the state, with the one send path (`PROSE-UI-002`). That path is the lossless
+// outbox Toile and Trame send their edits through (`BUS-011`). The draft is shaped here,
+// on this thread's font context, and nothing else is (`PROSE-UI-134`).
 // ============================================================================
 
 use leptos::prelude::*;
-use parley::FontContext;
+use parley::{FontContext, LayoutContext};
 
 use ambre_bus::app::prose::WordCount;
-use ambre_bus::{AppEvent, DocumentId, LogicCommand, UiEvent};
+use ambre_bus::{AppEvent, DocumentId, LogicCommand, Outbox, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
-    ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache, WgpuSurface,
+    BusyPublisher, ContentRepaint, FrameStats, InputEvent, OverlayRepaint, RepaintPlan, TextCache,
+    WgpuSurface,
 };
-use ambre_draw::{DrawSurface, Rect};
-use ambre_prose::ui::{ProseUiState, send_command, status_figures};
+use ambre_draw::{DrawSurface, ParleyBrush, Rect};
+use ambre_prose::input::{ProseInput, ProseKey};
+use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
 use ambre_prose::view::paint::PagePalette;
 
 /// The pixels one wheel line scrolls, for a device that reports lines.
@@ -51,6 +55,9 @@ pub(crate) fn page_palette(theme: Theme) -> PagePalette {
 pub struct ProseView {
     document_id: DocumentId,
     to_logic: flume::Sender<LogicCommand>,
+    /// The edits' path out: a full channel holds them here (`BUS-011`).
+    outbox: Outbox,
+    busy_pub: BusyPublisher,
     from_logic: flume::Receiver<UiEvent>,
     state: ProseUiState,
     theme_ctl: ThemeControl,
@@ -62,6 +69,10 @@ pub struct ProseView {
     /// The five figures as the status bar slot shows them.
     figures: RwSignal<Option<[String; 5]>>,
     shown: Option<WordCount>,
+    /// The layout context the draft is shaped with.
+    layout_cx: LayoutContext<ParleyBrush>,
+    /// The clock of the last frame, to count presses in place.
+    now_ms: f64,
 }
 
 impl ProseView {
@@ -73,6 +84,7 @@ impl ProseView {
         height: f64,
         theme_ctl: ThemeControl,
         figures: RwSignal<Option<[String; 5]>>,
+        busy_pub: BusyPublisher,
     ) -> Self {
         let theme = theme_ctl.get();
         let size = (width as f32, height as f32);
@@ -80,6 +92,8 @@ impl ProseView {
         state.resize(size.0, size.1);
         Self {
             document_id,
+            outbox: Outbox::new(to_logic.clone()),
+            busy_pub,
             to_logic,
             from_logic,
             state,
@@ -90,6 +104,8 @@ impl ProseView {
             fatal: false,
             figures,
             shown: None,
+            layout_cx: LayoutContext::new(),
+            now_ms: 0.0,
         }
     }
 
@@ -132,7 +148,22 @@ impl ProseView {
         }
     }
 
+    /// Offer the held edits to the channel, then publish the busy level the
+    /// chrome shows and the input gate reads (`BUS-016`).
+    fn flush_outbox(&mut self) {
+        if self.fatal {
+            return;
+        }
+        if self.outbox.flush() == SendOutcome::Disconnected {
+            self.signal_fatal("Logic thread disconnected");
+            return;
+        }
+        self.busy_pub.publish(self.outbox.is_busy());
+    }
+
     pub fn plan_repaint(&mut self, now_ms: f64, _hud_tick: bool) -> RepaintPlan {
+        self.now_ms = now_ms;
+        self.flush_outbox();
         // A recount is owed half a second after the text last changed
         // (`PROSE-FEAT-124`). A full channel drops it, and the next change
         // asks again.
@@ -163,10 +194,11 @@ impl ProseView {
     pub fn paint_content(
         &mut self,
         surface: &mut WgpuSurface<'_>,
-        _font_cx: &mut FontContext,
+        font_cx: &mut FontContext,
         _text_cache: &mut TextCache,
         _strip: Option<Rect>,
     ) {
+        self.state.shape_draft(font_cx, &mut self.layout_cx);
         let backdrop = Rect::new(0.0, 0.0, f64::from(self.size.0), f64::from(self.size.1));
         surface.fill_rect(backdrop, self.theme.palette().content_pending);
         self.state.paint(surface, &page_palette(self.theme));
@@ -188,6 +220,12 @@ impl ProseView {
     }
 
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
+        // An edit waits in the outbox, so the page refuses input until it
+        // drains (`BUS-016`). Consuming the event is what makes the refusal
+        // visible, as on the board and the grid.
+        if self.outbox.is_busy() {
+            return true;
+        }
         match ev {
             InputEvent::Wheel { dy, delta_mode, .. } => {
                 let px = match delta_mode {
@@ -199,8 +237,59 @@ impl ProseView {
                 self.dirty = true;
                 true
             }
-            _ => false,
+            _ => {
+                let Some(input) = self.translate(ev) else {
+                    return false;
+                };
+                let (outbox, document_id) = (&mut self.outbox, self.document_id);
+                let mut send = |command| send_edit(outbox, document_id, command);
+                let consumed = self.state.handle_input(&input, &mut send);
+                self.busy_pub.publish(self.outbox.is_busy());
+                self.dirty |= consumed;
+                consumed
+            }
         }
+    }
+
+    /// The input a canvas event stands for, or `None` for one the view leaves
+    /// to the host. The composition lands with the "Toolbar, slash menu and
+    /// composition" Story (`ambre-roadmap.md` E5).
+    fn translate(&self, ev: &InputEvent) -> Option<ProseInput> {
+        Some(match ev {
+            InputEvent::Key {
+                key,
+                ctrl,
+                alt,
+                shift,
+                meta,
+            } if !alt => {
+                let ctrl = *ctrl || *meta;
+                ProseInput::Key {
+                    key: ProseKey::from_name(key, ctrl)?,
+                    shift: *shift,
+                    ctrl,
+                }
+            }
+            InputEvent::Text { text } => ProseInput::Text(text.clone()),
+            InputEvent::PointerDown {
+                x,
+                y,
+                button: 0,
+                shift,
+                ..
+            } => ProseInput::Press {
+                x: *x as f32,
+                y: *y as f32,
+                shift: *shift,
+                now_ms: self.now_ms,
+            },
+            InputEvent::PointerMove { x, y } => ProseInput::Drag {
+                x: *x as f32,
+                y: *y as f32,
+            },
+            InputEvent::PointerUp { button: 0, .. } => ProseInput::Release,
+            _ => return None,
+        })
     }
 
     pub fn clipboard_write(&mut self, _cut: bool) -> ambre_bus::CopyOutcome {

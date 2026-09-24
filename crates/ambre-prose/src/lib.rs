@@ -44,6 +44,7 @@ pub mod comment;
 pub mod count;
 pub mod doc;
 pub mod events;
+pub mod input;
 pub mod layout;
 pub mod logic;
 pub mod mark;
@@ -59,3 +60,6 @@ pub mod xref;
 
 pub use events::{ProseCommand, ProseEvent, ProseOutcome};
 pub use logic::ProseState;
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod input_tests;

@@ -1088,6 +1088,16 @@ pub enum ProseEvent {
     /// The confirmed change, local or imported. The bytes are the ones applied,
     /// never a re-export (`PROSE-023`, `PROSE-048`).
     DocUpdated { delta: Vec<u8> },
+    /// What that change did to the text, in code points, for a view that
+    /// holds no document (`PROSE-UI-001`). The draft and the caret follow it
+    /// (`PROSE-UI-005`, `PROSE-UI-028`, `PROSE-UI-143`).
+    TextChanged {
+        /// The change is this peer's own command, coming back.
+        local: bool,
+        edits: Vec<TextEdit>,
+        /// The blocks the change deleted.
+        removed: Vec<BlockId>,
+    },
     /// The paragraph that parted, and the one that carries its tail. The view
     /// needs the new block's identity to leave the caret at its start
     /// (`PROSE-UI-141`): it cannot mint the id and cannot read the document.
@@ -1317,6 +1327,16 @@ mod tests {
             .is_mutating()
         );
     }
+}
+
+/// One run of text inserted or deleted in one block's body.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TextEdit {
+    pub block_id: BlockId,
+    /// Where the run starts, in the text as it stood before this edit.
+    pub at: u32,
+    /// The code points inserted, positive, or deleted, negative.
+    pub delta: i64,
 }
 
 /// A value handed from the Logic thread to the UI thread over the shared heap,

@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: CARET AND SELECTION
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
+**Implementation:** partial -- a press, a drag and the keys move the caret; links and bands do not
 
 > Where the caret is, where it goes, and what a drag selects. A click lands on the character under
 > it. The arrow keys walk the text the reader sees rather than the text as it is stored. A
@@ -22,45 +22,45 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-008` | `INV` | Hit-testing MUST be the exact inverse of the drawn layout, under zoom and scroll. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-031` | `INV` | Hit-testing MUST read the shaped runs alone: a block that was never painted MUST resolve like a painted one. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-039` | `INV` | A selection MUST be valid with its end before its start. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-151` | `INV` | Every reader of a selection MUST order its two ends before it uses them: a backwards selection MUST NOT reach a caller as it is held. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-034` | `INV` | A vertical move MUST keep the column the caret started from until a horizontal move, a click or an edit ends the run of vertical moves. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-152` | `INV` | A change from a collaborator MUST NOT move the anchor of a drag in flight: the anchor is a gesture, not a document position, for as long as the gesture lasts. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-033` | `INV` | Header, footer and footnote text MUST hit-test like body text, so the caret can enter it. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-153` | `OBS` | A pointer resting inside a link MUST show the link cursor, over the marked text alone. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-008` | `INV` | Hit-testing MUST be the exact inverse of the drawn layout, under zoom and scroll. | this spec section 2 | `ambre_prose::input_tests::a_point_resolves_to_the_offset_drawn_there_under_zoom_and_scroll` | none | verified |
+| `PROSE-UI-031` | `INV` | Hit-testing MUST read the shaped runs alone: a block that was never painted MUST resolve like a painted one. | this spec section 2 | `ambre_prose::input_tests::a_point_resolves_to_the_offset_drawn_there_under_zoom_and_scroll` | none | verified |
+| `PROSE-UI-039` | `INV` | A selection MUST be valid with its end before its start. | this spec section 2 | `ambre_prose::input_tests::a_backwards_selection_is_read_in_order` | none | verified |
+| `PROSE-UI-151` | `INV` | Every reader of a selection MUST order its two ends before it uses them: a backwards selection MUST NOT reach a caller as it is held. | this spec section 2 | `ambre_prose::input_tests::a_backwards_selection_is_read_in_order` | none | verified |
+| `PROSE-UI-034` | `INV` | A vertical move MUST keep the column the caret started from until a horizontal move, a click or an edit ends the run of vertical moves. | this spec section 2 | `ambre_prose::input_tests::a_run_of_vertical_moves_keeps_its_column` | none | verified |
+| `PROSE-UI-152` | `INV` | A change from a collaborator MUST NOT move the anchor of a drag in flight: the anchor is a gesture, not a document position, for as long as the gesture lasts. | this spec section 2 | `ambre_prose::input_tests::a_remote_change_does_not_move_the_anchor_of_a_drag` | none | verified |
+| `PROSE-UI-033` | `INV` | Header, footer and footnote text MUST hit-test like body text, so the caret can enter it. | this spec section 2 | not built | unbuilt -- lands with the "Links and bands under the caret" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-153` | `OBS` | A pointer resting inside a link MUST show the link cursor, over the marked text alone. | this spec section 2 | not built | unbuilt -- lands with the "Links and bands under the caret" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Press in the text
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-009` | `POST` | A click that lands in no glyph MUST resolve to the nearest valid caret position, never to no position. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-032` | `POST` | A block that holds no text MUST resolve to one of its two edges, chosen by the side the pointer is on. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-154` | `POST` | A press that does not extend MUST collapse the selection to the caret it places. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-155` | `POST` | A second press in place MUST select the word under the pointer. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-171` | `POST` | A third press in place MUST select the paragraph the word sits in. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-072` | `POST` | A press on a document holding no block MUST place the caret in a block created through the command path, never in a locally invented one. | this spec section 2; `PROSE-027` | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-156` | `FAIL` | A press on a layout carrying no page at all MUST resolve to no position, and the caret MUST stay where it was until a block exists to hold it. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-157` | `FRAME` | Placing the caret with a press MUST NOT shape a block and MUST NOT scroll the column: what the press resolved is already on screen. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-009` | `POST` | A click that lands in no glyph MUST resolve to the nearest valid caret position, never to no position. | this spec section 2 | `ambre_prose::input_tests::a_press_in_the_margin_resolves_to_the_nearest_caret` | none | verified |
+| `PROSE-UI-032` | `POST` | A block that holds no text MUST resolve to one of its two edges, chosen by the side the pointer is on. | this spec section 2 | `ambre_prose::input_tests::a_block_without_text_resolves_to_the_edge_on_the_pointers_side` | none | verified |
+| `PROSE-UI-154` | `POST` | A press that does not extend MUST collapse the selection to the caret it places. | this spec section 2 | `ambre_prose::input_tests::a_press_places_the_caret_and_collapses_the_selection` | none | verified |
+| `PROSE-UI-155` | `POST` | A second press in place MUST select the word under the pointer. | this spec section 2 | `ambre_prose::input_tests::a_second_press_selects_the_word_and_a_third_the_paragraph` | none | verified |
+| `PROSE-UI-171` | `POST` | A third press in place MUST select the paragraph the word sits in. | this spec section 2 | `ambre_prose::input_tests::a_second_press_selects_the_word_and_a_third_the_paragraph` | none | verified |
+| `PROSE-UI-072` | `POST` | A press on a document holding no block MUST place the caret in a block created through the command path, never in a locally invented one. | this spec section 2; `PROSE-027` | `ambre_prose::input_tests::a_press_on_a_document_with_no_block_asks_for_one` | none | verified |
+| `PROSE-UI-156` | `FAIL` | A press on a layout carrying no page at all MUST resolve to no position, and the caret MUST stay where it was until a block exists to hold it. | this spec section 2 | `ambre_prose::input_tests::a_press_on_a_layout_with_no_page_leaves_the_caret` | none | verified |
+| `PROSE-UI-157` | `FRAME` | Placing the caret with a press MUST NOT shape a block and MUST NOT scroll the column: what the press resolved is already on screen. | this spec section 2 | `ambre_prose::input_tests::a_press_places_the_caret_and_collapses_the_selection` | none | verified |
 
 ### 1.3 Walk the caret with the keys
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-036` | `POST` | A caret move without extension MUST collapse the selection to the caret. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-035` | `POST` | Every caret move MUST leave the caret on screen. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-158` | `POST` | A move that takes the caret out of the window MUST scroll the least that brings it back. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-159` | `POST` | A move to the start or the end of a line MUST honour the wrapped line under the caret, and the caret's affinity at a wrap point, never the paragraph. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-160` | `FRAME` | A move that extends the selection MUST NOT move its anchor. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-036` | `POST` | A caret move without extension MUST collapse the selection to the caret. | this spec section 2 | `ambre_prose::input_tests::shift_extends_from_a_fixed_anchor_and_a_plain_move_collapses` | none | verified |
+| `PROSE-UI-035` | `POST` | Every caret move MUST leave the caret on screen. | this spec section 2 | `ambre_prose::input_tests::every_move_leaves_the_caret_on_screen` | none | verified |
+| `PROSE-UI-158` | `POST` | A move that takes the caret out of the window MUST scroll the least that brings it back. | this spec section 2 | `ambre_prose::input_tests::every_move_leaves_the_caret_on_screen` | none | verified |
+| `PROSE-UI-159` | `POST` | A move to the start or the end of a line MUST honour the wrapped line under the caret, and the caret's affinity at a wrap point, never the paragraph. | this spec section 2 | `ambre_prose::input_tests::home_and_end_honour_the_wrapped_line` | none | verified |
+| `PROSE-UI-160` | `FRAME` | A move that extends the selection MUST NOT move its anchor. | this spec section 2 | `ambre_prose::input_tests::shift_extends_from_a_fixed_anchor_and_a_plain_move_collapses` | none | verified |
 
 ### 1.4 Drag to select
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-037` | `POST` | The anchor of a drag MUST be captured when the drag starts. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-161` | `POST` | Extending a drag MUST resolve the moving end at the position under the pointer, leaving the anchor where the drag started. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-162` | `FRAME` | Extending a drag MUST NOT scroll the column: only an armed autoscroll tick does. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-037` | `POST` | The anchor of a drag MUST be captured when the drag starts. | this spec section 2 | `ambre_prose::input_tests::a_drag_grows_from_the_anchor_its_press_captured` | none | verified |
+| `PROSE-UI-161` | `POST` | Extending a drag MUST resolve the moving end at the position under the pointer, leaving the anchor where the drag started. | this spec section 2 | `ambre_prose::input_tests::a_drag_grows_from_the_anchor_its_press_captured` | none | verified |
+| `PROSE-UI-162` | `FRAME` | Extending a drag MUST NOT scroll the column: only an armed autoscroll tick does. | this spec section 2 | `ambre_prose::input_tests::a_drag_grows_from_the_anchor_its_press_captured` | none | verified |
 
 ### 1.5 Hold the drag past the edge of the window
 
@@ -73,38 +73,35 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-164` | `POST` | Escape MUST collapse the selection to the caret. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-165` | `POST` | Escape MUST cancel a drag in flight: the release that follows MUST extend nothing. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-166` | `FRAME` | Escape MUST NOT move the caret and MUST NOT change the scroll offset. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-164` | `POST` | Escape MUST collapse the selection to the caret. | this spec section 2 | `ambre_prose::input_tests::escape_collapses_and_cancels_the_drag` | none | verified |
+| `PROSE-UI-165` | `POST` | Escape MUST cancel a drag in flight: the release that follows MUST extend nothing. | this spec section 2 | `ambre_prose::input_tests::escape_collapses_and_cancels_the_drag` | none | verified |
+| `PROSE-UI-166` | `FRAME` | Escape MUST NOT move the caret and MUST NOT change the scroll offset. | this spec section 2 | `ambre_prose::input_tests::escape_collapses_and_cancels_the_drag` | none | verified |
 
 ### 1.7 Select the whole document
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-167` | `POST` | Selecting the whole document MUST set the anchor at the start of the first block and the moving end at the end of the last. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-168` | `FRAME` | Selecting the whole document MUST NOT change the scroll offset: the reader stays on the page they were on. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-167` | `POST` | Selecting the whole document MUST set the anchor at the start of the first block and the moving end at the end of the last. | this spec section 2 | `ambre_prose::input_tests::select_all_spans_the_document_and_keeps_the_window` | none | verified |
+| `PROSE-UI-168` | `FRAME` | Selecting the whole document MUST NOT change the scroll offset: the reader stays on the page they were on. | this spec section 2 | `ambre_prose::input_tests::select_all_spans_the_document_and_keeps_the_window` | none | verified |
 
 ### 1.8 Press inside a link
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-070` | `POST` | A press inside a link, without the platform's modifier, MUST place the caret. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-169` | `FRAME` | A press inside a link, without the platform's modifier, MUST NOT open the target. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-071` | `POST` | Opening a link's target MUST go through the shared open-URL affordance of the host, never a call made from the crate. | this spec section 2; `UI-THREAD-004` | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-170` | `FRAME` | Opening a link's target MUST NOT move the caret and MUST NOT change the selection. | this spec section 2 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-070` | `POST` | A press inside a link, without the platform's modifier, MUST place the caret. | this spec section 2 | not built | unbuilt -- lands with the "Links and bands under the caret" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-169` | `FRAME` | A press inside a link, without the platform's modifier, MUST NOT open the target. | this spec section 2 | not built | unbuilt -- lands with the "Links and bands under the caret" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-071` | `POST` | Opening a link's target MUST go through the shared open-URL affordance of the host, never a call made from the crate. | this spec section 2; `UI-THREAD-004` | not built | unbuilt -- lands with the "Links and bands under the caret" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-170` | `FRAME` | Opening a link's target MUST NOT move the caret and MUST NOT change the selection. | this spec section 2 | not built | unbuilt -- lands with the "Links and bands under the caret" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the hit-test of a pointer position, a row of `ambre-spec-budgets.md section 1`.
   The autoscroll tick costs one hit-test per frame and no row of its own.
 * **Boundary.** none: `PROSE-UI-010` (`features/ambre-spec-prose-engine.md section 1`) keeps the
   selection out of the document, and the UI thread reaches no network, crypto or persistence path
   (`UI-THREAD-004`).
-* **Verification.** 35 `unimplemented`, nothing else.
-  `PROSE-UI-008` has an oracle already: the layout draws a glyph at a position
-  and the hit-test answers a position for a point. The round trip is then a property over the
-  shaped runs, at any zoom and offset. `PROSE-UI-071` is compiler-held the day the crate exists, since a
-  browser binding cannot be named from a crate that does not depend on it. The eight frame
-  conditions are where a gesture document pays: the anchor a Shift-arrow must not move, the tick a
-  release disarms.
+* **Verification.** 27 `verified`, and 8 `unimplemented`: the links, the bands and the drag's
+  scroll tick. `PROSE-UI-008` is a round trip: the point the layout draws an offset at resolves
+  back to that offset, at any zoom and scroll. `PROSE-UI-071` is compiler-held the day the link
+  path exists, since the crate names no browser binding.
 
 ---
 
@@ -218,7 +215,8 @@ press sends a block insertion and the caret lands at its start once the layout f
 (`PROSE-UI-072`). This is the local guard only: two peers emptying the document at the same moment
 converge by the format's own rule, `PROSE-094`.
 
-**Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
+**Code:** `crates/ambre-prose/src/view/caret.rs` moves the caret and resolves a point, and
+`crates/ambre-prose/src/input.rs` counts the presses.
 
 ---
 

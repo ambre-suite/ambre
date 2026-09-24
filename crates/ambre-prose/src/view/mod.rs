@@ -7,6 +7,7 @@
 //! module shapes a block, reads the document or sends a command.
 
 pub mod cache;
+pub mod caret;
 pub mod column;
 pub mod hit;
 pub mod paint;
@@ -71,6 +72,9 @@ impl ProseUiState {
         self.page_blocks = page_blocks;
         self.shaped = shaped;
         self.clamp_scroll();
+        // What the draft confirmed is in these runs now.
+        self.draft.laid();
+        self.settle_awaited_block();
         true
     }
 

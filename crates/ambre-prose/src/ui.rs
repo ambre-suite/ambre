@@ -7,29 +7,28 @@
 //! read the same document (`PROSE-UI-010`).
 //!
 //! **It never blocks on the Logic channel** (`PROSE-UI-003`). Every send is a
-//! `try_send`, and a full channel drops the command rather than holding the
-//! frame (`PROSE-UI-149`). The lossless class of `ambre-spec-message-bus.md`
-//! (`BUS-011`) holds a command instead, and refuses input while it does. It
-//! lands with the "Input and cursor" Story (`ambre-roadmap.md` E5).
+//! `try_send`. An edit goes through the lossless outbox of
+//! `ambre-spec-message-bus.md`, which holds it on a full channel (`BUS-011`,
+//! `PROSE-UI-149`). Any other command is dropped and asked again later.
 //!
-//! **Engine-core scope** (`ARCH P2`). The draft below holds what was typed and
-//! not yet confirmed, because the send path needs it to answer
-//! `PROSE-UI-150`. Its whole state machine lands with the "Input and cursor"
-//! Story. That is the re-anchor over a remote change, the input-method
-//! composition, and the collapse on a deleted block.
+//! The draft below holds what was typed and not yet confirmed. A remote
+//! change shifts it, a deleted block drops it, and a layout that carries its
+//! text empties it. The input-method composition lands with the "Toolbar,
+//! slash menu and composition" Story (`ambre-roadmap.md` E5).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use ambre_core::DocumentId;
 use loro::TreeID;
 
 use ambre_bus::logic::{AppCommand, LogicCommand};
+use ambre_bus::{Outbox, SendOutcome};
 
 use crate::events::{
     BandSet, BlockId, CommentThread, CursorPosition, FindMatch, FootnoteEntry, ProseCommand,
-    ProseEvent, RemoteCursor, ResolvedCrossRef, Suggestion, TableOfContents, WordCount,
+    ProseEvent, RemoteCursor, ResolvedCrossRef, Suggestion, TableOfContents, TextEdit, WordCount,
 };
-use crate::layout::run::ShapedLayout;
+use crate::layout::run::{ShapedLayout, ShapedRun};
 use crate::view::Highlight;
 use crate::view::cache::RunCache;
 use crate::view::column::PageColumn;
@@ -50,37 +49,151 @@ pub const RECOUNT_DELAY_MS: f64 = 500.0;
 /// deletion or a mark (`PROSE-UI-135`). It is painted under the caret and it
 /// never reaches the wire (`PROSE-UI-150`): what reaches the wire is the
 /// command the same keystroke emitted.
+///
+/// Positions count code points of the document as it will read once every
+/// command sent has landed. The layout in force lags behind it by the text
+/// the draft still shows.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DraftBuffer {
-    /// Typed since the last confirming event, drawn over the confirmed runs.
+    /// Sent and not yet confirmed, drawn over the confirmed runs.
     pub pending_text: String,
     pub block_id: Option<BlockId>,
+    /// Where the pending text starts.
     pub insert_pos: u32,
+    /// Confirmed, and not yet in the layout in force. It is drawn until a
+    /// layout carrying it is taken, so a keystroke never blinks out.
+    landed_text: String,
+    /// The length of each insertion sent and not yet confirmed, oldest first.
+    pieces: VecDeque<u32>,
 }
 
 impl DraftBuffer {
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.pending_text.is_empty()
+        self.pending_text.is_empty() && self.landed_text.is_empty()
     }
 
-    /// Append committed text. The draft re-anchors only when it moves to
-    /// another block, so consecutive keystrokes in one block accumulate in one
-    /// draft (`PROSE-UI-138`).
+    /// Where the next keystroke lands to extend this draft.
+    #[must_use]
+    pub fn end(&self) -> u32 {
+        self.insert_pos.saturating_add(chars(&self.pending_text))
+    }
+
+    /// Append text sent to `pos` in `block_id` (`PROSE-UI-136`). The draft
+    /// re-anchors only when the caret left its end, so consecutive keystrokes
+    /// accumulate in one draft (`PROSE-UI-138`).
     pub fn push_str(&mut self, text: &str, block_id: &BlockId, pos: u32) {
-        if self.block_id != Some(*block_id) {
-            self.pending_text.clear();
+        if self.block_id != Some(*block_id) || pos != self.end() {
+            self.clear();
             self.block_id = Some(*block_id);
             self.insert_pos = pos;
         }
         self.pending_text.push_str(text);
+        self.pieces.push_back(chars(text));
+    }
+
+    /// Take in one change this peer made. The oldest insertion sent is
+    /// confirmed when the change inserted it, where it was sent to
+    /// (`PROSE-UI-005`). Answers whether it was.
+    pub fn confirm(&mut self, edit: &TextEdit) -> bool {
+        let Some(front) = self.pieces.front().copied() else {
+            return false;
+        };
+        if self.block_id != Some(edit.block_id)
+            || edit.at != self.insert_pos
+            || edit.delta != i64::from(front)
+        {
+            return false;
+        }
+        self.pieces.pop_front();
+        let cut = byte_at(&self.pending_text, front);
+        let rest = self.pending_text.split_off(cut);
+        let confirmed = std::mem::replace(&mut self.pending_text, rest);
+        self.landed_text.push_str(&confirmed);
+        self.insert_pos = self.insert_pos.saturating_add(front);
+        true
+    }
+
+    /// Move the anchor by what a collaborator's change did before it
+    /// (`PROSE-UI-028`).
+    pub fn shift(&mut self, edits: &[TextEdit]) {
+        if let Some(block) = self.block_id {
+            self.insert_pos = shifted(self.insert_pos, block, edits);
+        }
+    }
+
+    /// A layout was taken: what landed is in its runs now.
+    pub fn laid(&mut self) {
+        self.landed_text.clear();
+    }
+
+    /// The text to draw, and where it goes in the layout in force.
+    #[must_use]
+    pub fn shown(&self) -> Option<(BlockId, u32, String)> {
+        let block = self.block_id?;
+        if self.is_empty() {
+            return None;
+        }
+        let at = self.insert_pos.saturating_sub(chars(&self.landed_text));
+        Some((
+            block,
+            at,
+            format!("{}{}", self.landed_text, self.pending_text),
+        ))
+    }
+
+    /// How many code points the document holds past the layout in force, in
+    /// the anchored block.
+    #[must_use]
+    pub fn unlaid(&self) -> u32 {
+        chars(&self.landed_text).saturating_add(chars(&self.pending_text))
     }
 
     pub fn clear(&mut self) {
         self.pending_text.clear();
+        self.landed_text.clear();
+        self.pieces.clear();
         self.block_id = None;
         self.insert_pos = 0;
     }
+}
+
+/// How many code points a string holds.
+pub(crate) fn chars(text: &str) -> u32 {
+    u32::try_from(text.chars().count()).unwrap_or(u32::MAX)
+}
+
+/// The byte a code-point offset starts at, the length past the end.
+fn byte_at(text: &str, offset: u32) -> usize {
+    text.char_indices()
+        .nth(offset as usize)
+        .map_or(text.len(), |(at, _)| at)
+}
+
+/// Where a position of `block` sits once `edits` applied.
+///
+/// The edits count positions of the text before them. An insertion at the
+/// position or before it pushes it on. A deletion before it pulls it back,
+/// and one that straddles it pulls it to where the deletion started.
+pub(crate) fn shifted(pos: u32, block: BlockId, edits: &[TextEdit]) -> u32 {
+    let mut moved = i64::from(pos);
+    for edit in edits.iter().filter(|edit| edit.block_id == block) {
+        let at = i64::from(edit.at);
+        let p = i64::from(pos);
+        if edit.delta >= 0 {
+            if at <= p {
+                moved += edit.delta;
+            }
+        } else {
+            let end = at - edit.delta;
+            if end <= p {
+                moved += edit.delta;
+            } else if at < p {
+                moved -= p - at;
+            }
+        }
+    }
+    u32::try_from(moved.max(0)).unwrap_or(u32::MAX)
 }
 
 /// The UI thread's whole state for one open Prose document.
@@ -142,7 +255,21 @@ pub struct ProseUiState {
     /// `PROSE-UI-020` against.
     pub(crate) highlights_walked: u64,
     pub cursor: Option<CursorPosition>,
+    /// The caret sits at the end of the line before a wrap point rather than
+    /// at the start of the line after it (`PROSE-UI-159`).
+    pub caret_upstream: bool,
+    /// The column a run of vertical moves keeps (`PROSE-UI-034`).
+    pub(crate) x_goal: Option<f32>,
+    /// A drag in flight: its anchor is frozen while it lasts (`PROSE-UI-152`).
+    pub(crate) dragging: Option<(BlockId, u32)>,
+    /// The last press, to count a second and a third one in place.
+    pub(crate) last_press: Option<crate::input::Press>,
+    /// A press asked for a first block, and the caret goes to it once a
+    /// layout carries it (`PROSE-UI-072`).
+    pub(crate) awaiting_block: bool,
     pub draft: DraftBuffer,
+    /// The draft as last shaped, and the text it was shaped from.
+    pub(crate) draft_shape: Option<(String, ShapedRun)>,
     /// A change arrived since the last tick.
     changed: bool,
     /// When the text was last seen changing, while a recount is owed.
@@ -158,8 +285,11 @@ pub struct ProseUiState {
 pub enum SendResult {
     /// The command reached the channel.
     Sent,
-    /// The channel was full, and the command was dropped rather than the frame
-    /// held (`PROSE-UI-149`).
+    /// The channel was full, and the outbox holds the edit for a later frame
+    /// (`BUS-011`). It is on its way, and the view refuses input meanwhile.
+    Held,
+    /// Nothing carries the command: a full channel dropped a command outside
+    /// the edit class, or the outbox refused an edit at its bound (`BUS-018`).
     Dropped,
     /// The Logic thread is gone. This channel carries nothing again.
     Disconnected,
@@ -169,7 +299,7 @@ impl SendResult {
     /// Whether the command is on its way to the Logic thread.
     #[must_use]
     pub fn accepted(self) -> bool {
-        self == Self::Sent
+        matches!(self, Self::Sent | Self::Held)
     }
 }
 
@@ -197,13 +327,43 @@ pub fn send_command(
     }
 }
 
+/// Send one edit to the Logic thread through the lossless outbox
+/// (`PROSE-UI-149`, `BUS-011`).
+///
+/// A full channel holds the edit rather than the frame or the keystroke. The
+/// host refuses input while the outbox holds anything (`BUS-016`), so the
+/// order the user typed in is the order the edits land.
+pub fn send_edit(
+    outbox: &mut Outbox,
+    document_id: DocumentId,
+    command: ProseCommand,
+) -> SendResult {
+    let envelope = LogicCommand::App {
+        document_id,
+        command: AppCommand::Prose(command),
+    };
+    match outbox.send(envelope) {
+        SendOutcome::Sent => SendResult::Sent,
+        SendOutcome::Held => {
+            tracing::warn!("Prose: the Logic channel is full, the edit is held");
+            SendResult::Held
+        }
+        SendOutcome::Refused => {
+            tracing::error!("Prose: the outbox is full, the edit is refused");
+            SendResult::Dropped
+        }
+        SendOutcome::Disconnected => SendResult::Disconnected,
+    }
+}
+
 impl ProseUiState {
     /// Take in one display event.
     ///
-    /// A confirming change clears the draft it covers: the text is then in the
-    /// confirmed runs (`PROSE-UI-005`). A split leaves the caret at the start of
-    /// the new paragraph (`PROSE-UI-141`). The view can do that only because the
-    /// event names the block the engine minted.
+    /// A change to the text confirms what the draft sent, or shifts the draft
+    /// and the caret by what a collaborator did (`PROSE-UI-005`,
+    /// `PROSE-UI-028`). An event that changes no text leaves the draft alone
+    /// (`PROSE-UI-027`). A split leaves the caret at the start of the new
+    /// paragraph (`PROSE-UI-141`), because the event names the block minted.
     pub fn apply_event(&mut self, event: &ProseEvent) {
         match event {
             // Whole and already shaped: the view adopts it and lays nothing
@@ -213,17 +373,13 @@ impl ProseUiState {
                     self.apply_layout(shaped.clone());
                 }
             }
-            ProseEvent::DocUpdated { .. } => {
-                self.draft.clear();
-                self.changed = true;
-            }
-            ProseEvent::CellEntered { block, .. } => {
-                self.cursor = Some(CursorPosition {
-                    block_id: *block,
-                    offset: 0,
-                    anchor: None,
-                });
-            }
+            ProseEvent::TextChanged {
+                local,
+                edits,
+                removed,
+            } => self.take_text_change(*local, edits, removed),
+            ProseEvent::DocUpdated { .. } => self.changed = true,
+            ProseEvent::CellEntered { block, .. } => self.place_caret(*block, 0),
             ProseEvent::WordCountUpdated { count } => self.word_count = *count,
             ProseEvent::TocUpdated { block_id, toc } => {
                 match self.tocs.iter_mut().find(|(id, _)| id == block_id) {
@@ -246,20 +402,8 @@ impl ProseUiState {
                 self.index_highlights();
             }
             ProseEvent::RevealBlock { page, .. } => self.reveal_page = Some(*page),
-            ProseEvent::CaretPlaced { block, offset } => {
-                self.cursor = Some(CursorPosition {
-                    block_id: *block,
-                    offset: *offset,
-                    anchor: None,
-                });
-            }
-            ProseEvent::BlockSplit { new_block, .. } => {
-                self.cursor = Some(CursorPosition {
-                    block_id: *new_block,
-                    offset: 0,
-                    anchor: None,
-                });
-            }
+            ProseEvent::CaretPlaced { block, offset } => self.place_caret(*block, *offset),
+            ProseEvent::BlockSplit { new_block, .. } => self.place_caret(*new_block, 0),
             ProseEvent::FindResults { matches, current } => {
                 self.find_matches = matches.clone();
                 self.find_current = *current;
@@ -285,6 +429,87 @@ impl ProseUiState {
             | ProseEvent::DocumentRefused { .. }
             | ProseEvent::Error(_) => {}
         }
+    }
+
+    /// A caret the document placed: no selection, no column kept.
+    fn place_caret(&mut self, block_id: BlockId, offset: u32) {
+        self.cursor = Some(CursorPosition {
+            block_id,
+            offset,
+            anchor: None,
+        });
+        self.caret_upstream = false;
+        self.x_goal = None;
+    }
+
+    /// What a change did to the text.
+    ///
+    /// This peer's own change confirms the draft, and moves no caret: the view
+    /// placed it when it sent the command. A collaborator's change shifts the
+    /// draft and both ends of the selection, but never the anchor of a drag in
+    /// flight (`PROSE-UI-152`). A deleted block drops the draft anchored in it
+    /// (`PROSE-UI-143`), and the caret collapses beside it (`PROSE-UI-178`).
+    fn take_text_change(&mut self, local: bool, edits: &[TextEdit], removed: &[BlockId]) {
+        if local {
+            for edit in edits {
+                self.draft.confirm(edit);
+            }
+        } else {
+            self.draft.shift(edits);
+            if let Some(cursor) = &mut self.cursor {
+                cursor.offset = shifted(cursor.offset, cursor.block_id, edits);
+                if self.dragging.is_none()
+                    && let Some((block, offset)) = &mut cursor.anchor
+                {
+                    *offset = shifted(*offset, *block, edits);
+                }
+            }
+        }
+        for gone in removed {
+            if self.draft.block_id == Some(*gone) {
+                self.draft.clear();
+            }
+            let Some(cursor) = &mut self.cursor else {
+                continue;
+            };
+            if cursor.anchor.is_some_and(|(block, _)| block == *gone) {
+                cursor.anchor = None;
+            }
+            if cursor.block_id == *gone {
+                self.cursor = self.nearest_confirmed(*gone);
+                self.caret_upstream = false;
+                self.x_goal = None;
+                self.dragging = None;
+            }
+        }
+    }
+
+    /// The confirmed position nearest a deleted block. It is the end of the
+    /// text block before it, else the start of the one after it.
+    fn nearest_confirmed(&self, gone: BlockId) -> Option<CursorPosition> {
+        let index = self.flow_index(&crate::events::tree_id(gone))?;
+        let blocks = &self.shaped.layout.blocks;
+        let text = |block: &crate::layout::place::BlockLayout| {
+            self.shaped
+                .blocks
+                .get(&block.block_id)
+                .map(|run| (crate::events::block_id(block.block_id), run.data().len()))
+        };
+        let before = blocks
+            .get(..index)
+            .and_then(|head| head.iter().rev().find_map(text));
+        let place = match before {
+            Some(found) => Some(found),
+            None => blocks
+                .get(index + 1..)
+                .and_then(|tail| tail.iter().find_map(text))
+                .map(|(block, _)| (block, 0)),
+        };
+        place.map(|(block_id, offset)| CursorPosition {
+            block_id,
+            offset,
+            anchor: None,
+        })
     }
 
     /// Advance the recount clock by one frame, and answer the recount when
@@ -370,6 +595,25 @@ mod tests {
     }
 
     #[test]
+    fn a_full_channel_holds_an_edit_rather_than_the_frame() {
+        let (tx, rx) = flume::bounded::<LogicCommand>(1);
+        let mut outbox = Outbox::new(tx);
+        assert_eq!(
+            send_edit(&mut outbox, a_document(), ProseCommand::Noop),
+            SendResult::Sent
+        );
+        // The channel holds one, so the second edit waits in the outbox. It
+        // answers at once, and the edit is still on its way.
+        let held = send_edit(&mut outbox, a_document(), ProseCommand::Noop);
+        assert_eq!(held, SendResult::Held);
+        assert!(held.accepted());
+        assert!(outbox.is_busy());
+        assert!(rx.try_recv().is_ok());
+        assert_eq!(outbox.flush(), SendOutcome::Sent);
+        assert!(rx.try_recv().is_ok());
+    }
+
+    #[test]
     fn a_closed_channel_is_told_apart_from_a_full_one() {
         let (tx, rx) = flume::bounded::<LogicCommand>(1);
         drop(rx);
@@ -412,7 +656,20 @@ mod tests {
         let block = BlockId::new(1, 0);
         let mut state = ProseUiState::default();
         state.draft.push_str("hel", &block, 0);
+        // A change alone keeps the draft: the text is not laid out yet.
         state.apply_event(&ProseEvent::DocUpdated { delta: vec![1] });
+        assert_eq!(state.draft.pending_text, "hel");
+        state.apply_event(&ProseEvent::TextChanged {
+            local: true,
+            edits: vec![TextEdit {
+                block_id: block,
+                at: 0,
+                delta: 3,
+            }],
+            removed: Vec::new(),
+        });
+        assert_eq!(state.draft.unlaid(), 3);
+        state.draft.laid();
         assert!(state.draft.is_empty());
     }
 

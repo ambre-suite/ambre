@@ -623,6 +623,7 @@ impl ProseState {
         // The repair is a write of this peer's own, so it needs a commit. The
         // next local command flushes it to the other peers.
         self.doc.commit();
+        events.extend(self.text_changed(false));
         events
     }
 
@@ -657,6 +658,7 @@ impl ProseState {
         events.extend(self.validate_tables());
         events.extend(self.regrow_root());
         self.doc.commit();
+        events.extend(self.text_changed(false));
         if any_failed {
             events.push(Self::err_remote());
         }
@@ -721,6 +723,9 @@ impl ProseState {
         events.extend(self.validate_tables());
         events.extend(self.regrow_root());
         self.doc.commit();
+        // A whole document is no run of edits: the layout it brings is the
+        // answer, and the moves it recorded go nowhere.
+        drop(self.touched.take_moves());
         Ok(events)
     }
 
@@ -884,11 +889,43 @@ impl ProseState {
         if let Some(delta) = update.clone() {
             display.insert(0, ProseEvent::DocUpdated { delta });
         }
+        if let Some(moved) = self.text_changed(true) {
+            display.insert(usize::from(update.is_some()), moved);
+        }
         ProseOutcome {
             display,
             update,
             ephemeral: None,
         }
+    }
+
+    /// What the text did since the last answer, for the view that follows it
+    /// (`PROSE-UI-028`). `None` when the change touched no text and deleted
+    /// no block.
+    fn text_changed(&mut self, local: bool) -> Option<ProseEvent> {
+        let mut moves = self.touched.take_moves();
+        // A tree diff reports a delete for a node an import re-creates or
+        // moves, so only a block that is gone now counts as removed.
+        let tree = doc::blocks(&self.doc);
+        moves.removed.retain(|id| doc::node_of(&tree, id).is_none());
+        moves.removed.sort_unstable();
+        moves.removed.dedup();
+        if moves.edits.is_empty() && moves.removed.is_empty() {
+            return None;
+        }
+        Some(ProseEvent::TextChanged {
+            local,
+            edits: moves
+                .edits
+                .into_iter()
+                .map(|(block, at, delta)| crate::events::TextEdit {
+                    block_id: block_id(block),
+                    at,
+                    delta,
+                })
+                .collect(),
+            removed: moves.removed.into_iter().map(block_id).collect(),
+        })
     }
 
     /// Export every operation past the export cursor, and advance the cursor

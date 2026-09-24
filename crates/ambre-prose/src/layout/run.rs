@@ -14,7 +14,9 @@ use ambre_core::Uuid;
 use ambre_draw::{BoundingBox, Layout, ParleyBrush};
 use loro::TreeID;
 use parley::{Affinity, Cursor, Selection};
+use unicode_segmentation::UnicodeSegmentation;
 
+use crate::layout::measure::EffectiveStyle;
 use crate::layout::pass::PageLayout;
 
 /// One block's text, shaped and broken into lines: enough to draw and to
@@ -28,6 +30,12 @@ pub struct ParleyRunData {
     /// How far the text sits from the left of the content box. It is the
     /// block's left indent, which the width it was broken to left out.
     indent_px: f32,
+    /// The text the glyphs were shaped from. The caret walks its graphemes
+    /// and its words, which the glyphs alone do not tell apart.
+    text: String,
+    /// The style the text was shaped in, so a draft typed into the block is
+    /// shaped alike (`PROSE-UI-134`). `None` for a run shaped without one.
+    style: Option<EffectiveStyle>,
 }
 
 impl ParleyRunData {
@@ -44,7 +52,21 @@ impl ParleyRunData {
             layout,
             char_starts,
             indent_px,
+            text: text.to_owned(),
+            style: None,
         }
+    }
+
+    /// The style the text was shaped in, when the shaper recorded it.
+    #[must_use]
+    pub fn style(&self) -> Option<&EffectiveStyle> {
+        self.style.as_ref()
+    }
+
+    /// The text the glyphs were shaped from.
+    #[must_use]
+    pub fn text(&self) -> &str {
+        &self.text
     }
 
     /// How far the text sits from the left of the content box.
@@ -121,6 +143,135 @@ impl ParleyRunData {
             .collect()
     }
 
+    /// Where a code-point offset sits, on the side of a wrap point the
+    /// affinity names: the caret's box.
+    #[must_use]
+    pub fn caret_box_at(&self, offset: u32, upstream: bool) -> BoundingBox {
+        self.cursor(offset, upstream).geometry(&self.layout, 1.0)
+    }
+
+    /// The line a caret sits on, the first one being zero.
+    #[must_use]
+    pub fn line_of(&self, offset: u32, upstream: bool) -> usize {
+        let caret = self.caret_box_at(offset, upstream);
+        let middle = ((caret.y0 + caret.y1) / 2.0) as f32;
+        let tops = self.line_tops();
+        let lines = self.layout.len().max(1);
+        tops.partition_point(|top| *top <= middle)
+            .saturating_sub(1)
+            .min(lines - 1)
+    }
+
+    /// How many lines the run is broken into, never fewer than one.
+    #[must_use]
+    pub fn line_count(&self) -> usize {
+        self.layout.len().max(1)
+    }
+
+    /// The caret on line `line` nearest to `x`, and its affinity.
+    #[must_use]
+    pub fn at_line(&self, line: usize, x: f32) -> (u32, bool) {
+        let tops = self.line_tops();
+        let top = tops.get(line).copied().unwrap_or(0.0);
+        let bottom = tops.get(line + 1).copied().unwrap_or(top);
+        let cursor = Cursor::from_point(&self.layout, x, (top + bottom) / 2.0);
+        (
+            self.offset_of_byte(cursor.index()),
+            cursor.affinity() == Affinity::Upstream,
+        )
+    }
+
+    /// The start or the end of the wrapped line under a caret, and the
+    /// affinity that keeps the caret on it (`PROSE-UI-159`).
+    #[must_use]
+    pub fn line_edge(&self, offset: u32, upstream: bool, end: bool) -> (u32, bool) {
+        let here = Selection::new(self.cursor(offset, upstream), self.cursor(offset, upstream));
+        let moved = if end {
+            here.line_end(&self.layout, false)
+        } else {
+            here.line_start(&self.layout, false)
+        };
+        let focus = moved.focus();
+        (
+            self.offset_of_byte(focus.index()),
+            focus.affinity() == Affinity::Upstream,
+        )
+    }
+
+    /// The grapheme boundary before an offset, or `None` at the start.
+    #[must_use]
+    pub fn grapheme_before(&self, offset: u32) -> Option<u32> {
+        let byte = self.byte_of(offset);
+        let head = self.text.get(..byte)?;
+        let (at, _) = head.grapheme_indices(true).next_back()?;
+        Some(self.offset_of_byte(at))
+    }
+
+    /// The grapheme boundary after an offset, or `None` at the end.
+    #[must_use]
+    pub fn grapheme_after(&self, offset: u32) -> Option<u32> {
+        let byte = self.byte_of(offset);
+        let tail = self.text.get(byte..)?;
+        let first = tail.graphemes(true).next()?;
+        Some(self.offset_of_byte(byte + first.len()))
+    }
+
+    /// The start of the word before an offset, or `None` at the start.
+    #[must_use]
+    pub fn word_before(&self, offset: u32) -> Option<u32> {
+        let byte = self.byte_of(offset);
+        let head = self.text.get(..byte)?;
+        if head.is_empty() {
+            return None;
+        }
+        let at = head
+            .split_word_bound_indices()
+            .rev()
+            .find(|(_, word)| word.chars().any(char::is_alphanumeric))
+            .map_or(0, |(at, _)| at);
+        Some(self.offset_of_byte(at))
+    }
+
+    /// The end of the word after an offset, or `None` at the end.
+    #[must_use]
+    pub fn word_after(&self, offset: u32) -> Option<u32> {
+        let byte = self.byte_of(offset);
+        let tail = self.text.get(byte..)?;
+        if tail.is_empty() {
+            return None;
+        }
+        let end = tail
+            .split_word_bound_indices()
+            .find(|(_, word)| word.chars().any(char::is_alphanumeric))
+            .map_or(tail.len(), |(at, word)| at + word.len());
+        Some(self.offset_of_byte(byte + end))
+    }
+
+    /// The word under an offset, as a code-point range. A space or a
+    /// punctuation mark is a word of its own, as a double click takes it.
+    #[must_use]
+    pub fn word_around(&self, offset: u32) -> (u32, u32) {
+        let byte = self.byte_of(offset);
+        for (at, word) in self.text.split_word_bound_indices() {
+            if byte < at + word.len() {
+                return (
+                    self.offset_of_byte(at),
+                    self.offset_of_byte(at + word.len()),
+                );
+            }
+        }
+        (self.len(), self.len())
+    }
+
+    fn cursor(&self, offset: u32, upstream: bool) -> Cursor {
+        let affinity = if upstream {
+            Affinity::Upstream
+        } else {
+            Affinity::Downstream
+        };
+        Cursor::from_byte_index(&self.layout, self.byte_of(offset), affinity)
+    }
+
     fn byte_of(&self, offset: u32) -> usize {
         let last = self.char_starts.last().copied().unwrap_or(0);
         self.char_starts
@@ -161,6 +312,14 @@ impl ShapedRun {
     #[must_use]
     pub fn new(text: &str, layout: Layout<ParleyBrush>, indent_px: f32) -> Self {
         Self(Arc::new(ParleyRunData::new(text, layout, indent_px)))
+    }
+
+    /// The same, recording the style the text was shaped in.
+    #[must_use]
+    pub fn styled(text: &str, layout: Layout<ParleyBrush>, style: &EffectiveStyle) -> Self {
+        let mut data = ParleyRunData::new(text, layout, style.indent_left_px);
+        data.style = Some(style.clone());
+        Self(Arc::new(data))
     }
 
     /// The shaped data.

@@ -1752,6 +1752,7 @@ pub fn main() {
                     h,
                     theme_ctl,
                     prose_figures,
+                    busy_pub.clone(),
                 ))
             } else if boot_is_toile {
                 AppView::Toile(ToileView::new(

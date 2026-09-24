@@ -768,3 +768,60 @@ fn unmerging_brings_a_masked_text_back_verbatim() {
     assert!(alice.merged_rects(&table).is_empty());
     assert_eq!(texts(&alice, table)[0][1], "Kept, verbatim.");
 }
+
+/// What a peer's change did to the text, as the view is told it.
+fn moved(
+    events: &[ProseEvent],
+) -> Option<(
+    bool,
+    Vec<crate::events::TextEdit>,
+    Vec<crate::events::BlockId>,
+)> {
+    events.iter().find_map(|event| match event {
+        ProseEvent::TextChanged {
+            local,
+            edits,
+            removed,
+        } => Some((*local, edits.clone(), removed.clone())),
+        _ => None,
+    })
+}
+
+/// `PROSE-UI-028`: the view is told each run a change inserted or deleted, in
+/// code points of the text before it. It also learns whether it was its own.
+#[test]
+fn a_change_tells_the_view_what_it_did_to_the_text() {
+    let (mut alice, mut bob, block) = two_peers();
+    let typed = alice.handle_command(ProseCommand::InsertText {
+        block_id: block,
+        pos: 0,
+        text: "\u{e9}t\u{e9}".to_owned(),
+    });
+    let (local, edits, removed) = moved(&typed.display).expect("the text moved");
+    assert!(local, "the command is this peer's own");
+    assert_eq!(edits.len(), 1);
+    assert_eq!(
+        (edits[0].block_id, edits[0].at, edits[0].delta),
+        (block, 0, 3)
+    );
+    assert!(removed.is_empty());
+
+    let answered = bob.apply_remote(&typed.update.expect("a delta"));
+    let (local, edits, _) = moved(&answered).expect("the text moved");
+    assert!(!local, "the change came from a peer");
+    assert_eq!((edits[0].at, edits[0].delta), (0, 3));
+
+    // A deletion after the accented run counts code points, not bytes.
+    let cut = alice.handle_command(ProseCommand::DeleteText {
+        block_id: block,
+        range: (2, 3),
+    });
+    let answered = bob.apply_remote(&cut.update.expect("a delta"));
+    let (_, edits, _) = moved(&answered).expect("the text moved");
+    assert_eq!((edits[0].at, edits[0].delta), (2, -1));
+
+    let gone = alice.handle_command(ProseCommand::DeleteBlock { block_id: block });
+    let answered = bob.apply_remote(&gone.update.expect("a delta"));
+    let (_, _, removed) = moved(&answered).expect("a block went");
+    assert!(removed.contains(&block), "the deleted block is named");
+}

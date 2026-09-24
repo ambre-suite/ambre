@@ -295,10 +295,7 @@ impl Measurer {
         width_px: f32,
     ) -> (TextMetrics, ShapedRun) {
         let layout = self.shape(text, style, width_px);
-        (
-            metrics_of(&layout),
-            ShapedRun::new(text, layout, style.indent_left_px),
-        )
+        (metrics_of(&layout), ShapedRun::styled(text, layout, style))
     }
 
     /// Shape one run, keep its heights and the run, and name the line each
@@ -332,7 +329,7 @@ impl Measurer {
         (
             metrics_of(&layout),
             lines,
-            ShapedRun::new(text, layout, style.indent_left_px),
+            ShapedRun::styled(text, layout, style),
         )
     }
 
@@ -360,29 +357,70 @@ impl Measurer {
         line_height: LineHeight,
         width_px: f32,
     ) -> Layout<ParleyBrush> {
-        let mut builder = self
-            .layout_cx
-            .ranged_builder(&mut self.font_cx, text, 1.0, true);
-        builder.push_default(StyleProperty::FontStack(FontStack::Source(
-            family.to_string().into(),
-        )));
-        builder.push_default(StyleProperty::FontSize(style.font_size_px));
-        builder.push_default(StyleProperty::LineHeight(line_height));
-        if style.bold {
-            builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
-        }
-        if style.italic {
-            builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
-        }
-        let mut layout: Layout<ParleyBrush> = builder.build(text);
-        layout.break_all_lines(Some(width_px));
-        layout.align(
+        build(
+            &mut self.font_cx,
+            &mut self.layout_cx,
+            text,
+            style,
+            family,
+            line_height,
             Some(width_px),
-            alignment_of(style.align),
-            AlignmentOptions::default(),
-        );
-        layout
+        )
     }
+}
+
+/// Shape a draft the way the block it is typed into was shaped
+/// (`PROSE-UI-134`), on the contexts the thread that paints holds.
+///
+/// It is not broken into lines, since a draft is a few keystrokes long. It is
+/// drawn under the caret until the layout that carries it arrives.
+pub fn shape_draft(
+    font_cx: &mut FontContext,
+    layout_cx: &mut LayoutContext<ParleyBrush>,
+    text: &str,
+    style: &EffectiveStyle,
+) -> Layout<ParleyBrush> {
+    let family = fonts::resolve(&style.font_family).face_name();
+    build(
+        font_cx,
+        layout_cx,
+        text,
+        style,
+        family,
+        style.line_height,
+        None,
+    )
+}
+
+fn build(
+    font_cx: &mut FontContext,
+    layout_cx: &mut LayoutContext<ParleyBrush>,
+    text: &str,
+    style: &EffectiveStyle,
+    family: &str,
+    line_height: LineHeight,
+    width_px: Option<f32>,
+) -> Layout<ParleyBrush> {
+    let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
+    builder.push_default(StyleProperty::FontStack(FontStack::Source(
+        family.to_string().into(),
+    )));
+    builder.push_default(StyleProperty::FontSize(style.font_size_px));
+    builder.push_default(StyleProperty::LineHeight(line_height));
+    if style.bold {
+        builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
+    }
+    if style.italic {
+        builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+    }
+    let mut layout: Layout<ParleyBrush> = builder.build(text);
+    layout.break_all_lines(width_px);
+    layout.align(
+        width_px,
+        alignment_of(style.align),
+        AlignmentOptions::default(),
+    );
+    layout
 }
 
 /// The floor an `AtLeast` line height sets, in pixels.

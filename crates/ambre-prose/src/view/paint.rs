@@ -9,6 +9,7 @@
 use ambre_draw::{Affine, Brush, Color, DrawSurface, PositionedLayoutItem, Rect};
 
 use crate::events::{BlockId, CursorPosition, block_id};
+use crate::layout::measure::{EffectiveStyle, shape_draft};
 use crate::layout::place::NOTE_SEPARATOR_PX;
 use crate::layout::run::{CellStyle, ParleyRunData, ShapedRun, TableShape};
 use crate::ui::ProseUiState;
@@ -134,6 +135,43 @@ fn draw_run<S: DrawSurface>(
 }
 
 impl ProseUiState {
+    /// Shape the draft the way the block it is typed into was shaped
+    /// (`PROSE-UI-134`), on the contexts of the thread that paints.
+    ///
+    /// Only the draft is shaped, never a block: the runs came with the
+    /// layout (`PROSE-UI-006`). A draft already shaped is kept.
+    pub fn shape_draft(
+        &mut self,
+        font_cx: &mut parley::FontContext,
+        layout_cx: &mut parley::LayoutContext<ambre_draw::ParleyBrush>,
+    ) {
+        let Some((block, _, text)) = self.draft.shown() else {
+            self.draft_shape = None;
+            return;
+        };
+        if self
+            .draft_shape
+            .as_ref()
+            .is_some_and(|(shaped, _)| *shaped == text)
+        {
+            return;
+        }
+        let style = self
+            .run_of(block)
+            .and_then(ParleyRunData::style)
+            .cloned()
+            .unwrap_or_else(|| {
+                EffectiveStyle::from_parts(
+                    &crate::doc::DocDefaults::default(),
+                    &ambre_bus::app::prose::ParagraphStyle::default(),
+                    false,
+                )
+            });
+        let layout = shape_draft(font_cx, layout_cx, &text, &style);
+        let run = ShapedRun::new(&text, layout, 0.0);
+        self.draft_shape = Some((text, run));
+    }
+
     /// Paint the pages the canvas shows, and one more on each side
     /// (`PROSE-UI-007`).
     ///
@@ -293,12 +331,39 @@ impl ProseUiState {
                 }
             }
         }
+        // The draft, under the caret and over the confirmed runs, before the
+        // document has answered (`PROSE-UI-134`).
+        let mut draft_width = 0.0;
+        let mut draft_at = None;
+        if let Some((anchored, at, text)) = self.draft.shown()
+            && anchored == id
+            && let Some((shaped_text, shape)) = &self.draft_shape
+            && *shaped_text == text
+        {
+            let origin = data.caret_box(at);
+            let transform =
+                Affine::translate((placed.origin_x + origin.x0, placed.origin_y + origin.y0));
+            let brush = Brush::Solid(palette.text);
+            for line in shape.data().layout().lines() {
+                for item in line.items() {
+                    if let PositionedLayoutItem::GlyphRun(glyphs) = item {
+                        surface.draw_glyphs(&glyphs, &brush, transform);
+                    }
+                }
+            }
+            draft_width = f64::from(shape.data().layout().full_width());
+            draft_at = Some(at.saturating_add(crate::ui::chars(&text)));
+        }
         if let Some(cursor) = &self.cursor
             && cursor.block_id == id
             && cursor.anchor.is_none()
         {
-            let caret = data.caret_box(cursor.offset);
-            let rect = to_rect(placed, &caret);
+            let laid = self.to_laid(id, cursor.offset);
+            let caret = data.caret_box_at(laid, self.caret_upstream);
+            let mut rect = to_rect(placed, &caret);
+            if draft_at == Some(cursor.offset) {
+                rect.x0 += draft_width;
+            }
             surface.fill_rect(
                 Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX, rect.y1),
                 palette.accent,
@@ -1064,5 +1129,38 @@ mod tests {
         let (_, y2) = first_text_at(&paint(&mut ui));
         let room = 2.0 * f64::from(36.0 * crate::layout::measure::PX_PER_PT);
         assert!((y2 - y1 - room).abs() < 0.5, "the text sits at the bottom");
+    }
+
+    /// `PROSE-UI-134`: the draft is drawn at the caret before the document
+    /// has answered, in glyphs of its own over the confirmed run.
+    #[test]
+    fn a_draft_is_drawn_before_the_document_answers() {
+        let (_, shaped) = laid_out(1, 20);
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_layout(shaped);
+        let id = first_block(&ui);
+        ui.cursor = Some(CursorPosition {
+            block_id: id,
+            offset: 3,
+            anchor: None,
+        });
+        let count = |surface: &RecordingSurface| surface.count(glyphs);
+        let confirmed = count(&paint(&mut ui));
+        ui.draft.push_str("abc", &id, 3);
+        let mut font_cx = parley::FontContext::new();
+        for bytes in crate::layout::fonts::shipped_faces() {
+            crate::layout::fonts::register_faces(&mut font_cx, bytes);
+        }
+        let mut layout_cx = parley::LayoutContext::new();
+        ui.shape_draft(&mut font_cx, &mut layout_cx);
+        let surface = paint(&mut ui);
+        assert_eq!(count(&surface), confirmed + 1);
+        assert!(
+            surface
+                .ops()
+                .iter()
+                .any(|op| matches!(op, DrawOp::Glyphs { glyph_count: 3, .. }))
+        );
     }
 }

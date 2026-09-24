@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: TEXT EDITING
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the join and the split are built; the draft and the composition are not
+**Implementation:** partial -- the draft, the join and the split are built; the composition is not
 
 > Typing, deleting, splitting and joining paragraphs. A keystroke shows on the glass at once and
 > reaches the document a moment later. Two authors typing in the same paragraph never wait for
@@ -18,9 +18,9 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-004` | `INV` | The view MUST NOT mutate shared state: what was typed and not yet confirmed MUST live in a draft held apart from the document, and every mutation MUST leave as a command. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-134` | `OBS` | The text a draft holds MUST be drawn under the caret over the confirmed runs, before the document has answered. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-135` | `INV` | A draft MUST hold text and an anchor and no structure: it MUST NOT be able to express a split, a deletion or a mark. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-004` | `INV` | The view MUST NOT mutate shared state: what was typed and not yet confirmed MUST live in a draft held apart from the document, and every mutation MUST leave as a command. | this spec section 3 | `ambre_prose::input_tests::typing_fills_the_draft_and_sends_one_insertion_per_run`; `::a_dropped_insertion_leaves_no_echo` | none | verified |
+| `PROSE-UI-134` | `OBS` | The text a draft holds MUST be drawn under the caret over the confirmed runs, before the document has answered. | this spec section 3 | `ambre_prose::view::paint::tests::a_draft_is_drawn_before_the_document_answers` | none | verified |
+| `PROSE-UI-135` | `INV` | A draft MUST hold text and an anchor and no structure: it MUST NOT be able to express a split, a deletion or a mark. | this spec section 3 | `ambre_prose::input_tests::a_split_and_a_deletion_leave_as_commands_and_not_as_draft` | none | verified |
 | `PROSE-UI-137` | `INV` | One primitive MUST delete the active selection, and a second one MUST NOT exist per editing path. | this spec section 3 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-039` | `INV` | Joining two paragraphs MUST be expressed as the deletion below with an empty range; a second join operation MUST NOT exist. | this spec section 3 | exhaustive-match -- `ProseCommand` is closed and declares one deletion across blocks and no join variant; `ambre_prose::logic::text::tests::a_deletion_across_a_boundary_joins_the_two_paragraphs` | none | verified |
 
@@ -28,10 +28,10 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-136` | `POST` | The text MUST be appended to the draft at its anchor. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-176` | `POST` | One insertion command MUST leave carrying the same text at the same position. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-138` | `POST` | The draft MUST re-anchor only when it moves to another block, so consecutive keystrokes in one block MUST accumulate in one draft. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-139` | `FRAME` | Typing MUST NOT change the structure of the document, the paragraph's settings, or the marks the run lands beside. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-136` | `POST` | The text MUST be appended to the draft at its anchor. | this spec section 3 | `ambre_prose::input_tests::typing_fills_the_draft_and_sends_one_insertion_per_run` | none | verified |
+| `PROSE-UI-176` | `POST` | One insertion command MUST leave carrying the same text at the same position. | this spec section 3 | `ambre_prose::input_tests::typing_fills_the_draft_and_sends_one_insertion_per_run` | none | verified |
+| `PROSE-UI-138` | `POST` | The draft MUST re-anchor only when the caret leaves its end, so consecutive keystrokes in one block MUST accumulate in one draft. | this spec section 3 | `ambre_prose::input_tests::keystrokes_at_the_end_of_the_draft_accumulate_in_it` | none | verified |
+| `PROSE-UI-139` | `FRAME` | Typing MUST NOT change the structure of the document, the paragraph's settings, or the marks the run lands beside. | this spec section 3 | `ambre_prose::input_tests::typing_leaves_the_structure_the_settings_and_the_marks_alone` | none | verified |
 
 ### 1.3 Take the active selection
 
@@ -69,11 +69,11 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-005` | `POST` | An event confirming the anchored block MUST drop the draft: its text is then in the confirmed runs. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-028` | `POST` | A remote change MUST shift the pending draft by what it applied at or before the draft position. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-143` | `POST` | The draft MUST be dropped only when the block it is anchored in is deleted. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-178` | `POST` | When that block is deleted, the caret MUST collapse to the nearest confirmed position. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-027` | `FRAME` | An event carrying no change MUST leave the draft untouched: a download or a presence update MUST NOT erase what is being typed. | this spec section 3 | not built | unbuilt -- lands with the "Input and cursor" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-005` | `POST` | A confirmed run MUST leave the draft once the layout carrying it is in force: its text is then in the confirmed runs. | this spec section 3 | `ambre_prose::input_tests::a_confirmed_run_leaves_the_draft_once_it_is_laid_out` | none | verified |
+| `PROSE-UI-028` | `POST` | A remote change MUST shift the pending draft by what it applied at or before the draft position. | this spec section 3 | `ambre_prose::input_tests::a_remote_insertion_before_the_draft_shifts_it` | none | verified |
+| `PROSE-UI-143` | `POST` | The draft MUST be dropped only when the block it is anchored in is deleted. | this spec section 3 | `ambre_prose::input_tests::the_draft_is_dropped_only_with_its_block` | none | verified |
+| `PROSE-UI-178` | `POST` | When that block is deleted, the caret MUST collapse to the nearest confirmed position. | this spec section 3 | `ambre_prose::input_tests::the_caret_of_a_deleted_block_collapses_beside_it` | none | verified |
+| `PROSE-UI-027` | `FRAME` | An event carrying no change MUST leave the draft untouched: a download or a presence update MUST NOT erase what is being typed. | this spec section 3 | `ambre_prose::input_tests::the_draft_is_dropped_only_with_its_block` | none | verified |
 
 * **Budget.** the keystroke to a local echo and the keystroke to a confirmed one, two rows of
   `ambre-spec-budgets.md section 1`.
@@ -84,8 +84,8 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path.
-* **Verification.** 8 `verified`, and 18 `unimplemented`. The join and the split are built; the draft's
-  state machine is not. `PROSE-101` reads two tests, because the paragraph the caret started in is
+* **Verification.** 20 `verified`, and 6 `unimplemented`. The draft, the join and the split are
+  built; the composition is not. `PROSE-101` reads two tests, because the paragraph the caret started in is
   the one a deletion does not remove.
 
 ---
@@ -204,7 +204,8 @@ one code path and one convergence case (`PROSE-039`). Splitting is its inverse (
 `PROSE-042`), and it leaves the caret on the new paragraph (`PROSE-UI-141`).
 
 **Code:** `crates/ambre-prose/src/logic/text.rs` holds the four commands, and
-`crates/ambre-prose/src/ui.rs` the draft and the one send path.
+`crates/ambre-prose/src/ui.rs` the draft and the one send path. `crates/ambre-prose/src/input.rs`
+turns a key or typed text into a command.
 
 ---
 
@@ -241,12 +242,11 @@ toolbar and the slash command.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The position unit is decided, and the conversion is still unwritten.** The command plane counts
-  Unicode code points, which is what the CRDT indexes (`PROSE-FEAT-006`,
+* **The position unit is decided, and the view converts.** The command plane counts Unicode code
+  points, which is what the CRDT indexes (`PROSE-FEAT-006`,
   `features/ambre-spec-prose-engine.md section 3`). The shaped run joins glyphs to UTF-8 byte ranges
   (`features/ambre-spec-prose-page-rendering.md section 2`), and a caret advances by grapheme
-  cluster. Both conversions belong to the view, and neither has code: they land with the
-  `Input and cursor` Story (`ambre-roadmap.md` E5).
+  cluster. `crates/ambre-prose/src/view/caret.rs` holds both conversions.
 * **Nothing rules on how many pending characters a draft may hold.** A slow or blocked Logic
   thread grows the string without bound, and no rule caps it or says what happens when the
   confirmation never comes.
