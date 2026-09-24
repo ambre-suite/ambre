@@ -316,15 +316,29 @@ impl ProseUiState {
         None
     }
 
-    /// Where the caret is drawn in a band, on the page it was placed on.
+    /// Where the caret is drawn in a band, on the page it was placed on, or
+    /// in a note, on the page that carries it.
     fn band_caret_span(&self, block: BlockId, laid: u32) -> Option<(f32, f32)> {
-        let page = self.band_page?;
-        let slot = self
-            .band_slots(page)
-            .into_iter()
-            .find(|slot| slot.block == tree_id(block))?;
+        let id = tree_id(block);
+        let (page, top) = match self.note_page(block) {
+            Some(page) => {
+                let slot = self
+                    .note_slots(page)
+                    .into_iter()
+                    .find(|slot| slot.block == id)?;
+                (page, slot.top)
+            }
+            None => {
+                let page = self.band_page?;
+                let slot = self
+                    .band_slots(page)
+                    .into_iter()
+                    .find(|slot| slot.block == id)?;
+                (page, slot.top)
+            }
+        };
         let caret = self.run_of(block)?.caret_box_at(laid, self.caret_upstream);
-        let base = self.column.page_top_y(page) + slot.top;
+        let base = self.column.page_top_y(page) + top;
         Some((base + caret.y0 as f32, base + caret.y1 as f32))
     }
 

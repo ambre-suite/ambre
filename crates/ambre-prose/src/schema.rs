@@ -29,7 +29,7 @@ use ambre_core::schema::{
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing document across it (`PROSE-029`, `SCHEMA-009`).
-pub const SCHEMA_VERSION: u32 = 8;
+pub const SCHEMA_VERSION: u32 = 9;
 
 /// Write the current version into a document's `meta` register.
 ///
@@ -93,6 +93,10 @@ pub fn read_version(doc: &LoroDoc) -> Result<u32, SchemaError> {
 ///
 /// `7 -> 8` is the suggestion. A version 7 document holds none, since no
 /// command could write one, so this step stamps the number too.
+///
+/// `8 -> 9` moves a footnote's text out of its entry into a block of its own
+/// (`PROSE-FEAT-305`). A version 8 document may hold notes, so this step
+/// rewrites each one: see [`notes_to_blocks`].
 const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
     SchemaMigration {
         from: 0,
@@ -134,11 +138,62 @@ const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
         to: 8,
         apply: stamp_step,
     },
+    SchemaMigration {
+        from: 8,
+        to: 9,
+        apply: notes_to_blocks,
+    },
 ];
 
 /// The `0 -> 1` step. A free function rather than a closure because a registry
 /// row holds a plain `fn`.
 fn stamp_step(doc: &LoroDoc) -> Result<(), String> {
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
+
+/// The `8 -> 9` step: each footnote's text leaves its entry for a block of
+/// its own. That block is a root marked as a note, and the entry names it.
+///
+/// The text is carried over as its delta, so a mark the note held survives.
+/// An entry that already names a block, or holds no text, is left alone, so
+/// the step read twice writes nothing the second time.
+fn notes_to_blocks(doc: &LoroDoc) -> Result<(), String> {
+    use loro::{Container, ValueOrContainer};
+
+    use crate::doc as d;
+
+    let annots = doc.get_map(d::ANNOTS);
+    let mut entries = Vec::new();
+    for key in annots.keys() {
+        let Some(ValueOrContainer::Container(Container::Map(entry))) = annots.get(&key) else {
+            continue;
+        };
+        if d::read_string(&entry, d::ANNOT_KIND).as_deref() != Some(crate::note::KIND_FOOTNOTE)
+            || d::read_string(&entry, d::ANNOT_NOTE_BLOCK).is_some()
+        {
+            continue;
+        }
+        let Some(ValueOrContainer::Container(Container::Text(text))) = entry.get(d::ANNOT_TEXT)
+        else {
+            continue;
+        };
+        entries.push((entry, text));
+    }
+    // The scratch document the gate reads into knows no mark yet, and a
+    // delta carrying one is refused without the policy (`PROSE-007`).
+    crate::mark::configure(doc);
+    for (entry, text) in entries {
+        let block = crate::logic::notes::write_note_block(doc, "")?;
+        d::get_block_text(doc, &block)
+            .apply_delta(&text.to_delta())
+            .map_err(|e| format!("{e:?}"))?;
+        entry
+            .insert(d::ANNOT_NOTE_BLOCK, block.to_string())
+            .map_err(|e| format!("{e:?}"))?;
+        entry.delete(d::ANNOT_TEXT).map_err(|e| format!("{e:?}"))?;
+    }
     stamp(doc);
     doc.commit();
     Ok(())

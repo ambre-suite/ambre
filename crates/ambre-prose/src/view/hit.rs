@@ -51,7 +51,47 @@ pub(crate) struct BandSlot {
     pub bottom: f32,
 }
 
+/// A footnote drawn at the foot of a page. It carries its identity, the block
+/// holding its text, and its top and bottom from the top of the page.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct NoteSlot {
+    pub footnote_id: ambre_core::Uuid,
+    pub block: TreeID,
+    pub top: f32,
+    pub bottom: f32,
+}
+
 impl ProseUiState {
+    /// The notes `page` draws at its foot, in the order of their ordinals,
+    /// stacked up from the foot of the body. The one geometry the painter
+    /// and the hit-test both read.
+    pub(crate) fn note_slots(&self, page: u32) -> Vec<NoteSlot> {
+        let layout = &self.shaped.layout;
+        let mut notes: Vec<&crate::layout::place::FootnoteLayout> = self
+            .blocks_on(page)
+            .iter()
+            .filter_map(|index| layout.blocks.get(*index))
+            .flat_map(|block| block.notes.iter())
+            .filter(|note| note.page == page)
+            .collect();
+        notes.sort_by_key(|note| note.ordinal);
+        let total: f32 = notes.iter().map(|note| note.height_px).sum();
+        let mut y = layout.body_top_px() + layout.body_height_px() - total;
+        notes
+            .into_iter()
+            .map(|note| {
+                let top = y;
+                y += note.height_px;
+                NoteSlot {
+                    footnote_id: note.footnote_id,
+                    block: note.block_id,
+                    top,
+                    bottom: y,
+                }
+            })
+            .collect()
+    }
+
     /// The header and the footer `page` draws, where it draws them. The one
     /// geometry the painter and the hit-test both read.
     pub(crate) fn band_slots(&self, page: u32) -> Vec<BandSlot> {
@@ -80,21 +120,40 @@ impl ProseUiState {
         .collect()
     }
 
-    /// Whether `block` is the text of a header or a footer.
+    /// Whether `block` is the text of a header, a footer or a note: one
+    /// block drawn apart from the flow, which holds its own selection.
     pub(crate) fn is_band(&self, block: BlockId) -> bool {
-        self.shaped
-            .layout
-            .bands
-            .register_of(&tree_id(block))
-            .is_some()
+        let id = tree_id(block);
+        self.shaped.layout.bands.register_of(&id).is_some() || self.note_page(block).is_some()
     }
 
-    /// The band text under a point of `page`, when the point is in a band.
+    /// The page a note's text is drawn on, when `block` holds a note's text.
+    pub(crate) fn note_page(&self, block: BlockId) -> Option<u32> {
+        let id = tree_id(block);
+        self.shaped
+            .layout
+            .blocks
+            .iter()
+            .flat_map(|placed| placed.notes.iter())
+            .find(|note| note.block_id == id)
+            .map(|note| note.page)
+    }
+
+    /// The text of a band or a note under a point of `page`, when the point
+    /// is in one.
     fn band_hit(&self, page: u32, x_in_page: f32, y_in_page: f32) -> Option<(BlockId, u32)> {
-        let slot = self
+        let bands = self
             .band_slots(page)
             .into_iter()
-            .find(|slot| y_in_page >= slot.top && y_in_page < slot.bottom)?;
+            .map(|slot| (slot.block, slot.top, slot.bottom));
+        let notes = self
+            .note_slots(page)
+            .into_iter()
+            .map(|slot| (slot.block, slot.top, slot.bottom));
+        let (block, top, bottom) = bands
+            .chain(notes)
+            .find(|(_, top, bottom)| y_in_page >= *top && y_in_page < *bottom)?;
+        let slot = BandSlot { block, top, bottom };
         let run = self.shaped.blocks.get(&slot.block)?.data();
         let x = x_in_page - self.shaped.layout.margin_left_px - run.indent_px();
         let y = (y_in_page - slot.top).clamp(0.0, (slot.bottom - slot.top).max(0.0));
@@ -125,7 +184,8 @@ impl ProseUiState {
         else {
             return None;
         };
-        // A header or a footer answers like body text (`PROSE-UI-033`).
+        // A header, a footer or a note answers like body text (`PROSE-UI-033`,
+        // `PROSE-UI-187`).
         if let Some(hit) = self.band_hit(page, x_in_page, y_in_page) {
             return Some(hit);
         }

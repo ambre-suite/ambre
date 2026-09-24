@@ -421,8 +421,9 @@ pub(crate) fn children_of(tree: &LoroTree, parent: Option<TreeID>) -> Vec<TreeID
 #[must_use]
 pub(crate) fn roots(tree: &LoroTree) -> Vec<TreeID> {
     let mut roots = children_of(tree, None);
-    // A band is a root and no part of the flow (`PROSE-006`).
-    roots.retain(|id| !is_band(tree, id));
+    // A band or a note is a root and no part of the flow (`PROSE-006`,
+    // `PROSE-FEAT-305`).
+    roots.retain(|id| !is_aside(tree, id));
     roots
 }
 
@@ -1085,6 +1086,22 @@ pub(crate) fn is_band(tree: &LoroTree, id: &TreeID) -> bool {
     node_of(tree, id).is_some_and(|node| read_bool(&node, K_BAND) == Some(true))
 }
 
+/// Whether a block holds a footnote's text rather than body text.
+#[must_use]
+pub(crate) fn is_note(tree: &LoroTree, id: &TreeID) -> bool {
+    node_of(tree, id).is_some_and(|node| read_bool(&node, K_NOTE) == Some(true))
+}
+
+/// Whether a block stands outside the body flow: a band or a note. Such a
+/// block is one paragraph a register or an entry names, so no structural
+/// command may split, move or delete it.
+#[must_use]
+pub(crate) fn is_aside(tree: &LoroTree, id: &TreeID) -> bool {
+    node_of(tree, id).is_some_and(|node| {
+        read_bool(&node, K_BAND) == Some(true) || read_bool(&node, K_NOTE) == Some(true)
+    })
+}
+
 /// The last-modified stamp, or `None` before any peer wrote one.
 #[must_use]
 pub fn read_updated_at(doc: &LoroDoc) -> Option<i64> {
@@ -1162,8 +1179,17 @@ pub(crate) const K_CROSS_REF: &str = "ref";
 /// An annotation's kind, in one field of one type (`PROSE-031`).
 pub(crate) const ANNOT_KIND: &str = "kind";
 
-/// The text child of an annotation entry: a footnote's body, or a reply's.
+/// The text child of an annotation entry: a reply's body.
 pub(crate) const ANNOT_TEXT: &str = "text";
+
+/// The note marker, `true` on a block that holds a footnote's text. Such a
+/// block is a root of the block tree kept out of the body flow, and the
+/// note's entry names it (`PROSE-FEAT-305`).
+pub(crate) const K_NOTE: &str = "nb";
+
+/// The block of a footnote's text, named by its entry as the string Loro
+/// prints a `TreeID`.
+pub(crate) const ANNOT_NOTE_BLOCK: &str = "block_id";
 
 /// The root of a comment's mark. Each thread writes its own key under it,
 /// `cm:{id}`, so two threads over one character never share a value.

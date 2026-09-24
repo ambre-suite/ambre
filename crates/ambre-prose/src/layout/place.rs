@@ -25,12 +25,14 @@ pub const NOTE_SEPARATOR_PX: f32 = 8.0;
 #[derive(Clone, Debug, PartialEq)]
 pub struct NoteCall {
     pub footnote_id: Uuid,
+    /// The block holding the note's text (`PROSE-FEAT-305`).
+    pub block_id: TreeID,
     /// Counted before placement, from the calls in document order
     /// (`PROSE-117`).
     pub ordinal: u32,
     /// The line of the block the call sits on: a table's row, a text's line.
     pub line: u32,
-    /// The note's shaped text, its ordinal in front.
+    /// The note's shaped text, or its number when that is taller.
     pub height_px: f32,
 }
 
@@ -38,6 +40,8 @@ pub struct NoteCall {
 #[derive(Clone, Debug, PartialEq)]
 pub struct FootnoteLayout {
     pub footnote_id: Uuid,
+    /// The block holding the note's text, the caret's address in it.
+    pub block_id: TreeID,
     pub ordinal: u32,
     pub page: u32,
     pub height_px: f32,
@@ -258,6 +262,7 @@ impl Cursor {
         self.foot_px += self.foot_cost(notes.clone());
         out.extend(notes.map(|note| FootnoteLayout {
             footnote_id: note.footnote_id,
+            block_id: note.block_id,
             ordinal: note.ordinal,
             page: self.page,
             height_px: note.height_px,

@@ -38,7 +38,7 @@ mod find;
 mod history;
 mod lists;
 mod marks;
-mod notes;
+pub(crate) mod notes;
 mod presence;
 mod suggestions;
 pub(crate) mod tables;
@@ -1038,10 +1038,11 @@ impl ProseState {
         &self.doc
     }
 
-    /// Whether one of the named blocks holds a band, which no structural
-    /// command may delete, move, or place a block beside (`PROSE-006`).
+    /// Whether one of the named blocks holds a band or a note. No
+    /// structural command may delete, move, or place a block beside one
+    /// (`PROSE-006`, `PROSE-FEAT-305`).
     fn names_a_band(tree: &loro::LoroTree, ids: &[Option<TreeID>]) -> bool {
-        ids.iter().flatten().any(|id| doc::is_band(tree, id))
+        ids.iter().flatten().any(|id| doc::is_aside(tree, id))
     }
 
     fn err_no_block(id: &TreeID) -> ProseOutcome {

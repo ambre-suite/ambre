@@ -1097,3 +1097,86 @@ fn a_selection_does_not_cross_the_edge_of_a_band() {
         (body, 5, None)
     );
 }
+
+/// A document whose one page calls one note, and the note's block.
+fn noted() -> (Rig, BlockId, BlockId) {
+    let mut rig = Rig::new(&["the body of the page"]);
+    let body = rig.blocks()[0];
+    rig.outbox.push(ProseCommand::InsertFootnote {
+        block_id: body,
+        pos: 4,
+        note_text: "the text of the note".to_owned(),
+    });
+    rig.deliver();
+    rig.lay();
+    let note = rig
+        .ui
+        .note_slots(0)
+        .first()
+        .map(|slot| crate::events::block_id(slot.block))
+        .expect("the note is drawn on the first page");
+    (rig, body, note)
+}
+
+/// Where a note's offset is drawn, as the painter places it.
+fn note_point(rig: &Rig, block: BlockId, offset: u32) -> (f32, f32) {
+    let ui = &rig.ui;
+    let layout = &ui.shaped.layout;
+    let slot = ui
+        .note_slots(0)
+        .into_iter()
+        .find(|slot| slot.block == crate::events::tree_id(block))
+        .expect("the note is drawn");
+    let run = ui.shaped.blocks[&slot.block].data();
+    let caret = run.caret_box(offset);
+    let x = layout.margin_left_px + run.indent_px() + caret.x0 as f32 + 0.5;
+    let y_doc = ui.column.page_top_y(0) + slot.top + (caret.y0 + caret.y1) as f32 / 2.0;
+    let scale = ui.viewport.scale();
+    (
+        ui.column.left_px(&ui.viewport) + x * scale,
+        (y_doc - ui.viewport.scroll_y) * scale,
+    )
+}
+
+/// `PROSE-UI-187`: a press in a note puts the caret in its text, past the
+/// number drawn beside it, and typing goes to the note's block.
+#[test]
+fn a_press_in_a_note_lands_in_its_text() {
+    let (mut rig, _, note) = noted();
+    let at = note_point(&rig, note, 4);
+    assert!(rig.press(at, false, 0.0));
+    assert_eq!((rig.caret().block_id, rig.caret().offset), (note, 4));
+    assert!(
+        rig.ui.caret_span().is_some(),
+        "the caret is placed in the note"
+    );
+    let sent = rig.sent.len();
+    assert!(rig.type_text("x"));
+    rig.deliver();
+    assert!(
+        rig.sent[sent..].iter().any(|command| matches!(
+            command,
+            ProseCommand::InsertText { block_id, pos: 4, text } if *block_id == note && text == "x"
+        )),
+        "the text goes to the note"
+    );
+    assert_eq!(
+        rig.logic.text_of(&note).as_deref(),
+        Some("the xtext of the note")
+    );
+}
+
+/// `PROSE-UI-187`: a note holds its own selection, as a band does.
+#[test]
+fn a_selection_does_not_cross_the_edge_of_a_note() {
+    let (mut rig, body, note) = noted();
+    let at = note_point(&rig, note, 2);
+    assert!(rig.press(at, false, 0.0));
+    let (x, y) = rig.point_of(body, 5);
+    rig.input(ProseInput::Drag { x, y });
+    assert_eq!(rig.caret().block_id, note);
+    assert_eq!(rig.caret().anchor, None);
+    let (x, y) = note_point(&rig, note, 8);
+    rig.input(ProseInput::Drag { x, y });
+    assert_eq!(rig.ui.selection(), Some(((note, 2), (note, 8))));
+}

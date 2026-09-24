@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-034` | `INV` | A vertical move MUST keep the column the caret started from until a horizontal move, a click or an edit ends the run of vertical moves. | this spec section 2 | `ambre_prose::input_tests::a_run_of_vertical_moves_keeps_its_column` | none | verified |
 | `PROSE-UI-152` | `INV` | A change from a collaborator MUST NOT move the anchor of a drag in flight: the anchor is a gesture, not a document position, for as long as the gesture lasts. | this spec section 2 | `ambre_prose::input_tests::a_remote_change_does_not_move_the_anchor_of_a_drag` | none | verified |
 | `PROSE-UI-033` | `INV` | Header and footer text MUST hit-test like body text, so the caret can enter it. | this spec section 2 | `ambre_prose::input_tests::a_press_in_a_header_or_a_footer_lands_in_its_text`; `ambre_prose::input_tests::a_selection_does_not_cross_the_edge_of_a_band` | none | verified |
-| `PROSE-UI-187` | `INV` | Footnote text MUST hit-test like body text, so the caret can enter it. | this spec section 2 | not built | unbuilt -- lands with the "The caret in a footnote" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-187` | `INV` | Footnote text MUST hit-test like body text, so the caret can enter it. | this spec section 2 | `input_tests::a_press_in_a_note_lands_in_its_text`; `::a_selection_does_not_cross_the_edge_of_a_note` -- a note is a block out of the flow, so the press resolves into it and the selection stays inside it | none | verified |
 | `PROSE-UI-153` | `OBS` | A pointer resting inside a link MUST show the link cursor, over the marked text alone. | this spec section 2 | `ambre_prose::input_tests::a_link_answers_over_its_marked_text_alone` | none | verified |
 
 ### 1.2 Press in the text
@@ -100,7 +100,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: `PROSE-UI-010` (`features/ambre-spec-prose-engine.md section 1`) keeps the
   selection out of the document, and the UI thread reaches no network, crypto or persistence path
   (`UI-THREAD-004`).
-* **Verification.** 34 `verified`, and 3 `unimplemented`: the footnotes and the drag's scroll tick.
+* **Verification.** 35 `verified`, and 2 `unimplemented`: the drag's scroll tick.
   `PROSE-UI-008` is a round trip: the point the layout draws an offset at resolves back to that
   offset, at any zoom and scroll. `PROSE-UI-071` holds by the shape of the view: it sets a field
   and opens nothing, and the shell is the one reader of that field.

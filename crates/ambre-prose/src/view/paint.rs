@@ -459,26 +459,17 @@ impl ProseUiState {
     }
 
     /// The footnote band at the foot of the body: a separator, then each note
-    /// this page carries, in the order of their ordinals.
+    /// this page carries, in the order of their ordinals. Each note draws its
+    /// number, then its text as any block draws, caret and selection with it
+    /// (`PROSE-UI-187`).
     fn paint_notes<S: DrawSurface>(&mut self, surface: &mut S, palette: &PagePalette, page: u32) {
-        let layout = std::sync::Arc::clone(&self.shaped.layout);
-        let mut notes: Vec<&crate::layout::place::FootnoteLayout> = self
-            .blocks_on(page)
-            .iter()
-            .filter_map(|index| layout.blocks.get(*index))
-            .flat_map(|block| block.notes.iter())
-            .filter(|note| note.page == page)
-            .collect();
-        if notes.is_empty() {
+        let slots = self.note_slots(page);
+        let Some(first) = slots.first() else {
             return;
-        }
-        notes.sort_by_key(|note| note.ordinal);
-        let total: f32 = notes.iter().map(|note| note.height_px).sum();
-        let left = f64::from(layout.margin_left_px);
-        let right = left + f64::from(layout.content_width_px);
-        let foot = layout.body_top_px() + layout.body_height_px();
-        let mut y = f64::from(foot - total - NOTE_SEPARATOR_PX);
-        let rule = y + f64::from(NOTE_SEPARATOR_PX) / 2.0;
+        };
+        let left = f64::from(self.shaped.layout.margin_left_px);
+        let right = left + f64::from(self.shaped.layout.content_width_px);
+        let rule = f64::from(first.top - NOTE_SEPARATOR_PX / 2.0);
         surface.stroke_line(
             left,
             rule,
@@ -487,27 +478,34 @@ impl ProseUiState {
             palette.sheet_border,
             1.0,
         );
-        y += f64::from(NOTE_SEPARATOR_PX);
-        for note in notes {
-            let height = f64::from(note.height_px);
-            if let Some(run) = self.shaped.notes.get(&note.footnote_id).cloned() {
+        for slot in slots {
+            let (top, bottom) = (f64::from(slot.top), f64::from(slot.bottom));
+            let clip = Rect::new(left, top, right, bottom);
+            surface.push_clip(clip);
+            if let Some(number) = self.shaped.notes.get(&slot.footnote_id).cloned() {
                 let placed = Placed {
                     origin_x: left,
-                    origin_y: y,
-                    clip: Rect::new(left, y, right, y + height),
+                    origin_y: top,
+                    clip,
                 };
-                surface.push_clip(placed.clip);
                 draw_run(
                     surface,
                     &mut self.runs,
-                    RunKey::Note(note.footnote_id),
-                    &run,
+                    RunKey::Note(slot.footnote_id),
+                    &number,
                     &placed,
                     palette.text,
                 );
-                surface.pop_clip();
             }
-            y += height;
+            if let Some(text) = self.shaped.blocks.get(&slot.block).cloned() {
+                let placed = Placed {
+                    origin_x: left + f64::from(text.data().indent_px()),
+                    origin_y: top,
+                    clip,
+                };
+                self.paint_block(surface, palette, block_id(slot.block), &text, &placed, true);
+            }
+            surface.pop_clip();
         }
     }
 

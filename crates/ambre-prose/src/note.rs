@@ -9,7 +9,7 @@
 use std::collections::HashSet;
 
 use ambre_core::Uuid;
-use loro::{Container, LoroDoc, LoroMap, LoroText, LoroValue, ValueOrContainer};
+use loro::{Container, LoroDoc, LoroMap, LoroText, LoroValue, TreeID, ValueOrContainer};
 
 use crate::doc;
 use crate::events::FootnoteEntry;
@@ -34,13 +34,20 @@ pub(crate) fn entry(document: &LoroDoc, id: &Uuid) -> Option<LoroMap> {
     is_note.then_some(map)
 }
 
-/// The body of footnote `id`.
+/// The block holding the text of footnote `id`, when its entry names a live
+/// one (`PROSE-FEAT-305`).
+#[must_use]
+pub(crate) fn block(document: &LoroDoc, id: &Uuid) -> Option<TreeID> {
+    let named = doc::read_string(&entry(document, id)?, doc::ANNOT_NOTE_BLOCK)?;
+    let block = TreeID::try_from(named.as_str()).ok()?;
+    let tree = doc::blocks_read(document)?;
+    doc::is_note(&tree, &block).then_some(block)
+}
+
+/// The body of footnote `id`: the text of its block.
 #[must_use]
 pub(crate) fn body(document: &LoroDoc, id: &Uuid) -> Option<LoroText> {
-    match entry(document, id)?.get(doc::ANNOT_TEXT) {
-        Some(ValueOrContainer::Container(Container::Text(text))) => Some(text),
-        _ => None,
-    }
+    block(document, id).map(|block| doc::get_block_text(document, &block))
 }
 
 /// Every footnote the document holds, whether a call reaches it or not.

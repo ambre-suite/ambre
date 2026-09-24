@@ -285,10 +285,11 @@ impl ProseState {
         Ok(true)
     }
 
-    /// A header or a footer is refused while suggesting: the pending list
-    /// walks the flow alone, so a suggestion there could never be accepted.
+    /// A header, a footer or a note is refused while suggesting. The pending
+    /// list walks the flow alone, so a suggestion there could never be
+    /// accepted.
     fn refuse_suggesting_in(&self, block: &TreeID) -> Option<ProseOutcome> {
-        doc::is_band(&doc::blocks(&self.doc), block)
+        doc::is_aside(&doc::blocks(&self.doc), block)
             .then(|| ProseOutcome::refused(ProseRefusal::NotWhileSuggesting))
     }
 
@@ -641,7 +642,7 @@ mod tests {
     }
 
     /// With the mode off, text typed inside a suggestion is plain text: it
-    /// joins no suggestion (`PROSE-FEAT-304`).
+    /// joins no suggestion (`PROSE-FEAT-307`).
     #[test]
     fn plain_typing_inside_a_suggestion_joins_none() {
         let (mut state, ids) = document(1, ALICE, &["ab"]);

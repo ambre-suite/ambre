@@ -120,8 +120,11 @@ impl Paginator {
         ShapedLayout {
             version: self.version,
             layout: Arc::new(self.layout.clone()),
-            blocks: body.chain(self.bands.runs.iter().cloned()).collect(),
-            notes: self.notes.runs.clone(),
+            blocks: body
+                .chain(self.bands.runs.iter().cloned())
+                .chain(self.notes.texts.iter().cloned())
+                .collect(),
+            notes: self.notes.numbers.clone(),
             tables: self
                 .measured
                 .iter()

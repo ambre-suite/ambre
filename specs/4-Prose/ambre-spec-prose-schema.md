@@ -139,7 +139,6 @@ the container, `--` where no feature does.
 | `styles/{id}` | Map | a paragraph-style field name, per the table below | per field | the field | inline-styles | design |
 | `annots` | Map | a `Uuid` | one annotation map | the entry | comments, track-changes, footnotes | built |
 | `annots/{id}` | Map | a field name, per the table below | per field | the field | comments, track-changes, footnotes | built |
-| `annots/{id}/text` | Text | -- | a footnote's body | none: char-CRDT | footnotes | built |
 | `annots/{id}/replies` | List | position | one reply map | list order, no LWW | comments | built |
 | `annots/{id}/replies/{n}` | Map | `id`, `author`, `user_id`, `created_at` | String, String, String, `i64` | the key | comments | built |
 | `annots/{id}/replies/{n}/text` | Text | -- | a reply's body | none: char-CRDT | comments | built |
@@ -155,6 +154,7 @@ block always carries.
 | `s` | String | the `style_id`: a key in `styles`, or one of the nine built-in names -- `body`, `heading-1` to `heading-6`, `code`, `quote`; absent means the type's own built-in | every | built |
 | `a` | Map | the type-specific attributes; absent means the type has none | the types below | built |
 | `hb` | `bool` | that the block holds a header or a footer, named by `meta`; kept out of the body flow (`PROSE-006`) | Paragraph, at the root | built |
+| `nb` | `bool` | that the block holds a footnote's text, named by the note's entry; kept out of the body flow (`PROSE-FEAT-305`) | Paragraph, at the root | built |
 | `gn` | String | that a user deleted the block: the Loro peer id of the session that did, in decimal; absent on every live block (`PROSE-118`, `PROSE-122`) | every | built |
 | `rg` | `bool` | that a peer grew this block for want of any root block, and not the author; absent on every block the author asked for (`PROSE-094`) | Paragraph, at the root | built |
 | `align` | `u8` | left, center, right or justify | every text block | built |
@@ -209,7 +209,7 @@ function is total (`PROSE-007`).
 | `author` | String | the self-asserted display name, stamped by the local session | suggestion | built |
 | `user_id` | String | the canonical `UserId` of the author, from the session identity. Ownership is read from it | suggestion | built |
 | `replies` | List | the thread, the opening comment first. A comment's author is the one its opening reply names | comment | built |
-| `text` | Text | the note body | footnote | design |
+| `block_id` | String | the `TreeID` of the block holding the note's text (`PROSE-FEAT-305`) | footnote | built |
 | `name`, `block_id`, `range` | -- | the deferred bookmark fields | bookmark | design |
 
 **Absence is a value** (`PROSE-096`). No `s` key means the block type's built-in style. No `a` map
@@ -231,8 +231,8 @@ means the type carries no attribute. No mark on a range means the cascade decide
   * `styles`
     * per custom style, keyed by `style_id`: the paragraph-style keys it overrides
   * `annots`
-    * per annotation, keyed by `Uuid`: the kind, the anchor cache, the authorship, and `text` for a
-      footnote
+    * per annotation, keyed by `Uuid`: the kind, the anchor cache, the authorship, and the
+      `block_id` of a footnote's text
       * per reply: the author, the stamp, and `text`
   * `bibliography`
 

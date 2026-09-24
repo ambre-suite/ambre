@@ -140,12 +140,17 @@ pub fn lay_out(measurer: &mut Measurer, document: &LoroDoc) -> PageLayout {
     layout
 }
 
+/// The room between a note's number and its text, in pixels.
+pub const NOTE_GAP_PX: f32 = 4.0;
+
 /// Every footnote numbered and measured, before any block is placed
 /// (`PROSE-117`).
 ///
 /// The ordinals are counted from the calls in document order (`PROSE-068`),
 /// so where placement later puts a note never changes its number
-/// (`PROSE-099`).
+/// (`PROSE-099`). A note's text is shaped alone, as the run of its block, with
+/// its number beside it. An offset in the run is an offset in the block, so
+/// the caret reads a note like any other text (`PROSE-UI-187`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct NotePlan {
     /// What the plan was read from: each reachable note, its ordinal and its
@@ -153,10 +158,13 @@ pub(crate) struct NotePlan {
     pub(crate) key: Vec<(Uuid, u32, String)>,
     /// The calls of each block: the code-point offset and the note.
     calls: HashMap<TreeID, Vec<(u32, Uuid)>>,
-    /// Each note's ordinal and shaped height.
-    notes: HashMap<Uuid, (u32, f32)>,
-    /// Each note's text as it was shaped, its ordinal in front.
-    pub(crate) runs: HashMap<Uuid, ShapedRun>,
+    /// Each note's ordinal, shaped height and block.
+    notes: HashMap<Uuid, (u32, f32, TreeID)>,
+    /// Each note's number as it was shaped.
+    pub(crate) numbers: HashMap<Uuid, ShapedRun>,
+    /// Each note's text as it was shaped, under the note's block, indented
+    /// past its number.
+    pub(crate) texts: Vec<(TreeID, ShapedRun)>,
 }
 
 impl NotePlan {
@@ -179,8 +187,8 @@ impl NotePlan {
             .collect()
     }
 
-    /// Number every note, then shape each one against the content width, its
-    /// ordinal in front.
+    /// Number every note, then shape each one against the content width:
+    /// the number first, then the text in the room left beside it.
     pub(crate) fn read(measurer: &mut Measurer, document: &LoroDoc, content_width_px: f32) -> Self {
         let key = Self::key_of(document);
         if key.is_empty() {
@@ -189,16 +197,24 @@ impl NotePlan {
         let defaults = doc::read_defaults(document);
         let style = EffectiveStyle::from_parts(&defaults, &ParagraphStyle::default(), false);
         let width = style.text_width_px(content_width_px);
-        let mut runs = HashMap::with_capacity(key.len());
-        let notes = key
-            .iter()
-            .map(|(id, ordinal, text)| {
-                let shown = format!("{ordinal} {text}");
-                let (metrics, run) = measurer.measure_run(&shown, &style, width);
-                runs.insert(*id, run);
-                (*id, (*ordinal, metrics.text_height_px))
-            })
-            .collect::<HashMap<_, _>>();
+        let mut numbers = HashMap::with_capacity(key.len());
+        let mut texts = Vec::with_capacity(key.len());
+        let mut notes = HashMap::with_capacity(key.len());
+        for (id, ordinal, text) in &key {
+            let Some(block) = note::block(document, id) else {
+                continue;
+            };
+            let (number_metrics, number) =
+                measurer.measure_run(&ordinal.to_string(), &style, width);
+            let mut hung = style.clone();
+            hung.indent_left_px += number.data().layout().full_width() + NOTE_GAP_PX;
+            let (metrics, run) =
+                measurer.measure_run(text, &hung, hung.text_width_px(content_width_px));
+            let height = metrics.text_height_px.max(number_metrics.text_height_px);
+            numbers.insert(*id, number);
+            texts.push((block, run));
+            notes.insert(*id, (*ordinal, height, block));
+        }
         let mut calls: HashMap<TreeID, Vec<(u32, Uuid)>> = HashMap::new();
         for anchor in doc::anchors(document, doc::K_FOOTNOTE) {
             let Ok(id) = Uuid::parse_str(&anchor.value) else {
@@ -215,7 +231,8 @@ impl NotePlan {
             key,
             calls,
             notes,
-            runs,
+            numbers,
+            texts,
         }
     }
 
@@ -226,9 +243,10 @@ impl NotePlan {
 
     /// One call, placed on `line`.
     fn call(&self, id: &Uuid, line: u32) -> Option<NoteCall> {
-        let (ordinal, height_px) = *self.notes.get(id)?;
+        let (ordinal, height_px, block_id) = *self.notes.get(id)?;
         Some(NoteCall {
             footnote_id: *id,
+            block_id,
             ordinal,
             line,
             height_px,

@@ -1,14 +1,14 @@
 //! The three footnote commands (`features/ambre-spec-prose-footnotes.md`).
 //!
-//! A note is an entry of `annots` holding its body, and a call is one carrier
-//! character marked with the entry's identity. The identity is minted once, by
+//! A note is an entry of `annots` naming the block that holds its text. A
+//! call is one carrier character marked with the entry's identity. The identity is minted once, by
 //! the peer that inserts the note (`PROSE-FEAT-096`, `PROSE-087`).
 
 use ambre_core::Uuid;
 use loro::{LoroMap, LoroText, TreeID, UpdateOptions};
 
 use crate::doc;
-use crate::events::{ProseEvent, ProseOutcome, ProseRefusal};
+use crate::events::{BlockType, ProseEvent, ProseOutcome, ProseRefusal};
 use crate::note;
 
 use super::ProseState;
@@ -21,8 +21,12 @@ impl ProseState {
     /// (`PROSE-FEAT-100`). A header or a footer is refused, since a band drawn
     /// on every page cannot own one page's note (`PROSE-FEAT-071`).
     pub(super) fn insert_footnote(&mut self, block: &TreeID, pos: u32, text: &str) -> ProseOutcome {
-        if doc::is_band(&doc::blocks(&self.doc), block) {
+        let tree = doc::blocks(&self.doc);
+        if doc::is_band(&tree, block) {
             return ProseOutcome::refused(ProseRefusal::FootnoteInBand);
+        }
+        if doc::is_note(&tree, block) {
+            return ProseOutcome::refused(ProseRefusal::FootnoteInNote);
         }
         let Some(body) = self.body_of(block) else {
             return Self::err_no_block(block);
@@ -72,6 +76,11 @@ impl ProseState {
                 return Self::err_write(&format!("{e:?}"));
             }
         }
+        if let Some(block) = note::block(&self.doc, id)
+            && let Err(e) = doc::blocks(&self.doc).delete(block)
+        {
+            return Self::err_write(&format!("{e:?}"));
+        }
         if let Err(e) = self.doc.get_map(doc::ANNOTS).delete(&key) {
             return Self::err_write(&format!("{e:?}"));
         }
@@ -84,8 +93,11 @@ impl ProseState {
         note::entries(&self.doc)
     }
 
-    /// The entry of a new note: its kind and its body.
+    /// The entry of a new note, and the block holding its text. That block is a
+    /// root paragraph marked as a note, so the body flow never meets it
+    /// (`PROSE-FEAT-305`).
     fn write_note(&self, id: &Uuid, text: &str) -> Result<(), String> {
+        let block = write_note_block(&self.doc, text)?;
         let annots = self.doc.get_map(doc::ANNOTS);
         let entry = annots
             .insert_container(&id.to_hyphenated(), LoroMap::new())
@@ -93,10 +105,10 @@ impl ProseState {
         entry
             .insert(doc::ANNOT_KIND, crate::note::KIND_FOOTNOTE)
             .map_err(|e| format!("{e:?}"))?;
-        let body = entry
-            .insert_container(doc::ANNOT_TEXT, LoroText::new())
-            .map_err(|e| format!("{e:?}"))?;
-        body.insert(0, text).map_err(|e| format!("{e:?}"))
+        entry
+            .insert(doc::ANNOT_NOTE_BLOCK, block.to_string())
+            .map(|_| ())
+            .map_err(|e| format!("{e:?}"))
     }
 
     /// One carrier character at `at`, marked `key` = `value`. The mark never
@@ -119,6 +131,22 @@ impl ProseState {
         let notes = note::entries(&self.doc);
         self.commit_with(vec![ProseEvent::FootnotesUpdated { notes }])
     }
+}
+
+/// A root paragraph marked as a note, holding `text`. The schema migration
+/// writes a note's block through here too, so both mint it alike.
+pub(crate) fn write_note_block(document: &loro::LoroDoc, text: &str) -> Result<TreeID, String> {
+    let block = doc::create_block(document, None, BlockType::Paragraph)
+        .ok_or_else(|| "the tree refused a note block".to_owned())?;
+    let tree = doc::blocks(document);
+    doc::node_of(&tree, &block)
+        .ok_or_else(|| "the note block is not in the tree".to_owned())?
+        .insert(doc::K_NOTE, true)
+        .map_err(|e| format!("{e:?}"))?;
+    doc::get_block_text(document, &block)
+        .insert(0, text)
+        .map_err(|e| format!("{e:?}"))?;
+    Ok(block)
 }
 
 #[cfg(test)]
@@ -414,5 +442,103 @@ mod tests {
         assert_eq!(refusal(&outcome), Some(ProseRefusal::FootnoteInBand));
         assert_eq!(state.document().oplog_vv(), before);
         assert_eq!(state.text_of(&block_id(footer)).as_deref(), Some(""));
+    }
+
+    /// `PROSE-FEAT-305`: a note's text lives in a block the body flow never
+    /// meets. Deleting the note takes the block with it.
+    #[test]
+    fn a_note_holds_its_text_in_a_block_out_of_the_flow() {
+        let (mut state, ids) = document(1, &["text"]);
+        let id = add(&mut state, ids[0], 4, "a note");
+        let block = note::block(state.document(), &id).expect("the note's block");
+        assert_eq!(state.text_of(&block_id(block)).as_deref(), Some("a note"));
+        assert_eq!(state.root_blocks(), ids, "the flow holds no note");
+        // Typing in the note is typing in any block.
+        state.handle_command(ProseCommand::InsertText {
+            block_id: block_id(block),
+            pos: 6,
+            text: " more".to_owned(),
+        });
+        assert_eq!(
+            note::body(state.document(), &id).map(|t| t.to_string()),
+            Some("a note more".to_owned())
+        );
+        state.handle_command(ProseCommand::DeleteFootnote { footnote_id: id });
+        let tree = doc::blocks(state.document());
+        assert!(
+            !doc::children_of(&tree, None).contains(&block),
+            "the block went with it"
+        );
+    }
+
+    /// `PROSE-FEAT-306`, `PROSE-FEAT-307`: a note's text holds no note and no
+    /// comment, and does not split.
+    #[test]
+    fn a_note_refuses_a_note_a_comment_and_a_split() {
+        let (mut state, ids) = document(1, &["text"]);
+        let id = add(&mut state, ids[0], 4, "a note");
+        let block = block_id(note::block(state.document(), &id).expect("the note's block"));
+        let outcome = state.handle_command(ProseCommand::InsertFootnote {
+            block_id: block,
+            pos: 1,
+            note_text: "inner".to_owned(),
+        });
+        assert_eq!(refusal(&outcome), Some(ProseRefusal::FootnoteInNote));
+        let outcome = state.handle_command(ProseCommand::AddComment {
+            block_id: block,
+            range: (0, 2),
+            text: "a thread".to_owned(),
+            now_ms: 0,
+        });
+        assert_eq!(refusal(&outcome), Some(ProseRefusal::CommentInNote));
+        let outcome = state.handle_command(ProseCommand::SplitBlock {
+            block_id: block,
+            pos: 2,
+        });
+        assert!(refusal(&outcome).is_some(), "a note does not split");
+        assert_eq!(state.root_blocks(), ids);
+    }
+
+    /// `PROSE-FEAT-308`: a version 8 document keeps its notes. The text moves
+    /// from the entry to a block of its own, its marks with it.
+    #[test]
+    fn a_version_8_note_moves_to_a_block_with_its_marks() {
+        let (mut state, ids) = document(1, &["text"]);
+        let id = add(&mut state, ids[0], 4, "old note");
+        // Write the note back the way version 8 held it.
+        let document = state.document();
+        let block = note::block(document, &id).expect("the note's block");
+        let entry = note::entry(document, &id).expect("the entry");
+        let text = entry
+            .insert_container(doc::ANNOT_TEXT, LoroText::new())
+            .expect("a text");
+        text.insert(0, "old note").expect("written");
+        text.mark(0..3, "b", "true").expect("marked");
+        entry.delete(doc::ANNOT_NOTE_BLOCK).expect("unnamed");
+        doc::blocks(document).delete(block).expect("gone");
+        document
+            .get_map(ambre_core::schema::SCHEMA_META_MAP)
+            .insert(ambre_core::schema::SCHEMA_VERSION_KEY, 8_i64)
+            .expect("stamped");
+        document.commit();
+        let bytes = state.export_snapshot();
+
+        let mut read = ProseState::with_peer(2).expect("a document");
+        read.import_snapshot(&bytes).expect("version 8 migrates");
+        let body = note::body(read.document(), &id).expect("the note's text");
+        assert_eq!(body.to_string(), "old note");
+        let bold = body.to_delta().into_iter().any(|delta| match delta {
+            loro::TextDelta::Insert { insert, attributes } => {
+                insert == "old" && attributes.is_some_and(|a| a.contains_key("b"))
+            }
+            _ => false,
+        });
+        assert!(bold, "the mark came with the text");
+        let entry = note::entry(read.document(), &id).expect("the entry");
+        assert!(
+            entry.get(doc::ANNOT_TEXT).is_none(),
+            "the entry holds no text"
+        );
+        assert_eq!(read.root_blocks().len(), 1, "the flow holds no note");
     }
 }

@@ -34,8 +34,12 @@ impl ProseState {
         text: &str,
         now_ms: u64,
     ) -> ProseOutcome {
-        if doc::is_band(&doc::blocks(&self.doc), block) {
+        let tree = doc::blocks(&self.doc);
+        if doc::is_band(&tree, block) {
             return ProseOutcome::refused(ProseRefusal::CommentInBand);
+        }
+        if doc::is_note(&tree, block) {
+            return ProseOutcome::refused(ProseRefusal::CommentInNote);
         }
         let Some(body) = self.body_of(block) else {
             return Self::err_no_block(block);

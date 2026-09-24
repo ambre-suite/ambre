@@ -24,6 +24,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-280` | `INV` | A note's identity MUST survive a move of its call, an edit of its body, and a remote change. | this spec section 3; this spec section 5 | `ambre_prose::logic::notes::tests::a_note_keeps_its_identity_through_a_move_an_edit_and_a_remote_change` | none | verified |
 | `PROSE-FEAT-097` | `CONC` | Two peers whose text has converged MUST draw the same number in front of every note. | this spec section 2; this spec section 3 | `ambre_prose::logic::notes::tests::two_converged_peers_count_the_same_numbers` | none | verified |
 | `PROSE-FEAT-098` | `OBS` | A note no call reaches MUST be shown to the author as orphaned. | this spec section 3; this spec section 5 | `ambre_prose::logic::notes::tests::deleting_the_text_of_a_call_keeps_the_note_and_lists_it_as_orphaned` | none | verified |
+| `PROSE-FEAT-305` | `INV` | A note's text MUST live in a block of its own, which the note's entry names and the body flow never holds, and deleting the note MUST remove that block. | this spec section 3; `ambre-spec-prose-schema.md section 3` | `ambre_prose::logic::notes::tests::a_note_holds_its_text_in_a_block_out_of_the_flow` | none | verified |
+| `PROSE-FEAT-308` | `INV` | A document written under schema version 8 MUST keep each note's text and its marks once read. | this spec section 3; `ambre-spec-prose-schema.md section 7` | `ambre_prose::logic::notes::tests::a_version_8_note_moves_to_a_block_with_its_marks` | none | verified |
 
 ### 1.2 Add a note
 
@@ -32,6 +34,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-099` | `POST` | After the command, the document MUST hold the note's body and one call to it at the position the caret was in. | this spec section 3; this spec section 4 | `ambre_prose::logic::notes::tests::a_note_lands_as_one_call_and_an_entry_holding_its_text` | none | verified |
 | `PROSE-FEAT-100` | `FRAME` | Adding a note MUST NOT put the note's text in the block the call sits in, and MUST NOT touch another note. | this spec section 5 | `ambre_prose::logic::notes::tests::a_note_lands_as_one_call_and_an_entry_holding_its_text`; `::a_note_touches_no_other_note` | none | verified |
 | `PROSE-FEAT-071` | `FAIL` | A note MUST be refused in a header or a footer, and the refusal MUST be reported. | this spec section 3 | `ambre_prose::logic::notes::tests::a_note_is_refused_in_a_band_and_the_refusal_is_reported` | none | verified |
+| `PROSE-FEAT-306` | `FAIL` | A note MUST be refused in a note's own text, and the refusal MUST be reported. | this spec section 3 | `ambre_prose::logic::notes::tests::a_note_refuses_a_note_a_comment_and_a_split` | none | verified |
+| `PROSE-FEAT-307` | `FAIL` | A comment MUST be refused in a note's text, and the refusal MUST be reported. | this spec section 3 | `ambre_prose::logic::notes::tests::a_note_refuses_a_note_a_comment_and_a_split` | none | verified |
 
 ### 1.3 Delete a note
 
@@ -51,7 +55,7 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** none of its own: a note is text in the document, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 12 `verified`, each by a unit test on the engine in
+* **Verification.** 16 `verified`, each by a unit test on the engine in
   `crates/ambre-prose/src/logic/notes.rs`. The two concurrent rows run two peers over one document
   and exchange their updates (`PROSE-FEAT-097`, `PROSE-FEAT-070`). Where a note is drawn is the
   pagination's to verify (`PROSE-015`, `PROSE-035`).
@@ -75,10 +79,12 @@ Two peers over one set of notes. The last column names the test that plays the r
 
 ## 3. MODEL
 
-**Containers.** The note's body is one annotation entry of the shared annotation map. The call
-is an inline mark on the text carrying that entry's identity. Both are declared in
-`ambre-spec-prose-schema.md section 3`. The identity is a value the peer that creates the note
-mints (`section 2` of that document) once, for the life of the note (`PROSE-FEAT-096`).
+**Containers.** The note is one annotation entry of the shared annotation map, and its text is a
+block of its own. That block is a root paragraph marked as a note: the entry names it, and the body
+flow never holds it (`PROSE-FEAT-305`). The call is an inline mark on the text carrying that entry's
+identity. Both are declared in `ambre-spec-prose-schema.md section 3`. The identity is a value the
+peer that creates the note mints (`section 2` of that document) once, for the life of the note
+(`PROSE-FEAT-096`).
 
 **The number is not stored.** It is counted by walking the block tree in document order and, inside
 each block, the positions of the calls (`PROSE-FEAT-013`). It is nowhere written down

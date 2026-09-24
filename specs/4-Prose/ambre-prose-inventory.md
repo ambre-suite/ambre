@@ -19,7 +19,7 @@
 | `prose-cross-references` | A pointer from one place in the document to another: "see page 4", "see section 2.1", or a label the author chose. | implemented | 16 |  |
 | `prose-engine` | An author types a word and every collaborator reads it. | implemented | 42 |  |
 | `prose-find-replace` | Searching the document, walking the matches, and replacing one or all of them. | implemented | 15 |  |
-| `prose-footnotes` | A note at the foot of the page, called from a mark in the text. | implemented | 12 |  |
+| `prose-footnotes` | A note at the foot of the page, called from a mark in the text. | implemented | 16 |  |
 | `prose-headers-footers` | A band at the top of every page and a band at the bottom, each holding ordinary text. | implemented | 27 |  |
 | `prose-headings` | Six levels of section title. | implemented | 8 | 1 |
 | `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | implemented | 25 | 1 |
@@ -44,4 +44,4 @@
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 | `prose-toolbar` | Select a few words and a small bar appears above them. | design-only | 14 |  |
 
-**28 features: 13 implemented, 6 partial, 9 design-only. 632 contract rows, 2 loose.**
+**28 features: 13 implemented, 6 partial, 9 design-only. 636 contract rows, 2 loose.**

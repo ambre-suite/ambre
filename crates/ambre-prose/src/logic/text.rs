@@ -71,7 +71,7 @@ impl ProseState {
             return Self::err_write(&format!("{e:?}"));
         }
         // Plain text typed inside a suggestion is no part of it
-        // (`PROSE-FEAT-304`).
+        // (`PROSE-FEAT-307`).
         if let Err(e) = crate::suggest::strip_inherited(&body, pos, pos + text.chars().count()) {
             return Self::err_write(&e);
         }
@@ -188,9 +188,9 @@ impl ProseState {
         let Some(body) = self.body_of(id) else {
             return Self::err_no_block(id);
         };
-        // A band is one block the metadata names. A split would put its tail
-        // in the body flow.
-        if doc::is_band(&doc::blocks(&self.doc), id) {
+        // A band or a note is one block the metadata names. A split would
+        // put its tail in the body flow.
+        if doc::is_aside(&doc::blocks(&self.doc), id) {
             return Self::err_nesting();
         }
         let pos = pos as usize;

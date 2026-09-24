@@ -345,9 +345,9 @@ impl PartialEq for ShapedRun {
 pub struct ShapedLayout {
     pub version: u64,
     pub layout: Arc<PageLayout>,
-    /// The run of every block that draws text, body and bands alike.
+    /// The run of every block that draws text: body, bands and notes alike.
     pub blocks: HashMap<TreeID, ShapedRun>,
-    /// The run of every footnote, its ordinal in front.
+    /// The number of every footnote, drawn beside its text.
     pub notes: HashMap<Uuid, ShapedRun>,
     /// The cells of every table, placed and shaped.
     pub tables: HashMap<TreeID, Arc<TableShape>>,

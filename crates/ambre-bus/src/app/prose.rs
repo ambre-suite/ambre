@@ -1280,12 +1280,19 @@ pub enum ProseRefusal {
     /// A footnote asked for in a header or a footer (`PROSE-FEAT-071`).
     #[error("a header or a footer cannot hold a footnote")]
     FootnoteInBand,
+    /// A footnote asked for in a note's own text (`PROSE-FEAT-306`).
+    #[error("a footnote cannot hold a footnote")]
+    FootnoteInNote,
     /// The command names a footnote the document does not hold.
     #[error("footnote {0} is not in the document")]
     NoSuchFootnote(Uuid),
     /// A comment asked for in a header or a footer, drawn on every page.
     #[error("a header or a footer cannot hold a comment")]
     CommentInBand,
+    /// A comment asked for in a note's text, which the comment panel does not
+    /// place (`PROSE-FEAT-307`).
+    #[error("a footnote cannot hold a comment")]
+    CommentInNote,
     /// The command names a comment thread the document does not hold.
     #[error("comment {0} is not in the document")]
     NoSuchComment(Uuid),
