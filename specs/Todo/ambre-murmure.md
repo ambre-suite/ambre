@@ -27,6 +27,7 @@ Murmure is the command and discussion center. Unlike classic SaaS tools, every m
   * The root message shows the reply count and the last replier. A new post never hides an older thread.
   * "Also send to channel" copies a reply into the main stream, so a channel reader misses no decision.
   * One "Threads" view lists every followed thread with unread replies. A thread never archives on a fixed delay.
+  * The user can mark a whole thread as read.
 * **Forum channels:** Each post has a title and tags and opens its own thread. The forum works on mobile, tags included.
 * **Direct Messages (DM):** 1:1 channels or restricted groups with forward secrecy.
 
@@ -182,6 +183,17 @@ One channel = one document from a crypto standpoint, with its Document Key. Shar
 
 Choice: access to **the entire history** (Document Key is shared). Consistent with a collaborative office suite (unlike Signal which limits to member join time).
 
+* Each rotation creates a new Document Key. A new member needs every key since the channel start.
+* The inviting client sends one signed bundle of all these keys, as Matrix MSC4268 does.
+* The Matrix MSC3061 implementation forwarded keys one by one, and it had a vulnerability.
+
+### Decryption failures
+
+A client can hold a message whose key is missing, for example on a new device.
+
+* The message shows the cause and the remedy, for example "key bundle not received, ask a member".
+* A bare "unable to decrypt" is forbidden. Element users rank that state as a main complaint.
+
 ### Optional retention
 
 With segments, a retention policy = deleting segments older than N months (`DELETE` Object Storage + Doc meta update). Useful for GDPR / right to erasure compliance.
@@ -198,8 +210,10 @@ Retention is an explicit admin policy. Without one, Murmure keeps the full histo
 ## 4. NOTIFICATIONS & REAL TIME
 * **Push Notifications:** Privacy-respecting notification proxy system (only message existence is notified, content is decrypted by client on receipt).
 * **Notification levels:** Per channel: all, mentions, none. A large channel defaults to mentions.
-  * The client filters each push after decryption, so the relay never learns the level.
-  * Open question: a web push service worker must show a notification. It must decrypt the push before it decides to show one.
+  * Every push MUST show a notification. Web Push requires `userVisibleOnly: true`, and Safari cancels a subscription after three silent pushes.
+  * Proposal: the relay stores the level per member and channel, as Matrix MSC4028 does for muted rooms. The relay sends no push for a muted channel.
+  * Proposal: for the mentions level, the sender client lists the public keys of the mentioned members in the routing header. The relay pushes to those members only.
+  * Cost: the relay learns the levels, and who mentions whom. The zero-knowledge boundary table must record both before this ships.
 * **Cold Start Sync:** On startup, Murmure downloads missed deltas since the last disconnection to rebuild the channel state.
 
 ---
@@ -280,13 +294,14 @@ The index format assumes that a sealed segment is immutable. The sketch does not
 | **Searchable encryption on the relay** (keyed-hash token per word, SSE) | The relay sees which queries repeat and which documents match. Published leakage-abuse attacks (Cash et al., 2015) recover content from that leak. It breaks the zero-knowledge pillar. |
 | **Full download and re-index on each device** | The Element model: Seshat (Rust, tantivy) indexes locally on desktop only. Element Web still has no search in encrypted rooms. A new device waits for the full history. |
 | **SQLite/FTS5 compiled to WASM** | A C library, against the Rust-first pillar. |
+| **Client-side filtering of each push after decryption** | Web Push requires a visible notification for each push. Safari cancels the subscription after three silent pushes. |
 
 ### Product
 From `ambre-murmure-user-research.md`.
 
 | Alternative | Rejected because |
 | :--- | :--- |
-| **Two message models** (flat chat, threaded posts) | Teams users do not know which one to use. |
+| **Several message models** (flat chat, threaded posts) | Teams users do not know which one to use. Teams added a third model, a threads layout, in August 2025. |
 | **A new post hides older threads** | Teams users lose threads they did not close. |
 | **Auto-archive of a thread on a fixed delay** | Discord users find the delay too short. |
 | **Unread cleared only when the user opens the conversation** | Users of all three products want to control their read state. |
