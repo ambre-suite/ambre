@@ -27,9 +27,9 @@ of this feature: the suggestion converges under one, and it is painted under the
 | `PROSE-FEAT-261` | `INV` | The set of pending suggestions MUST be derived from the marks and the annotation entries, never stored beside them. | this spec section 3 | structural -- `ambre_prose::suggest::pending` reads the marks and the entries, and no container holds a list; `ambre_prose::logic::suggestions::tests::an_undo_takes_back_the_whole_suggestion` | none | verified |
 | `PROSE-FEAT-262` | `INV` | Every edit intercepted while suggesting MUST carry the intercepting peer's current identity. | this spec section 3 | `ambre_prose::logic::suggestions::tests::typed_text_becomes_a_suggested_insertion_by_its_author`; `ambre_prose::logic::suggestions::tests::a_session_with_no_user_cannot_suggest` | none | verified |
 | `PROSE-FEAT-011` | `CONC` | Track changes MUST converge under concurrent accept and reject of the same suggestion: one outcome, never a half-applied edit. | this spec section 3 | `ambre_prose::logic::suggestions::tests::a_concurrent_accept_and_reject_converge_on_one_outcome` | none | verified |
-| `PROSE-UI-051` | `OBS` | A suggested insertion and a suggested deletion MUST be distinguishable in the text itself, not by an affordance the reader has to open. | this spec section 4 | not built | unbuilt -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-148` | `OBS` | A hover over a suggestion MUST show the accept and reject affordance on that suggestion, and on no other. | this spec section 4 | not built | unbuilt -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-052` | `INV` | The accept and reject affordance MUST be DOM chrome, not a canvas overlay. | this spec section 4; `ambre-spec-ui.md section 2` | not built | unbuilt -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-051` | `OBS` | A suggested insertion and a suggested deletion MUST be distinguishable in the text itself, not by an affordance the reader has to open. | this spec section 4 | `ambre_prose::view::paint::tests::an_insertion_is_underlined_and_a_deletion_struck_through` | none | verified |
+| `PROSE-UI-148` | `OBS` | A hover over a suggestion MUST show the accept and reject affordance on that suggestion, and on no other. | this spec section 4 | `ambre_prose::view::annotate::tests::a_hover_names_the_suggestion_under_the_pointer_and_no_other` -- the one suggestion the view publishes; `::a_suggestion_that_leaves_the_list_takes_its_popover_along`; structural -- `crates/ambre-prose/src/chrome/mod.rs` draws the popover from that one signal alone | none | verified |
+| `PROSE-UI-052` | `INV` | The accept and reject affordance MUST be DOM chrome, not a canvas overlay. | this spec section 4; `ambre-spec-ui.md section 2` | structural -- `crates/ambre-prose/src/chrome/mod.rs` renders the two buttons as Leptos elements, and the Prose painter holds no button to draw; `ambre_prose::view::annotate::tests::each_intent_becomes_its_command_and_a_focus_scrolls` -- what each button sends | none | verified |
 
 ### 1.2 Turn suggestion mode on or off
 
@@ -95,10 +95,9 @@ of this feature: the suggestion converges under one, and it is painted under the
   a hundred suggestions is under 5 ms.
 * **Boundary.** none of its own: a suggestion is a mark and an annotation entry in the document.
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 35 `verified`, 5 `unimplemented`. The three `PROSE-UI` rows wait for the
-  painted half. `PROSE-FEAT-085` names a merge window resting on an undo interval no document
-  defines. `PROSE-FEAT-301` is the structure a reviewer cannot suggest yet. Both land with the
-  "Suggestions beyond typing" Story (`ambre-roadmap.md` E5).
+* **Verification.** 38 `verified`, 2 `unimplemented`. `PROSE-FEAT-085` names a merge window resting
+  on an undo interval no document defines. `PROSE-FEAT-301` is the structure a reviewer cannot
+  suggest yet. Both land with the "Suggestions beyond typing" Story (`ambre-roadmap.md` E5).
 
   `PROSE-FEAT-010` is also held by a property: any run of typing and deleting, then an accept-all,
   leaves the text the same edits made plainly would.
@@ -112,8 +111,8 @@ waits on.
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| suggests a sentence | -- | the sentence, marked as an insertion | the sentence in the insertion style on both screens | `ambre_prose::logic::suggestions::tests::typed_text_becomes_a_suggested_insertion_by_its_author`; the style waits on `PROSE-UI-051` |
-| suggests deleting a paragraph | -- | the paragraph, marked as a deletion | the paragraph struck through, and still there | `ambre_prose::logic::suggestions::tests::a_delete_removes_its_own_suggestion_and_marks_the_rest`; the style waits on `PROSE-UI-051` |
+| suggests a sentence | -- | the sentence, marked as an insertion | the sentence in the insertion style on both screens | `ambre_prose::logic::suggestions::tests::typed_text_becomes_a_suggested_insertion_by_its_author`; `ambre_prose::view::paint::tests::an_insertion_is_underlined_and_a_deletion_struck_through` |
+| suggests deleting a paragraph | -- | the paragraph, marked as a deletion | the paragraph struck through, and still there | `ambre_prose::logic::suggestions::tests::a_delete_removes_its_own_suggestion_and_marks_the_rest`; `ambre_prose::view::paint::tests::an_insertion_is_underlined_and_a_deletion_struck_through` |
 | accepts a suggestion | rejects the same one | the removal: a rejected insertion or an accepted deletion | the same document on both screens, never half of the change | `ambre_prose::logic::suggestions::tests::a_concurrent_accept_and_reject_converge_on_one_outcome` |
 | rejects her own suggested insertion | -- | nothing of it | the text gone on both screens, and no mark left | `ambre_prose::logic::suggestions::tests::each_outcome_is_the_recorded_change_and_idempotent` |
 | suggests across a paragraph break | accepts it | both halves applied | one change, not two, on both screens | `ambre_prose::logic::suggestions::tests::a_deletion_across_a_break_is_one_suggestion_and_one_accept` |

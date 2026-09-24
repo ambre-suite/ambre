@@ -91,7 +91,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Input and cursor | MVP | typing, caret navigation, click and drag selection, optimistic display |
 | `[ ]` Links and bands under the caret | MVP | a press inside a link places the caret and a modified one opens it through the host; the link cursor; the caret entering a header, a footer or a footnote |
 | `[ ]` Toolbar, slash menu and composition | MVP | the contextual format bar, its ranges caught up with concurrent edits, the slash menu, input-method composition, double-click word selection |
-| `[ ]` Collaborative cursors and annotations | MVP | remote carets, comment highlights, track-change highlights |
+| `[x]` Collaborative cursors and annotations | MVP | remote carets, comment highlights, track-change highlights |
 | `[ ]` Ruler, clipboard and inertial scroll | MVP | the interactive ruler, copy and paste, inertial scroll |
 | `[ ]` The native format | MVP | a Prose document saved to and read from an `.ambre` file |
 | `[ ]` Markdown interop | MVP | Markdown import and export, with a report of what was lost |

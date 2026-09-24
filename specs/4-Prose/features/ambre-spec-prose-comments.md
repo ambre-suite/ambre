@@ -41,9 +41,9 @@ Two of the four match. The two that do not are the anchor itself, which is why t
 | `PROSE-FEAT-296` | `INV` | An undo MUST NOT retract a comment command: a thread, a reply, a resolve or a deletion. | this spec section 3; `TOILE-FEAT-017` | `ambre_prose::logic::comments::tests::an_undo_never_retracts_a_comment` | none | verified |
 | `PROSE-FEAT-009` | `CONC` | A comment thread MUST stay anchored to its text range across concurrent edits. | this spec section 3 | `ambre_prose::logic::comments::tests::a_thread_stays_on_its_text_under_concurrent_edits` | none | verified |
 | `PROSE-FEAT-297` | `CONC` | A reply that races the deletion of its thread MUST be lost on every peer alike. | this spec section 3 | `ambre_prose::logic::comments::tests::a_reply_racing_the_deletion_of_its_thread_is_lost` | none | verified |
-| `PROSE-UI-049` | `OBS` | A comment highlight MUST be canvas content, painted under the annotated range. | this spec section 4 | not built | unbuilt -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-144` | `OBS` | Two threads whose spans share characters MUST both be painted, one highlight over the other. | this spec section 3 | not built | unbuilt -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-050` | `INV` | The comment panel MUST be DOM chrome, not a canvas overlay. | this spec section 4; `ambre-spec-ui.md section 2` | not built | unbuilt -- lands with the "Collaborative cursors and annotations" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-049` | `OBS` | A comment highlight MUST be canvas content, painted over the characters of its range and no other. | this spec section 4 | `ambre_prose::view::paint::tests::a_thread_the_logic_thread_sends_is_painted_over_its_range_and_no_other` -- a thread received from the Logic thread is tinted over its five characters alone; `::selections_go_under_the_glyphs_and_highlights_over_them` | none | verified |
+| `PROSE-UI-144` | `OBS` | Two threads whose spans share characters MUST both be painted, one highlight over the other. | this spec section 3 | `ambre_prose::view::paint::tests::two_overlapping_threads_are_both_painted` | none | verified |
+| `PROSE-UI-050` | `INV` | The comment panel MUST be DOM chrome, not a canvas overlay. | this spec section 4; `ambre-spec-ui.md section 2` | structural -- `crates/ambre-prose/src/chrome/mod.rs` renders the panel as Leptos elements, and the Prose painter holds no panel to draw; `ambre_prose::view::annotate::tests::each_open_thread_is_lined_up_with_its_anchor` -- the heights it reads; `::the_panel_lists_open_threads_top_to_bottom`; `::two_anchors_on_one_line_are_stacked_and_the_first_stays`; `::each_intent_becomes_its_command_and_a_focus_scrolls` | none | verified |
 
 ### 1.2 Open a thread on a range
 
@@ -110,10 +110,10 @@ Two of the four match. The two that do not are the anchor itself, which is why t
 * **Boundary.** none of its own: a thread is content in the document, and `ZK-001` seals every
   payload before it leaves the client. The author field is stamped locally, a rule of this document
   rather than a boundary the relay sees.
-* **Verification.** 33 `verified`, 3 `unimplemented`. The three are the painted rows,
-  `PROSE-UI-049`, `PROSE-UI-050` and `PROSE-UI-144`, which wait on a view. `PROSE-FEAT-009` is a
-  property test over two peers, and `PROSE-FEAT-078` and `PROSE-FEAT-297` need two peers too. Each
-  frame condition reads the fields the operation may not touch, before and after.
+* **Verification.** 36 `verified`. The painted rows read a recording surface, and the panel's
+  heights are read off the view on the host. `PROSE-FEAT-009` is a property test over two peers, and
+  `PROSE-FEAT-078` and `PROSE-FEAT-297` need two peers too. Each frame condition reads the fields
+  the operation may not touch, before and after.
 
 ---
 
@@ -124,7 +124,7 @@ Two peers over one thread. The last column names the test, or the row a painted 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
 | comments on a sentence | types a word before it | the thread, on the same sentence, one word further down | the highlight on Alice's sentence, on both screens | `a_thread_stays_on_its_text_under_concurrent_edits` |
-| comments on a sentence | comments on three words inside it | two threads, two spans | both highlights, stacked over the three shared words | `two_threads_over_shared_characters_keep_their_own_spans`; the paint waits on `PROSE-UI-144` |
+| comments on a sentence | comments on three words inside it | two threads, two spans | both highlights, stacked over the three shared words | `two_threads_over_shared_characters_keep_their_own_spans`; `two_overlapping_threads_are_both_painted` |
 | resolves her thread | -- | both threads, one closed | Bob's highlight untouched, and Alice's out of the open list | `resolving_and_reopening_flip_the_flag_alone` |
 | deletes the whole commented sentence | replies to that thread | the thread, with no mark left | the reply, and the thread listed as orphaned on both screens | `deleting_the_range_orphans_the_thread_where_it_last_was` |
 | replies to a thread Bob resolved | -- | the thread, open again | the thread back in the open list, on both screens | `a_reply_reopens_a_resolved_thread` |
@@ -227,10 +227,11 @@ computed from the layout, which is why the panel can align to the text without h
 | the orphaned list | the threads whose text is gone, for review or deletion |
 
 The feature is painted in two places, and the split is the canvas and DOM boundary
-`ambre-spec-ui.md section 2` draws. The **highlight** is canvas content: a tinted rectangle under
+`ambre-spec-ui.md section 2` draws. The **highlight** is canvas content: a tinted rectangle over
 the annotated range, painted in the page pass (`PROSE-UI-049`). The **panel** is a DOM Leptos
 element to the right of the page, scrolled by the browser. Each thread is aligned to the vertical
-position the view publishes for its anchor (`PROSE-UI-050`).
+position the view publishes for its anchor (`PROSE-UI-050`). Two anchors on one line stack, the
+first in place. A click on a thread brings its anchor into view.
 
 ---
 
@@ -248,7 +249,7 @@ position the view publishes for its anchor (`PROSE-UI-050`).
 | The author is stamped locally | trusting an author field on the command | it lets any member post under any other member's name. The name on a comment is what every reader judges it by, so it must not be a field the sender chooses; stamping it from the session identity leaves nothing to forge (`PROSE-FEAT-077`) |
 | A reply reopens a resolved thread | keeping the thread closed | it hides the reply from everyone but the reader who went looking in the resolved list. Someone replying to a closed discussion is reopening it, whatever the control they used; requiring a separate reopen first means a reply that lands in a list nobody reads (`PROSE-FEAT-079`) |
 | A reply is its author's, a thread is everyone's | one permission for both | it either lets a member rewrite another's reply or stops a reviewer resolving a thread they did not open. Rewriting someone else's words is the one operation with no honest use; closing a discussion is what a reviewer is there to do (`PROSE-FEAT-080`) |
-| The highlight is canvas and the panel is DOM | drawing the panel on the canvas | it reimplements scrolling, focus and accessibility for a list of text boxes. The highlight sits under the text, at a position only the layout knows, so it belongs to the page pass; the panel is a scrollable list of text fields, which the browser lays out, focuses and reads to a screen reader for free (`PROSE-UI-049`, `PROSE-UI-050`) |
+| The highlight is canvas and the panel is DOM | drawing the panel on the canvas | it reimplements scrolling, focus and accessibility for a list of text boxes. The highlight sits on the text, at a position only the layout knows, so it belongs to the page pass; the panel is a scrollable list of text fields, which the browser lays out, focuses and reads to a screen reader for free (`PROSE-UI-049`, `PROSE-UI-050`) |
 
 ---
 

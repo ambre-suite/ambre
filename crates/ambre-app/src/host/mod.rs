@@ -60,7 +60,7 @@ mod run;
 mod web_embed;
 
 pub use frame::{FrameHost, MakeChild};
-pub use prose::ProseView;
+pub use prose::{ProseAnnotations, ProseView};
 pub use run::run_with;
 
 /// Private clipboard MIME type carrying the base64 postcard

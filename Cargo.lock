@@ -235,6 +235,7 @@ dependencies = [
  "ambre-core",
  "ambre-draw",
  "flume",
+ "leptos",
  "loro",
  "parley",
  "postcard",
@@ -242,6 +243,7 @@ dependencies = [
  "serde",
  "tracing",
  "unicode-segmentation",
+ "web-sys",
 ]
 
 [[package]]

@@ -6,6 +6,7 @@
 //! handed over. A layout arrives shaped (`PROSE-UI-006`), and nothing in this
 //! module shapes a block, reads the document or sends a command.
 
+pub mod annotate;
 pub mod cache;
 pub mod caret;
 pub mod column;
@@ -103,12 +104,17 @@ impl ProseUiState {
     /// and nothing is sent (`PROSE-UI-083`). An entry whose heading is not in
     /// the layout in force moves nothing.
     pub fn follow_toc_entry(&mut self, entry: &TocEntry) {
-        let Some(block) = self.block_layout(entry.block_id) else {
+        self.reveal_block(entry.block_id);
+    }
+
+    /// Scroll so a block's top shows at the top of the canvas.
+    pub(crate) fn reveal_block(&mut self, block: BlockId) {
+        let Some(layout) = self.block_layout(block) else {
             return;
         };
-        let top = self.column.page_top_y(block.page_start)
+        let top = self.column.page_top_y(layout.page_start)
             + self.shaped.layout.body_top_px()
-            + block.y_in_page;
+            + layout.y_in_page;
         self.viewport.scroll_y = self.column.clamp_scroll(&self.viewport, top);
     }
 

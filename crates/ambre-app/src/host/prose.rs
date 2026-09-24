@@ -12,6 +12,10 @@
 // the state, with the one send path (`PROSE-UI-002`). That path is the lossless
 // outbox Toile and Trame send their edits through (`BUS-011`). The draft is shaped here,
 // on this thread's font context, and nothing else is (`PROSE-UI-134`).
+//
+// The comment panel and the suggestion popover are DOM chrome (`PROSE-UI-050`,
+// `PROSE-UI-052`). The view publishes where they go, in CSS pixels, and drains
+// what they ask for once a frame.
 // ============================================================================
 
 use leptos::prelude::*;
@@ -25,8 +29,10 @@ use ambre_canvas::{
     WgpuSurface,
 };
 use ambre_draw::{DrawSurface, ParleyBrush, Rect};
+pub use ambre_prose::chrome::ProseAnnotations;
 use ambre_prose::input::{ProseInput, ProseKey};
 use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
+use ambre_prose::view::annotate::{HoveredSuggestion, PanelThread, ScreenRect};
 use ambre_prose::view::paint::PagePalette;
 
 /// The pixels one wheel line scrolls, for a device that reports lines.
@@ -51,6 +57,30 @@ pub(crate) fn page_palette(theme: Theme) -> PagePalette {
     }
 }
 
+/// From canvas pixels to CSS pixels of the window.
+fn to_css(x: f32, y: f32) -> (f32, f32) {
+    let window = web_sys::window();
+    let dpr = window
+        .as_ref()
+        .map(|w| w.device_pixel_ratio())
+        .filter(|dpr| *dpr > 0.0)
+        .unwrap_or(1.0) as f32;
+    let (left, top) = window
+        .and_then(|w| w.document())
+        .and_then(|d| d.query_selector(".ambre-canvas").ok().flatten())
+        .map_or((0.0, 0.0), |el| {
+            let r = el.get_bounding_client_rect();
+            (r.left() as f32, r.top() as f32)
+        });
+    (left + x / dpr, top + y / dpr)
+}
+
+fn rect_to_css(rect: ScreenRect) -> ScreenRect {
+    let (x0, y0) = to_css(rect.x0, rect.y0);
+    let (x1, y1) = to_css(rect.x1, rect.y1);
+    ScreenRect { x0, y0, x1, y1 }
+}
+
 /// One open Prose document on the canvas.
 pub struct ProseView {
     document_id: DocumentId,
@@ -69,6 +99,7 @@ pub struct ProseView {
     /// The five figures as the status bar slot shows them.
     figures: RwSignal<Option<[String; 5]>>,
     shown: Option<WordCount>,
+    annotations: ProseAnnotations,
     /// The layout context the draft is shaped with.
     layout_cx: LayoutContext<ParleyBrush>,
     /// The clock of the last frame, to count presses in place.
@@ -84,6 +115,7 @@ impl ProseView {
         height: f64,
         theme_ctl: ThemeControl,
         figures: RwSignal<Option<[String; 5]>>,
+        annotations: ProseAnnotations,
         busy_pub: BusyPublisher,
     ) -> Self {
         let theme = theme_ctl.get();
@@ -104,6 +136,7 @@ impl ProseView {
             fatal: false,
             figures,
             shown: None,
+            annotations,
             layout_cx: LayoutContext::new(),
             now_ms: 0.0,
         }
@@ -141,6 +174,9 @@ impl ProseView {
                 }
             }
         }
+        // An accepted or rejected suggestion takes its popover along.
+        self.publish_hover();
+        self.take_intent();
         // The input held behind a structural command goes out once the
         // Logic thread answered it, unless an edit still waits in the outbox.
         if !self.fatal && !self.outbox.is_busy() {
@@ -153,6 +189,56 @@ impl ProseView {
             self.shown = Some(self.state.word_count);
             self.figures
                 .set(Some(status_figures(&self.state.word_count)));
+        }
+    }
+
+    /// Act on what the panel or the popover asked for. An intent that waits
+    /// behind a busy outbox stays in its signal for a later frame.
+    fn take_intent(&mut self) {
+        if self.fatal || self.outbox.is_busy() {
+            return;
+        }
+        let Some(intent) = self.annotations.intent.get_untracked() else {
+            return;
+        };
+        self.annotations.intent.set(None);
+        let now_ms = js_sys::Date::now() as u64;
+        if let Some(command) = self.state.take_intent(intent, now_ms) {
+            send_edit(&mut self.outbox, self.document_id, command);
+            self.busy_pub.publish(self.outbox.is_busy());
+        }
+        self.publish_hover();
+        self.dirty = true;
+    }
+
+    /// Publish the hovered suggestion, where the popover goes.
+    fn publish_hover(&self) {
+        let hovered = self.state.hovered.map(|h| HoveredSuggestion {
+            rect: rect_to_css(h.rect),
+            ..h
+        });
+        if self.annotations.hovered.get_untracked() != hovered {
+            self.annotations.hovered.set(hovered);
+        }
+    }
+
+    /// Publish the threads the panel lists, lined up with their anchors.
+    fn publish_threads(&self) {
+        let threads: Vec<PanelThread> = self
+            .state
+            .panel_threads()
+            .into_iter()
+            .map(|entry| PanelThread {
+                y_px: to_css(0.0, entry.y_px).1,
+                ..entry
+            })
+            .collect();
+        if self
+            .annotations
+            .threads
+            .with_untracked(|shown| *shown != threads)
+        {
+            self.annotations.threads.set(threads);
         }
     }
 
@@ -184,6 +270,9 @@ impl ProseView {
             self.dirty = true;
         }
         let dirty = std::mem::take(&mut self.dirty);
+        if dirty {
+            self.publish_threads();
+        }
         RepaintPlan {
             content: if dirty {
                 ContentRepaint::Full
@@ -242,10 +331,18 @@ impl ProseView {
                     _ => *dy,
                 };
                 self.state.scroll_by(px as f32);
+                // The text moved from under the pointer.
+                self.state.hovered = None;
+                self.publish_hover();
                 self.dirty = true;
                 true
             }
             _ => {
+                if let InputEvent::PointerMove { x, y } = ev
+                    && self.state.hover(*x as f32, *y as f32)
+                {
+                    self.publish_hover();
+                }
                 let Some(input) = self.translate(ev) else {
                     return false;
                 };
@@ -317,6 +414,7 @@ impl ProseView {
         self.state = ProseUiState::default();
         self.state.resize(self.size.0, self.size.1);
         self.shown = None;
+        self.publish_hover();
         self.dirty = true;
     }
 }

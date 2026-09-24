@@ -40,6 +40,10 @@
 #![forbid(unsafe_code)]
 
 pub mod band;
+/// The DOM chrome beside the page, wasm-only Leptos: the host tests never
+/// build it.
+#[cfg(target_arch = "wasm32")]
+pub mod chrome;
 pub mod comment;
 pub mod count;
 pub mod doc;

@@ -229,6 +229,9 @@ pub struct ProseUiState {
     /// How many highlights paints have read, for the tests to hold
     /// `PROSE-UI-020` against.
     pub(crate) highlights_walked: u64,
+    /// The suggestion under the pointer, for the accept or reject popover
+    /// (`PROSE-UI-148`).
+    pub hovered: Option<crate::view::annotate::HoveredSuggestion>,
     pub cursor: Option<CursorPosition>,
     /// The caret sits at the end of the line before a wrap point rather than
     /// at the start of the line after it (`PROSE-UI-159`).
@@ -399,6 +402,14 @@ impl ProseUiState {
             } => {
                 self.suggesting = *suggesting;
                 self.suggestions.clone_from(suggestions);
+                // A suggestion accepted or rejected takes its popover along.
+                if let Some(hovered) = self.hovered
+                    && !suggestions
+                        .iter()
+                        .any(|s| s.suggestion_id == hovered.suggestion_id)
+                {
+                    self.hovered = None;
+                }
                 self.index_highlights();
             }
             ProseEvent::RevealBlock { page, .. } => self.reveal_page = Some(*page),

@@ -325,9 +325,18 @@ impl ProseUiState {
             for rect in data.range_boxes(mark.start, mark.end) {
                 let rect = to_rect(placed, &rect);
                 surface.fill_rect(rect, palette.highlight(mark.kind));
-                if mark.kind == HighlightKind::Deletion {
-                    let middle = (rect.y0 + rect.y1) / 2.0;
-                    surface.stroke_line(rect.x0, middle, rect.x1, middle, palette.error, 1.0);
+                // A suggestion reads in the text itself: an insertion is
+                // underlined, a deletion struck through (`PROSE-UI-051`).
+                match mark.kind {
+                    HighlightKind::Deletion => {
+                        let middle = (rect.y0 + rect.y1) / 2.0;
+                        surface.stroke_line(rect.x0, middle, rect.x1, middle, palette.error, 1.0);
+                    }
+                    HighlightKind::Insertion => {
+                        let base = rect.y1 - 1.0;
+                        surface.stroke_line(rect.x0, base, rect.x1, base, palette.success, 1.0);
+                    }
+                    HighlightKind::Comment | HighlightKind::Find => {}
                 }
             }
         }
@@ -821,6 +830,7 @@ mod tests {
             pal.text,
             pal.accent,
             pal.error,
+            pal.success,
             pal.accent.multiply_alpha(0.2),
             peer,
             peer.multiply_alpha(0.8),
@@ -1162,5 +1172,116 @@ mod tests {
                 .iter()
                 .any(|op| matches!(op, DrawOp::Glyphs { glyph_count: 3, .. }))
         );
+    }
+
+    fn thread(block: BlockId, start: u32, end: u32) -> crate::events::CommentThread {
+        crate::events::CommentThread {
+            comment_id: ambre_core::Uuid::new(),
+            anchor_block: Some(block),
+            anchor_start: start,
+            anchor_end: end,
+            orphaned: false,
+            resolved: false,
+            replies: Vec::new(),
+        }
+    }
+
+    /// The tinted rectangles of `color`, left to right.
+    fn tints(surface: &RecordingSurface, tint: Color) -> Vec<(f64, f64)> {
+        surface
+            .ops()
+            .iter()
+            .filter_map(|op| match op {
+                DrawOp::FillRect { rect, color } if *color == tint => Some((rect.x0, rect.x1)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_thread_the_logic_thread_sends_is_painted_over_its_range_and_no_other() {
+        let (_, shaped) = laid_out(1, 20);
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_layout(shaped);
+        let id = first_block(&ui);
+        let comment = palette().highlight(HighlightKind::Comment);
+        assert!(tints(&paint(&mut ui), comment).is_empty());
+        ui.apply_event(&crate::events::ProseEvent::CommentsUpdated {
+            threads: vec![thread(id, 4, 9)],
+        });
+        let surface = paint(&mut ui);
+        let data = ui.shaped.blocks[&crate::events::tree_id(id)].data();
+        let (start, end) = (data.caret_box(4).x0, data.caret_box(9).x0);
+        let painted = tints(&surface, comment);
+        assert_eq!(painted.len(), 1);
+        let (x0, x1) = painted[0];
+        assert!((x1 - x0 - (end - start)).abs() < 0.5, "{painted:?}");
+    }
+
+    #[test]
+    fn two_overlapping_threads_are_both_painted() {
+        let (_, shaped) = laid_out(1, 20);
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_layout(shaped);
+        let id = first_block(&ui);
+        ui.apply_event(&crate::events::ProseEvent::CommentsUpdated {
+            threads: vec![thread(id, 2, 10), thread(id, 6, 14)],
+        });
+        let surface = paint(&mut ui);
+        let painted = tints(&surface, palette().highlight(HighlightKind::Comment));
+        assert_eq!(painted.len(), 2);
+        // The second overlaps the first: each is drawn whole, one over the other.
+        assert!(painted[1].0 < painted[0].1);
+    }
+
+    #[test]
+    fn an_insertion_is_underlined_and_a_deletion_struck_through() {
+        let (_, shaped) = laid_out(1, 20);
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_layout(shaped);
+        let id = first_block(&ui);
+        let mark = |kind| Highlight {
+            kind,
+            start: 2,
+            end: 6,
+        };
+        ui.highlights.insert(
+            id,
+            vec![
+                mark(HighlightKind::Insertion),
+                mark(HighlightKind::Deletion),
+            ],
+        );
+        let surface = paint(&mut ui);
+        let pal = palette();
+        let tint = |color| {
+            surface
+                .ops()
+                .iter()
+                .find_map(|op| match op {
+                    DrawOp::FillRect { rect, color: c } if *c == color => Some(*rect),
+                    _ => None,
+                })
+                .expect("the tint")
+        };
+        let line = |color| {
+            surface
+                .ops()
+                .iter()
+                .find_map(|op| match op {
+                    DrawOp::StrokeLine { y0, color: c, .. } if *c == color => Some(*y0),
+                    _ => None,
+                })
+                .expect("the line")
+        };
+        let inserted = tint(pal.highlight(HighlightKind::Insertion));
+        let deleted = tint(pal.highlight(HighlightKind::Deletion));
+        // Under the text for an insertion, through its middle for a deletion.
+        assert!(line(pal.success) > inserted.y0 + inserted.height() * 0.75);
+        let middle = (deleted.y0 + deleted.y1) / 2.0;
+        assert!((line(pal.error) - middle).abs() < 0.5);
     }
 }

@@ -118,6 +118,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         boot_is_toile,
         boot_is_prose,
         prose_figures,
+        prose_annotations,
         formula_ref,
         formula_text,
         formula_action,
@@ -1510,6 +1511,13 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     toile_comments.intent.set(Some(i))
                 })
             />
+        })}
+
+        // Prose annotations: the comment panel and the suggestion popover,
+        // both DOM chrome (`PROSE-UI-050`, `PROSE-UI-052`).
+        {boot_is_prose.then(|| view! {
+            <ambre_prose::chrome::ProseCommentsPanel signals=prose_annotations />
+            <ambre_prose::chrome::ProseSuggestionPopover signals=prose_annotations />
         })}
 
         // The deck panel (`toile-presentation`): the surface that adds a frame

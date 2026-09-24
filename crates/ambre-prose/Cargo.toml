@@ -50,6 +50,13 @@ unicode-segmentation = { workspace = true }
 # threads, so a command moves rather than serializes.
 flume = { workspace = true }
 
+# The Prose chrome -- the comment panel and the suggestion popover
+# (`PROSE-UI-050`, `PROSE-UI-052`) -- is wasm-only Leptos, as ambre-toile's and
+# ambre-trame's chrome are. Scoped to wasm32, so the host tests never build it.
+# web-sys gives the reply field its keyboard event.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+leptos = { workspace = true }
+web-sys = { workspace = true }
 
 # Placement holds universal rules over an unenumerated input space: a walk that
 # terminates, a page it never goes back to, and a cut only ever taken at a line
