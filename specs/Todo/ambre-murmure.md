@@ -8,7 +8,8 @@
 > communication, channels, and E2EE persistence.
 >
 > What users like and dislike in Teams, Slack and Discord is in
-> `ambre-murmure-user-research.md`, with a do and do-not table for Murmure.
+> `ambre-murmure-user-research.md`, with a do and do-not table for Murmure. This sketch applies
+> that table; the rows it rejects are in section 8.
 
 ## 1. VISION & FLOW
 Murmure is the command and discussion center. Unlike classic SaaS tools, every message is an encrypted CRDT mutation, ensuring that even the "Blind Relay" server cannot read the content.
@@ -22,14 +23,31 @@ Murmure is the command and discussion center. Unlike classic SaaS tools, every m
 ### A. Spaces & Channels (Discord/Slack Structure)
 * **Spaces (Workspaces):** Logical team groupings with PKI permission management.
 * **Channels (Public/Private):** Thematic streams organized in folders.
-* **Threads:** Branched discussions to avoid polluting the main stream.
+* **Threads:** One model everywhere: a thread is a reply chain on any message, in a channel or a direct message.
+  * The root message shows the reply count and the last replier. A new post never hides an older thread.
+  * "Also send to channel" copies a reply into the main stream, so a channel reader misses no decision.
+  * One "Threads" view lists every followed thread with unread replies. A thread never archives on a fixed delay.
+* **Forum channels:** Each post has a title and tags and opens its own thread. The forum works on mobile, tags included.
 * **Direct Messages (DM):** 1:1 channels or restricted groups with forward secrecy.
 
 ### B. Chat Experience
 * **Message Editor:** Simplified version of the **Prose** engine (Markdown, emojis, `@` mentions, code blocks).
-* **Reactions:** Emoji additions on messages with CRDT aggregation (no conflict on reaction counts).
-* **Pins & Favorites:** Marking important messages in local storage.
+* **Reactions:** Emoji additions on messages with CRDT aggregation (no conflict on reaction counts). A reaction is a light reply: custom emoji per space, and a reaction never counts in the unread badge.
+* **Pins:** Shared with the channel, through the `pinned` array of the `meta` document.
+* **Bookmarks:** Personal, and a different feature from a pin. The client stores a bookmark in local storage.
 * **Status & Presence:** Real-time indicators (Online, Busy, Typing...) via WebSocket relay.
+  * Each indicator tells the relay when a member is active, and that timing is metadata.
+  * Each indicator has a user setting. The default is an open decision.
+* **Read state:**
+  * The read cursor syncs across devices (see *Unread tracking*).
+  * The user can mark any message as unread.
+  * One key marks everything as read.
+* **Keyboard first:** quick switcher, jump to the first unread, edit the last message. No frequent action requires the mouse.
+
+### D. Interface principles
+* The messaging view stays minimal. The other applications stay one command away.
+* No permanent navigation bar that the user cannot hide.
+* Start time and memory hold the budgets of `ambre-spec-budgets.md`. The client never loads a full channel history at start.
 
 ### C. Sharing & Integration
 * **File Transfer:** Drag & drop of assets (images, docs). Files are encrypted and stored on MinIO; Murmure only stores the reference.
@@ -82,6 +100,14 @@ Channel storage layout (`channel_{id}/`):
 - `"media"` (Map) -- same system as documents
 
 `content` as `Loro::Text` enables message editing and rich formatting (bold, links, inline code, mentions).
+
+### Thread tracking
+
+A reply can land in a later segment than its root. So the reply count and the last replier cannot live in the root segment alone.
+
+* Proposal: a per-channel `threads` document maps each root `msg_id` to `{reply_count, last_reply_ts, last_author}`.
+* The "followed" state is personal. The client stores it with the bookmarks, outside the shared documents.
+* Open question: the size of the `threads` document in a channel with years of history. It may need the same segment chain.
 
 ### Object Storage
 
@@ -160,6 +186,8 @@ Choice: access to **the entire history** (Document Key is shared). Consistent wi
 
 With segments, a retention policy = deleting segments older than N months (`DELETE` Object Storage + Doc meta update). Useful for GDPR / right to erasure compliance.
 
+Retention is an explicit admin policy. Without one, Murmure keeps the full history as long as the organization keeps it.
+
 ### UI
 
 1D virtualization (virtualized list) + Parley rendering for rich content. Much simpler than the spreadsheet's Grid2D.
@@ -169,14 +197,46 @@ With segments, a retention policy = deleting segments older than N months (`DELE
 
 ## 4. NOTIFICATIONS & REAL TIME
 * **Push Notifications:** Privacy-respecting notification proxy system (only message existence is notified, content is decrypted by client on receipt).
+* **Notification levels:** Per channel: all, mentions, none. A large channel defaults to mentions.
+  * The client filters each push after decryption, so the relay never learns the level.
+  * Open question: a web push service worker must show a notification. It must decrypt the push before it decides to show one.
 * **Cold Start Sync:** On startup, Murmure downloads missed deltas since the last disconnection to rebuild the channel state.
 
 ---
 
 ## 5. LOCAL SEARCH
-Since the server is "blind", indexing is done client-side:
-* **SQLite/FTS5 (WASM):** Full-text indexing of decrypted content.
-* **Filters:** Search by author, date, channel, or file type.
+The relay is blind, so it cannot search. The client builds and queries every index. The hard case is a new device: it holds only the active segment.
+
+### Index per sealed segment
+* **Build:** The client that seals a segment also builds the inverted index of that segment.
+* **Store:** The client encrypts the index with the Document Key and PUTs it at `channels/{channel_id}/segments/{seg_id}/index`.
+* **Immutable:** A sealed segment is immutable, so its index is immutable too. The index needs no incremental update.
+* **Active segment:** Each client indexes the active segment locally, message by message.
+* **Relay view:** One more encrypted blob, with a size close to the snapshot size that the relay already sees.
+
+### Query on a new device
+1. The client downloads the segment indexes. An index is much smaller than its snapshot.
+2. The client queries the indexes.
+3. The client fetches and decrypts only the segments with a match.
+
+The result list shows the coverage, for example "searched 2 of 14 segments", and offers to fetch the rest. A partial result is never silent.
+
+### Integrity
+A malicious member can publish a false index.
+* The sealing client signs the index.
+* The client checks each match against the decrypted segment content. This check removes every false positive.
+* A false negative stays possible. A client can rebuild an index in the background and compare it with the signed one.
+
+### Local storage and stack
+* The index lives in OPFS (Origin Private File System), inside a worker, and not in RAM. Synchronous OPFS access exists only in a worker. The client memory budget forbids an index of millions of messages in RAM.
+* Pure Rust: `unicode-segmentation` for tokens, with diacritic folding for French. `fst` for the term dictionary, `roaring` for the posting lists.
+* tantivy is richer, but its WASM support is fragile. It needs a prototype before any choice.
+
+### Filters
+Author, date, channel, file type, and "replies to me", including replies that did not mention the user.
+
+### Open point
+The index format assumes that a sealed segment is immutable. The sketch does not say how a user edits or deletes an old message in a sealed segment. Decide that before the index format is frozen.
 
 ---
 
@@ -210,5 +270,27 @@ Since the server is "blind", indexing is done client-side:
 * **Audit Logs:** Every bot action is a signed mutation in the CRDT, making any modification traceable and reversible (Time-travel).
 
 
-## 8. REJECTED TECHNICAL CHOICES
-* **Matrix/XMPP Protocols:** Rejected in favor of native integration into the SecSync/Loro pipeline for full consistency with the rest of the Ambre suite.
+## 8. REJECTED ALTERNATIVES
+
+### Technical
+
+| Alternative | Rejected because |
+| :--- | :--- |
+| **Matrix/XMPP protocols** | Native integration into the SecSync/Loro pipeline keeps full consistency with the rest of the Ambre suite. |
+| **Searchable encryption on the relay** (keyed-hash token per word, SSE) | The relay sees which queries repeat and which documents match. Published leakage-abuse attacks (Cash et al., 2015) recover content from that leak. It breaks the zero-knowledge pillar. |
+| **Full download and re-index on each device** | The Element model: Seshat (Rust, tantivy) indexes locally on desktop only. Element Web still has no search in encrypted rooms. A new device waits for the full history. |
+| **SQLite/FTS5 compiled to WASM** | A C library, against the Rust-first pillar. |
+
+### Product
+From `ambre-murmure-user-research.md`.
+
+| Alternative | Rejected because |
+| :--- | :--- |
+| **Two message models** (flat chat, threaded posts) | Teams users do not know which one to use. |
+| **A new post hides older threads** | Teams users lose threads they did not close. |
+| **Auto-archive of a thread on a fixed delay** | Discord users find the delay too short. |
+| **Unread cleared only when the user opens the conversation** | Users of all three products want to control their read state. |
+| **A permanent navigation bar that the user cannot hide** | The 2023 Slack redesign caused a backlash from users of basic messaging. |
+| **History deletion to sell a plan** | Slack deleted free history older than one year from 2024-08-26. Users read it as a hostage. |
+| **Any server-side processing of content** (model training, analysis) | The 2024 Slack backlash over training on messages. It also breaks the zero-knowledge pillar. |
+| **Identity documents to use the product** | The 2026 Discord backlash over age verification by ID or face scan. |
