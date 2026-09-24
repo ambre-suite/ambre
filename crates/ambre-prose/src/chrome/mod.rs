@@ -11,8 +11,11 @@
 
 use leptos::prelude::*;
 
-use crate::events::SuggestionKind;
+use ambre_commands::CommandId;
+
+use crate::events::{SuggestionKind, TriState};
 use crate::view::annotate::{AnnotationIntent, HoveredSuggestion, PanelThread};
+use crate::view::toolbar::{ToolbarState, state_of};
 
 /// The signals the chrome and the shell share with the view. Every position
 /// is in CSS pixels of the window.
@@ -29,6 +32,11 @@ pub struct ProseSignals {
     pub over_link: RwSignal<bool>,
     /// A link target to open, until the shell takes it (`PROSE-UI-071`).
     pub followed: RwSignal<Option<String>>,
+    /// The format bar, its anchor in CSS pixels (`PROSE-UI-053`).
+    pub toolbar: RwSignal<ToolbarState>,
+    /// A formatting command a control or a chord invoked, until the view
+    /// drains it. Both write the same id here (`PROSE-UI-056`).
+    pub format: RwSignal<Option<CommandId>>,
 }
 
 impl Default for ProseSignals {
@@ -46,6 +54,8 @@ impl ProseSignals {
             intent: RwSignal::new(None),
             over_link: RwSignal::new(false),
             followed: RwSignal::new(None),
+            toolbar: RwSignal::new(ToolbarState::default()),
+            format: RwSignal::new(None),
         }
     }
 }
@@ -174,5 +184,60 @@ pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
                 </div>
             }
         })
+    }
+}
+
+/// How far above the selection's first line the format bar sits, in CSS
+/// pixels.
+const BAR_LIFT_PX: f32 = 40.0;
+
+/// The format bar over a non-empty selection
+/// (`features/ambre-spec-prose-toolbar.md section 4`).
+///
+/// It holds no document state: it renders what the view published, and a
+/// control hands its command id back to the view (`PROSE-UI-057`,
+/// `PROSE-UI-098`).
+#[component]
+pub fn ProseFormatBar(signals: ProseSignals) -> impl IntoView {
+    move || {
+        let bar = signals.toolbar.get();
+        let (x, y) = bar.anchor?;
+        let style = format!(
+            "position: fixed; left: {x}px; top: {}px; transform: translateX(-50%); z-index: 62;",
+            (y - BAR_LIFT_PX).max(0.0)
+        );
+        let controls = crate::commands::FORMAT_BAR.map(|(id, key)| {
+            let pressed = match bar.active.as_ref().map(|m| state_of(m, key)) {
+                Some(TriState::On) => "true",
+                Some(TriState::Mixed) => "mixed",
+                _ => "false",
+            };
+            control(signals, id, pressed)
+        });
+        Some(view! {
+            <div class="ambre-prose-format-bar" style=style role="toolbar" aria-label="Format">
+                {controls.into_iter().collect_view()}
+            </div>
+        })
+    }
+}
+
+/// One control. A press keeps the selection: the canvas never loses focus to
+/// the bar.
+fn control(signals: ProseSignals, id: CommandId, pressed: &'static str) -> impl IntoView {
+    let label = ambre_commands::find(crate::commands::COMMANDS, id)
+        .map(|command| (command.title)(&ambre_commands::Locale::En))
+        .unwrap_or_default();
+    let text = label.clone();
+    view! {
+        <button
+            class="ambre-prose-format-control"
+            aria-pressed=pressed
+            aria-label=label
+            on:mousedown=|ev: web_sys::MouseEvent| ev.prevent_default()
+            on:click=move |_| signals.format.set(Some(id))
+        >
+            {text}
+        </button>
     }
 }

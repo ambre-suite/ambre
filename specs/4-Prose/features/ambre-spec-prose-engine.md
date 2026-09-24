@@ -325,6 +325,12 @@ pub enum ProseCommand {
     ApplyMark     { block_id: TreeID, range: (u32, u32), key: String, value: Option<String> },
     RemoveMark    { block_id: TreeID, range: (u32, u32), key: String },
     ClearInlineMarks { block_id: TreeID, range: (u32, u32) },
+    /// Reading the styles of a selection for the format bar. It writes nothing; the answer is
+    /// `SelectionMarks` (`features/ambre-spec-prose-toolbar.md`).
+    ReadMarks     { anchor: (BlockId, u32), focus: (BlockId, u32) },
+    /// One presence mark applied over a whole selection, or removed, in one commit: one
+    /// gesture of the format bar is one undo item (`PROSE-UI-192`).
+    FormatSelection { anchor: (BlockId, u32), focus: (BlockId, u32), key: String, apply: bool },
 
     // -- Block structure --
     /// `init` is a typed per-type initializer: it carries the attributes the block type needs
@@ -516,6 +522,8 @@ pub enum ProseEvent {
     /// The clipboard payload built from the selection: a plain-text mirror and the opaque
     /// Ambre bytes. The host performs the write (`features/ambre-spec-prose-clipboard.md`).
     Clipboard     { text: String, ambre: Vec<u8> },
+    /// The marks of a selection, with the selection read (`PROSE-UI-057`).
+    SelectionMarks { anchor: (BlockId, u32), focus: (BlockId, u32), marks: ActiveMarks },
 
     // -- Features --
     TocUpdated       { block_id: BlockId, toc: TableOfContents },

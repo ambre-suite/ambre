@@ -40,7 +40,7 @@ impl ProseUiState {
     }
 
     /// The text blocks of the flow, in order: the blocks the caret walks.
-    fn text_blocks(&self) -> impl DoubleEndedIterator<Item = BlockId> + '_ {
+    pub(crate) fn text_blocks(&self) -> impl DoubleEndedIterator<Item = BlockId> + '_ {
         self.shaped
             .layout
             .blocks

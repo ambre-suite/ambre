@@ -99,6 +99,12 @@ impl CatchUp {
         rebase::end_through_all(pos, block, &self.unseen())
     }
 
+    /// A range the view sent, both ends moved through what it had not seen.
+    fn range(&self, block: crate::events::BlockId, (a, b): (u32, u32)) -> (u32, u32) {
+        let (start, end) = (a.min(b), a.max(b));
+        (self.position(start, block), self.end(end, block))
+    }
+
     /// Stamp a change of the text: whether the view drew it, its number, and
     /// the runs the view applies. A change the view did not draw is queued.
     pub(super) fn stamp(
@@ -218,6 +224,77 @@ impl ProseState {
             ProseCommand::InsertBlock { .. } => {
                 sync.predicting = Prediction::Barrier;
                 command
+            }
+            // A range the view does not draw: its ends move through what the
+            // view had not seen. Text typed at its end stays outside it
+            // (`PROSE-UI-185`).
+            ProseCommand::ApplyMark {
+                block_id,
+                range,
+                key,
+                value,
+            } => ProseCommand::ApplyMark {
+                block_id,
+                range: sync.range(block_id, range),
+                key,
+                value,
+            },
+            ProseCommand::RemoveMark {
+                block_id,
+                range,
+                key,
+            } => ProseCommand::RemoveMark {
+                block_id,
+                range: sync.range(block_id, range),
+                key,
+            },
+            ProseCommand::ClearInlineMarks { block_id, range } => ProseCommand::ClearInlineMarks {
+                block_id,
+                range: sync.range(block_id, range),
+            },
+            ProseCommand::FormatSelection {
+                anchor,
+                focus,
+                key,
+                apply,
+            } => {
+                // The view sends the selection head first, so its tail is an
+                // end: text typed there stays outside.
+                let (anchor, focus) = if anchor.0 == focus.0 {
+                    let (a, b) = sync.range(anchor.0, (anchor.1, focus.1));
+                    ((anchor.0, a), (focus.0, b))
+                } else {
+                    (
+                        (anchor.0, sync.position(anchor.1, anchor.0)),
+                        (focus.0, sync.end(focus.1, focus.0)),
+                    )
+                };
+                ProseCommand::FormatSelection {
+                    anchor,
+                    focus,
+                    key,
+                    apply,
+                }
+            }
+            ProseCommand::ReadMarks { anchor, focus } => {
+                // The answer names the selection as the view sent it, so the
+                // view can tell it from a later one (`PROSE-UI-057`).
+                let moved = (
+                    (anchor.0, sync.position(anchor.1, anchor.0)),
+                    (focus.0, sync.position(focus.1, focus.0)),
+                );
+                let mut outcome = self.read_marks(moved.0, moved.1);
+                for event in &mut outcome.display {
+                    if let ProseEvent::SelectionMarks {
+                        anchor: a,
+                        focus: f,
+                        ..
+                    } = event
+                    {
+                        (*a, *f) = (anchor, focus);
+                    }
+                }
+                return Err(outcome);
             }
             other => other,
         })

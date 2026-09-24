@@ -15,7 +15,9 @@
 //
 // The comment panel and the suggestion popover are DOM chrome (`PROSE-UI-050`,
 // `PROSE-UI-052`). The view publishes where they go, in CSS pixels, and drains
-// what they ask for once a frame.
+// what they ask for once a frame. The format bar is the same. The view
+// publishes where it goes and what its controls report. It drains the
+// formatting id a control or a chord left in its signal (`PROSE-UI-056`).
 // ============================================================================
 
 use leptos::prelude::*;
@@ -180,6 +182,8 @@ impl ProseView {
         // An accepted or rejected suggestion takes its popover along.
         self.publish_hover();
         self.take_intent();
+        self.take_format();
+        self.publish_toolbar();
         // The input held behind a structural command goes out once the
         // Logic thread answered it, unless an edit still waits in the outbox.
         if !self.fatal && !self.outbox.is_busy() {
@@ -212,6 +216,42 @@ impl ProseView {
         }
         self.publish_hover();
         self.dirty = true;
+    }
+
+    /// Act on the formatting id a control or a chord invoked. One that waits
+    /// behind a busy outbox stays in its signal for a later frame.
+    fn take_format(&mut self) {
+        if self.fatal || self.outbox.is_busy() {
+            return;
+        }
+        let Some(id) = self.annotations.format.get_untracked() else {
+            return;
+        };
+        self.annotations.format.set(None);
+        if let Some(command) = self.state.format(id) {
+            send_edit(&mut self.outbox, self.document_id, command);
+        }
+        self.busy_pub.publish(self.outbox.is_busy());
+    }
+
+    /// Publish the format bar, and ask for the marks it still lacks
+    /// (`PROSE-UI-057`). A read the channel drops is asked again next frame.
+    fn publish_toolbar(&mut self) {
+        if !self.fatal
+            && let Some(query) = self.state.marks_query()
+            && send_command(&self.to_logic, self.document_id, query).accepted()
+        {
+            self.state.marks_sent();
+        }
+        let mut bar = self.state.toolbar();
+        bar.anchor = bar.anchor.map(|(x, y)| to_css(x, y));
+        if self
+            .annotations
+            .toolbar
+            .with_untracked(|shown| *shown != bar)
+        {
+            self.annotations.toolbar.set(bar);
+        }
     }
 
     /// Publish the hovered suggestion, where the popover goes.
@@ -334,9 +374,11 @@ impl ProseView {
                     _ => *dy,
                 };
                 self.state.scroll_by(px as f32);
-                // The text moved from under the pointer.
+                // The text moved from under the pointer, and the bar with it
+                // (`PROSE-UI-055`).
                 self.state.hovered = None;
                 self.publish_hover();
+                self.publish_toolbar();
                 self.dirty = true;
                 true
             }
@@ -363,6 +405,7 @@ impl ProseView {
                     self.annotations.followed.set(Some(url));
                 }
                 self.busy_pub.publish(self.outbox.is_busy());
+                self.publish_toolbar();
                 self.dirty |= consumed;
                 consumed
             }
@@ -370,7 +413,7 @@ impl ProseView {
     }
 
     /// The input a canvas event stands for, or `None` for one the view leaves
-    /// to the host. The composition lands with the "Toolbar, slash menu and
+    /// to the host. The composition lands with the "Input-method
     /// composition" Story (`ambre-roadmap.md` E5).
     fn translate(&self, ev: &InputEvent) -> Option<ProseInput> {
         Some(match ev {
@@ -431,6 +474,7 @@ impl ProseView {
         self.state.resize(self.size.0, self.size.1);
         self.shown = None;
         self.publish_hover();
+        self.publish_toolbar();
         self.dirty = true;
     }
 }

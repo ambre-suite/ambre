@@ -261,6 +261,14 @@ pub struct ProseUiState {
     pub draft: DraftBuffer,
     /// The draft as last shaped, and the text it was shaped from.
     pub(crate) draft_shape: Option<(String, ShapedRun)>,
+    /// The marks the Logic thread read for a selection, and that selection
+    /// (`PROSE-UI-057`).
+    pub(crate) marks: Option<(
+        (crate::view::caret::Spot, crate::view::caret::Spot),
+        crate::events::ActiveMarks,
+    )>,
+    /// The selection and the layout version the last read was asked for.
+    pub(crate) marks_asked: Option<((crate::view::caret::Spot, crate::view::caret::Spot), u64)>,
     /// A change arrived since the last tick.
     changed: bool,
     /// When the text was last seen changing, while a recount is owed.
@@ -410,6 +418,11 @@ impl ProseUiState {
             ProseEvent::DocUpdated { .. } => self.changed = true,
             ProseEvent::CellEntered { block, .. } => self.place_caret(*block, 0),
             ProseEvent::WordCountUpdated { count } => self.word_count = *count,
+            ProseEvent::SelectionMarks {
+                anchor,
+                focus,
+                marks,
+            } => self.take_marks(*anchor, *focus, marks),
             ProseEvent::TocUpdated { block_id, toc } => {
                 match self.tocs.iter_mut().find(|(id, _)| id == block_id) {
                     Some(entry) => entry.1 = toc.clone(),

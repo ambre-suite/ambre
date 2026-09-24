@@ -430,6 +430,33 @@ pub struct WordCount {
     pub pages: u32,
 }
 
+/// One formatting control's state over a selection
+/// (`features/ambre-spec-prose-toolbar.md section 3`).
+///
+/// Three states, not two: a selection formatted in part is neither on nor
+/// off (`PROSE-UI-096`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TriState {
+    #[default]
+    Off,
+    On,
+    Mixed,
+}
+
+/// The marks a selection carries, one state per control of the format bar
+/// (`PROSE-UI-054`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ActiveMarks {
+    pub bold: TriState,
+    pub italic: TriState,
+    pub underline: TriState,
+    pub strikethrough: TriState,
+    pub code: TriState,
+    /// The address, when the whole selection carries one link and the same
+    /// one.
+    pub link: Option<String>,
+}
+
 /// A value a band resolves when its page is drawn, and never stores
 /// (`features/ambre-spec-prose-headers-footers.md`, `PROSE-FEAT-065`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -827,6 +854,23 @@ pub enum ProseCommand {
     /// has stopped (`PROSE-FEAT-124`); it writes nothing.
     CountWords,
 
+    // -- Format bar (`features/ambre-spec-prose-toolbar.md`) --
+    /// Read the marks a selection carries. The endpoints arrive in either
+    /// order; it writes nothing (`PROSE-UI-099`).
+    ReadMarks {
+        anchor: (BlockId, u32),
+        focus: (BlockId, u32),
+    },
+    /// Apply one presence mark over a whole selection, or remove it. Every
+    /// block the selection covers changes in one commit, so one undo takes
+    /// the whole gesture back.
+    FormatSelection {
+        anchor: (BlockId, u32),
+        focus: (BlockId, u32),
+        key: String,
+        apply: bool,
+    },
+
     // -- Headers and footers (`features/ambre-spec-prose-headers-footers.md`) --
     /// Show or hide the top band (`PROSE-FEAT-167`).
     SetHeaderEnabled {
@@ -996,7 +1040,9 @@ pub enum ProseCommand {
     /// [`ProseEvent::ExportReady`]. Read-only: an export emits no delta
     /// (`PROSE-IO-017`). The Logic dispatcher serves it, because the native
     /// header needs the identity its registry holds.
-    ExportDocument { format: ExportFormat },
+    ExportDocument {
+        format: ExportFormat,
+    },
 }
 
 /// The formats a document leaves the editor in
@@ -1033,6 +1079,7 @@ impl ProseCommand {
                 | Self::Sync { .. }
                 | Self::UpdateCursor { .. }
                 | Self::CountWords
+                | Self::ReadMarks { .. }
                 | Self::FindStart { .. }
                 | Self::FindNext
                 | Self::FindPrev
@@ -1080,6 +1127,8 @@ impl ProseCommand {
             Self::InsertToc { .. } => "inserting a table of contents",
             Self::UpdateTocConfig { .. } => "changing the table of contents",
             Self::CountWords => "counting the words",
+            Self::ReadMarks { .. } => "reading the styles",
+            Self::FormatSelection { .. } => "formatting the selection",
             Self::SetHeaderEnabled { .. } => "showing or hiding the header",
             Self::SetFooterEnabled { .. } => "showing or hiding the footer",
             Self::SetDifferentFirstPage { .. } => "changing the first page's bands",
@@ -1188,6 +1237,13 @@ pub enum ProseEvent {
     },
     /// The five figures, after a recount or a new layout.
     WordCountUpdated { count: WordCount },
+    /// The marks of the selection a [`ProseCommand::ReadMarks`] named, with
+    /// that selection as it was sent (`PROSE-UI-057`).
+    SelectionMarks {
+        anchor: (BlockId, u32),
+        focus: (BlockId, u32),
+        marks: ActiveMarks,
+    },
     /// A cell a merge covers still holds text: masked, not destroyed. A hint,
     /// and it blocks nothing (`PROSE-FEAT-255`).
     MergeConflictDetected { cell_id: BlockId },

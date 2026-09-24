@@ -11,12 +11,12 @@
 //! which the engine does not hold (`PROSE-024`).
 
 pub use ambre_bus::app::prose::{
-    Align, BandSet, BlockId, BlockInit, BlockType, CellBorder, CommentReply, CommentThread,
+    ActiveMarks, Align, BandSet, BlockId, BlockInit, BlockType, CellBorder, CommentReply, CommentThread,
     CrossRefKind, CursorPosition, DateFieldFormat, FindMatch, FindQuery, FootnoteEntry,
     HeaderField, HfTarget, LineHeight, LineHeightMode, LinkSpan, ListStyle, OrderedStyle,
     ParagraphStyle, PresencePayload, ProseCommand, ProseError, ProseEvent, ProseRefusal,
     RemoteCursor, ResolvedCrossRef, Suggestion, SuggestionKind, SuggestionSpan, TableOfContents,
-    TextEdit, TocEntry, VAlign, WordCount,
+    TextEdit, TocEntry, TriState, VAlign, WordCount,
 };
 
 use loro::TreeID;

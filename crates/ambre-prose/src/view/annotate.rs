@@ -92,7 +92,7 @@ pub fn stack(heights: &[f32], room: f32) -> Vec<f32> {
 impl ProseUiState {
     /// The page and fragment of `block` that show `run_y`, a height in its
     /// run, and the top of that fragment in the page.
-    fn fragment_at(&self, block: BlockId, run_y: f32) -> Option<(u32, Fragment)> {
+    pub(crate) fn fragment_at(&self, block: BlockId, run_y: f32) -> Option<(u32, Fragment)> {
         let index = self.flow_index(&tree_id(block))?;
         let layout = self.shaped.layout.blocks.get(index)?;
         let tops = self.shaped.blocks.get(&layout.block_id)?.data().line_tops();
@@ -104,7 +104,7 @@ impl ProseUiState {
     }
 
     /// A point of a block's run, moved onto the canvas.
-    fn to_screen(&self, block: BlockId, page: u32, piece: Fragment, x: f32, y: f32) -> (f32, f32) {
+    pub(crate) fn to_screen(&self, block: BlockId, page: u32, piece: Fragment, x: f32, y: f32) -> (f32, f32) {
         let layout = &self.shaped.layout;
         let indent = self
             .flow_index(&tree_id(block))

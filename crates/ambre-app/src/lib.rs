@@ -956,6 +956,7 @@ pub fn main() {
         find_state_toile,
         toile_active_tool,
         boot_is_toile,
+        boot_is_prose.then_some(prose_signals.format),
     );
 
     // Local persistence: open the IndexedDB store on this (Main) thread, where

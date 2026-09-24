@@ -552,6 +552,7 @@ pub(crate) fn install_command_keys(
     find_state_toile: RwSignal<bool>,
     active_tool_toile: RwSignal<ambre_toile::ui::Tool>,
     boot_is_toile: bool,
+    prose_format: Option<RwSignal<Option<CommandId>>>,
 ) {
     let document = web_sys::window()
         .expect("no window")
@@ -585,6 +586,18 @@ pub(crate) fn install_command_keys(
                 event.prevent_default();
                 if id == toile_chrome::FIND {
                     find_state_toile.set(true);
+                }
+                return;
+            }
+            // Prose: a formatting chord leaves its id where the format bar's
+            // controls leave theirs, and the view drains both the same way
+            // (`PROSE-UI-056`). A chrome text field keeps its own chords.
+            if let Some(format) = prose_format
+                && ambre_prose::commands::mark_key(id).is_some()
+            {
+                if !target_is_editable(&event) {
+                    event.prevent_default();
+                    format.set(Some(id));
                 }
                 return;
             }

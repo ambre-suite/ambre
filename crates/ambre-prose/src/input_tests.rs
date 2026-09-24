@@ -2,7 +2,7 @@
 //! Logic thread's answers fed back (`features/ambre-spec-prose-text-editing.md`,
 //! `features/ambre-spec-prose-selection.md`).
 
-use crate::events::{BlockId, BlockInit, CursorPosition, ProseCommand, ProseEvent};
+use crate::events::{BlockId, BlockInit, CursorPosition, ProseCommand, ProseEvent, TriState};
 use crate::input::{ProseInput, ProseKey};
 use crate::logic::ProseState;
 use crate::ui::{ProseUiState, SendResult};
@@ -1179,4 +1179,279 @@ fn a_selection_does_not_cross_the_edge_of_a_note() {
     let (x, y) = note_point(&rig, note, 8);
     rig.input(ProseInput::Drag { x, y });
     assert_eq!(rig.ui.selection(), Some(((note, 2), (note, 8))));
+}
+
+// -- The format bar -----------------------------------------------------------
+
+impl Rig {
+    /// Select `start..end` of one block, as a drag would leave it.
+    fn select(&mut self, block: BlockId, start: u32, end: u32) {
+        self.ui.cursor = Some(CursorPosition {
+            block_id: block,
+            offset: end,
+            anchor: Some((block, start)),
+        });
+    }
+
+    /// Ask the marks the bar needs, and take the answer, as the host does
+    /// on each frame.
+    fn read_marks(&mut self) {
+        if let Some(command) = self.ui.marks_query() {
+            self.ui.marks_sent();
+            self.outbox.push(command);
+            self.deliver();
+        }
+    }
+
+    /// Send what a control asks for, then take the new layout.
+    fn format(&mut self, id: ambre_commands::CommandId) -> Option<ProseCommand> {
+        let command = self.ui.format(id);
+        self.take_sent(command.clone().into_iter().collect());
+        self.deliver();
+        self.lay();
+        command
+    }
+
+    /// Whether every run of a block carries a mark key.
+    fn all_marked(&self, block: BlockId, key: &str) -> bool {
+        let runs = self.logic.resolved_runs(&block);
+        !runs.is_empty()
+            && runs.iter().all(|(_, style)| match key {
+                "b" => style.bold,
+                "i" => style.italic,
+                _ => false,
+            })
+    }
+}
+
+fn marked(rig: &mut Rig, block: BlockId, range: (u32, u32), key: &str) {
+    let outcome = rig.logic.handle_command(ProseCommand::ApplyMark {
+        block_id: block,
+        range,
+        key: key.to_owned(),
+        value: None,
+    });
+    assert!(outcome.update.is_some(), "the mark is written");
+    rig.lay();
+}
+
+/// `PROSE-UI-053`, `PROSE-UI-100`: the bar shows over a non-empty selection
+/// alone, and goes when the selection is emptied or cancelled.
+#[test]
+fn the_bar_shows_over_a_selection_and_goes_with_it() {
+    let mut rig = Rig::new(&["hello world"]);
+    let block = rig.blocks()[0];
+    rig.ui.set_caret((block, 3));
+    assert!(!rig.ui.toolbar().visible());
+    assert_eq!(rig.ui.marks_query(), None);
+    rig.key(ProseKey::Right, true, false);
+    assert!(rig.ui.toolbar().visible());
+    rig.key(ProseKey::Escape, false, false);
+    assert!(!rig.ui.toolbar().visible());
+    rig.select(block, 0, 5);
+    assert!(rig.ui.toolbar().visible());
+    rig.key(ProseKey::Right, false, false);
+    assert!(!rig.ui.toolbar().visible());
+}
+
+/// `PROSE-UI-099`: raising the bar writes nothing, and the selection it was
+/// raised on stays whole.
+#[test]
+fn raising_the_bar_writes_nothing_and_keeps_the_selection() {
+    let mut rig = Rig::new(&["hello world"]);
+    let block = rig.blocks()[0];
+    rig.select(block, 2, 7);
+    let before = rig.ui.cursor;
+    let query = rig.ui.marks_query().expect("the bar needs its marks");
+    let outcome = rig.logic.handle_view_command(query);
+    assert!(outcome.update.is_none());
+    assert!(
+        outcome
+            .display
+            .iter()
+            .all(|event| matches!(event, ProseEvent::SelectionMarks { .. }))
+    );
+    assert_eq!(rig.ui.cursor, before);
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("hello world"));
+}
+
+/// `PROSE-UI-054`, `PROSE-UI-096`: each control reports the whole
+/// selection, and a key carried by part of it reads mixed whichever end
+/// carries it.
+#[test]
+fn a_selection_bold_in_part_reads_mixed() {
+    let mut rig = Rig::new(&["hello world", "second"]);
+    let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
+    marked(&mut rig, first, (0, 5), "b");
+    rig.select(first, 0, 11);
+    rig.read_marks();
+    let marks = rig.ui.toolbar().active.expect("the marks arrived");
+    assert_eq!(marks.bold, TriState::Mixed);
+    assert_eq!(marks.italic, TriState::Off);
+    rig.select(first, 6, 11);
+    rig.read_marks();
+    assert_eq!(rig.ui.toolbar().active.map(|m| m.bold), Some(TriState::Off));
+    rig.select(first, 0, 5);
+    rig.read_marks();
+    assert_eq!(rig.ui.toolbar().active.map(|m| m.bold), Some(TriState::On));
+    // Across two paragraphs: the bold start alone does not make it bold.
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: second,
+        offset: 3,
+        anchor: Some((first, 0)),
+    });
+    rig.read_marks();
+    assert_eq!(
+        rig.ui.toolbar().active.map(|m| m.bold),
+        Some(TriState::Mixed)
+    );
+}
+
+/// `PROSE-UI-057`, `PROSE-UI-097`: the controls show what the Logic thread
+/// read for this very selection, and nothing carries over to the next one.
+#[test]
+fn the_marks_shown_are_the_ones_read_for_this_selection() {
+    let mut rig = Rig::new(&["hello world"]);
+    let block = rig.blocks()[0];
+    marked(&mut rig, block, (0, 5), "b");
+    rig.select(block, 0, 5);
+    rig.read_marks();
+    assert_eq!(rig.ui.toolbar().active.map(|m| m.bold), Some(TriState::On));
+    // Another selection: nothing is shown until its own answer arrives.
+    rig.select(block, 6, 11);
+    assert_eq!(rig.ui.toolbar().active, None);
+    assert!(rig.ui.marks_query().is_some());
+    // The same selection again, after it was cancelled: asked afresh.
+    rig.select(block, 0, 5);
+    rig.key(ProseKey::Escape, false, false);
+    assert_eq!(rig.ui.marks_query(), None);
+    rig.select(block, 0, 5);
+    assert_eq!(rig.ui.toolbar().active, None);
+    assert!(rig.ui.marks_query().is_some());
+}
+
+/// `PROSE-UI-102`, `PROSE-UI-103`, `PROSE-UI-098`: a mixed control applies
+/// its mark to the whole selection, and an on control removes it. One
+/// command the plane declares leaves, and one undo takes it back.
+#[test]
+fn a_mixed_control_applies_its_mark_to_the_whole_selection() {
+    let mut rig = Rig::new(&["hello world", "second"]);
+    let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
+    marked(&mut rig, first, (0, 5), "b");
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: second,
+        offset: 6,
+        anchor: Some((first, 0)),
+    });
+    rig.read_marks();
+    let sent = rig.format(crate::commands::BOLD);
+    assert_eq!(
+        sent,
+        Some(ProseCommand::FormatSelection {
+            anchor: (first, 0),
+            focus: (second, 6),
+            key: "b".to_owned(),
+            apply: true,
+        })
+    );
+    assert!(rig.all_marked(first, "b") && rig.all_marked(second, "b"));
+    rig.read_marks();
+    assert_eq!(rig.ui.toolbar().active.map(|m| m.bold), Some(TriState::On));
+    let sent = rig.format(crate::commands::BOLD);
+    assert!(matches!(
+        sent,
+        Some(ProseCommand::FormatSelection { apply: false, .. })
+    ));
+    rig.read_marks();
+    assert_eq!(rig.ui.toolbar().active.map(|m| m.bold), Some(TriState::Off));
+    // The removal spanned two blocks, and one undo restores both.
+    rig.logic.handle_command(ProseCommand::Undo);
+    assert!(rig.all_marked(first, "b") && rig.all_marked(second, "b"));
+}
+
+/// `PROSE-UI-104`: a control changes neither the text, nor the selection,
+/// nor a mark it does not name.
+#[test]
+fn a_control_leaves_the_text_the_selection_and_other_marks() {
+    let mut rig = Rig::new(&["hello world"]);
+    let block = rig.blocks()[0];
+    marked(&mut rig, block, (0, 11), "i");
+    rig.select(block, 2, 9);
+    rig.read_marks();
+    let before = rig.ui.cursor;
+    rig.format(crate::commands::BOLD);
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("hello world"));
+    assert_eq!(rig.ui.cursor, before);
+    assert!(rig.all_marked(block, "i"));
+}
+
+/// `PROSE-UI-101`: dismissing the bar sends nothing, and a mark applied
+/// before stays.
+#[test]
+fn dismissing_the_bar_writes_nothing() {
+    let mut rig = Rig::new(&["hello world"]);
+    let block = rig.blocks()[0];
+    rig.select(block, 0, 11);
+    rig.read_marks();
+    rig.format(crate::commands::BOLD);
+    let sent = rig.sent.len();
+    rig.key(ProseKey::Escape, false, false);
+    assert!(!rig.ui.toolbar().visible());
+    assert_eq!(rig.sent.len(), sent);
+    assert!(rig.all_marked(block, "b"));
+}
+
+/// `PROSE-UI-055`: the bar stays over its text while the page scrolls and
+/// while it zooms.
+#[test]
+fn the_bar_follows_its_text_through_a_scroll_and_a_zoom() {
+    let paragraphs: Vec<String> = (0..40).map(|_| words(30)).collect();
+    let texts: Vec<&str> = paragraphs.iter().map(String::as_str).collect();
+    let mut rig = Rig::new(&texts);
+    let block = rig.blocks()[3];
+    rig.select(block, 5, 9);
+    let text_at = |rig: &Rig| rig.point_of(block, 5);
+    let (x0, y0) = rig.ui.toolbar().anchor.expect("the bar shows");
+    let (_, line) = text_at(&rig);
+    rig.ui.scroll_by(120.0);
+    let (x1, y1) = rig.ui.toolbar().anchor.expect("the bar shows");
+    let (_, moved) = text_at(&rig);
+    assert!((x1 - x0).abs() < 0.01);
+    assert!(((y0 - y1) - (line - moved)).abs() < 0.01);
+    assert!(y1 < y0);
+    rig.ui.viewport.zoom = 2.0;
+    let (_, zoomed) = rig.ui.toolbar().anchor.expect("the bar shows");
+    let (_, line) = text_at(&rig);
+    // Above the text it formats, by less than one line at this zoom.
+    assert!(zoomed <= line && line - zoomed < 40.0);
+}
+
+/// `PROSE-UI-185`: a mark sent before the view saw a collaborator's
+/// insertion lands on the text it was sent for.
+#[test]
+fn a_mark_sent_before_a_remote_insertion_lands_on_its_text() {
+    let mut rig = Rig::new(&["hello world"]);
+    let block = rig.blocks()[0];
+    // A collaborator's insertion the Logic side took and the view has not
+    // seen yet: its events stay undelivered.
+    let mut other = a_collaborator(&rig);
+    let update = other
+        .handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: ">> ".to_owned(),
+        })
+        .update
+        .expect("the change exported");
+    let _unseen = rig.logic.apply_remote(&update);
+    // The view marks "world" as it still sees it, at 6..11.
+    rig.select(block, 6, 11);
+    let _ = rig.format(crate::commands::BOLD);
+    let runs = rig.logic.resolved_runs(&block);
+    let bold: String = runs
+        .iter()
+        .filter(|(_, style)| style.bold)
+        .map(|(text, _)| text.as_str())
+        .collect();
+    assert_eq!(bold, "world");
 }

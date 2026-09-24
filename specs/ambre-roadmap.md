@@ -91,7 +91,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Input and cursor | MVP | typing, caret navigation, click and drag selection, optimistic display |
 | `[x]` Links and bands under the caret | MVP | a press inside a link places the caret and a modified one opens it through the host; the link cursor; the caret entering a header or a footer |
 | `[x]` The caret in a footnote | MVP | a note's text lives in its entry, not in a block, and the caret, the selection and every text command address a block. Putting the caret in a note needs an address for that text on the bus, and the edits typed there to reach it |
-| `[ ]` The format bar | MVP | the contextual format bar over a selection, its mixed state, and its ranges caught up with concurrent edits |
+| `[x]` The format bar | MVP | the contextual format bar over a selection, its mixed state, and its ranges caught up with concurrent edits |
+| `[ ]` The format bar's other controls | V1 | the bar carries the five presence marks alone. The link, heading, quote, colour and size controls, superscript, subscript and clearing the formatting reach no control yet |
 | `[ ]` The slash menu | MVP | the slash menu: where it opens, what it records, the one command it sends and how it closes |
 | `[ ]` Input-method composition | MVP | input-method composition through the hidden text field, its preview on the canvas, and double-click word selection |
 | `[x]` Collaborative cursors and annotations | MVP | remote carets, comment highlights, track-change highlights |

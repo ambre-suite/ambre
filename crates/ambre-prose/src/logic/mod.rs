@@ -552,6 +552,13 @@ impl ProseState {
                 numbered,
             } => self.update_toc_config(&tree_id(block_id), max_level, numbered),
             ProseCommand::CountWords => self.count_words(),
+            ProseCommand::ReadMarks { anchor, focus } => self.read_marks(anchor, focus),
+            ProseCommand::FormatSelection {
+                anchor,
+                focus,
+                key,
+                apply,
+            } => self.format_selection(anchor, focus, &key, apply),
             ProseCommand::SetHeaderEnabled { enabled } => {
                 self.set_side_enabled(bands::Side::Header, enabled)
             }

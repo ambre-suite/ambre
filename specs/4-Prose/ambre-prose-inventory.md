@@ -33,6 +33,7 @@
 | `prose-pagination` | A document becomes a sequence of measured pages. | partial | 48 |  |
 | `prose-selection` | Where the caret is, where it goes, and what a drag selects. | partial | 37 |  |
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 30 |  |
+| `prose-toolbar` | Select a few words and a small bar appears above them. | partial | 19 |  |
 | `prose-track-changes` | A reviewer edits without changing the document. | partial | 40 |  |
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | partial | 17 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
@@ -42,6 +43,5 @@
 | `prose-ruler` | A horizontal scale above the page, carrying three handles. | design-only | 5 |  |
 | `prose-slash-command` | Type a slash at the start of an empty line and a short list appears: a heading, a list, a table, a page break. | design-only | 16 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
-| `prose-toolbar` | Select a few words and a small bar appears above them. | design-only | 14 |  |
 
-**28 features: 13 implemented, 7 partial, 8 design-only. 638 contract rows, 3 loose.**
+**28 features: 13 implemented, 8 partial, 7 design-only. 643 contract rows, 3 loose.**

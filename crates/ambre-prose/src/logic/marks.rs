@@ -12,7 +12,9 @@ use loro::TreeID;
 use loro::LoroValue;
 
 use crate::doc;
-use crate::events::{BlockId, BlockType, ProseEvent, ProseOutcome, ProseRefusal, tree_id};
+use crate::events::{
+    ActiveMarks, BlockId, BlockType, ProseEvent, ProseOutcome, ProseRefusal, TriState, tree_id,
+};
 use crate::mark;
 use crate::style::{BlockContext, MarkSet, ResolvedStyle, resolve};
 
@@ -152,6 +154,169 @@ impl ProseState {
     pub fn marks_of(&self, id: &BlockId) -> Option<loro::LoroValue> {
         self.body_of(&tree_id(*id))
             .map(|body| body.get_richtext_value())
+    }
+}
+
+impl ProseState {
+    /// The marks a selection carries, one state per control of the format
+    /// bar (`PROSE-UI-054`). It writes nothing (`PROSE-UI-099`).
+    ///
+    /// A key carried by some of the selected text and not all of it is
+    /// mixed, whichever end carries it (`PROSE-UI-096`).
+    pub(super) fn read_marks(&self, anchor: (BlockId, u32), focus: (BlockId, u32)) -> ProseOutcome {
+        let mut fold = MarkFold::default();
+        for (block, (start, end)) in self.selected_spans(anchor, focus) {
+            let Some(LoroValue::List(runs)) = self.marks_of(&block) else {
+                continue;
+            };
+            let mut at = 0u32;
+            for run in runs.iter() {
+                let LoroValue::Map(fields) = run else {
+                    continue;
+                };
+                let Some(LoroValue::String(text)) = fields.get(RUN_TEXT) else {
+                    continue;
+                };
+                let len = crate::ui::chars(text);
+                let covered = end.min(at + len).saturating_sub(start.max(at));
+                if covered > 0 {
+                    fold.take(&marks_of_run(run));
+                }
+                at += len;
+            }
+        }
+        let mut outcome = ProseOutcome::nothing();
+        outcome.display.push(ProseEvent::SelectionMarks {
+            anchor,
+            focus,
+            marks: fold.finish(),
+        });
+        outcome
+    }
+
+    /// The text a selection covers, one span per block, in document order.
+    /// A block with no body, a table among them, contributes nothing.
+    /// Apply or remove one mark over every block a selection covers, in one
+    /// commit: one gesture is one undo item. A key the bar does not name is
+    /// refused, since only a presence mark needs no value.
+    pub(super) fn format_selection(
+        &mut self,
+        anchor: (BlockId, u32),
+        focus: (BlockId, u32),
+        key: &str,
+        apply: bool,
+    ) -> ProseOutcome {
+        if !BAR_KEYS.contains(&key) {
+            return ProseOutcome::refused(ProseRefusal::UnknownMark(key.to_owned()));
+        }
+        let spans: Vec<_> = self
+            .selected_spans(anchor, focus)
+            .into_iter()
+            .filter(|(_, (start, end))| start < end)
+            .collect();
+        if spans.is_empty() {
+            return Self::err_bad_range();
+        }
+        for (block, range) in spans {
+            let (start, end) = ordered(range);
+            let Some(body) = self.body_of(&tree_id(block)) else {
+                return Self::err_no_block(&tree_id(block));
+            };
+            if end > body.len_unicode() {
+                return Self::err_bad_range();
+            }
+            let written = if apply {
+                body.mark(start..end, key, "")
+            } else {
+                body.unmark(start..end, key)
+            };
+            if let Err(e) = written {
+                return Self::err_write(&format!("{e:?}"));
+            }
+        }
+        self.commit_with(Vec::new())
+    }
+
+    fn selected_spans(
+        &self,
+        anchor: (BlockId, u32),
+        focus: (BlockId, u32),
+    ) -> Vec<(BlockId, (u32, u32))> {
+        if anchor.0 == focus.0 {
+            let (a, b) = (anchor.1.min(focus.1), anchor.1.max(focus.1));
+            return vec![(anchor.0, (a, b))];
+        }
+        let order = self.document_order();
+        let at = |spot: (BlockId, u32)| order.iter().position(|id| *id == tree_id(spot.0));
+        let (Some(a), Some(f)) = (at(anchor), at(focus)) else {
+            return Vec::new();
+        };
+        let ((head, head_at), (tail, tail_at)) = if a <= f {
+            ((anchor, a), (focus, f))
+        } else {
+            ((focus, f), (anchor, a))
+        };
+        order
+            .get(head_at..=tail_at)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|id| {
+                let len = crate::ui::chars(&self.body_of(id)?.to_string());
+                let block = crate::events::block_id(*id);
+                let start = if block == head.0 { head.1 } else { 0 };
+                let end = if block == tail.0 { tail.1 } else { len };
+                Some((block, (start, end.min(len))))
+            })
+            .collect()
+    }
+}
+
+/// The five on-or-off keys of the format bar, in the order of
+/// [`ActiveMarks`].
+const BAR_KEYS: [&str; 5] = ["b", "i", "u", "s", "c"];
+
+/// What the selected runs carry, run by run.
+#[derive(Default)]
+struct MarkFold {
+    /// Per bar key: how many runs carry it, and how many do not.
+    counts: [(u32, u32); 5],
+    /// The link every run carries so far: `None` before the first run, and
+    /// `Some(None)` once two runs disagree or one carries none.
+    link: Option<Option<String>>,
+}
+
+impl MarkFold {
+    fn take(&mut self, marks: &MarkSet) {
+        for (key, (on, off)) in BAR_KEYS.iter().zip(self.counts.iter_mut()) {
+            if marks.contains_key(*key) {
+                *on += 1;
+            } else {
+                *off += 1;
+            }
+        }
+        let this = marks.get("a").cloned();
+        self.link = match self.link.take() {
+            None => Some(this),
+            Some(held) if held == this => Some(held),
+            Some(_) => Some(None),
+        };
+    }
+
+    fn finish(self) -> ActiveMarks {
+        let state = |(on, off): (u32, u32)| match (on, off) {
+            (0, _) => TriState::Off,
+            (_, 0) => TriState::On,
+            _ => TriState::Mixed,
+        };
+        let [bold, italic, underline, strikethrough, code] = self.counts.map(state);
+        ActiveMarks {
+            bold,
+            italic,
+            underline,
+            strikethrough,
+            code,
+            link: self.link.flatten(),
+        }
     }
 }
 
