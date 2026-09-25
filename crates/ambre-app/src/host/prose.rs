@@ -183,6 +183,7 @@ impl ProseView {
         self.publish_hover();
         self.take_intent();
         self.take_format();
+        self.take_slash_pick();
         self.publish_toolbar();
         // The input held behind a structural command goes out once the
         // Logic thread answered it, unless an edit still waits in the outbox.
@@ -234,6 +235,37 @@ impl ProseView {
         self.busy_pub.publish(self.outbox.is_busy());
     }
 
+    /// Act on the slash menu item picked with the pointer. It goes down the
+    /// input path, as Enter on the item would.
+    fn take_slash_pick(&mut self) {
+        if self.fatal || self.outbox.is_busy() {
+            return;
+        }
+        let Some(index) = self.annotations.slash_pick.get_untracked() else {
+            return;
+        };
+        self.annotations.slash_pick.set(None);
+        let (outbox, document_id) = (&mut self.outbox, self.document_id);
+        let mut send = |command| send_edit(outbox, document_id, command);
+        self.dirty |= self
+            .state
+            .handle_input(&ProseInput::SlashPick(index), &mut send);
+        self.busy_pub.publish(self.outbox.is_busy());
+    }
+
+    /// Publish the slash menu where the view placed it.
+    fn publish_slash(&self) {
+        let mut menu = self.state.slash_menu();
+        menu.anchor = menu.anchor.map(|(x, y)| to_css(x, y));
+        if self
+            .annotations
+            .slash
+            .with_untracked(|shown| *shown != menu)
+        {
+            self.annotations.slash.set(menu);
+        }
+    }
+
     /// Publish the format bar, and ask for the marks it still lacks
     /// (`PROSE-UI-057`). A read the channel drops is asked again next frame.
     fn publish_toolbar(&mut self) {
@@ -252,6 +284,8 @@ impl ProseView {
         {
             self.annotations.toolbar.set(bar);
         }
+        // The slash menu sits at the caret, and moves when the bar does.
+        self.publish_slash();
     }
 
     /// Publish the hovered suggestion, where the popover goes.

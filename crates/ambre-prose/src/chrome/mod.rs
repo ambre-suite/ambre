@@ -15,6 +15,7 @@ use ambre_commands::CommandId;
 
 use crate::events::{SuggestionKind, TriState};
 use crate::view::annotate::{AnnotationIntent, HoveredSuggestion, PanelThread};
+use crate::view::slash::SlashMenuState;
 use crate::view::toolbar::{ToolbarState, state_of};
 
 /// The signals the chrome and the shell share with the view. Every position
@@ -37,6 +38,10 @@ pub struct ProseSignals {
     /// A formatting command a control or a chord invoked, until the view
     /// drains it. Both write the same id here (`PROSE-UI-056`).
     pub format: RwSignal<Option<CommandId>>,
+    /// The slash menu, its anchor in CSS pixels (`PROSE-UI-090`).
+    pub slash: RwSignal<SlashMenuState>,
+    /// The menu item picked with the pointer, until the view drains it.
+    pub slash_pick: RwSignal<Option<usize>>,
 }
 
 impl Default for ProseSignals {
@@ -56,6 +61,8 @@ impl ProseSignals {
             followed: RwSignal::new(None),
             toolbar: RwSignal::new(ToolbarState::default()),
             format: RwSignal::new(None),
+            slash: RwSignal::new(SlashMenuState::default()),
+            slash_pick: RwSignal::new(None),
         }
     }
 }
@@ -239,5 +246,49 @@ fn control(signals: ProseSignals, id: CommandId, pressed: &'static str) -> impl 
         >
             {text}
         </button>
+    }
+}
+
+/// How far below the slash's line the menu sits, in CSS pixels.
+const MENU_DROP_PX: f32 = 4.0;
+
+/// The slash menu under the caret
+/// (`features/ambre-spec-prose-slash-command.md section 4`).
+///
+/// It renders what the view published. A picked item goes back to the view
+/// by its place in the list: the menu sends nothing itself (`PROSE-UI-088`,
+/// `PROSE-UI-089`).
+#[component]
+pub fn ProseSlashMenu(signals: ProseSignals) -> impl IntoView {
+    move || {
+        let menu = signals.slash.get();
+        let (x, y) = menu.anchor?;
+        let style = format!(
+            "position: fixed; left: {x}px; top: {}px; z-index: 62;",
+            y + MENU_DROP_PX
+        );
+        let items = menu.items.iter().enumerate().map(|(index, label)| {
+            let selected = if index == menu.selected {
+                "true"
+            } else {
+                "false"
+            };
+            view! {
+                <li
+                    class="ambre-prose-slash-item"
+                    role="option"
+                    aria-selected=selected
+                    on:mousedown=|ev: web_sys::MouseEvent| ev.prevent_default()
+                    on:click=move |_| signals.slash_pick.set(Some(index))
+                >
+                    {*label}
+                </li>
+            }
+        });
+        Some(view! {
+            <ul class="ambre-prose-slash-menu" style=style role="listbox" aria-label="Insert">
+                {items.collect_view()}
+            </ul>
+        })
     }
 }

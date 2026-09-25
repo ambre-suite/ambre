@@ -87,6 +87,9 @@ pub enum ProseInput {
         y: f32,
     },
     Release,
+    /// An item of the slash menu picked with the pointer, by its place in
+    /// the filtered list.
+    SlashPick(usize),
 }
 
 /// A command sent, as the view keeps track of it.
@@ -120,7 +123,9 @@ impl Sent {
             }
             ProseCommand::SplitBlock { .. }
             | ProseCommand::DeleteRange { .. }
-            | ProseCommand::InsertBlock { .. } => Self::Barrier,
+            | ProseCommand::InsertBlock { .. }
+            | ProseCommand::InsertTable { .. }
+            | ProseCommand::InsertToc { .. } => Self::Barrier,
             _ => return None,
         })
     }
@@ -232,8 +237,14 @@ impl ProseUiState {
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> bool {
         match input {
-            ProseInput::Text(text) => self.type_text(text, send),
-            ProseInput::Key { key, shift, ctrl } => self.key(*key, *shift, *ctrl, send),
+            ProseInput::Text(text) => self.type_into_menu(text, send),
+            ProseInput::Key { key, shift, ctrl } => {
+                if let Some(consumed) = self.menu_key(*key, *shift, *ctrl, send) {
+                    return consumed;
+                }
+                self.key(*key, *shift, *ctrl, send)
+            }
+            ProseInput::SlashPick(index) => self.pick(*index, send),
             ProseInput::Press {
                 x,
                 y,
@@ -255,7 +266,11 @@ impl ProseUiState {
                         }
                         true
                     }
-                    None => self.press(*x, *y, *shift, *now_ms, send),
+                    None => {
+                        // A press on the canvas is outside the menu.
+                        self.slash = None;
+                        self.press(*x, *y, *shift, *now_ms, send)
+                    }
                 }
             }
             ProseInput::Drag { x, y } => {
@@ -264,6 +279,105 @@ impl ProseUiState {
             }
             ProseInput::Release => self.dragging.take().is_some(),
         }
+    }
+
+    /// Type a run of text, and open, narrow or close the slash menu with it.
+    ///
+    /// The text always takes the ordinary path (`PROSE-UI-059`): the menu
+    /// only watches it, and opening one writes nothing else (`PROSE-UI-092`).
+    fn type_into_menu(
+        &mut self,
+        text: &str,
+        send: &mut dyn FnMut(ProseCommand) -> SendResult,
+    ) -> bool {
+        let text: String = text.chars().filter(|c| !c.is_control()).collect();
+        if self.slash.is_some() && text.chars().any(char::is_whitespace) {
+            self.slash = None;
+        }
+        let at = self.cursor.map(|c| (c.block_id, c.offset));
+        let opens = self.slash.is_none()
+            && self.selection().is_none()
+            && text
+                .strip_prefix('/')
+                .is_some_and(|rest| !rest.chars().any(char::is_whitespace))
+            && at.is_some_and(|spot| self.opens_menu(spot));
+        let consumed = self.type_text(&text, send);
+        let typed = self.cursor.map(|c| (c.block_id, c.offset)) != at;
+        if !typed {
+            return consumed;
+        }
+        if opens && let Some(origin) = at {
+            self.slash = Some(crate::view::slash::SlashMenu {
+                origin,
+                query: text.chars().skip(1).collect(),
+                selected: 0,
+            });
+        } else if let Some(menu) = &mut self.slash {
+            menu.query.push_str(&text);
+            menu.selected = 0;
+        }
+        consumed
+    }
+
+    /// A key while the slash menu is open. `None` leaves the key to the
+    /// editor, once the menu has closed if the key closes it.
+    fn menu_key(
+        &mut self,
+        key: ProseKey,
+        shift: bool,
+        ctrl: bool,
+        send: &mut dyn FnMut(ProseCommand) -> SendResult,
+    ) -> Option<bool> {
+        let menu = self.slash.as_mut()?;
+        match key {
+            ProseKey::Up | ProseKey::Down if !shift && !ctrl => {
+                self.step_menu(key == ProseKey::Down);
+                Some(true)
+            }
+            ProseKey::Enter if !crate::view::slash::filter(&menu.query).is_empty() => {
+                let selected = menu.selected;
+                Some(self.pick(selected, send))
+            }
+            ProseKey::Escape => {
+                self.slash = None;
+                Some(true)
+            }
+            // The Backspace over the slash closes the menu; one over the
+            // query narrows it less. Both delete like any Backspace.
+            ProseKey::Backspace if !ctrl && menu.query.pop().is_some() => {
+                menu.selected = 0;
+                None
+            }
+            _ => {
+                self.slash = None;
+                None
+            }
+        }
+    }
+
+    /// Confirm an item. The slash and the query leave the origin block, then
+    /// the item's one command is sent (`PROSE-UI-060`, `PROSE-UI-093`). The
+    /// menu closes (`PROSE-UI-175`).
+    fn pick(&mut self, index: usize, send: &mut dyn FnMut(ProseCommand) -> SendResult) -> bool {
+        let Some(menu) = self.slash.take() else {
+            return false;
+        };
+        let Some(item) = crate::view::slash::filter(&menu.query).get(index).copied() else {
+            self.slash = Some(menu);
+            return true;
+        };
+        let (start, end) = menu.span();
+        let erase = ProseCommand::DeleteText {
+            block_id: menu.origin.0,
+            range: (start, end),
+        };
+        if !send(erase).accepted() {
+            return true;
+        }
+        self.draft.clear();
+        self.set_caret(menu.origin);
+        send(item.command.resolve(menu.origin.0));
+        true
     }
 
     /// Type a run of text at the caret (`PROSE-UI-136`, `PROSE-UI-176`).

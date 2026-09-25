@@ -12,6 +12,7 @@ pub mod caret;
 pub mod column;
 pub mod hit;
 pub mod paint;
+pub mod slash;
 pub mod toolbar;
 
 use std::collections::HashMap;

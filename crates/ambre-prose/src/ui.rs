@@ -269,6 +269,8 @@ pub struct ProseUiState {
     )>,
     /// The selection and the layout version the last read was asked for.
     pub(crate) marks_asked: Option<((crate::view::caret::Spot, crate::view::caret::Spot), u64)>,
+    /// The slash menu, while it is open.
+    pub(crate) slash: Option<crate::view::slash::SlashMenu>,
     /// A change arrived since the last tick.
     changed: bool,
     /// When the text was last seen changing, while a recount is owed.
@@ -528,6 +530,10 @@ impl ProseUiState {
             let (inflight, edits) = rebase::transform_all(self.inflight.make_contiguous(), edits);
             self.inflight = inflight.into();
             self.draft.shift(&edits);
+            // The slash moves with the text around it.
+            if let Some(menu) = &mut self.slash {
+                menu.origin.1 = rebase::through_all(menu.origin.1, menu.origin.0, &edits);
+            }
             if let Some(cursor) = &mut self.cursor {
                 cursor.offset = rebase::through_all(cursor.offset, cursor.block_id, &edits);
                 if self.dragging.is_none()
@@ -538,6 +544,13 @@ impl ProseUiState {
             }
         }
         for gone in removed {
+            if self
+                .slash
+                .as_ref()
+                .is_some_and(|menu| menu.origin.0 == *gone)
+            {
+                self.slash = None;
+            }
             if self.draft.block_id == Some(*gone) {
                 self.draft.clear();
             }

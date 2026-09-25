@@ -93,7 +93,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` The caret in a footnote | MVP | a note's text lives in its entry, not in a block, and the caret, the selection and every text command address a block. Putting the caret in a note needs an address for that text on the bus, and the edits typed there to reach it |
 | `[x]` The format bar | MVP | the contextual format bar over a selection, its mixed state, and its ranges caught up with concurrent edits |
 | `[ ]` The format bar's other controls | V1 | the bar carries the five presence marks alone. The link, heading, quote, colour and size controls, superscript, subscript and clearing the formatting reach no control yet |
-| `[ ]` The slash menu | MVP | the slash menu: where it opens, what it records, the one command it sends and how it closes |
+| `[x]` The slash menu | MVP | the slash menu: where it opens, what it records, the one command it sends and how it closes |
+| `[ ]` The slash menu's other items | V1 | the menu reaches nine features through twelve items. A picture, a footnote, a cross reference, a comment, an equation and the heading levels past three have no item |
 | `[ ]` Input-method composition | MVP | input-method composition through the hidden text field, its preview on the canvas, and double-click word selection |
 | `[x]` Collaborative cursors and annotations | MVP | remote carets, comment highlights, track-change highlights |
 | `[ ]` Ruler, clipboard and inertial scroll | MVP | the interactive ruler, copy and paste, inertial scroll |

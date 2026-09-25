@@ -1455,3 +1455,267 @@ fn a_mark_sent_before_a_remote_insertion_lands_on_its_text() {
         .collect();
     assert_eq!(bold, "world");
 }
+
+/// Put the caret at a place, with no selection.
+fn caret_at(rig: &mut Rig, block: BlockId, offset: u32) {
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: block,
+        offset,
+        anchor: None,
+    });
+}
+
+/// `PROSE-UI-058`: a slash opens the menu at the start of a block, on an
+/// empty one or before its first character, and nowhere else.
+#[test]
+fn a_slash_opens_the_menu_only_at_the_start_of_a_block() {
+    let mut rig = Rig::new(&["hello", ""]);
+    let (text, empty) = (rig.blocks()[0], rig.blocks()[1]);
+    caret_at(&mut rig, text, 3);
+    rig.type_text("/");
+    assert!(
+        !rig.ui.slash_menu().visible(),
+        "a slash mid-word is a slash"
+    );
+    caret_at(&mut rig, empty, 0);
+    rig.type_text("/");
+    assert!(rig.ui.slash_menu().visible());
+    rig.key(ProseKey::Escape, false, false);
+    caret_at(&mut rig, text, 0);
+    rig.type_text("/");
+    assert!(rig.ui.slash_menu().visible());
+}
+
+/// `PROSE-UI-091`, `PROSE-UI-092`, `PROSE-UI-059`: opening records the
+/// block and the slash's offset, and the slash and the query leave as
+/// ordinary insertions, with nothing else.
+#[test]
+fn the_slash_and_the_query_reach_the_document_as_text() {
+    let mut rig = Rig::new(&[""]);
+    let block = rig.blocks()[0];
+    caret_at(&mut rig, block, 0);
+    rig.type_text("/");
+    let origin = rig.ui.slash.as_ref().map(|menu| menu.origin);
+    assert_eq!(origin, Some((block, 0)));
+    rig.type_text("tab");
+    rig.deliver();
+    assert!(
+        rig.sent
+            .iter()
+            .all(|c| matches!(c, ProseCommand::InsertText { .. }))
+    );
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("/tab"));
+    assert_eq!(rig.ui.slash_menu().query, "tab");
+}
+
+/// `PROSE-UI-060`, `PROSE-UI-093`, `PROSE-UI-174`, `PROSE-UI-175`: Enter
+/// takes the slash and the query out of the origin block. It sends the
+/// item's command once, addressed to that block, and closes the menu.
+#[test]
+fn enter_erases_the_query_then_sends_one_command() {
+    let mut rig = Rig::new(&[""]);
+    let block = rig.blocks()[0];
+    caret_at(&mut rig, block, 0);
+    rig.type_text("/");
+    rig.type_text("tab");
+    rig.deliver();
+    let before = rig.sent.len();
+    rig.key(ProseKey::Enter, false, false);
+    assert!(!rig.ui.slash_menu().visible());
+    let sent: Vec<_> = rig.sent.split_off(before);
+    assert_eq!(
+        sent,
+        vec![
+            ProseCommand::DeleteText {
+                block_id: block,
+                range: (0, 4),
+            },
+            ProseCommand::InsertTable {
+                parent_id: None,
+                after_id: Some(block),
+                rows: 3,
+                cols: 3,
+            },
+        ]
+    );
+    rig.deliver();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some(""));
+    let roots = rig.logic.root_blocks();
+    let next = roots.iter().position(|b| *b == block).map(|i| roots[i + 1]);
+    assert_eq!(
+        next.and_then(|b| rig.logic.block_type_of(&b)),
+        Some(crate::events::BlockType::Table)
+    );
+}
+
+/// `PROSE-UI-061`, `PROSE-UI-095`: four gestures close the menu: Escape, a
+/// space, a press outside and the Backspace over the slash. None of them
+/// writes beyond what the key itself does.
+#[test]
+fn closing_the_menu_leaves_the_text_as_typed() {
+    let mut rig = Rig::new(&["", "below"]);
+    let (block, below) = (rig.blocks()[0], rig.blocks()[1]);
+    let open = |rig: &mut Rig| {
+        caret_at(rig, block, 0);
+        rig.type_text("/");
+        rig.deliver();
+        rig.lay();
+        assert!(rig.ui.slash_menu().visible());
+        rig.sent.len()
+    };
+    let sent = open(&mut rig);
+    rig.key(ProseKey::Escape, false, false);
+    assert!(!rig.ui.slash_menu().visible());
+    assert_eq!(rig.sent.len(), sent, "Escape sends nothing");
+    rig.deliver();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("/"));
+
+    // The slash is still there: a second one would sit after it.
+    rig.key(ProseKey::Backspace, false, false);
+    rig.deliver();
+    let sent = open(&mut rig);
+    let point = rig.point_of(below, 2);
+    rig.press(point, false, 0.0);
+    assert!(!rig.ui.slash_menu().visible());
+    assert_eq!(rig.sent.len(), sent, "a press outside sends nothing");
+
+    caret_at(&mut rig, block, 1);
+    rig.key(ProseKey::Backspace, false, false);
+    rig.deliver();
+    open(&mut rig);
+    rig.type_text(" ");
+    assert!(!rig.ui.slash_menu().visible());
+    rig.deliver();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("/ "));
+
+    rig.key(ProseKey::Backspace, false, false);
+    rig.key(ProseKey::Backspace, false, false);
+    rig.deliver();
+    open(&mut rig);
+    rig.key(ProseKey::Backspace, false, false);
+    assert!(!rig.ui.slash_menu().visible());
+    rig.deliver();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some(""));
+}
+
+/// `PROSE-UI-089`, `PROSE-UI-087`: the arrows move the menu's selection and
+/// send nothing, and the document holds the typed text alone.
+#[test]
+fn moving_through_the_menu_sends_nothing() {
+    let mut rig = Rig::new(&[""]);
+    let block = rig.blocks()[0];
+    caret_at(&mut rig, block, 0);
+    rig.type_text("/");
+    rig.type_text("h");
+    rig.deliver();
+    let sent = rig.sent.len();
+    let before = rig.logic.export_snapshot();
+    rig.key(ProseKey::Down, false, false);
+    rig.key(ProseKey::Down, false, false);
+    rig.key(ProseKey::Up, false, false);
+    assert_eq!(rig.ui.slash_menu().selected, 1);
+    assert_eq!(rig.sent.len(), sent);
+    rig.deliver();
+    assert_eq!(rig.logic.export_snapshot(), before);
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("/h"));
+}
+
+/// `PROSE-UI-090`: a peer sees the typed text and nothing of the menu.
+#[test]
+fn a_peer_sees_the_slash_and_no_menu() {
+    let mut rig = Rig::new(&[""]);
+    let block = rig.blocks()[0];
+    let mut peer = a_collaborator(&rig);
+    caret_at(&mut rig, block, 0);
+    rig.type_text("/");
+    rig.type_text("ta");
+    rig.key(ProseKey::Down, false, false);
+    rig.deliver();
+    assert!(rig.ui.slash_menu().visible());
+    peer.import_snapshot(&rig.logic.export_snapshot())
+        .expect("the snapshot imports");
+    assert_eq!(peer.text_of(&block).as_deref(), Some("/ta"));
+    assert_eq!(peer.root_blocks(), rig.logic.root_blocks());
+}
+
+/// `PROSE-UI-094`: an item leaves every other block, and the text after the
+/// query, as they were.
+#[test]
+fn an_item_touches_the_origin_block_alone() {
+    let mut rig = Rig::new(&["hello", "other"]);
+    let (block, other) = (rig.blocks()[0], rig.blocks()[1]);
+    caret_at(&mut rig, block, 0);
+    rig.type_text("/");
+    rig.type_text("sep");
+    rig.deliver();
+    rig.key(ProseKey::Enter, false, false);
+    rig.deliver();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("hello"));
+    assert_eq!(rig.logic.text_of(&other).as_deref(), Some("other"));
+}
+
+/// `PROSE-UI-062`, `PROSE-UI-088`: every item resolves to a command the
+/// plane declares, and the Logic thread carries each one out.
+#[test]
+fn every_item_is_a_command_the_plane_carries_out() {
+    for index in 0..crate::view::slash::ITEMS.len() {
+        let mut rig = Rig::new(&[""]);
+        let block = rig.blocks()[0];
+        let roots = rig.logic.root_blocks().len();
+        caret_at(&mut rig, block, 0);
+        rig.type_text("/");
+        rig.deliver();
+        rig.input(ProseInput::SlashPick(index));
+        rig.deliver();
+        let turned = rig.logic.block_type_of(&block) == Some(crate::events::BlockType::Heading);
+        assert!(
+            turned || rig.logic.root_blocks().len() > roots,
+            "item {index} changed nothing"
+        );
+    }
+}
+
+/// `PROSE-UI-193`: a collaborator's insertion before the slash moves the
+/// origin, and Enter takes the slash and the query, and nothing else.
+#[test]
+fn a_remote_insertion_before_the_slash_moves_the_origin() {
+    let mut rig = Rig::new(&["tail"]);
+    let block = rig.blocks()[0];
+    caret_at(&mut rig, block, 0);
+    rig.type_text("/");
+    rig.type_text("sep");
+    rig.deliver();
+    let mut other = a_collaborator(&rig);
+    receive(
+        &mut rig,
+        &mut other,
+        ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "ab".to_owned(),
+        },
+    );
+    assert_eq!(rig.ui.slash.as_ref().map(|m| m.origin), Some((block, 2)));
+    rig.key(ProseKey::Enter, false, false);
+    rig.deliver();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("abtail"));
+}
+
+/// `PROSE-UI-194`: the query keeps the items whose label holds it, case
+/// folded, in the menu's order.
+#[test]
+fn the_query_narrows_the_items_in_order() {
+    let labels = |q: &str| -> Vec<&str> {
+        crate::view::slash::filter(q)
+            .iter()
+            .map(|item| item.label)
+            .collect()
+    };
+    assert_eq!(labels("HEAD"), vec!["Heading 1", "Heading 2", "Heading 3"]);
+    assert_eq!(
+        labels("list"),
+        vec!["Bullet list", "Numbered list", "Task list"]
+    );
+    assert_eq!(labels("tab"), vec!["Table", "Table of contents"]);
+    assert!(labels("zzz").is_empty());
+}

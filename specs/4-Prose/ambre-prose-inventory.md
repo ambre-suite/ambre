@@ -32,6 +32,7 @@
 | `prose-page-rendering` | What a page looks like on the canvas. | partial | 19 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | partial | 48 |  |
 | `prose-selection` | Where the caret is, where it goes, and what a drag selects. | partial | 37 |  |
+| `prose-slash-command` | Type a slash at the start of an empty line and a short list appears: a heading, a list, a table, a page break. | partial | 20 |  |
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 30 |  |
 | `prose-toolbar` | Select a few words and a small bar appears above them. | partial | 19 |  |
 | `prose-track-changes` | A reviewer edits without changing the document. | partial | 40 |  |
@@ -41,7 +42,6 @@
 | `prose-images` | A picture in the document. | design-only | 38 |  |
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | design-only | 8 |  |
 | `prose-ruler` | A horizontal scale above the page, carrying three handles. | design-only | 5 |  |
-| `prose-slash-command` | Type a slash at the start of an empty line and a short list appears: a heading, a list, a table, a page break. | design-only | 16 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 13 implemented, 8 partial, 7 design-only. 643 contract rows, 3 loose.**
+**28 features: 13 implemented, 9 partial, 6 design-only. 647 contract rows, 3 loose.**
