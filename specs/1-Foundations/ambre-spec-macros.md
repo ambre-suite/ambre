@@ -28,15 +28,19 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MACRO`.
 | `MACRO-001` | `INV` | A macro MUST be stored sealed, like any other content of the document. | `ZK-001` | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACRO-002` | `INV` | A macro MUST run only in a member client, never on the relay. | `ZK-004`; this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACRO-003` | `INV` | A macro MUST edit the document only through the commands the interface offers. | `1-Foundations/ambre-spec-commands.md section 2` (`UI-THREAD-019`) | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A second write path would bypass the role check and the undo history that the commands already carry | unimplemented |
-| `MACRO-004` | `INV` | A macro MUST act with the lower of two roles: its integrator's and its running user's. | `SYNC-016`; this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). With the running user's role alone, an editor's macro run by an owner would act as an owner, which its integrator never was | unimplemented |
+| `MACRO-004` | `INV` | A macro MUST act with the lower of two roles: its integrator's and its running user's. | `SYNC-016`; `1-Foundations/ambre-spec-membership.md section 3`; this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). With the running user's role alone, an editor's macro run by an owner would act as an owner, which its integrator never was | unimplemented |
 | `MACRO-005` | `INV` | A macro MUST NOT reach the commands that manage members, roles, sharing or keys, whatever it is granted. | `1-Foundations/ambre-spec-membership.md section 3`; derived | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). These commands change who can read the document, and no approval of a macro is informed enough to grant that | unimplemented |
 | `MACRO-006` | `INV` | A macro MUST NOT delete the document. | derived | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACRO-007` | `INV` | A macro MUST reach no key. | `1-Foundations/ambre-spec-architecture.md section 2` (`ARCH-004`) | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACRO-008` | `INV` | A macro MUST reach no storage of the Ambre client. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). The local store holds every document the user opened, and a macro from one document must not read another | unimplemented |
 | `MACRO-009` | `INV` | A macro MUST reach another document only through a picker its user operates. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A macro that named a document by id could copy, into a shared one, a document its integrator cannot open | unimplemented |
-| `MACRO-010` | `INV` | The browser MUST block every network request a macro makes on its own. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). Removing the network functions from the sandbox in code is no boundary: one function forgotten is a leak, and the browser has dozens | unimplemented |
+| `MACRO-010` | `INV` | The browser MUST block every network request of a macro, except to a domain its user approved for that version. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). Removing the network functions from the sandbox in code is no boundary: one function forgotten is a leak, and the browser has dozens | unimplemented |
+| `MACRO-046` | `INV` | The sandbox MUST be served from a registrable domain other than the client's. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). Browsers split processes by site, and a subdomain of the client is the same site: the sandbox could share the process of the Sync worker and its keys | unimplemented |
+| `MACRO-047` | `INV` | The client MUST NOT delegate cross-origin isolation to the sandbox. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). Without it the sandbox has no shared memory and only coarse timers, which is the defence against a timing attack on the keys where processes are shared | unimplemented |
+| `MACRO-048` | `INV` | The sandbox MUST serve the embedder and resource policies that a cross-origin isolated page requires of a frame. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). The client is cross-origin isolated for its shared memory (`ARCH-012`), and it refuses to load a frame that lacks them | unimplemented |
 | `MACRO-011` | `INV` | A dialog a macro opens MUST offer no masked input field. | this spec section 4 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A macro that drew a passphrase prompt would harvest the one secret that opens every document. The rule slows a lure and no more: a plain field that asks for the passphrase still works, and `MACRO-012` is the defence that holds | unimplemented |
 | `MACRO-012` | `OBS` | A dialog a macro opens MUST name the macro and its integrator. | this spec section 4 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MACRO-045` | `OBS` | A message a macro posts in a conversation MUST show that a macro posted it. | this spec section 4 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A message that looked typed would let a macro speak for its user | unimplemented |
 | `MACRO-013` | `OBS` | A macro MUST show its publisher and its integrator. | this spec section 4 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACRO-014` | `INV` | An approval MUST bind one exact version of a macro, in one document. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). An approval that survived an edit would let any editor swap the code under a trust already given | unimplemented |
 | `MACRO-015` | `INV` | The code that runs MUST be derived from the approved source alone. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A document that stored a compiled form beside the source could show one and run the other | unimplemented |
@@ -79,8 +83,10 @@ A user presses the button of an approved macro. Its edits land as one change.
 | `MACRO-029` | `PRE` | A macro whose integrator has left the document MUST NOT run until a member integrates it again. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). An integrator who left holds no role, so the lower of the two roles is none | unimplemented |
 | `MACRO-030` | `POST` | A run MUST read the document as it stood when the run began, plus its own edits. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). Peers keep editing during a run, and a macro that read their edits halfway would compute on two states at once | unimplemented |
 | `MACRO-031` | `POST` | A run MUST undo as one step. | `1-Foundations/ambre-spec-undo.md section 2` (`UNDO-001`) | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MACRO-049` | `PRE` | A run MUST commit only if the lower of the two roles still allows each of its commands. | `SYNC-016`; this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A role lowered during the run would otherwise be read from before the change | unimplemented |
 | `MACRO-032` | `FRAME` | A run MUST NOT block the interface. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A loop that never ends is the first macro most users write | unimplemented |
-| `MACRO-033` | `FAIL` | A run that exceeds its time budget MUST be stopped and leave the document unchanged. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MACRO-033` | `FAIL` | A run that exceeds its time budget MUST be stopped and leave the document unchanged. | `1-Foundations/ambre-spec-budgets.md section 1`; this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MACRO-050` | `FAIL` | A run whose replay fails on one command MUST leave the document unchanged. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A peer can delete, during the run, the row a command targets; half a run applied is an edit nobody asked for | unimplemented |
 | `MACRO-034` | `FAIL` | A run that raises an error MUST leave the document unchanged and report the error. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.5 Trigger a macro on an edit
@@ -97,20 +103,20 @@ A macro declares that it runs after a kind of edit, such as a new row.
 
 ### 1.6 Call the network from a macro
 
-A macro asks for one address its user approved. The call leaves like any other request.
+A macro calls an address its user approved. The browser refuses any other.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MACRO-040` | `PRE` | A macro MUST call only a domain its user approved for that version. | this spec section 3 | not built | unbuilt -- lands with the `Macro network access` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `MACRO-041` | `POST` | A macro call MUST leave from the Sync worker, like every network call. | `1-Foundations/ambre-spec-architecture.md section 2` (`ARCH-005`) | not built | unbuilt -- lands with the `Macro network access` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MACRO-041` | `POST` | A macro call MUST leave from the sandbox, never from the Sync worker. | this spec section 3 | not built | unbuilt -- lands with the `Macro network access` Story (`ambre-roadmap.md` post-V1). Through Sync, the domain check would be code, the content policy of the whole client would open to every approved domain, and the worker that holds the keys would parse a third party's answers | unimplemented |
 | `MACRO-042` | `FRAME` | A macro call MUST carry no credential of the user. | this spec section 3 | not built | unbuilt -- lands with the `Macro network access` Story (`ambre-roadmap.md` post-V1). A call that carried the session token would let the macro act on the relay as its user | unimplemented |
 | `MACRO-043` | `FAIL` | A call to a domain not approved MUST be refused before any byte leaves. | this spec section 3 | not built | unbuilt -- lands with the `Macro network access` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
-* **Budget.** none of its own yet: the time budget that `MACRO-033` enforces has no row in
-  `ambre-spec-budgets.md`, and section 6 names it.
+* **Budget.** the macro rows of `ambre-spec-budgets.md section 1`. Each run has a ceiling, one for a
+  gesture and one for a trigger, and the fork a run reads has a target.
 * **Boundary.** a macro is sealed like content (`ZK-001`) and runs on no relay (`ZK-004`). A call a
   user approves sends what the macro chooses to a third party, and section 6 names that exit.
-* **Verification.** 0 `verified`, 44 `unimplemented`. Nothing here is built.
+* **Verification.** 0 `verified`, 50 `unimplemented`. Nothing here is built.
 
 ---
 
@@ -211,12 +217,28 @@ pub enum ApprovalSource {
 
 **Where it runs.** In a worker the browser compiles and optimizes like any page script. The worker
 lives in a frame served from an origin of its own, sandboxed without its parent's origin. That
-origin shares no storage with Ambre (`MACRO-008`). Its content policy forbids every connection, so
-the browser refuses a request the macro makes on its own (`MACRO-010`).
+origin shares no storage with Ambre (`MACRO-008`). The frame comes in two variants, and the browser
+holds the network of each (`MACRO-010`).
+
+| Variant | Served for | Header policy | What the macro reaches |
+|---|---|---|---|
+| closed | a macro granted no domain | `connect-src 'none'` | nothing |
+| network | a macro granted one domain or more | `connect-src https:` | the approved domains only, once narrowed |
+
+In the network variant, Ambre's bootstrap adds a policy in a `meta` element before it creates the
+worker. That policy lists the approved domains, and the browser enforces the intersection of both.
+The worker starts from a `blob:` address, so it inherits the policy of the frame. The server that
+serves the frame never learns which domains a macro calls.
 
 The frame speaks to the Logic thread by message only. It is outside the two instances of the client
 (`ARCH-001`), and it holds none of their memory. Its permissions policy denies the camera, the
 microphone and the location.
+
+The sandbox domain is a registrable domain of its own, not a subdomain of the client (`MACRO-046`).
+Its frame serves `Cross-Origin-Embedder-Policy` and `Cross-Origin-Resource-Policy: cross-origin`,
+which the isolated client demands of it (`MACRO-048`). The client never grants it
+`cross-origin-isolated`, so the macro gets no shared memory and coarse timers (`MACRO-047`). A
+deployment without a second domain has no macros.
 
 **The language.** TypeScript limited to syntax that erases, or plain JavaScript. The document stores
 the source alone. Before a run, the sandbox erases the types with a stripper of a pinned version.
@@ -229,7 +251,7 @@ asynchronous and works on ranges, never cell by cell, because each call crosses 
 // Common to every application
 await ambre.ui.alert("Done");                       // dialogs drawn by Ambre, not by the sandbox
 const token = await ambre.secrets.get("API_KEY");   // this user's value, never the document's
-const res = await ambre.net.fetch(url, { token });  // approved domains only, sent by Sync
+const res = await ambre.net.fetch(url, { token });  // approved domains only, held by the browser
 
 // One namespace per application
 const r = ambre.trame.sheet("Q3").range("A2:D500");
@@ -253,14 +275,21 @@ calls later.
 
 1. the client checks the approval of the current digest, and that the integrator is a member
    (`MACRO-028`, `MACRO-029`);
-2. the Logic thread takes a snapshot for the run to read (`MACRO-030`);
+2. the Logic thread forks the document; the run reads and writes that fork alone (`MACRO-030`);
 3. the sandbox erases the types and starts the code under a time budget (`MACRO-032`);
-4. each command the macro calls is checked against the lower of the two roles, and staged
-   (`MACRO-004`);
-5. a network call goes to Sync with the approved domain, or is refused (`MACRO-040`, `MACRO-043`);
-6. at the end, the staged commands commit as one transaction and one undo step (`MACRO-031`);
-7. a run past its budget is terminated; it and a run that raises commit nothing (`MACRO-033`,
+4. each command the macro calls is checked against the lower of the two roles, applied to the fork,
+   and recorded (`MACRO-004`);
+5. a network call leaves the sandbox, and the browser refuses a domain not approved (`MACRO-040`,
+   `MACRO-043`);
+6. at the end, the roles are checked again (`MACRO-049`);
+7. the recorded commands replay on the document as local edits, in one undo step (`MACRO-031`).
+   One command that fails drops the whole replay (`MACRO-050`);
+8. a run past its budget is terminated; it and a run that raises commit nothing (`MACRO-033`,
    `MACRO-034`).
+
+The fork serves reads only. Its edits come from a peer of their own, and the undo history keeps
+local edits alone. Imported, they would make the run impossible to undo. The replay costs each
+command twice, and the fork costs one export and one import of the document.
 
 **A trigger, in steps.** A local edit that matches the kind of a trigger queues its macro, if the
 user granted automatic runs (`MACRO-035`). A remote delta queues nothing (`MACRO-037`), and the
@@ -290,6 +319,7 @@ commit of a run queues nothing (`MACRO-038`).
 | :--- | :--- | :--- |
 | A macro runs in a member client | a macro run by the relay, as Apps Script runs on the server | the relay cannot open the document (`ZK-004`). A relay able to run a macro would be a relay able to read |
 | A worker the browser optimizes | an interpreter embedded in the Logic instance | far slower than the browser's compiler on a loop over a sheet, and several megabytes more in the Logic instance. Its one gain, counting each instruction, is not needed: a worker stops when terminated |
+| A registrable domain for the sandbox | a frame with an opaque origin, served from the client's own page | no second domain to deploy, but the frame is always the same site as the client, so it always shares the process of the keys |
 | The sandbox is enforced by the browser | a worker whose network functions are removed in code | the global scope of a worker holds dozens of ways out, and a sandbox that lists them by hand fails at the first one it forgets |
 | The lower of the integrator's and the running user's role | the running user's role alone | an editor could integrate a macro that shares the document, and wait for an owner to press its button |
 | The lower of the integrator's and the running user's role | the publisher's role | a marketplace publisher is never a member, so its role is none and no published macro could write |
@@ -302,33 +332,51 @@ commit of a run queues nothing (`MACRO-038`).
 | TypeScript that erases, or JavaScript | a language of Ambre's own | a user who writes one macro a year will not learn a new language for it |
 | TypeScript that erases, or JavaScript | WebAssembly modules in any language, now | a user can read a short source before approving it, and cannot read a binary. The interface stays plain data so that a later WebAssembly binding costs no redesign |
 | A cell calls a named formula | a macro function called from a cell | a cell must compute the same value on every client, inside a recompute that cannot wait on a worker. Trame's named formulas give custom functions without a second language |
+| The recorded commands replay on the document | the fork's edits imported into the document | they arrive as a remote peer's edits, and the undo history keeps local ones alone: the run could not be undone (`MACRO-031`) |
+| The recorded commands replay on the document | edits written straight into the document as the run goes | peers would see half a run, and a run that failed would have to be undone in front of them (`MACRO-033`) |
 | An approval binds one version, in one document | an approval per author, or shared across documents | an editor could change the code after the approval. Approving a network call approves sending this document, not every document the macro lands in |
 | An edit trigger runs in the editing client only | every client that sees the edit runs it | each online member would apply the effect once more |
 | No timed trigger | a trigger that runs every hour | no client is sure to be online at the hour. A timed job is a machine member (`ambre-spec-machine-access.md`) |
 | No ambient network | network open to every macro, as in VBA | one approved click would send the whole document in clear to any address |
+| A call leaves from the sandbox | a call relayed by the Sync worker | the check would be code, the policy of the whole client would open to every approved domain, and the worker holding the keys would parse hostile answers |
+| The approved domains narrow the policy on the client | a list of domains fixed in the deployment's policy | macros could reach only the interfaces the host picked in advance |
 
 ---
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Every row is unbuilt.** No document carries code today.
-* **No budget row for a run.** `MACRO-033` stops a run that exceeds a time no row sizes yet.
-* **Process isolation is not verified.** Code another member wrote runs compiled in the user's
-  browser. The Sync worker holds the keys, and the sandbox must not share its process. Each browser
-  must be checked for that before the Document macros Story lands.
+* **Process isolation is partial on mobile.** A distinct site gets its own process on desktop
+  browsers. Chrome on Android isolates only some sites, Firefox on Android none, and Safari is
+  still rolling it out. There, the macro can share the process of the Sync worker. Coarse timers
+  and no shared memory make a timing attack on the keys hard; nothing makes it impossible.
 * **`ARCH-001` names two instances.** The sandbox is a third context, outside the trusted pair. The
   row must say so before the Document macros Story lands.
+* **`ARCH-005` names no exception.** Every network call of the two instances leaves from Sync. The
+  sandbox is outside both and calls on its own; the row must say so before the Macro network access
+  Story lands.
+* **A bug in the bootstrap fails open.** If the `meta` policy is not added, a network variant reaches
+  any `https:` address. The closed variant never does.
+* **Only interfaces open to a browser answer.** The sandbox sends a null origin, so an interface
+  that does not answer every origin refuses it. A proxy would fix that, and the relay cannot be one:
+  it would read the call in clear.
 * **An approved call is an exit.** A macro with an approved domain sends what it chooses in clear.
   The approval names the domain, and nothing checks what the macro sends there.
 * **User settings do not exist.** Approvals and secret values need a sealed store that follows a user
   across devices. It lands with the "User settings" Story (`ambre-roadmap.md` post-V1).
 * **The marketplace is not ruled.** Who hosts it, who vets a publisher, and how a stolen publisher key
   is revoked all belong to the "Macro marketplace" Story (`ambre-roadmap.md` post-V1).
+* **`MACRO-004` inherits the relay's authority on roles.** A lying relay can raise the bound of a
+  macro to its running user's role, which it could already grant. The approval, held on the client,
+  still bounds the macro. That is why an organization catalog needs a trust anchor and this row does
+  not.
 * **Organization catalogs are not ruled.** An organization could approve macros for its members, and
   restrict them to that list. Its signature is worth nothing while the relay decides who its admins
   are. The catalog waits on the "Organization trust anchor" Story (`ambre-roadmap.md` post-V1).
 * **A policy binds a client, not a person.** The relay cannot see a macro, so only the client enforces
   a catalog. It stops a mistake or a lure, and it does not stop a member who changes their client.
+* **A run computes on a state that can be stale.** A total read from the fork is written after a peer
+  may have changed a value it summed. An offline edit has the same limit, and nothing here treats it.
 * **Undoing the edit that fired a trigger is not ruled.** The run is its own undo step, so its effect
   stays when the user undoes the edit that caused it.
 * **Approvals never expire.** An approval unused for months still stands; no rule retires it.

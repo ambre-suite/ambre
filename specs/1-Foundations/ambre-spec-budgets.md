@@ -83,6 +83,9 @@
 | `ScrollViewport` send | < 1 ms | -- | UI | non-blocking -- **none exists** |
 | Receive and render `TrameEvent::ViewportData` | < 5 ms | -- | UI | typed value by move, plus the vertex batch build -- **none exists** |
 | Autocompletion, computation plus dropdown | < 2 ms | -- | UI | static lookup, no round trip -- **none exists** |
+| Macro run started by a gesture (wall clock, network waits included) | -- | 30 s | Macro sandbox | the worker is terminated at the ceiling -- **none exists** |
+| Macro run fired by an edit trigger (wall clock) | -- | 2 s | Macro sandbox | the worker is terminated at the ceiling -- **none exists** |
+| Macro run fork, 10k-cell workbook | < 50 ms | -- | Logic | criterion -- **none exists** |
 
 * **The transport is not the cost.** UI <-> Logic stays zero-cost (`flume` by move, shared heap). The
   Logic <-> Sync `postMessage` hop adds a postcard encode plus a structured clone, or a zero-copy

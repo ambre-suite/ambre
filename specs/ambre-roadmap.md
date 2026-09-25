@@ -279,7 +279,7 @@ owns the subsystem.
 | `[ ]` User settings | a sealed store of one user's settings that follows them across devices: macro approvals and secret values first |
 | `[ ]` Document macros | a user saves a signed macro in a document, approves each version, and runs it as one undoable change |
 | `[ ]` Macro triggers | a macro runs after a kind of local edit, in the editing client only |
-| `[ ]` Macro network access | a macro calls a domain its user approved, through the Sync worker |
+| `[ ]` Macro network access | a macro calls a domain its user approved, held by the browser's content policy |
 | `[ ]` Macro marketplace | a publisher signs a macro package, an editor installs it into a document, and an update waits for a new installation |
 | `[ ]` Organization trust anchor | an organization signing key held by its owners, admin certificates it signs, and a fingerprint members verify |
 | `[ ]` Organization macro catalog | a catalog document of macros an organization approves, and the policy its members' clients apply. Needs the trust anchor |

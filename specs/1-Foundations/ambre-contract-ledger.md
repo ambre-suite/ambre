@@ -19,7 +19,7 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2575 rows: 1747 shipped, of which 779 loose. 828 unbuilt.**
+**2581 rows: 1747 shipped, of which 779 loose. 834 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
@@ -28,7 +28,7 @@
 | `untested` | 273 | 144 | 235 |  | 652 |
 | `human-review` | 7 |  |  |  | 7 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
-| `unimplemented` | 132 | 56 | 23 | 617 | 828 |
+| `unimplemented` | 138 | 56 | 23 | 617 | 834 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -158,7 +158,7 @@
 | `ambre-spec-launcher.md` | CHROME-035..045,079..084 |
 | `ambre-spec-locale.md` | LOCALE-001..013 |
 | `ambre-spec-machine-access.md` | MACH-001..034 |
-| `ambre-spec-macros.md` | MACRO-001..044 |
+| `ambre-spec-macros.md` | MACRO-001..050 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077 |
 | `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094 |
 | `ambre-spec-message-bus.md` | BUS-001..024 |
