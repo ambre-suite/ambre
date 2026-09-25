@@ -19,16 +19,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2570 rows: 2289 shipped, of which 775 loose. 281 unbuilt.**
+**2582 rows: 2292 shipped, of which 775 loose. 290 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 227 | 221 | 542 | 524 | 1514 |
+| `verified` | 227 | 221 | 542 | 527 | 1517 |
 | `failing` | 39 | 46 | 22 |  | 107 |
 | `untested` | 266 | 143 | 234 | 3 | 646 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
-| `unimplemented` | 54 | 56 | 23 | 148 | 281 |
+| `unimplemented` | 55 | 56 | 23 | 156 | 290 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -38,7 +38,7 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 13 | 3 | 10 | 2 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 0 | 7 | 1 |
-| `ambre-spec-architecture.md` | 16 | 16 | 3 | 13 |  |
+| `ambre-spec-architecture.md` | 17 | 16 | 3 | 13 | 1 |
 | `ambre-spec-broadcast.md` | 19 | 16 | 6 | 10 | 3 |
 | `ambre-spec-chrome.md` | 21 | 20 | 9 | 11 | 1 |
 | `ambre-spec-clipboard.md` | 14 | 14 | 0 | 14 |  |
@@ -140,13 +140,13 @@
 | `ambre-spec-prose-import-export.md` | 49 | 10 | 9 | 1 | 39 |
 | `ambre-spec-prose-inline-styles.md` | 25 | 25 | 24 | 1 |  |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
-| `ambre-spec-prose-page-rendering.md` | 19 | 18 | 18 |  | 1 |
+| `ambre-spec-prose-page-rendering.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-prose-pagination.md` | 48 | 47 | 47 |  | 1 |
 | `ambre-spec-prose-selection.md` | 37 | 35 | 35 |  | 2 |
 | `ambre-spec-prose-slash-command.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-prose-table-of-contents.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-prose-tables.md` | 47 | 47 | 47 |  |  |
-| `ambre-spec-prose-text-editing.md` | 30 | 30 | 30 |  |  |
+| `ambre-spec-prose-text-editing.md` | 40 | 33 | 33 |  | 7 |
 | `ambre-spec-prose-toolbar.md` | 19 | 15 | 15 |  | 4 |
 | `ambre-spec-prose-track-changes.md` | 40 | 38 | 38 |  | 2 |
 | `ambre-spec-prose-undo.md` | 3 | 3 | 3 |  |  |
@@ -163,7 +163,7 @@
 | :--- | :--- |
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058 |
-| `ambre-spec-architecture.md` | ARCH-001..016 |
+| `ambre-spec-architecture.md` | ARCH-001..017 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..092 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047 |
@@ -200,7 +200,7 @@
 | `ambre-spec-prose-import-export.md` | PROSE-IO-001..006,009..014,016..028,043..066 |
 | `ambre-spec-prose-inline-styles.md` | PROSE-FEAT-007..008,020..025,173..184,287..288,290,298..299 |
 | `ambre-spec-prose-lists.md` | PROSE-005; PROSE-FEAT-002,026..028,136..146,278 |
-| `ambre-spec-prose-page-rendering.md` | PROSE-UI-006,014,016..020,113..122,172..173 |
+| `ambre-spec-prose-page-rendering.md` | PROSE-UI-006,014,016..020,113..122,172..173,205 |
 | `ambre-spec-prose-pagination.md` | PROSE-010..019,033..036,064..084,099..100,107..115,117,123 |
 | `ambre-spec-prose-pdf-export.md` | PROSE-IO-029,031..033,035,037..039 |
 | `ambre-spec-prose-ruler.md` | PROSE-UI-063..065,075..076 |
@@ -210,7 +210,7 @@
 | `ambre-spec-prose-spell-check.md` | PROSE-FEAT-019,041..043,102..112 |
 | `ambre-spec-prose-table-of-contents.md` | PROSE-FEAT-003,060..062,113..118,291..292; PROSE-UI-082..083 |
 | `ambre-spec-prose-tables.md` | PROSE-009,040; PROSE-FEAT-017,044..051,227..256,293..294; PROSE-UI-147,179..181 |
-| `ambre-spec-prose-text-editing.md` | PROSE-037..039,041..042,101,116; PROSE-UI-004..005,027..030,134..143,176..178,182..185 |
+| `ambre-spec-prose-text-editing.md` | PROSE-037..039,041..042,101,116,124; PROSE-UI-004..005,027..030,134..143,176..178,182..185,197..204,206 |
 | `ambre-spec-prose-toolbar.md` | PROSE-UI-053..057,096..104,188..192 |
 | `ambre-spec-prose-track-changes.md` | PROSE-FEAT-004,010..011,082..089,257..277,300..304; PROSE-UI-051..052,148 |
 | `ambre-spec-prose-undo.md` | PROSE-UI-045,073..074 |

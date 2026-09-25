@@ -227,6 +227,22 @@ fn a_split_and_a_deletion_leave_as_commands_and_not_as_draft() {
     ));
 }
 
+/// `PROSE-124`: two deletions sent before the layout comes back read their
+/// clusters on the old run. The second lands inside a cluster of the new
+/// text, and the Logic side takes the whole of it.
+#[test]
+fn two_deletes_before_the_layout_never_split_a_grapheme() {
+    let mut rig = Rig::new(&["xae\u{301}z"]);
+    let block = rig.blocks()[0];
+    rig.ui.set_caret((block, 1));
+    rig.key(ProseKey::Delete, false, false);
+    rig.key(ProseKey::Delete, false, false);
+    rig.deliver();
+    rig.lay();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("xz"));
+    assert_eq!(rig.caret().offset, 1);
+}
+
 /// `PROSE-UI-139`: typing changes no structure, no paragraph setting and no
 /// mark beside it.
 #[test]
@@ -1785,4 +1801,63 @@ fn a_remote_insertion_during_a_composition_moves_its_landing() {
     rig.deliver();
     rig.lay();
     assert_eq!(rig.logic.text_of(&block).as_deref(), Some(">> helloxy"));
+}
+
+/// `PROSE-UI-197`: a composition opened over a selection deletes it before
+/// the preview shows, and the committed text takes its place.
+#[test]
+fn a_composition_over_a_selection_deletes_it_first() {
+    let mut rig = Rig::new(&["hello world"]);
+    let block = rig.blocks()[0];
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: block,
+        offset: 11,
+        anchor: Some((block, 6)),
+    });
+    rig.input(ProseInput::Compose(String::new()));
+    assert!(rig.sent.is_empty(), "an empty preview takes nothing");
+    rig.input(ProseInput::Compose("n".to_owned()));
+    assert_eq!(
+        rig.sent,
+        vec![ProseCommand::DeleteText {
+            block_id: block,
+            range: (6, 11),
+        }]
+    );
+    assert!(rig.ui.selection().is_none());
+    assert_eq!(rig.caret().offset, 6);
+    assert_eq!(rig.ui.composing, "n");
+    rig.input(ProseInput::ComposeEnd("\u{4f60}".to_owned()));
+    rig.deliver();
+    rig.lay();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("hello \u{4f60}"));
+}
+
+/// `PROSE-UI-198`: past the bound a held key goes, and held text stays,
+/// joined to the text before it. A preview replaces the one before it.
+#[test]
+fn held_text_is_never_dropped() {
+    let mut rig = Rig::new(&["hello"]);
+    let block = rig.blocks()[0];
+    rig.ui.set_caret((block, 5));
+    rig.key(ProseKey::Enter, false, false);
+    for _ in 0..300 {
+        rig.key(ProseKey::Right, false, false);
+    }
+    assert_eq!(rig.ui.queued.len(), 256);
+    rig.type_text("a");
+    rig.key(ProseKey::Backspace, false, false);
+    rig.type_text("b");
+    rig.input(ProseInput::Compose("n".to_owned()));
+    rig.input(ProseInput::Compose("ni".to_owned()));
+    rig.input(ProseInput::ComposeEnd("\u{4f60}".to_owned()));
+    rig.type_text("!");
+    assert_eq!(rig.ui.queued.len(), 258);
+    rig.deliver();
+    rig.lay();
+    let blocks = rig.blocks();
+    assert_eq!(
+        rig.logic.text_of(&blocks[1]).as_deref(),
+        Some("ab\u{4f60}!")
+    );
 }

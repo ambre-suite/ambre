@@ -90,6 +90,9 @@ impl ProseState {
         if start == end {
             return ProseOutcome::nothing();
         }
+        // The view reads its clusters on a layout that may be older than the
+        // body, so the range is widened against the body itself (`PROSE-124`).
+        let (start, end) = whole_graphemes(&body.to_string(), start, end);
         if let Err(e) = body.delete(start, end - start) {
             return Self::err_write(&format!("{e:?}"));
         }
@@ -134,6 +137,9 @@ impl ProseState {
         if head_off > head_len || tail_off > tail_len {
             return Self::err_bad_range();
         }
+        // Neither endpoint cuts a cluster in two (`PROSE-124`).
+        let head_off = whole_graphemes(&head_body.to_string(), head_off, head_off).0;
+        let tail_off = whole_graphemes(&tail_body.to_string(), tail_off, tail_off).1;
         // What survives of the last paragraph, before anything is written
         // (`PROSE-037`), with the marks it carries (`PROSE-042`).
         let surviving = marked_runs(&tail_body, tail_off, tail_len);
@@ -315,6 +321,30 @@ fn write_runs(target: &LoroText, dest: usize, runs: &[MarkedRun]) -> Result<(), 
     Ok(())
 }
 
+/// A range of code points widened to the grapheme clusters it cuts
+/// (`PROSE-124`). The start moves back to the start of its cluster, and the
+/// end forward to the end of its own. A range that cuts none comes back as it
+/// was.
+fn whole_graphemes(text: &str, start: usize, end: usize) -> (usize, usize) {
+    use unicode_segmentation::UnicodeSegmentation;
+    let (mut from, mut to) = (start, end);
+    let mut at = 0;
+    for cluster in text.graphemes(true) {
+        let next = at + cluster.chars().count();
+        if at < start && start < next {
+            from = at;
+        }
+        if at < end && end < next {
+            to = next;
+        }
+        if next >= end {
+            break;
+        }
+        at = next;
+    }
+    (from, to)
+}
+
 /// The two ends of a range, smaller first. A selection is dragged in either
 /// direction, and every caller wants the same pair.
 fn normalize(range: (u32, u32)) -> (usize, usize) {
@@ -353,6 +383,23 @@ mod tests {
             });
         }
         (state, ids)
+    }
+
+    /// `PROSE-124`: a range that ends or starts inside a cluster takes the
+    /// whole of it, in one paragraph and across two.
+    #[test]
+    fn a_deletion_never_splits_a_grapheme() {
+        let (mut state, ids) = document_of(&["xe\u{301}z", "e\u{301}y"]);
+        state.handle_command(ProseCommand::DeleteText {
+            block_id: ids[0],
+            range: (1, 2),
+        });
+        assert_eq!(state.text_of(&ids[0]).as_deref(), Some("xz"));
+        state.handle_command(ProseCommand::DeleteRange {
+            anchor: (ids[0], 2),
+            focus: (ids[1], 1),
+        });
+        assert_eq!(state.text_of(&ids[0]).as_deref(), Some("xzy"));
     }
 
     #[test]

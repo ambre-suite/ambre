@@ -33,6 +33,7 @@ prefix is `ARCH`.
 | `ARCH-016` | `INV` | The engine MUST survive every route change. | this spec section 2 | `ambre_app::route::tests::cross_kind_open_needs_reload` -- the one route change that is allowed to end it | partial -- nothing holds the lifetime across an ordinary route change; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-011` | `INV` | Each browser tab MUST run a complete client of its own. | this spec section 2 | none | unheld -- two tabs load the same two artefacts twice, and nothing refuses a design that shared one worker between them, which is the shortcut this rule exists to close; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-014` | `INV` | The client MUST NOT rely on a channel disconnection to detect a thread failure. | this spec section 2 | none | unheld -- the panic hook fires before the abort, so the notice does not wait on a channel, and nothing refuses a second detection path that would. A disconnection arrives late, or never, because a wedged thread holds its end open; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ARCH-017` | `INV` | The Logic thread MUST answer a view once per pass over the commands waiting on its inbound channels, not once per command. | this spec section 2 | not built | unbuilt -- lands with the `ARCH P9` -- the Logic thread drains before it answers Story (`ambre-roadmap.md` E6) | unimplemented |
 | `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | none | unheld -- convergence is covered per application by the two-peer belt, which drives two engines in one process. Nothing drives two tabs, and the two differ in exactly the place that matters: one relay, two sessions, one identity; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 A thread fails
@@ -51,9 +52,10 @@ that and a page that looks alive and answers nothing.
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 3 `verified`, 13 `untested`. What holds is what the build can refuse: a cycle,
-  a cryptographic dependency in the wrong crate, a missing atomics flag. Everything else, the
-  failure path and the tab model included, is held by the code having been written that way.
+* **Verification.** 3 `verified`, 13 `untested`, 1 `unimplemented`. What holds is what the build
+  can refuse: a cycle, a cryptographic dependency in the wrong crate, a missing atomics flag.
+  Everything else, the failure path and the tab model included, is held by the code having been
+  written that way.
 
 ---
 
@@ -110,6 +112,11 @@ An embedded child adds one more channel, so its event stream never reaches its p
 **Backpressure.** The Logic thread may block on a full outbound channel, which is the intended
 signal. The UI thread never blocks: it drops a lossy message and reports a full channel for a
 lossless one. The two classes and what each owes are `ambre-spec-message-bus.md`.
+
+**The Logic loop.** It takes one message, applies it and answers every view it wrote, before
+it takes the next. A burst of keystrokes therefore costs one layout per keystroke, and all but
+the last are stale before the view draws them. `ARCH-017` drains the waiting commands first and
+answers once per pass, so the lag stays one pass whatever the typing rate.
 
 **Failure, in two paths.**
 

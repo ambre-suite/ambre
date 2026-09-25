@@ -18,7 +18,8 @@ pub const MULTI_PRESS_MS: f64 = 500.0;
 const MULTI_PRESS_PX: f32 = 4.0;
 
 /// How many inputs the view holds while it waits on a structural command. A
-/// wait lasts one round trip, so the bound is never reached by a hand.
+/// wait lasts one round trip, so the bound is never reached by a hand. Text
+/// is held past it, joined to the text before it (`PROSE-UI-198`).
 const QUEUED_INPUTS: usize = 256;
 
 /// A key the view acts on.
@@ -160,11 +161,7 @@ impl ProseUiState {
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> bool {
         if self.waiting() {
-            if self.queued.len() < QUEUED_INPUTS {
-                self.queued.push_back(input.clone());
-            } else {
-                tracing::warn!("Prose: too much input held, one is dropped");
-            }
+            self.hold(input);
             return true;
         }
         let (seen, mut sent_seen) = (self.seen, self.sent_seen);
@@ -206,6 +203,42 @@ impl ProseUiState {
             self.syncs.push_back(true);
         }
         consumed
+    }
+
+    /// Hold an input until the structural command is answered.
+    ///
+    /// A preview replaces the preview held before it, and text joins the text
+    /// held before it. Past the bound a key or a pointer input is dropped;
+    /// text never is, since the user cannot tell it went (`PROSE-UI-198`).
+    fn hold(&mut self, input: &ProseInput) {
+        match (self.queued.back_mut(), input) {
+            (Some(ProseInput::Compose(held)), ProseInput::Compose(text)) => {
+                held.clone_from(text);
+                return;
+            }
+            // The end of a composition takes the place of its last preview.
+            (Some(held @ ProseInput::Compose(_)), ProseInput::ComposeEnd(_)) => {
+                held.clone_from(input);
+                return;
+            }
+            (
+                Some(ProseInput::Text(held) | ProseInput::ComposeEnd(held)),
+                ProseInput::Text(text),
+            ) => {
+                held.push_str(text);
+                return;
+            }
+            _ => {}
+        }
+        let carries_text = matches!(
+            input,
+            ProseInput::Text(_) | ProseInput::Compose(_) | ProseInput::ComposeEnd(_)
+        );
+        if carries_text || self.queued.len() < QUEUED_INPUTS {
+            self.queued.push_back(input.clone());
+        } else {
+            tracing::warn!("Prose: too much input held, a key or a pointer input is dropped");
+        }
     }
 
     /// Whether a structural command is still unanswered.
@@ -252,6 +285,11 @@ impl ProseUiState {
             }
             ProseInput::SlashPick(index) => self.pick(*index, send),
             ProseInput::Compose(text) => {
+                // The preview replaces the selection, as typing does
+                // (`PROSE-UI-197`).
+                if !text.is_empty() && !self.take_selection(send) {
+                    return true;
+                }
                 self.composing.clone_from(text);
                 true
             }

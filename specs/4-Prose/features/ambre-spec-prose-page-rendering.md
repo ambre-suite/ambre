@@ -50,12 +50,13 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-121` | `POST` | A layout newer than the one in force MUST replace it, and the version it carries MUST become the version the view holds. | this spec section 2 | `ambre_prose::view::tests::a_newer_layout_replaces_the_one_in_force_and_rebuilds_the_column` | none | verified |
 | `PROSE-UI-016` | `FAIL` | A layout older than the one already applied MUST be dropped, so a late arrival MUST NOT replace a newer one. | this spec section 2 | `ambre_prose::view::tests::a_late_layout_is_dropped_and_the_newer_one_stays` | none | verified |
 | `PROSE-UI-122` | `FRAME` | Applying a layout MUST NOT write to the document and MUST NOT shape a block. | derived | `ambre_prose::view::tests::applying_a_layout_keeps_the_zoom_shapes_nothing_and_writes_nothing` | none | verified |
+| `PROSE-UI-205` | `FRAME` | Applying the layout that answers an edit MUST NOT copy or rebuild the blocks and the pages the edit left alone: its cost on this thread MUST follow the edit, not the document. | this spec section 2 | not built | unbuilt -- lands with the "The layout travels as a delta" Story (`ambre-roadmap.md` E5) | unimplemented |
 * **Budget.** the display-list build and the whole page paint (`ambre-spec-budgets.md section 2`);
   the run cache and the vertex buffers (`ambre-spec-budgets.md section 6`). The second of those
   exceeds the shared UI-thread total, and the register says so.
 * **Boundary.** none: this thread paints view state, where `UI-THREAD-004` bans a network, crypto
   or persistence path. What it draws arrives as an event and leaves as nothing.
-* **Verification.** 18 `verified`, 1 `unimplemented`. Every verified row is a host test in
+* **Verification.** 18 `verified`, 2 `unimplemented`. Every verified row is a host test in
   `crates/ambre-prose`, painting through the recording surface of `ambre-draw`. `PROSE-UI-113` is
   also compiler-held: the run type must be `Send`, `Sync` and `'static`. `PROSE-UI-006` is held in
   `crates/ambre-logic`: the Logic thread shapes, and the view draws what the bus hands it.

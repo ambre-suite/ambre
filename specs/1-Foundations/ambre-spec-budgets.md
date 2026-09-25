@@ -77,9 +77,9 @@
 | Prose scroll of one page | < 16 ms | -- | UI | culling plus the rebuild of the pages revealed (`features/ambre-spec-prose-viewport.md`) -- **none exists**, and no code either |
 | Prose slash menu opened | < 8 ms | -- | UI | **none exists**, and no code either |
 | Prose contextual toolbar shown | < 4 ms | -- | UI | **none exists**, and no code either |
-| Keystroke to a local draft echo | < 2 ms | -- | UI | the editor echoes locally with no round trip: Trame's inline cell editor, Prose's draft buffer -- **none exists** |
-| Keystroke to CRDT confirmation | < 15 ms | -- | UI <-> Logic | the round trip Prose budgets too -- **none exists** |
-| Keydown to a moved caret, end to end | < 50 ms | < 100 ms | UI <-> Logic | `performance.mark` and `performance.measure`, on desktop **and** mobile, over a single keystroke, a sustained typing burst and a 10 KB paste -- **none exists** |
+| Keystroke to a local draft echo | < 2 ms | -- | UI | the editor echoes locally with no round trip: Trame's inline cell editor, Prose's draft buffer -- **none exists**; the `Keystroke latency probes` Story (`ambre-roadmap.md` E6) measures it |
+| Keystroke to CRDT confirmation | < 15 ms | -- | UI <-> Logic | the round trip Prose budgets too -- **none exists**; the `Keystroke latency probes` Story (`ambre-roadmap.md` E6) measures it |
+| Keydown to a moved caret, end to end | < 50 ms | < 100 ms | UI <-> Logic | `performance.mark` and `performance.measure`, on desktop **and** mobile, over a single keystroke, a sustained typing burst and a 10 KB paste -- **none exists**; the `Keystroke latency probes` Story (`ambre-roadmap.md` E6) measures it |
 | `ScrollViewport` send | < 1 ms | -- | UI | non-blocking -- **none exists** |
 | Receive and render `TrameEvent::ViewportData` | < 5 ms | -- | UI | typed value by move, plus the vertex batch build -- **none exists** |
 | Autocompletion, computation plus dropdown | < 2 ms | -- | UI | static lookup, no round trip -- **none exists** |
@@ -108,7 +108,7 @@
 | Content hit-test and input dispatch (in view) | < 0.2 ms | UI | `AppView::handle_input`, pointer and keyboard on the canvas area |
 | View state update | < 0.5 ms | UI | Internal state mutations, transition logic |
 | `LoroText::insert` | < 0.1 ms | Logic | Sequential insert, off the render frame |
-| Text layout (Parley, dirty paragraph) | < 2 ms | UI or Logic | UI-thread shaping for the in-cell editor case (Trame cells, multi-line), typical < 0.5 ms. **Prose does NOT shape on the UI thread**: pagination shapes in the Logic thread and ships pre-shaped `ParleyRunData`, so this row is ~0 on the UI thread for Prose and 0.5-2 ms on the Logic thread (`features/ambre-spec-prose-pagination.md`, `features/ambre-spec-prose-page-rendering.md`) |
+| Text layout (Parley, dirty paragraph) | < 2 ms | UI or Logic | UI-thread shaping for the in-cell editor case (Trame cells, multi-line), typical < 0.5 ms. **Prose shapes one line or two on the UI thread and no paragraph**: the draft and the input method's preview, each one unwrapped line (`features/ambre-spec-prose-text-editing.md`). Pagination shapes in the Logic thread and ships pre-shaped `ParleyRunData`, so this row is a line's worth on the UI thread for Prose and 0.5-2 ms on the Logic thread (`features/ambre-spec-prose-pagination.md`, `features/ambre-spec-prose-page-rendering.md`) |
 | Content accessibility diff (AccessKit) | < 0.2 ms | UI | OS notifications on the delta only |
 | Glyph rasterization (Swash) on a new glyph | ~0 ms nominal | UI | Atlas hit |
 | Build the vertex batch (dirty only) | < 1 ms | UI | `QuadRenderer::begin_frame` plus the scene draw. Zero allocation in steady state |
