@@ -176,8 +176,17 @@ pub struct InboxPost {
 }
 ```
 
-**The client.** A machine runs a native build of `ambre-sync` with no interface. The library seals
-every frame, and it exposes no path that skips the seal (`MACH-002`).
+**The client.** One Rust library, `ambre-client`, with no interface. It seals every frame, and it
+exposes no path that skips the seal (`MACH-002`). One feature per class keeps each build small:
+
+| Feature | Pulls in | Serves |
+| :--- | :--- | :--- |
+| `inbox` | `ambre-core`, `ambre-crypto`, `ambre-protocol`, an HTTP client | an inbox writer |
+| `addressed` | `inbox`, and a native socket | an addressed machine |
+| `member` | `addressed`, Loro, and the crate of each application | a machine member |
+
+An inbox writer and an addressed machine never open the document, so neither links Loro. Python and
+TypeScript reach the same core through bindings; no other language implements the cryptography.
 
 **A post, in steps.**
 
@@ -249,6 +258,12 @@ A second merge of the same post finds its id in the document and writes nothing 
   the program runs.
 * **The content a post maps to is per application.** A row in Trame, a card in Toile, a paragraph in
   Prose and a message in Murmure are four schemas. No application declares its inbox schema yet.
+* **No native client exists.** `ambre-sync` runs in the browser worker only: its sockets and its HTTP
+  calls go through the browser. A transport seam, with one browser and one native side, comes first.
+* **The bindings and the publication are not ruled.** Publishing `ambre-client` publishes the crates it
+  depends on. Their wire format then becomes a public contract, and no rule versions it yet.
+* **The licence of the client is not ruled.** The workspace is `AGPL-3.0-only`, and few integrators
+  link a copyleft library into a private program. A permissive licence for the client crates is open.
 
 ---
 
