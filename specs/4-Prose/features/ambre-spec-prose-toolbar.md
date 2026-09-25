@@ -77,9 +77,9 @@ the row a scenario rests on when no test resolves it.
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
 | selects a sentence | selects nothing | nothing: a selection is local | a bar over Alice's sentence, and no bar for Bob | `ambre_prose::input_tests::the_bar_shows_over_a_selection_and_goes_with_it` |
-| makes the sentence bold | reads it | the bold mark over the range | the sentence bold on both screens, the control lit for Alice | `ambre_prose::input_tests::a_mixed_control_applies_its_mark_to_the_whole_selection` |
+| makes the sentence bold | reads it | the bold mark over the range | the bold mark in both documents, the control lit for Alice | `ambre_prose::input_tests::a_mixed_control_applies_its_mark_to_the_whole_selection` |
 | selects a range half of which is bold | -- | nothing | the bold control mixed, neither on nor off | `ambre_prose::input_tests::a_selection_bold_in_part_reads_mixed` |
-| makes it bold | makes the same range italic at the same moment | both marks, neither lost | bold and italic text for both | none -- `PROSE-FEAT-008` |
+| makes it bold | makes the same range italic at the same moment | both marks, neither lost | both marks in both documents | none -- `PROSE-FEAT-008` |
 | scrolls while the bar is open | -- | nothing | the bar still over the same words | `ambre_prose::input_tests::the_bar_follows_its_text_through_a_scroll_and_a_zoom` |
 
 ---

@@ -117,7 +117,22 @@ fn to_rect(placed: &Placed, rect: &ambre_draw::BoundingBox) -> Rect {
     )
 }
 
+/// A text the view draws on a line ahead of the layout: the draft or the
+/// composition. The glyphs after its point move right by its width.
+#[derive(Clone, Copy)]
+struct Insertion {
+    line: usize,
+    x: f64,
+    width: f64,
+}
+
+/// Far enough past any page that a clip band never cuts a glyph vertically.
+const BAND: f64 = 1.0e7;
+
 /// Draw the glyphs of a run, building its drawing state on its first paint.
+///
+/// A line that carries insertions is drawn in slices, each clipped at an
+/// insertion point and moved right by the widths before it (`PROSE-UI-199`).
 fn draw_run<S: DrawSurface>(
     surface: &mut S,
     cache: &mut RunCache,
@@ -125,6 +140,7 @@ fn draw_run<S: DrawSurface>(
     run: &ShapedRun,
     placed: &Placed,
     color: Color,
+    insertions: &[Insertion],
 ) {
     let data: &ParleyRunData = run.data();
     let brush = Brush::Solid(color);
@@ -133,8 +149,46 @@ fn draw_run<S: DrawSurface>(
         let Some(line) = data.layout().get(*line_index) else {
             continue;
         };
-        if let Some(PositionedLayoutItem::GlyphRun(glyphs)) = line.items().nth(*item_index) {
+        let Some(PositionedLayoutItem::GlyphRun(glyphs)) = line.items().nth(*item_index) else {
+            continue;
+        };
+        let mut cuts = insertions
+            .iter()
+            .filter(|cut| cut.line == *line_index)
+            .peekable();
+        if cuts.peek().is_none() {
             surface.draw_glyphs(&glyphs, &brush, transform);
+            continue;
+        }
+        let (mut from, mut shift) = (-BAND, 0.0);
+        let slice = |surface: &mut S, from: f64, to: f64, shift: f64| {
+            let left = placed.origin_x + from + shift;
+            let right = placed.origin_x + to + shift;
+            surface.push_clip(Rect::new(left, -BAND, right, BAND));
+            let moved = Affine::translate((placed.origin_x + shift, placed.origin_y));
+            surface.draw_glyphs(&glyphs, &brush, moved);
+            surface.pop_clip();
+        };
+        for cut in cuts {
+            if cut.x > from {
+                slice(surface, from, cut.x, shift);
+                from = cut.x;
+            }
+            shift += cut.width;
+        }
+        slice(surface, from, BAND, shift);
+    }
+}
+
+/// Draw every glyph of a shaped text at `(x, y)`.
+fn draw_shape<S: DrawSurface>(surface: &mut S, shape: &ShapedRun, x: f64, y: f64, color: Color) {
+    let transform = Affine::translate((x, y));
+    let brush = Brush::Solid(color);
+    for line in shape.data().layout().lines() {
+        for item in line.items() {
+            if let PositionedLayoutItem::GlyphRun(glyphs) = item {
+                surface.draw_glyphs(&glyphs, &brush, transform);
+            }
         }
     }
 }
@@ -173,11 +227,6 @@ impl ProseUiState {
         layout_cx: &mut parley::LayoutContext<ambre_draw::ParleyBrush>,
     ) -> Option<(String, ShapedRun)> {
         let (block, text) = wanted?;
-        if let Some(kept) = kept
-            && kept.0 == text
-        {
-            return Some(kept);
-        }
         let style = self
             .run_of(block)
             .and_then(ParleyRunData::style)
@@ -189,8 +238,16 @@ impl ProseUiState {
                     false,
                 )
             });
+        // A shape is kept only in the style it was made in: the same text
+        // typed into another block is shaped again (`PROSE-UI-200`).
+        if let Some(kept) = kept
+            && kept.0 == text
+            && kept.1.data().style() == Some(&style)
+        {
+            return Some(kept);
+        }
         let layout = shape_draft(font_cx, layout_cx, &text, &style);
-        let run = ShapedRun::new(&text, layout, 0.0);
+        let run = ShapedRun::styled(&text, layout, &style);
         Some((text, run))
     }
 
@@ -335,6 +392,56 @@ impl ProseUiState {
                 }
             }
         }
+        // The draft and the composition, placed before the run is drawn: the
+        // text after each one moves right by its width (`PROSE-UI-199`).
+        let draft = self
+            .draft
+            .shown()
+            .filter(|(anchored, ..)| *anchored == id)
+            .and_then(|(_, at, text)| {
+                let (shaped_text, shape) = self.draft_shape.as_ref()?;
+                (*shaped_text == text).then(|| {
+                    let origin = data.caret_box(at);
+                    let width = f64::from(shape.data().layout().full_width());
+                    let end = at.saturating_add(crate::ui::chars(&text));
+                    (data.line_of(at, false), origin, width, end, shape)
+                })
+            });
+        let caret = self
+            .cursor
+            .as_ref()
+            .filter(|cursor| local && cursor.block_id == id && cursor.anchor.is_none())
+            .map(|cursor| {
+                let laid = self.to_laid(id, cursor.offset);
+                let caret = data.caret_box_at(laid, self.caret_upstream);
+                (
+                    data.line_of(laid, self.caret_upstream),
+                    caret,
+                    cursor.offset,
+                )
+            });
+        let compose = caret.and_then(|(line, caret, _)| {
+            let (shaped_text, shape) = self.compose_shape.as_ref()?;
+            (*shaped_text == self.composing).then(|| {
+                let width = f64::from(shape.data().layout().full_width());
+                (line, caret.x0, width, shape)
+            })
+        });
+        // The caret sits after the draft once it is past the draft's end.
+        let after_draft = matches!(
+            (draft, caret),
+            (Some((draft_line, _, _, end, _)), Some((line, _, offset))) if draft_line == line && offset >= end
+        );
+        let mut insertions: Vec<Insertion> = draft
+            .map(|(line, origin, width, ..)| Insertion {
+                line,
+                x: origin.x0,
+                width,
+            })
+            .into_iter()
+            .chain(compose.map(|(line, x, width, _)| Insertion { line, x, width }))
+            .collect();
+        insertions.sort_by(|a, b| a.line.cmp(&b.line).then(a.x.total_cmp(&b.x)));
         draw_run(
             surface,
             &mut self.runs,
@@ -342,6 +449,7 @@ impl ProseUiState {
             run,
             placed,
             palette.text,
+            &insertions,
         );
         // Over the glyphs: the inline highlights of this block and no other.
         for mark in self.highlights.get(&id).map_or(&[][..], Vec::as_slice) {
@@ -366,53 +474,22 @@ impl ProseUiState {
         }
         // The draft, under the caret and over the confirmed runs, before the
         // document has answered (`PROSE-UI-134`).
-        let mut draft_width = 0.0;
-        let mut draft_at = None;
-        if let Some((anchored, at, text)) = self.draft.shown()
-            && anchored == id
-            && let Some((shaped_text, shape)) = &self.draft_shape
-            && *shaped_text == text
-        {
-            let origin = data.caret_box(at);
-            let transform =
-                Affine::translate((placed.origin_x + origin.x0, placed.origin_y + origin.y0));
-            let brush = Brush::Solid(palette.text);
-            for line in shape.data().layout().lines() {
-                for item in line.items() {
-                    if let PositionedLayoutItem::GlyphRun(glyphs) = item {
-                        surface.draw_glyphs(&glyphs, &brush, transform);
-                    }
-                }
-            }
-            draft_width = f64::from(shape.data().layout().full_width());
-            draft_at = Some(at.saturating_add(crate::ui::chars(&text)));
+        if let Some((line, origin, _, _, shape)) = draft {
+            let before = compose
+                .filter(|(at_line, x, ..)| *at_line == line && *x <= origin.x0 && !after_draft)
+                .map_or(0.0, |(_, _, width, _)| width);
+            let x = placed.origin_x + origin.x0 + before;
+            draw_shape(surface, shape, x, placed.origin_y + origin.y0, palette.text);
         }
-        if local
-            && let Some(cursor) = &self.cursor
-            && cursor.block_id == id
-            && cursor.anchor.is_none()
-        {
-            let laid = self.to_laid(id, cursor.offset);
-            let caret = data.caret_box_at(laid, self.caret_upstream);
+        if let Some((_, caret, _)) = caret {
             let mut rect = to_rect(placed, &caret);
-            if draft_at == Some(cursor.offset) {
-                rect.x0 += draft_width;
+            if after_draft && let Some((_, _, width, ..)) = draft {
+                rect.x0 += width;
             }
             // The composition in progress, at the caret, and the caret after
             // it. It never waits on the document (`PROSE-UI-142`).
-            if let Some((shaped_text, shape)) = &self.compose_shape
-                && *shaped_text == self.composing
-            {
-                let transform = Affine::translate((rect.x0, rect.y0));
-                let brush = Brush::Solid(palette.text);
-                for line in shape.data().layout().lines() {
-                    for item in line.items() {
-                        if let PositionedLayoutItem::GlyphRun(glyphs) = item {
-                            surface.draw_glyphs(&glyphs, &brush, transform);
-                        }
-                    }
-                }
-                let width = f64::from(shape.data().layout().full_width());
+            if let Some((_, _, width, shape)) = compose {
+                draw_shape(surface, shape, rect.x0, rect.y0, palette.text);
                 let base = rect.y1 - 1.0;
                 surface.stroke_line(rect.x0, base, rect.x0 + width, base, palette.text, 1.0);
                 rect.x0 += width;
@@ -531,6 +608,7 @@ impl ProseUiState {
                     &number,
                     &placed,
                     palette.text,
+                    &[],
                 );
             }
             if let Some(text) = self.shaped.blocks.get(&slot.block).cloned() {
@@ -1220,13 +1298,107 @@ mod tests {
         let mut layout_cx = parley::LayoutContext::new();
         ui.shape_draft(&mut font_cx, &mut layout_cx);
         let surface = paint(&mut ui);
-        assert_eq!(count(&surface), confirmed + 1);
+        // The line the draft joins is drawn in two slices (`PROSE-UI-199`).
+        assert_eq!(count(&surface), confirmed + 2);
         assert!(
             surface
                 .ops()
                 .iter()
                 .any(|op| matches!(op, DrawOp::Glyphs { glyph_count: 3, .. }))
         );
+    }
+
+    /// The width of the draft `text` typed at the start of `block`.
+    fn draft_width(ui: &mut ProseUiState, block: BlockId, text: &str) -> f64 {
+        ui.draft.clear();
+        ui.draft.push_str(text, &block, 0);
+        let mut font_cx = parley::FontContext::new();
+        for bytes in crate::layout::fonts::shipped_faces() {
+            crate::layout::fonts::register_faces(&mut font_cx, bytes);
+        }
+        let mut layout_cx = parley::LayoutContext::new();
+        ui.shape_draft(&mut font_cx, &mut layout_cx);
+        let (_, shape) = ui.draft_shape.as_ref().expect("the draft is shaped");
+        f64::from(shape.data().layout().full_width())
+    }
+
+    /// `PROSE-UI-199`: the text after the draft is drawn a draft's width to
+    /// the right, clipped at the draft's point, and never under it.
+    #[test]
+    fn the_text_after_a_draft_moves_right_by_its_width() {
+        let (_, shaped) = laid_out(1, 20);
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_layout(shaped);
+        let id = first_block(&ui);
+        ui.cursor = Some(CursorPosition {
+            block_id: id,
+            offset: 3,
+            anchor: None,
+        });
+        let clips = |surface: &RecordingSurface| {
+            surface
+                .ops()
+                .iter()
+                .filter(|op| matches!(op, DrawOp::PushClip { .. }))
+                .count()
+        };
+        let before = clips(&paint(&mut ui));
+        let width = draft_width(&mut ui, id, "abc");
+        ui.draft.clear();
+        ui.draft.push_str("abc", &id, 3);
+        let mut font_cx = parley::FontContext::new();
+        for bytes in crate::layout::fonts::shipped_faces() {
+            crate::layout::fonts::register_faces(&mut font_cx, bytes);
+        }
+        let mut layout_cx = parley::LayoutContext::new();
+        ui.shape_draft(&mut font_cx, &mut layout_cx);
+        let surface = paint(&mut ui);
+        assert_eq!(
+            clips(&surface),
+            before + 2,
+            "the line is drawn in two slices"
+        );
+        let lines: Vec<(usize, f64)> = surface
+            .ops()
+            .iter()
+            .filter_map(|op| match op {
+                DrawOp::Glyphs {
+                    glyph_count,
+                    transform,
+                    ..
+                } if *glyph_count > 3 => Some((*glyph_count, transform.translation().x)),
+                _ => None,
+            })
+            .collect();
+        let moved = lines.iter().any(|(count, x)| {
+            lines
+                .iter()
+                .any(|(other, left)| other == count && ((x - left) - width).abs() < 0.01)
+        });
+        assert!(moved, "one slice is moved right by the draft's width");
+    }
+
+    /// `PROSE-UI-200`: the draft takes the style its block is laid out in,
+    /// even when the same text was shaped for another block just before.
+    #[test]
+    fn a_draft_in_a_heading_is_drawn_as_the_heading() {
+        let (mut state, _) = laid_out(1, 3);
+        let heading = append(&mut state, BlockInit::Heading { level: 1 }, "Title");
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_layout(state.shaped_layout());
+        let paragraph = first_block(&ui);
+        let plain = draft_width(&mut ui, paragraph, "abc");
+        let titled = draft_width(&mut ui, heading, "abc");
+        let (_, shape) = ui.draft_shape.as_ref().expect("the draft is shaped");
+        let block = ui.run_of(heading).and_then(|run| run.style());
+        assert_eq!(
+            shape.data().style(),
+            block,
+            "the draft is in the heading's style"
+        );
+        assert!(titled > plain, "the heading's bold reaches the draft");
     }
 
     fn thread(block: BlockId, start: u32, end: u32) -> crate::events::CommentThread {

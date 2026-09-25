@@ -33,6 +33,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-116` | `OBS` | A block the layout breaks across two pages MUST be drawn on both: the continuation MUST NOT be left out. | this spec section 2 | `ambre_prose::view::paint::tests::a_block_split_across_two_pages_is_drawn_on_both` | none | verified |
 | `PROSE-UI-117` | `OBS` | A selection MUST be drawn under the glyphs it covers, and an inline highlight over them. | this spec section 2 | `ambre_prose::view::paint::tests::selections_go_under_the_glyphs_and_highlights_over_them` | none | verified |
 | `PROSE-UI-118` | `OBS` | A remote caret and its label MUST NOT hide local text: they MUST be drawn after the glyphs of the page. | this spec section 2 | `ambre_prose::view::paint::tests::a_remote_caret_is_painted_after_every_glyph_of_its_page` | none | verified |
+| `PROSE-UI-207` | `OBS` | An inline mark MUST reach the glyphs of the text it covers. | this spec section 2 | not built | unbuilt -- lands with the "Inline marks reach the glyphs" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Paint a page
 
@@ -56,7 +57,7 @@ status values are normative in `ambre-spec-template.md`.
   exceeds the shared UI-thread total, and the register says so.
 * **Boundary.** none: this thread paints view state, where `UI-THREAD-004` bans a network, crypto
   or persistence path. What it draws arrives as an event and leaves as nothing.
-* **Verification.** 18 `verified`, 2 `unimplemented`. Every verified row is a host test in
+* **Verification.** 18 `verified`, 3 `unimplemented`. Every verified row is a host test in
   `crates/ambre-prose`, painting through the recording surface of `ambre-draw`. `PROSE-UI-113` is
   also compiler-held: the run type must be `Send`, `Sync` and `'static`. `PROSE-UI-006` is held in
   `crates/ambre-logic`: the Logic thread shapes, and the view draws what the bus hands it.
