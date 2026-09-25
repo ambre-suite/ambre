@@ -12,7 +12,7 @@ use parley::{
 
 use ambre_bus::app::prose::{Align, LineHeightMode, ParagraphStyle};
 use ambre_draw::{ParleyBrush, ScriptSet};
-use loro::{LoroDoc, LoroTree, TreeID};
+use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
 use crate::layout::fonts;
@@ -21,6 +21,49 @@ use crate::layout::run::ShapedRun;
 /// Pixels per point at 96 DPI. Every length the document stores in points is
 /// converted here and nowhere else.
 pub(crate) const PX_PER_PT: f32 = 96.0 / 72.0;
+
+/// A byte range of a block's text and the inline marks the shaper reads on
+/// it. Only the marks that change the glyphs are kept (`PROSE-UI-207`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MarkedSpan {
+    pub start: usize,
+    pub end: usize,
+    pub bold: bool,
+    pub italic: bool,
+}
+
+/// The text of a block and the spans of it that carry bold or italic, in
+/// one walk over its runs.
+#[must_use]
+pub fn marked_text(text: &LoroText) -> (String, Vec<MarkedSpan>) {
+    let mut out = String::new();
+    let mut spans = Vec::new();
+    for delta in text.to_delta() {
+        let TextDelta::Insert { insert, attributes } = delta else {
+            continue;
+        };
+        // A flag mark is on when present with a value: an unmarked range may
+        // keep the key with a null (`ambre-spec-prose-schema.md section 3`).
+        let on = |key: &str| {
+            attributes
+                .as_ref()
+                .and_then(|marks| marks.get(key))
+                .is_some_and(|value| !matches!(value, LoroValue::Null))
+        };
+        let (bold, italic) = (on("b"), on("i"));
+        let start = out.len();
+        out.push_str(&insert);
+        if bold || italic {
+            spans.push(MarkedSpan {
+                start,
+                end: out.len(),
+                bold,
+                italic,
+            });
+        }
+    }
+    (out, spans)
+}
 
 /// The height one point converts to.
 #[must_use]
@@ -249,6 +292,7 @@ impl Measurer {
     pub fn shape(
         &mut self,
         text: &str,
+        marks: &[MarkedSpan],
         style: &EffectiveStyle,
         width_px: f32,
     ) -> Layout<ParleyBrush> {
@@ -256,7 +300,7 @@ impl Measurer {
         let absent = fonts::missing_scripts(&mut self.font_cx, text);
         self.missing.extend(absent);
         let family = fonts::resolve(&style.font_family).face_name();
-        let mut layout = self.build(text, style, family, style.line_height, width_px);
+        let mut layout = self.build(text, marks, style, family, style.line_height, width_px);
         // `AtLeast` is a floor on the height the font asked for, so it takes a
         // measured line to apply. One re-shape, and only for that one mode.
         if let Some(floor_px) = style.at_least_floor_px
@@ -266,6 +310,7 @@ impl Measurer {
         {
             layout = self.build(
                 text,
+                marks,
                 style,
                 family,
                 LineHeight::Absolute(floor_px),
@@ -280,7 +325,7 @@ impl Measurer {
     /// For a caller that needs no glyphs. A block the view draws is measured
     /// with its run instead (`PROSE-036`).
     pub fn measure(&mut self, text: &str, style: &EffectiveStyle, width_px: f32) -> TextMetrics {
-        metrics_of(&self.shape(text, style, width_px))
+        metrics_of(&self.shape(text, &[], style, width_px))
     }
 
     /// Shape one run, keep its heights and the shaped run itself.
@@ -294,7 +339,7 @@ impl Measurer {
         style: &EffectiveStyle,
         width_px: f32,
     ) -> (TextMetrics, ShapedRun) {
-        let layout = self.shape(text, style, width_px);
+        let layout = self.shape(text, &[], style, width_px);
         (metrics_of(&layout), ShapedRun::styled(text, layout, style))
     }
 
@@ -303,14 +348,16 @@ impl Measurer {
     ///
     /// One shape serves both, so a block that calls a note pays nothing more
     /// than one that does not. An offset past the text is on the last line.
+    /// The spans of `marks` are shaped bold or italic (`PROSE-UI-207`).
     pub fn measure_with_lines(
         &mut self,
         text: &str,
+        marks: &[MarkedSpan],
         style: &EffectiveStyle,
         width_px: f32,
         offsets: &[u32],
     ) -> (TextMetrics, Vec<u32>, ShapedRun) {
-        let layout = self.shape(text, style, width_px);
+        let layout = self.shape(text, marks, style, width_px);
         let last = layout.len().saturating_sub(1);
         let lines = offsets
             .iter()
@@ -352,6 +399,7 @@ impl Measurer {
     fn build(
         &mut self,
         text: &str,
+        marks: &[MarkedSpan],
         style: &EffectiveStyle,
         family: &str,
         line_height: LineHeight,
@@ -360,7 +408,7 @@ impl Measurer {
         build(
             &mut self.font_cx,
             &mut self.layout_cx,
-            text,
+            (text, marks),
             style,
             family,
             line_height,
@@ -384,7 +432,7 @@ pub fn shape_draft(
     build(
         font_cx,
         layout_cx,
-        text,
+        (text, &[]),
         style,
         family,
         style.line_height,
@@ -392,10 +440,11 @@ pub fn shape_draft(
     )
 }
 
+/// `text` comes with the spans of it that carry a mark (`PROSE-UI-207`).
 fn build(
     font_cx: &mut FontContext,
     layout_cx: &mut LayoutContext<ParleyBrush>,
-    text: &str,
+    (text, marks): (&str, &[MarkedSpan]),
     style: &EffectiveStyle,
     family: &str,
     line_height: LineHeight,
@@ -412,6 +461,15 @@ fn build(
     }
     if style.italic {
         builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+    }
+    for span in marks {
+        let range = span.start..span.end;
+        if span.bold {
+            builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
+        }
+        if span.italic {
+            builder.push(StyleProperty::FontStyle(FontStyle::Italic), range);
+        }
     }
     let mut layout: Layout<ParleyBrush> = builder.build(text);
     layout.break_all_lines(width_px);

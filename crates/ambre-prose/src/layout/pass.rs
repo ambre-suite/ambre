@@ -151,11 +151,16 @@ pub const NOTE_GAP_PX: f32 = 4.0;
 /// (`PROSE-099`). A note's text is shaped alone, as the run of its block, with
 /// its number beside it. An offset in the run is an offset in the block, so
 /// the caret reads a note like any other text (`PROSE-UI-187`).
+/// One reachable note: its id, its ordinal, its text and the marked spans
+/// of it (`PROSE-UI-207`).
+pub(crate) type NoteKey = (Uuid, u32, String, Vec<crate::layout::measure::MarkedSpan>);
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct NotePlan {
-    /// What the plan was read from: each reachable note, its ordinal and its
-    /// text. A reflow compares it to decide whether the plan still holds.
-    pub(crate) key: Vec<(Uuid, u32, String)>,
+    /// What the plan was read from: each reachable note, its ordinal, its
+    /// text and its marks. A reflow compares it to decide whether the plan
+    /// still holds.
+    pub(crate) key: Vec<NoteKey>,
     /// The calls of each block: the code-point offset and the note.
     calls: HashMap<TreeID, Vec<(u32, Uuid)>>,
     /// Each note's ordinal, shaped height and block.
@@ -170,7 +175,7 @@ pub(crate) struct NotePlan {
 impl NotePlan {
     /// What the plan of `document` would be read from, without shaping a
     /// note. The cheap half a reflow runs on every edit (`PROSE-035`).
-    pub(crate) fn key_of(document: &LoroDoc) -> Vec<(Uuid, u32, String)> {
+    pub(crate) fn key_of(document: &LoroDoc) -> Vec<NoteKey> {
         // A document with no tree holds no call, and reading one would mint
         // the tree (`PROSE-079`).
         if doc::blocks_read(document).is_none() {
@@ -179,10 +184,10 @@ impl NotePlan {
         note::ordinals(document)
             .into_iter()
             .map(|(id, ordinal)| {
-                let text = note::body(document, &id)
-                    .map(|body| body.to_string())
+                let (text, marks) = note::body(document, &id)
+                    .map(|body| crate::layout::measure::marked_text(&body))
                     .unwrap_or_default();
-                (id, ordinal, text)
+                (id, ordinal, text, marks)
             })
             .collect()
     }
@@ -200,7 +205,7 @@ impl NotePlan {
         let mut numbers = HashMap::with_capacity(key.len());
         let mut texts = Vec::with_capacity(key.len());
         let mut notes = HashMap::with_capacity(key.len());
-        for (id, ordinal, text) in &key {
+        for (id, ordinal, text, marks) in &key {
             let Some(block) = note::block(document, id) else {
                 continue;
             };
@@ -208,8 +213,13 @@ impl NotePlan {
                 measurer.measure_run(&ordinal.to_string(), &style, width);
             let mut hung = style.clone();
             hung.indent_left_px += number.data().layout().full_width() + NOTE_GAP_PX;
-            let (metrics, run) =
-                measurer.measure_run(text, &hung, hung.text_width_px(content_width_px));
+            let (metrics, _, run) = measurer.measure_with_lines(
+                text,
+                marks,
+                &hung,
+                hung.text_width_px(content_width_px),
+                &[],
+            );
             let height = metrics.text_height_px.max(number_metrics.text_height_px);
             numbers.insert(*id, number);
             texts.push((block, run));
@@ -531,11 +541,12 @@ fn measure_one(
             }
         }
         _ => {
-            let text = doc::get_block_text(document, id).to_string();
+            let (text, marks) =
+                crate::layout::measure::marked_text(&doc::get_block_text(document, id));
             let calls = scope.notes.calls_of(id);
             let offsets: Vec<u32> = calls.iter().map(|(offset, _)| *offset).collect();
             let (metrics, lines, shaped) =
-                measurer.measure_with_lines(&text, &style, text_width_px, &offsets);
+                measurer.measure_with_lines(&text, &marks, &style, text_width_px, &offsets);
             run = Some(shaped);
             notes = calls
                 .iter()

@@ -390,6 +390,48 @@ pub(crate) mod tests {
         format!("{:?}", state.marks_of(block)).contains(key)
     }
 
+    /// The width of the first line `block` is laid out in, on the layout
+    /// the view is handed.
+    fn laid_width(state: &mut ProseState, block: crate::events::BlockId) -> f32 {
+        let Some(ProseEvent::LayoutShaped { layout }) = state.layout_event() else {
+            panic!("the edit is laid out");
+        };
+        let shaped = layout
+            .get::<crate::layout::run::ShapedLayout>()
+            .expect("a shaped layout");
+        let run = shaped
+            .blocks
+            .get(&crate::events::tree_id(block))
+            .expect("the run");
+        run.data().layout().full_width()
+    }
+
+    /// `PROSE-UI-207`: a bold or italic mark reaches the glyphs it covers
+    /// on the next layout, and leaves them when it is removed.
+    #[test]
+    fn a_bold_or_italic_mark_reaches_the_glyphs() {
+        let (mut state, block) = document_with_text("mmmm mmmm");
+        state.load_faces(&crate::layout::fonts::shipped_faces());
+        let plain = laid_width(&mut state, block);
+        for key in ["b", "i"] {
+            state.handle_command(ProseCommand::ApplyMark {
+                block_id: block,
+                range: (0, 4),
+                key: key.to_owned(),
+                value: None,
+            });
+            let marked = laid_width(&mut state, block);
+            assert!((marked - plain).abs() > 0.5, "{key} changes the glyphs");
+            state.handle_command(ProseCommand::RemoveMark {
+                block_id: block,
+                range: (0, 4),
+                key: key.to_owned(),
+            });
+            let back = laid_width(&mut state, block);
+            assert!((back - plain).abs() < 0.01, "removing {key} restores them");
+        }
+    }
+
     #[test]
     fn a_size_reaches_the_document_in_its_canonical_spelling() {
         let (mut state, block) = document_with_text("hello");
