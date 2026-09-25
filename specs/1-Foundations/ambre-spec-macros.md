@@ -27,6 +27,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MACRO`.
 |---|---|---|---|---|---|---|
 | `MACRO-001` | `INV` | A macro MUST be stored sealed, like any other content of the document. | `ZK-001` | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACRO-002` | `INV` | A macro MUST run only in a member client, never on the relay. | `ZK-004`; this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MACRO-053` | `INV` | A macro MUST reach only the commands its application declares open to macros. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A list of what is open fails closed on a new command; a list of what is barred, as `MACRO-005` alone would be, fails open | unimplemented |
 | `MACRO-003` | `INV` | A macro MUST edit the document only through the commands the interface offers. | `1-Foundations/ambre-spec-commands.md section 2` (`UI-THREAD-019`) | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A second write path would bypass the role check and the undo history that the commands already carry | unimplemented |
 | `MACRO-004` | `INV` | A macro MUST act with the lower of two roles: its integrator's and its running user's. | `SYNC-016`; `1-Foundations/ambre-spec-membership.md section 3`; this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). With the running user's role alone, an editor's macro run by an owner would act as an owner, which its integrator never was | unimplemented |
 | `MACRO-005` | `INV` | A macro MUST NOT reach the commands that manage members, roles, sharing or keys, whatever it is granted. | `1-Foundations/ambre-spec-membership.md section 3`; derived | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). These commands change who can read the document, and no approval of a macro is informed enough to grant that | unimplemented |
@@ -61,6 +62,7 @@ into this document. Nothing runs yet.
 | `MACRO-021` | `POST` | An installed macro MUST be copied whole into the document. | this spec section 3 | not built | unbuilt -- lands with the `Macro marketplace` Story (`ambre-roadmap.md` post-V1). A macro fetched at each run would tell its source which documents use it, and when | unimplemented |
 | `MACRO-022` | `FRAME` | Integrating a macro MUST NOT run it. | derived | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACRO-023` | `FAIL` | A source that uses TypeScript syntax the stripper cannot erase MUST be refused at integration. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). Refusing here tells the integrator; refusing at run tells every other member instead | unimplemented |
+| `MACRO-054` | `FAIL` | A macro whose source is a compiled module MUST be refused at integration. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A user can read a short source before approving it, and cannot read a binary | unimplemented |
 | `MACRO-024` | `FAIL` | A package whose publisher signature fails MUST be refused at integration. | this spec section 3 | not built | unbuilt -- lands with the `Macro marketplace` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.3 Approve a macro
@@ -71,6 +73,7 @@ A user reads what a macro asks for, and allows it on their own client.
 |---|---|---|---|---|---|---|
 | `MACRO-025` | `POST` | The approval prompt MUST list every capability the macro asks for. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACRO-026` | `FRAME` | An approval MUST NOT reach any other member. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). Trust is personal: one member's approval is no reason for another's code to run on their machine | unimplemented |
+| `MACRO-051` | `POST` | Revoking an approval MUST stop every later run of that version for that user. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACRO-027` | `FAIL` | A macro whose integrator signature fails, or names another document, MUST NOT be offered for approval. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.4 Run a macro
@@ -99,6 +102,7 @@ A macro declares that it runs after a kind of edit, such as a new row.
 | `MACRO-036` | `POST` | An edit trigger MUST run only in the client that made the edit. | this spec section 3 | not built | unbuilt -- lands with the `Macro triggers` Story (`ambre-roadmap.md` post-V1). If every client ran it, a row would be stamped once per member online | unimplemented |
 | `MACRO-037` | `FRAME` | An edit that arrives from another peer MUST trigger no macro. | this spec section 3 | not built | unbuilt -- lands with the `Macro triggers` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACRO-038` | `FRAME` | The edits of a macro MUST trigger no macro. | this spec section 3 | not built | unbuilt -- lands with the `Macro triggers` Story (`ambre-roadmap.md` post-V1). Two macros that trigger each other would loop until the budget stops them, on every edit | unimplemented |
+| `MACRO-052` | `POST` | A trigger run MUST undo in one step with the edit that fired it, unless a local edit came between them. | `1-Foundations/ambre-spec-undo.md section 2` (`UNDO-001`); this spec section 3 | not built | unbuilt -- lands with the `Macro triggers` Story (`ambre-roadmap.md` post-V1). The user sees the effect as part of the edit; undoing the row must not leave its stamp behind | unimplemented |
 | `MACRO-039` | `FAIL` | A trigger whose macro the editing user has not approved MUST NOT run, and MUST tell that user. | this spec section 3 | not built | unbuilt -- lands with the `Macro triggers` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.6 Call the network from a macro
@@ -116,7 +120,7 @@ A macro calls an address its user approved. The browser refuses any other.
   gesture and one for a trigger, and the fork a run reads has a target.
 * **Boundary.** a macro is sealed like content (`ZK-001`) and runs on no relay (`ZK-004`). A call a
   user approves sends what the macro chooses to a third party, and section 6 names that exit.
-* **Verification.** 0 `verified`, 50 `unimplemented`. Nothing here is built.
+* **Verification.** 0 `verified`, 54 `unimplemented`. Nothing here is built.
 
 ---
 
@@ -277,8 +281,8 @@ calls later.
    (`MACRO-028`, `MACRO-029`);
 2. the Logic thread forks the document; the run reads and writes that fork alone (`MACRO-030`);
 3. the sandbox erases the types and starts the code under a time budget (`MACRO-032`);
-4. each command the macro calls is checked against the lower of the two roles, applied to the fork,
-   and recorded (`MACRO-004`);
+4. each command the macro calls is checked against the open list of its application and the lower
+   of the two roles (`MACRO-053`, `MACRO-004`). It is then applied to the fork, and recorded;
 5. a network call leaves the sandbox, and the browser refuses a domain not approved (`MACRO-040`,
    `MACRO-043`);
 6. at the end, the roles are checked again (`MACRO-049`);
@@ -293,7 +297,8 @@ command twice, and the fork costs one export and one import of the document.
 
 **A trigger, in steps.** A local edit that matches the kind of a trigger queues its macro, if the
 user granted automatic runs (`MACRO-035`). A remote delta queues nothing (`MACRO-037`), and the
-commit of a run queues nothing (`MACRO-038`).
+commit of a run queues nothing (`MACRO-038`). The run joins the undo step of its edit, unless a
+local edit came between them; then it takes a step of its own (`MACRO-052`).
 
 **Code.** not built -- the model lands with its Stories (`ambre-roadmap.md` post-V1).
 
@@ -307,6 +312,7 @@ commit of a run queues nothing (`MACRO-038`).
 | the macro editor | edit the source and the capabilities it asks for; saving signs it as integrator (`MACRO-020`) |
 | "Install a macro" | pick a package; its publisher is checked and its source copied in (`MACRO-021`, `MACRO-024`) |
 | a button, a slash command, or a command palette entry bound to a macro | run it, or ask for approval first (`MACRO-028`) |
+| the approvals list, in the user's settings | each approved version, with its document and its grants; revoke stops its next run (`MACRO-051`) |
 | the approval prompt | the publisher, the integrator, the source, the capabilities asked, and the refusing action first (`MACRO-025`) |
 | a dialog a macro opens | framed as the macro's, with its name and its integrator, and no masked field (`MACRO-011`, `MACRO-012`) |
 | a run that stops | a notice names the macro and the reason; the document is unchanged (`MACRO-034`) |
@@ -330,10 +336,12 @@ commit of a run queues nothing (`MACRO-038`).
 | A secret has one value per user | a secret stored in the document | every member reads the document, so every member would hold the token |
 | TypeScript that erases, or JavaScript | full TypeScript compiled by `tsc` | the compiler is too large to load for a run, and its output is a second form to trust |
 | TypeScript that erases, or JavaScript | a language of Ambre's own | a user who writes one macro a year will not learn a new language for it |
-| TypeScript that erases, or JavaScript | WebAssembly modules in any language, now | a user can read a short source before approving it, and cannot read a binary. The interface stays plain data so that a later WebAssembly binding costs no redesign |
+| TypeScript that erases, or JavaScript | WebAssembly modules in any language | a user can read a short source before approving it, and cannot read a binary (`MACRO-054`). The interface stays plain data, so the refusal is a rule and not a wall |
 | A cell calls a named formula | a macro function called from a cell | a cell must compute the same value on every client, inside a recompute that cannot wait on a worker. Trame's named formulas give custom functions without a second language |
 | The recorded commands replay on the document | the fork's edits imported into the document | they arrive as a remote peer's edits, and the undo history keeps local ones alone: the run could not be undone (`MACRO-031`) |
 | The recorded commands replay on the document | edits written straight into the document as the run goes | peers would see half a run, and a run that failed would have to be undone in front of them (`MACRO-033`) |
+| An approval lasts until revoked | an approval that lapses after a period | it binds one version, so the code a user approved is the code that runs a year later. A lapse would train users to approve again without reading |
+| A trigger run joins the undo step of its edit | a trigger run as its own undo step | undoing a new row would leave its stamp behind, and the user would undo twice for one gesture |
 | An approval binds one version, in one document | an approval per author, or shared across documents | an editor could change the code after the approval. Approving a network call approves sending this document, not every document the macro lands in |
 | An edit trigger runs in the editing client only | every client that sees the edit runs it | each online member would apply the effect once more |
 | No timed trigger | a trigger that runs every hour | no client is sure to be online at the hour. A timed job is a machine member (`ambre-spec-machine-access.md`) |
@@ -350,11 +358,6 @@ commit of a run queues nothing (`MACRO-038`).
   browsers. Chrome on Android isolates only some sites, Firefox on Android none, and Safari is
   still rolling it out. There, the macro can share the process of the Sync worker. Coarse timers
   and no shared memory make a timing attack on the keys hard; nothing makes it impossible.
-* **`ARCH-001` names two instances.** The sandbox is a third context, outside the trusted pair. The
-  row must say so before the Document macros Story lands.
-* **`ARCH-005` names no exception.** Every network call of the two instances leaves from Sync. The
-  sandbox is outside both and calls on its own; the row must say so before the Macro network access
-  Story lands.
 * **A bug in the bootstrap fails open.** If the `meta` policy is not added, a network variant reaches
   any `https:` address. The closed variant never does.
 * **Only interfaces open to a browser answer.** The sandbox sends a null origin, so an interface
@@ -377,13 +380,9 @@ commit of a run queues nothing (`MACRO-038`).
   a catalog. It stops a mistake or a lure, and it does not stop a member who changes their client.
 * **A run computes on a state that can be stale.** A total read from the fork is written after a peer
   may have changed a value it summed. An offline edit has the same limit, and nothing here treats it.
-* **Undoing the edit that fired a trigger is not ruled.** The run is its own undo step, so its effect
-  stays when the user undoes the edit that caused it.
-* **Approvals never expire.** An approval unused for months still stands; no rule retires it.
-* **The commands a macro can call are not listed.** Each application exposes its own, and none
-  declares them yet.
-* **WebAssembly macros are not ruled.** The interface is shaped to allow them; no rule says how a
-  user approves a binary.
+* **No application declares its macro commands yet.** `MACRO-053` opens none until one does.
+* **An approval has no end date.** It binds one version, so time adds no risk the code did not
+  have. A user revokes it by hand (`MACRO-051`).
 
 ---
 
