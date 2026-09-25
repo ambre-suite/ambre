@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: TEXT EDITING
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the draft, the join and the split are built; the composition is not
+**Implementation:** implemented
 
 > Typing, deleting, splitting and joining paragraphs. A keystroke shows on the glass at once and
 > reaches the document a moment later. Two authors typing in the same paragraph never wait for
@@ -62,8 +62,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-029` | `POST` | The composed text MUST reach the document once, when the composition ends, at the position the draft holds then. | this spec section 3 | not built | unbuilt -- lands with the "Input-method composition" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-142` | `FRAME` | While a composition is open the view MUST send no text to the document: a preview MUST reach the canvas and nothing else. | this spec section 3 | not built | unbuilt -- lands with the "Input-method composition" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-029` | `POST` | The composed text MUST reach the document once, when the composition ends, at the position the draft holds then. | this spec section 3 | `ambre_prose::input_tests::a_composition_ends_in_one_insertion`; `::a_remote_insertion_during_a_composition_moves_its_landing` | none | verified |
+| `PROSE-UI-142` | `FRAME` | While a composition is open the view MUST send no text to the document: a preview MUST reach the canvas and nothing else. | this spec section 3 | `ambre_prose::input_tests::a_composition_in_progress_sends_nothing`; `ambre_prose::view::paint::tests::a_composition_away_from_the_draft_is_drawn_at_once` | none | verified |
 
 ### 1.7 Take in a document event
 
@@ -84,9 +84,8 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. Every mutation leaves as a command (`PROSE-UI-002`,
   `features/ambre-spec-prose-engine.md section 1`).
-* **Verification.** 28 `verified`, and 2 `unimplemented`. The draft, the join and the split are
-  built; the composition is not. `PROSE-101` reads two tests, because the paragraph the caret started in is
-  the one a deletion does not remove.
+* **Verification.** 30 `verified`, 0 `untested`, 0 `unimplemented`. `PROSE-101` reads two tests,
+  because the paragraph the caret started in is the one a deletion does not remove.
 
 ---
 
@@ -118,32 +117,33 @@ structure (`PROSE-UI-135`):
 
 ```rust
 pub struct DraftBuffer {
-    /// Typed since the last confirming event, drawn over the confirmed runs.
+    /// Sent and not yet confirmed, drawn over the confirmed runs.
     pub pending_text: String,
-    pub block_id:     Option<TreeID>,
+    pub block_id:     Option<BlockId>,
     pub insert_pos:   u32,
-    /// True while an input-method composition is open; `pending_text` is then the preview.
-    pub composing:    bool,
+    // Private: the confirmed text the layout in force lacks, and the
+    // length of each insertion in flight.
 }
 
 impl DraftBuffer {
     pub fn is_empty(&self) -> bool;
-    /// Append committed text. Re-anchors only when the draft moves to another block, so
+    /// Append text sent. Re-anchors only when the caret left the draft's end, so
     /// consecutive keystrokes in one block accumulate (`PROSE-UI-138`).
-    pub fn push_str(&mut self, text: &str, block_id: &TreeID, pos: u32);
-    pub fn begin_composition(&mut self, block_id: TreeID, pos: u32);
-    /// Replace the preview text. Canvas only: no command leaves (`PROSE-UI-029`).
-    pub fn set_composition(&mut self, text: &str);
-    /// End the composition and answer the anchor the insertion must use -- the current one,
-    /// which a remote change may have moved since it opened (`PROSE-UI-028`).
-    pub fn end_composition(&mut self) -> (TreeID, u32);
+    pub fn push_str(&mut self, text: &str, block_id: &BlockId, pos: u32);
+    /// Carry the anchor over a collaborator's change (`PROSE-UI-028`).
+    pub fn shift(&mut self, edits: &[TextEdit]);
     pub fn clear(&mut self);
-    /// Carry the draft over a remote change: `shift` is the net offset change applied at or
-    /// before `insert_pos` (`PROSE-UI-028`). Answers `false` when the anchored block is gone
-    /// (`PROSE-UI-143`).
-    pub fn reanchor(&mut self, block_still_alive: bool, shift: i64) -> bool;
 }
 ```
+
+**The composition.** The input method's text in progress is not the draft: it was never sent.
+The view keeps it apart, as one string, and shapes it apart. It draws it underlined at the
+caret, wherever the draft is, so it never waits on the document. No offset counts it, so the
+caret and the selection read the document alone (`PROSE-UI-142`).
+
+When the composition ends, the committed text takes the typing path at the caret. A
+collaborator's change has moved that caret by then, so the text lands where the author now is
+(`PROSE-UI-029`).
 
 **What clears the draft, and what does not.** One branch, on the delta the confirming event
 carries. Anything else erases keystrokes the user is still typing.

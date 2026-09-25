@@ -261,6 +261,8 @@ pub struct ProseUiState {
     pub draft: DraftBuffer,
     /// The draft as last shaped, and the text it was shaped from.
     pub(crate) draft_shape: Option<(String, ShapedRun)>,
+    /// The composition as last shaped, and the text it was shaped from.
+    pub(crate) compose_shape: Option<(String, ShapedRun)>,
     /// The marks the Logic thread read for a selection, and that selection
     /// (`PROSE-UI-057`).
     pub(crate) marks: Option<(
@@ -271,6 +273,9 @@ pub struct ProseUiState {
     pub(crate) marks_asked: Option<((crate::view::caret::Spot, crate::view::caret::Spot), u64)>,
     /// The slash menu, while it is open.
     pub(crate) slash: Option<crate::view::slash::SlashMenu>,
+    /// The input method's text still being composed. It is drawn at the
+    /// caret and sends nothing until the composition ends (`PROSE-UI-142`).
+    pub(crate) composing: String,
     /// A change arrived since the last tick.
     changed: bool,
     /// When the text was last seen changing, while a recount is owed.

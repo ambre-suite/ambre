@@ -95,7 +95,10 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` The format bar's other controls | V1 | the bar carries the five presence marks alone. The link, heading, quote, colour and size controls, superscript, subscript and clearing the formatting reach no control yet |
 | `[x]` The slash menu | MVP | the slash menu: where it opens, what it records, the one command it sends and how it closes |
 | `[ ]` The slash menu's other items | V1 | the menu reaches nine features through twelve items. A picture, a footnote, a cross reference, a comment, an equation and the heading levels past three have no item |
-| `[ ]` Input-method composition | MVP | input-method composition through the hidden text field, its preview on the canvas, and double-click word selection |
+| `[x]` Input-method composition | MVP | input-method composition through the hidden text field, its preview on the canvas, and double-click word selection |
+| `[ ]` The draft reads like the text it joins | MVP | the draft is drawn over the confirmed line, so typed mid-line it covers the text after the caret until the layout comes back, and it takes the paragraph's style rather than the marks at the caret: a word typed in bold shows plain, then turns bold |
+| `[ ]` A provisional paragraph on the UI thread | V1 | the draft never wraps and a deletion shows nothing until the Logic thread answers, which on a slow device is several frames. The view shapes the edited paragraph itself with the Logic thread's measurer and faces, and the layout that answers replaces it. `PROSE-UI-006` bans the view from laying text out, so the rule moves with it |
+| `[ ]` The layout travels as a delta | V1 | every answer to a keystroke hands the view the whole layout: every page, and one run handle per block of the document. The runs are shared, but the copy still grows with the document while the edit touched one paragraph. The blocks and the pages that changed, merged into what the view holds |
 | `[x]` Collaborative cursors and annotations | MVP | remote carets, comment highlights, track-change highlights |
 | `[ ]` Ruler, clipboard and inertial scroll | MVP | the interactive ruler, copy and paste, inertial scroll |
 | `[x]` The native format | MVP | a Prose document saved to and read from an `.ambre` file |
@@ -117,6 +120,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
 | `[ ]` `ARCH P4` -- offline durability | -- | edit while offline and lose nothing on reconnect |
+| `[ ]` `ARCH P9` -- the Logic thread drains before it answers | MVP | the Logic loop takes one message, applies it and answers the view, so a burst of ten keystrokes costs ten layouts or ten derivations, nine of them stale before they are drawn. On a slow device the answer falls further behind with each keystroke. Every queued command applied first, then one answer per document written, bounds the lag to one pass whatever the typing rate |
+| `[ ]` Keystroke latency probes | MVP | three budgets govern typing -- the local echo, the confirmation and the moved caret -- and nothing measures any of them. Marks on both threads, run on a slow phone and a slow laptop, over a long document, a burst and a large paste (`ambre-spec-budgets.md`) |
 | `[ ]` `CANVAS P2` -- frame quality | -- | frame profiling, allocation-free painting, dynamic theme, content accessibility, translation and right-to-left |
 | `[ ]` Antialiased vector geometry | V1 | every screen pipeline runs at one sample and the solid shader carries no coverage term, so a diagonal or a curve is a hard staircase. Only glyphs escape, through a CPU-rasterized coverage atlas. A high-density display hides it by paying twice the pixels; a 1x monitor does not |
 | `[x]` Pictures on the screen | V1 | a picture imported onto a board is painted: the GPU uploads it once, mipped and sampled trilinear under an evicted budget, and the view asks the Logic thread for the pixels of what survived the cull. It paints at thumbnail resolution, which is every pixel this side holds |

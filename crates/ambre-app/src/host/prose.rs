@@ -447,8 +447,7 @@ impl ProseView {
     }
 
     /// The input a canvas event stands for, or `None` for one the view leaves
-    /// to the host. The composition lands with the "Input-method
-    /// composition" Story (`ambre-roadmap.md` E5).
+    /// to the host.
     fn translate(&self, ev: &InputEvent) -> Option<ProseInput> {
         Some(match ev {
             InputEvent::Key {
@@ -466,6 +465,8 @@ impl ProseView {
                 }
             }
             InputEvent::Text { text } => ProseInput::Text(text.clone()),
+            InputEvent::CompositionUpdate { text } => ProseInput::Compose(text.clone()),
+            InputEvent::CompositionEnd { text } => ProseInput::ComposeEnd(text.clone()),
             InputEvent::PointerDown {
                 x,
                 y,

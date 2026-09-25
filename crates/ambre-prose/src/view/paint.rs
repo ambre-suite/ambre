@@ -150,16 +150,33 @@ impl ProseUiState {
         font_cx: &mut parley::FontContext,
         layout_cx: &mut parley::LayoutContext<ambre_draw::ParleyBrush>,
     ) {
-        let Some((block, _, text)) = self.draft.shown() else {
-            self.draft_shape = None;
-            return;
-        };
-        if self
-            .draft_shape
-            .as_ref()
-            .is_some_and(|(shaped, _)| *shaped == text)
+        let draft = self.draft.shown().map(|(block, _, text)| (block, text));
+        let kept = self.draft_shape.take();
+        self.draft_shape = self.reshape(kept, draft, font_cx, layout_cx);
+        // The composition is shaped apart: it sits at the caret, wherever the
+        // draft is (`PROSE-UI-142`).
+        let compose = self
+            .cursor
+            .filter(|_| !self.composing.is_empty())
+            .map(|cursor| (cursor.block_id, self.composing.clone()));
+        let kept = self.compose_shape.take();
+        self.compose_shape = self.reshape(kept, compose, font_cx, layout_cx);
+    }
+
+    /// Shape a text in the style of its block, keeping the shape already
+    /// made for the same text.
+    fn reshape(
+        &self,
+        kept: Option<(String, ShapedRun)>,
+        wanted: Option<(BlockId, String)>,
+        font_cx: &mut parley::FontContext,
+        layout_cx: &mut parley::LayoutContext<ambre_draw::ParleyBrush>,
+    ) -> Option<(String, ShapedRun)> {
+        let (block, text) = wanted?;
+        if let Some(kept) = kept
+            && kept.0 == text
         {
-            return;
+            return Some(kept);
         }
         let style = self
             .run_of(block)
@@ -174,7 +191,7 @@ impl ProseUiState {
             });
         let layout = shape_draft(font_cx, layout_cx, &text, &style);
         let run = ShapedRun::new(&text, layout, 0.0);
-        self.draft_shape = Some((text, run));
+        Some((text, run))
     }
 
     /// Paint the pages the canvas shows, and one more on each side
@@ -380,6 +397,25 @@ impl ProseUiState {
             let mut rect = to_rect(placed, &caret);
             if draft_at == Some(cursor.offset) {
                 rect.x0 += draft_width;
+            }
+            // The composition in progress, at the caret, and the caret after
+            // it. It never waits on the document (`PROSE-UI-142`).
+            if let Some((shaped_text, shape)) = &self.compose_shape
+                && *shaped_text == self.composing
+            {
+                let transform = Affine::translate((rect.x0, rect.y0));
+                let brush = Brush::Solid(palette.text);
+                for line in shape.data().layout().lines() {
+                    for item in line.items() {
+                        if let PositionedLayoutItem::GlyphRun(glyphs) = item {
+                            surface.draw_glyphs(&glyphs, &brush, transform);
+                        }
+                    }
+                }
+                let width = f64::from(shape.data().layout().full_width());
+                let base = rect.y1 - 1.0;
+                surface.stroke_line(rect.x0, base, rect.x0 + width, base, palette.text, 1.0);
+                rect.x0 += width;
             }
             surface.fill_rect(
                 Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX, rect.y1),
@@ -1125,6 +1161,39 @@ mod tests {
         let (_, y2) = first_text_at(&paint(&mut ui));
         let room = 2.0 * f64::from(36.0 * crate::layout::measure::PX_PER_PT);
         assert!((y2 - y1 - room).abs() < 0.5, "the text sits at the bottom");
+    }
+
+    /// `PROSE-UI-142`: a composition opened away from a draft still in
+    /// flight is drawn at once, in glyphs of its own at the caret.
+    #[test]
+    fn a_composition_away_from_the_draft_is_drawn_at_once() {
+        let (_, shaped) = laid_out(1, 20);
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_layout(shaped);
+        let id = first_block(&ui);
+        ui.draft.push_str("abc", &id, 3);
+        ui.cursor = Some(CursorPosition {
+            block_id: id,
+            offset: 0,
+            anchor: None,
+        });
+        ui.composing = "ni".to_owned();
+        let mut font_cx = parley::FontContext::new();
+        for bytes in crate::layout::fonts::shipped_faces() {
+            crate::layout::fonts::register_faces(&mut font_cx, bytes);
+        }
+        let mut layout_cx = parley::LayoutContext::new();
+        ui.shape_draft(&mut font_cx, &mut layout_cx);
+        let surface = paint(&mut ui);
+        let drawn = |n: usize| {
+            surface
+                .ops()
+                .iter()
+                .any(|op| matches!(op, DrawOp::Glyphs { glyph_count, .. } if *glyph_count == n))
+        };
+        assert!(drawn(3), "the draft is drawn");
+        assert!(drawn(2), "the composition is drawn");
     }
 
     /// `PROSE-UI-134`: the draft is drawn at the caret before the document

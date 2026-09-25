@@ -1719,3 +1719,70 @@ fn the_query_narrows_the_items_in_order() {
     assert_eq!(labels("tab"), vec!["Table", "Table of contents"]);
     assert!(labels("zzz").is_empty());
 }
+
+/// `PROSE-UI-142`: the composition in progress is drawn at the caret and
+/// sends nothing, and the caret stays where the document has it.
+#[test]
+fn a_composition_in_progress_sends_nothing() {
+    let mut rig = Rig::new(&["hello"]);
+    let block = rig.blocks()[0];
+    rig.ui.set_caret((block, 5));
+    rig.input(ProseInput::Compose("n".to_owned()));
+    rig.input(ProseInput::Compose("ni".to_owned()));
+    assert!(rig.sent.is_empty());
+    assert_eq!(rig.ui.composing, "ni");
+    assert_eq!(rig.caret().offset, 5);
+    assert!(rig.ui.draft.is_empty());
+}
+
+/// `PROSE-UI-029`: the composition ends in one insertion of the committed
+/// text, and the preview goes.
+#[test]
+fn a_composition_ends_in_one_insertion() {
+    let mut rig = Rig::new(&["hello"]);
+    let block = rig.blocks()[0];
+    rig.ui.set_caret((block, 5));
+    rig.input(ProseInput::Compose("ni".to_owned()));
+    rig.input(ProseInput::Compose("\u{4f60}".to_owned()));
+    rig.input(ProseInput::ComposeEnd("\u{4f60}".to_owned()));
+    assert_eq!(
+        rig.sent,
+        vec![ProseCommand::InsertText {
+            block_id: block,
+            pos: 5,
+            text: "\u{4f60}".to_owned(),
+        }]
+    );
+    assert!(rig.ui.composing.is_empty());
+    assert_eq!(
+        rig.ui.draft.shown(),
+        Some((block, 5, "\u{4f60}".to_owned()))
+    );
+    rig.deliver();
+    rig.lay();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("hello\u{4f60}"));
+}
+
+/// `PROSE-UI-029`: a collaborator's insertion during the composition moves
+/// the caret, and the committed text lands where the author was.
+#[test]
+fn a_remote_insertion_during_a_composition_moves_its_landing() {
+    let mut rig = Rig::new(&["hello"]);
+    let block = rig.blocks()[0];
+    rig.ui.set_caret((block, 5));
+    rig.input(ProseInput::Compose("x".to_owned()));
+    let mut other = a_collaborator(&rig);
+    receive(
+        &mut rig,
+        &mut other,
+        ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: ">> ".to_owned(),
+        },
+    );
+    rig.input(ProseInput::ComposeEnd("xy".to_owned()));
+    rig.deliver();
+    rig.lay();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some(">> helloxy"));
+}

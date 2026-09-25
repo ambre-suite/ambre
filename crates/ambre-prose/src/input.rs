@@ -90,6 +90,12 @@ pub enum ProseInput {
     /// An item of the slash menu picked with the pointer, by its place in
     /// the filtered list.
     SlashPick(usize),
+    /// The input method's text in progress, replacing the previous one. It
+    /// is drawn and never sent (`PROSE-UI-142`).
+    Compose(String),
+    /// The input method committed its text: one insertion at the caret
+    /// (`PROSE-UI-029`).
+    ComposeEnd(String),
 }
 
 /// A command sent, as the view keeps track of it.
@@ -245,6 +251,15 @@ impl ProseUiState {
                 self.key(*key, *shift, *ctrl, send)
             }
             ProseInput::SlashPick(index) => self.pick(*index, send),
+            ProseInput::Compose(text) => {
+                self.composing.clone_from(text);
+                true
+            }
+            ProseInput::ComposeEnd(text) => {
+                self.composing.clear();
+                self.type_into_menu(text, send);
+                true
+            }
             ProseInput::Press {
                 x,
                 y,
