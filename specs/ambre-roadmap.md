@@ -276,6 +276,13 @@ owns the subsystem.
 | `[ ]` Machine members | a program joins a document as a member, marked as a machine, with its declared host, and its removal rotates the key |
 | `[ ]` Write-only inboxes | a program posts into a document through an asymmetric inbox it cannot read, and a member client merges each post once |
 | `[ ]` Addressed machines | a program reads only the frames a user addresses to it, under a key derived from the document key, and answers through the inbox |
+| `[ ]` Document macros | a user saves a signed macro in a document, approves each version, and runs it as one undoable change |
+| `[ ]` Macro triggers | a macro runs after a kind of local edit, in the editing client only |
+| `[ ]` Macro network access | a macro calls a domain its user approved, through the Sync worker |
+| `[ ]` Macro marketplace | a publisher signs a macro package, an editor installs it into a document, and an update waits for a new installation |
+| `[ ]` User settings | a sealed store of one user's settings that follows them across devices: macro approvals and secret values first |
+| `[ ]` Organization trust anchor | an organization signing key held by its owners, admin certificates it signs, and a fingerprint members verify |
+| `[ ]` Organization macro catalog | a catalog document of macros an organization approves, and the policy its members' clients apply. Needs the trust anchor |
 
 ### Prose
 
@@ -297,6 +304,7 @@ owns the subsystem.
 | `[ ]` Engine optimization | the indexes and parallelism a million-cell sheet needs, measured against benchmarks |
 | `[ ]` Recompute on mobile hardware | measure the recompute on a target device. Past 50 ms at P95 it must yield instead of blocking |
 | `[ ]` The shared style dictionary | the style indirection the schema prescribes and no code writes. Gated on a benchmark: it needs a reclamation policy first |
+| `[ ]` Named formulas | `LAMBDA` and `LET`, and a formula saved under a name that any cell of the workbook calls as a function |
 
 ### Toile
 
