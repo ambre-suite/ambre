@@ -35,13 +35,14 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MACRO`.
 | `MACRO-008` | `INV` | A macro MUST reach no storage of the Ambre client. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). The local store holds every document the user opened, and a macro from one document must not read another | unimplemented |
 | `MACRO-009` | `INV` | A macro MUST reach another document only through a picker its user operates. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A macro that named a document by id could copy, into a shared one, a document its integrator cannot open | unimplemented |
 | `MACRO-010` | `INV` | The browser MUST block every network request a macro makes on its own. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). Removing the network functions from the sandbox in code is no boundary: one function forgotten is a leak, and the browser has dozens | unimplemented |
-| `MACRO-011` | `INV` | A dialog a macro opens MUST offer no masked input field. | this spec section 4 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A macro that drew a passphrase prompt would harvest the one secret that opens every document | unimplemented |
+| `MACRO-011` | `INV` | A dialog a macro opens MUST offer no masked input field. | this spec section 4 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A macro that drew a passphrase prompt would harvest the one secret that opens every document. The rule slows a lure and no more: a plain field that asks for the passphrase still works, and `MACRO-012` is the defence that holds | unimplemented |
 | `MACRO-012` | `OBS` | A dialog a macro opens MUST name the macro and its integrator. | this spec section 4 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACRO-013` | `OBS` | A macro MUST show its publisher and its integrator. | this spec section 4 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACRO-014` | `INV` | An approval MUST bind one exact version of a macro, in one document. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). An approval that survived an edit would let any editor swap the code under a trust already given | unimplemented |
 | `MACRO-015` | `INV` | The code that runs MUST be derived from the approved source alone. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A document that stored a compiled form beside the source could show one and run the other | unimplemented |
 | `MACRO-016` | `INV` | A version published after an integration MUST NOT replace the integrated one on its own. | this spec section 3 | not built | unbuilt -- lands with the `Macro marketplace` Story (`ambre-roadmap.md` post-V1). An update pushed to every document at once is how one stolen publisher key reaches every user | unimplemented |
 | `MACRO-017` | `INV` | A secret a macro declares MUST hold one value per user, kept in that user's settings. | this spec section 3 | not built | unbuilt -- lands with the `User settings` Story (`ambre-roadmap.md` post-V1). A token pasted into the source would be read by every member of the document | unimplemented |
+| `MACRO-044` | `CONC` | Two versions of a macro saved concurrently MUST leave one of them whole, never a merge of both. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A source merged character by character is code that no integrator signed | unimplemented |
 | `MACRO-018` | `INV` | A secret value MUST NOT reach the document. | this spec section 3 | not built | unbuilt -- lands with the `User settings` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.2 Integrate a macro
@@ -52,7 +53,7 @@ into this document. Nothing runs yet.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MACRO-019` | `PRE` | A member without the right to edit MUST NOT integrate a macro. | `SYNC-016`; derived | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `MACRO-020` | `POST` | An integrated macro MUST carry the signature of its integrator. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MACRO-020` | `POST` | An integrated macro MUST carry its integrator's signature over the document it lands in and its digest. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A signature that named no document would let an editor copy a macro from another document, under the name and the role of a member who never put it here | unimplemented |
 | `MACRO-021` | `POST` | An installed macro MUST be copied whole into the document. | this spec section 3 | not built | unbuilt -- lands with the `Macro marketplace` Story (`ambre-roadmap.md` post-V1). A macro fetched at each run would tell its source which documents use it, and when | unimplemented |
 | `MACRO-022` | `FRAME` | Integrating a macro MUST NOT run it. | derived | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACRO-023` | `FAIL` | A source that uses TypeScript syntax the stripper cannot erase MUST be refused at integration. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). Refusing here tells the integrator; refusing at run tells every other member instead | unimplemented |
@@ -66,7 +67,7 @@ A user reads what a macro asks for, and allows it on their own client.
 |---|---|---|---|---|---|---|
 | `MACRO-025` | `POST` | The approval prompt MUST list every capability the macro asks for. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACRO-026` | `FRAME` | An approval MUST NOT reach any other member. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). Trust is personal: one member's approval is no reason for another's code to run on their machine | unimplemented |
-| `MACRO-027` | `FAIL` | A macro whose integrator signature fails MUST NOT be offered for approval. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MACRO-027` | `FAIL` | A macro whose integrator signature fails, or names another document, MUST NOT be offered for approval. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.4 Run a macro
 
@@ -109,14 +110,14 @@ A macro asks for one address its user approved. The call leaves like any other r
   `ambre-spec-budgets.md`, and section 6 names it.
 * **Boundary.** a macro is sealed like content (`ZK-001`) and runs on no relay (`ZK-004`). A call a
   user approves sends what the macro chooses to a third party, and section 6 names that exit.
-* **Verification.** 0 `verified`, 43 `unimplemented`. Nothing here is built.
+* **Verification.** 0 `verified`, 44 `unimplemented`. Nothing here is built.
 
 ---
 
 ## 2. WHAT EACH USER SEES
 
-A macro is content, so its source converges like any other edit. Its runs do not: each user runs it
-alone.
+A macro is content, so it syncs like any other edit, but as one value: a concurrent save keeps one
+version whole (`MACRO-044`). Its runs do not sync: each user runs it alone.
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
@@ -131,7 +132,8 @@ alone.
 ## 3. MODEL
 
 **Containers.** one per document: a map of macros in the document metadata, sealed like content
-(`MACRO-001`). Approvals and secret values live in the user's own settings, never in the document.
+(`MACRO-001`). Each entry is one value that a save replaces whole, never a text that merges
+(`MACRO-044`). Approvals and secret values live in the user's own settings, never in the document.
 Those settings land with the "User settings" Story (`ambre-roadmap.md` post-V1).
 
 **Two parties to a macro.**
@@ -147,7 +149,9 @@ member who installed it.
 **The shapes.**
 
 ```rust
-/// One macro, as the document stores it. `digest` names this exact source.
+/// One macro, as the document stores it, and replaced whole on each save.
+/// `digest` covers the name, the source, the API version, the asks and the
+/// trigger; `integrator_signature` covers the document id and the digest.
 pub struct Macro {
     pub name: String,
     pub source: String,
@@ -196,7 +200,7 @@ pub enum ApprovalSource {
 }
 ```
 
-**The capabilities.** Three tiers, and each capability sits in one.
+**The capabilities.** Four tiers, and each capability sits in one.
 
 | Tier | What it covers | How it is granted |
 |---|---|---|
@@ -242,7 +246,7 @@ calls later.
 
 1. an editor picks a package; its publisher signature is checked (`MACRO-024`);
 2. the source and its manifest are copied whole into the document (`MACRO-021`);
-3. the editor signs the digest as integrator (`MACRO-020`);
+3. the editor signs the document id and the digest as integrator (`MACRO-020`);
 4. a later version of the package changes nothing until an editor installs it (`MACRO-016`).
 
 **A run, in steps.**
@@ -285,7 +289,7 @@ commit of a run queues nothing (`MACRO-038`).
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
 | A macro runs in a member client | a macro run by the relay, as Apps Script runs on the server | the relay cannot open the document (`ZK-004`). A relay able to run a macro would be a relay able to read |
-| A worker the browser optimizes | an interpreter embedded in the Logic instance | twenty to a hundred times slower than the browser's compiler on a loop over a sheet, and several megabytes more in the Logic instance. Its one gain, counting each instruction, is not needed: a worker stops when terminated |
+| A worker the browser optimizes | an interpreter embedded in the Logic instance | far slower than the browser's compiler on a loop over a sheet, and several megabytes more in the Logic instance. Its one gain, counting each instruction, is not needed: a worker stops when terminated |
 | The sandbox is enforced by the browser | a worker whose network functions are removed in code | the global scope of a worker holds dozens of ways out, and a sandbox that lists them by hand fails at the first one it forgets |
 | The lower of the integrator's and the running user's role | the running user's role alone | an editor could integrate a macro that shares the document, and wait for an owner to press its button |
 | The lower of the integrator's and the running user's role | the publisher's role | a marketplace publisher is never a member, so its role is none and no published macro could write |
@@ -325,6 +329,8 @@ commit of a run queues nothing (`MACRO-038`).
   are. The catalog waits on the "Organization trust anchor" Story (`ambre-roadmap.md` post-V1).
 * **A policy binds a client, not a person.** The relay cannot see a macro, so only the client enforces
   a catalog. It stops a mistake or a lure, and it does not stop a member who changes their client.
+* **Undoing the edit that fired a trigger is not ruled.** The run is its own undo step, so its effect
+  stays when the user undoes the edit that caused it.
 * **Approvals never expire.** An approval unused for months still stands; no rule retires it.
 * **The commands a macro can call are not listed.** Each application exposes its own, and none
   declares them yet.

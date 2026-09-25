@@ -53,8 +53,8 @@
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 13 | 7 |
 | `ui` | The page's own thread. | partial | 17 | 9 |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
-| `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 32 |  |
-| `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 43 |  |
+| `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
+| `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 44 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**41 features: 23 implemented, 14 partial, 4 design-only. 664 contract rows, 323 loose.**
+**41 features: 23 implemented, 14 partial, 4 design-only. 667 contract rows, 323 loose.**

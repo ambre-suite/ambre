@@ -87,7 +87,7 @@
 | addressed key | the key that opens only the frames sent to one machine | | `1-Foundations/ambre-spec-machine-access.md` |
 | macro | code stored in a document, run by a member client after approval | | `1-Foundations/ambre-spec-macros.md` |
 | integrator | the member who put one version of a macro in one document | | `1-Foundations/ambre-spec-macros.md` |
-| publisher | whoever wrote and signed a macro, member or not | | `1-Foundations/ambre-spec-macros.md` |
+| publisher | whoever wrote a macro; a third party signs the package it publishes | | `1-Foundations/ambre-spec-macros.md` |
 | container | the file wrapping a document on disk | | `1-Foundations/ambre-spec-docfile.md` |
 | doc_type | the header byte naming the owning application | | `1-Foundations/ambre-spec-docfile.md` |
 | magic | the four bytes opening every container | | `1-Foundations/ambre-spec-docfile.md` |

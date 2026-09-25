@@ -46,7 +46,7 @@ The owner invites a program as a member. It receives the document key, bound by 
 | `MACH-011` | `POST` | Adding a machine member MUST ask for the same fingerprint confirmation as a human invite. | `1-Foundations/ambre-spec-key-verification.md section 3` (`CHROME-073`) | not built | unbuilt -- lands with the `Machine members` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACH-012` | `POST` | A machine member MUST join as a viewer unless the owner picks another role. | derived | not built | unbuilt -- lands with the `Machine members` Story (`ambre-roadmap.md` post-V1). A program that only reads, to export or index, is the common case, and a write role is a choice the owner states | unimplemented |
 | `MACH-013` | `FRAME` | Adding a machine MUST change no other member's role. | derived | not built | unbuilt -- lands with the `Machine members` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `MACH-014` | `FAIL` | An addition with no declared host MUST be refused before any key is wrapped. | this spec section 3 | not built | unbuilt -- lands with the `Machine members` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MACH-014` | `PRE` | The owner MUST see the declared host before any key is wrapped. | this spec section 4 | not built | unbuilt -- lands with the `Machine members` Story (`ambre-roadmap.md` post-V1). The host is the operator's word, so refusing an empty one proves nothing; showing it before the key leaves is the one moment it informs a choice | unimplemented |
 
 ### 1.3 Remove a machine member
 
@@ -64,10 +64,11 @@ other posts.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
+| `MACH-034` | `PRE` | A writer MUST take the inbox public key from the owner who registers it, never from the relay. | this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1). A relay that served a key of its own would open every post | unimplemented |
 | `MACH-017` | `POST` | A post MUST be sealed to the inbox public key. | this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACH-018` | `POST` | A post MUST carry the signature of its writer. | this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACH-019` | `FRAME` | A post MUST NOT change the document before a member merges it. | this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1). The writer holds no document key, so it cannot seal a delta, and a post is a request, not an edit | unimplemented |
-| `MACH-020` | `FAIL` | The relay MUST refuse a post signed by no registered writer of that inbox. | this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1). An open inbox is a spam channel that every member client must open and drop | unimplemented |
+| `MACH-020` | `FAIL` | The relay MUST refuse a post signed by no registered writer of that inbox. | this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1). An open inbox is a spam channel that every member client must open and drop. The relay's registry is its own word, so this check filters spam and `MACH-033` is the one that holds | unimplemented |
 
 ### 1.5 Revoke an inbox writer
 
@@ -87,6 +88,7 @@ A member client opens the pending posts and writes them into the document as ord
 | `MACH-023` | `PRE` | A member without the right to edit MUST NOT merge a post. | `SYNC-016`; this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1). A viewer who merged would write through the inbox what its role forbids it to write directly | unimplemented |
 | `MACH-024` | `POST` | A merged post MUST keep the identity of its writer in the document. | this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MACH-025` | `FRAME` | A member MUST NOT delete a post before the relay acknowledges the merged edit. | this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1). A crash between the two steps would otherwise lose the post | unimplemented |
+| `MACH-033` | `FAIL` | A post whose writer is missing from the sealed machine records MUST be set aside, whatever the relay accepted. | this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1). A relay that added a writer of its own to its registry would otherwise write into the document | unimplemented |
 | `MACH-026` | `FAIL` | A post that fails to open or to parse MUST be set aside and reported, never merged. | this spec section 3 | not built | unbuilt -- lands with the `Write-only inboxes` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.7 Address a frame to a machine
@@ -114,7 +116,7 @@ The owner removes the machine. It keeps the frames it already opened, and it rec
 * **Boundary.** every path is sealed on the client (`ZK-001`), and no relay endpoint reads content
   (`ZK-004`). The machine flag, the declared host and the inbox registry are new relay knowledge,
   which section 6 names.
-* **Verification.** 0 `verified`, 32 `unimplemented`. Nothing here is built.
+* **Verification.** 0 `verified`, 34 `unimplemented`. Nothing here is built.
 
 ---
 
@@ -190,17 +192,19 @@ TypeScript reach the same core through bindings; no other language implements th
 
 **A post, in steps.**
 
-1. the writer builds the payload the application declares for the inbox;
-2. it seals the payload to the inbox X25519 public key, with a fresh ephemeral key (`MACH-017`);
-3. it signs the post id and the sealed bytes with its Ed25519 key (`MACH-018`);
-4. the relay checks the signature against the registry of the inbox, and stores the post (`MACH-020`).
+1. the writer holds the inbox public key the owner gave it at registration (`MACH-034`);
+2. it builds the payload the application declares for the inbox;
+3. it seals the payload to the inbox X25519 public key, with a fresh ephemeral key (`MACH-017`);
+4. it signs the post id and the sealed bytes with its Ed25519 key (`MACH-018`);
+5. the relay checks the signature against the registry of the inbox, and stores the post (`MACH-020`).
 
 **A merge, in steps.**
 
 1. a member client with the right to edit opens the inbox private key with the document key (`MACH-023`);
-2. it opens each pending post, and sets aside one that fails to open or to parse (`MACH-026`);
-3. it writes the post into the document, keyed by post id, with the writer identity (`MACH-024`);
-4. it deletes the post once the relay acknowledges the edit (`MACH-025`).
+2. it checks each writer against the sealed machine records, and sets aside a stranger (`MACH-033`);
+3. it opens each pending post, and sets aside one that fails to open or to parse (`MACH-026`);
+4. it writes the post into the document, keyed by post id, with the writer identity (`MACH-024`);
+5. it deletes the post once the relay acknowledges the edit (`MACH-025`).
 
 A second merge of the same post finds its id in the document and writes nothing (`MACH-007`).
 
@@ -211,6 +215,9 @@ A second merge of the same post finds its id in the document and writes nothing 
 3. the member wraps the result for the exchange key of the machine, as a membership wrap;
 4. after a rotation, a member derives and wraps again from the new document key (`MACH-009`).
 
+An addressed frame is not an edit. It travels on a stream of its own beside the oplog, and the
+document never holds it. The oplog is sealed under the document key, which the machine lacks.
+
 **Code.** not built -- the three classes land with their Stories (`ambre-roadmap.md` post-V1).
 
 ---
@@ -219,7 +226,7 @@ A second merge of the same post finds its id in the document and writes nothing 
 
 | Trigger | Behaviour |
 |---|---|
-| "Add a machine" in the share dialog | the class, the role and the host are asked; the fingerprint is confirmed (`MACH-011`, `MACH-014`) |
+| "Add a machine" in the share dialog | the class, the role and the host are asked; the host is shown and the fingerprint confirmed (`MACH-011`, `MACH-014`) |
 | the member list | a machine badge and the declared host beside each machine (`MACH-003`, `MACH-004`) |
 | the inbox settings of a document | register or revoke a writer by its public key (`MACH-021`) |
 | a Murmure slash command, or a command palette entry in an editor | the frame is addressed to one machine (`MACH-027`) |
@@ -254,6 +261,8 @@ A second merge of the same post finds its id in the document and writes nothing 
   set `ZK-007` allows. Each needs a row in the boundary table, or a sealed form the relay stores blind.
 * **A machine member reads the history.** The document key opens the whole oplog, edits made before
   the machine joined included. A shallow snapshot that would hide the older edits is not ruled.
+* **The stream of addressed frames is not ruled.** Where the relay keeps it, and for how long, has no
+  rule yet.
 * **The host declaration is unverifiable.** It records what the operator says; nothing proves where
   the program runs.
 * **The content a post maps to is per application.** A row in Trame, a card in Toile, a paragraph in
