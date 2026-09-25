@@ -16,7 +16,7 @@ use loro::TreeID;
 use parley::{Affinity, Cursor, Selection};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::layout::measure::EffectiveStyle;
+use crate::layout::measure::{EffectiveStyle, MarkedSpan};
 use crate::layout::pass::PageLayout;
 
 /// One block's text, shaped and broken into lines: enough to draw and to
@@ -36,6 +36,9 @@ pub struct ParleyRunData {
     /// The style the text was shaped in, so a draft typed into the block is
     /// shaped alike (`PROSE-UI-134`). `None` for a run shaped without one.
     style: Option<EffectiveStyle>,
+    /// The spans shaped bold or italic, in bytes, so a draft typed after one
+    /// takes its marks (`PROSE-UI-208`).
+    marks: Vec<MarkedSpan>,
 }
 
 impl ParleyRunData {
@@ -54,7 +57,23 @@ impl ParleyRunData {
             indent_px,
             text: text.to_owned(),
             style: None,
+            marks: Vec::new(),
         }
+    }
+
+    /// Whether the code point before `offset` is bold, then italic. Text
+    /// typed at `offset` takes these marks, since both expand after their
+    /// range (`ambre-spec-prose-schema.md section 3`).
+    #[must_use]
+    pub fn marks_before(&self, offset: u32) -> (bool, bool) {
+        let Some(previous) = offset.checked_sub(1) else {
+            return (false, false);
+        };
+        let byte = self.byte_of(previous);
+        self.marks
+            .iter()
+            .find(|span| span.start <= byte && byte < span.end)
+            .map_or((false, false), |span| (span.bold, span.italic))
     }
 
     /// The style the text was shaped in, when the shaper recorded it.
@@ -319,6 +338,20 @@ impl ShapedRun {
     pub fn styled(text: &str, layout: Layout<ParleyBrush>, style: &EffectiveStyle) -> Self {
         let mut data = ParleyRunData::new(text, layout, style.indent_left_px);
         data.style = Some(style.clone());
+        Self(Arc::new(data))
+    }
+
+    /// The same, recording the spans shaped bold or italic as well.
+    #[must_use]
+    pub fn marked(
+        text: &str,
+        layout: Layout<ParleyBrush>,
+        style: &EffectiveStyle,
+        marks: &[MarkedSpan],
+    ) -> Self {
+        let mut data = ParleyRunData::new(text, layout, style.indent_left_px);
+        data.style = Some(style.clone());
+        data.marks = marks.to_vec();
         Self(Arc::new(data))
     }
 

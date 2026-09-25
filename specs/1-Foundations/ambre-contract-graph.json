@@ -6122,7 +6122,7 @@
   {"edge": "cites-section", "from": "PROSE-UI-200", "section": "3", "to": "4-Prose/features/ambre-spec-prose-text-editing.md"},
   {"edge": "verified-by", "from": "PROSE-UI-200", "to": "ambre_prose::view::paint::tests::a_draft_in_a_heading_is_drawn_as_the_heading"},
   {"edge": "cites-section", "from": "PROSE-UI-208", "section": "3", "to": "4-Prose/features/ambre-spec-prose-text-editing.md"},
-  {"edge": "lands-with", "from": "PROSE-UI-208", "to": "The draft takes the marks at the caret"},
+  {"edge": "verified-by", "from": "PROSE-UI-208", "to": "ambre_prose::view::paint::tests::a_draft_after_a_bold_word_is_drawn_bold"},
   {"edge": "cites-section", "from": "PROSE-UI-201", "section": "3", "to": "4-Prose/features/ambre-spec-prose-text-editing.md"},
   {"edge": "lands-with", "from": "PROSE-UI-201", "to": "A provisional paragraph on the UI thread"},
   {"edge": "cites-section", "from": "PROSE-UI-202", "section": "3", "to": "4-Prose/features/ambre-spec-prose-text-editing.md"},

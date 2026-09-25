@@ -376,7 +376,7 @@ impl Measurer {
         (
             metrics_of(&layout),
             lines,
-            ShapedRun::styled(text, layout, style),
+            ShapedRun::marked(text, layout, style, marks),
         )
     }
 

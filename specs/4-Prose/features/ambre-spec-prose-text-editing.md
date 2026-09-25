@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-124` | `INV` | A deletion MUST NOT split a grapheme cluster: a range that starts or ends inside one MUST take the whole cluster. | this spec section 3 | `ambre_prose::logic::text::tests::a_deletion_never_splits_a_grapheme`; `ambre_prose::input_tests::two_deletes_before_the_layout_never_split_a_grapheme` | none | verified |
 | `PROSE-UI-199` | `OBS` | The text after the caret MUST be drawn after the draft, and never under it, while the layout carrying the draft is on its way. | this spec section 3 | `ambre_prose::view::paint::tests::the_text_after_a_draft_moves_right_by_its_width` | none | verified |
 | `PROSE-UI-200` | `OBS` | The draft MUST be drawn in the style the document lays out the block it joins in. | this spec section 3 | `ambre_prose::view::paint::tests::a_draft_in_a_heading_is_drawn_as_the_heading` | none | verified |
-| `PROSE-UI-208` | `OBS` | A draft typed where a bold or italic mark applies MUST be drawn with that mark. | this spec section 3 | not built | unbuilt -- lands with the "The draft takes the marks at the caret" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-208` | `OBS` | A draft typed where a bold or italic mark applies MUST be drawn with that mark. | this spec section 3 | `ambre_prose::view::paint::tests::a_draft_after_a_bold_word_is_drawn_bold` | none | verified |
 | `PROSE-UI-201` | `OBS` | A draft longer than its line MUST wrap as the paragraph will, before the document answers. | this spec section 3 | not built | unbuilt -- lands with the "A provisional paragraph on the UI thread" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-202` | `OBS` | Deleted text MUST leave the screen before the document answers. | this spec section 3 | not built | unbuilt -- lands with the "A provisional paragraph on the UI thread" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-206` | `OBS` | A deletion MUST NOT take off the screen the text typed before it that no layout carries yet. | this spec section 3 | not built | unbuilt -- lands with the "A provisional paragraph on the UI thread" Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -96,7 +96,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. Every mutation leaves as a command (`PROSE-UI-002`,
   `features/ambre-spec-prose-engine.md section 1`).
-* **Verification.** 35 `verified`, 0 `untested`, 6 `unimplemented`. `PROSE-101` reads two tests,
+* **Verification.** 36 `verified`, 0 `untested`, 5 `unimplemented`. `PROSE-101` reads two tests,
   because the paragraph the caret started in is the one a deletion does not remove.
 
 ---

@@ -204,7 +204,7 @@ impl ProseUiState {
         font_cx: &mut parley::FontContext,
         layout_cx: &mut parley::LayoutContext<ambre_draw::ParleyBrush>,
     ) {
-        let draft = self.draft.shown().map(|(block, _, text)| (block, text));
+        let draft = self.draft.shown();
         let kept = self.draft_shape.take();
         self.draft_shape = self.reshape(kept, draft, font_cx, layout_cx);
         // The composition is shaped apart: it sits at the caret, wherever the
@@ -212,23 +212,26 @@ impl ProseUiState {
         let compose = self
             .cursor
             .filter(|_| !self.composing.is_empty())
-            .map(|cursor| (cursor.block_id, self.composing.clone()));
+            .map(|cursor| {
+                let at = self.to_laid(cursor.block_id, cursor.offset);
+                (cursor.block_id, at, self.composing.clone())
+            });
         let kept = self.compose_shape.take();
         self.compose_shape = self.reshape(kept, compose, font_cx, layout_cx);
     }
 
-    /// Shape a text in the style of its block, keeping the shape already
-    /// made for the same text.
+    /// Shape a text typed at `at` in the style of its block and the marks
+    /// before `at`. A shape already made for the same text is kept.
     fn reshape(
         &self,
         kept: Option<(String, ShapedRun)>,
-        wanted: Option<(BlockId, String)>,
+        wanted: Option<(BlockId, u32, String)>,
         font_cx: &mut parley::FontContext,
         layout_cx: &mut parley::LayoutContext<ambre_draw::ParleyBrush>,
     ) -> Option<(String, ShapedRun)> {
-        let (block, text) = wanted?;
-        let style = self
-            .run_of(block)
+        let (block, at, text) = wanted?;
+        let run = self.run_of(block);
+        let mut style = run
             .and_then(ParleyRunData::style)
             .cloned()
             .unwrap_or_else(|| {
@@ -238,6 +241,11 @@ impl ProseUiState {
                     false,
                 )
             });
+        // Typed after a bold or italic span, the text lands in it
+        // (`PROSE-UI-208`).
+        let (bold, italic) = run.map_or((false, false), |run| run.marks_before(at));
+        style.bold |= bold;
+        style.italic |= italic;
         // A shape is kept only in the style it was made in: the same text
         // typed into another block is shaped again (`PROSE-UI-200`).
         if let Some(kept) = kept
@@ -1399,6 +1407,38 @@ mod tests {
             "the draft is in the heading's style"
         );
         assert!(titled > plain, "the heading's bold reaches the draft");
+    }
+
+    /// `PROSE-UI-208`: a draft typed right after a bold word is shaped
+    /// bold, and one typed after plain text is not.
+    #[test]
+    fn a_draft_after_a_bold_word_is_drawn_bold() {
+        let (mut state, _) = laid_out(1, 2);
+        let block = *state.root_blocks().last().expect("a block");
+        state.handle_command(ProseCommand::ApplyMark {
+            block_id: block,
+            range: (0, 4),
+            key: "b".to_owned(),
+            value: None,
+        });
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_layout(state.shaped_layout());
+        let mut font_cx = parley::FontContext::new();
+        for bytes in crate::layout::fonts::shipped_faces() {
+            crate::layout::fonts::register_faces(&mut font_cx, bytes);
+        }
+        let mut layout_cx = parley::LayoutContext::new();
+        let mut bold_at = |ui: &mut ProseUiState, at: u32| {
+            ui.draft.clear();
+            ui.draft.push_str("abc", &block, at);
+            ui.shape_draft(&mut font_cx, &mut layout_cx);
+            let (_, shape) = ui.draft_shape.as_ref().expect("the draft is shaped");
+            shape.data().style().is_some_and(|style| style.bold)
+        };
+        assert!(bold_at(&mut ui, 4), "after the bold word");
+        assert!(!bold_at(&mut ui, 9), "after the plain word");
+        assert!(!bold_at(&mut ui, 0), "before any text");
     }
 
     fn thread(block: BlockId, start: u32, end: u32) -> crate::events::CommentThread {
