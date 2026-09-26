@@ -24,6 +24,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-006` | `INV` | Per document and per author the accepted clock MUST increase by exactly one. | this spec section 3; `ambre-spec-delta-order.md`, `SYNC-024` | `ambre_server::redis_ops::lua_tests::sequential_clock_succeeds` -- an accepted value; `::first_update_succeeds` -- the first one; `::duplicate_clock_rejected` -- the replayed refusal; `::clock_mismatch_rejected` -- the out-of-step refusal; `::independent_clients_have_independent_clocks` -- one author's clock does not move another's, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
+| `SRV-132` | `INV` | The deltas a document keeps past its latest confirmed snapshot MUST stop growing while a single author writes. | this spec section 3; `SRV-130` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
 
 ### 1.2 A delta is numbered
 
@@ -57,6 +58,12 @@ sequence has already moved.
 | `SRV-039` | `POST` | A delta a retained snapshot already contains MUST be removed from the index. | this spec section 3 | `ambre_server::db::tests::purge_superseded_updates_trims_covered_deltas` -- ten deltas and a snapshot covering six leave exactly the uncovered tail, correct and unreachable while `SRV-038` is unbuilt, since with no snapshot there is no horizon | none | verified |
 | `SRV-083` | `FRAME` | A trim MUST NOT remove a delta the oldest retained snapshot does not cover. | this spec section 3 | `ambre_server::db::tests::purge_horizon_is_min_covered_seq` -- two snapshots covering 3 and 8 stop the trim at 3, not 8; `::create_snapshot_roundtrips_covered_seq` -- the horizon a snapshot records | none | verified |
 | `SRV-038` | `POST` | The relay MUST ask for a snapshot once a document's unfolded history passes its threshold. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7). The request exists in the protocol and the client acts on it, and the relay sends it from nowhere, so no document is ever compacted, section 6 | unimplemented |
+| `SRV-126` | `POST` | A snapshot MUST stay pending until another member client confirms it, or until its author confirms it. | this spec section 3; `AUTHOR-016`, `AUTHOR-021` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-127` | `FRAME` | A trim MUST NOT count a pending snapshot. | this spec section 3; `SRV-083` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-128` | `POST` | A cold open MUST be served the latest confirmed snapshot. | this spec section 3; `AUTHOR-015` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-129` | `POST` | A pending snapshot MUST be offered for confirmation to a member client, other than its author, that has the document open. | this spec section 3; `AUTHOR-016` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-130` | `FRAME` | A trim after a confirmation by the author MUST NOT drop a delta another user signed past the reference snapshot. | this spec section 3; `AUTHOR-022` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-131` | `FRAME` | A trim MUST NOT drop the reference snapshot: the latest one a member other than its author confirmed. | this spec section 3; `AUTHOR-022` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
 
 ### 1.5 A client asks for what it missed
 
@@ -81,7 +88,7 @@ snapshot, and the relay arbitrates who writes it.
 | `SRV-115` | `FAIL` | Given a delta for a locked segment, the relay MUST refuse it with an answer that names the lock. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-116` | `FAIL` | Given a finalize commit from a client that holds no live lease, the relay MUST refuse it. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-117` | `POST` | An accepted finalization MUST record the finalization time of the segment. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-118` | `POST` | The deltas of a final segment MUST be purged only once a second member client confirms the finalization, or once the verification delay has passed. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-118` | `POST` | The deltas of a final segment MUST be purged only once a member client other than its author confirms the finalization. | this spec section 3; `SRV-126` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-119` | `POST` | A lease that expires MUST let another client take the lease of the same segment. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-120` | `FRAME` | Finalizing a segment MUST NOT touch a delta of any other document. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -159,8 +166,17 @@ for ever.
 
 **A snapshot, and the horizon it moves.** A client seals its whole state and puts it in object
 storage. It records it against the document with the highest delta number it had folded in, and
-that number is the horizon. The trim removes every delta at or below the lowest horizon of the
-snapshots the document still keeps (`SRV-039`, `SRV-083`). The hourly pass keeps the ten most
+that number is the horizon.
+
+A snapshot is pending until it is confirmed (`SRV-126`). The relay offers it at once to a member who
+has the document open (`SRV-129`), so two active members confirm within seconds. An author may
+confirm its own snapshot. The relay then keeps the reference snapshot (`SRV-131`) and every delta
+another user signed past it (`SRV-130`), and drops the author's own. So the deltas kept stop
+growing while one author writes alone (`SRV-132`).
+
+Only a confirmed snapshot is retained, and moves the trim (`SRV-127`). The trim
+removes every delta at or below the lowest horizon of the snapshots the document still keeps
+(`SRV-039`, `SRV-083`). The hourly pass keeps the ten most
 recent. **Nothing triggers any of it** (`SRV-038`).
 
 **A finalization.** A Murmure segment ends as one immutable snapshot
@@ -171,8 +187,8 @@ recent. **Nothing triggers any of it** (`SRV-038`).
    that names the lock, so the client rewrites the edit as an amendment (`SRV-115`).
 2. The client uploads the final snapshot and commits it with its horizon, a `Seq`. The relay refuses a
    commit without the live lease (`SRV-116`), and records the finalization time (`SRV-117`).
-3. The deltas stay until a second member client confirms the snapshot against them, or until the
-   verification delay passes (`SRV-118`). A false snapshot therefore loses nothing at once.
+3. The deltas stay until another member client confirms the snapshot against them (`SRV-118`).
+   A false snapshot therefore loses nothing, however long the confirmation takes.
 
 The lease names the segment by its `DocumentId`, and the commit carries its `SnapshotId` and its
 horizon `Seq`. The durations are rows of `ambre-spec-budgets.md section 8`.
@@ -232,6 +248,9 @@ sees is how long a document takes to open.
 | The replay is paged, and each page is fetched together | one batch with a hard cap | it silently truncated any client further behind than the cap: it applied the batch, declared itself hydrated and never asked again |
 | The replay is paged, and each page is fetched together | one object fetch at a time | the serial round trip dominated a cold open. Fetching a page's objects together removes it |
 | A replay is throttled per document | no throttle | it makes the cheapest frame the most expensive request: a request for everything since the first delta is one small frame that costs the relay the whole history from object storage. One replay per reconnect is the real need, and a second within the same second is not one |
+| A pending snapshot moves no trim | trimming as soon as a snapshot lands | a false snapshot would replace the signed deltas that could prove it false |
+| The deltas of a final segment wait for a confirmation | purging them after a delay | a false snapshot nobody checked in time would become the only record, and every cold open would trust it |
+| The relay offers a snapshot for confirmation | waiting for the next cold open | a document whose other members keep it open would never be confirmed, and its deltas would pile up |
 
 ---
 

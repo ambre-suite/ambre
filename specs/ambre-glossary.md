@@ -53,6 +53,7 @@
 | clock | the per-author counter carried by a delta | | `1-Foundations/ambre-spec-delta-order.md` |
 | quarantine | the hold for a delta that cannot apply yet | | `1-Foundations/ambre-spec-delta-order.md` |
 | snapshot | a full document state, encrypted and signed | | `1-Foundations/ambre-spec-delta-order.md` |
+| reference snapshot | the latest snapshot a member other than its author confirmed | | `1-Foundations/ambre-spec-sequencer.md` |
 | sync | the thread owning the network and the crypto | | `1-Foundations/ambre-spec-sync.md` |
 | relay | the server, which carries traffic it cannot read | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | boundary | the line between what the relay learns and what it never learns | | `1-Foundations/ambre-spec-zero-knowledge.md` |

@@ -61,7 +61,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-076` | `POST` | A re-finalization MUST remove from the amendments document the entries it folded in. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-077` | `FRAME` | A re-finalization MUST NOT drop an amendment written after the fold began. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** the grace period, the lease, the verification delay and the erasure delay are rows
+* **Budget.** the grace period, the lease and the erasure delay are rows
   of `ambre-spec-budgets.md section 8`. The segment size row of section 6 bounds every snapshot here,
   and the row beside it bounds the deltas a cold open replays.
 * **Boundary.** a final snapshot is sealed like any snapshot (`ZK-001`). The relay learns the state
@@ -98,15 +98,16 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 **An active segment is compacted by count, never on a timer.** The relay asks a member client for
 a snapshot once the deltas past the latest one pass their budget (`SRV-038`, `MURMURE-222`). A
 quiet channel is never compacted for nothing, and a busy one is compacted as often as it writes. The
-snapshot is full, not shallow: a client may still send a change made before it.
+snapshot is full, not shallow: a client may still send a change made before it. It stays pending
+until another member confirms it, as any snapshot does (`SRV-126`, `AUTHOR-016`).
 
 **A finalization, in steps.**
 
 1. A member client asks for the lease, and the relay locks the segment (`SRV-113`, `SRV-114`).
 2. The client exports a shallow snapshot of the deltas up to the number the relay returned.
 3. It uploads the snapshot and its search index, and commits (`SRV-116`).
-4. A second member client confirms, or the verification delay passes, and the deltas go
-   (`SRV-118`).
+4. Another member client confirms, and the deltas go (`SRV-118`). A segment nobody opens again
+   keeps its deltas: about 1.8 MB beside a 0.5 MB snapshot, for 5000 messages.
 
 **A re-finalization** runs rarely and in batches. It is what turns a delete into an erasure: the
 deleted text leaves the ciphertext only then.
@@ -138,6 +139,7 @@ The segments have no control of their own. A user meets them only as a channel t
 | An active segment is compacted by count | a compaction every one or two minutes | a quiet channel would upload a snapshot for nothing, and a busy one could still pile up deltas between two ticks |
 | A full snapshot while the segment is active | a shallow snapshot at each compaction | a client that sends a change made before the snapshot could no longer merge it |
 | A compaction bounds the deltas past the snapshot | smaller segments instead | every close adds a lease, a final snapshot and a search index, and a smaller segment still replays its whole tail |
+| The deltas wait for a confirmation | purging them after a verification delay | a false snapshot nobody checked in time would become the only record of the segment |
 
 ---
 
