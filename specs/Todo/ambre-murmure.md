@@ -420,6 +420,10 @@ revoke.
 **The space document is the catalogue of a space.** It is one sealed Loro document per space, and
 every member of the space is a member of it.
 
+**A space is a document.** Joining a space means joining its `space` document, through the same
+invite and the same signed membership log as any document. The relay holds nothing of its own for
+a space, beyond the space each channel belongs to.
+
 - Space admins are `editor` or `owner`. The relay refuses a write from a `viewer` (`SRV-008`).
 - Other members are `viewer`. They read the catalogue and cannot change it.
 
@@ -450,6 +454,15 @@ channel, sealed by the space document. The client wraps that key for its own X25
 the relay for a membership row. The relay grants the row to a space member only for a channel it
 knows as public in that space. So the relay holds the public flag and the space of each channel.
 That flag is outside the `ZK-007` set today, like the notification level below.
+
+**A self-join is checked against the catalogue, never against the relay flag.** The joining member
+signs their own entry in the membership log. Every client accepts that entry only when both hold:
+
+- the signer is a verified member of the space document;
+- the catalogue of the space lists the channel.
+
+Only space admins write the catalogue, and the relay cannot read it. A relay that flips a private
+channel to public can create a row, and every client shows that row as unverified.
 
 **The user settings hold the personal state.** Murmure keeps no store of its own. It writes one
 `"murmure"` section in the sealed per-user store of the
@@ -482,6 +495,11 @@ member online.
 shared key would expose nothing more to that member. The gain is for a member of one channel who
 is not a member of the space, such as a bot or a guest. That member holds the key of one channel
 and reads no other channel.
+
+**A guest is never a member of the space document.** The catalogue holds the key of every public
+channel, so a guest who reads it would hold them all. A guest enters a channel only through an
+invite, signed by the member who invites. The membership log then shows who is a guest, who let
+them in, and in which channels. A guest cannot self-join: the first condition above fails.
 
 **The rotation needs a budget row before Murmure ships.** The row goes in `ambre-spec-budgets.md`
 and bounds the rotation on a space leave. A measure against that row decides whether the shared key
@@ -646,6 +664,8 @@ A re-seal replaces the sealed index (section 3, *Amendments to a sealed segment*
 | **A frame kind in plaintext, so the relay counts unread messages** | One more leak in the `ZK-007` set, for a count the client computes from the deltas it fetches anyway. |
 | **A new direct message each time** | Two conversations between the same members split one history. |
 | **GIF search through a third-party service** | Each search sends what the user types to that service. |
+| **A self-join checked against the public flag of the relay** | The relay could flip a private channel to public and show a verified member who holds no key. The catalogue is sealed and written by admins only. |
+| **A guest who browses the catalogue** | The catalogue holds the key of every public channel, so the guest would read them all. A member invites a guest channel by channel. |
 | **A sealed index document of the user's channels** | The relay already holds the membership. A second list drifts after a revoke and shows a channel whose key is gone. |
 | **Bookmarks and followed threads in local storage** | A new device starts empty, and a new device is where the user needs them most. |
 | **Private channels in the space catalogue** | Every space member reads the catalogue, so each private channel would show its name and existence to the whole space. |
