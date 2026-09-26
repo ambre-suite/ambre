@@ -46,9 +46,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MACRO`.
 | `MACRO-014` | `INV` | An approval MUST bind one exact version of a macro, in one document. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). An approval that survived an edit would let any editor swap the code under a trust already given | unimplemented |
 | `MACRO-015` | `INV` | The code that runs MUST be derived from the approved source alone. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A document that stored a compiled form beside the source could show one and run the other | unimplemented |
 | `MACRO-016` | `INV` | A version published after an integration MUST NOT replace the integrated one on its own. | this spec section 3 | not built | unbuilt -- lands with the `Macro marketplace` Story (`ambre-roadmap.md` post-V1). An update pushed to every document at once is how one stolen publisher key reaches every user | unimplemented |
-| `MACRO-017` | `INV` | A secret a macro declares MUST hold one value per user, kept in that user's settings. | this spec section 3 | not built | unbuilt -- lands with the `User settings` Story (`ambre-roadmap.md` post-V1). A token pasted into the source would be read by every member of the document | unimplemented |
+| `MACRO-017` | `INV` | A secret a macro declares MUST hold one value per user, kept in that user's settings. | this spec section 3 | not built | unbuilt -- lands with the `User settings` Story (`ambre-roadmap.md` E6). A token pasted into the source would be read by every member of the document | unimplemented |
 | `MACRO-044` | `CONC` | Two versions of a macro saved concurrently MUST leave one of them whole, never a merge of both. | this spec section 3 | not built | unbuilt -- lands with the `Document macros` Story (`ambre-roadmap.md` post-V1). A source merged character by character is code that no integrator signed | unimplemented |
-| `MACRO-018` | `INV` | A secret value MUST NOT reach the document. | this spec section 3 | not built | unbuilt -- lands with the `User settings` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MACRO-018` | `INV` | A secret value MUST NOT reach the document. | this spec section 3 | not built | unbuilt -- lands with the `User settings` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.2 Integrate a macro
 
@@ -144,7 +144,7 @@ version whole (`MACRO-044`). Its runs do not sync: each user runs it alone.
 **Containers.** one per document: a map of macros in the document metadata, sealed like content
 (`MACRO-001`). Each entry is one value that a save replaces whole, never a text that merges
 (`MACRO-044`). Approvals and secret values live in the user's own settings, never in the document.
-Those settings land with the "User settings" Story (`ambre-roadmap.md` post-V1).
+Those settings land with the "User settings" Story (`ambre-roadmap.md` E6).
 
 **Two parties to a macro.**
 
@@ -366,7 +366,7 @@ local edit came between them; then it takes a step of its own (`MACRO-052`).
 * **An approved call is an exit.** A macro with an approved domain sends what it chooses in clear.
   The approval names the domain, and nothing checks what the macro sends there.
 * **User settings do not exist.** Approvals and secret values need a sealed store that follows a user
-  across devices. It lands with the "User settings" Story (`ambre-roadmap.md` post-V1).
+  across devices. It lands with the "User settings" Story (`ambre-roadmap.md` E6).
 * **The marketplace is not ruled.** Who hosts it, who vets a publisher, and how a stolen publisher key
   is revoked all belong to the "Macro marketplace" Story (`ambre-roadmap.md` post-V1).
 * **`MACRO-004` inherits the relay's authority on roles.** A lying relay can raise the bound of a

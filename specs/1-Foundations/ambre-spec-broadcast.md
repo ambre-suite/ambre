@@ -65,9 +65,9 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-047` | `FAIL` | A channel subscription MUST be refused to a caller who is not a member of that channel. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels and meetings Story (`ambre-roadmap.md` E5). The channel plane holds nothing back at all today: a subscribe is accepted from anyone the socket already authenticated | unimplemented |
-| `SRV-048` | `POST` | A channel frame MUST carry a verified signature and a number before it is relayed. | this spec section 3; `SRV-006`, `SRV-007` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels and meetings Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SRV-049` | `FRAME` | Signalling for a meeting MUST NOT travel on this plane: it MUST have an endpoint of its own. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels and meetings Story (`ambre-roadmap.md` E5). No meeting endpoint exists, so nothing refuses signalling smuggled through a channel frame either | unimplemented |
+| `SRV-047` | `FAIL` | A channel subscription MUST be refused to a caller who is not a member of that channel. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5). The channel plane holds nothing back at all today: a subscribe is accepted from anyone the socket already authenticated | unimplemented |
+| `SRV-048` | `POST` | A channel frame MUST carry a verified signature and a number before it is relayed. | this spec section 3; `SRV-006`, `SRV-007` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-049` | `FRAME` | Signalling for a meeting MUST NOT travel on this plane: it MUST have an endpoint of its own. | this spec section 3 | not built | unbuilt -- lands with the `Rendez-Vous` Story (`ambre-roadmap.md` post-V1). No meeting endpoint exists, so nothing refuses signalling smuggled through a channel frame either | unimplemented |
 
 * **Budget.** the live receive and broadcast of `ambre-spec-budgets.md section 3` and the presence
   write of the same table, all three reading **none exists**. The relay's memory per open document

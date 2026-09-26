@@ -361,7 +361,7 @@ That flag is outside the `ZK-007` set today, like the notification level below.
 
 **The user settings hold the personal state.** Murmure keeps no store of its own. It writes one
 `"murmure"` section in the sealed per-user store of the
-`User settings` Story (`ambre-roadmap.md` POST-V1).
+`User settings` Story (`ambre-roadmap.md` E6).
 Macro approvals and the personal dictionary of Prose already wait on that store. That Story
 decides the key, the document layout and how a new device finds the store.
 
@@ -551,7 +551,7 @@ A re-seal replaces the sealed index (section 3, *Amendments to a sealed segment*
 | **Public channel names in the channel `meta` document** | A member who has not joined holds no key for `meta`, so the channel to join would have no name. |
 | **One key for every public channel of a space** | A bot or a guest invited to one channel would read every public channel of the space. Reconsider it if a measure shows that the rotation on a space leave is too slow for the admin client, or too frequent for large spaces. |
 | **A member online to wrap the key of a public channel** | Joining would wait on another member. The catalogue carries the key, and a space leave pays for it with a rotation. |
-| **A Murmure document of its own for personal state** | The `User settings` Story (`ambre-roadmap.md` POST-V1) already plans one sealed store per user. A second store gives the same user two sources of truth. |
+| **A Murmure document of its own for personal state** | The `User settings` Story (`ambre-roadmap.md` E6) already plans one sealed store per user. A second store gives the same user two sources of truth. |
 | **Client-side filtering of each push after decryption** | Web Push requires a visible notification for each push. Safari cancels the subscription after three silent pushes. |
 
 ### Product

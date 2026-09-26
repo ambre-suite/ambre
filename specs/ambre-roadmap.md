@@ -90,8 +90,27 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` DOCX interop | V1 | Word import and export, comments and track changes included |
 | `[ ]` PDF export | V1 | a paginated PDF with working links and metadata |
 | `[ ]` Images | V1 | images in the document, resolved through the shared media flow and embedded on export |
-| `[ ]` `ARCH P7` -- Murmure | V1 | chat channels, and a typed command surface in place of an opaque byte payload |
-| `[ ]` `SYNC P4` / `SRV P1` -- channels and meetings | V1 | channel membership and history, unread tracking, and meeting signalling |
+| `[ ]` `ARCH P7` -- the Murmure engine core | MVP | the message model, and a typed command surface in place of the opaque byte payload of the channel plane |
+| `[ ]` `SYNC P4` / `SRV P1` -- channels | MVP | channel membership and history, and unread tracking |
+| `[ ]` Spaces and the channel catalogue | MVP | a space, its catalogue of public channels with their names, categories and keys, and joining a public channel with no other member online |
+| `[ ]` Private channels and direct messages | MVP | invite-only channels, and direct messages between two or more members with an optional name |
+| `[ ]` Channel segments and sealing | MVP | the chain of segments, closing and sealing through a relay lease, and the second client that confirms a seal before the deltas go |
+| `[ ]` Message authorship | MVP | an edit, a delete or a reaction takes effect only from the member entitled to it |
+| `[ ]` Message edits and deletes | MVP | editing and deleting a message, amendments to a sealed segment, and the re-seal that turns a delete into an erasure |
+| `[ ]` Reactions, mentions and threads | MVP | emoji reactions, `@` mentions, and reply chains with a reply count on the root |
+| `[ ]` Typing and presence in a channel | MVP | typing indicators and presence on the channel plane |
+| `[ ]` The message list and the composer | MVP | the virtualized message list, and a composer built on the Prose editor |
+| `[ ]` Notifications in an open tab | MVP | a system notification for a mention or a direct message while a tab is open |
+| `[ ]` Search in loaded segments | MVP | local search over the active segment and the sealed segments already fetched |
+| `[ ]` Push notifications | V1 | a notification with every tab closed, a level per channel, and mentions routed by the relay |
+| `[ ]` Mute and hide | V1 | a channel muted or hidden, kept in the user settings |
+| `[ ]` The personal sidebar | V1 | personal groups and order of channels, and bookmarks, kept in the user settings |
+| `[ ]` Followed threads | V1 | one view of every followed thread with unread replies, and marking a thread as read |
+| `[ ]` Search on a new device | V1 | a signed index per sealed segment, queried before its segment is fetched |
+| `[ ]` Space retention | V1 | one retention duration per space, applied by the relay |
+| `[ ]` Direct message conversion | V1 | a direct message becomes a private channel of a space, with its history or from a fresh start |
+| `[ ]` Forum channels | V1 | posts with a title and tags, each opening its own thread |
+| `[ ]` Chat import | V1 | an archive of Slack or Discord imported into a space |
 
 ---
 
@@ -111,6 +130,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Clipped paths on the canvas | -- | a shape crossing a clip edge is drawn whole today. Clip it, and give a stroke a screen-constant width |
 | `[ ]` The adaptive chrome | V1 | the navigation, the side panels, the toolbar overflow and the wide data views adapt at the three declared widths. Today two labels and one bottom sheet move, and the regions the design names exist at no width |
 | `[ ]` The stylesheet reads the tokens | V1 | fifty literal colours and five undeclared custom properties in the shell stylesheet bypass the one token source, so a theme switch moves everything except them |
+| `[ ]` User settings | V1 | a sealed store of one user's settings that follows them across devices: Murmure mute and layout first, then macro approvals and secret values |
 | `[ ]` The PDF writer is fetched on demand | V1 | `krilla` sits behind a Cargo feature the launcher enables, so every user downloads the writer whether or not they ever export. A feature cannot defer it: the build emits one wasm artifact per instance, so the writer needs a second artifact fetched on the first export, as the budget already prescribes for Prose's interop |
 
 ### Trame
@@ -271,12 +291,12 @@ owns the subsystem.
 | Story | Touches |
 | :--- | :--- |
 | `[ ]` Split-secret organization recovery | the escrow has a release path and no deposit path, and the quorum is clamped to one so the register advertises no guarantee the relay cannot keep. Threshold reconstruction, and a deposit, are what make the clamp liftable |
-| `[ ]` Rendez-Vous | end-to-end encrypted video |
+| `[ ]` Rendez-Vous | end-to-end encrypted video, and its signalling on an endpoint of its own |
+| `[ ]` Murmure bots and webhooks | bots holding their own keys, slash commands, interactive messages, and inbound webhooks through an encrypting bridge |
 | `[ ]` Cross-app rich paste | a paste from one app into another keeps its structure instead of falling back to plain text |
 | `[ ]` Machine members | a program joins a document as a member, marked as a machine, with its declared host, and its removal rotates the key |
 | `[ ]` Write-only inboxes | a program posts into a document through an asymmetric inbox it cannot read, and a member client merges each post once |
 | `[ ]` Addressed machines | a program reads only the frames a user addresses to it, under a key derived from the document key, and answers through the inbox |
-| `[ ]` User settings | a sealed store of one user's settings that follows them across devices: macro approvals and secret values first |
 | `[ ]` Document macros | a user saves a signed macro in a document, approves each version, and runs it as one undoable change |
 | `[ ]` Macro triggers | a macro runs after a kind of local edit, in the editing client only |
 | `[ ]` Macro network access | a macro calls a domain its user approved, held by the browser's content policy |
