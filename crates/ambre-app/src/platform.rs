@@ -105,12 +105,14 @@ pub(crate) fn open_csv_picker(
 /// active view through the same ladder as the native `paste` event
 /// (`UI-THREAD-024`). Best-effort: a clipboard the browser will not surface
 /// (permission denied, unsupported) earns a log line, not a failure -- Ctrl+V
-/// still works.
+/// still works. `plain` keeps the text alone, for the paste-as-plain-text
+/// entry (`PROSE-UI-227`).
 pub(crate) async fn paste_from_clipboard(
     read_promise: js_sys::Promise,
     clipboard: web_sys::Clipboard,
     paste_tx: flume::Sender<host::ClipboardPaste>,
     toasts: Toasts,
+    plain: bool,
 ) {
     let mut blob = ambre_bus::ClipboardBlob::default();
     let mut token: Option<String> = None;
@@ -168,6 +170,15 @@ pub(crate) async fn paste_from_clipboard(
         tracing::warn!("clipboard read unavailable for the Paste button (use Ctrl+V)");
         toasts.warning("Could not read the clipboard; use Ctrl+V to paste");
         return;
+    }
+
+    if plain {
+        blob = ambre_bus::ClipboardBlob {
+            text: blob.text,
+            plain: true,
+            ..ambre_bus::ClipboardBlob::default()
+        };
+        token = None;
     }
 
     // The host compares the token and pastes through the active view

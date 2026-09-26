@@ -81,12 +81,16 @@ pub mod shared {
     pub const CUT: CommandId = CommandId("clipboard.cut");
     pub const COPY: CommandId = CommandId("clipboard.copy");
     pub const PASTE: CommandId = CommandId("clipboard.paste");
+    /// Paste the plain text alone, whatever richer half the clipboard holds.
+    pub const PASTE_PLAIN: CommandId = CommandId("clipboard.paste_plain");
 
     /// The identities the browser services itself. It raises `cut`, `copy` and
     /// `paste` with the clipboard attached, on the modern and the legacy chords
     /// alike. A keymap therefore declares those chords and decodes none of them
     /// (`ambre-spec-text-input.md`, `CHROME-021`).
-    pub const BROWSER_SERVICED: [CommandId; 3] = [CUT, COPY, PASTE];
+    /// The plain paste rides the same `paste` event. The host notes its chord
+    /// on the keydown, then strips the richer halves from the event.
+    pub const BROWSER_SERVICED: [CommandId; 4] = [CUT, COPY, PASTE, PASTE_PLAIN];
 
     /// Undo answers one chord.
     pub const UNDO_CHORDS: &[KeyBinding] = &[KeyBinding::primary('z')];
@@ -109,6 +113,10 @@ pub mod shared {
     /// Paste: the modern chord, then the legacy one.
     pub const PASTE_CHORDS: &[KeyBinding] =
         &[KeyBinding::primary('v'), KeyBinding::shift(Key::Insert)];
+
+    /// Paste as plain text: the chord Chrome, Edge, Firefox, Word and Google
+    /// Docs share.
+    pub const PASTE_PLAIN_CHORDS: &[KeyBinding] = &[KeyBinding::primary_shift('v')];
 }
 
 /// Runtime state of a command, derived from app state on each interrogation
@@ -342,7 +350,11 @@ mod tests {
         // them. The keymap resolves none, so the browser's own event stays the
         // one path (`UI-THREAD-011`, `CHROME-021`).
         let km = Keymap::from_commands([EDITING]);
-        for chord in shared::COPY_CHORDS.iter().chain(shared::PASTE_CHORDS) {
+        for chord in shared::COPY_CHORDS
+            .iter()
+            .chain(shared::PASTE_CHORDS)
+            .chain(shared::PASTE_PLAIN_CHORDS)
+        {
             assert_eq!(km.resolve(*chord), None, "{chord} must reach no command");
         }
         assert_eq!(km.len(), shared::REDO_CHORDS.len());

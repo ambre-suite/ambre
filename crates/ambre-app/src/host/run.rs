@@ -131,9 +131,15 @@ where
         });
     }
 
+    // The plain-paste chord rides the browser's own `paste` event, which says
+    // nothing of the chord that raised it. The keydown notes it, and the
+    // `paste` listener that follows reads and clears it (`PROSE-UI-227`).
+    let plain_paste = Rc::new(std::cell::Cell::new(false));
+
     // -- Keyboard input -> view. ----------------------------------------------
     {
         let host_c = Rc::clone(&host);
+        let plain_c = Rc::clone(&plain_paste);
         // The canvas text pipe: the one editable element whose keydowns the grid
         // owns. Navigation/edit keys ride the document listener even while it is
         // focused, since text itself arrives via the textarea `input` event.
@@ -148,6 +154,11 @@ where
                 if event.target().is_some_and(|t| is_other_editable(&t, &pipe)) {
                     return;
                 }
+                plain_c.set(
+                    event.shift_key()
+                        && (event.ctrl_key() || event.meta_key())
+                        && event.key().eq_ignore_ascii_case("v"),
+                );
                 let consumed = host_c.borrow_mut().handle_input(&InputEvent::Key {
                     key: event.key(),
                     ctrl: event.ctrl_key(),
@@ -274,8 +285,10 @@ where
     {
         let ta = text_input.element().clone();
         let host_c = Rc::clone(&host);
+        let plain_c = Rc::clone(&plain_paste);
         let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
             move |event: web_sys::ClipboardEvent| {
+                let plain = plain_c.replace(false);
                 let Some(data) = event.clipboard_data() else {
                     return;
                 };
@@ -287,15 +300,18 @@ where
                 let ambre = data
                     .get_data(AMBRE_CLIPBOARD_TYPE)
                     .ok()
-                    .filter(|s| !s.is_empty())
+                    .filter(|s| !s.is_empty() && !plain)
                     .and_then(|b64| base64_decode(&b64));
                 let text = data.get_data("text/plain").unwrap_or_default();
                 // The formatting another editor wrote, for a view that reads it.
-                let html = data.get_data("text/html").ok().filter(|s| !s.is_empty());
+                let html = data
+                    .get_data("text/html")
+                    .ok()
+                    .filter(|s| !s.is_empty() && !plain);
                 // Same-tab ownership: the synchronous token survives even when the
                 // async payload write failed (Firefox). So a match means paste our
                 // own in-memory copy at full fidelity.
-                let own_copy = {
+                let own_copy = !plain && {
                     let token = host_c.borrow().clip_token().to_owned();
                     data.get_data(AMBRE_CLIPBOARD_TOKEN_TYPE)
                         .is_ok_and(|t| !t.is_empty() && t == token)
@@ -306,9 +322,15 @@ where
                 // Prevent the native insert (which would also fire `input` and
                 // double-paste); route through the host's paste path.
                 event.prevent_default();
-                host_c
-                    .borrow_mut()
-                    .paste_clipboard(ambre_bus::ClipboardBlob { text, html, ambre }, own_copy);
+                host_c.borrow_mut().paste_clipboard(
+                    ambre_bus::ClipboardBlob {
+                        text,
+                        html,
+                        ambre,
+                        plain,
+                    },
+                    own_copy,
+                );
             },
         );
         ta.add_event_listener_with_callback("paste", cb.as_ref().unchecked_ref())

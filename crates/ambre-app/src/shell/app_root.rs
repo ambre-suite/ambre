@@ -374,6 +374,13 @@ pub(crate) fn AppRoot() -> impl IntoView {
                             },
                         ),
                     });
+                } else if id == ambre_prose::commands::COPY || id == ambre_prose::commands::CUT {
+                    exec_clipboard(id == ambre_prose::commands::COPY);
+                } else if id == ambre_prose::commands::PASTE
+                    || id == ambre_prose::commands::PASTE_PLAIN
+                {
+                    let plain = id == ambre_prose::commands::PASTE_PLAIN;
+                    read_clipboard(clipboard_paste.clone(), toasts, plain);
                 }
                 return;
             }
@@ -487,56 +494,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     });
                 }
             } else if id == trame_chrome::COPY || id == trame_chrome::CUT {
-                // Copy/cut (`trame-clipboard`): focus the canvas text pipe and ask the
-                // browser to fire the `copy`/`cut` DOM event the host listeners
-                // service. They write both the TSV and the typed payload.
-                if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-                    if let Ok(Some(ta)) = doc.query_selector(".ambre-input")
-                        && let Some(el) = ta.dyn_ref::<web_sys::HtmlElement>()
-                    {
-                        let _ = el.focus();
-                    }
-                    let cmd = if id == trame_chrome::COPY {
-                        "copy"
-                    } else {
-                        "cut"
-                    };
-                    if let Ok(html_doc) = doc.dyn_into::<web_sys::HtmlDocument>() {
-                        let _ = html_doc.exec_command(cmd);
-                    }
-                }
+                exec_clipboard(id == trame_chrome::COPY);
             } else if id == trame_chrome::PASTE {
-                // Paste (`trame-clipboard`): `execCommand("paste")` is blocked by browsers,
-                // so read the OS clipboard via the async Clipboard API (allowed in this
-                // click gesture). The read is decoded and handed to the host, which
-                // routes it to the active view through the same ladder as Ctrl+V
-                // (`UI-THREAD-024`, `UI-THREAD-025`).
-                let clipboard = web_sys::window().map(|w| w.navigator().clipboard());
-                // `navigator.clipboard` is undefined outside a secure context, such as
-                // http:// on a LAN IP. There the button cannot read at all, so tell
-                // the user instead of failing silently.
-                let available = clipboard
-                    .as_ref()
-                    .map(|c| {
-                        let v: &wasm_bindgen::JsValue = c.as_ref();
-                        !v.is_undefined() && !v.is_null()
-                    })
-                    .unwrap_or(false);
-                if let Some(clipboard) = clipboard.filter(|_| available) {
-                    let paste_tx = clipboard_paste.clone();
-                    // Call `read()` synchronously, still inside the click's user
-                    // gesture: Firefox shows its mandatory "paste" confirmation
-                    // right away instead of deferring it to the next click.
-                    let read_promise = clipboard.read();
-                    wasm_bindgen_futures::spawn_local(paste_from_clipboard(
-                        read_promise,
-                        clipboard,
-                        paste_tx,
-                        toasts,
-                    ));
-                } else {
-                    toasts.warning("Clipboard unavailable here (needs HTTPS); use Ctrl+V to paste");
-                }
+                read_clipboard(clipboard_paste.clone(), toasts, false);
             } else if id == trame_chrome::IMPORT_CSV {
                 // Interop (`trame-import-export`): open a file picker, read the chosen
                 // CSV bytes, and send them to the Logic thread. It creates a new sheet
@@ -773,6 +733,8 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let ctx_entries = Memo::new(move |_| {
         if boot_is_toile {
             toile_chrome::context_entries_for(&toile_ctx_scope.get())
+        } else if boot_is_prose {
+            prose_context_entries()
         } else {
             trame_chrome::context_entries_for(ctx_scope.get(), filter_active.get())
         }
@@ -1614,5 +1576,69 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 move || landing::landing_view(landing_signals, landing_tx.clone())
             }
         </Show>
+    }
+}
+
+/// The page's context menu in Prose: the clipboard entries, titled from the
+/// command table (`PROSE-UI-227`).
+fn prose_context_entries() -> Vec<ambre_chrome::MenuEntry> {
+    ambre_prose::commands::context_menu(&ambre_prose::commands::Locale::En)
+        .into_iter()
+        .map(|(id, title)| ambre_chrome::MenuEntry::new(id, title))
+        .collect()
+}
+
+/// Copy or cut from a menu: focus the text pipe and ask the browser to fire
+/// the `copy`/`cut` DOM event the host listeners service. They write every
+/// format the active view offers.
+fn exec_clipboard(copy: bool) {
+    if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+        if let Ok(Some(ta)) = doc.query_selector(".ambre-input")
+            && let Some(el) = ta.dyn_ref::<web_sys::HtmlElement>()
+        {
+            let _ = el.focus();
+        }
+        let cmd = if copy { "copy" } else { "cut" };
+        if let Ok(html_doc) = doc.dyn_into::<web_sys::HtmlDocument>() {
+            let _ = html_doc.exec_command(cmd);
+        }
+    }
+}
+
+/// Paste from a menu. `execCommand("paste")` is blocked by browsers, so read
+/// the OS clipboard via the async Clipboard API, allowed in this click
+/// gesture. The read is decoded and handed to the host, which routes it to the
+/// active view through the same ladder as Ctrl+V (`UI-THREAD-024`,
+/// `UI-THREAD-025`). `plain` keeps the text alone (`PROSE-UI-227`).
+fn read_clipboard(
+    paste_tx: flume::Sender<crate::host::ClipboardPaste>,
+    toasts: Toasts,
+    plain: bool,
+) {
+    let clipboard = web_sys::window().map(|w| w.navigator().clipboard());
+    // `navigator.clipboard` is undefined outside a secure context, such as
+    // http:// on a LAN IP. There the entry cannot read at all, so tell the
+    // user instead of failing silently.
+    let available = clipboard
+        .as_ref()
+        .map(|c| {
+            let v: &wasm_bindgen::JsValue = c.as_ref();
+            !v.is_undefined() && !v.is_null()
+        })
+        .unwrap_or(false);
+    if let Some(clipboard) = clipboard.filter(|_| available) {
+        // Call `read()` synchronously, still inside the click's user gesture:
+        // Firefox shows its mandatory "paste" confirmation right away instead
+        // of deferring it to the next click.
+        let read_promise = clipboard.read();
+        wasm_bindgen_futures::spawn_local(paste_from_clipboard(
+            read_promise,
+            clipboard,
+            paste_tx,
+            toasts,
+            plain,
+        ));
+    } else {
+        toasts.warning("Clipboard unavailable here (needs HTTPS); use Ctrl+V to paste");
     }
 }

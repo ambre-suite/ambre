@@ -381,6 +381,13 @@ impl ProseUiState {
     /// read serves (`PROSE-UI-043`).
     #[must_use]
     pub fn paste_input(&self, read: ambre_bus::ClipboardBlob, own_copy: bool) -> ProseInput {
+        if read.plain {
+            return ProseInput::Paste {
+                text: read.text,
+                html: None,
+                rich: None,
+            };
+        }
         match &self.last_clip {
             Some(kept) if own_copy || kept.text == read.text => ProseInput::Paste {
                 text: kept.text.clone(),

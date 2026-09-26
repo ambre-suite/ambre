@@ -544,6 +544,7 @@ impl ProseUiState {
                     text: text.clone(),
                     html: Some(html.clone()),
                     ambre: Some(payload.clone()),
+                    plain: false,
                 };
                 self.last_clip = Some(blob.clone());
                 self.pending_clip = Some(blob);

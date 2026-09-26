@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: CLIPBOARD
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- text and HTML go both ways; tables, pictures and a plain paste do not.
+**Implementation:** partial -- text, HTML and a plain paste work; tables and pictures do not.
 
 > Copy, cut and paste. Copying inside Ambre keeps the formatting and the structure of what was
 > copied. Copying out of it leaves plain text and HTML. A paste from a web page, Google Docs or
@@ -54,7 +54,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-043` | `POST` | The kept payload MUST be used only while the system clipboard's text still matches it; otherwise the pasted content MUST come from the system clipboard. | this spec section 3 | `ambre_prose::input_tests::the_kept_payload_serves_only_its_own_copy` | none | verified |
 | `PROSE-UI-221` | `FAIL` | HTML nested deeper than the reader's depth cap MUST paste as its plain-text mirror, and MUST NOT be built into a tree. | this spec section 3 | `ambre_prose::logic::clipboard::html_read::tests::a_tree_nested_past_the_cap_reads_as_nothing` | none | verified |
 | `PROSE-UI-223` | `POST` | A paste of several blocks, or of one typed block, into an empty paragraph MUST give that paragraph the type of the first pasted block. | this spec section 3 | `ambre_prose::logic::clipboard::tests::the_html_half_alone_pastes_what_the_rich_half_does` | none | verified |
-| `PROSE-UI-227` | `POST` | The paste-as-plain-text chord and its context-menu entry MUST insert the plain-text mirror alone, whatever richer half the clipboard holds. | this spec section 4 | not built | unbuilt -- lands with the "Paste as plain text" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-227` | `POST` | The paste-as-plain-text chord and its context-menu entry MUST insert the plain-text mirror alone, whatever richer half the clipboard holds. | this spec section 4 | `ambre_prose::input_tests::a_plain_paste_carries_the_text_alone`; `ambre_prose::commands::tests::the_context_menu_entries_are_declared_and_left_unbound` | none | verified |
 | `PROSE-UI-112` | `FRAME` | A paste MUST NOT change a block outside the range it replaces, and MUST NOT reformat the text that surrounds it. | derived | `ambre_prose::logic::clipboard::tests::a_paste_mid_paragraph_leaves_the_neighbours_alone` | none | verified |
 
 * **Budget.** the HTML read holds the "Prose HTML clipboard import" row of `ambre-spec-budgets.md`.
@@ -64,7 +64,7 @@ status values are normative in `ambre-spec-template.md`.
   It carries the user's own selection, already plaintext on their machine; nothing is encrypted,
   nothing is sent, and the host performs the write (`PROSE-UI-041`). The browser's own handling is
   outside Ambre's control, and gates the mirror (`ambre-spec-clipboard.md`).
-* **Verification.** 20 `verified`, 3 `unimplemented`. The Logic rows are host tests over a real
+* **Verification.** 21 `verified`, 2 `unimplemented`. The Logic rows are host tests over a real
   document, a round trip included; the view rows drive the input queue with a recording sender.
   `PROSE-UI-041`, `PROSE-UI-105` and `PROSE-UI-106` are held by where the types live.
 
@@ -184,12 +184,12 @@ the paste),
 | the paste chord | inserts the rich payload, the HTML, or the plain text |
 | a paste with no selection | inserts at the caret |
 | a paste over a selection | deletes it first (`PROSE-UI-030`) |
-| the paste-as-plain-text chord, or its menu entry | `PROSE-UI-227`, on the "Paste as plain text" Story (`ambre-roadmap.md` E5) |
+| the paste-as-plain-text chord, or its menu entry | inserts the plain text alone, the kept copy ignored too (`PROSE-UI-227`) |
 | dropping text into the page | `PROSE-UI-204`, on the "A drag that scrolls, and text dropped into the page" Story (`ambre-roadmap.md` E5) |
 
 The legacy chords and the fold of `Ctrl` and `Cmd` are decided for every application in
 `1-Foundations/ambre-spec-commands.md section 2`. Prose takes the shared clipboard identities and
-their chord lists, and decodes none of the three itself.
+their chord lists, and decodes none of them itself.
 
 ---
 

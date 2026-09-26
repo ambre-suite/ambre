@@ -875,6 +875,7 @@ impl ToileView {
                     text: String::new(),
                     html: None,
                     ambre: postcard::to_allocvec(&payload).ok(),
+                    plain: false,
                 };
                 self.last_clip = Some(blob.clone());
                 self.pending_clipboard = Some(blob);

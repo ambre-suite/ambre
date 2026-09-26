@@ -68,6 +68,9 @@ pub struct ClipboardBlob {
     /// not Ambre's own bytes. `None` when the active app writes none.
     pub html: Option<String>,
     pub ambre: Option<Vec<u8>>,
+    /// The user asked for the plain text alone: a view ignores every richer
+    /// half, and the copy it kept in memory too.
+    pub plain: bool,
 }
 
 /// What a `copy`/`cut` on the focused view resolves to synchronously, inside the

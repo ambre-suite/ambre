@@ -108,7 +108,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Copy and paste | MVP | copy, cut and paste through the Logic thread: the plain text and this application's own bytes on the system clipboard, the marks and the block types kept on a paste back |
 | `[x]` Rich clipboard: HTML in and out | MVP | a copy writes HTML beside the text and the private bytes, and a paste from a web page, Google Docs or Word keeps its blocks, lists, links and marks, read on the Logic thread through an allow-list with a depth cap |
 | `[ ]` Rich paste: tables and pictures | V1 | an HTML table lands as a table and a pasted picture lands in the text, where the reader now keeps one paragraph per cell and drops the picture |
-| `[ ]` Paste as plain text | MVP | a chord and a context-menu entry that insert the plain-text mirror alone, as every word processor offers |
+| `[x]` Paste as plain text | MVP | a chord and a context-menu entry that insert the plain-text mirror alone, as every word processor offers |
 | `[ ]` The interactive ruler | MVP | the ruler above the page, its indent handles following the caret's block, and a drag that writes the paragraph once on release |
 | `[ ]` A drag that scrolls, and text dropped into the page | MVP | a selection dragged past the edge of the window scrolls and follows the text, and text dropped into the page lands at the drop point |
 | `[ ]` Inertial scroll | MVP | a flick keeps the column moving, slowing down, and stops at either end of the column |

@@ -1949,6 +1949,7 @@ fn the_kept_payload_serves_only_its_own_copy() {
         text: text.to_owned(),
         html: None,
         ambre: None,
+        plain: false,
     };
     let ProseInput::Paste { rich, .. } = rig.ui.paste_input(own("hello"), false) else {
         panic!("a paste");
@@ -2000,6 +2001,7 @@ fn an_html_half_keeps_a_short_paste_off_the_typing_path() {
         text: "x".to_owned(),
         html: Some("<b>x</b>".to_owned()),
         ambre: None,
+        plain: false,
     };
     let input = rig.ui.paste_input(blob, false);
     assert!(matches!(
@@ -2013,4 +2015,49 @@ fn an_html_half_keeps_a_short_paste_off_the_typing_path() {
     ));
     rig.deliver();
     assert_eq!(rig.logic.text_of(&block).as_deref(), Some("axb"));
+}
+
+/// `PROSE-UI-227`: a plain paste leaves the text alone. The HTML the host
+/// read and the payload this tab kept, which the same text would otherwise
+/// serve, both stay out of the command.
+#[test]
+fn a_plain_paste_carries_the_text_alone() {
+    let mut rig = Rig::new(&["hello"]);
+    let block = rig.blocks()[0];
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: block,
+        offset: 5,
+        anchor: Some((block, 0)),
+    });
+    rig.input(ProseInput::Copy { cut: false });
+    rig.deliver();
+    let read = |plain: bool| ambre_bus::ClipboardBlob {
+        text: "hello".to_owned(),
+        html: Some("<b>hello</b>".to_owned()),
+        ambre: None,
+        plain,
+    };
+    let ProseInput::Paste { rich, .. } = rig.ui.paste_input(read(false), true) else {
+        panic!("a paste");
+    };
+    assert!(rich.is_some(), "the ordinary paste serves the kept payload");
+    let input = rig.ui.paste_input(read(true), true);
+    assert!(matches!(
+        &input,
+        ProseInput::Paste { text, html: None, rich: None } if text == "hello"
+    ));
+    rig.sent.clear();
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: block,
+        offset: 5,
+        anchor: None,
+    });
+    rig.input(input);
+    rig.deliver();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("hellohello"));
+    assert!(
+        rig.logic
+            .marks_of(&block)
+            .is_some_and(|marks| !format!("{marks:?}").contains("\"b\""))
+    );
 }
