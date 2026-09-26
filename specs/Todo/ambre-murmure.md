@@ -77,7 +77,7 @@ Channel storage layout (`channel_{id}/`):
 
 `Loro::Doc (meta)`:
 
-- `"channel"` (Map) -- `{name, type, created, topic}`
+- `"channel"` (Map) -- `{name, type, created, topic}` -- `name` and `topic` for a private channel or a direct message only; the `space` document names a public channel
 - `"members"` (Map) -- `{"pubkey_alice": {role, joined}}`
 - `"pinned"` (Array) -- `[{msg_id, segment_id}]`
 - `"segments"` (Array), for example:
@@ -186,20 +186,52 @@ Four stores hold what the channel sidebar shows. Each fact has one owner.
 | Fact | Owner | Visible to the relay |
 | :--- | :--- | :--- |
 | The channels a user can read | the relay, through `channel_members` | yes, routing metadata |
-| The channel name and topic | the channel `meta` document | no, sealed |
-| The categories and the channel order of a space | the `space` document | no, sealed |
+| The catalogue of a space: public channels, names, topics, categories, order | the `space` document | no, sealed |
+| The Document Key of a public channel | the `space` document | no, sealed |
+| The name and topic of a private channel or a direct message | the channel `meta` document | no, sealed |
+| The public flag and the space of a channel | the relay | yes |
 | The personal layout, mute, bookmarks and followed threads | the user settings | no, sealed |
 | The notification level | the user settings, with a copy on the relay | yes, the copy |
 | The read cursor | the relay, through `channel_read_cursors` | yes |
 
 **The channel list is membership.** The client asks the relay for its channels. The answer carries
-each `channel_id` and its wrapped Document Key. The client then opens each `meta` document and
-decrypts the name. The launcher lists documents the same way today (`CHROME-044`). No document holds
-a second copy of that list, because such a copy drifts after a revoke.
+each `channel_id` and its wrapped Document Key. The launcher lists documents the same way today
+(`CHROME-044`). No document holds a second copy of that list, because such a copy drifts after a
+revoke.
 
-**The space document holds the shared structure.** It is a sealed Loro document per space. It maps
-each `channel_id` to its category and its position. It also lists the public channels that a
-member has not joined yet. Every member of the space sees the same content.
+**The space document is the catalogue of a space.** It is one sealed Loro document per space, and
+every member of the space is a member of it.
+
+- Space admins are `editor` or `owner`. The relay refuses a write from a `viewer` (`SRV-008`).
+- Other members are `viewer`. They read the catalogue and cannot change it.
+
+`Loro::Doc (space)`:
+
+- `"categories"` (Map) -- `{category_id: {name, position}}`
+- `"channels"` (Map) -- `{channel_id: {name, topic, category_id, position, key}}`
+
+The catalogue lists public channels only. Every member of the space reads it, so a private channel
+in it would show its name and its existence to the whole space. A private channel and a direct
+message appear through membership alone. Their place in the sidebar is in the user settings.
+
+**The space document owns the name of a public channel.** A member who has not joined holds no key
+for the channel `meta` document, so the name cannot live there. The name has one owner, so only a
+space admin renames a public channel. The `"channel"` Map of the `meta` document names a private
+channel or a direct message only.
+
+**The client joins the catalogue to its memberships.**
+
+| Catalogue entry | Membership | The sidebar shows |
+| :--- | :--- | :--- |
+| yes | yes | a joined channel |
+| yes | no | a channel to join |
+| no | yes | a private channel or a direct message |
+
+**Joining a public channel needs no other member.** The `key` field holds the Document Key of the
+channel, sealed by the space document. The client wraps that key for its own X25519 key and asks
+the relay for a membership row. The relay grants the row to a space member only for a channel it
+knows as public in that space. So the relay holds the public flag and the space of each channel.
+That flag is outside the `ZK-007` set today, like the notification level below.
 
 **The user settings hold the personal state.** Murmure keeps no store of its own. It writes one
 `"murmure"` section in the sealed per-user store of the
@@ -217,10 +249,16 @@ the edits of several devices.
 
 **Leave and hide are two acts.**
 
-- Leave removes the `channel_members` row. A private channel then rotates its Document Key.
+- Leave removes the `channel_members` row. A private channel then rotates its Document Key. A
+  public channel does not: every space member can read its key in the catalogue.
 - Hide sets `hidden` in the user settings. The user keeps the key and can still read.
 
 A user who hides a channel and believes they left still receives its traffic.
+
+**Leaving a space rotates every key it shared.** The space document rotates its Document Key. An
+admin also rotates the key of each public channel and writes the new keys to the catalogue. The
+cost grows with the number of public channels. That cost is the price of joining without a
+member online.
 
 **The notification level has two copies.** The user settings are the source of truth for the
 interface. The client writes a copy of each level to the relay, because the relay decides which
@@ -344,6 +382,9 @@ The index format assumes that a sealed segment is immutable. The sketch does not
 | **SQLite/FTS5 compiled to WASM** | A C library, against the Rust-first pillar. |
 | **A sealed index document of the user's channels** | The relay already holds the membership. A second list drifts after a revoke and shows a channel whose key is gone. |
 | **Bookmarks and followed threads in local storage** | A new device starts empty, and a new device is where the user needs them most. |
+| **Private channels in the space catalogue** | Every space member reads the catalogue, so each private channel would show its name and existence to the whole space. |
+| **Public channel names in the channel `meta` document** | A member who has not joined holds no key for `meta`, so the channel to join would have no name. |
+| **A member online to wrap the key of a public channel** | Joining would wait on another member. The catalogue carries the key, and a space leave pays for it with a rotation. |
 | **A Murmure document of its own for personal state** | The `User settings` Story (`ambre-roadmap.md` POST-V1) already plans one sealed store per user. A second store gives the same user two sources of truth. |
 | **Client-side filtering of each push after decryption** | Web Push requires a visible notification for each push. Safari cancels the subscription after three silent pushes. |
 
