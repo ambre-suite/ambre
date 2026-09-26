@@ -282,8 +282,41 @@ More aggressive than for documents: compaction every **1-2 min** (vs 5 min for d
 two numbers it holds, so it learns nothing new. The sidebar shows that dot at once.
 
 **The client computes the count.** A reaction and an edit never count, and only the client can
-tell a message from a reaction. It computes the count and the mentions once it holds the deltas.
-The relay never sees the kind of a frame.
+tell a message from a reaction. It reads the sealed summary of each delta (see *Residency and
+eviction*), so it counts with no document loaded. The relay never sees the kind of a frame.
+
+### Residency and eviction
+
+A user can belong to 200 channels, each made of several documents. Loading them all would break the
+memory budget, and a Loro delta cannot be decoded without its segment. Three tiers answer that.
+
+**1. A sealed summary in each delta.** The sender adds a small header inside the sealed payload,
+beside the session nonce: `{kind: message | reaction | edit, mentions: [user], thread_root}`.
+
+- The Sync worker reads it with no Loro document, and keeps the unread and mention counters of every
+  channel in the background, for a few bytes per channel.
+- The relay sees nothing more: the header is sealed.
+- A malicious member can lie in the header, and gains one false notice. The document stays the
+  truth once it opens.
+- Push notifications in V1 read the same header.
+
+**2. In memory, a cache bounded in bytes, evicted least recently viewed.**
+
+- The channel on screen and the open thread are pinned, and never evicted.
+- Fetched sealed segments go first: they are immutable and reload with no loss.
+- Eviction writes a local snapshot, then drops the Loro document and its Sync state. A reopen starts
+  from that snapshot and replays the deltas after it.
+- The bound needs a row in `ambre-spec-budgets.md`, for example 32 MB for the Murmure documents of
+  the Logic thread, to measure.
+
+**3. On disk, a local cache bounded in bytes, evicted least recently viewed.** It stays inside the
+browser quota and needs its own budget row. Sealed segments go first.
+
+**A background channel costs a light subscription.** It holds the key, the counters and the cursor,
+a few hundred bytes. The full state of an open document stays for the documents in memory.
+
+**The rule is a foundation rule.** Any application that lists documents with activity badges needs
+the same residency. So it lives in a foundation document, and Murmure is its first user.
 
 ### Typing indicators
 
@@ -666,6 +699,9 @@ A re-seal replaces the sealed index (section 3, *Amendments to a sealed segment*
 | **GIF search through a third-party service** | Each search sends what the user types to that service. |
 | **A self-join checked against the public flag of the relay** | The relay could flip a private channel to public and show a verified member who holds no key. The catalogue is sealed and written by admins only. |
 | **A guest who browses the catalogue** | The catalogue holds the key of every public channel, so the guest would read them all. A member invites a guest channel by channel. |
+| **Every active segment of every channel kept in memory** | 200 channels at up to 2 MB each break the memory budget. The sealed summary counts with no document loaded. |
+| **A cache bounded by a document count** | Documents differ in size by orders of magnitude. A byte bound is the one that holds the memory budget. |
+| **Decoding every background delta to find the mentions** | A Loro delta needs its segment to decode, so every active segment would stay loaded. |
 | **A sealed index document of the user's channels** | The relay already holds the membership. A second list drifts after a revoke and shows a channel whose key is gone. |
 | **Bookmarks and followed threads in local storage** | A new device starts empty, and a new device is where the user needs them most. |
 | **Private channels in the space catalogue** | Every space member reads the catalogue, so each private channel would show its name and existence to the whole space. |

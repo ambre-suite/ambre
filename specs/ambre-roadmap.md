@@ -92,6 +92,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Images | V1 | images in the document, resolved through the shared media flow and embedded on export |
 | `[ ]` Operations bound to their signer | MVP | every Loro operation of every application traced to the key that signed its delta |
 | `[ ]` Signed membership log | MVP | every invite, revoke and role change signed by its author, so a client checks the member list the relay serves, for documents and channels alike |
+| `[ ]` Document residency | MVP | a bounded cache of the documents in memory and on disk, and a light subscription that keeps activity counters for documents not loaded |
 | `[ ]` `ARCH P7` -- the Murmure engine core | MVP | the message model, and a typed command surface in place of the opaque byte payload of the channel plane |
 | `[ ]` `SYNC P4` / `SRV P1` -- channels | MVP | channel membership and history, and unread tracking |
 | `[ ]` Spaces and the channel catalogue | MVP | a space, its catalogue of public channels with their names, categories and keys, and joining a public channel with no other member online |
