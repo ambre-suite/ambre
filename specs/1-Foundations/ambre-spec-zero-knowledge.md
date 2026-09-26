@@ -26,7 +26,7 @@ that component's prefix instead.
 | `ZK-004` | `INV` | The server process MUST NOT link a crate able to decrypt a document payload, derive a shared secret, or reconstruct a split secret. | this spec section 2; `ambre-spec-server.md`, `SRV-012` | cargo-deny -- the capability bans on `chacha20poly1305`, `x25519-dalek`, `argon2`, `ambre-crypto` and `loro`, run by the CI `deny` job. The three unused declarations that violated this were dropped from `ambre-server` | none | verified |
 | `ZK-005` | `INV` | Presence and cursor data MUST be sealed with the `DocumentKey`, exactly like a delta. | `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_ephemeral` -- it seals an ephemeral frame and opens it, so an unsealed one fails the assertion | none | verified |
 | `ZK-006` | `INV` | Logs and tracing spans MUST NOT carry ciphertext or plaintext payloads -- identifiers, lengths and sequence numbers only. | `ambre-spec-server.md`, `SRV-001`; audit `C1` | human-review -- the reviewer reads every log line and span a change adds, against the comment in `s3.rs` | unheld -- no check reads a log line back, so the guarantee is worth what the review is worth | human-review |
-| `ZK-007` | `INV` | What the relay learns MUST be limited to `{document_id, pub_key, clock, seq, snapshot_id, nonce, blob size, timestamp, source IP}`; anything outside that set is a leak. | this spec section 2, the boundary table and its accepted leak | none | unheld -- a whitelist has no natural test, and the candidate is an `insta` snapshot over the `WsClientMsg` and `WsServerMsg` shapes; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ZK-007` | `INV` | What the relay learns MUST be limited to `{document_id, pub_key, clock, seq, snapshot_id, key_id, nonce, blob size, timestamp, source IP}`; anything outside that set is a leak. | this spec section 2, the boundary table and its accepted leak | none | unheld -- a whitelist has no natural test, and the candidate is an `insta` snapshot over the `WsClientMsg` and `WsServerMsg` shapes; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ZK-008` | `INV` | A presigned S3 URL MUST be issued only after the ACL check. | `ambre-spec-object-store.md`, `SRV-002` | none | unheld -- no test asserts that a non-member asking for a URL is refused one; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ZK-009` | `INV` | The two key-derivation domains MUST stay frozen at `ambre-sign-v1` and `ambre-exch-v1`, one context each. | this spec section 2; derived | `ambre_crypto::tests::derive_keys_deterministic` -- the derivation is deterministic and the two domains are independent | partial -- it pins no vector, so a renamed domain keeps the test green and gives every existing account a different key pair; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | partial |
 | `ZK-010` | `INV` | A passphrase MUST cross the client bus in a type that wipes its own bytes when it is dropped. | README pillar "Zero-Knowledge"; audit `H4`, `H5` | type-level -- `RestCommand::Unlock`, `SetupAccount`, `ChangePassphrase` and `RecoverAccount` carry `SecretBytes`, a `Zeroizing` newtype, so a plain `Vec<u8>` on that path does not compile | none | verified |
@@ -68,7 +68,7 @@ that component's prefix instead.
 
 | Component | Data seen by server | Never seen |
 |-----------|----------------------------|-------------|
-| `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
+| `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `key_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
 
 **The cast of a scenario.** Every scenario table of the corpus draws its actors from this list, so
 a reader knows who is hostile from the name alone.
@@ -103,6 +103,8 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
   the activity summary is sealed (`SYNC-113`).
 * **Not accepted, and stated as a defect:** a media blob's address, which is a hash of its
   plaintext, and its media type (`ambre-spec-media.md`, `SYNC-050`, `SYNC-053`).
+* **Accepted, and not a leak:** a key identifier. It is a hash of a random 256-bit key. It tells the
+  relay when a document rotated, which it already knows, and nothing of the key (`SYNC-115`).
 
 **Static verification, mechanised in `deny.toml`.** `ambre-server` imports no type from
 `ambre-trame`, `ambre-bus` or `ambre-crypto`; it imports `ed25519-dalek` directly. Every

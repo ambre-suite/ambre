@@ -48,7 +48,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-056` | `POST` | An invite MUST wrap every key since the latest history boundary for the invitee. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-056` | `POST` | An invite MUST open the history since the latest history boundary to the invitee, through the key chain. | this spec section 3; `SYNC-119` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-057` | `POST` | A third member joining a direct message of two MUST be announced to both members before the invite applies. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-058` | `FRAME` | An invite MUST NOT hand the invitee a key older than the latest history boundary. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -60,8 +60,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-060` | `POST` | A rotation MUST close the active segment, so the successor opens under the new key. | this spec section 3; `features/ambre-spec-murmure-segments.md` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-061` | `FRAME` | Leaving a public channel MUST NOT rotate its key. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** an invite wraps one key per key period, charged to the crypto rows of
-  `ambre-spec-budgets.md section 1`. A rotation costs one close and one wrap per remaining member.
+* **Budget.** an invite wraps one key. The invitee then walks the key chain back to the boundary,
+  one small open per rotation, charged to the crypto rows of `ambre-spec-budgets.md section 1`. A
+  rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
 * **Verification.** 16 `unimplemented`: no channel exists in the code.
@@ -88,15 +89,18 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 message whose members are exactly the requested set. It learns nothing new by doing so
 (`MURMURE-051`).
 
-**No forward secrecy.** A direct message keeps every key, like any channel. A new device reads the
-full history, and every final snapshot sits under a kept key. What protects it is the rotation on
+**No forward secrecy.** A direct message keeps every key, like any channel. Each final segment stays
+sealed under the key of its time, and the key chain reaches it. What protects it is the rotation on
 a leave.
 
 **An invite, in steps.**
 
-1. The inviting client wraps each key since the latest history boundary for the invitee.
-2. It posts the wraps and its signed entry in one request (`SYNC-105`).
-3. For a direct message of two, both members see the notice before the invite applies.
+1. The inviting client wraps the current key for the invitee, and its signed entry names that key
+   (`SYNC-123`).
+2. It posts the wrap and the entry in one request (`SYNC-105`).
+3. The invitee walks the key chain back to the latest history boundary (`SYNC-119`), so it reads
+   every segment since.
+4. For a direct message of two, both members see the notice before the invite applies.
 
 **A leave, in steps.** The leaving member adds a signed entry, and the relay removes the row. An
 online member client then rotates the key and closes the active segment (`MURMURE-060`).

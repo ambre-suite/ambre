@@ -90,6 +90,8 @@ member with the viewer role reads it, and the relay refuses a write from them (`
 3. The relay creates the row only for a member of the space and a channel it holds as public
    (`SRV-105`, `SRV-106`).
 4. Every client checks the entry against the catalogue, never against the relay flag.
+5. The joining client walks the key chain back from the key of the catalogue (`SYNC-119`). It
+   reads the whole history of the channel, before a rotation too.
 
 **A leave.** The first admin client online after the leave rotates the space key, then the key of
 each public channel. Its Sync worker seals each new key under the new space key, and the catalogue

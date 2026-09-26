@@ -63,7 +63,7 @@
 | segment | one time slice of a Murmure channel, held as one document | | `5-Murmure/ambre-spec-murmure-schema.md` |
 | finalize | close a segment for good, as one immutable snapshot | | `5-Murmure/features/ambre-spec-murmure-segments.md` |
 | amendment | a late edit or delete of a final segment | | `5-Murmure/ambre-spec-murmure-schema.md` |
-| history boundary | the key rotation a later member cannot read past | | `5-Murmure/features/ambre-spec-murmure-channels.md` |
+| history boundary | a key rotation with no link, which later members cannot read past | | `5-Murmure/features/ambre-spec-murmure-channels.md` |
 | membership log | the signed record of every invite, revoke and role change | | `1-Foundations/ambre-spec-membership.md` |
 | residency | where a document lives: in memory, on disk, or neither | | `1-Foundations/ambre-spec-residency.md` |
 | activity summary | the sealed header that tells what an update holds | | `1-Foundations/ambre-spec-residency.md` |
@@ -100,6 +100,8 @@
 | document key | the key that seals one document | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | user key | the key derived from the account passphrase | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | key rotation | replacing a document key, and what follows | | `1-Foundations/ambre-spec-key-rotation.md` |
+| key chain | the links that seal each older document key under the next one | | `1-Foundations/ambre-spec-key-rotation.md` |
+| key identifier | the hash that names a document key without revealing it | | `1-Foundations/ambre-spec-key-rotation.md` |
 | fingerprint | the readable digest of a public key | | `1-Foundations/ambre-spec-key-verification.md` |
 | machine member | a program holding the document key, bound by its role | | `1-Foundations/ambre-spec-machine-access.md` |
 | inbox | the write-only drop box of one document | | `1-Foundations/ambre-spec-machine-access.md` |

@@ -141,7 +141,7 @@ The segments have no control of their own. A user meets them only as a channel t
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing is built.** No segment, lease, amendment or re-finalization exists.
-* **The compaction waits on a Story scheduled later.** `SRV-038` lands with the `A document is
-  compacted as its history grows` Story (`ambre-roadmap.md` E7), a V1 Story. `MURMURE-222` needs it first.
+* **The compaction waits on the relay.** `SRV-038` lands with the `A document is compacted as its
+  history grows` Story (`ambre-roadmap.md` E7), which `MURMURE-222` needs first.
 * **Nothing states what a reported mismatch leads to.** The deltas stay, and no rule names who
   finalizes again or how the member who sealed the false snapshot is shown.

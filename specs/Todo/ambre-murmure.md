@@ -208,13 +208,11 @@ An archive of Slack or Discord, in JSON, imported into a space.
 
 ## 3. NOT YET IN A SPEC
 
-The MVP specs leave one point of the earlier sketch without a row. It needs one before its Story
-closes. The compaction of an active segment is `MURMURE-222`, and a segment that cannot be opened
-is `MURMURE-218` to `MURMURE-221`.
-
-* **A signed key bundle.** `MURMURE-056` wraps every key since the latest history boundary for an
-  invitee. It does not say that the wraps travel as one signed bundle, as Matrix MSC4268 does. The
-  Matrix MSC3061 implementation forwarded keys one by one, and it had a vulnerability.
+Nothing of the earlier sketch is left without a row. The compaction of an active segment is
+`MURMURE-222`, and a segment that cannot be opened is `MURMURE-218` to `MURMURE-221`. The keys an
+invitee needs come through the key chain of `ambre-spec-key-rotation.md` (`SYNC-115` to
+`SYNC-122`). One measured defect waits on a rule: the authorship fork fails its budget
+(`ambre-spec-budgets.md section 1`).
 
 ---
 
