@@ -143,7 +143,7 @@ renderer (`features/ambre-spec-prose-page-rendering.md`).
 * **Nothing rules on where the language comes from.** A command sets it, and no rule says what it
   is before one does -- the document's language, the browser's, or none.
 * **The personal dictionary does not follow the reader.** It is local to the browser for now, and
-  syncing it through the settings channel is named as later work with no rule behind it.
+  syncing it through the user settings is named as later work with no rule behind it.
 * **Nothing rules on what is checked.** Whether a code block, a link target, a word inside a
   suggestion or the text of a header is checked is undecided. Each answer changes what the
   reader sees underlined.

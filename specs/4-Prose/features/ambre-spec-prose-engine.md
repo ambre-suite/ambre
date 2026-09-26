@@ -246,7 +246,7 @@ then advances it. Exporting twice from the same vector yields the same bytes, an
 be truncated by an extra call. It is the mechanism `features/ambre-spec-trame-engine.md` already
 uses, so both applications have one delta model on the shared engine.
 
-**The state never sees a channel.** `ProseState` names no sender, no `SyncCommand` and no incoming
+**The state never sees a queue.** `ProseState` names no sender, no `SyncCommand` and no incoming
 event type. The generic dispatcher in `ambre-logic` routes what arrives to the four content methods
 above and fans the outcome back out (`PROSE-024`). A connection change, a sharing change or a
 revoked member is not document content and never reaches this state at all.
@@ -655,7 +655,7 @@ Prose view is an arm of the frame host's application enum, like Trame's.
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
 | One state per document, dispatched by a match | a trait object or a boxed `Any` in a registry | it trades the compiler's exhaustiveness for a downcast at every call site. A closed enum of document states means adding Prose adds an arm and no indirection, and a concrete value is what lets a host test build a document, drive it and read the answer with no worker and no browser |
-| A handler returns an outcome and sends nothing | injecting an effect sink into the state | it is the trait object the closed enum exists to avoid. A value returned by a plain method is testable with no channel and keeps the state free of a transport handle, so the dispatcher is the single place where a document change becomes traffic |
+| A handler returns an outcome and sends nothing | injecting an effect sink into the state | it is the trait object the closed enum exists to avoid. A value returned by a plain method is testable with no queue and keeps the state free of a transport handle, so the dispatcher is the single place where a document change becomes traffic |
 | Every mutation is a typed command, and there is one entry point | letting a feature module open the CRDT and write to it | it is how the interception rules silently stop holding. One path into the document is one place to intercept it, which is what track changes, undo and the refusal rules all hang off; a second path would have to reimplement each of them |
 | The command plane carries no `serde` | serializing every command, as the Sync hop must | it pays the serialization on the hop that must not. The UI and Logic threads share one linear memory, so a value moves between them; deriving serialization on the plane would invite a copy on a hop that has none, and it is the derive that makes a network type by accident |
 | A delta is exported from a stored version vector | a single-drain export | its correctness depends on nobody calling it twice. Draining Loro's internal diff is order-fragile: a second call returns empty and silently truncates the stream, forcing every caller to thread the one exported copy by hand; exporting from a stored vector is idempotent, and it is the mechanism `features/ambre-spec-trame-engine.md` already uses -- one delta model for both applications |
@@ -698,7 +698,7 @@ Prose view is an arm of the frame host's application enum, like Trame's.
 * **Nothing rules on the export cursor when an export fails.** The cursor is advanced after every
   export, and no rule of this document says whether a failed export advances it too. The
   operations of that range would then never be offered again.
-* **A dropped command leaves no trace.** A full Logic channel drops the mutation, and nothing
+* **A dropped command leaves no trace.** A full Logic queue drops the mutation, and nothing
   says whether the drop is logged, surfaced or counted. An edit the user made is lost silently.
 * **The remote path has no batch.** A run of deltas arriving together is applied one at a time, so
   the layout is rebuilt once per delta. Trame and Toile each carry a row for the amortized path,

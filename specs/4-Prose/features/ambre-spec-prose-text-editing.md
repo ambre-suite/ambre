@@ -190,7 +190,7 @@ fn take_selection(state: &mut ProseUiState, to_logic: &flume::Sender<LogicComman
 | `DeleteRange { anchor, focus }` | two endpoints, in either order | `PROSE-037`, `PROSE-039` |
 | `SplitBlock { block_id, pos }` | where the paragraph parts | `PROSE-038` |
 
-The channel keeps the order it was sent in, so the deletion of a selection always applies before
+The queue keeps the order it was sent in, so the deletion of a selection always applies before
 the insertion that replaced it. Whether the two are one undo item is undecided
 (`features/ambre-spec-prose-undo.md section 5`).
 

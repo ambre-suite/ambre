@@ -225,5 +225,5 @@ The boundary has no control of its own. What a user meets is what it costs them.
 | What the relay stores, and what it refuses | `ambre-spec-server.md` |
 | How a key fingerprint is shown and pinned | `ambre-spec-key-verification.md` |
 | Who may recover a member's key inside an organization | `ambre-spec-organizations.md` |
-| The threads, the channels and the crate graph that carry the separation | `ambre-spec-architecture.md` |
+| The threads, the queues and the crate graph that carry the separation | `ambre-spec-architecture.md` |
 | What each budget of the workspace is | `ambre-spec-budgets.md` |

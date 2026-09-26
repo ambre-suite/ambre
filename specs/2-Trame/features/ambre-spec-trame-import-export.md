@@ -101,7 +101,7 @@ status values are normative in `ambre-spec-template.md`.
   round trip of the two gestures: the header's identity, the sheet an import activates and the
   formula a reload re-evaluates. The role gate keeps an export in a reader's hands. What is loose
   is the frame conditions. The failures are rules the code contradicts: records
-  dropped in silence, a full channel losing the file, a snapshot written out empty.
+  dropped in silence, a full queue losing the file, a snapshot written out empty.
 
 ---
 

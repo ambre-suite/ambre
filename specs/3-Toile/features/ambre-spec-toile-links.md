@@ -163,7 +163,7 @@ culled frame and no state.
 | The link is a register of its own | a field of the style register | the style is written whole, so a link inside it would be erased by any restyle of a selection that included the element |
 | Following writes nothing | recording the jump, so a presenter could replay it | a jump is one user's camera, and a camera is per user; writing it would put one user's navigation into the other users' history |
 | A dead frame target is inert | clearing the register when the frame is gone | it destroys data on a read, and the target may come back through a late change or an undo |
-| A web address is opened by the shell, never fetched | fetching a preview of the address | the board holds document content, so a fetch from the board would put a request next to plaintext and give an attacker a channel. The shell opens a sandboxed tab and the board learns nothing |
+| A web address is opened by the shell, never fetched | fetching a preview of the address | the board holds document content, so a fetch from the board would put a request next to plaintext and give an attacker a path to it. The shell opens a sandboxed tab and the board learns nothing |
 | Three target kinds and no more | a general action target | an address, a place on this board and another document are the three navigations a whiteboard needs; anything else is a command, and a command belongs to a menu |
 
 ---

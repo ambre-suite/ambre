@@ -249,7 +249,7 @@ conditions hold.
 
 | Question | Owner |
 |---|---|
-| What the canvas and the DOM each own, and the two channels between them | `ambre-spec-ui.md section 2` |
+| What the canvas and the DOM each own, and the two queues between them | `ambre-spec-ui.md section 2` |
 | Which subset of WebGPU and WebGL2 the content stays inside | `ambre-spec-ui.md`, `UI-THREAD-005` |
 | Where the design tokens come from | `ambre-spec-design-tokens.md` |
 | The menus, the dialogs, the panels and the status bar around the canvas | `ambre-spec-chrome.md` |

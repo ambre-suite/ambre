@@ -109,7 +109,7 @@ zoom: f64,
 3. drop every cached cell outside that window (`TRAME-UI-024`), then rebuild the hidden-row set,
    because an evicted cell carried the flag it was derived from;
 4. stamp a fresh monotonic version and hold the command in the one-slot queue (`TRAME-UI-025`);
-5. the frame flush sends it, dropping it if the channel is full -- the next scroll supersedes it.
+5. the frame flush sends it, dropping it if the queue is full -- the next scroll supersedes it.
 
 **Steps, on every answer:**
 
@@ -172,7 +172,7 @@ painter never leaves it (`TRAME-UI-013`). Every fill comes from the theme palett
 | The axis scrolls by whole rows, the remainder kept in an accumulator | a pixel scroll origin | it is what the earlier design carried and what the code never built. The grid is a lattice: an origin that is an index makes every mapping between a pixel and a cell exact, and a touchpad glide still feels continuous because the accumulator absorbs the remainder. |
 | The padding is one screen each side, floored at 20 rows | a padding derived from the gesture speed, 20 to 100 rows | the earlier design prescribed it and no code implements it, and it misses the case the padding exists for: a page jump moves the origin by exactly one screen, so a margin smaller than that lands outside the cache and flashes the entering rows. |
 | A late answer is dropped on a version compare | a sequence number per axis | the window is one answer over two axes, so two counters can each be current while the pair they describe never existed. |
-| A late answer is dropped on a version compare | cancelling the outstanding request | the channel cannot do it: a request already sent is answered, and the answer arrives whether the window still wants it or not. |
+| A late answer is dropped on a version compare | cancelling the outstanding request | the queue cannot do it: a request already sent is answered, and the answer arrives whether the window still wants it or not. |
 | A cell outside the new window is evicted | keeping every cell ever received | it is unbounded on a 100 000-row sheet, and a cell that stays in the cache after leaving the window is a value nothing will refresh, which reads as authoritative. |
 | A band entering by a scroll is painted blank, not pending | painting the pending fill uniformly | it is what a full repaint does, and the pending fill is grey: a grey flash on every scroll reads as a fault rather than as a wait. |
 | Only a high-resolution pixel gesture gets momentum | one path for every scroll source | a notched wheel emits one large discrete delta, and feeding it to a velocity estimate sends the sheet flying from a single click. |

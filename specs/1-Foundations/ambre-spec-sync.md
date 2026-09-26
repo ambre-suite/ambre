@@ -107,7 +107,7 @@ no handler at all. The contract is an announcement. As the last step of its star
 posts an empty payload. The relay on the Main side holds every command until it sees one. An
 encoded event is never empty, so the announcement is unambiguous (`SYNC-057`).
 
-**The loop.** One non-blocking wait over two channels: the commands relayed in, and the results of
+**The loop.** One non-blocking wait over two queues: the commands relayed in, and the results of
 the socket and the requests. Both producers live in this worker, so the wait wakes correctly and the
 browser event loop stays free for the socket and the fetches (`SYNC-058`). Network work runs as
 spawned tasks on that free loop.

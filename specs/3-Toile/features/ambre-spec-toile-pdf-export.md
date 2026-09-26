@@ -134,7 +134,7 @@ menu is where a user looks for a file.
 `ToileState`; this one is not. The glyphs need the base font faces, which the Main thread fetches at boot.
 They are seeded into the Logic thread's own `export_cx`, a resource beside the documents rather than inside
 one. So the dispatcher intercepts `ExportPdf` before the document lookup. It borrows the board and the faces
-apart, and answers on the same channel as any other command; the board stays read-only through it
+apart, and answers on the same queue as any other command; the board stays read-only through it
 (`TOILE-IO-046`).
 
 **A build without the writer still answers.** `krilla` is compiled behind a feature, and the launcher is the

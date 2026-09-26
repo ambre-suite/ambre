@@ -86,7 +86,7 @@ pub struct SelStats {
 **Steps, on the UI side:**
 
 1. a selection change asks for the aggregates when the selection is multi-cell, and clears the
-   band otherwise (`TRAME-UI-108`). The request is lossy, so a full channel drops it and the band
+   band otherwise (`TRAME-UI-108`). The request is lossy, so a full queue drops it and the band
    stays cleared (`TRAME-UI-136`);
 2. the reply is mirrored into one signal, which the band reads.
 
@@ -122,7 +122,7 @@ value (`TRAME-UI-108`).
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
-| The Logic thread computes the aggregates | totalling the cached cells on the UI thread | it answers for the visible part alone: the selection can be far larger than the window, and the UI thread holds the window alone. Sending the cells up instead would move the whole selection across a channel to compute six numbers. |
+| The Logic thread computes the aggregates | totalling the cached cells on the UI thread | it answers for the visible part alone: the selection can be far larger than the window, and the UI thread holds the window alone. Sending the cells up instead would move the whole selection across a queue to compute six numbers. |
 | The request carries no geometry | sending the rectangle with the request | it would be a second source for one rectangle. The Logic thread already tracks the selection for the sort, the style and the structural commands. |
 | An aggregate skips the rows the filter hides | totalling every row | it is what a formula does, and the band is not a formula: it reports what the user is looking at, and a user who filters a column is asking about the rows that remain. |
 | A formula does not skip them | making `SUM` follow the filter | it is what `SUBTOTAL` will do explicitly, and doing it in `SUM` makes a formula's result depend on a view, so two peers filtered differently read two totals (`TRAME-021`). The band is not a document value, so it is free to follow the view. |

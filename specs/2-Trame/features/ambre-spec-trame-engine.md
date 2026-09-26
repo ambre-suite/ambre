@@ -26,10 +26,10 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-015` | `CONC` | Two peers exchanging the same operations in any interleaving MUST converge to the same document. | audit `H6`; this spec section 2; `ambre-spec-testing.md` | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest over the interleavings; `ambre_trame::logic::tests::group3::two_peers_converge_via_mock_sync` | none | verified |
 | `TRAME-023` | `INV` | The incrementally maintained sheet index MUST equal a from-scratch rebuild after any sequence of structural operations. | this spec section 3 | `ambre_trame::model::sheet_index::tests::apply_insert_and_delete_row_shift_positions`; `::apply_move_row_permutes_order_and_reindexes` -- per-operation unit tests | partial -- the equivalence property exists on the Toile index and not here, though this is the cache invariant the whole engine rests on; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-024` | `INV` | `ambre-trame` MUST contain no `unsafe`. | README pillar "Security" | none | claim -- the crate measures zero `unsafe`, and its root carries no `#![forbid(unsafe_code)]`, so the count is a measurement and not a mechanism (`ambre-spec-testing.md`, the mechanism ladder); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-FEAT-001` | `INV` | A feature handler MUST NOT send on any channel: it returns a `TrameOutcome` and the Logic dispatcher fans it out. | this spec section 3; architecture section 4 | type-level -- `TrameState` holds no sink or sender, so a handler has no channel in reach; `ambre_trame::logic::tests::group3::edit_emits_send_update_through_sink` -- the dispatcher seam | none | verified |
+| `TRAME-FEAT-001` | `INV` | A feature handler MUST NOT send on any queue: it returns a `TrameOutcome` and the Logic dispatcher fans it out. | this spec section 3; architecture section 4 | type-level -- `TrameState` holds no sink or sender, so a handler has no queue in reach; `ambre_trame::logic::tests::group3::edit_emits_send_update_through_sink` -- the dispatcher seam | none | verified |
 | `TRAME-UI-001` | `INV` | The UI thread MUST hold no document data -- only view state and the viewport the Logic thread sends. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | none | claim -- no occurrence of `LoroDoc` or `loro::` sits under `ambre-trame/src/ui/` today, but nothing runs that search: `deny.toml` bans the crate, not the directory, and `ambre-trame` is one of the four the ban allows. It is a measurement, like `TRAME-024`; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TRAME-UI-002` | `INV` | Every document mutation MUST leave the UI thread as a `TrameCommand`; the UI MUST NOT write document state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the outbound path is `TrameView::send_command_lossless` and its lossy twin (`ui/view/lifecycle.rs`), both of which take a `TrameCommand`, and the document itself is out of reach on this side (`TRAME-UI-001`) | none | verified |
-| `TRAME-UI-003` | `INV` | The UI thread MUST NOT block on the Logic channel. | architecture section 2.B; `ambre-spec-ui.md section 1` | type-level -- both senders are `try_send`, and neither has a blocking form in scope | none | verified |
+| `TRAME-UI-003` | `INV` | The UI thread MUST NOT block on the Logic queue. | architecture section 2.B; `ambre-spec-ui.md section 1` | type-level -- both senders are `try_send`, and neither has a blocking form in scope | none | verified |
 | `TRAME-UI-142` | `INV` | A command the UI thread failed to send MUST NOT be dropped in silence. | this spec section 4; `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), every lossless call site reading its outcome and logging a refusal, the two that dropped it outright included: the source clear of a cut and the undo group boundary on cell exit | none | qa-manual |
 | `TRAME-UI-006` | `INV` | The canvas dispatch over `TrameEvent` MUST be exhaustive -- no wildcard arm -- so a new variant is a compile error, not a silent drop. | this spec section 4 | exhaustive-match -- `ui/view/frame.rs::dispatch_trame` names all 26 variants of the enum and carries no `_` arm, so adding one fails the build | none | verified |
 | `TRAME-UI-014` | `INV` | There MUST NOT be an `is_error` field on `DisplayCell`. | this spec section 3 | type-level -- the struct declares no such field, and the renderer has no other input | none | verified |
@@ -57,7 +57,7 @@ status values are normative in `ambre-spec-template.md`.
   as bytes alone, which the Sync worker seals (`ZK-001`). `UI-THREAD-004` bans a network, crypto or
   persistence path on the other side.
 * **Verification.** 13 `verified`, 3 `untested`, 1 `qa-manual`. What holds is what a compiler
-  holds: a handler with no channel in reach, an apply that returns display events and cannot
+  holds: a handler with no queue in reach, an apply that returns display events and cannot
   broadcast. A dispatch is checked against all 26 event variants. What is loose is what only a running
   thread shows: the refused send that must reach the log (`TRAME-UI-142`), broken at two call
   sites. Section 6 names four divergences from the code.
@@ -186,7 +186,7 @@ the feature that owns it, in `ambre-bus::app::trame`, where the code is authorit
 
 ```rust
 /// What a handler returns. The `ambre-logic` dispatcher is the only place that
-/// turns any of these three into a message on a channel (`TRAME-FEAT-001`).
+/// turns any of these three into a message on a queue (`TRAME-FEAT-001`).
 pub struct TrameOutcome {
     display:   Vec<TrameEvent>,   // to the UI thread
     update:    Option<Vec<u8>>,   // the CRDT delta to broadcast
@@ -225,7 +225,7 @@ operations rather than answering empty.
 ### E. What the UI thread receives
 
 `TrameCommand` and `TrameEvent` travel as Rust values by move, inside `AppCommand::Trame` and
-`AppEvent::Trame`, over shared-memory channels: no serialization on this hop, and no `postMessage`.
+`AppEvent::Trame`, over shared-memory queues: no serialization on this hop, and no `postMessage`.
 The viewport answer is the `TrameEvent::ViewportData` variant, whose fields the Logic thread fills
 directly -- there is no `DisplayViewport` type on the bus. One cell of it is flat:
 
@@ -269,7 +269,7 @@ Three shapes are deliberately absent, and each one is a rule:
 The user touches no part of this document directly. What it exposes is the answer every other
 Trame feature draws from, and the rules that keep the drawing thread honest. The UI thread holds
 view state and the current window and nothing else (`TRAME-UI-001`). Every mutation leaves as a
-command (`TRAME-UI-002`), and a full channel drops that command rather than blocking the frame
+command (`TRAME-UI-002`), and a full queue drops that command rather than blocking the frame
 (`TRAME-UI-003`).
 
 **Where each event lands.** One arm per variant and **no `_` arm**, so a new variant is a compile
@@ -297,7 +297,7 @@ Each viewport answer carries a version, and the UI drops one older than the last
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
-| A handler returns an outcome and sends nothing | injecting an effect sink into the state | it is the trait object the closed `DocState` enum exists to avoid, and it puts a transport handle in the state. A value returned by a pure method is testable on the host with no channel, no worker and no browser, and the dispatcher is then the single place where a document change becomes traffic |
+| A handler returns an outcome and sends nothing | injecting an effect sink into the state | it is the trait object the closed `DocState` enum exists to avoid, and it puts a transport handle in the state. A value returned by a pure method is testable on the host with no queue, no worker and no browser, and the dispatcher is then the single place where a document change becomes traffic |
 | The recompute finishes inside the command | a deferred pass on a timer | it buys a shorter command and pays with a grid showing stale numbers, plus a second scheduler to reason about. The dirty set is what bounds the cost, so an incremental recompute stays inside the frame budget |
 | A cell reference binds to a uid; a range binds to positions | binding both endpoints of a range to uids, so a range follows the data the way a cell does | the endpoints then reorder independently under a sort and can cross, so `SUM(A1:A3)` over a sorted block collapses to zero. A rectangle cannot follow a non-contiguous set of rows, and a user expects an internal sort to leave the block total intact |
 | A range is one dependency, not an edge per cell | expanding each range into cell-to-cell edges | a whole column is a hundred thousand edges, rebuilt on every row insert. Storing the rectangle and testing containment costs one entry per formula |

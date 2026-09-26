@@ -61,8 +61,8 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-020` | `POST` | At most one cull request MUST leave the UI thread per frame. | this spec section 2 | type-level -- the pending request is one `Option<Viewport>` on the view, so a second request in the same frame replaces the first, and the frame flush is its only send site | none | verified |
-| `TOILE-UI-274` | `FRAME` | Asking for the visible set MUST NOT stall the frame. | this spec section 2; `BUS-004` | structural -- the flush is a try-send on a bounded channel and the frame continues on either arm, so no paint waits on the Logic thread | none | verified |
-| `TOILE-UI-275` | `FAIL` | A cull request the channel refuses MUST NOT leave the board painting a stale set. | this spec section 2 | type-level -- the flush reads the outcome of the send and puts the camera back into `pending_viewport` on anything but `Sent`, so the slot is empty only once a request left, and the next frame offers the same camera again (`BUS-024`) | none | verified |
+| `TOILE-UI-274` | `FRAME` | Asking for the visible set MUST NOT stall the frame. | this spec section 2; `BUS-004` | structural -- the flush is a try-send on a bounded queue and the frame continues on either arm, so no paint waits on the Logic thread | none | verified |
+| `TOILE-UI-275` | `FAIL` | A cull request the queue refuses MUST NOT leave the board painting a stale set. | this spec section 2 | type-level -- the flush reads the outcome of the send and puts the camera back into `pending_viewport` on anything but `Sent`, so the slot is empty only once a request left, and the next frame offers the same camera again (`BUS-024`) | none | verified |
 
 * **Budget.** the board paint under 16 ms at 2 000 visible elements, a row of
   `ambre-spec-budgets.md section 2`, beside the frame phases it sits inside. An idle board

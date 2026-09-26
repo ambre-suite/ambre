@@ -134,8 +134,8 @@ modifier is read at release, not at press, so changing your mind mid-drag counts
   (`features/ambre-spec-trame-cell-editing.md section 6`). The destination geometry does not: it is
   a free function that takes the source, the drag corner and the block granularity and returns a
   rectangle. Nothing but habit keeps it untested.
-* **A fill the channel dropped still moves the selection.** `TRAME-UI-133`: the release logs the
-  full channel and grows the selection over the destination anyway. The user is left selecting a
+* **A fill the queue dropped still moves the selection.** `TRAME-UI-133`: the release logs the
+  full queue and grows the selection over the destination anyway. The user is left selecting a
   rectangle no peer ever wrote. The resize drops the same way (`features/ambre-spec-trame-resize.md
   section 6`), and there the stale value is at least visible. Here the cells stay as they were and
   only the outline lies.

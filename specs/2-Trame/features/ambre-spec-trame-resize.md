@@ -169,7 +169,7 @@ resolved on the next frame.
   should own it. Its worst case is `TRAME-UI-128`: measuring nothing is not read as "measure
   later" but as "there is nothing". The column is set to the default width.
 * **A band resize is not one write.** One drag emits one command per column, each on its own, so a
-  full channel can land some of the band and drop the rest. The screen shows one width and the
+  full queue can land some of the band and drop the rest. The screen shows one width and the
   document holds two. Nothing rules whether a band is one gesture or several.
 * **Nothing drives a sized column through a structural change** (`TRAME-UI-037`). The keying makes
   the rule true by construction, which is exactly the claim a test is cheapest to make.

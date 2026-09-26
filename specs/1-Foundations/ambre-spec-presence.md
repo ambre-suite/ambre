@@ -124,7 +124,7 @@ makes the departure of a peer the absence of an entry, which no dropped message 
 
 **How a departure travels** (`PRESENCE-014`). The relay is the one party that knows a peer stopped
 watching: it sees the unsubscribe, and it sees the socket close. It drops that peer's presence
-entry and says so on the document's channel. It names the document and the author key it already
+entry and says so on the document's topic. It names the document and the author key it already
 routes on, and nothing else (`SRV-098`). `ambre-sync` resolves that key through the member
 directory, exactly as it resolves the author of a sample, and drops a key it cannot resolve. The application
 then removes the peer and hands the view the set that remains.

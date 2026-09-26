@@ -58,7 +58,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-UI-137` | `POST` | Copy MUST carry the whole selection. | this spec section 2 | `ambre_toile::ui::menu::tests::copy_cut_delete_resolve` -- the copy command carrying the selection unchanged | none | verified |
-| `TOILE-UI-138` | `POST` | Cut MUST copy before it deletes. | this spec section 2 | `ambre_toile::ui::menu::tests::copy_cut_delete_resolve` -- the pair in that order, which the channel preserves | none | verified |
+| `TOILE-UI-138` | `POST` | Cut MUST copy before it deletes. | this spec section 2 | `ambre_toile::ui::menu::tests::copy_cut_delete_resolve` -- the pair in that order, which the queue preserves | none | verified |
 | `TOILE-UI-139` | `POST` | Delete MUST carry the whole selection. | this spec section 2 | `ambre_toile::ui::menu::tests::copy_cut_delete_resolve` -- the delete command carrying the selection unchanged | none | verified |
 | `TOILE-UI-140` | `POST` | Duplicate MUST offset the copy so it is visibly distinct from its source. | this spec section 2 | `ambre_toile::ui::menu::tests::duplicate_carries_nudge` -- the delta as the diagonal nudge on both axes | none | verified |
 | `TOILE-UI-141` | `POST` | Group MUST emit one binding over the whole selection. | this spec section 2 | `ambre_toile::ui::menu::tests::group_ungroup_resolve` -- a single group command for a two-element selection | none | verified |

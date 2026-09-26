@@ -163,7 +163,7 @@ ghost outline, never as this box (`features/ambre-spec-toile-presence.md section
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
-| The index pre-filters and the UI thread refines | testing exact geometry in the Logic thread | it moves every path and every stroke across a channel per click. The spatial index answers in the order of the visible count and indexes rotation-expanded boxes, so it over-approximates on purpose, and refining on the UI thread keeps the exact geometry next to the code that drew it |
+| The index pre-filters and the UI thread refines | testing exact geometry in the Logic thread | it moves every path and every stroke across a queue per click. The spatial index answers in the order of the visible count and indexes rotation-expanded boxes, so it over-approximates on purpose, and refining on the UI thread keeps the exact geometry next to the code that drew it |
 | A group is not pickable and a click resolves upward | picking the group by its union bounds | it selects the group from empty space inside it. A group paints nothing, so a pick there is a pick on the space between its members, and resolving upward from a member is what makes a group behave as one object |
 | The scope is peeled one level per double-click | a double-click reaching the leaf element directly | nesting is arbitrary, and a rule that jumps to the innermost member makes a two-level group unusable for a user who wanted the sub-group |
 | A locked element is skipped by the pick, not greyed | keeping it pickable and refusing the transform later | locking exists to let a user draw over a background, so refusing the click is the whole feature. A visible difference would be noise on a board built of colour |

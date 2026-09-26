@@ -140,7 +140,7 @@ exists anywhere in the workspace.
 
 **Steps, when a peer leaves** (`PRESENCE-014`):
 
-1. the relay saw them unsubscribe, or their socket close, and says so on the document's channel;
+1. the relay saw them unsubscribe, or their socket close, and says so on the document's topic;
 2. `ambre-sync` resolves the key it named through the member directory, exactly as it resolves the author of a
    sample. A key it cannot attribute is dropped;
 3. the peer is removed and the set that remains travels to the view.

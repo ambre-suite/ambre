@@ -314,8 +314,8 @@ at. A double-click inside selects the word.
 * **The pointer maps to one line.** `editor_local_point` returns a local `y` of zero, so a click in
   a multi-line cell resolves against the first line. `Alt+Enter` and the up and down caret moves are
   built, which is what makes the gap visible.
-* **A commit the channel cannot carry is lost, and the cell shows it anyway.** On a full UI-to-Logic
-  channel `commit_edit` logs "retry next frame" and updates the local cache regardless
+* **A commit the queue cannot carry is lost, and the cell shows it anyway.** On a full UI-to-Logic
+  queue `commit_edit` logs "retry next frame" and updates the local cache regardless
   (`TRAME-UI-163`). No retry exists anywhere: the command is dropped, and the cell reads as written
   on one screen and blank on every other.
 * **A write beyond the materialization cap vanishes** (`TRAME-UI-164`). `write_cell` returns without

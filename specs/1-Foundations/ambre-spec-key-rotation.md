@@ -124,7 +124,7 @@ its older snapshots locally, and re-reads them from object storage (`SYNC-044`).
 cache is wiped by the key type itself (`SYNC-078`).
 
 **A rotation is not a removal.** Being taken off a document is a separate, targeted notice on the
-user's own channel: it closes the document locally and tells the Logic thread. The rotation notice
+user's own topic: it closes the document locally and tells the Logic thread. The rotation notice
 is for the members who stay, and it reports no departure (`SYNC-081`).
 
 **What the document key seals.** The rotation reaches the first row and none of the others, which is

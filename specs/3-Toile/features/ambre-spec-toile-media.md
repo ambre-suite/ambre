@@ -100,7 +100,7 @@ example to the test that holds it.
 thumbnail -- never the pixels (`ambre-spec-toile-schema.md section 3`). The picture element carries
 the address alone.
 
-**The service plane** (`ambre-bus`): media reuses the shared request plane rather than a channel of
+**The service plane** (`ambre-bus`): media reuses the shared request plane rather than a queue of
 its own (`ambre-spec-architecture.md section 2`).
 
 | Shape | Direction | Carries |
@@ -219,7 +219,7 @@ picture the document cannot resolve would be re-requested on every frame that fa
   unprintable, and the row stays `unverified` for want of a distinction to assert rather than for want of a
   test.
 * **Every picture crosses the bus as raw pixels.** A `MediaDecoded` carries `width * height * 4` bytes. The
-  channel is shared memory and the vector moves rather than copies. The cost is the decode and the peak, not a
+  queue is shared memory and the vector moves rather than copies. The cost is the decode and the peak, not a
   memcpy per frame. But nothing bounds how many answers one viewport reply can produce, and a board opening on
   thirty pictures decodes thirty thumbnails in one command.
 * **An entry outlives its last element, and no rule says what should happen.** Deleting a picture

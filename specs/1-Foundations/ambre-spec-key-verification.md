@@ -93,7 +93,7 @@ itself.
 
 **The last two rows are indistinguishable, and that is the point.** The interface cannot tell a
 reinstall from an interception. It says so, and asks the user to compare the fingerprint over a
-channel the server does not control.
+route the server does not control, such as a call.
 
 ---
 

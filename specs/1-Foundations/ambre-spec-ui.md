@@ -62,7 +62,7 @@ application.
 payload the Logic thread pushed. The document is one mental model, and it lives on the other
 thread.
 
-**The boundary.** Two zones, two technologies, and two channels between them.
+**The boundary.** Two zones, two technologies, and two queues between them.
 
 | Zone | Drawn by | Specified in |
 |---|---|---|
@@ -97,7 +97,7 @@ of every application.
     controls (`ambre-spec-chrome.md`).
 * one crate per application, each holding its own Logic state and handlers, its own view, its own
   interface components and its own command table.
-* the launcher, downstream of every application: it mounts the shell, creates the channels and
+* the launcher, downstream of every application: it mounts the shell, creates the queues and
   spawns the Logic and Sync threads. It then boots the surface and injects the active view
   (`ambre-spec-launcher.md`).
 
@@ -143,7 +143,7 @@ The user touches nothing here. What they see is whether the interface stays resp
 
 | Trigger | Behaviour |
 |---|---|
-| any gesture at all | the thread never waits: a full channel drops the message with a log rather than freezing the page |
+| any gesture at all | the thread never waits: a full queue drops the message with a log rather than freezing the page |
 | a document mutation | leaves as a command and comes back as an event; nothing is written locally first |
 | a right-click on content | the surface computes the position and a page element opens there |
 | a toolbar control on content that pans | the element follows the content's transform on every frame |
@@ -200,7 +200,7 @@ The user touches nothing here. What they see is whether the interface stays resp
 | What a copy carries, and how a paste decides fidelity | `ambre-spec-clipboard.md` |
 | The keyboard, the composition and the transparent input | `ambre-spec-text-input.md` |
 | The shared inline editor, and the names of the selection ends | `ambre-spec-text-editor.md` |
-| The channels between the three threads, and what they carry | `ambre-spec-architecture.md section 2` |
+| The queues between the three threads, and what they carry | `ambre-spec-architecture.md section 2` |
 | What the sealed path is, and what the relay may read | `ambre-spec-zero-knowledge.md` |
 | The home screen, the routes and the sign-in | `ambre-spec-launcher.md` |
 | What each application's view holds and paints | each application's engine document |

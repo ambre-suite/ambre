@@ -179,11 +179,11 @@ the panel (`TOILE-UI-024`). The pick tests the pins before the elements. A pin o
 click, and the note under it stays unselected (`TOILE-UI-082`, `TOILE-UI-308`,
 `features/ambre-spec-toile-selection.md section 3`).
 
-**The panel** is a chrome side panel over the command channel, the same plumbing as the find panel
+**The panel** is a chrome side panel over the command queue, the same plumbing as the find panel
 (`features/ambre-spec-toile-find.md section 4`). It holds no authoritative state (`TOILE-UI-023`):
 the list and the open thread are what a `ReadComments` answered. It re-reads a thread when the
 board says the thread changed (`TOILE-UI-310`). Every action it offers leaves as one intent the
-canvas view carries out, because the panel names no camera and holds no command channel.
+canvas view carries out, because the panel names no camera and holds no command queue.
 
 **The composer** is the field the comment tool opens at the click (`TOILE-UI-307`). A thread is born
 with its first message, so nothing is written until the user posts. Abandoning the composer leaves
@@ -201,7 +201,7 @@ the board as it was.
 | A message body is a text container | one register per message | a whole-string register loses one of two concurrent editors silently. It is rare, but the text container makes it cost nothing |
 | Order is the list order, not the timestamp | sorting by the author's timestamp | a clock is untrusted and unsynchronized, so a wrong clock rewrites a conversation |
 | A comment is outside the history | commenting like any other write | `Ctrl+Z` reverts what the user drew; withdrawing a message a teammate has already read is not an undo, it is a deletion nobody asked for |
-| Mentions and notifications are out | a mention that mails or notifies | a mention needs a notification channel, which is Murmure's subject, and routing between the two applications does not exist |
+| Mentions and notifications are out | a mention that mails or notifies | a mention needs a notification, which is Murmure's subject, and routing between the two applications does not exist |
 | The author's clock rides the command | reading the clock in the Logic thread | that thread holds none, which is why a reaction carries its own `ts` too (`features/ambre-spec-toile-reactions.md section 5`). The clock is untrusted either way, and `TOILE-FEAT-012` is what keeps it out of the ordering |
 | An edit carries a `TextDelta`, never a whole body | the edit command carrying the new body whole | the body is a text container, and a whole body settles two concurrent corrections by replacing one of them. It would undo `TOILE-FEAT-013` at the command layer, where the container cannot see it |
 

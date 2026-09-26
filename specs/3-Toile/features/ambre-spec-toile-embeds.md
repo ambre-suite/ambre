@@ -184,7 +184,7 @@ pub const CLICK_SLOP: f64 = 4.0;
 ```rust
 /// Builds a child view for a nested document. Only the launcher can: it alone
 /// may name every application's view type. Given the document, its type and the
-/// child canvas size, it wires a private event channel and returns the view.
+/// child canvas size, it wires a private event queue and returns the view.
 pub type MakeChild = Rc<dyn Fn(DocumentId, DocType, Size) -> AppView>;
 ```
 
@@ -207,9 +207,9 @@ a pointer press into a spreadsheet edit needs the child view's own selection and
 board may not name that view. So what crosses is the event; the child translates it and addresses
 the result itself.
 
-**Why the events come back on a private channel.** A view ignores the document id on the events it
-drains: it assumes every event on its channel is its own. That holds while one view reads one
-channel, so a child cannot share the board's. Each child registers its own channel, and the relay
+**Why the events come back on a private queue.** A view ignores the document id on the events it
+drains: it assumes every event on its queue is its own. That holds while one view reads one
+queue, so a child cannot share the board's. Each child registers its own queue, and the relay
 routes every document-tagged event whose id is a live child there instead (`TOILE-UI-098`).
 
 **Code:**
@@ -309,10 +309,10 @@ never the gesture, exactly as a dropped file does.
     The overlay pass walks the embeds;
   * an unmappable pointer event was handed over with a board coordinate (`TOILE-UI-328`), so the
     remap answers `None`;
-  * an event a child's channel refused vanished (`TOILE-UI-340`), so a refused event waits in a
+  * an event a child's queue refused vanished (`TOILE-UI-340`), so a refused event waits in a
     bounded queue;
   * a child's events fell through to the board for the length of the debounce (`TOILE-UI-098`).
-    The fan-out carries a list of channels per document, and a route outlives the view it was
+    The fan-out carries a list of queues per document, and a route outlives the view it was
     opened for.
 * **What a saturated child costs.** `TOILE-UI-340` no longer drops an event, but a queue has a
   bound and a full one still drops its oldest with an error line. The busy signal `BUS-016`

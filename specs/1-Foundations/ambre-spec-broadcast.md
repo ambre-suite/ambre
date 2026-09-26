@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-045` | `INV` | One process MUST hold one live subscription per channel, whatever the number of connections watching it. | this spec section 3 | none | unheld -- the hub is one task holding one stream, which the type makes true, and nothing in continuous integration opens two sockets on one document to observe it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-045` | `INV` | One process MUST hold one live subscription per topic, whatever the number of connections watching it. | this spec section 3 | none | unheld -- the hub is one task holding one stream, which the type makes true, and nothing in continuous integration opens two sockets on one document to observe it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-098` | `INV` | What the relay says about a departure MUST be what it already routes on: the document and the author key, and nothing else. | `ambre-spec-zero-knowledge.md`, `ZK-001`; this spec section 3 | type-level -- the message declares a document id and a public key and has no other field, so there is nothing else for it to carry | none | verified |
 | `SRV-050` | `INV` | A presence entry MUST stay opaque to the relay. | `ZK-005`; this spec section 3 | none | unheld -- the relay stores the frame's ciphertext as it received it and decodes nothing, which is an absence rather than a check. The two `ephemeral_binding_tests` hold the entry a forged sender never gets, which is `SRV-007` and not this rule; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-046` | `FAIL` | An upgrade refused on authentication MUST close with a code of its own, never with a generic drop. | `ambre-spec-session.md`; `ambre-spec-sync.md`, `SYNC-063` | none | unheld -- the upgrade always completes and the handler then closes with the authentication code, so the client can renew instead of backing off; no host test drives a close frame; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SRV-051` | `FRAME` | A disconnect MUST leave no subscription and no queue behind it. | this spec section 3; `SRV-045` | none | unheld -- every watched channel is deregistered and the outbound task is stopped at the end of the connection, and no test closes a socket to observe the hub afterwards; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-051` | `FRAME` | A disconnect MUST leave no subscription and no queue behind it. | this spec section 3; `SRV-045` | none | unheld -- every watched topic is deregistered and the outbound task is stopped at the end of the connection, and no test closes a socket to observe the hub afterwards; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 A frame arrives on the socket
 
@@ -41,7 +41,7 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 |---|---|---|---|---|---|---|
 | `SRV-010` | `FAIL` | A frame larger than its cap MUST be refused with no partial effect. | this spec section 3 | `ambre_server::ws::handler::message::delta_size_cap_tests::oversized_delta_writes_no_pending` -- the queue stays empty and a 413 comes back; `ws::handler::message::ephemeral_binding_tests::oversized_ephemeral_writes_no_presence` -- the same emptiness on the presence path, the socket refusing a frame past the outer envelope before any handler runs | none | verified |
 | `SRV-044` | `FAIL` | One connection MUST NOT exceed the message rate the deployment declares. | this spec section 3 | `ambre_server::ws::handler::token_bucket::tests::starts_full_and_allows_a_full_burst`; `::refills_at_the_configured_rate`; `::refill_is_capped_at_capacity`; `::sustained_rate_below_refill_is_never_rejected` -- the one that matters in production, where a legitimate client must never be caught | none | verified |
-| `SRV-087` | `FAIL` | A refused presence frame MUST be dropped in silence. | this spec section 3; `SRV-044` | type-level -- `handle_ephemeral` is handed no outbound channel, so no refusal on that path has anything to answer with. Presence arrives about ten times a minute per peer, and an error frame per refusal would be a second flood on the path the cap exists to bound | none | verified |
+| `SRV-087` | `FAIL` | A refused presence frame MUST be dropped in silence. | this spec section 3; `SRV-044` | type-level -- `handle_ephemeral` is handed no outbound queue, so no refusal on that path has anything to answer with. Presence arrives about ten times a minute per peer, and an error frame per refusal would be a second flood on the path the cap exists to bound | none | verified |
 | `SRV-042` | `FAIL` | A frame MUST be accepted only for a document this connection has subscribed to. | this spec section 3 | none | unheld -- every handler checks the connection's own subscription set before anything else, and no test sends a frame for an unsubscribed document: the check has no store behind it and the suite drives the handlers with a subscription already in place; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-043` | `FAIL` | A member removed while connected MUST stop being served within thirty seconds. | audit `H8`; this spec section 3 | none | unheld -- the membership is re-read past a thirty-second mark on every write, presence and replay, and the subscription is dropped when it is gone; no test removes a member on a live connection; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -49,8 +49,8 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-073` | `POST` | A frame one instance accepts MUST reach every subscriber, whichever instance holds their connection. | audit `C2`; `SRV-021` | none | unheld -- each process runs one subscriber task on the shared channel and fans the frames out to its own connections, and nothing in continuous integration runs a second instance to watch a frame cross; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SRV-088` | `FRAME` | A removal MUST reach the person removed alone: no fan-out MUST tell the remaining members who left. | `ZK-005`; this spec section 3 | none | unheld -- the revoke route sends the notice on the target's personal channel and nothing on the document's, so the targeting is held by the call being written that way; no test asserts that a second member's connection is told nothing. The re-key notice the others receive names nobody, and that is the whole of what they may learn; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-073` | `POST` | A frame one instance accepts MUST reach every subscriber, whichever instance holds their connection. | audit `C2`; `SRV-021` | none | unheld -- each process runs one subscriber task on the shared topic and fans the frames out to its own connections, and nothing in continuous integration runs a second instance to watch a frame cross; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-088` | `FRAME` | A removal MUST reach the person removed alone: no fan-out MUST tell the remaining members who left. | `ZK-005`; this spec section 3 | none | unheld -- the revoke route sends the notice on the target's personal topic and nothing on the document's, so the targeting is held by the call being written that way; no test asserts that a second member's connection is told nothing. The re-key notice the others receive names nobody, and that is the whole of what they may learn; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.5 A presence entry is recorded
 
@@ -134,16 +134,16 @@ gated before it is acted on.
 for an answer. An error frame per refusal would be a second flood on the path the cap exists to
 bound.
 
-**Three channels of the fan-out**, and each one exists because the others cannot reach the reader.
+**Three topics of the fan-out**, and each one exists because the others cannot reach the reader.
 
-| Channel | Carries | Reaches |
+| Topic | Carries | Reaches |
 |---|---|---|
 | per document | a delta, a presence blob, a snapshot availability, a re-key notice | every connection subscribed to that document, the sender included |
 | per person | a document shared, a document revoked | that person's connections, whatever they have open |
 | per channel | a channel delta, channel presence | every connection subscribed to that channel |
 
-**Why a person needs a channel of their own.** An invitation has to reach someone who does not yet
-know the document exists, so it cannot travel on the document's own channel. A removal is targeted
+**Why a person needs a topic of their own.** An invitation has to reach someone who does not yet
+know the document exists, so it cannot travel on the document's own topic. A removal is targeted
 for the opposite reason: only the person removed learns it, and the re-key notice the others get
 names nobody.
 
@@ -152,15 +152,15 @@ Excluding the sender would mean the fan-out knowing which connection wrote -- a 
 path for nothing.
 
 **A departure is announced.** The relay drops a person's presence entry and publishes one departure
-on the document's channel. It does so when they unsubscribe, and once per document they watched when
+on the document's topic. It does so when they unsubscribe, and once per document they watched when
 their socket closes. It names the document and the author key, which are what it routes on already,
 so it says nothing it did not already know (`SRV-091`). The per-entry expiry stays underneath as
 the fallback for a socket that dies without either path running (`SRV-072`).
 
-**One subscription per channel per process.** The ephemeral store keeps a subscription per
+**One subscription per topic per process.** The ephemeral store keeps a subscription per
 connection to it, and the relay holds one connection to that store. Two sockets watching one
 document would therefore collide on it. A single hub task owns the one stream and counts the
-interested connections per channel. It subscribes on the first and unsubscribes after the last, and
+interested connections per topic. It subscribes on the first and unsubscribes after the last, and
 copies each arriving message to every interested outbound queue in the process (`SRV-045`).
 
 **Presence.** The relay stores the sealed blob under the author's key and gives that one entry a
@@ -185,7 +185,7 @@ The socket has no surface of its own. What a person meets of it is four things.
 |---|---|
 | a collaborator's change appearing as they make it | the per-document fan-out |
 | a collaborator's cursor and selection | the presence entry and its expiry (`SRV-050`, `SRV-072`) |
-| a document appearing in their list without a reload | the per-person channel |
+| a document appearing in their list without a reload | the per-person topic |
 | a document closing under them after they are removed | the targeted removal notice, and `SRV-043` |
 
 ---
@@ -204,11 +204,11 @@ The socket has no surface of its own. What a person meets of it is four things.
 | A presence entry is stored sealed | a readable presence entry | it is what the store held first: the cursor, the colour and the display name as readable values, which is a person's position in a document sitting in the relay's own store. Sealing costs the relay nothing, because it forwards the entry rather than reading it (`SRV-050`, `ZK-005`). |
 | A refused upgrade gets a code of its own | one close for every refusal, and a backoff over all of them | when a token expires or the relay rotates its signing key every token is invalid at once, so a plain backoff never recovers -- each new connection is refused too. A distinct code lets the client renew and reconnect with no action (`SRV-046`). |
 | The channel plane relays without checking, and that is written down | leaving the channel handlers looking like the document ones | no channel is wired to real data, so the gap is reachable by nobody, and stating it is what stops a later reader from reading the asymmetry as a subtlety. The three gates it owes are `SRV-047` and `SRV-048`. |
-| The socket is bidirectional, and its frames are binary | a server-sent event stream | the client sends as much as it receives, so a server-to-client stream carries half the traffic and needs a second channel for the other half. |
+| The socket is bidirectional, and its frames are binary | a server-sent event stream | the client sends as much as it receives, so a server-to-client stream carries half the traffic and needs a second connection for the other half. |
 | The socket is bidirectional, and its frames are binary | a textual encoding on the socket | a frame per keystroke burst is what the format has to be affordable for, and a textual body inflates every one of them. The frames are a version byte and a compact encoding instead. |
 | The frame shapes live in one crate | declaring the shapes again inside the relay, beside the handlers that read them | two definitions of one wire shape diverge silently, and the first divergence found was a key declared as a bounded array on one side and an unbounded one on the other. One crate is the definition and both ends depend on it. |
 | A presence frame carries a signature | an unsigned presence frame | it is what the shape carried first: any connection could claim any author key and write that member's presence entry, which is both an attribution and a way to fill the entry hash. The signature is what makes the author binding checkable rather than declared (`SRV-007`). |
-| The fan-out rides the ephemeral store | a dedicated message broker between the instances | it adds an operational component for one publish-subscribe channel per document, with a durability nobody here needs -- the durable copy is the index. The store is already a dependency, already multiplexed, and already holds every other piece of live state. |
+| The fan-out rides the ephemeral store | a dedicated message broker between the instances | it adds an operational component for one publish-subscribe topic per document, with a durability nobody here needs -- the durable copy is the index. The store is already a dependency, already multiplexed, and already holds every other piece of live state. |
 
 ---
 

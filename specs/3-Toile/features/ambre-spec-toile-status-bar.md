@@ -128,7 +128,7 @@ zero (`TOILE-UI-107`).
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
-| The Logic thread computes the aggregates | unioning the visible bounds on the UI thread | it answers for the visible part alone, and a selection can be far larger than the viewport. Sending the elements up instead would move the whole selection across a channel to compute two numbers |
+| The Logic thread computes the aggregates | unioning the visible bounds on the UI thread | it answers for the visible part alone, and a selection can be far larger than the viewport. Sending the elements up instead would move the whole selection across a queue to compute two numbers |
 | An empty id list means the whole board | a second command for the board extent | it is a second walk to keep in step with the first, over the same cache. A fit needs the extent of a board the UI has never seen, and one command answers both questions |
 | The band shows no box for a lone element | showing the bounds from one element up | the element already wears a selection box, so the numbers would repeat what the screen says, and the band would resize on every click |
 | A world value carries at most one decimal | the full value | the digit count changes with the value, so the band jitters in width under a moving selection |

@@ -28,13 +28,13 @@
 | thread | one of the three execution contexts of a client | | `1-Foundations/ambre-spec-architecture.md` |
 | instance | one running copy of the application | | `1-Foundations/ambre-spec-architecture.md` |
 | worker | a browser worker hosting a thread | | `1-Foundations/ambre-spec-architecture.md` |
-| channel | a typed queue between two threads | | `1-Foundations/ambre-spec-architecture.md` |
+| queue | a bounded, typed link between two threads | | `1-Foundations/ambre-spec-architecture.md` |
 | plane | a class of traffic on the bus | | `1-Foundations/ambre-spec-message-bus.md` |
 | content plane | the plane carrying document edits | | `1-Foundations/ambre-spec-message-bus.md` |
 | service plane | the plane carrying correlated requests and responses | | `1-Foundations/ambre-spec-message-bus.md` |
 | envelope | the typed wrapper of one hop | | `1-Foundations/ambre-spec-message-bus.md` |
 | role gate | the check of this client's role on a document | | `1-Foundations/ambre-spec-message-bus.md` |
-| full channel | a channel with no room left | | `1-Foundations/ambre-spec-message-bus.md` |
+| full queue | a queue with no room left | | `1-Foundations/ambre-spec-message-bus.md` |
 | drop | throw a message or a command away | discard | `1-Foundations/ambre-spec-message-bus.md` |
 | command | a user intent travelling to the Logic thread | | `1-Foundations/ambre-spec-commands.md` |
 | chord | a key combination bound to a command | | `1-Foundations/ambre-spec-commands.md` |
@@ -54,6 +54,8 @@
 | sync | the thread owning the network and the crypto | | `1-Foundations/ambre-spec-sync.md` |
 | relay | the server, which carries traffic it cannot read | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | boundary | the line between what the relay learns and what it never learns | | `1-Foundations/ambre-spec-zero-knowledge.md` |
+| channel | a Murmure conversation: public, private or direct | | `Todo/ambre-murmure.md` |
+| topic | a publish-subscribe address of the relay fan-out | | `1-Foundations/ambre-spec-broadcast.md` |
 | peer | one participant of a document | | `1-Foundations/ambre-spec-presence.md` |
 | PeerID | the Loro identifier of one writing session | | `1-Foundations/ambre-spec-op-authorship.md` |
 | session nonce | the random value a PeerID derives from | | `1-Foundations/ambre-spec-op-authorship.md` |

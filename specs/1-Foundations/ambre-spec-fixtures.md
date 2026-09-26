@@ -376,7 +376,7 @@ committed in the clear beside
 them, and neither is written to disk. Hand-rolled bytes would prove that the server serves
 something, not that it serves what a client produces.
 
-**Data flow.** No worker, no channel, no transport.
+**Data flow.** No worker, no queue, no transport.
 
 ```
   FixtureGen::build()               seed() is the generator's own constant

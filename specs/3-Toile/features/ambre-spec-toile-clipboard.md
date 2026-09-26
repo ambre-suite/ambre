@@ -168,7 +168,7 @@ operating system therefore costs nothing inside the tab (`ambre-spec-clipboard.m
 | A half-copied arrow is dropped | re-binding it to the source element on the same board | it ties the copy to an element the user did not copy, and the rule would then differ by destination: the same paste onto another board has no source element to bind to |
 | The identities are minted before anything is written | writing then patching | membership and arrow ends have to be remapped, and remapping after the write means a second pass over what was just written |
 | A copy is answered by the Logic thread | building the payload from what is displayed | the selection can reach past the screen, and the UI thread holds the screen; guessing is a silent truncation, asking is one round trip |
-| Cut is a copy and a delete, not a command | a cut command | the two halves already exist and the order is guaranteed by the channel, so a third command would only duplicate them |
+| Cut is a copy and a delete, not a command | a cut command | the two halves already exist and the order is guaranteed by the queue, so a third command would only duplicate them |
 | A duplicate is fused into one undo item | a copy item and a paste item | the user made one gesture, and two items would make the first `Ctrl+Z` leave the copy behind |
 
 ---

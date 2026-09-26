@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: THE THREE-THREAD STACK
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the two instances, the six channels and the crate graph all ship.
+**Implementation:** partial -- the two instances, the six queues and the crate graph all ship.
 The failure path and the tab model are held by construction alone.
 
 > How the client is split, and why. Three execution contexts, two WebAssembly instances, one crate
@@ -47,7 +47,7 @@ that and a page that looks alive and answers nothing.
 | `ARCH-015` | `FRAME` | A failing thread MUST NOT write to the document on its way out. | this spec section 2; derived | none | unheld -- the fatal path emits an event and stops, so a half-applied operation is not flushed today. Nothing holds it, and a thread failing mid-write is the one moment the document can be left in a state no peer will ever converge to; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** the whole of `ambre-spec-budgets.md`: this stack is what every row of that register
-  measures. Its own two rows are the channel hop and the worker hop of `section 1`, and neither is
+  measures. Its own two rows are the queue hop and the worker hop of `section 1`, and neither is
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
@@ -79,8 +79,8 @@ flowchart TB
         direction TB
         UI["UI THREAD<br/>page main thread"]
         LOGIC["LOGIC THREAD<br/>worker, shared heap"]
-        UI -->|"channel: LogicCommand"| LOGIC
-        LOGIC -->|"channel: UiEvent"| UI
+        UI -->|"queue: LogicCommand"| LOGIC
+        LOGIC -->|"queue: UiEvent"| UI
     end
     SYNC["SYNC WORKER<br/>second instance, own memory"]
     RELAY["BLIND RELAY<br/>native server"]
@@ -98,7 +98,7 @@ must either block its own stack to stay alive, or return and be collected.
 
 **What the page creates at boot**, in order:
 
-1. Six bounded channels, each of capacity 1024. Two run between UI and Logic and two between Logic
+1. Six bounded queues, each of capacity 1024. Two run between UI and Logic and two between Logic
    and Sync. One carries document snapshots from Logic to the Main thread for the local store. One
    carries the content event stream on to the active view.
 2. The Logic thread, as a worker over the same heap, holding the two receivers and two senders it
@@ -106,13 +106,13 @@ must either block its own stack to stay alive, or return and be collected.
 3. The Sync worker, as a separate artefact loaded through its own loader, so it is an ordinary
    browser worker rather than a thread.
 4. The render loop on the Main thread. Each frame, before drawing, it drains the Logic to Sync
-   channel and posts each message to the worker. Then it drains the events for the views, drains the
-   snapshot channel into the local store, and polls the route.
+   queue and posts each message to the worker. Then it drains the events for the views, drains the
+   snapshot queue into the local store, and polls the route.
 
-An embedded child adds one more channel, so its event stream never reaches its parent's view.
+An embedded child adds one more queue, so its event stream never reaches its parent's view.
 
-**Backpressure.** The Logic thread may block on a full outbound channel, which is the intended
-signal. The UI thread never blocks: it drops a lossy message and reports a full channel for a
+**Backpressure.** The Logic thread may block on a full outbound queue, which is the intended
+signal. The UI thread never blocks: it drops a lossy message and reports a full queue for a
 lossless one. The two classes and what each owes are `ambre-spec-message-bus.md`.
 
 **Failure, in two paths.**
@@ -120,10 +120,10 @@ lossless one. The two classes and what each owes are `ambre-spec-message-bus.md`
 | Path | What happens | What the user gets |
 |---|---|---|
 | graceful | the thread emits a fatal event, then exits | the view latches an inert state and stops sending |
-| a panic | the build aborts rather than unwinding, so no value is dropped and no channel ever reports a disconnection | the panic hook calls the page's fatal hook before the abort, and a terminal screen replaces the content |
+| a panic | the build aborts rather than unwinding, so no value is dropped and no queue ever reports a disconnection | the panic hook calls the page's fatal hook before the abort, and a terminal screen replaces the content |
 
 The second path is why `ARCH-008` exists. A leaked sender lives in shared memory forever, so the
-receiving side reads an empty channel rather than a closed one. A disconnection therefore means a
+receiving side reads an empty queue rather than a closed one. A disconnection therefore means a
 clean shutdown, and never a crash.
 
 **One tab, one client.** Each tab instantiates the whole stack. Two tabs on one document are two
@@ -149,7 +149,7 @@ separation is carried by what each crate is allowed to declare.
 | each application crate | `ambre-bus`, `ambre-draw`, `ambre-canvas`, `ambre-chrome`, `ambre-commands` | one crate per application, holding its state, its view and its own interface. It knows neither the Logic runtime nor the worker |
 | `ambre-logic` | `ambre-bus` plus the application crates | the Logic runtime, pure Rust with no browser glue (`ARCH-003`) |
 | `ambre-sync` | `ambre-bus`, `ambre-protocol`, `ambre-crypto`, the transport crates | the Sync worker, and its own entry point |
-| `ambre-app` | everything above except `ambre-sync` | the launcher: it mounts the interface, creates the channels, spawns both workers and relays between them |
+| `ambre-app` | everything above except `ambre-sync` | the launcher: it mounts the interface, creates the queues, spawns both workers and relays between them |
 | `ambre-server` | `ambre-core`, `ambre-protocol`, and one signature crate | the relay. It links nothing that could read a document (`ZK-004`) |
 
 Two consequences follow and neither is obvious. The launcher sits **downstream** of every
@@ -192,15 +192,15 @@ The stack has no control of its own. What a user meets is what it guarantees the
 | :--- | :--- | :--- |
 | Shared memory to the Logic thread, message passing to the Sync worker | one uniform transport, every link by message passing and no shared memory anywhere | the two links have different budgets. Scroll and typing cannot afford an encode and a copy; network traffic already waits on the network. Pushing the first link onto message passing would pay serialization on the one path where it is the whole budget. |
 | The Sync worker is its own instance | a shared-heap worker for the Sync side, with an asynchronous loop inside it | a shared-heap worker runs to completion: an asynchronous loop returns immediately, its handle is dropped and it is collected after the first poll. A worker cannot both block its stack to stay alive and keep an event loop free for a socket. A second instance has an ordinary event loop and no such conflict. |
-| The blocking channel path is used across the worker boundary | an asynchronous receive across a worker boundary | the asynchronous waker of the channel crate is scheduled on the sending worker, so it never wakes a consumer parked on another one. The blocking path is backed by atomics and crosses workers correctly, and inside the Sync worker every producer is local anyway. |
-| No channel crate of our own | a hand-written queue over atomics, duplicating the channel crate | one was written to work around the freeze above, and the freeze had a different cause. Once the Sync worker moved out, the only shared-memory link left is the one where the existing crate always worked. |
+| The blocking queue path is used across the worker boundary | an asynchronous receive across a worker boundary | the asynchronous waker of the queue crate is scheduled on the sending worker, so it never wakes a consumer parked on another one. The blocking path is backed by atomics and crosses workers correctly, and inside the Sync worker every producer is local anyway. |
+| No queue crate of our own | a hand-written queue over atomics, duplicating the queue crate | one was written to work around the freeze above, and the freeze had a different cause. Once the Sync worker moved out, the only shared-memory link left is the one where the existing crate always worked. |
 | The launcher owns the frame driver and the closed view registry | the view registry in the content runtime, upstream of the applications | a closed registry naming an application view must sit downstream of every application crate, so putting it upstream is the cycle this resolves. |
 | One crate per application, deliberately monolithic | a crate per layer, with an application spread across three of them | the state, the view and the interface of one application share its whole vocabulary, and splitting them by layer is what produced the specification corpus this migration is undoing. |
 | The Logic runtime is pure Rust with no browser glue | a Logic runtime that reaches the browser directly for storage or timing | it forfeits the whole engine being testable on the host under an ordinary test run, with no browser and no worker. That is a first-order property of the split, not a side effect. |
 | The relay is in the same workspace as the client | a separate workspace for the server | the build flags are scoped by target, so a native member is unaffected, and one workspace gives one formatter, one lint pass and one CI job. |
-| A panic aborts | unwinding on panic, and detecting the death through channel disconnection | unwinding across a shared heap with a leaked sender leaves the other threads reading a channel that will never close, so the disconnection the detection waits on never comes. Aborting is honest, and the fatal hook is what makes it visible. |
+| A panic aborts | unwinding on panic, and detecting the death through queue disconnection | unwinding across a shared heap with a leaked sender leaves the other threads reading a queue that will never close, so the disconnection the detection waits on never comes. Aborting is honest, and the fatal hook is what makes it visible. |
 | One binary per instance, not one per application | a separate build per application | the applications share the render runtime, the interface toolkit and the engine, so splitting them would duplicate the heavy half of the download per application. |
-| No dependency-injection framework | a container that resolves the graph at run time | the registry is a map and the wiring is explicit in the launcher: two channels, a closure that builds a view, and a worker handle. |
+| No dependency-injection framework | a container that resolves the graph at run time | the registry is a map and the wiring is explicit in the launcher: two queues, a closure that builds a view, and a worker handle. |
 | No fourth thread for import and export | a fourth thread for conversions | during an import the interface shows a waiting state, and a blocked Logic thread is the intended behaviour. The cost of a long conversion is paid by lazy loading, not by another thread. |
 
 ---
@@ -231,7 +231,7 @@ The stack has no control of its own. What a user meets is what it guarantees the
 
 | Question | Owner |
 |---|---|
-| What travels on the channels, and what a full one means | `ambre-spec-message-bus.md` |
+| What travels on the queues, and what a full one means | `ambre-spec-message-bus.md` |
 | What the relay may learn, and what may never leave sealed | `ambre-spec-zero-knowledge.md` |
 | What every part of the stack is budgeted at | `ambre-spec-budgets.md` |
 | How a document stays readable by a later binary | `ambre-spec-schema-version.md` |

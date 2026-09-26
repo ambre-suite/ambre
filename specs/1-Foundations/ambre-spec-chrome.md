@@ -232,7 +232,7 @@ label narrows the list (`CHROME-008`). The palette is why every command carries 
 
 | Question | Owner |
 |---|---|
-| What the canvas and the DOM each own, and the two channels between them | `ambre-spec-ui.md section 2` |
+| What the canvas and the DOM each own, and the two queues between them | `ambre-spec-ui.md section 2` |
 | The command identifier, the keymap and the registry a command is described in | `ambre-spec-commands.md` |
 | Where the design tokens come from, and how a theme switch reaches both sides | `ambre-spec-design-tokens.md` |
 | What a copy and a paste carry | `ambre-spec-clipboard.md` |
