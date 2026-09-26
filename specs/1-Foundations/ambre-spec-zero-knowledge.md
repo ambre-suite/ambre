@@ -69,6 +69,18 @@ that component's prefix instead.
 |-----------|----------------------------|-------------|
 | `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
 
+**The cast of a scenario.** Every scenario table of the corpus draws its actors from this list, so
+a reader knows who is hostile from the name alone.
+
+| Name | Role | Holds |
+| :--- | :--- | :--- |
+| Alice, Bob, Carol | honest members | their own keys and the document key |
+| Mallory | a malicious member: forges, replays and rewrites with a legitimate key | her own keys and the document key |
+| Eve | a passive attacker on the network | the ciphertext in transit, and nothing to open it |
+| the relay | honest but curious: routes and stores as asked, and reads all it can | the set of `ZK-007`, and nothing to open a payload |
+
+A scenario row where Mallory acts is an attack. Its outcome column says what stops her.
+
 **Accepted leak, and what is not accepted.**
 
 * **Accepted:** the relay infers that a client with a given public key modified a given document at

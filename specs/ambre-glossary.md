@@ -79,6 +79,9 @@
 | seal | encrypt, and bind the ciphertext to its context | | `1-Foundations/ambre-spec-sealed-envelope.md` |
 | sealed envelope | the shape every encrypted message takes | | `1-Foundations/ambre-spec-sealed-envelope.md` |
 | commitment tag | the tag binding a ciphertext to one key | | `1-Foundations/ambre-spec-sealed-envelope.md` |
+| Alice | an honest member in a scenario, like Bob and Carol | | `1-Foundations/ambre-spec-zero-knowledge.md` |
+| Mallory | a malicious member in a scenario, holding a legitimate key | | `1-Foundations/ambre-spec-zero-knowledge.md` |
+| Eve | a passive network attacker in a scenario | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | key hierarchy | the derivation tree of every key a client holds | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | document key | the key that seals one document | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | user key | the key derived from the account passphrase | | `1-Foundations/ambre-spec-zero-knowledge.md` |
