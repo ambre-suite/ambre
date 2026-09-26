@@ -117,20 +117,18 @@ impl Paginator {
             .measured
             .iter()
             .filter_map(|block| Some((block.block_id, block.run.clone()?)));
-        ShapedLayout {
-            version: self.version,
-            layout: Arc::new(self.layout.clone()),
-            blocks: body
-                .chain(self.bands.runs.iter().cloned())
+        ShapedLayout::new(
+            self.version,
+            Arc::new(self.layout.clone()),
+            body.chain(self.bands.runs.iter().cloned())
                 .chain(self.notes.texts.iter().cloned())
                 .collect(),
-            notes: self.notes.numbers.clone(),
-            tables: self
-                .measured
+            self.notes.numbers.clone(),
+            self.measured
                 .iter()
                 .filter_map(|block| Some((block.block_id, Arc::clone(block.table.as_ref()?))))
                 .collect(),
-        }
+        )
     }
 
     /// Lay the whole document out again, shaping every block.

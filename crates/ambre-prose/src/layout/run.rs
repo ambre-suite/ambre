@@ -375,12 +375,13 @@ impl PartialEq for ShapedRun {
     }
 }
 
-/// One layout as the view receives it: the pages, and the runs to draw on
-/// them.
+/// One layout as the view receives it: the pages, the runs to draw on
+/// them, and the indices the view reads them through.
 ///
 /// It is a whole value, stamped with the version the paginator gave it. The
 /// view keeps the newest it has seen and drops an older one
-/// (`PROSE-UI-016`).
+/// (`PROSE-UI-016`). The indices are built here, on the thread that lays
+/// out, so taking a layout costs the view a pointer (`PROSE-UI-205`).
 #[derive(Clone, Debug, Default)]
 pub struct ShapedLayout {
     pub version: u64,
@@ -391,6 +392,61 @@ pub struct ShapedLayout {
     pub notes: HashMap<Uuid, ShapedRun>,
     /// The cells of every table, placed and shaped.
     pub tables: HashMap<TreeID, Arc<TableShape>>,
+    /// Each block of the layout, by its place in the flow.
+    order: HashMap<TreeID, usize>,
+    /// The blocks each page shows, by their place in the flow, so a frame
+    /// reads its pages and never the whole document (`PROSE-UI-007`).
+    page_blocks: Vec<Vec<usize>>,
+}
+
+impl ShapedLayout {
+    /// A layout and its runs, with the indices built from them.
+    #[must_use]
+    pub fn new(
+        version: u64,
+        layout: Arc<PageLayout>,
+        blocks: HashMap<TreeID, ShapedRun>,
+        notes: HashMap<Uuid, ShapedRun>,
+        tables: HashMap<TreeID, Arc<TableShape>>,
+    ) -> Self {
+        let order = layout
+            .blocks
+            .iter()
+            .enumerate()
+            .map(|(index, block)| (block.block_id, index))
+            .collect();
+        let mut page_blocks = vec![Vec::new(); layout.page_count as usize];
+        for (index, block) in layout.blocks.iter().enumerate() {
+            for page in block.page_span() {
+                if let Some(blocks) = page_blocks.get_mut(page as usize) {
+                    blocks.push(index);
+                }
+            }
+        }
+        Self {
+            version,
+            layout,
+            blocks,
+            notes,
+            tables,
+            order,
+            page_blocks,
+        }
+    }
+
+    /// The place of a block in the flow.
+    #[must_use]
+    pub fn index_of(&self, block: &TreeID) -> Option<usize> {
+        self.order.get(block).copied()
+    }
+
+    /// The indices of the blocks a page shows, in flow order.
+    #[must_use]
+    pub fn blocks_on(&self, page: u32) -> &[usize] {
+        self.page_blocks
+            .get(page as usize)
+            .map_or(&[], Vec::as_slice)
+    }
 }
 
 /// A table as the view draws it: where each cell sits, and the text it holds

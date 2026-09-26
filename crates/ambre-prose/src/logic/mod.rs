@@ -36,8 +36,8 @@ mod comments;
 mod derived;
 mod docfile;
 mod find;
-mod ids;
 mod history;
+mod ids;
 mod lists;
 mod marks;
 pub(crate) mod notes;
@@ -138,6 +138,10 @@ pub struct ProseState {
     /// across a snapshot import that rebuilds the paginator: the view drops a
     /// layout older than the one it holds (`PROSE-UI-016`).
     handed_version: u64,
+    /// The layouts handed over that the view may still hold. This thread
+    /// frees each one once the view has let go of it, so the view never
+    /// pays for freeing a whole layout (`PROSE-UI-205`).
+    in_view: Vec<std::sync::Arc<crate::layout::run::ShapedLayout>>,
     /// Where the ids of notes, threads, replies and suggestions come from:
     /// fresh on a live document, a sequence on a pinned one (`FIXTURE-002`).
     ids: ids::IdSource,
@@ -229,6 +233,7 @@ impl ProseState {
             faces: Vec::new(),
             handed: None,
             handed_version: 0,
+            in_view: Vec::new(),
             ids,
             word_count: crate::events::WordCount::default(),
             find: None,
@@ -299,8 +304,14 @@ impl ProseState {
         self.handed_version = self.handed_version.saturating_add(1);
         shaped.version = self.handed_version;
         self.handed = Some(basis);
+        // A layout no one else holds is freed here, on this thread. One the
+        // view still holds is kept, so its last handle is this one.
+        self.in_view
+            .retain(|layout| std::sync::Arc::strong_count(layout) > 1);
+        let shaped = std::sync::Arc::new(shaped);
+        self.in_view.push(std::sync::Arc::clone(&shaped));
         Some(ProseEvent::LayoutShaped {
-            layout: ambre_bus::app::prose::SharedLayout::new(shaped),
+            layout: ambre_bus::app::prose::SharedLayout::from_arc(shaped),
         })
     }
 
@@ -641,14 +652,14 @@ impl ProseState {
             // The native header needs the identity the registry holds, so the
             // Logic dispatcher serves the export before the document is reached
             // (`PROSE-IO-028`). A caller driving the engine directly is told so.
-            ProseCommand::ExportDocument { .. } => ProseOutcome::display_only(vec![
-                ProseEvent::Error(ProseError::new(
+            ProseCommand::ExportDocument { .. } => {
+                ProseOutcome::display_only(vec![ProseEvent::Error(ProseError::new(
                     "saving to a file",
                     ProseRefusal::WriteFailed(
                         "the file is written by the Logic thread, not by the document".to_owned(),
                     ),
-                )),
-            ]),
+                ))])
+            }
         }
     }
 

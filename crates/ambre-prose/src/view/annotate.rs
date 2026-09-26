@@ -104,7 +104,14 @@ impl ProseUiState {
     }
 
     /// A point of a block's run, moved onto the canvas.
-    pub(crate) fn to_screen(&self, block: BlockId, page: u32, piece: Fragment, x: f32, y: f32) -> (f32, f32) {
+    pub(crate) fn to_screen(
+        &self,
+        block: BlockId,
+        page: u32,
+        piece: Fragment,
+        x: f32,
+        y: f32,
+    ) -> (f32, f32) {
         let layout = &self.shaped.layout;
         let indent = self
             .flow_index(&tree_id(block))

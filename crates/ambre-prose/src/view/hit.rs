@@ -163,9 +163,7 @@ impl ProseUiState {
     /// The indices of the blocks a page shows, in flow order. Read from the
     /// index built when the layout was taken, never by walking every block.
     pub(crate) fn blocks_on(&self, page: u32) -> &[usize] {
-        self.page_blocks
-            .get(page as usize)
-            .map_or(&[], Vec::as_slice)
+        self.shaped.blocks_on(page)
     }
 
     /// The block and the offset under a canvas point.

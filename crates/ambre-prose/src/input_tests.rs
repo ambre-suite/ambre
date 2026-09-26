@@ -557,19 +557,22 @@ fn a_second_press_selects_the_word_and_a_third_the_paragraph() {
 /// the caret goes to it once a layout carries it.
 #[test]
 fn a_press_on_a_document_with_no_block_asks_for_one() {
+    use std::collections::HashMap;
     use std::sync::Arc;
     let mut ui = ProseUiState::default();
     ui.resize(1200.0, 900.0);
-    let empty = crate::layout::run::ShapedLayout {
-        version: 1,
-        layout: Arc::new(crate::layout::pass::PageLayout {
+    let empty = crate::layout::run::ShapedLayout::new(
+        1,
+        Arc::new(crate::layout::pass::PageLayout {
             page_width_px: 800.0,
             page_height_px: 1000.0,
             page_count: 1,
             ..crate::layout::pass::PageLayout::default()
         }),
-        ..crate::layout::run::ShapedLayout::default()
-    };
+        HashMap::new(),
+        HashMap::new(),
+        HashMap::new(),
+    );
     ui.apply_layout(empty);
     let mut sent = Vec::new();
     let press = ProseInput::Press {

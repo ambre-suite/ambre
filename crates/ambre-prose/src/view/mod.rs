@@ -16,6 +16,7 @@ pub mod slash;
 pub mod toolbar;
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use loro::TreeID;
 
@@ -51,28 +52,15 @@ impl ProseUiState {
     /// and nothing is shaped: the runs came with the layout (`PROSE-UI-122`).
     ///
     /// Answers whether the layout was taken.
-    pub fn apply_layout(&mut self, shaped: ShapedLayout) -> bool {
+    pub fn apply_layout(&mut self, shaped: impl Into<Arc<ShapedLayout>>) -> bool {
+        let shaped = shaped.into();
         if shaped.version <= self.layout_version {
             return false;
         }
         self.layout_version = shaped.version;
+        // Built on the Logic thread: taking the layout copies nothing and
+        // walks no block (`PROSE-UI-205`).
         self.column = column::PageColumn::of(&shaped.layout);
-        self.order = shaped
-            .layout
-            .blocks
-            .iter()
-            .enumerate()
-            .map(|(index, block)| (block.block_id, index))
-            .collect();
-        let mut page_blocks = vec![Vec::new(); shaped.layout.page_count as usize];
-        for (index, block) in shaped.layout.blocks.iter().enumerate() {
-            for page in block.page_span() {
-                if let Some(blocks) = page_blocks.get_mut(page as usize) {
-                    blocks.push(index);
-                }
-            }
-        }
-        self.page_blocks = page_blocks;
         self.shaped = shaped;
         self.clamp_scroll();
         // What the draft confirmed is in these runs now.
@@ -122,13 +110,13 @@ impl ProseUiState {
 
     /// Where a block sits in the layout in force.
     fn block_layout(&self, block: BlockId) -> Option<&crate::layout::place::BlockLayout> {
-        let index = *self.order.get(&tree_id(block))?;
+        let index = self.shaped.index_of(&tree_id(block))?;
         self.shaped.layout.blocks.get(index)
     }
 
     /// The position of a block in the flow of the layout in force.
     pub(crate) fn flow_index(&self, block: &TreeID) -> Option<usize> {
-        self.order.get(block).copied()
+        self.shaped.index_of(block)
     }
 
     fn clamp_scroll(&mut self) {
@@ -226,17 +214,74 @@ pub(crate) mod tests {
         (state, shaped)
     }
 
+    /// `PROSE-UI-205`: the view takes the layout the Logic thread handed by
+    /// its pointer, with the indices built beside it, and copies nothing.
+    #[test]
+    fn a_layout_is_taken_by_its_pointer() {
+        let (mut state, _) = laid_out(3, 5);
+        let Some(event) = state.layout_event() else {
+            panic!("a layout is handed over");
+        };
+        let crate::events::ProseEvent::LayoutShaped { layout } = &event else {
+            panic!("the event carries a layout");
+        };
+        let handed = layout.shared::<ShapedLayout>().expect("a shaped layout");
+        let mut ui = a_view();
+        ui.apply_event(&event);
+        assert!(
+            Arc::ptr_eq(&ui.shaped, &handed),
+            "the view holds the value sent"
+        );
+        let last = *state.root_blocks().last().expect("a block");
+        assert_eq!(ui.flow_index(&crate::events::tree_id(last)), Some(3));
+        assert_eq!(ui.blocks_on(0).len(), 4, "the page index came with it");
+    }
+
+    /// `PROSE-UI-205`: a layout the view lets go of is freed on the Logic
+    /// thread, never by the view.
+    #[test]
+    fn a_layout_the_view_drops_is_freed_by_the_logic_thread() {
+        let (mut state, _) = laid_out(1, 5);
+        let block = *state.root_blocks().last().expect("a block");
+        let mut ui = a_view();
+        let hand = |state: &mut ProseState, ui: &mut ProseUiState| {
+            let event = state.layout_event().expect("a layout is handed over");
+            ui.apply_event(&event);
+        };
+        hand(&mut state, &mut ui);
+        let first = Arc::downgrade(&ui.shaped);
+        state.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "a".to_owned(),
+        });
+        hand(&mut state, &mut ui);
+        assert!(
+            first.upgrade().is_some(),
+            "the view let go without freeing it"
+        );
+        state.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "b".to_owned(),
+        });
+        hand(&mut state, &mut ui);
+        assert!(first.upgrade().is_none(), "the Logic thread freed it");
+    }
+
     fn a_layout(version: u64, pages: u32) -> ShapedLayout {
-        ShapedLayout {
+        ShapedLayout::new(
             version,
-            layout: Arc::new(PageLayout {
+            Arc::new(PageLayout {
                 page_width_px: 800.0,
                 page_height_px: 1000.0,
                 page_count: pages,
                 ..PageLayout::default()
             }),
-            ..ShapedLayout::default()
-        }
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+        )
     }
 
     fn a_view() -> ProseUiState {

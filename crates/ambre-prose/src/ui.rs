@@ -17,9 +17,9 @@
 //! slash menu and composition" Story (`ambre-roadmap.md` E5).
 
 use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 
 use ambre_core::DocumentId;
-use loro::TreeID;
 
 use ambre_bus::logic::{AppCommand, LogicCommand};
 use ambre_bus::{Outbox, SendOutcome};
@@ -212,7 +212,7 @@ pub struct ProseUiState {
     pub reveal_page: Option<u32>,
     /// The layout in force and the runs it carries, as last taken
     /// (`features/ambre-spec-prose-page-rendering.md`).
-    pub shaped: ShapedLayout,
+    pub shaped: Arc<ShapedLayout>,
     /// A file the Logic thread wrote, waiting for the host to hand it to the
     /// browser: filename, media type and bytes (`PROSE-IO-056`).
     pub pending_export: Option<(String, &'static str, Vec<u8>)>,
@@ -223,11 +223,6 @@ pub struct ProseUiState {
     pub column: PageColumn,
     /// The drawing state of the runs painted lately (`PROSE-UI-019`).
     pub runs: RunCache,
-    /// Each block of the layout in force, by its place in the flow.
-    pub(crate) order: HashMap<TreeID, usize>,
-    /// The blocks each page shows, by their place in the flow, so a frame
-    /// reads its pages and never the whole document (`PROSE-UI-007`).
-    pub(crate) page_blocks: Vec<Vec<usize>>,
     /// The inline highlights, by the block they sit in (`PROSE-UI-020`).
     pub(crate) highlights: HashMap<BlockId, Vec<Highlight>>,
     /// The other peers' carets, by the block each sits in (`PROSE-UI-020`).
@@ -399,10 +394,11 @@ impl ProseUiState {
                 self.pending_export = Some((filename.clone(), media_type, data.clone()));
             }
             // Whole and already shaped: the view adopts it and lays nothing
-            // out (`PROSE-UI-006`). A handle of another type is not a layout.
+            // out (`PROSE-UI-006`), by its pointer (`PROSE-UI-205`). A handle
+            // of another type is not a layout.
             ProseEvent::LayoutShaped { layout } => {
-                if let Some(shaped) = layout.get::<ShapedLayout>() {
-                    self.apply_layout(shaped.clone());
+                if let Some(shaped) = layout.shared::<ShapedLayout>() {
+                    self.apply_layout(shaped);
                 }
             }
             ProseEvent::TextChanged {

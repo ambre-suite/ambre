@@ -1486,6 +1486,18 @@ impl SharedLayout {
         Self(Arc::new(value))
     }
 
+    /// A value the sender keeps a handle on, so the last handle dropped is
+    /// its own and the receiver never frees the value.
+    pub fn from_arc<T: Any + Send + Sync>(value: Arc<T>) -> Self {
+        Self(value)
+    }
+
+    /// The value as a handle of its own, when it is of the type asked for.
+    #[must_use]
+    pub fn shared<T: Any + Send + Sync>(&self) -> Option<Arc<T>> {
+        Arc::clone(&self.0).downcast().ok()
+    }
+
     /// The value, when it is of the type asked for.
     #[must_use]
     pub fn get<T: Any>(&self) -> Option<&T> {

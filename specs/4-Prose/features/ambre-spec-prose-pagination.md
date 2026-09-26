@@ -74,6 +74,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-082` | `POST` | A change to the page box, to either band, to a document default, or a whole-document import MUST force a full recomputation. | this spec section 2 | `ambre_prose::layout::reflow::tests::a_page_box_change_forces_a_full_recomputation`; `ambre_prose::layout::reflow::tests::a_document_default_change_forces_a_full_recomputation`; `ambre_prose::logic::tests::a_snapshot_import_lays_the_document_out_again` | none | verified |
 | `PROSE-083` | `FRAME` | A partial reflow MUST NOT re-shape a block whose text and whose resolved style are both unchanged. | this spec section 2 | `ambre_prose::layout::reflow::tests::a_reflow_does_not_shape_a_block_it_was_not_told_about` -- it counts the runs shaped, so a reflow that re-shaped an untouched block fails it | none | verified |
 | `PROSE-123` | `POST` | A layout taken after an edit MUST re-shape the blocks the edit wrote, whether the edit is local or arrived from another peer, and whoever named them. | this spec section 2 | `ambre_prose::view::tests::a_block_not_edited_hands_the_view_the_run_it_was_measured_into`; `ambre_prose::view::tests::an_edit_from_another_peer_reshapes_the_block_it_wrote` | none | verified |
+| `PROSE-125` | `FRAME` | Handing the view the layout after a partial reflow MUST NOT copy the blocks and the runs the reflow left alone. | this spec section 2 | not built | unbuilt -- lands with the "The layout is handed by its changes" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Settle the table of contents
 
@@ -96,10 +97,10 @@ status values are normative in `ambre-spec-template.md`.
   the document at open. Shaping and placement are budgeted apart, and section 4 says why.
 * **Boundary.** none: pagination runs on the Logic thread, reads the document and returns a value.
   `PROSE-025` (`features/ambre-spec-prose-engine.md section 1`) bans a network call from this crate.
-* **Verification.** 47 `verified`, 1 `unimplemented`: `PROSE-112`, which waits on the first
-  output to carry a page number off the screen. The five footnote rows run through the engine, since a note is
-  written by its command. Termination rests on `PROSE-078` and `PROSE-017`, which a property over generated
-  documents holds together. Two bans are structural, held by a test that reads the module's own
+* **Verification.** 47 `verified`, 2 `unimplemented`: `PROSE-112` and `PROSE-125`. The five
+  footnote rows run through the engine, since a note is written by its command. Termination rests
+  on `PROSE-078` and `PROSE-017`, which a property over generated documents holds together. Two
+  bans are structural, held by a test that reads the module's own
   source. The schema holds `PROSE-065`.
 
 ---
