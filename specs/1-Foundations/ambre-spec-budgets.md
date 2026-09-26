@@ -283,6 +283,7 @@ A duration a rule waits on before it acts. Each figure is a first estimate, to m
 | Duration | Target | Why this order of size | Method |
 |---|---|---|---|
 | Grace period before a closing Murmure segment is finalized | 24 h | a typo fix lands within minutes, so a day keeps every recent edit out of a sealed segment | **none exists** |
+| Murmure message grouping span | 5 min | consecutive messages of one author inside the span share one header, as every chat product groups them | **none exists** |
 | Finalize lease | 30 s | long enough to encode, seal and upload one segment of about 2 MB | **none exists** |
 | Verification delay before the deltas of a final segment are purged | 7 days | the time for a second member client to come online and confirm the seal | **none exists** |
 | Delay between a Murmure delete after the finalization and its erasure | < 30 days | the re-finalization runs in batches, and an erasure request expects an answer within a month | **none exists** |

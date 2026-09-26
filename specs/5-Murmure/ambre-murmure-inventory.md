@@ -17,9 +17,13 @@
 | :--- | :--- | :--- | ---: | ---: |
 | `murmure-attachments` | A member drops a file or an image into a message. | design-only | 9 |  |
 | `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | design-only | 16 |  |
+| `murmure-composer` | The field where a member writes. | design-only | 19 |  |
 | `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | design-only | 5 |  |
 | `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | design-only | 10 |  |
+| `murmure-keyboard` | No frequent action in Murmure needs the mouse. | design-only | 13 |  |
+| `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | design-only | 12 |  |
 | `murmure-mentions` | A member names another in a message with `@`. | design-only | 8 |  |
+| `murmure-message-list` | The conversation of a channel, newest at the bottom. | design-only | 16 |  |
 | `murmure-messages` | A member writes a message, edits it, or deletes it. | design-only | 13 |  |
 | `murmure-notifications` | A member working in another tab learns that someone mentioned them or wrote to them directly. | design-only | 5 |  |
 | `murmure-reactions` | A member answers a message with an emoji. | design-only | 7 |  |
@@ -30,4 +34,4 @@
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | design-only | 7 |  |
 | `murmure-unread` | The sidebar shows where something new is, and how much. | design-only | 11 |  |
 
-**14 features: 0 implemented, 0 partial, 14 design-only. 136 contract rows, 0 loose.**
+**18 features: 0 implemented, 0 partial, 18 design-only. 196 contract rows, 0 loose.**
