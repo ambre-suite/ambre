@@ -127,6 +127,7 @@ The segments have no control of their own. A user meets them only as a channel t
 | Closing and finalizing are two acts | finalizing at the size threshold | the last message before the cut would land in a final segment, and its first typo fix would create an amendments document |
 | The deltas stay until a second client confirms | purging at the finalization | a false snapshot from a malicious member would lose messages for good |
 | A shallow final snapshot | a full snapshot with its history | the history keeps the text of every deleted message in the ciphertext |
+| The relay arbitrates the finalization | a lock the clients take | a client does not reach the relay store, so the relay holds the lease |
 
 ---
 

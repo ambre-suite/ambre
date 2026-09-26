@@ -109,6 +109,9 @@ the `Moderation` Story (`ambre-roadmap.md` E5).
 | The check runs before import | a filter at display | the filter detects and prevents nothing: a last-writer-wins value is already overwritten |
 | A delete empties the content | a tombstone that keeps the text | the text would stay readable to every member, against the wish of its author |
 | Only the author changes a message | a moderator role in the same check | a role lives in another document, and a revoke concurrent with a delete has no single answer without the relay |
+| A late edit goes to an amendments document | new deltas on the final segment | every old segment would take concurrent writes again, and its search index would turn mutable |
+| A late edit goes to an amendments document | a new final snapshot on each edit | a typo fix would take the finalize lease and a full index rebuild |
+| Amendments sit beside their segment | amendments in the active segment | opening an old segment would need every later segment, to find its amendments |
 
 ---
 

@@ -118,6 +118,9 @@ takes the sealed value.
 | A self-join is checked against the catalogue | trusting the public flag of the relay | the relay could flip a private channel to public and show a verified member |
 | A guest stays out of the space document | letting a guest read the catalogue | the catalogue holds every public key, so the guest would read every public channel |
 | One key per public channel | one key for every public channel of a space | a guest or a bot of one channel would read them all |
+| The catalogue lists public channels only | private channels in the catalogue | every member of the space reads the catalogue, so it would show each private channel |
+| The catalogue names a public channel | the name in the channel `meta` document | a member who has not joined holds no key for `meta`, so the channel to join would have no name |
+| The catalogue carries the sealed key | a member online to wrap the key | a join would wait on another member, and a space leave pays for the catalogue with a rotation |
 
 ---
 

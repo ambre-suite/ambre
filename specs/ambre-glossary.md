@@ -61,9 +61,9 @@
 | space | a group of Murmure channels, itself a document | | `5-Murmure/ambre-spec-murmure-schema.md` |
 | catalogue | the sealed list of the public channels of a space | | `5-Murmure/ambre-spec-murmure-schema.md` |
 | segment | one time slice of a Murmure channel, held as one document | | `5-Murmure/ambre-spec-murmure-schema.md` |
-| finalize | close a segment for good, as one immutable snapshot | | `Todo/ambre-murmure.md` |
+| finalize | close a segment for good, as one immutable snapshot | | `5-Murmure/features/ambre-spec-murmure-segments.md` |
 | amendment | a late edit or delete of a final segment | | `5-Murmure/ambre-spec-murmure-schema.md` |
-| history boundary | the key rotation a later member cannot read past | | `Todo/ambre-murmure.md` |
+| history boundary | the key rotation a later member cannot read past | | `5-Murmure/features/ambre-spec-murmure-channels.md` |
 | membership log | the signed record of every invite, revoke and role change | | `1-Foundations/ambre-spec-membership.md` |
 | residency | where a document lives: in memory, on disk, or neither | | `1-Foundations/ambre-spec-residency.md` |
 | activity summary | the sealed header that tells what an update holds | | `1-Foundations/ambre-spec-residency.md` |

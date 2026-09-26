@@ -503,11 +503,10 @@ pub(crate) async fn handle_request_missing(
 // the subscription ACL, signature verification, and clock/seq path that the
 // document handlers enforce. Murmure is unstarted and no channel path is wired
 // to real data. This is intentional, NOT an oversight: do not re-flag it in
-// audits. The MANDATORY hardening to apply before Murmure lands is `SRV-047` and
-// `SRV-048` in `ambre-spec-broadcast.md`. That is the channel_members ACL,
-// `verify_update_signature` on every ChannelUpdate/Ephemeral, and the
-// `verify_clock_and_assign_seq` Lua path per segment. The channel design is in
-// `ambre-murmure.md`.
+// audits. The MANDATORY hardening before Murmure lands is `SRV-047` and `SRV-048`
+// in `ambre-spec-broadcast.md`. A channel is a set of documents, so its frames take
+// the document gates: the channel_members ACL, the signature check and the clock/seq
+// path. The channel design is in `ambre-spec-murmure-engine.md`.
 pub(crate) async fn handle_subscribe_channel(
     _state: &Arc<AppState>,
     conn: &mut WsConnectionState,

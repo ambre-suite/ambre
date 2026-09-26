@@ -88,6 +88,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 message whose members are exactly the requested set. It learns nothing new by doing so
 (`MURMURE-051`).
 
+**No forward secrecy.** A direct message keeps every key, like any channel. A new device reads the
+full history, and every final snapshot sits under a kept key. What protects it is the rotation on
+a leave.
+
 **An invite, in steps.**
 
 1. The inviting client wraps each key since the latest history boundary for the invitee.
@@ -120,6 +124,9 @@ online member client then rotates the key and closes the active segment (`MURMUR
 | A direct message is reused | a new one for each open | two conversations between the same people split one history |
 | A rotation closes the active segment | rotating inside the segment | a segment would hold deltas under two keys, and its final snapshot under one |
 | A public channel keeps its key on a leave | rotating on every leave | every member of the space reads the key in the catalogue anyway |
+| A direct message is a channel | a separate model for direct messages | a conversion would copy the history into a new document, with new identifiers and a new key |
+| No forward secrecy | forward secrecy for direct messages | a full history on a new device, the final snapshots and the search index all need every key |
+| The channel list is the membership | a sealed document listing the channels of a user | a second list drifts after a revoke, and shows a channel whose key is gone |
 
 ---
 
