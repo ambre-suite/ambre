@@ -76,7 +76,7 @@ snapshot, and the relay arbitrates who writes it.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-113` | `POST` | The relay MUST grant the finalize lease of a segment to one client at a time. | this spec section 3; `Todo/ambre-murmure.md` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-113` | `POST` | The relay MUST grant the finalize lease of a segment to one client at a time. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-114` | `POST` | Granting a finalize lease MUST lock the segment against deltas for good. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-115` | `FAIL` | Given a delta for a locked segment, the relay MUST refuse it with an answer that names the lock. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-116` | `FAIL` | Given a finalize commit from a client that holds no live lease, the relay MUST refuse it. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -163,7 +163,8 @@ that number is the horizon. The trim removes every delta at or below the lowest 
 snapshots the document still keeps (`SRV-039`, `SRV-083`). The hourly pass keeps the ten most
 recent. **Nothing triggers any of it** (`SRV-038`).
 
-**A finalization.** A Murmure segment ends as one immutable snapshot (`Todo/ambre-murmure.md`).
+**A finalization.** A Murmure segment ends as one immutable snapshot
+(`5-Murmure/ambre-spec-murmure-schema.md`).
 
 1. A member client asks for the finalize lease of the segment. The relay grants it to one client
    (`SRV-113`) and locks the segment for good (`SRV-114`). A later delta is refused with an answer

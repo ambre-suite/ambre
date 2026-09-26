@@ -94,9 +94,9 @@ SPECS = ROOT / "specs"
 CRATES = ROOT / "crates"
 RULES = ROOT / "ai"
 
-# The three applications. A document of an application is named
+# The four applications. A document of an application is named
 # `ambre-spec-<app>-<rest>.md`; a citation may drop the fixed halves.
-APPS = ("trame", "toile", "prose")
+APPS = ("trame", "toile", "prose", "murmure")
 
 # A backticked name candidate. It ends at a backtick (`` `trame-logic` ``) or at a
 # space, which is the form that carries the coordinate in the same span

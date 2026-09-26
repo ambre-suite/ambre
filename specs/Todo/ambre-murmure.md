@@ -139,8 +139,8 @@ to it through its `thread` field.
 
 `Loro::Doc (thread)`:
 
-- `"root"` (Map) -- `{channel_id, root_msg_id}`
-- `"replies"` (Array) -- the same entry shape as a segment message, without `thread`
+- `"header"` (Map) -- the kind, the channel and the root message
+- `"messages"` (Array) -- the same entry shape as a segment message, without `thread`
 
 **The root shows the head of its thread.** The reply count and the last replier are read from the
 thread document. The client loads the head of a thread only for a root visible on screen.
@@ -170,7 +170,8 @@ acts, so that a recent message is never in a final segment.
 
 **Closing.** When the active segment exceeds ~5000 messages or ~2 MB of snapshot:
 
-1. The client opens a new active segment in `meta`. New messages go there.
+1. The client asks the relay to close the segment. The relay creates one successor, so two clients
+   closing at once receive the same one. New messages go there.
 2. The old segment becomes `closing`. It still accepts edits and deletes as ordinary deltas.
 
 At most two segments accept deltas: the active one and the closing one.

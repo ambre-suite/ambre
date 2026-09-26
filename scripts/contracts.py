@@ -124,7 +124,7 @@ AUDIT = "audits/security-audit.md"  # numbered findings, cited by the rows that 
 LOOSE = ("failing", "untested", "human-review", "qa-manual")  # built, nothing goes red
 # The three that are debt: each owes an open Story of the roadmap.
 OWES_STORY = ("partial", "failing", "untested", "unimplemented")
-APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose")
+APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose", "5-Murmure")
 
 # An id minted once, then withdrawn because the rule it carried left the
 # application for a shared document. The id is **never reused** -- that is what

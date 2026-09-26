@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-014` | `INV` | Relay code MUST contain no unchecked memory access. | README pillar "Security" | none | unheld -- the workspace measures zero unchecked access today, and this crate carries no crate-level refusal of it: two crates of seventeen do (`ambre-spec-testing.md section 8`); lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-021` | `INV` | Any instance MUST be able to serve any client: no request state MUST live in the process. | this spec section 3 | none | unheld -- every store is external and the one process-wide object is the fan-out hub, which holds no request, and nothing boots two instances to observe it. The one exception is stated by `ambre-spec-session.md`, `SRV-024`; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated. | `ambre-spec-architecture.md section 2` | none | unheld -- the relay serves the requests and not the page, so the two headers are the deployment's obligation on whatever serves the page and the worker bootstrap, and nothing in continuous integration reads them back; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SRV-103` | `INV` | Membership of a channel MUST grant access to each document the channel groups, and to no other document. | this spec section 3; `Todo/ambre-murmure.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-103` | `INV` | Membership of a channel MUST grant access to each document the channel groups, and to no other document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-104` | `INV` | The register MUST keep the signed membership entries of a document beside its member rows. | this spec section 3; `SYNC-101` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 A request is classified and limited
@@ -70,7 +70,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-105` | `FAIL` | Given a caller who is not a member of the space of the channel, a self-join MUST be refused. | this spec section 3; `Todo/ambre-murmure.md` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-105` | `FAIL` | Given a caller who is not a member of the space of the channel, a self-join MUST be refused. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-106` | `FAIL` | Given a channel the relay does not hold as public, a self-join MUST be refused. | this spec section 3 | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-107` | `POST` | An accepted self-join MUST store the entry the joining member signed, beside the new member row. | this spec section 3; `SYNC-106` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-108` | `FRAME` | A self-join MUST NOT grant a role above editor. | this spec section 3 | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -86,7 +86,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SRV-111` | `POST` | A final segment MUST be deleted, with its index and its amendments, once its finalization time is older than the retention of its space. | this spec section 3; `Todo/ambre-murmure.md` | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-111` | `POST` | A final segment MUST be deleted, with its index and its amendments, once its finalization time is older than the retention of its space. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-112` | `FRAME` | Applying retention MUST NOT delete an active or a closing segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the per-operation targets of `ambre-spec-budgets.md section 3`, and the roughly

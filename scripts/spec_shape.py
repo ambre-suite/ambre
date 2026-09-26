@@ -277,6 +277,7 @@ SCHEMA_DOCS = {
     "2-Trame/ambre-spec-trame-schema.md": ROOT / "crates/ambre-trame/src/logic/schema.rs",
     "3-Toile/ambre-spec-toile-schema.md": ROOT / "crates/ambre-toile/src/logic/state",
     "4-Prose/ambre-spec-prose-schema.md": ROOT / "crates/ambre-prose/src",
+    "5-Murmure/ambre-spec-murmure-schema.md": ROOT / "crates/ambre-murmure/src",
 }
 
 # `format!("cells_{sheet}")` and `const SHEETS_MAP: &str = "sheets";`

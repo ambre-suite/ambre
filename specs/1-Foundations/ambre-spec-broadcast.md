@@ -25,7 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-045` | `INV` | One process MUST hold one live subscription per topic, whatever the number of connections watching it. | this spec section 3 | none | unheld -- the hub is one task holding one stream, which the type makes true, and nothing in continuous integration opens two sockets on one document to observe it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-098` | `INV` | What the relay says about a departure MUST be what it already routes on: the document and the author key, and nothing else. | `ambre-spec-zero-knowledge.md`, `ZK-001`; this spec section 3 | type-level -- the message declares a document id and a public key and has no other field, so there is nothing else for it to carry | none | verified |
 | `SRV-050` | `INV` | A presence entry MUST stay opaque to the relay. | `ZK-005`; this spec section 3 | none | unheld -- the relay stores the frame's ciphertext as it received it and decodes nothing, which is an absence rather than a check. The two `ephemeral_binding_tests` hold the entry a forged sender never gets, which is `SRV-007` and not this rule; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SRV-102` | `INV` | The socket MUST carry no frame of its own for a channel: a channel MUST travel as its documents. | this spec section 3; `Todo/ambre-murmure.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-102` | `INV` | The socket MUST carry no frame of its own for a channel: a channel MUST travel as its documents. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 A connection opens, and closes
 
@@ -69,7 +69,7 @@ Every gate below runs before the frame is acted on, and each one refuses rather 
 | `SRV-047` | `FAIL` | A subscription to a document of a channel MUST be refused to a caller who is not a member of that channel. | this spec section 3 | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5). The channel plane of the code holds nothing back: a subscribe is accepted from anyone the socket already authenticated | unimplemented |
 | `SRV-048` | `POST` | A frame on a document of a channel MUST pass the gates of any document frame before it is relayed. | this spec section 3; `SRV-006`, `SRV-007` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-049` | `FRAME` | Signalling for a meeting MUST NOT travel on this plane: it MUST have an endpoint of its own. | this spec section 3 | not built | unbuilt -- lands with the `Rendez-Vous` Story (`ambre-roadmap.md` post-V1). No meeting endpoint exists, so nothing refuses signalling smuggled through a channel frame either | unimplemented |
-| `SRV-100` | `POST` | A frame on a thread document MUST publish an activity signal on the topic of its channel. | this spec section 3; `Todo/ambre-murmure.md` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-100` | `POST` | A frame on a thread document MUST publish an activity signal on the topic of its channel. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-101` | `FRAME` | The activity signal MUST NOT carry any field beyond the thread document it names. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the live receive and broadcast of `ambre-spec-budgets.md section 3` and the presence
@@ -257,5 +257,5 @@ The socket has no surface of its own. What a person meets of it is four things.
 | Who may write, and who may see a document at all | `ambre-spec-server.md` |
 | What a re-key notice makes the client do | `ambre-spec-key-rotation.md` |
 | What the relay may learn from a frame | `ambre-spec-zero-knowledge.md`, `ZK-007` |
-| Which documents form a channel, and what each one holds | `Todo/ambre-murmure.md` |
+| Which documents form a channel, and what each one holds | `5-Murmure/ambre-spec-murmure-schema.md` |
 | What is verified where, and by which tier | `ambre-spec-testing.md` |
