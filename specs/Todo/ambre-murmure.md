@@ -21,27 +21,27 @@ Murmure is the command and discussion center. Unlike classic SaaS tools, every m
 ## 2. CORE FEATURES
 
 ### A. Spaces & Channels (Discord/Slack Structure)
-* **Spaces (Workspaces):** Logical team groupings with PKI permission management.
-* **Channels (Public/Private):** Thematic streams organized in folders.
-* **Threads:** One model everywhere: a thread is a reply chain on any message, in a channel or a direct message.
+* **Spaces (Workspaces):** Logical team groupings. A space admin manages the catalogue of its public channels.
+* **Channels (Public/Private):** Thematic streams, grouped in the categories of the space catalogue.
+* **Threads:** One model everywhere: a thread is a reply chain on any message, in a channel or a direct message. Each thread is its own document (see *Threads are documents*).
   * The root message shows the reply count and the last replier. A new post never hides an older thread.
   * "Also send to channel" copies a reply into the main stream, so a channel reader misses no decision.
   * One "Threads" view lists every followed thread with unread replies. A thread never archives on a fixed delay.
   * The user can mark a whole thread as read.
 * **Forum channels:** Each post has a title and tags and opens its own thread. The forum works on mobile, tags included.
-* **Direct Messages (DM):** A direct message is a private channel with no space, between two or more members. A member may give it a name. It uses the same key model as any channel, and it offers no forward secrecy (see *Direct messages are channels*).
+* **Direct Messages (DM):** A direct message is a private channel with no space, between two or more members. A member may give it a name. It uses the same key model as any channel, and it offers no forward secrecy (see *Direct messages are channels*). A direct message between the same members is reused, never created twice.
 * **Conversion:** A direct message becomes a private channel of a space. It keeps its identifier and its segments. The converting member keeps the history for later members or starts them fresh.
 
 ### B. Chat Experience
-* **Message Editor:** Simplified version of the **Prose** engine (Markdown, emojis, `@` mentions, code blocks).
-* **Reactions:** Emoji additions on messages with CRDT aggregation (no conflict on reaction counts). A reaction is a light reply: custom emoji per space, and a reaction never counts in the unread badge.
+* **Message Editor:** Simplified version of the **Prose** engine (Markdown, emojis, `@` mentions, code blocks). A mention is a mark on the text that carries the user it names (see *Mentions*).
+* **Reactions:** Emoji additions on messages with CRDT aggregation (no conflict on reaction counts). A reaction is a light reply, and it never counts in the unread badge. The minimal form offers Unicode emoji. Custom emoji per space come later.
 * **Pins:** Shared with the channel, through the `pinned` array of the `meta` document.
 * **Bookmarks:** Personal, and a different feature from a pin. The client stores a bookmark in the user settings (see *Channel list and personal state*).
 * **Status & Presence:** Real-time indicators (Online, Busy, Typing...) via WebSocket relay.
   * Each indicator tells the relay when a member is active, and that timing is metadata.
-  * Each indicator has a user setting. The default is an open decision.
+  * Both indicators are on by default, and visible to the members of the channel only. The setting that turns them off lives in the user settings, which come after the minimal form.
 * **Read state:**
-  * The read cursor syncs across devices (see *Unread tracking*).
+  * The read cursor syncs across devices, and the client computes the unread count (see *Unread tracking*).
   * The user can mark any message as unread.
   * One key marks everything as read.
 * **Keyboard first:** quick switcher, jump to the first unread, edit the last message. No frequent action requires the mouse.
@@ -52,7 +52,7 @@ Murmure is the command and discussion center. Unlike classic SaaS tools, every m
 * Start time and memory hold the budgets of `ambre-spec-budgets.md`. The client never loads a full channel history at start.
 
 ### C. Sharing & Integration
-* **File Transfer:** Drag & drop of assets (images, docs). Files are encrypted and stored on MinIO; Murmure only stores the reference.
+* **File Transfer:** Drag and drop of files, images and animated GIFs, through the shared media flow (see *Attachments, emoji and animated images*). A message stores the reference only.
 * **Unfurling:** Secure preview of links and internal documents (Trame, Toile, Prose) directly in the stream.
 * **Calls & Video:** Native integration of the **Vue** engine to launch a conference from a channel in one click.
 
@@ -64,13 +64,32 @@ Murmure is the command and discussion center. Unlike classic SaaS tools, every m
 
 An active channel accumulates ~200 messages/day with 20 participants. A single `Loro::Doc` per channel would become unmanageable (50 MB+ in 2 years with Loro's tombstone overhead). The solution: **one channel = a chain of segments**, each segment being an independent `Loro::Doc`.
 
-Channel storage layout (`channel_{id}/`):
+### A channel is a set of documents
 
-- `meta` -- lightweight Loro::Doc (name, topic, members, pinned)
-- `segments/`:
-  - `seg_001` -- messages 1-5000 (sealed, read-only)
-  - `seg_002` -- messages 5001-10000 (closing, writable for edits until its grace period ends)
-  - `seg_003` -- messages 10001-... (active segment, writable)
+Every `Loro::Doc` of a channel is an ordinary Ambre document, with its own `document_id`. It
+reuses the whole document pipeline: the sequencer, the `seq` and the clock, the snapshots, the
+replay and the access check.
+
+| Document | How many | Holds |
+| :--- | :--- | :--- |
+| `meta` | one per channel | name, topic, pins, the list of segments |
+| segment | one per time slice | the messages of that slice |
+| amendments | one per amended sealed segment | the late edits and deletes of that segment |
+| thread | one per message with replies | the replies to that message |
+
+**The relay groups them.** It keeps `channel_documents(channel_id, document_id, kind)`. Access to
+each document follows from the membership of its channel. Every document of a channel is sealed
+under the key of the channel for the current key period.
+
+**Subscribing to a channel** means subscribing to its live documents: `meta`, the active segment
+and the closing segment. A thread document is subscribed while it is open.
+
+**No channel plane.** The channel frames of the protocol (`ChannelUpdate`, `ChannelEphemeral`)
+disappear. A delta is a document delta, and the typing indicator rides the ephemeral frames of
+the `meta` document.
+
+**The relay learns the grouping.** It learns which documents form a channel and the kind of each
+one. It already infers most of that from the traffic. The mapping is outside the `ZK-007` set today.
 
 **The client only loads the active segment + metadata** (~2 MB max on first display). Older segments are lazy-loaded when scrolling up.
 
@@ -79,13 +98,14 @@ Channel storage layout (`channel_{id}/`):
 `Loro::Doc (meta)`:
 
 - `"channel"` (Map) -- `{name, type, created, topic}` -- `type` is `dm`, `private` or `public`; `name` and `topic` for a private channel or a direct message, where `name` is optional for a direct message; the `space` document names a public channel
-- `"members"` (Map) -- `{"pubkey_alice": {joined}}`
-- `"role_log"` (List) -- append-only `[{member, role, granted_by}]`. The role of a member is the last entry for that member. The log keeps every past role, so a client can check a moderation against the role its author held
 - `"pinned"` (Array) -- `[{msg_id, segment_id}]`
 - `"segments"` (Array), for example:
-  - `{id: "seg_001", from_ts: 1710000000, to_ts: 1720000000, msg_count: 5000, state: "sealed", amended: true}`
-  - `{id: "seg_002", from_ts: 1720000000, to_ts: 1730000000, msg_count: 5000, state: "closing", amended: false}`
-  - `{id: "seg_003", from_ts: 1730000000, to_ts: null, msg_count: 1847, state: "active", amended: false}`
+  - `{id: "seg_001", document_id, from_ts: 1710000000, to_ts: 1720000000, msg_count: 5000, state: "sealed", amended: true}`
+  - `{id: "seg_002", document_id, from_ts: 1720000000, to_ts: 1730000000, msg_count: 5000, state: "closing", amended: false}`
+  - `{id: "seg_003", document_id, from_ts: 1730000000, to_ts: null, msg_count: 1847, state: "active", amended: false}`
+
+The `meta` document holds no member list. The relay is the authority on membership, and the signed
+membership log lets each client check what the relay serves (see *Signed membership log*).
 
 ### CRDT Structure -- Segment (one Loro::Doc per segment)
 
@@ -93,38 +113,55 @@ Channel storage layout (`channel_{id}/`):
 
 - `"messages"` (Array) -- chronological order; each entry a Map:
   - `id`
-  - `author_pubkey`
+  - `author` -- the user who signed the delta that created it
   - `timestamp`
-  - `content` -- Loro::Text (editable, rich formatting)
-  - `reply_to` -- parent message id (threads)
-  - `reactions` -- Map `{"thumbs-up": ["pubkey_a", "pubkey_b"]}`
+  - `content` -- Loro::Text (editable, rich formatting, mentions as marks)
+  - `attachments` -- List `[{media_ref, name, media_type, size}]`
+  - `thread` -- the `document_id` of its thread, once the message has a reply
+  - `also_in_thread` -- the root `msg_id`, when a reply is also sent to the channel
+  - `reactions` -- Map `{emoji: Map {user: timestamp}}`: each member writes under their own key only
   - `edited` -- bool
   - `deleted` -- tombstone (soft delete)
-- `"media"` (Map) -- same system as documents
 
 `content` as `Loro::Text` enables message editing and rich formatting (bold, links, inline code, mentions).
 
-### Thread tracking
+### Mentions
 
-A reply can land in a later segment than its root. So the reply count and the last replier cannot live in the root segment alone.
+A mention is a Loro rich-text mark named `mention` over the displayed name, for example `@Alice`.
+The mark value is the user identifier. The client finds the mentions of a message by reading its
+marks, never by parsing the text. A later rename of Alice leaves the mark valid, and the display
+reads the current name.
 
-* Proposal: a per-channel `threads` document maps each root `msg_id` to `{reply_count, last_reply_ts, last_author}`.
+### Threads are documents
+
+The replies to a message live in their own document, one per root message. The root message points
+to it through its `thread` field.
+
+`Loro::Doc (thread)`:
+
+- `"root"` (Map) -- `{channel_id, root_msg_id}`
+- `"replies"` (Array) -- the same entry shape as a segment message, without `thread`
+
+**The root shows the head of its thread.** The reply count and the last replier are read from the
+thread document. The client loads the head of a thread only for a root visible on screen.
+
+**A thread that is not open is followed through the channel.** The relay publishes a small signal on
+the topic of the channel when a thread document receives a frame. The relay already knows that the
+document is a thread of this channel, so the signal teaches it nothing. The client then reloads
+the head of that thread if its root is on screen.
+
+**A very long thread becomes a chain of segments**, with the same closing and sealing as a channel.
+
+**"Also send to channel"** writes the reply in the thread and a copy in the active segment. The copy
+carries `also_in_thread`, so the channel reader sees the decision and can open the thread.
+
 * The "followed" state is personal. The client stores it with the bookmarks, in the user settings.
-* Open question: the size of the `threads` document in a channel with years of history. It may need the same segment chain.
 
 ### Object Storage
 
-See `ambre-spec-object-store.md` for the layout that exists. The channel branches below exist in no
-code and in no object name today. Summary of messaging keys:
-
-Object storage paths:
-
-- `channels/{channel_id}/meta/snapshots/{snapshot_id}`
-- `channels/{channel_id}/meta/deltas/{seq:010}`
-- `channels/{channel_id}/segments/{seg_id}/snapshot` -- sealed = final snapshot only
-- `channels/{channel_id}/segments/{seg_id}/deltas/{seq:010}` -- active or closing segment only
-- `channels/{channel_id}/segments/{seg_id}/amendments/...` -- sealed segment only, created on the first amendment
-- `channels/{channel_id}/media/{content_hash}`
+Every document of a channel uses the document layout of `ambre-spec-object-store.md`, under its
+own `document_id`. No object name carries a channel branch. Attachments use the media layout of
+the same document.
 
 ### Segment sealing
 
@@ -140,21 +177,21 @@ At most two segments accept deltas: the active one and the closing one.
 
 **Sealing.** When the grace period of a closing segment ends:
 
-1. Any online member client asks the relay for a seal lease, `SealLease(channel_id, seg_id)`.
+1. Any online member client asks the relay for a seal lease, `SealLease(document_id)` on the segment.
 2. The relay grants the lease to one client, for a bounded time. The relay freezes the segment:
    it refuses every later delta for it, and answers with the last `seq`.
 3. The client encodes a shallow Loro snapshot of the deltas up to that `seq`, with no history,
    encrypts it and PUTs it to Object Storage.
 4. The client builds and PUTs the search index of the segment (section 5).
-5. The client sends `SealCommit(seg_id, snapshot_id, horizon)`. The relay checks the lease and
+5. The client sends `SealCommit(document_id, snapshot_id, horizon)`. The relay checks the lease and
    records the seal time, which retention reads.
 6. The client updates Doc meta (`state: "sealed"`).
 
 A lease that expires releases the segment to the next client. The relay reuses the horizon of a
 document snapshot (`ambre-spec-sequencer.md`).
 
-**The relay knows the state of each segment.** It already infers the `seg_id` from the object
-paths and the traffic. The state is outside the `ZK-007` set today, like the retention duration.
+**The relay knows the state of each segment.** It already knows each segment as a document of the
+channel. The state is outside the `ZK-007` set today, like the retention duration.
 
 **An offline edit can meet a frozen segment.** The relay refuses the delta. The Sync worker then
 rewrites the edit as an amendment (see *Amendments to a sealed segment*). Without that rewrite, the
@@ -226,11 +263,11 @@ withhold any frame. So the relay may check that the role still holds, with no ne
 
 1. The relay refuses a moderation from a member whose role it has revoked. The relay orders every
    frame, so the answer is unique.
-2. Each client checks that the signer held the moderator role in the `role_log` at the state the
-   operation cites. Every client reads the same log, so every client agrees.
+2. Each client checks that the signer held the moderator role in the signed membership log, at the
+   entry the operation cites. Every client reads the same log, so every client agrees.
 
-Two choices of the minimal form keep that path open. The roles are an append-only log, never a
-last-writer-wins map. An amendment records whether the author or a moderator deleted.
+Two choices of the minimal form keep that path open. The roles live in the signed membership log,
+which only grows. An amendment records whether the author or a moderator deleted.
 
 ### Messaging compaction
 
@@ -238,44 +275,56 @@ More aggressive than for documents: compaction every **1-2 min** (vs 5 min for d
 
 ### Unread tracking
 
-The only real server-side addition. The server tracks a "last read seq" cursor per user per channel -- unencrypted metadata (Postgres, `channel_read_cursors`, `ambre-spec-server.md section 3`).
+**The relay keeps a read cursor per user and per document**, in plaintext (`channel_read_cursors`,
+`ambre-spec-server.md section 3`). It already knows the last `seq` of each document.
+
+**The relay answers a yes or no, never a count.** "Activity since your cursor" is a comparison of
+two numbers it holds, so it learns nothing new. The sidebar shows that dot at once.
+
+**The client computes the count.** A reaction and an edit never count, and only the client can
+tell a message from a reaction. It computes the count and the mentions once it holds the deltas.
+The relay never sees the kind of a frame.
 
 ### Typing indicators
 
-Native use case for SecSync **Ephemeral messages** -- never persisted, anti-replay counter.
+Native use case for SecSync **Ephemeral messages** -- never persisted, anti-replay counter. They ride
+the ephemeral frames of the `meta` document, and they are on by default.
 
 ### Server-side authorization (Blind Relay enforcement)
 
-> **MANDATORY when Murmure lands.** The current WS handler (`ambre-server`) enforces
-> real access control for documents but NOT for channels: `handle_subscribe_channel`
-> accepts any `channel_id` with no membership check, and `handle_channel_update` /
-> `handle_channel_ephemeral` rebroadcast without verifying the Ed25519 signature.
-> Since Murmure is not started, no channel path is wired to real data yet; before it
-> is, the relay MUST mirror the document guarantees so E2EE is not the ONLY line of
-> defense.
+Every document of a channel is a document for the relay, so the document guarantees hold with no
+second path: the subscription check, the signature check before sequencing, and the clock and
+`seq` of the Lua path. The one addition is that membership of the channel grants access to each
+of its documents.
 
-A channel is one document crypto-side (see *Key management*), so it reuses the same
-membership model. The relay MUST enforce, server-side:
+The channel handlers of the relay today accept a subscription with no membership check and
+rebroadcast with no signature check (`SRV-047`, `SRV-048`). They disappear with the channel plane.
 
-1. **Subscription ACL** -- `SubscribeChannel` requires a `channel_members` row for the
-   caller (same shape as `document_members`), re-checked on a short TTL exactly like
-   `MEMBERSHIP_RECHECK_TTL` for documents. Without it any authenticated user who learns
-   a `channel_id` can receive every broadcast (Zero-Knowledge leak: sender identity,
-   timing, volume -- even though the ciphertext stays sealed) and inject traffic.
-2. **Signature verification** -- every `ChannelUpdate` MUST pass `verify_update_signature`
-   before it is sequenced/persisted/broadcast, identical to `handle_update`. Ephemerals
-   (typing/presence) carry the anti-replay counter and are signature-checked too.
-3. **Clock + seq** -- persisted channel updates go through the same
-   `verify_clock_and_assign_seq` Lua path (per active segment) as document deltas.
+### Signed membership log
 
-Rationale: the Blind Relay's promise is "the server only knows routing metadata for
-*authorized* members." An unauthenticated-to-the-channel subscriber breaks that promise
-at the metadata layer, and unsigned rebroadcast lets a non-member pollute members'
-sessions (integrity / DoS). E2EE protects content, not membership metadata or integrity.
+**The relay is the authority on access, and it cannot lie about membership.** Every act on
+membership is an entry signed by its author, and the relay stores and serves the entries.
+
+- An invite, a revoke and a role change each add one signed entry.
+- An entry names the channel or the document, the member, the act, and the previous entry.
+- Each client checks the chain back to the creator. A row with no valid chain is shown as unverified.
+
+**A revoke is signed too.** Otherwise the relay could show a revoked member again by replaying the
+old invite, which stays valid.
+
+**What the relay can still do: withhold recent entries.** It can show a list that is late, never a
+list it made up. A revoke rotates the key, so a revoked member reads nothing new either way.
+
+**The log replaces a role list in `meta`.** It carries the role history that moderation checks in
+V1, so a second copy would only drift. The rule serves documents as well as channels, so it lives
+in `ambre-spec-membership.md`.
 
 ### Key management
 
-One channel = one document from a crypto standpoint, with its Document Key. Sharing = encrypting the Document Key with each member's X25519 pubkey. When a member leaves: rotation via the flow described in section 6.
+One channel = one key from a crypto standpoint, shared by all its documents. Sharing = encrypting the key with each member's X25519 pubkey. When a member leaves: rotation via the flow of `ambre-spec-key-rotation.md`.
+
+**A rotation closes the active segment.** The new key opens a new active segment. So a segment is
+sealed under one key, and never holds deltas under two.
 
 ### Direct messages are channels
 
@@ -330,6 +379,23 @@ direct message of two.
 without history". The conversion is its first use.
 
 A member of the direct message who is not a member of the space stays a member of the channel.
+
+**A direct message is reused.** Opening a direct message with the same members opens the existing
+one. The relay finds it from the membership it already holds, so it learns nothing new.
+
+### Attachments, emoji and animated images
+
+**Attachments** go through the shared media flow (`ambre-spec-media.md`). The message stores the
+reference, the name, the media type and the size. The media address is a hash of the plaintext
+today, which that document states as a defect (`SYNC-050`). Murmure multiplies the files, so the
+fix lands before or with the attachments.
+
+**Emoji.** The minimal form draws Unicode emoji and offers a picker. A color emoji font is large, so
+it loads on first use and needs a row in `ambre-spec-budgets.md`. Custom emoji per space come later.
+
+**Animated images.** An animated GIF is an attachment. The client decodes it off the render thread
+and animates it on the canvas. It stays still under reduced motion, and off screen. There is no GIF
+search: each search would send what the user types to a third party.
 
 ### Channel list and personal state
 
@@ -401,7 +467,7 @@ the edits of several devices.
 
 **Leave and hide are two acts.**
 
-- Leave removes the `channel_members` row. A private channel then rotates its Document Key. A
+- Leave adds a signed entry to the membership log, and the relay removes the row. A private channel then rotates its Document Key. A
   public channel does not: every space member can read its key in the catalogue.
 - Hide sets `hidden` in the user settings. The user keeps the key and can still read.
 
@@ -483,7 +549,7 @@ The relay is blind, so it cannot search. The client builds and queries every ind
 
 ### Index per sealed segment
 * **Build:** The client that seals a segment also builds the inverted index of that segment.
-* **Store:** The client encrypts the index with the Document Key and PUTs it at `channels/{channel_id}/segments/{seg_id}/index`.
+* **Store:** The client encrypts the index with the Document Key and PUTs it beside the snapshot of the segment document.
 * **Immutable:** A sealed segment is immutable, so its index is immutable too. The index needs no incremental update.
 * **Active segment:** Each client indexes the active segment locally, message by message.
 * **Relay view:** One more encrypted blob, with a size close to the snapshot size that the relay already sees.
@@ -573,6 +639,13 @@ A re-seal replaces the sealed index (section 3, *Amendments to a sealed segment*
 | **Purging the deltas at the seal** | A false snapshot from a malicious member would lose messages for good. |
 | **Roles in a last-writer-wins map** | Compaction would drop every past role. A client could no longer check a moderation against the role its author held. |
 | **Moderation in the minimal form** | A role lives in `meta` and a message in a segment, two documents. A revoke concurrent with a delete has no single answer without the relay check and the role log. |
+| **A dedicated channel plane, with its own `seq` per segment in the relay Lua** | A second pipeline to build and secure beside the document one. A channel as a set of documents reuses the sequencer, the snapshots, the replay and the access check. |
+| **One `threads` document per channel** | It grows with every thread of the channel for years. One document per thread grows with that thread only. |
+| **A member list in the `meta` document** | It duplicates the relay and drifts after a revoke. The signed membership log checks the relay instead. |
+| **Membership the relay serves unsigned** | The relay could show any member list. An unsigned start would also leave every early membership unverifiable for good. |
+| **A frame kind in plaintext, so the relay counts unread messages** | One more leak in the `ZK-007` set, for a count the client computes from the deltas it fetches anyway. |
+| **A new direct message each time** | Two conversations between the same members split one history. |
+| **GIF search through a third-party service** | Each search sends what the user types to that service. |
 | **A sealed index document of the user's channels** | The relay already holds the membership. A second list drifts after a revoke and shows a channel whose key is gone. |
 | **Bookmarks and followed threads in local storage** | A new device starts empty, and a new device is where the user needs them most. |
 | **Private channels in the space catalogue** | Every space member reads the catalogue, so each private channel would show its name and existence to the whole space. |
