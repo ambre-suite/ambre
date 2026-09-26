@@ -79,7 +79,8 @@ Channel storage layout (`channel_{id}/`):
 `Loro::Doc (meta)`:
 
 - `"channel"` (Map) -- `{name, type, created, topic}` -- `type` is `dm`, `private` or `public`; `name` and `topic` for a private channel or a direct message, where `name` is optional for a direct message; the `space` document names a public channel
-- `"members"` (Map) -- `{"pubkey_alice": {role, joined}}`
+- `"members"` (Map) -- `{"pubkey_alice": {joined}}`
+- `"role_log"` (List) -- append-only `[{member, role, granted_by}]`. The role of a member is the last entry for that member. The log keeps every past role, so a client can check a moderation against the role its author held
 - `"pinned"` (Array) -- `[{msg_id, segment_id}]`
 - `"segments"` (Array), for example:
   - `{id: "seg_001", from_ts: 1710000000, to_ts: 1720000000, msg_count: 5000, state: "sealed", amended: true}`
@@ -185,7 +186,7 @@ document of its segment, never to the sealed snapshot.
 
 `Loro::Doc (amendments)`, one per sealed segment, created on the first amendment:
 
-- `"amendments"` (Map) -- `{msg_id: {content: Loro::Text} | {deleted: true}}`
+- `"amendments"` (Map) -- `{msg_id: {content: Loro::Text} | {deleted: true, by: "author" | "moderator"}}`
 
 The segment entry in `meta` carries `amended: true` once the document exists. So a client fetches
 the amendments document only when it exists. A reader applies the amendments over the sealed
@@ -200,11 +201,36 @@ stays in the sealed ciphertext. A client re-seals the segment, rarely and in bat
 
 The delay between a delete and its erasure needs a row in `ambre-spec-budgets.md`.
 
-**Who may amend.** The author edits a message. The author or a moderator deletes it. The relay
-cannot read an amendment, so the merging client must refuse one whose signer has no such right.
-Nothing binds a Loro operation to the key that signed its delta today. The gap exists in the
-active segment too, where a member can rewrite the message of another member. That question stays
-open.
+### Who may change a message
+
+`ambre-spec-op-authorship.md` binds each operation to the user who signed its delta. Murmure reads
+that binding to enforce its own rules.
+
+**The rules.**
+
+- A member creates a message only under their own name: its `author` is the signer.
+- A member edits or deletes only their own message. The message container records the PeerID that
+  created it, and that PeerID resolves to its author.
+- A member adds or removes only their own reaction: the reaction key is the signer.
+
+**The check runs before import.** The client imports the delta into a fork of the segment and reads
+the operations it produces. A delta that breaks one rule is refused whole, by every client alike.
+The fork costs up to one segment, about 2 MB. That cost needs a row in `ambre-spec-budgets.md`,
+measured by a prototype.
+
+**Moderation is out of the minimal form.** Only the author changes a message. A moderator who
+hides the message of another member is the `Moderation` Story (`ambre-roadmap.md` E5).
+
+**How moderation will hold.** A hide is within the power of the relay already: the relay can
+withhold any frame. So the relay may check that the role still holds, with no new power.
+
+1. The relay refuses a moderation from a member whose role it has revoked. The relay orders every
+   frame, so the answer is unique.
+2. Each client checks that the signer held the moderator role in the `role_log` at the state the
+   operation cites. Every client reads the same log, so every client agrees.
+
+Two choices of the minimal form keep that path open. The roles are an append-only log, never a
+last-writer-wins map. An amendment records whether the author or a moderator deleted.
 
 ### Messaging compaction
 
@@ -545,6 +571,8 @@ A re-seal replaces the sealed index (section 3, *Amendments to a sealed segment*
 | **A history duration chosen at conversion** | Keys change at a rotation, not on a date. A cut inside a segment would split and re-seal it under two keys. A cut at a segment edge would show a false duration. The retention of the space already bounds the history. |
 | **A client-side lock on sealing** | A client does not reach Redis. The relay arbitrates through a lease. |
 | **Purging the deltas at the seal** | A false snapshot from a malicious member would lose messages for good. |
+| **Roles in a last-writer-wins map** | Compaction would drop every past role. A client could no longer check a moderation against the role its author held. |
+| **Moderation in the minimal form** | A role lives in `meta` and a message in a segment, two documents. A revoke concurrent with a delete has no single answer without the relay check and the role log. |
 | **A sealed index document of the user's channels** | The relay already holds the membership. A second list drifts after a revoke and shows a channel whose key is gone. |
 | **Bookmarks and followed threads in local storage** | A new device starts empty, and a new device is where the user needs them most. |
 | **Private channels in the space catalogue** | Every space member reads the catalogue, so each private channel would show its name and existence to the whole space. |

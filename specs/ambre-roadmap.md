@@ -90,6 +90,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` DOCX interop | V1 | Word import and export, comments and track changes included |
 | `[ ]` PDF export | V1 | a paginated PDF with working links and metadata |
 | `[ ]` Images | V1 | images in the document, resolved through the shared media flow and embedded on export |
+| `[ ]` Operations bound to their signer | MVP | every Loro operation of every application traced to the key that signed its delta |
 | `[ ]` `ARCH P7` -- the Murmure engine core | MVP | the message model, and a typed command surface in place of the opaque byte payload of the channel plane |
 | `[ ]` `SYNC P4` / `SRV P1` -- channels | MVP | channel membership and history, and unread tracking |
 | `[ ]` Spaces and the channel catalogue | MVP | a space, its catalogue of public channels with their names, categories and keys, and joining a public channel with no other member online |
@@ -102,6 +103,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` The message list and the composer | MVP | the virtualized message list, and a composer built on the Prose editor |
 | `[ ]` Notifications in an open tab | MVP | a system notification for a mention or a direct message while a tab is open |
 | `[ ]` Search in loaded segments | MVP | local search over the active segment and the sealed segments already fetched |
+| `[ ]` Moderation | V1 | a moderator hides the message of another member |
 | `[ ]` Push notifications | V1 | a notification with every tab closed, a level per channel, and mentions routed by the relay |
 | `[ ]` Mute and hide | V1 | a channel muted or hidden, kept in the user settings |
 | `[ ]` The personal sidebar | V1 | personal groups and order of channels, and bookmarks, kept in the user settings |

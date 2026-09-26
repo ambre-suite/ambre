@@ -19,7 +19,7 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2585 rows: 1747 shipped, of which 779 loose. 838 unbuilt.**
+**2599 rows: 1747 shipped, of which 779 loose. 852 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
@@ -28,7 +28,7 @@
 | `untested` | 273 | 144 | 235 |  | 652 |
 | `human-review` | 7 |  |  |  | 7 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
-| `unimplemented` | 142 | 56 | 23 | 617 | 838 |
+| `unimplemented` | 156 | 56 | 23 | 617 | 852 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -163,6 +163,7 @@
 | `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094 |
 | `ambre-spec-message-bus.md` | BUS-001..024 |
 | `ambre-spec-object-store.md` | SRV-002,004,052..059,078..079 |
+| `ambre-spec-op-authorship.md` | AUTHOR-001..014 |
 | `ambre-spec-organizations.md` | SRV-060..067,071,076..077 |
 | `ambre-spec-pdf-export.md` | PDF-001..006 |
 | `ambre-spec-presence.md` | PRESENCE-001..014 |

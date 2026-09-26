@@ -55,6 +55,9 @@
 | relay | the server, which carries traffic it cannot read | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | boundary | the line between what the relay learns and what it never learns | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | peer | one participant of a document | | `1-Foundations/ambre-spec-presence.md` |
+| PeerID | the Loro identifier of one writing session | | `1-Foundations/ambre-spec-op-authorship.md` |
+| session nonce | the random value a PeerID derives from | | `1-Foundations/ambre-spec-op-authorship.md` |
+| peer registry | the map from a PeerID to its user, inside a document | | `1-Foundations/ambre-spec-op-authorship.md` |
 | presence | who is on a document, and where | | `1-Foundations/ambre-spec-presence.md` |
 | ephemeral | a message kept by nothing after delivery | | `1-Foundations/ambre-spec-broadcast.md` |
 | broadcast | one message sent to every subscriber | | `1-Foundations/ambre-spec-broadcast.md` |
