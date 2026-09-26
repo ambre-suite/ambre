@@ -35,7 +35,7 @@ Murmure is the command and discussion center. Unlike classic SaaS tools, every m
 * **Message Editor:** Simplified version of the **Prose** engine (Markdown, emojis, `@` mentions, code blocks).
 * **Reactions:** Emoji additions on messages with CRDT aggregation (no conflict on reaction counts). A reaction is a light reply: custom emoji per space, and a reaction never counts in the unread badge.
 * **Pins:** Shared with the channel, through the `pinned` array of the `meta` document.
-* **Bookmarks:** Personal, and a different feature from a pin. The client stores a bookmark in the personal document (see *Channel list and personal state*).
+* **Bookmarks:** Personal, and a different feature from a pin. The client stores a bookmark in the user settings (see *Channel list and personal state*).
 * **Status & Presence:** Real-time indicators (Online, Busy, Typing...) via WebSocket relay.
   * Each indicator tells the relay when a member is active, and that timing is metadata.
   * Each indicator has a user setting. The default is an open decision.
@@ -107,7 +107,7 @@ Channel storage layout (`channel_{id}/`):
 A reply can land in a later segment than its root. So the reply count and the last replier cannot live in the root segment alone.
 
 * Proposal: a per-channel `threads` document maps each root `msg_id` to `{reply_count, last_reply_ts, last_author}`.
-* The "followed" state is personal. The client stores it with the bookmarks, in the personal document.
+* The "followed" state is personal. The client stores it with the bookmarks, in the user settings.
 * Open question: the size of the `threads` document in a channel with years of history. It may need the same segment chain.
 
 ### Object Storage
@@ -181,15 +181,15 @@ One channel = one document from a crypto standpoint, with its Document Key. Shar
 
 ### Channel list and personal state
 
-Three stores hold what the channel sidebar shows. Each fact has one owner.
+Four stores hold what the channel sidebar shows. Each fact has one owner.
 
 | Fact | Owner | Visible to the relay |
 | :--- | :--- | :--- |
 | The channels a user can read | the relay, through `channel_members` | yes, routing metadata |
 | The channel name and topic | the channel `meta` document | no, sealed |
 | The categories and the channel order of a space | the `space` document | no, sealed |
-| The personal layout, mute, bookmarks and followed threads | the personal document | no, sealed |
-| The notification level | the personal document, with a copy on the relay | yes, the copy |
+| The personal layout, mute, bookmarks and followed threads | the user settings | no, sealed |
+| The notification level | the user settings, with a copy on the relay | yes, the copy |
 | The read cursor | the relay, through `channel_read_cursors` | yes |
 
 **The channel list is membership.** The client asks the relay for its channels. The answer carries
@@ -201,28 +201,27 @@ a second copy of that list, because such a copy drifts after a revoke.
 each `channel_id` to its category and its position. It also lists the public channels that a
 member has not joined yet. Every member of the space sees the same content.
 
-**The personal document holds the personal state.** It is one Loro document per user, and the user
-is its only member. Its Document Key is random and wrapped for the user's own X25519 key. So it
-reuses the membership path and adds no derivation domain beside the two that `ZK-009` freezes.
+**The user settings hold the personal state.** Murmure keeps no store of its own. It writes one
+`"murmure"` section in the sealed per-user store of the `User settings` Story (`ambre-roadmap.md`
+post-V1). Macro approvals and the personal dictionary of Prose already wait on that store. That
+Story decides the key, the document layout and how a new device finds the store.
 
 - `"layout"` (Map) -- `{channel_id: {group, position, hidden, collapsed}}`
 - `"notify"` (Map) -- `{channel_id: "all" | "mentions" | "none"}`
 - `"bookmarks"` (Map) -- `{msg_id: {channel_id, segment_id, added}}`
 - `"followed"` (Map) -- `{root_msg_id: {channel_id, since}}`
 
-Loro merges the edits of several devices. Each key is a channel or a message, so a
-last-writer-wins map fits every entry. A new device finds the document through a
-`settings_doc_id` column on the user row. The relay already knows that the user is its member, so
-the column tells the relay nothing new.
+Each key is a channel or a message, so a last-writer-wins map fits every entry. The store merges
+the edits of several devices.
 
 **Leave and hide are two acts.**
 
 - Leave removes the `channel_members` row. A private channel then rotates its Document Key.
-- Hide sets `hidden` in the personal document. The user keeps the key and can still read.
+- Hide sets `hidden` in the user settings. The user keeps the key and can still read.
 
 A user who hides a channel and believes they left still receives its traffic.
 
-**The notification level has two copies.** The personal document is the source of truth for the
+**The notification level has two copies.** The user settings are the source of truth for the
 interface. The client writes a copy of each level to the relay, because the relay decides which
 push to send (section 4). The copy and `channel_read_cursors` are outside the `ZK-007` set today.
 The zero-knowledge boundary table must record both before either ships.
@@ -344,7 +343,7 @@ The index format assumes that a sealed segment is immutable. The sketch does not
 | **SQLite/FTS5 compiled to WASM** | A C library, against the Rust-first pillar. |
 | **A sealed index document of the user's channels** | The relay already holds the membership. A second list drifts after a revoke and shows a channel whose key is gone. |
 | **Bookmarks and followed threads in local storage** | A new device starts empty, and a new device is where the user needs them most. |
-| **A personal key derived from the Master Seed** | It adds a third derivation domain beside the two that `ZK-009` freezes. A wrapped random key reuses the membership path. |
+| **A Murmure document of its own for personal state** | The `User settings` Story already plans one sealed store per user. A second store gives the same user two sources of truth. |
 | **Client-side filtering of each push after decryption** | Web Push requires a visible notification for each push. Safari cancels the subscription after three silent pushes. |
 
 ### Product
