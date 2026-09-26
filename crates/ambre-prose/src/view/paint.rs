@@ -352,7 +352,7 @@ impl ProseUiState {
         let indices = self.blocks_on(page).to_vec();
         let mut drawn: Vec<(BlockId, ShapedRun, Placed)> = Vec::with_capacity(indices.len());
         for index in indices {
-            let Some(block) = layout.blocks.get(index) else {
+            let Some(block) = self.shaped.block(index) else {
                 continue;
             };
             if let Some(table) = self.shaped.tables.get(&block.block_id).cloned() {
@@ -855,12 +855,13 @@ mod tests {
 
     #[test]
     fn the_run_cache_stays_bounded_over_a_long_scroll() {
-        let (_, shaped) = laid_out(1200, 8);
+        let (mut state, shaped) = laid_out(1200, 8);
         let mut ui = ProseUiState::default();
         ui.resize(1200.0, 900.0);
         ui.apply_layout(shaped);
         let bottom = ui.column.max_scroll(&ui.viewport);
         while ui.viewport.scroll_y < bottom {
+            super::super::tests::follow(&mut ui, &mut state);
             paint(&mut ui);
             ui.scroll_by(800.0);
         }

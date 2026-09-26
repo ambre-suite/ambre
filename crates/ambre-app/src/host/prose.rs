@@ -341,6 +341,12 @@ impl ProseView {
         if let Some(command) = self.state.tick(now_ms) {
             send_command(&self.to_logic, self.document_id, command);
         }
+        // The pages the canvas is about to show, asked for before a frame
+        // needs them (`PROSE-UI-211`). A full channel drops the request, and
+        // the next layout taken asks again.
+        if let Some(command) = self.state.window_request() {
+            send_command(&self.to_logic, self.document_id, command);
+        }
         let theme = self.theme_ctl.get();
         if theme != self.theme {
             self.theme = theme;

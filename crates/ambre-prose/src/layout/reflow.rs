@@ -12,10 +12,11 @@
 //! gave. Then [`Paginator::settle_toc`] is the bounded pass that brings the two
 //! into step, off the keystroke path (`PROSE-019`, `PROSE-084`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use ambre_bus::app::prose::BlockType;
+use ambre_core::Uuid;
 use loro::{LoroDoc, TreeID};
 
 use crate::doc;
@@ -23,7 +24,7 @@ use crate::layout::geometry::PageBox;
 use crate::layout::measure::Measurer;
 use crate::layout::pass::{self, PageLayout};
 use crate::layout::place::{self, BlockLayout, MeasuredBlock, Placement};
-use crate::layout::run::ShapedLayout;
+use crate::layout::run::{ShapedLayout, TextEnds, Window, text_ends};
 use crate::toc;
 
 /// The most layouts one settling of the tables of contents runs
@@ -56,6 +57,11 @@ pub struct Paginator {
     /// Stamped on each layout this paginator hands over, so the view can
     /// tell a late one from a new one (`PROSE-UI-016`).
     version: u64,
+    /// Every block of the layout, by its place in the flow. Shared by every
+    /// window handed over, and built again only when the blocks change.
+    order: Arc<HashMap<TreeID, usize>>,
+    /// The first and the last block holding text.
+    ends: Option<TextEnds>,
 }
 
 impl Default for Paginator {
@@ -84,6 +90,8 @@ impl Paginator {
             bands: pass::BandHeights::default(),
             notes: pass::NotePlan::default(),
             version: 0,
+            order: Arc::default(),
+            ends: None,
         }
     }
 
@@ -107,28 +115,84 @@ impl Paginator {
         &self.layout
     }
 
-    /// The layout as it stands, with the runs the view draws on it.
+    /// The layout as it stands, with the runs the view draws on it, over the
+    /// whole document.
     ///
     /// Nothing is shaped here: every run is the one the last pass kept
     /// (`PROSE-UI-006`).
     #[must_use]
     pub fn shaped_layout(&self) -> ShapedLayout {
-        let body = self
-            .measured
+        self.window(0, u32::MAX)
+    }
+
+    /// The layout of the pages `first` to `last`, with the runs the view
+    /// draws on them (`PROSE-125`).
+    ///
+    /// The page geometry and the page count stay the document's. The blocks,
+    /// runs, tables and notes are the window's. A layout handed over costs
+    /// what the pages shown hold, not the document. Nothing is shaped here
+    /// (`PROSE-UI-006`).
+    #[must_use]
+    pub fn window(&self, first: u32, last: u32) -> ShapedLayout {
+        let last = last.min(self.layout.page_count.saturating_sub(1));
+        let first = first.min(last);
+        let all = &self.layout.blocks;
+        let start = all.partition_point(|block| *block.page_span().end() < first);
+        let end = all.partition_point(|block| block.page_start <= last);
+        let range = start..end.max(start);
+        let blocks = all.get(range.clone()).unwrap_or_default();
+        let measured = self.measured.get(range).unwrap_or_default();
+        let called: HashSet<Uuid> = blocks
             .iter()
-            .filter_map(|block| Some((block.block_id, block.run.clone()?)));
+            .flat_map(|block| block.notes.iter().map(|note| note.footnote_id))
+            .collect();
+        let note_blocks: HashSet<TreeID> = blocks
+            .iter()
+            .flat_map(|block| block.notes.iter().map(|note| note.block_id))
+            .collect();
+        let runs = measured
+            .iter()
+            .filter_map(|block| Some((block.block_id, block.run.clone()?)))
+            .chain(self.bands.runs.iter().cloned())
+            .chain(
+                self.notes
+                    .texts
+                    .iter()
+                    .filter(|(block, _)| note_blocks.contains(block))
+                    .cloned(),
+            )
+            .collect();
+        let numbers = self
+            .notes
+            .numbers
+            .iter()
+            .filter(|(id, _)| called.contains(id))
+            .map(|(id, run)| (*id, run.clone()))
+            .collect();
+        let tables = measured
+            .iter()
+            .filter_map(|block| Some((block.block_id, Arc::clone(block.table.as_ref()?))))
+            .collect();
         ShapedLayout::new(
             self.version,
-            Arc::new(self.layout.clone()),
-            body.chain(self.bands.runs.iter().cloned())
-                .chain(self.notes.texts.iter().cloned())
-                .collect(),
-            self.notes.numbers.clone(),
-            self.measured
-                .iter()
-                .filter_map(|block| Some((block.block_id, Arc::clone(block.table.as_ref()?))))
-                .collect(),
+            Arc::new(self.layout.with_blocks(blocks.to_vec())),
+            runs,
+            numbers,
+            tables,
         )
+        .with_window(Window {
+            first_index: start,
+            pages: (first, last),
+            order: Arc::clone(&self.order),
+            ends: self.ends,
+        })
+    }
+
+    /// The page a block starts on, when the layout holds it.
+    #[must_use]
+    pub fn page_of(&self, block: &TreeID) -> Option<u32> {
+        let index = *self.order.get(block)?;
+        Some(self.layout.blocks.get(index)?.page_start)
     }
 
     /// Lay the whole document out again, shaping every block.
@@ -330,6 +394,26 @@ impl Paginator {
         first_dirty: u32,
     ) {
         self.page_box = page_box;
+        let same_blocks = self.order.len() == measured.len()
+            && measured
+                .iter()
+                .enumerate()
+                .all(|(index, block)| self.order.get(&block.block_id) == Some(&index));
+        if !same_blocks {
+            self.order = Arc::new(
+                measured
+                    .iter()
+                    .enumerate()
+                    .map(|(index, block)| (block.block_id, index))
+                    .collect(),
+            );
+        }
+        self.ends = text_ends(measured.iter().map(|block| {
+            (
+                block.block_id,
+                block.run.as_ref().map(|run| run.data().len()),
+            )
+        }));
         self.measured = measured;
         self.version = self.version.saturating_add(1);
         self.layout = pass::layout_of(page_box, &placement);

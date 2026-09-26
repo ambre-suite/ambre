@@ -253,6 +253,14 @@ pub struct ProseUiState {
     /// A press asked for a first block, and the caret goes to it once a
     /// layout carries it (`PROSE-UI-072`).
     pub(crate) awaiting_block: bool,
+    /// A block asked to show that the layout in force does not carry. The
+    /// view scrolls to it once a layout does (`PROSE-UI-212`).
+    pub(crate) awaited_reveal: Option<BlockId>,
+    /// The pages last asked of the Logic thread, first and last, so a frame
+    /// does not ask twice for the same (`PROSE-UI-211`).
+    pub(crate) asked_pages: Option<(u32, u32)>,
+    /// The block last asked for in a [`ProseCommand::ShowBlock`].
+    pub(crate) asked_block: Option<BlockId>,
     pub draft: DraftBuffer,
     /// The draft as last shaped, and the text it was shaped from.
     pub(crate) draft_shape: Option<(String, ShapedRun)>,
@@ -580,21 +588,25 @@ impl ProseUiState {
     /// text block before it, else the start of the one after it.
     fn nearest_confirmed(&self, gone: BlockId) -> Option<CursorPosition> {
         let index = self.flow_index(&crate::events::tree_id(gone))?;
-        let blocks = &self.shaped.layout.blocks;
-        let text = |block: &crate::layout::place::BlockLayout| {
+        let text = |(_, block): (usize, &crate::layout::place::BlockLayout)| {
             self.shaped
                 .blocks
                 .get(&block.block_id)
                 .map(|run| (crate::events::block_id(block.block_id), run.data().len()))
         };
-        let before = blocks
-            .get(..index)
-            .and_then(|head| head.iter().rev().find_map(text));
+        let before = self
+            .shaped
+            .window_blocks()
+            .rev()
+            .filter(|(at, _)| *at < index)
+            .find_map(text);
         let place = match before {
             Some(found) => Some(found),
-            None => blocks
-                .get(index + 1..)
-                .and_then(|tail| tail.iter().find_map(text))
+            None => self
+                .shaped
+                .window_blocks()
+                .filter(|(at, _)| *at > index)
+                .find_map(text)
                 .map(|(block, _)| (block, 0)),
         };
         place.map(|(block_id, offset)| CursorPosition {

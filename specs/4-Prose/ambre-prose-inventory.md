@@ -36,7 +36,7 @@
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 41 |  |
 | `prose-toolbar` | Select a few words and a small bar appears above them. | partial | 19 |  |
 | `prose-track-changes` | A reviewer edits without changing the document. | partial | 40 |  |
-| `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | partial | 17 |  |
+| `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | partial | 19 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 | `prose-clipboard` | Copy, cut and paste. | design-only | 14 |  |
 | `prose-images` | A picture in the document. | design-only | 38 |  |
@@ -44,4 +44,4 @@
 | `prose-ruler` | A horizontal scale above the page, carrying three handles. | design-only | 5 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 13 implemented, 9 partial, 6 design-only. 663 contract rows, 3 loose.**
+**28 features: 13 implemented, 9 partial, 6 design-only. 665 contract rows, 3 loose.**

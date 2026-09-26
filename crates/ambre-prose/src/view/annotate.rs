@@ -94,7 +94,7 @@ impl ProseUiState {
     /// run, and the top of that fragment in the page.
     pub(crate) fn fragment_at(&self, block: BlockId, run_y: f32) -> Option<(u32, Fragment)> {
         let index = self.flow_index(&tree_id(block))?;
-        let layout = self.shaped.layout.blocks.get(index)?;
+        let layout = self.shaped.block(index)?;
         let tops = self.shaped.blocks.get(&layout.block_id)?.data().line_tops();
         let last = layout.page_start + layout.continuation_heights.len() as u32;
         (layout.page_start..=last)
@@ -115,7 +115,7 @@ impl ProseUiState {
         let layout = &self.shaped.layout;
         let indent = self
             .flow_index(&tree_id(block))
-            .and_then(|index| layout.blocks.get(index))
+            .and_then(|index| self.shaped.block(index))
             .and_then(|b| self.shaped.blocks.get(&b.block_id))
             .map_or(0.0, |run| run.data().indent_px());
         let scale = self.viewport.scale();
@@ -138,7 +138,7 @@ impl ProseUiState {
         (x_px, y_px): (f32, f32),
     ) -> Option<ScreenRect> {
         let index = self.flow_index(&tree_id(block))?;
-        let layout = self.shaped.layout.blocks.get(index)?;
+        let layout = self.shaped.block(index)?;
         let run = self.shaped.blocks.get(&layout.block_id)?.data();
         let piece = fragment(layout, page, &run.line_tops())?;
         let bottom = piece.run_top + piece.height;
@@ -270,7 +270,7 @@ impl ProseUiState {
             .filter_map(|thread| {
                 let block = thread.anchor_block?;
                 let index = self.flow_index(&tree_id(block))?;
-                let layout = self.shaped.layout.blocks.get(index)?;
+                let layout = self.shaped.block(index)?;
                 let caret = self
                     .shaped
                     .blocks

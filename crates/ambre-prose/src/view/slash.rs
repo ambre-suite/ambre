@@ -200,7 +200,7 @@ impl ProseUiState {
             return false;
         }
         self.flow_index(&tree_id(spot.0))
-            .and_then(|index| self.shaped.layout.blocks.get(index))
+            .and_then(|index| self.shaped.block(index))
             .is_some_and(|block| {
                 matches!(block.block_type, BlockType::Paragraph | BlockType::Heading)
             })

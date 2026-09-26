@@ -101,6 +101,12 @@ impl PageLayout {
         notes
     }
 
+    /// The same geometry, holding `blocks` in place of its own.
+    #[must_use]
+    pub fn with_blocks(&self, blocks: Vec<BlockLayout>) -> Self {
+        Self { blocks, ..*self }
+    }
+
     /// Where the body starts on a sheet, below the taller header. Every page
     /// gets the same body, so every page starts it at the same height.
     #[must_use]

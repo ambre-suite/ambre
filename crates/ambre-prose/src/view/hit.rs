@@ -70,7 +70,7 @@ impl ProseUiState {
         let mut notes: Vec<&crate::layout::place::FootnoteLayout> = self
             .blocks_on(page)
             .iter()
-            .filter_map(|index| layout.blocks.get(*index))
+            .filter_map(|index| self.shaped.block(*index))
             .flat_map(|block| block.notes.iter())
             .filter(|note| note.page == page)
             .collect();
@@ -191,7 +191,7 @@ impl ProseUiState {
         let y_body = y_in_page - layout.body_top_px();
         let mut chosen: Option<(&BlockLayout, Fragment)> = None;
         for index in self.blocks_on(page) {
-            let Some(block) = layout.blocks.get(*index) else {
+            let Some(block) = self.shaped.block(*index) else {
                 continue;
             };
             let tops = self

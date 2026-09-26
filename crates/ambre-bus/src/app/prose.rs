@@ -849,6 +849,16 @@ pub enum ProseCommand {
         numbered: bool,
     },
 
+    // -- Viewport (`features/ambre-spec-prose-viewport.md`) --
+    /// Hand the view the zero-based pages `first` to `last`, both included.
+    /// The view sends it when the canvas nears a page the layout in force
+    /// does not carry (`PROSE-UI-211`); it writes nothing.
+    ShowPages { first: u32, last: u32 },
+    /// Hand the view the pages around the page `block_id` starts on. The view
+    /// sends it to reveal a block the layout in force does not carry
+    /// (`PROSE-UI-212`); it writes nothing.
+    ShowBlock { block_id: BlockId },
+
     // -- Word count (`features/ambre-spec-prose-word-count.md`) --
     /// Recount the four text tallies. The view sends it once a run of changes
     /// has stopped (`PROSE-FEAT-124`); it writes nothing.
@@ -1079,6 +1089,8 @@ impl ProseCommand {
                 | Self::Sync { .. }
                 | Self::UpdateCursor { .. }
                 | Self::CountWords
+                | Self::ShowPages { .. }
+                | Self::ShowBlock { .. }
                 | Self::ReadMarks { .. }
                 | Self::FindStart { .. }
                 | Self::FindNext
@@ -1127,6 +1139,8 @@ impl ProseCommand {
             Self::InsertToc { .. } => "inserting a table of contents",
             Self::UpdateTocConfig { .. } => "changing the table of contents",
             Self::CountWords => "counting the words",
+            Self::ShowPages { .. } => "showing the pages",
+            Self::ShowBlock { .. } => "showing the block",
             Self::ReadMarks { .. } => "reading the styles",
             Self::FormatSelection { .. } => "formatting the selection",
             Self::SetHeaderEnabled { .. } => "showing or hiding the header",

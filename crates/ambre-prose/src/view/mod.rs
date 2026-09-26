@@ -20,9 +20,15 @@ use std::sync::Arc;
 
 use loro::TreeID;
 
+use ambre_bus::app::prose::ProseCommand;
+
 use crate::events::{BlockId, TocEntry, tree_id};
 use crate::layout::run::ShapedLayout;
 use crate::ui::ProseUiState;
+
+/// The pages asked for beyond those a frame builds, on each side, so a
+/// scroll finds its next pages laid out (`PROSE-UI-211`).
+pub const WINDOW_SLACK: u32 = 4;
 
 /// What an inline highlight marks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -66,7 +72,45 @@ impl ProseUiState {
         // What the draft confirmed is in these runs now.
         self.draft.laid();
         self.settle_awaited_block();
+        // A request lost on a full channel is made again from here.
+        self.asked_pages = None;
+        if let Some(block) = self.awaited_reveal
+            && self.shaped.carries(&tree_id(block))
+        {
+            self.awaited_reveal = None;
+            self.asked_block = None;
+            self.reveal_block(block);
+        }
         true
+    }
+
+    /// What to ask the Logic thread so the next frames find their pages laid
+    /// out (`PROSE-UI-211`, `PROSE-UI-212`). `None` when the layout in force
+    /// carries them.
+    ///
+    /// The host calls it once a frame and sends what it returns. A request
+    /// is made once: the same pages are not asked for again until a layout
+    /// comes back without them.
+    pub fn window_request(&mut self) -> Option<ProseCommand> {
+        if let Some(block) = self.awaited_reveal {
+            if self.asked_block == Some(block) {
+                return None;
+            }
+            self.asked_block = Some(block);
+            return Some(ProseCommand::ShowBlock { block_id: block });
+        }
+        let built = self.column.built_pages(&self.viewport)?;
+        let carried = self.shaped.pages();
+        if carried.contains(built.start()) && carried.contains(built.end()) {
+            return None;
+        }
+        let first = built.start().saturating_sub(WINDOW_SLACK);
+        let last = built.end().saturating_add(WINDOW_SLACK);
+        if self.asked_pages == Some((first, last)) {
+            return None;
+        }
+        self.asked_pages = Some((first, last));
+        Some(ProseCommand::ShowPages { first, last })
     }
 
     /// Scroll by a distance on the canvas, in screen pixels, down for a
@@ -98,8 +142,12 @@ impl ProseUiState {
     }
 
     /// Scroll so a block's top shows at the top of the canvas.
+    ///
+    /// A block the layout in force does not carry is asked for, and shown
+    /// once a layout carries it (`PROSE-UI-212`).
     pub(crate) fn reveal_block(&mut self, block: BlockId) {
         let Some(layout) = self.block_layout(block) else {
+            self.awaited_reveal = Some(block);
             return;
         };
         let top = self.column.page_top_y(layout.page_start)
@@ -111,7 +159,7 @@ impl ProseUiState {
     /// Where a block sits in the layout in force.
     fn block_layout(&self, block: BlockId) -> Option<&crate::layout::place::BlockLayout> {
         let index = self.shaped.index_of(&tree_id(block))?;
-        self.shaped.layout.blocks.get(index)
+        self.shaped.block(index)
     }
 
     /// The position of a block in the flow of the layout in force.
@@ -212,6 +260,110 @@ pub(crate) mod tests {
         }
         let shaped = state.shaped_layout();
         (state, shaped)
+    }
+
+    /// Answer every page the view asks for, as the host does once a frame,
+    /// until the view asks for nothing more.
+    pub(crate) fn follow(ui: &mut ProseUiState, state: &mut ProseState) {
+        while let Some(command) = ui.window_request() {
+            let _ = state.handle_command(command);
+            if let Some(event) = state.layout_event() {
+                ui.apply_event(&event);
+            }
+        }
+    }
+
+    /// `PROSE-125`: a layout handed to the view carries the pages it asked
+    /// for, and no block of another page.
+    #[test]
+    fn a_layout_carries_the_pages_asked_for_alone() {
+        let (mut state, _) = laid_out(400, 60);
+        let _ = state.handle_command(ProseCommand::ShowPages {
+            first: 10,
+            last: 12,
+        });
+        let Some(crate::events::ProseEvent::LayoutShaped { layout }) = state.layout_event() else {
+            panic!("a new window is handed over");
+        };
+        let shaped = layout.shared::<ShapedLayout>().expect("a shaped layout");
+        assert!(shaped.layout.page_count > 20);
+        assert_eq!(shaped.pages(), 10..=12);
+        assert!(!shaped.layout.blocks.is_empty());
+        for block in &shaped.layout.blocks {
+            let span = block.page_span();
+            assert!(
+                *span.end() >= 10 && *span.start() <= 12,
+                "{span:?} is outside"
+            );
+        }
+        // Every run and table is one of a block the window carries, or a band.
+        let carried: std::collections::HashSet<_> =
+            shaped.layout.blocks.iter().map(|b| b.block_id).collect();
+        let bands = shaped
+            .blocks
+            .keys()
+            .filter(|id| !carried.contains(id))
+            .count();
+        assert!(bands <= 4, "{bands} runs of blocks outside the window");
+    }
+
+    /// `PROSE-UI-211`: scrolling past the pages carried asks for the pages
+    /// around the canvas, and once they come back asks for nothing more.
+    #[test]
+    fn a_scroll_asks_for_the_pages_around_the_canvas() {
+        let (mut state, _) = laid_out(400, 60);
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_event(&state.layout_event().expect("a layout"));
+        assert_eq!(ui.window_request(), None, "the first pages are carried");
+        ui.scroll_by(ui.column.page_top_y(30) * ui.viewport.scale());
+        let built = ui.column.built_pages(&ui.viewport).expect("a page");
+        let Some(ProseCommand::ShowPages { first, last }) = ui.window_request() else {
+            panic!("the pages under the canvas are asked for");
+        };
+        assert!(first <= *built.start() && last >= *built.end());
+        assert_eq!(ui.window_request(), None, "a request is made once");
+        let _ = state.handle_command(ProseCommand::ShowPages { first, last });
+        let event = state.layout_event().expect("a layout");
+        ui.apply_event(&event);
+        assert!(ui.shaped.pages().contains(built.start()));
+        assert!(ui.shaped.pages().contains(built.end()));
+        assert_eq!(ui.window_request(), None);
+    }
+
+    /// `PROSE-UI-212`: revealing a block the layout does not carry asks for
+    /// its pages, then scrolls to it once a layout carries it.
+    #[test]
+    fn revealing_a_block_not_carried_asks_for_it_then_shows_it() {
+        let (mut state, _) = laid_out(400, 60);
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_event(&state.layout_event().expect("a layout"));
+        let far = state
+            .full_layout()
+            .and_then(|p| p.blocks.last().map(|b| (b.block_id, b.page_start)))
+            .expect("a block");
+        let block = crate::events::block_id(far.0);
+        assert!(!ui.shaped.carries(&far.0));
+        ui.reveal_block(block);
+        assert_eq!(
+            ui.viewport.scroll_y, 0.0,
+            "nothing moves before the block comes"
+        );
+        let Some(command) = ui.window_request() else {
+            panic!("the block is asked for");
+        };
+        assert_eq!(command, ProseCommand::ShowBlock { block_id: block });
+        let _ = state.handle_command(command);
+        let event = state.layout_event().expect("a layout");
+        ui.apply_event(&event);
+        assert!(ui.shaped.carries(&far.0));
+        assert!(
+            ui.column
+                .visible_pages(&ui.viewport)
+                .expect("a page")
+                .contains(&far.1)
+        );
     }
 
     /// `PROSE-UI-205`: the view takes the layout the Logic thread handed by

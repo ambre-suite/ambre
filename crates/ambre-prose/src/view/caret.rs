@@ -39,28 +39,29 @@ impl ProseUiState {
             .map(|run| run.data())
     }
 
-    /// The text blocks of the flow, in order: the blocks the caret walks.
-    pub(crate) fn text_blocks(&self) -> impl DoubleEndedIterator<Item = BlockId> + '_ {
-        self.shaped
-            .layout
-            .blocks
-            .iter()
-            .filter(|block| self.shaped.blocks.contains_key(&block.block_id))
-            .map(|block| block_id(block.block_id))
+    /// The first and the last text block of the document, the last with its
+    /// length in the layout in force. They hold whether or not the layout in
+    /// force carries them (`PROSE-UI-167`).
+    pub(crate) fn text_ends(&self) -> Option<(BlockId, BlockId, u32)> {
+        let ends = self.shaped.ends()?;
+        let last = block_id(ends.last);
+        let len = self.run_of(last).map_or(ends.last_len, ParleyRunData::len);
+        Some((block_id(ends.first), last, len))
     }
 
     /// The text block before `block` in the flow, or after it.
     pub(crate) fn neighbour(&self, block: BlockId, after: bool) -> Option<BlockId> {
         let index = self.flow_index(&tree_id(block))?;
-        let blocks = &self.shaped.layout.blocks;
-        let is_text =
-            |b: &&crate::layout::place::BlockLayout| self.shaped.blocks.contains_key(&b.block_id);
-        let found = if after {
-            blocks.get(index + 1..)?.iter().find(is_text)
-        } else {
-            blocks.get(..index)?.iter().rev().find(is_text)
+        let is_text = |(at, b): &(usize, &crate::layout::place::BlockLayout)| {
+            (if after { *at > index } else { *at < index })
+                && self.shaped.blocks.contains_key(&b.block_id)
         };
-        found.map(|b| block_id(b.block_id))
+        let found = if after {
+            self.shaped.window_blocks().find(is_text)
+        } else {
+            self.shaped.window_blocks().rev().find(is_text)
+        };
+        found.map(|(_, b)| block_id(b.block_id))
     }
 
     /// How many code points a block holds, the draft typed into it counted.
@@ -170,16 +171,20 @@ impl ProseUiState {
                 let (offset, up) = run.line_edge(laid, upstream, direction == Direction::LineEnd);
                 (block, offset, up)
             }
-            Direction::DocStart => match self.text_blocks().next() {
-                Some(first) => (first, 0, false),
+            Direction::DocStart => match self.text_ends() {
+                Some((first, ..)) => (first, 0, false),
                 None => (block, laid, upstream),
             },
-            Direction::DocEnd => match self.text_blocks().next_back() {
-                Some(last) => (last, self.run_of(last).map_or(0, ParleyRunData::len), false),
+            Direction::DocEnd => match self.text_ends() {
+                Some((_, last, len)) => (last, len, false),
                 None => (block, laid, upstream),
             },
         };
         let offset = self.to_doc(next.0, next.1);
+        // A document end may sit on a page the layout does not carry.
+        if !self.shaped.carries(&tree_id(next.0)) {
+            self.awaited_reveal = Some(next.0);
+        }
         self.apply_caret((next.0, offset), next.2, x_goal, extend);
     }
 
@@ -297,7 +302,7 @@ impl ProseUiState {
         let Some(index) = self.flow_index(&tree_id(cursor.block_id)) else {
             return self.band_caret_span(cursor.block_id, laid);
         };
-        let block = self.shaped.layout.blocks.get(index)?;
+        let block = self.shaped.block(index)?;
         let run = self.run_of(cursor.block_id)?;
         let caret = run.caret_box_at(laid, self.caret_upstream);
         let (y0, y1) = (caret.y0 as f32, caret.y1 as f32);
@@ -370,11 +375,10 @@ impl ProseUiState {
     /// the moving end at the end of the last (`PROSE-UI-167`). The window
     /// stays where it is (`PROSE-UI-168`).
     pub fn select_all(&mut self) {
-        let (Some(first), Some(last)) = (self.text_blocks().next(), self.text_blocks().next_back())
-        else {
+        let Some((first, last, len)) = self.text_ends() else {
             return;
         };
-        let end = self.block_len(last);
+        let end = self.to_doc(last, len);
         self.cursor = Some(CursorPosition {
             block_id: last,
             offset: end,

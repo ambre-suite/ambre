@@ -86,6 +86,13 @@ use crate::schema;
 /// retracts what its author wrote and never what opening it did.
 const LOAD_ORIGIN: &str = "load";
 
+/// The pages a layout carries before the view asks for any (`PROSE-125`).
+pub const WINDOW_PAGES: u32 = 8;
+
+/// The pages carried on each side of a block the view reveals
+/// (`PROSE-UI-212`).
+pub const WINDOW_MARGIN: u32 = 4;
+
 /// The per-document Prose engine.
 pub struct ProseState {
     /// The CRDT, private and named by no public signature (`PROSE-001`).
@@ -133,7 +140,9 @@ pub struct ProseState {
     /// What the last layout handed to the view was computed from: the
     /// document's state and how many faces it was shaped on. A layout from the
     /// same basis is the same picture, so it is not handed over twice.
-    handed: Option<(loro::Frontiers, usize)>,
+    handed: Option<(loro::Frontiers, usize, (u32, u32))>,
+    /// The pages the view last asked for, first and last (`PROSE-125`).
+    window: (u32, u32),
     /// The version stamped on the last layout handed over. It only grows, even
     /// across a snapshot import that rebuilds the paginator: the view drops a
     /// layout older than the one it holds (`PROSE-UI-016`).
@@ -232,6 +241,7 @@ impl ProseState {
             paginator: None,
             faces: Vec::new(),
             handed: None,
+            window: (0, WINDOW_PAGES - 1),
             handed_version: 0,
             in_view: Vec::new(),
             ids,
@@ -279,12 +289,37 @@ impl ProseState {
     /// It lays out first, so a caller never hands over a layout older than
     /// the document. Each call carries the paginator's version, and the view
     /// drops one older than what it holds (`PROSE-UI-016`).
+    ///
+    /// It carries the pages the view last asked for (`PROSE-125`).
     pub fn shaped_layout(&mut self) -> ShapedLayout {
         self.paginate(&[]);
+        let (first, last) = self.window;
         self.paginator
             .as_ref()
-            .map(Paginator::shaped_layout)
+            .map(|paginator| paginator.window(first, last))
             .unwrap_or_default()
+    }
+
+    /// Carry the pages `first` to `last` in the layouts handed from now on.
+    fn show_pages(&mut self, first: u32, last: u32) -> ProseOutcome {
+        self.window = (first.min(last), first.max(last));
+        ProseOutcome::nothing()
+    }
+
+    /// Carry the pages around the one `block` starts on (`PROSE-UI-212`).
+    fn show_block(&mut self, block: &TreeID) -> ProseOutcome {
+        self.paginate(&[]);
+        let page = self
+            .paginator
+            .as_ref()
+            .and_then(|paginator| paginator.page_of(block));
+        match page {
+            Some(page) => self.show_pages(
+                page.saturating_sub(WINDOW_MARGIN),
+                page.saturating_add(WINDOW_MARGIN),
+            ),
+            None => ProseOutcome::nothing(),
+        }
     }
 
     /// The layout for the view, when the document or its faces changed since
@@ -296,7 +331,7 @@ impl ProseState {
     /// nothing out and sends nothing.
     pub fn layout_event(&mut self) -> Option<ProseEvent> {
         self.doc.commit();
-        let basis = (self.doc.state_frontiers(), self.faces.len());
+        let basis = (self.doc.state_frontiers(), self.faces.len(), self.window);
         if self.handed.as_ref() == Some(&basis) {
             return None;
         }
@@ -313,6 +348,12 @@ impl ProseState {
         Some(ProseEvent::LayoutShaped {
             layout: ambre_bus::app::prose::SharedLayout::from_arc(shaped),
         })
+    }
+
+    /// The whole layout the paginator holds, beyond the window handed over.
+    #[cfg(test)]
+    pub(crate) fn full_layout(&self) -> Option<&crate::layout::pass::PageLayout> {
+        self.paginator.as_ref().map(Paginator::layout)
     }
 
     /// How many runs the paginator has shaped, over its life.
@@ -439,6 +480,8 @@ impl ProseState {
         match command {
             // Answered by `catch_up` before dispatch.
             ProseCommand::Noop | ProseCommand::Sync { .. } => ProseOutcome::nothing(),
+            ProseCommand::ShowPages { first, last } => self.show_pages(first, last),
+            ProseCommand::ShowBlock { block_id } => self.show_block(&tree_id(block_id)),
             ProseCommand::InsertText {
                 block_id,
                 pos,

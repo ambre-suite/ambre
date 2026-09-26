@@ -654,7 +654,7 @@ impl ProseUiState {
         if layout.page_count == 0 {
             return false;
         }
-        if layout.blocks.is_empty() {
+        if self.shaped.block_count() == 0 {
             // Nothing to hit: the block comes through the command path, and
             // the caret goes to it once a layout carries it (`PROSE-UI-072`).
             let command = ProseCommand::InsertBlock {
@@ -720,11 +720,9 @@ impl ProseUiState {
         }
         let first = self
             .shaped
-            .layout
-            .blocks
-            .iter()
-            .find(|block| self.shaped.blocks.contains_key(&block.block_id))
-            .map(|block| crate::events::block_id(block.block_id));
+            .window_blocks()
+            .find(|(_, block)| self.shaped.blocks.contains_key(&block.block_id))
+            .map(|(_, block)| crate::events::block_id(block.block_id));
         if let Some(block) = first {
             self.awaiting_block = false;
             self.set_caret((block, 0));

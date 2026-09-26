@@ -18,6 +18,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::layout::measure::{EffectiveStyle, MarkedSpan};
 use crate::layout::pass::PageLayout;
+use crate::layout::place::BlockLayout;
 
 /// One block's text, shaped and broken into lines: enough to draw and to
 /// hit-test.
@@ -382,25 +383,63 @@ impl PartialEq for ShapedRun {
 /// view keeps the newest it has seen and drops an older one
 /// (`PROSE-UI-016`). The indices are built here, on the thread that lays
 /// out, so taking a layout costs the view a pointer (`PROSE-UI-205`).
+///
+/// It carries the pages the view asked for, not the document
+/// (`PROSE-125`). The page geometry and the page count are the document's,
+/// so the column and the scroll range stay whole. The blocks, the runs and
+/// the tables are those of the pages in [`ShapedLayout::pages`] alone.
 #[derive(Clone, Debug, Default)]
 pub struct ShapedLayout {
     pub version: u64,
+    /// The page geometry of the document, with the blocks of the window.
     pub layout: Arc<PageLayout>,
-    /// The run of every block that draws text: body, bands and notes alike.
+    /// The run of every block the window draws text for: body, bands and
+    /// notes alike.
     pub blocks: HashMap<TreeID, ShapedRun>,
-    /// The number of every footnote, drawn beside its text.
+    /// The number of every footnote the window draws, beside its text.
     pub notes: HashMap<Uuid, ShapedRun>,
-    /// The cells of every table, placed and shaped.
+    /// The cells of every table of the window, placed and shaped.
     pub tables: HashMap<TreeID, Arc<TableShape>>,
-    /// Each block of the layout, by its place in the flow.
-    order: HashMap<TreeID, usize>,
-    /// The blocks each page shows, by their place in the flow, so a frame
-    /// reads its pages and never the whole document (`PROSE-UI-007`).
+    /// Every block of the document, by its place in the flow. The Logic
+    /// thread shares one map between the layouts it hands, and builds it
+    /// again only when a block is added, removed or moved.
+    order: Arc<HashMap<TreeID, usize>>,
+    /// The place in the flow of the first block of `layout`.
+    first_index: usize,
+    /// The first and the last page the window carries.
+    pages: (u32, u32),
+    /// The first and the last block of the document that hold text.
+    ends: Option<TextEnds>,
+    /// The blocks each page of the window shows, by their place in the flow.
+    /// A frame reads its pages and never the whole document (`PROSE-UI-007`).
     page_blocks: Vec<Vec<usize>>,
 }
 
+/// The two ends of the text of a document, which a selection of the whole
+/// document runs between (`PROSE-UI-167`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TextEnds {
+    pub first: TreeID,
+    pub last: TreeID,
+    /// The length of the last block, in code points.
+    pub last_len: u32,
+}
+
+/// Where a window sits in the document it was cut from.
+#[derive(Clone, Debug, Default)]
+pub struct Window {
+    /// The place in the flow of the first block the window carries.
+    pub first_index: usize,
+    /// The first and the last page the window carries.
+    pub pages: (u32, u32),
+    /// Every block of the document, by its place in the flow.
+    pub order: Arc<HashMap<TreeID, usize>>,
+    pub ends: Option<TextEnds>,
+}
+
 impl ShapedLayout {
-    /// A layout and its runs, with the indices built from them.
+    /// A layout of the whole document and its runs, with the indices built
+    /// from them.
     #[must_use]
     pub fn new(
         version: u64,
@@ -409,44 +448,133 @@ impl ShapedLayout {
         notes: HashMap<Uuid, ShapedRun>,
         tables: HashMap<TreeID, Arc<TableShape>>,
     ) -> Self {
-        let order = layout
-            .blocks
-            .iter()
-            .enumerate()
-            .map(|(index, block)| (block.block_id, index))
-            .collect();
-        let mut page_blocks = vec![Vec::new(); layout.page_count as usize];
-        for (index, block) in layout.blocks.iter().enumerate() {
-            for page in block.page_span() {
-                if let Some(blocks) = page_blocks.get_mut(page as usize) {
-                    blocks.push(index);
-                }
-            }
-        }
+        let ends = text_ends(layout.blocks.iter().map(|block| {
+            let run = blocks.get(&block.block_id);
+            (block.block_id, run.map(|run| run.data().len()))
+        }));
+        let window = Window {
+            first_index: 0,
+            pages: (0, layout.page_count.saturating_sub(1)),
+            order: Arc::new(order_of(&layout.blocks)),
+            ends,
+        };
         Self {
             version,
             layout,
             blocks,
             notes,
             tables,
-            order,
-            page_blocks,
+            ..Self::default()
         }
+        .with_window(window)
     }
 
-    /// The place of a block in the flow.
+    /// The same layout, read as the window `window` describes.
+    #[must_use]
+    pub fn with_window(mut self, window: Window) -> Self {
+        let (first, last) = window.pages;
+        let mut page_blocks = vec![Vec::new(); last.saturating_sub(first) as usize + 1];
+        for (local, block) in self.layout.blocks.iter().enumerate() {
+            for page in block.page_span() {
+                let at = page.checked_sub(first).map(|at| at as usize);
+                if let Some(blocks) = at.and_then(|at| page_blocks.get_mut(at)) {
+                    blocks.push(window.first_index + local);
+                }
+            }
+        }
+        self.order = window.order;
+        self.first_index = window.first_index;
+        self.pages = window.pages;
+        self.ends = window.ends;
+        self.page_blocks = page_blocks;
+        self
+    }
+
+    /// The place of a block in the flow of the document, whether or not the
+    /// window carries it.
     #[must_use]
     pub fn index_of(&self, block: &TreeID) -> Option<usize> {
         self.order.get(block).copied()
     }
 
-    /// The indices of the blocks a page shows, in flow order.
+    /// The block at a place in the flow, when the window carries it.
+    #[must_use]
+    pub fn block(&self, index: usize) -> Option<&BlockLayout> {
+        self.layout.blocks.get(index.checked_sub(self.first_index)?)
+    }
+
+    /// The blocks the window carries, each with its place in the flow.
+    pub fn window_blocks(&self) -> impl DoubleEndedIterator<Item = (usize, &BlockLayout)> {
+        let first = self.first_index;
+        self.layout
+            .blocks
+            .iter()
+            .enumerate()
+            .map(move |(local, block)| (first + local, block))
+    }
+
+    /// How many blocks the document holds, carried or not.
+    #[must_use]
+    pub fn block_count(&self) -> usize {
+        self.order.len()
+    }
+
+    /// Whether the window carries a block.
+    #[must_use]
+    pub fn carries(&self, block: &TreeID) -> bool {
+        self.index_of(block)
+            .and_then(|index| self.block(index))
+            .is_some()
+    }
+
+    /// The first and the last page the window carries.
+    #[must_use]
+    pub fn pages(&self) -> std::ops::RangeInclusive<u32> {
+        self.pages.0..=self.pages.1
+    }
+
+    /// The two ends of the text of the document.
+    #[must_use]
+    pub fn ends(&self) -> Option<TextEnds> {
+        self.ends
+    }
+
+    /// The indices of the blocks a page shows, in flow order. Empty for a
+    /// page the window does not carry.
     #[must_use]
     pub fn blocks_on(&self, page: u32) -> &[usize] {
-        self.page_blocks
-            .get(page as usize)
+        page.checked_sub(self.pages.0)
+            .and_then(|at| self.page_blocks.get(at as usize))
             .map_or(&[], Vec::as_slice)
     }
+}
+
+/// Every block of `blocks`, by its place in the flow.
+#[must_use]
+pub fn order_of(blocks: &[BlockLayout]) -> HashMap<TreeID, usize> {
+    blocks
+        .iter()
+        .enumerate()
+        .map(|(index, block)| (block.block_id, index))
+        .collect()
+}
+
+/// The first and the last block holding text, from blocks in flow order,
+/// each with the length of its text when it has one.
+///
+/// It reads from both ends, so a document whose ends hold text answers at
+/// once.
+pub fn text_ends<I>(blocks: I) -> Option<TextEnds>
+where
+    I: DoubleEndedIterator<Item = (TreeID, Option<u32>)> + Clone,
+{
+    let first = blocks.clone().find_map(|(id, len)| len.map(|_| id))?;
+    let (last, last_len) = blocks.rev().find_map(|(id, len)| Some((id, len?)))?;
+    Some(TextEnds {
+        first,
+        last,
+        last_len,
+    })
 }
 
 /// A table as the view draws it: where each cell sits, and the text it holds

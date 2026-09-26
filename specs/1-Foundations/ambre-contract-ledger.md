@@ -19,16 +19,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2587 rows: 2298 shipped, of which 775 loose. 289 unbuilt.**
+**2589 rows: 2301 shipped, of which 775 loose. 288 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 227 | 221 | 542 | 533 | 1523 |
+| `verified` | 227 | 221 | 542 | 536 | 1526 |
 | `failing` | 39 | 46 | 22 |  | 107 |
 | `untested` | 266 | 143 | 234 | 3 | 646 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
-| `unimplemented` | 55 | 56 | 23 | 155 | 289 |
+| `unimplemented` | 55 | 56 | 23 | 154 | 288 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -141,7 +141,7 @@
 | `ambre-spec-prose-inline-styles.md` | 25 | 25 | 24 | 1 |  |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
 | `ambre-spec-prose-page-rendering.md` | 23 | 21 | 21 |  | 2 |
-| `ambre-spec-prose-pagination.md` | 49 | 47 | 47 |  | 2 |
+| `ambre-spec-prose-pagination.md` | 49 | 48 | 48 |  | 1 |
 | `ambre-spec-prose-selection.md` | 37 | 35 | 35 |  | 2 |
 | `ambre-spec-prose-slash-command.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-prose-table-of-contents.md` | 14 | 14 | 14 |  |  |
@@ -150,7 +150,7 @@
 | `ambre-spec-prose-toolbar.md` | 19 | 15 | 15 |  | 4 |
 | `ambre-spec-prose-track-changes.md` | 40 | 38 | 38 |  | 2 |
 | `ambre-spec-prose-undo.md` | 3 | 3 | 3 |  |  |
-| `ambre-spec-prose-viewport.md` | 17 | 10 | 10 |  | 7 |
+| `ambre-spec-prose-viewport.md` | 19 | 12 | 12 |  | 7 |
 | `ambre-spec-prose-word-count.md` | 13 | 13 | 13 |  |  |
 
 ## WHICH DOCUMENT DECLARES AN ID
@@ -214,7 +214,7 @@
 | `ambre-spec-prose-toolbar.md` | PROSE-UI-053..057,096..104,188..192 |
 | `ambre-spec-prose-track-changes.md` | PROSE-FEAT-004,010..011,082..089,257..277,300..304; PROSE-UI-051..052,148 |
 | `ambre-spec-prose-undo.md` | PROSE-UI-045,073..074 |
-| `ambre-spec-prose-viewport.md` | PROSE-UI-007,021..026,123..132 |
+| `ambre-spec-prose-viewport.md` | PROSE-UI-007,021..026,123..132,211..212 |
 | `ambre-spec-prose-word-count.md` | PROSE-FEAT-018,038..040,119..127 |
 | `ambre-spec-render-assets.md` | CANVAS-006..007,017..024,051..054,067..069 |
 | `ambre-spec-schema-version.md` | SCHEMA-001..016 |

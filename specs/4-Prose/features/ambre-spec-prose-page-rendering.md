@@ -92,13 +92,14 @@ impl ParleyRunData {
 /// A shared handle on one shaped block. Two handles are equal when they are one run.
 pub struct ShapedRun(Arc<ParleyRunData>);
 
-/// What the Logic thread hands the view: the page layout, and the runs of the blocks
-/// and the notes it places, stamped with the version the paginator reached.
+/// What the Logic thread hands the view: the page geometry of the document, and the
+/// blocks, runs and notes of the pages the view asked for (`PROSE-125`).
 pub struct ShapedLayout {
     pub version: u64,
     pub layout:  Arc<PageLayout>,
     pub blocks:  HashMap<TreeID, ShapedRun>,
     pub notes:   HashMap<Uuid, ShapedRun>,
+    /* private: the flow order of every block, the pages carried, the two ends of the text */
 }
 ```
 

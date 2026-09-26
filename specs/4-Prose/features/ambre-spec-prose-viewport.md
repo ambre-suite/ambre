@@ -38,6 +38,8 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-UI-126` | `POST` | A scroll MUST move the column by the distance the gesture asks for, up to the clamp. | this spec section 3 | `ambre_prose::view::tests::a_scroll_moves_by_the_gesture_up_to_the_ends_and_nothing_else` | none | verified |
 | `PROSE-UI-127` | `FRAME` | A scroll MUST NOT change the zoom, MUST NOT rebuild the column and MUST NOT write to the document. | derived | `ambre_prose::view::tests::a_scroll_moves_by_the_gesture_up_to_the_ends_and_nothing_else` | none | verified |
+| `PROSE-UI-211` | `POST` | A frame whose built pages the layout in force does not carry MUST ask the Logic thread once for those pages and a margin around them. | this spec section 2 | `ambre_prose::view::tests::a_scroll_asks_for_the_pages_around_the_canvas` | none | verified |
+| `PROSE-UI-212` | `POST` | Revealing a block the layout in force does not carry MUST ask for its pages, then scroll to it once a layout carries it. | this spec section 2 | `ambre_prose::view::tests::revealing_a_block_not_carried_asks_for_it_then_shows_it` | none | verified |
 
 ### 1.3 Zoom about a point
 
@@ -64,7 +66,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the scroll offset and the zoom are view state on the UI thread, where
   `UI-THREAD-004` bans a network, crypto or persistence path. `PROSE-UI-010`
   (`features/ambre-spec-prose-engine.md section 1`) keeps both out of the document.
-* **Verification.** 10 `verified`, 7 `unimplemented`. The state rows are property tests over the
+* **Verification.** 12 `verified`, 7 `unimplemented`. The state rows are property tests over the
   column in `crates/ambre-prose`, being arithmetic over three numbers; the others are host tests of
   the view. `PROSE-UI-025` and the zoom rows wait on the
   "One zoom model" Story (`ambre-roadmap.md` E8).
@@ -145,6 +147,16 @@ no block (`features/ambre-spec-prose-page-rendering.md`).
 **Culling.** A block is built for a frame when the page it starts on is in the visible range, plus
 one page on each side (`PROSE-UI-007`). A block outside that range is neither shaped nor
 rasterized; its runs stay cached and unbuilt.
+
+**Window.** The view holds the pages the Logic thread last handed, not the document
+(`PROSE-125`). The page count and the page box stay the document's, so the column and the scroll
+range are whole. A frame whose built pages fall outside the window asks for them, four pages of
+margin on each side (`PROSE-UI-211`). A page not carried yet draws as a blank sheet until the
+answer comes.
+
+A block revealed off the window is asked for by its id, and the view scrolls to it
+once a layout carries it (`PROSE-UI-212`). The flow order and the two ends of the text stay
+global, so a selection of the whole document holds without its blocks.
 
 **Zoom.** A zoom multiplies the factor and clamps it (`PROSE-UI-024`). It recomputes the column's
 left margin so the column stays centred (`PROSE-UI-026`). It solves the scroll offset that keeps
