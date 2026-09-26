@@ -202,9 +202,10 @@ each `channel_id` to its category and its position. It also lists the public cha
 member has not joined yet. Every member of the space sees the same content.
 
 **The user settings hold the personal state.** Murmure keeps no store of its own. It writes one
-`"murmure"` section in the sealed per-user store of the `User settings` Story (`ambre-roadmap.md`
-post-V1). Macro approvals and the personal dictionary of Prose already wait on that store. That
-Story decides the key, the document layout and how a new device finds the store.
+`"murmure"` section in the sealed per-user store of the
+`User settings` Story (`ambre-roadmap.md` POST-V1).
+Macro approvals and the personal dictionary of Prose already wait on that store. That Story
+decides the key, the document layout and how a new device finds the store.
 
 - `"layout"` (Map) -- `{channel_id: {group, position, hidden, collapsed}}`
 - `"notify"` (Map) -- `{channel_id: "all" | "mentions" | "none"}`
@@ -343,7 +344,7 @@ The index format assumes that a sealed segment is immutable. The sketch does not
 | **SQLite/FTS5 compiled to WASM** | A C library, against the Rust-first pillar. |
 | **A sealed index document of the user's channels** | The relay already holds the membership. A second list drifts after a revoke and shows a channel whose key is gone. |
 | **Bookmarks and followed threads in local storage** | A new device starts empty, and a new device is where the user needs them most. |
-| **A Murmure document of its own for personal state** | The `User settings` Story already plans one sealed store per user. A second store gives the same user two sources of truth. |
+| **A Murmure document of its own for personal state** | The `User settings` Story (`ambre-roadmap.md` POST-V1) already plans one sealed store per user. A second store gives the same user two sources of truth. |
 | **Client-side filtering of each push after decryption** | Web Push requires a visible notification for each push. Safari cancels the subscription after three silent pushes. |
 
 ### Product

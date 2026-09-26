@@ -73,6 +73,16 @@ that component's prefix instead.
 
 * **Accepted:** the relay infers that a client with a given public key modified a given document at
   a given instant. That is the metadata of the table above, read as a pattern.
+* **Accepted:** the membership graph. The relay knows which public keys are members of which
+  document, readers included. For a Murmure channel, that graph shows who talks with whom.
+  * The relay needs the graph to route a frame and to refuse a non-member.
+  * A subscription reveals the graph anyway, so a sealed membership list would hide nothing.
+  * The leak stops at the graph. A document identifier is a UUID v7 minted on the client: a
+    timestamp and random bits, never derived from a name.
+  * A member row carries only what access control and the unwrap read. That is the member, the
+    role, the wrapped document key and the inviter whose exchange key wrapped it.
+  * The inviter column tells the relay who invited whom. The unwrap needs the inviter's exchange
+    key, so that edge of the graph is accepted too.
 * **Not accepted, and stated as a defect:** a media blob's address, which is a hash of its
   plaintext, and its media type (`ambre-spec-media.md`, `SYNC-050`, `SYNC-053`).
 
@@ -159,6 +169,7 @@ The boundary has no control of its own. What a user meets is what it costs them.
 | One key per document, wrapped per member | a per-user key index held server-side | it makes the relay the authority on who may read what, which is the property being removed. Wrapping the document key for each member's exchange key keeps the relay a carrier |
 | The plaintext delta crosses the worker boundary | sealing on the Logic thread, so that no plaintext ever crosses a `postMessage` | it means compiling cryptography into the Main instance, which puts the keys in the same memory as the renderer and the page. A structured clone stays in the user's own process, so the hop costs a copy and buys key isolation |
 | The metadata pattern is an accepted leak, written down | claiming the relay learns nothing at all | it would make the pillar unfalsifiable: a relay that routes must know who writes where and when. `ZK-007` exists to bound that set rather than to refuse it |
+| The membership graph is an accepted leak | hiding membership from the relay, through a fan-out by the sender or anonymous credentials | the relay then has no subscription check and no targeted push, and each message costs one send per member. A document suite gains too little for that cost, so the graph is written down instead |
 | The media address is a defect, not a second accepted leak | widening the whitelist of `ZK-007` to cover the address | the address is a hash of plaintext, so it answers "does this document contain this file" for any file the relay already holds. That is a capability, not metadata, and accepting it would put a capability inside a list that bounds metadata |
 | The escrow is opt-in and organization-scoped | a platform-wide key escrow for account recovery | a recovery path an owner can use without the member's consent is a second key holder, so it may exist only where an organization already claims that authority, and never for a personal account |
 
@@ -183,6 +194,9 @@ The boundary has no control of its own. What a user meets is what it costs them.
   non-member asking for a URL is refused one.
 * **The ephemeral field set is not compared to anything.** `ZK-013` names three fields, and the
   test on that path holds the author binding instead. A frame gaining a fourth field passes.
+* **The whitelist omits the member row.** `ZK-007` names nine fields. The member row adds a role
+  and an inviter. The relay reads the role and serves the inviter for the unwrap. The row must add
+  both, or name the membership graph as a separate accepted set.
 * **No rule covers what the relay may keep after a delete.** The rows are `SRV-017` and `SRV-057`,
   and until they move, a deleted document leaves its sealed objects in storage.
 
