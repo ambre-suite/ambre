@@ -105,6 +105,7 @@ never share one, which is the invariant a Loro document needs.
 3. The Logic thread reads the PeerIDs of the delta from the Loro blob metadata, with no import.
 4. It recomputes each PeerID from the signer key and the nonce. One mismatch refuses the delta.
 5. It imports the delta. An application check on the operations, when one exists, runs just before.
+   Murmure carries its deltas as Loro JSON updates, so its check reads them with no document.
 
 **Resolving a PeerID to a user.** A reader looks the PeerID up in the registry and recomputes the
 hash from the entry. A match resolves to the user of the entry. A mismatch or an absent entry

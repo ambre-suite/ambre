@@ -16,7 +16,7 @@
 use std::hint::black_box;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use loro::{ExportMode, LoroDoc, LoroList, LoroMap, LoroText, VersionVector};
+use loro::{ExportMode, JsonSchema, LoroDoc, LoroList, LoroMap, LoroText, VersionVector};
 
 /// The message counts of an active segment. 5000 is the close threshold of
 /// `ambre-spec-budgets.md` section 6.
@@ -218,6 +218,65 @@ fn bench_snapshot(c: &mut Criterion) {
     group.finish();
 }
 
+/// The authorship check with no fork. The last delta travels as a Loro JSON
+/// update, so the receiver reads its operations with no document. It then
+/// imports exactly what it read.
+fn bench_json_check(c: &mut Criterion) {
+    let mut group = c.benchmark_group("segment_json_check");
+    group.sample_size(20);
+    for count in SIZES {
+        let segment = build(count);
+        let (last, head) = segment.deltas.split_last().expect("one delta at least");
+        let doc = LoroDoc::new();
+        doc.import_batch(head).expect("import head");
+        let before = doc.oplog_vv();
+        let probe = LoroDoc::new();
+        probe.import_batch(&segment.deltas).expect("import all");
+        let json = serde_json::to_vec(&probe.export_json_updates(&before, &probe.oplog_vv()))
+            .expect("json");
+        if count == SIZES[SIZES.len() - 1] {
+            eprintln!(
+                "last delta: {} bytes binary, {} bytes JSON",
+                last.len(),
+                json.len()
+            );
+        }
+        group.bench_function(format!("decode_and_scan/{count}"), |b| {
+            b.iter(|| {
+                let schema: JsonSchema = serde_json::from_slice(black_box(&json)).expect("decode");
+                let ops: usize = schema.changes.iter().map(|change| change.ops.len()).sum();
+                black_box((schema, ops))
+            });
+        });
+        group.bench_function(format!("import_json/{count}"), |b| {
+            b.iter_batched(
+                || {
+                    (
+                        doc.fork(),
+                        serde_json::from_slice::<JsonSchema>(&json).expect("decode"),
+                    )
+                },
+                |(target, schema)| {
+                    target.import_json_updates(schema).expect("import json");
+                    black_box(target)
+                },
+                BatchSize::LargeInput,
+            );
+        });
+        group.bench_function(format!("import_binary/{count}"), |b| {
+            b.iter_batched(
+                || doc.fork(),
+                |target| {
+                    target.import(last).expect("import");
+                    black_box(target)
+                },
+                BatchSize::LargeInput,
+            );
+        });
+    }
+    group.finish();
+}
+
 /// The authorship check: one received delta imported into a fork of its
 /// segment (`ambre-spec-op-authorship.md`).
 fn bench_fork_check(c: &mut Criterion) {
@@ -248,6 +307,7 @@ criterion_group!(
     bench_replay,
     bench_replay_batch,
     bench_snapshot,
-    bench_fork_check
+    bench_fork_check,
+    bench_json_check
 );
 criterion_main!(benches);

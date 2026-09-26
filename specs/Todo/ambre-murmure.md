@@ -211,8 +211,7 @@ An archive of Slack or Discord, in JSON, imported into a space.
 Nothing of the earlier sketch is left without a row. The compaction of an active segment is
 `MURMURE-222`, and a segment that cannot be opened is `MURMURE-218` to `MURMURE-221`. The keys an
 invitee needs come through the key chain of `ambre-spec-key-rotation.md` (`SYNC-115` to
-`SYNC-122`). One measured defect waits on a rule: the authorship fork fails its budget
-(`ambre-spec-budgets.md section 1`).
+`SYNC-122`). The authorship check reads each delta as a JSON update (`MURMURE-223`).
 
 ---
 

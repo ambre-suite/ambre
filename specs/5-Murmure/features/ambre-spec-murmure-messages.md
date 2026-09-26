@@ -19,6 +19,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-078` | `INV` | A message MUST carry the author who signed the delta that created it. | this spec section 3; `ambre-spec-op-authorship.md` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-079` | `CONC` | Two peers MUST accept and refuse the same deltas on a message. | this spec section 3; `AUTHOR-007` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-223` | `INV` | A delta of a segment or a thread document MUST travel as a Loro JSON update. | this spec section 3; `ambre-spec-murmure-schema.md section 7` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Send a message
 
@@ -46,11 +47,19 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-089` | `FAIL` | Given a delta that deletes a message of another author, every client MUST refuse the delta. | this spec section 3 | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-090` | `FRAME` | Deleting a message MUST NOT delete its thread. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** the authorship check imports each received delta into a fork of its segment, a row
-  of `ambre-spec-budgets.md section 1`.
+### 1.5 Receive a delta
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-224` | `FAIL` | Given a binary delta on a segment or a thread document, every client MUST refuse it. | this spec section 3; `MURMURE-223` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-225` | `POST` | An accepted delta MUST be imported exactly as the check read it. | this spec section 3 | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-226` | `FRAME` | Checking a delta MUST NOT copy its document. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+* **Budget.** the authorship check reads each received delta with no document, a row of
+  `ambre-spec-budgets.md section 1`. A delta weighs about 1.4 times its binary form on the wire.
 * **Boundary.** a message is sealed like any delta (`ZK-001`), and its kind rides in the sealed
   summary (`SYNC-113`). The relay never learns whether a frame is a message, an edit or a delete.
-* **Verification.** 13 `unimplemented`: no message exists in the code.
+* **Verification.** 17 `unimplemented`: no message exists in the code.
 
 ---
 
@@ -70,15 +79,23 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 **CRDT containers.** the message map of `ambre-spec-murmure-schema.md section 3`: `id`, `author`,
 `ts`, `content`, `attachments`, `thread`, `reactions`, `edited` and `deleted`.
 
+**Every rule reads the delta alone.** A Loro container identifier carries the PeerID that created
+it. The `author` of a message and the key of a reaction are values inside the operation. So the
+check needs the operations of the delta, and never the state of the segment.
+
+**A delta travels as a Loro JSON update** (`MURMURE-223`). A binary update opens only by an import
+into a document, and a copy of the segment costs 40 ms at 5000 messages. The JSON form reads with
+no document, in microseconds.
+
 **The authorship check, in steps.** It runs on each received delta, before import.
 
-1. Import the delta into a fork of its document.
-2. Read the operations the delta produced.
+1. Parse the JSON update. A binary delta is refused (`MURMURE-224`).
+2. Read its operations: each carries its container and its value.
 3. Refuse the delta when it creates a message under another author (`MURMURE-082`).
 4. Refuse it when it changes a message container created by another author's PeerID
    (`MURMURE-085`, `MURMURE-089`).
 5. Refuse it when it writes a reaction under another user's key (`MURMURE-094`).
-6. Import it into the real document otherwise.
+6. Import otherwise, from the update the check read (`MURMURE-225`).
 
 A PeerID resolves to its user through `ambre-spec-op-authorship.md`. Every client runs the same
 check on the same delta, so every client reaches the same verdict (`MURMURE-079`).
@@ -107,6 +124,9 @@ the `Moderation` Story (`ambre-roadmap.md` E5).
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
 | The check runs before import | a filter at display | the filter detects and prevents nothing: a last-writer-wins value is already overwritten |
+| A delta travels as a JSON update | a fork of the segment per delta | a fork encodes and decodes the whole segment: 40 ms at 5000 messages on a desktop |
+| A delta travels as a JSON update | a decoder of our own for the binary format | the binary format is internal to Loro, and it would break at each upgrade |
+| A delta travels as a JSON update | smaller segments | a fork still costs 3 ms at 500 messages on a desktop, and the phone budget is 5 ms |
 | A delete empties the content | a tombstone that keeps the text | the text would stay readable to every member, against the wish of its author |
 | Only the author changes a message | a moderator role in the same check | a role lives in another document, and a revoke concurrent with a delete has no single answer without the relay |
 | A late edit goes to an amendments document | new deltas on the final segment | every old segment would take concurrent writes again, and its search index would turn mutable |
@@ -118,6 +138,7 @@ the `Moderation` Story (`ambre-roadmap.md` E5).
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing is built.** No message, and no authorship check, exists.
-* **The fork fails its budget.** A fork encodes and decodes a full snapshot of the segment. It costs
-  3 ms at 500 messages and 40 ms at 5000, on a desktop in native code, against 5 ms on a phone
-  (`ambre-spec-budgets.md section 1`). No rule yet says what replaces a fork per delta.
+* **The JSON form costs bytes.** A message delta weighs 346 bytes compressed, against 214 for the
+  binary form. The figure comes from zlib, and the envelope compresses with zstd.
+* **The JSON schema of Loro is pinned nowhere yet.** A Loro upgrade that changes it would split
+  clients on two schemas.

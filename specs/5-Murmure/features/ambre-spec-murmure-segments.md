@@ -135,6 +135,9 @@ The segments have no control of their own. A user meets them only as a channel t
 | The deltas stay until a second client confirms | purging at the finalization | a false snapshot from a malicious member would lose messages for good |
 | A shallow final snapshot | a full snapshot with its history | the history keeps the text of every deleted message in the ciphertext |
 | The relay arbitrates the finalization | a lock the clients take | a client does not reach the relay store, so the relay holds the lease |
+| An active segment is compacted by count | a compaction every one or two minutes | a quiet channel would upload a snapshot for nothing, and a busy one could still pile up deltas between two ticks |
+| A full snapshot while the segment is active | a shallow snapshot at each compaction | a client that sends a change made before the snapshot could no longer merge it |
+| A compaction bounds the deltas past the snapshot | smaller segments instead | every close adds a lease, a final snapshot and a search index, and a smaller segment still replays its whole tail |
 
 ---
 

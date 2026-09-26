@@ -192,6 +192,7 @@ The boundary has no control of its own. What a user meets is what it costs them.
 | The membership graph is an accepted leak | hiding membership from the relay, through a fan-out by the sender or anonymous credentials | the relay then has no subscription check and no targeted push, and each message costs one send per member. A document suite gains too little for that cost, so the graph is written down instead |
 | The media address is a defect, not a second accepted leak | widening the whitelist of `ZK-007` to cover the address | the address is a hash of plaintext, so it answers "does this document contain this file" for any file the relay already holds. That is a capability, not metadata, and accepting it would put a capability inside a list that bounds metadata |
 | The escrow is opt-in and organization-scoped | a platform-wide key escrow for account recovery | a recovery path an owner can use without the member's consent is a second key holder, so it may exist only where an organization already claims that authority, and never for a personal account |
+| A key identifier is accepted in the `ZK-007` set | keeping every key identifier sealed | the relay could then neither refuse a frame under a stale key nor keep the links of a key chain in order |
 
 ---
 

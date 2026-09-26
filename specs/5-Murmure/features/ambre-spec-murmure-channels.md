@@ -102,8 +102,9 @@ a leave.
    every segment since.
 4. For a direct message of two, both members see the notice before the invite applies.
 
-**A leave, in steps.** The leaving member adds a signed entry, and the relay removes the row. An
-online member client then rotates the key and closes the active segment (`MURMURE-060`).
+**A leave, in steps.** The leaving member adds a signed entry, and the relay removes the row and
+marks the rotation owed (`SYNC-127`). The first member client to send rotates the key and closes
+the active segment (`SYNC-128`, `MURMURE-060`).
 
 **Code.** not built.
 

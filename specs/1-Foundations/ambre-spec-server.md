@@ -89,6 +89,15 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-111` | `POST` | A final segment MUST be deleted, with its index and its amendments, once its finalization time is older than the retention of its space. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-112` | `FRAME` | Applying retention MUST NOT delete an active or a closing segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.8 A document owes a rotation
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-122` | `POST` | A removal posted without a rotation MUST mark its document as owing one. | this spec section 3; `SYNC-127` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-123` | `FAIL` | While a rotation is owed, the relay MUST refuse every frame sealed under the key the removal left behind. | this spec section 3; `SYNC-125` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-124` | `POST` | A rotation that lands MUST clear the debt of its document. | this spec section 3; `SYNC-128` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-125` | `FRAME` | Refusing a frame for its key MUST NOT give it a sequence number. | this spec section 3; `ambre-spec-sequencer.md` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
+
 * **Budget.** the per-operation targets of `ambre-spec-budgets.md section 3`, and the roughly
   50 KB per open document of `ambre-spec-budgets.md section 6`. Every relay row of that register
   reads **none exists**: no bench measures the relay today.
@@ -263,6 +272,8 @@ read the activity, and set the retention of a space.
 | A document's kind is named after the application | naming a kind after the generic object it resembles | the kinds are a closed set the register checks, and naming them after the generic object -- a spreadsheet, a document, a board -- puts a second vocabulary beside the product's own, so every reader has to hold a translation table. |
 | The queries are written out, against a compile-time check | an object-relational mapper over the register | it hides the queries and blocks the asynchronous path. The queries here are the boundary's own enforcement -- a membership filter, a scoped lookup, a transaction over a re-key -- and a checked query is the abstraction that keeps them readable and still fails the build when a column moves. |
 | Cross-origin access is refused by default | a permissive default, adjusted per deployment | a permissive origin is one line, ships silently, and is exactly the mistake nobody notices until it is exploited. A deployment that names no origin gets none, and the permissive fallback exists only in development mode and announces itself (`SRV-068`). |
+| The relay refuses the key a removal left behind | refusing every write until someone rotates | a delta sealed under the new key would wait for nothing, and the document would freeze whenever no member is online |
+| The relay marks a debt and a member rotates | the relay rotating the key itself | the relay holds no key, and a key it chose would break the boundary `ZK-001` draws |
 
 ---
 

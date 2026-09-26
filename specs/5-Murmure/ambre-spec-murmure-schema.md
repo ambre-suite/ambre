@@ -190,7 +190,7 @@ amendments document.
 | Bump | `MURMURE-020` |
 | Unknown field | a map key no build knows is ignored on read, so a key a newer client wrote is dropped rather than refused |
 | Size | a segment closes at the segment size row of `ambre-spec-budgets.md section 6` |
-| Deltas | every document takes the document pipeline: the sequencer, the sealed envelope and the replay. A remote delta carries no version and applies blind, as in the other applications |
+| Deltas | every document takes the document pipeline: the sequencer, the sealed envelope and the replay. A remote delta carries no version and applies blind, as in the other applications. A segment or thread delta is a Loro JSON update, whose own `schema_version` a client checks (`MURMURE-223`) |
 
 ---
 

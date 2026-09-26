@@ -28,6 +28,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-088` | `INV` | The per-document map of remote ephemeral counters MUST be bounded. | this spec section 2; `SYNC-008` | `ambre_sync::ephemeral_tests::author_map_is_bounded` -- a hundred authors past the cap, and the map never exceeds it, and a peer can mint signing keys at will, so without the cap one document's presence state is an unbounded allocation | none | verified |
 | `SYNC-001` | `INV` | The Sync worker MUST NOT hand the socket a payload that has not passed through the sealing pipeline. | `ZK-001`; this spec section 2 | none | unheld -- the rule cannot be stated as a test at all: the wire ciphertext is a public byte vector that accepts any bytes from anywhere, so the fix is a private field with a constructor reachable only from the seal, section 4; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-018` | `INV` | Every payload sealed under a document key MUST carry the author signature and the commitment tag. | `ZK-001`; this spec section 2 | none | fails -- the document name and every media blob take the bare cipher with no signature and no tag, so the relay can substitute one for another inside a document nobody has to be a member of (`SYNC-068`, `SYNC-051`); lands with the `The document name is sealed like every other payload` Story (`ambre-roadmap.md` E7) | failing |
+| `SYNC-125` | `INV` | Every sealed payload MUST name, in its public metadata, the identifier of the key that sealed it. | this spec section 2; `SYNC-115` | not built | unbuilt -- lands with the `Every sealed object names its key` Story (`ambre-roadmap.md` E7) | unimplemented |
 
 ### 1.2 A payload is sealed
 
@@ -63,7 +64,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this is the boundary `ambre-spec-zero-knowledge.md` draws, on the client side. Every
   byte of user content that leaves the client leaves through the seal here. `SYNC-001` and
   `SYNC-020` keep the metadata down to the whitelist `ZK-007` names.
-* **Verification.** 8 `verified`, 1 `failing`, 8 `untested`, 3 `unimplemented`. What holds is
+* **Verification.** 8 `verified`, 1 `failing`, 8 `untested`, 4 `unimplemented`. What holds is
   refusal: a tampered byte, a wrong document and a wrong key fail closed. So do a bad signature, a
   replayed counter, a decompression bomb and an unknown codec. What is loose is every rule stated as
   an absence. No unsealed send is forbidden, no nonce asserted fresh, no order established.
@@ -78,9 +79,9 @@ metadata and by their transport. The seal and the open are the same code for all
 
 | Message | Carries | Travels by | Metadata the relay reads |
 |---|---|---|---|
-| an update | one CRDT delta | the socket | the document, the author key, the parent snapshot, the clock |
+| an update | one CRDT delta | the socket | the document, the author key, the key identifier, the parent snapshot, the clock |
 | a snapshot | a full CRDT state | a presigned upload, straight to object storage | the same, plus the parent proof |
-| an ephemeral frame | a presence sample | the socket | the document, the author key, the counter |
+| an ephemeral frame | a presence sample | the socket | the document, the author key, the key identifier, the counter |
 
 **The seal, in steps.** The output is one message of the three shapes above.
 
@@ -168,6 +169,7 @@ say which of the four refusals fired.
 | The version byte is sealed, not public | a version byte in the public metadata | it would let a relay reject an unknown version early, and it would let it read whether the payload compressed -- a property of the content. That tells a relay whether a delta was above or below the threshold, for every delta, which is a channel `ZK-007` does not allow |
 | The ceiling is derived per message, with a floor and a cap | one absolute limit for every message | it is either too low for a large legitimate snapshot or too high to bound a small hostile frame. Three numbers hold both ends and the pillar figure |
 | Making an unsealed payload unrepresentable is a type change, not a test | a test that walks every send site | it passes until the next send site is added. `SYNC-001` is the rule the product rests on and it has no test shape: any test asserts a path was taken, and the rule is that no other path exists. A private field with one constructor puts the compiler on it, permanently, which is the top of the ladder in `ambre-spec-testing.md section 2` |
+| The key identifier is public metadata | the identifier inside the ciphertext | the relay could not refuse a frame under a key a removal left behind (`SRV-123`), and a client would try every key before it knew which one to open with |
 
 ---
 
