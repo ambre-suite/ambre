@@ -19,6 +19,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-062` | `INV` | A message younger than the grace period MUST NOT be in a final segment. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-063` | `INV` | A final snapshot MUST be shallow: it MUST hold no text deleted before the finalization. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-222` | `INV` | An active segment MUST NOT hold more deltas past its latest snapshot than the budget register allows. | this spec section 3; `ambre-spec-budgets.md section 6`; `SRV-038` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Close the active segment
 
@@ -61,10 +62,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-077` | `FRAME` | A re-finalization MUST NOT drop an amendment written after the fold began. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the grace period, the lease, the verification delay and the erasure delay are rows
-  of `ambre-spec-budgets.md section 8`. The segment size row of section 6 bounds every snapshot here.
+  of `ambre-spec-budgets.md section 8`. The segment size row of section 6 bounds every snapshot here,
+  and the row beside it bounds the deltas a cold open replays.
 * **Boundary.** a final snapshot is sealed like any snapshot (`ZK-001`). The relay learns the state
   of each segment and its finalization time (`ZK-015`).
-* **Verification.** 17 `unimplemented`: no segment exists in the code.
+* **Verification.** 18 `unimplemented`: no segment exists in the code.
 
 ---
 
@@ -92,6 +94,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `active` | new messages, edits, deletes | it passes the segment size, and the relay closes it |
 | `closing` | edits and deletes | the grace period ends, and a lease is granted |
 | `final` | nothing: the amendments document takes late edits | never |
+
+**An active segment is compacted by count, never on a timer.** The relay asks a member client for
+a snapshot once the deltas past the latest one pass their budget (`SRV-038`, `MURMURE-222`). A
+quiet channel is never compacted for nothing, and a busy one is compacted as often as it writes. The
+snapshot is full, not shallow: a client may still send a change made before it.
 
 **A finalization, in steps.**
 
@@ -134,5 +141,7 @@ The segments have no control of their own. A user meets them only as a channel t
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing is built.** No segment, lease, amendment or re-finalization exists.
+* **The compaction waits on a Story scheduled later.** `SRV-038` lands with the `A document is
+  compacted as its history grows` Story (`ambre-roadmap.md` E7), a V1 Story. `MURMURE-222` needs it first.
 * **Nothing states what a reported mismatch leads to.** The deltas stay, and no rule names who
   finalizes again or how the member who sealed the false snapshot is shown.

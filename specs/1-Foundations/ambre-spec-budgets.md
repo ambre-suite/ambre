@@ -28,7 +28,9 @@
 | Passphrase-sealed file, one seal or one open (Argon2id, then one AEAD pass over the whole container) | < 1 s | < 2 s | Sync | the login work factor, deliberately: 64 MiB, 3 passes, 1 lane, paid per file rather than per session, because it is also what an offline guessing attack pays (`ambre-spec-docfile.md`, `DOCFILE-014`). The 64 MiB is the largest transient the Sync worker allocates, and it is released with the call -- **none exists** |
 | Quarantine release, 100 updates | < 1 ms | -- | Sync | criterion -- **none exists** |
 | `doc.import()` Loro update (1 KB delta) | < 2 ms | -- | Logic | criterion |
-| Murmure authorship check, one received delta imported into a fork of its segment | < 5 ms, to measure | -- | Logic | **none exists** -- the fork copies up to one segment of about 2 MB (`ambre-spec-op-authorship.md`) |
+| Murmure authorship check, one received delta imported into a fork of its segment | < 5 ms | -- | Logic | criterion `ambre-murmure` `segment_fork_check` -- **fails**: 3.0 ms at 500 messages, 12.9 ms at 2000, 40.3 ms at 5000, measured on a desktop in native code. `LoroDoc::fork` encodes and decodes a full snapshot, so the cost grows with the segment |
+| Murmure segment, Loro import of its snapshot, 5000 messages | < 10 ms | -- | Logic | criterion `ambre-murmure` `segment_snapshot` -- 2.7 ms on a desktop in native code |
+| Murmure segment, Loro replay of one delta past its snapshot | < 250 us | -- | Logic | criterion `ambre-murmure` `segment_replay_one_by_one` -- about 32 us on a desktop in native code: 198 ms for the 6250 deltas of a segment at its close |
 | Trame formula DAG recompute (10k cells) | < 50 ms | -- | Logic | custom benchmark -- **none exists** |
 | Scroll viewport response (P1, end-to-end) | < 15 ms | -- | Logic -> UI | benchmark e2e |
 | Trame CSV import (10k lines) | < 200 ms | -- | Logic | criterion -- **none exists** |
@@ -260,7 +262,8 @@
 | Server, per open document | ~50 KB | No in-process blob cache: `LIST doc:{id}:pending` buffers in Redis, ~50 deltas of ~1 KB over the 15 s window |
 | Documents held in memory, per client | < 32 MB, to measure | Every document the Logic thread holds for a list with activity badges, pinned ones included. Held by eviction (`RESID-001`) |
 | Local store, per client | < 500 MB, to measure | Inside the browser quota. Held by eviction (`RESID-002`) |
-| Murmure segment, at its close | 5000 messages or 2 MB of snapshot, whichever comes first | Bounds the first display of a channel and every final snapshot. A first estimate, to measure |
+| Murmure segment, at its close | 5000 messages or 2 MB of snapshot, whichever comes first | Bounds the first display of a channel and every final snapshot. Measured with chat-length bodies: 5000 messages make a snapshot of 816 KB, 515 KB shallow, so the message count binds first |
+| Murmure active segment, deltas past its latest snapshot | < 250, to measure on a phone | A cold open pays one inbound open (section 1, < 350 us) and one replay (section 1, < 250 us) for each. 250 of them cost about 150 ms of a phone cold open. Without a snapshot, a segment at its close replays 6250 deltas, fetched as 6250 objects. The relay asks for the snapshot (`SRV-038`) |
 | Light subscription, per document not held | < 1 KB | The key, the counters and the cursor (`RESID-004`) |
 | Color emoji font | loaded on first use, size to measure | Charged to the fonts row above. A full color emoji font weighs about 10 MB, so its size decides whether the fonts row still holds |
 

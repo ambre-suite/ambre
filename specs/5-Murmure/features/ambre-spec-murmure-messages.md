@@ -118,5 +118,6 @@ the `Moderation` Story (`ambre-roadmap.md` E5).
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing is built.** No message, and no authorship check, exists.
-* **The fork is not measured.** Its cost is an estimate, and a prototype decides whether a fork per
-  delta holds the budget.
+* **The fork fails its budget.** A fork encodes and decodes a full snapshot of the segment. It costs
+  3 ms at 500 messages and 40 ms at 5000, on a desktop in native code, against 5 ms on a phone
+  (`ambre-spec-budgets.md section 1`). No rule yet says what replaces a fork per delta.

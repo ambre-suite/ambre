@@ -208,16 +208,10 @@ An archive of Slack or Discord, in JSON, imported into a space.
 
 ## 3. NOT YET IN A SPEC
 
-The MVP specs leave three points of the earlier sketch without a row. Each needs one before its
-Story closes.
+The MVP specs leave one point of the earlier sketch without a row. It needs one before its Story
+closes. The compaction of an active segment is `MURMURE-222`, and a segment that cannot be opened
+is `MURMURE-218` to `MURMURE-221`.
 
-* **Compaction frequency.** An active channel writes far more updates than a document. The sketch
-  proposed a compaction every one to two minutes, against five for a document. No budget row
-  holds that figure.
-* **Decryption failures.** A client can hold a message whose key is missing, for example on a new
-  device. The message shows the cause and the remedy, such as "key bundle not received, ask a
-  member". A bare "unable to decrypt" is forbidden: Element users rank that state as a main
-  complaint.
 * **A signed key bundle.** `MURMURE-056` wraps every key since the latest history boundary for an
   invitee. It does not say that the wraps travel as one signed bundle, as Matrix MSC4268 does. The
   Matrix MSC3061 implementation forwarded keys one by one, and it had a vulnerability.

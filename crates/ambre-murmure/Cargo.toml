@@ -16,5 +16,12 @@ tracing = { workspace = true }
 # CRDT
 loro = { workspace = true }
 
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "segment"
+harness = false
+
 [lints]
 workspace = true

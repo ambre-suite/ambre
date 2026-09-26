@@ -50,10 +50,20 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-205` | `POST` | Up and Down in the list MUST move the focus from one message to the next. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-206` | `FRAME` | Moving the focus MUST NOT move a read cursor. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.5 A segment cannot be opened
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-218` | `FAIL` | Given a segment whose key this client does not hold, the list MUST show one band in its place, naming its time span, the cause and the remedy. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-219` | `FAIL` | Given a segment older than the member's history boundary, the list MUST show the boundary as the start of the channel, never as a failure. | this spec section 3; `features/ambre-spec-murmure-channels.md` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-220` | `FAIL` | Given a segment that fails to open under the key it names, the list MUST show it as damaged, never as a missing key. | this spec section 3; `SYNC-045` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-221` | `FRAME` | A segment the client cannot open MUST NOT stop the list from loading the segments before it. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** the frame budget of `ambre-spec-budgets.md section 2` holds the scroll, and the
   memory rows of section 6 hold the loaded segments.
-* **Boundary.** none: the list paints what the engine decrypted, and holds no key.
-* **Verification.** 16 `unimplemented`: no Murmure view exists.
+* **Boundary.** none: the list paints what the engine decrypted, and holds no key. A band shows
+  only what `meta` already tells every member: the span and the count of a segment.
+* **Verification.** 20 `unimplemented`: no Murmure view exists.
 
 ---
 
@@ -65,6 +75,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | reads last week, higher up | posts | the list stays where she reads (`MURMURE-190`) | none |
 | scrolls past the oldest loaded message | -- | older messages appear above, and nothing on screen jumps (`MURMURE-192`) | none |
 | posts three messages within a minute | -- | one header over the three (`MURMURE-183`) | none |
+| opens a channel on a new phone, before its keys arrive | -- | one band per unreadable segment, with its dates and whom to ask (`MURMURE-218`) | none |
+| joins a channel invited without history | -- | the boundary at the top, and no error (`MURMURE-219`) | none |
 
 ---
 
@@ -91,6 +103,28 @@ uses (`ambre-spec-ui.md section 2`). An image and an animated GIF are painted in
 the live region carries the focused message, with its author and its time (`MURMURE-207`). A new
 message at the bottom is announced there too, politely, and the focus stays put (`MURMURE-209`).
 
+**A segment that cannot be opened** keeps its place. The `segments` list of `meta` gives its time
+span and its message count, so the band says which messages it stands for. The engine names the
+cause; the list names the remedy.
+
+```rust
+pub enum Unreadable {
+    KeyNotReceived,         // no key for this segment reached this client
+    BeforeHistoryBoundary,  // the member was invited without this history
+    Damaged,                // the key it names is held, and the segment does not open
+}
+```
+
+| Cause | The band says | Remedy |
+|---|---|---|
+| `KeyNotReceived` | the keys for these messages have not reached this device | ask a member of the channel to share the history |
+| `BeforeHistoryBoundary` | the history before this date was not shared with you | none: the band is the start of the channel |
+| `Damaged` | these messages could not be verified | retry, which fetches the segment again from the relay |
+
+A bare "unable to decrypt" names no cause and no remedy, so no band shows it (`MURMURE-218`).
+A band is one row of the list, whatever the segment holds, so scrolling goes on past it
+(`MURMURE-221`).
+
 **Code.** not built.
 
 ---
@@ -102,6 +136,7 @@ message at the bottom is announced there too, politely, and the focus stays put 
 | the wheel, a drag or a key | the list scrolls |
 | the pointer over a message | its actions: react, reply, edit and delete when the message is one's own |
 | the new-messages separator | shown once, at the first unread message |
+| a band of unreadable messages | its cause and its remedy, read out to a screen reader as one row |
 
 ---
 
@@ -111,6 +146,8 @@ message at the bottom is announced there too, politely, and the focus stays put 
 | :--- | :--- | :--- |
 | Messages on the canvas | a DOM list | a DOM node per message breaks the frame budget on a channel of years, and the other applications already paint their content on the canvas |
 | A message as the scroll anchor | a pixel offset | a load above shifts every offset, and the reader loses the line |
+| A band per unreadable segment | one line per message that did not decrypt | the whole segment shares one key, so one cause covers it, and a thousand identical lines bury the readable ones |
+| A band that names cause and remedy | a bare "unable to decrypt" | Element users rank that state among their main complaints: it says nothing they can act on |
 
 ---
 

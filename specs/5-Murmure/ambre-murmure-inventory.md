@@ -23,15 +23,15 @@
 | `murmure-keyboard` | No frequent action in Murmure needs the mouse. | design-only | 13 |  |
 | `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | design-only | 12 |  |
 | `murmure-mentions` | A member names another in a message with `@`. | design-only | 8 |  |
-| `murmure-message-list` | The conversation of a channel, newest at the bottom. | design-only | 16 |  |
+| `murmure-message-list` | The conversation of a channel, newest at the bottom. | design-only | 20 |  |
 | `murmure-messages` | A member writes a message, edits it, or deletes it. | design-only | 13 |  |
 | `murmure-notifications` | A member working in another tab learns that someone mentioned them or wrote to them directly. | design-only | 5 |  |
 | `murmure-reactions` | A member answers a message with an emoji. | design-only | 7 |  |
 | `murmure-search` | A member finds a message by its words, in the channels they have loaded. | design-only | 5 |  |
-| `murmure-segments` | A channel grows for years and still opens fast. | design-only | 17 |  |
+| `murmure-segments` | A channel grows for years and still opens fast. | design-only | 18 |  |
 | `murmure-spaces` | A team gathers in a space. | design-only | 15 |  |
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | design-only | 8 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | design-only | 7 |  |
 | `murmure-unread` | The sidebar shows where something new is, and how much. | design-only | 11 |  |
 
-**18 features: 0 implemented, 0 partial, 18 design-only. 196 contract rows, 0 loose.**
+**18 features: 0 implemented, 0 partial, 18 design-only. 201 contract rows, 0 loose.**
