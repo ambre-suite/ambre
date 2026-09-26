@@ -384,6 +384,7 @@ The index format assumes that a sealed segment is immutable. The sketch does not
 | **Bookmarks and followed threads in local storage** | A new device starts empty, and a new device is where the user needs them most. |
 | **Private channels in the space catalogue** | Every space member reads the catalogue, so each private channel would show its name and existence to the whole space. |
 | **Public channel names in the channel `meta` document** | A member who has not joined holds no key for `meta`, so the channel to join would have no name. |
+| **One key for every public channel of a space** | A bot or a guest invited to one channel would read every public channel of the space. Reconsider it if a measure shows that the rotation on a space leave is too slow for the admin client, or too frequent for large spaces. |
 | **A member online to wrap the key of a public channel** | Joining would wait on another member. The catalogue carries the key, and a space leave pays for it with a rotation. |
 | **A Murmure document of its own for personal state** | The `User settings` Story (`ambre-roadmap.md` POST-V1) already plans one sealed store per user. A second store gives the same user two sources of truth. |
 | **Client-side filtering of each push after decryption** | Web Push requires a visible notification for each push. Safari cancels the subscription after three silent pushes. |
