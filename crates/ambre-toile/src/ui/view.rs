@@ -3630,8 +3630,8 @@ impl ToileView {
     /// Service a paste from the shared [`ClipboardBlob`](ambre_bus::ClipboardBlob)
     /// transport (`toile-clipboard`). When `own_copy` (the synchronous ownership
     /// token was still on the clipboard) it prefers the in-memory `last_clip` at
-    /// full fidelity. That is immune to the async OS write having failed on
-    /// Firefox. Otherwise it decodes the blob's Ambre bytes. Either way,
+    /// full fidelity, whatever the asynchronous OS write did. Otherwise it
+    /// decodes the blob's Ambre bytes. Either way,
     /// `PasteElements` lands the id-free payload at the cursor's world position. A
     /// blob with no decodable Ambre payload is ignored (plain-text paste into a
     /// board is out of MVP).
@@ -3646,13 +3646,11 @@ impl ToileView {
             }
             return;
         }
-        let source = match &self.last_clip {
-            Some(clip) if own_copy => clip,
-            _ => &blob,
-        };
+        let source = ambre_bus::ClipboardBlob::source(self.last_clip.as_ref(), &blob, own_copy);
         let Some(payload) = source
             .ambre
             .as_ref()
+            .filter(|_| !source.plain)
             .and_then(|bytes| postcard::from_bytes::<ToileClipboardPayload>(bytes).ok())
         else {
             return;

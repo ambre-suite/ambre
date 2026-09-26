@@ -734,7 +734,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         if boot_is_toile {
             toile_chrome::context_entries_for(&toile_ctx_scope.get())
         } else if boot_is_prose {
-            prose_context_entries()
+            ambre_prose::chrome::context_entries()
         } else {
             trame_chrome::context_entries_for(ctx_scope.get(), filter_active.get())
         }
@@ -1577,15 +1577,6 @@ pub(crate) fn AppRoot() -> impl IntoView {
             }
         </Show>
     }
-}
-
-/// The page's context menu in Prose: the clipboard entries, titled from the
-/// command table (`PROSE-UI-227`).
-fn prose_context_entries() -> Vec<ambre_chrome::MenuEntry> {
-    ambre_prose::commands::context_menu(&ambre_prose::commands::Locale::En)
-        .into_iter()
-        .map(|(id, title)| ambre_chrome::MenuEntry::new(id, title))
-        .collect()
 }
 
 /// Copy or cut from a menu: focus the text pipe and ask the browser to fire

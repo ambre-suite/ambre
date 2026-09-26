@@ -5,8 +5,7 @@
 //! moving the caret, undo) are decoded by the view from the input pipe, and no
 //! table names them.
 
-pub use ambre_commands::Locale;
-use ambre_commands::{Command, CommandCategory, CommandId, IconId, KeyBinding, Keymap};
+use ambre_commands::{Command, CommandCategory, CommandId, IconId, KeyBinding, Keymap, Locale};
 
 /// Taking the document out as a file.
 const FILE: CommandCategory = CommandCategory("file");
@@ -34,15 +33,6 @@ pub const PASTE_PLAIN: CommandId = ambre_commands::shared::PASTE_PLAIN;
 
 /// The entries of the page's context menu, in the order it shows them.
 pub const CONTEXT_MENU: [CommandId; 4] = [CUT, COPY, PASTE, PASTE_PLAIN];
-
-/// Each entry of the context menu with its title, in menu order.
-pub fn context_menu(locale: &Locale) -> Vec<(CommandId, String)> {
-    CONTEXT_MENU
-        .into_iter()
-        .filter_map(|id| ambre_commands::find(COMMANDS, id))
-        .map(|c| (c.id, (c.title)(locale)))
-        .collect()
-}
 
 /// The five controls of the format bar. A control and its chord invoke the
 /// same id, and the id resolves to one mark key (`PROSE-UI-056`).
@@ -247,6 +237,5 @@ mod tests {
                 assert_eq!(keymap.resolve(*chord), None);
             }
         }
-        assert_eq!(context_menu(&Locale::En).len(), CONTEXT_MENU.len());
     }
 }

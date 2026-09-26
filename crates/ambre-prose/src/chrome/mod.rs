@@ -11,6 +11,9 @@
 
 use leptos::prelude::*;
 
+mod menu;
+pub use menu::context_entries;
+
 use ambre_commands::CommandId;
 
 use crate::events::{SuggestionKind, TriState};

@@ -376,29 +376,24 @@ impl ProseUiState {
     }
 
     /// The paste that what the host read stands for. The payload kept from
-    /// the last copy serves while the clipboard is still that copy: the host
-    /// found its token, or the text still matches. Otherwise what the host
-    /// read serves (`PROSE-UI-043`).
+    /// the last copy serves while the host found this tab's token on the
+    /// clipboard; otherwise what the host read serves (`PROSE-UI-043`). The
+    /// choice is the one every view makes (`UI-THREAD-053`).
     #[must_use]
     pub fn paste_input(&self, read: ambre_bus::ClipboardBlob, own_copy: bool) -> ProseInput {
-        if read.plain {
+        let source = ambre_bus::ClipboardBlob::source(self.last_clip.as_ref(), &read, own_copy);
+        if source.plain {
+            // The menu path reads every half, so the view drops them itself.
             return ProseInput::Paste {
-                text: read.text,
+                text: source.text.clone(),
                 html: None,
                 rich: None,
             };
         }
-        match &self.last_clip {
-            Some(kept) if own_copy || kept.text == read.text => ProseInput::Paste {
-                text: kept.text.clone(),
-                html: kept.html.clone(),
-                rich: kept.ambre.clone(),
-            },
-            _ => ProseInput::Paste {
-                text: read.text,
-                html: read.html,
-                rich: read.ambre,
-            },
+        ProseInput::Paste {
+            text: source.text.clone(),
+            html: source.html.clone(),
+            rich: source.ambre.clone(),
         }
     }
 

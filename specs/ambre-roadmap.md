@@ -149,6 +149,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
 | `[x]` One style register per cell | -- | a cell's whole style converges as one value, so no concurrent edit can tear it |
+| `[ ]` Paste as plain text in Trame | V1 | the plain-paste chord and a context-menu entry land the plain-text mirror as literal cells, the typed payload and the tab's own copy ignored |
 | `[x]` Column and row reorder | MVP | drag a whole column or row to a new position, references following the data |
 | `[ ]` Incremental remote apply | -- | a remote change costs the cells it touched, and the UI re-fetches the range that changed instead of the whole viewport |
 | `[ ]` Cached sheet indexes | -- | a scroll on one sheet no longer rebuilds every other sheet's index |
@@ -169,6 +170,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
+| `[ ]` Paste as plain text in Toile | V1 | the plain-paste chord and a context-menu entry land the plain text as one text element at the pointer, where a paste of text today lands nothing |
 | `[ ]` Snap to the board grid | V1 | a drag, a resize and a nudge quantize to the grid step the board asks for, which is drawn today and magnetic nowhere |
 | `[ ]` Rich text on the board | V1 | a note body converges character by character and carries per-run formatting, on the shared text substrate Prose unblocks. Today it is one whole value and one style per element |
 | `[ ]` Engine and render optimization | -- | a large board stays fluid: bulk index updates, cheaper layer diffs, memoized routing, atlas eviction. It is where the parent-lookup scan, the paint-order rewrite and the uncalled connectors land |
@@ -250,6 +252,7 @@ owns the subsystem.
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
 | `[x]` One command registry | MVP | one description per command -- title, icon, category, chord -- with the menus, the keyboard and the command palette all derived from it instead of built beside it |
+| `[ ]` The launcher holds no application logic | V1 | the shell stops deciding what an application's commands do: each application hands the shell one command handler and its own panels and dialogs, and the launcher keeps the integration and the shell |
 | `[ ]` One find and replace | V1 | one match session with a live cursor, in every app, instead of Trame's whole-grid re-scan |
 | `[ ]` One zoom model | V1 | one zoom engine behind the shared widget: Trame gains keyboard and pinch zoom and zoom-to-selection, Prose gains zoom. Touch and pinch belong here, in every app, and to no other row |
 | `[ ]` One text-editing substrate | V1 | one editing core under both layout drivers: the input pipe, composition, the caret and selection model |

@@ -95,6 +95,10 @@ pub struct FrameHost {
     /// `copy`/`cut`, re-published by the async write (`UI-THREAD-023`), and read
     /// back to answer rung 2 of the Paste-button path.
     clip_token: String,
+    /// Whether the asynchronous write of the last copy reached the clipboard.
+    /// It replaces the synchronous formats, token included, with `web `
+    /// variants a `paste` event cannot see (`UI-THREAD-054`).
+    clip_published: Rc<std::cell::Cell<bool>>,
     /// Clipboard reads the Paste button hands over, already decoded by the shell.
     /// Drained once per frame and routed to the active view (`UI-THREAD-024`).
     paste_rx: flume::Receiver<ClipboardPaste>,
@@ -162,6 +166,7 @@ impl FrameHost {
             view,
             perf,
             clip_token,
+            clip_published: Rc::new(std::cell::Cell::new(false)),
             paste_rx,
             to_logic,
             children: HashMap::new(),
@@ -189,6 +194,12 @@ impl FrameHost {
     /// clipboard event listeners in `run` read it back to decide a same-tab copy.
     pub(crate) fn clip_token(&self) -> &str {
         &self.clip_token
+    }
+
+    /// Whether the last copy's asynchronous write reached the clipboard
+    /// (`UI-THREAD-054`). A new copy clears it; the write sets it on success.
+    pub(crate) fn clip_published(&self) -> Rc<std::cell::Cell<bool>> {
+        Rc::clone(&self.clip_published)
     }
 
     /// Forward an input event to the view. Returns `true` if the caller should
@@ -413,7 +424,13 @@ impl FrameHost {
         // opaque Ambre bytes for a full-fidelity internal round-trip.
         if let Some(blob) = self.view.poll_clipboard() {
             let payload_b64 = blob.ambre.as_deref().map(base64_encode);
-            async_write_clipboard(blob.text, blob.html, payload_b64, self.clip_token.clone());
+            async_write_clipboard(
+                blob.text,
+                blob.html,
+                payload_b64,
+                self.clip_token.clone(),
+                Rc::clone(&self.clip_published),
+            );
         }
 
         // Deliver any lazily-fetched font faces (CJK/Arabic/Devanagari) that

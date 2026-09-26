@@ -110,7 +110,7 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | `ambre-prose` | Word processor application |
 | `ambre-toile` | Whiteboard/presentation application |
 | `ambre-murmure` | Secure messaging |
-| `ambre-app` | Main WASM application (UI integration) |
+| `ambre-app` | Main WASM application (UI integration). High-level integration and the shell only: the logic of an application lives in its own crate (`ARCH-018`) |
 
 ## Specifications
 

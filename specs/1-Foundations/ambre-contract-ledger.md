@@ -19,16 +19,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2604 rows: 2329 shipped, of which 775 loose. 275 unbuilt.**
+**2611 rows: 2333 shipped, of which 777 loose. 278 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 227 | 221 | 542 | 564 | 1554 |
+| `verified` | 229 | 221 | 542 | 564 | 1556 |
 | `failing` | 39 | 46 | 22 |  | 107 |
-| `untested` | 266 | 143 | 234 | 3 | 646 |
+| `untested` | 268 | 143 | 234 | 3 | 648 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
-| `unimplemented` | 55 | 56 | 23 | 141 | 275 |
+| `unimplemented` | 56 | 57 | 24 | 141 | 278 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -38,10 +38,10 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 13 | 3 | 10 | 2 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 0 | 7 | 1 |
-| `ambre-spec-architecture.md` | 17 | 16 | 3 | 13 | 1 |
+| `ambre-spec-architecture.md` | 18 | 17 | 3 | 14 | 1 |
 | `ambre-spec-broadcast.md` | 19 | 16 | 6 | 10 | 3 |
 | `ambre-spec-chrome.md` | 21 | 20 | 9 | 11 | 1 |
-| `ambre-spec-clipboard.md` | 14 | 14 | 0 | 14 |  |
+| `ambre-spec-clipboard.md` | 18 | 17 | 2 | 15 | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 9 | 4 |  |
 | `ambre-spec-delta-order.md` | 18 | 18 | 6 | 12 |  |
 | `ambre-spec-design-tokens.md` | 6 | 6 | 1 | 5 |  |
@@ -79,7 +79,7 @@
 | `ambre-spec-trame-cell-merges.md` | 38 | 37 | 24 | 13 | 1 |
 | `ambre-spec-trame-cell-rendering.md` | 12 | 9 | 1 | 8 | 3 |
 | `ambre-spec-trame-cell-styles.md` | 22 | 18 | 6 | 12 | 4 |
-| `ambre-spec-trame-clipboard.md` | 9 | 9 | 3 | 6 |  |
+| `ambre-spec-trame-clipboard.md` | 10 | 9 | 3 | 6 | 1 |
 | `ambre-spec-trame-context-menu.md` | 10 | 10 | 4 | 6 |  |
 | `ambre-spec-trame-engine.md` | 17 | 17 | 13 | 4 |  |
 | `ambre-spec-trame-find-replace.md` | 6 | 6 | 4 | 2 |  |
@@ -102,7 +102,7 @@
 | `ambre-spec-toile-schema.md` | 13 | 13 | 10 | 3 |  |
 | `ambre-spec-toile-auto-layout.md` | 27 | 27 | 21 | 6 |  |
 | `ambre-spec-toile-board-rendering.md` | 30 | 30 | 13 | 17 |  |
-| `ambre-spec-toile-clipboard.md` | 17 | 17 | 13 | 4 |  |
+| `ambre-spec-toile-clipboard.md` | 18 | 17 | 13 | 4 | 1 |
 | `ambre-spec-toile-comments.md` | 31 | 31 | 26 | 5 |  |
 | `ambre-spec-toile-connectors.md` | 45 | 45 | 22 | 23 |  |
 | `ambre-spec-toile-elements.md` | 33 | 33 | 28 | 5 |  |
@@ -164,10 +164,10 @@
 | :--- | :--- |
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058 |
-| `ambre-spec-architecture.md` | ARCH-001..017 |
+| `ambre-spec-architecture.md` | ARCH-001..018 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..092 |
-| `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047 |
+| `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..056 |
 | `ambre-spec-commands.md` | UI-THREAD-011,019,026..028,035..042 |
 | `ambre-spec-delta-order.md` | SYNC-006..007,024..033,082..087 |
 | `ambre-spec-design-tokens.md` | UI-THREAD-029..034 |
@@ -228,7 +228,7 @@
 | `ambre-spec-text-input.md` | CHROME-007,016..021,059..064 |
 | `ambre-spec-toile-auto-layout.md` | TOILE-FEAT-005,009,029..032,038..054,099,102..104 |
 | `ambre-spec-toile-board-rendering.md` | TOILE-UI-001,011..013,020..021,043..046,262..277,356..358,362 |
-| `ambre-spec-toile-clipboard.md` | TOILE-013,067..071,130..140 |
+| `ambre-spec-toile-clipboard.md` | TOILE-013,067..071,130..140,260 |
 | `ambre-spec-toile-comments.md` | TOILE-024..026,205; TOILE-FEAT-011..017,068..074,096..097,105,107; TOILE-UI-022..024,082,306..310 |
 | `ambre-spec-toile-connectors.md` | TOILE-006..007,042..047,164..176,232..233,238; TOILE-UI-211..215,344..348,350..354,359,363,371..374 |
 | `ambre-spec-toile-elements.md` | TOILE-012,022,031..037,186..204,234..235,239,242..243 |
@@ -261,7 +261,7 @@
 | `ambre-spec-trame-cell-merges.md` | TRAME-019..020,027..031,125..128,130..133,135..138,140..150; TRAME-IO-016; TRAME-UI-009,111..116 |
 | `ambre-spec-trame-cell-rendering.md` | TRAME-UI-020..021,093..100,139..140 |
 | `ambre-spec-trame-cell-styles.md` | TRAME-092..101,186..193; TRAME-FEAT-017..019,028 |
-| `ambre-spec-trame-clipboard.md` | TRAME-UI-059..065,124..125 |
+| `ambre-spec-trame-clipboard.md` | TRAME-UI-059..065,124..125,174 |
 | `ambre-spec-trame-context-menu.md` | TRAME-UI-085..090,117..120 |
 | `ambre-spec-trame-engine.md` | TRAME-001..002,015,023..024,166..169; TRAME-FEAT-001; TRAME-UI-001..003,006,014,141..142 |
 | `ambre-spec-trame-find-replace.md` | TRAME-UI-077..080,083,138 |

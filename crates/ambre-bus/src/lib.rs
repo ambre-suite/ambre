@@ -73,6 +73,45 @@ pub struct ClipboardBlob {
     pub plain: bool,
 }
 
+impl ClipboardBlob {
+    /// The blob a paste inserts: the copy the view kept in memory, or what
+    /// the browser read. A plain paste takes the read, whose richer halves the
+    /// host already dropped. Otherwise the kept copy wins only while the
+    /// clipboard carries this tab's ownership token. A text match never
+    /// decides: two tabs holding the same text are two copies
+    /// (`UI-THREAD-007`).
+    #[must_use]
+    pub fn source<'a>(kept: Option<&'a Self>, read: &'a Self, own_copy: bool) -> &'a Self {
+        if read.plain {
+            return read;
+        }
+        match kept {
+            Some(kept) if own_copy => kept,
+            _ => read,
+        }
+    }
+
+    /// Prefix `html` with the ownership token, for a browser that refuses the
+    /// `web ` types and so keeps no token of its own (`UI-THREAD-056`). A
+    /// comment, so another editor renders nothing of it.
+    #[must_use]
+    pub fn mark_html(html: &str, token: &str) -> String {
+        format!("{HTML_TOKEN_OPEN}{token}{HTML_TOKEN_CLOSE}{html}")
+    }
+
+    /// The ownership token [`Self::mark_html`] left in `html`, wherever the
+    /// browser moved the comment.
+    #[must_use]
+    pub fn html_token(html: &str) -> Option<&str> {
+        let start = html.find(HTML_TOKEN_OPEN)? + HTML_TOKEN_OPEN.len();
+        let rest = html.get(start..)?;
+        rest.get(..rest.find(HTML_TOKEN_CLOSE)?)
+    }
+}
+
+const HTML_TOKEN_OPEN: &str = "<!--ambre-token:";
+const HTML_TOKEN_CLOSE: &str = "-->";
+
 /// What a `copy`/`cut` on the focused view resolves to synchronously, inside the
 /// native clipboard event (`trame-clipboard`). The authoritative payload
 /// is built asynchronously on the Logic thread, so the sync event only decides
@@ -94,3 +133,51 @@ pub enum CopyOutcome {
 pub use ambre_core::{
     ChannelId, DocType, DocumentId, MeetingId, PublicKey, Role, SnapshotId, UserId, Uuid,
 };
+
+#[cfg(test)]
+mod clipboard_tests {
+    use super::ClipboardBlob;
+
+    fn blob(text: &str, ambre: u8) -> ClipboardBlob {
+        ClipboardBlob {
+            text: text.into(),
+            ambre: Some(vec![ambre]),
+            ..ClipboardBlob::default()
+        }
+    }
+
+    /// `UI-THREAD-056`: the token survives in the HTML as Firefox 156 hands it
+    /// back, the comment moved before the `<html>` wrapper it adds.
+    #[test]
+    fn the_token_reads_back_from_the_marked_html() {
+        let marked = ClipboardBlob::mark_html("<b>x</b>", "TOK");
+        assert_eq!(ClipboardBlob::html_token(&marked), Some("TOK"));
+        let moved = "<!--ambre-token:TOK-->\n<html><head></head><body><b>x</b></body></html>";
+        assert_eq!(ClipboardBlob::html_token(moved), Some("TOK"));
+        assert_eq!(ClipboardBlob::html_token("<b>x</b>"), None);
+        assert_eq!(ClipboardBlob::html_token("<!--ambre-token:TOK"), None);
+    }
+
+    /// `UI-THREAD-053`: one choice between the kept copy and the read, shared
+    /// by every view, and decided by the token alone (`UI-THREAD-007`).
+    #[test]
+    fn a_paste_takes_the_kept_copy_only_on_the_token() {
+        let kept = blob("a\tb", 1);
+        let same_text = blob("a\tb", 2);
+        // The token says the clipboard is ours.
+        assert_eq!(ClipboardBlob::source(Some(&kept), &same_text, true), &kept);
+        // No token: the same text from another tab is another copy.
+        assert_eq!(
+            ClipboardBlob::source(Some(&kept), &same_text, false),
+            &same_text
+        );
+        // Nothing was kept.
+        assert_eq!(ClipboardBlob::source(None, &same_text, true), &same_text);
+        // A plain paste never takes the kept copy.
+        let plain = ClipboardBlob {
+            plain: true,
+            ..blob("a\tb", 5)
+        };
+        assert_eq!(ClipboardBlob::source(Some(&kept), &plain, true), &plain);
+    }
+}

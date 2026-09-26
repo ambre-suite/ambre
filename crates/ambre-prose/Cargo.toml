@@ -70,6 +70,9 @@ flume = { workspace = true }
 # ambre-trame's chrome are. Scoped to wasm32, so the host tests never build it.
 # web-sys gives the reply field its keyboard event.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+# The shared menu type the page's context menu is built from, so the shell
+# only renders Prose's entries (`ARCH-018`).
+ambre-chrome = { path = "../ambre-chrome" }
 leptos = { workspace = true }
 web-sys = { workspace = true }
 

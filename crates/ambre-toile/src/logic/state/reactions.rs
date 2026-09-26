@@ -34,8 +34,8 @@ use loro::LoroValue;
 
 use ambre_bus::UserId;
 
-use crate::logic::command::{Reaction, ReactionKind, ReactionTally, ToileEvent, ToileOutcome};
 use crate::ToileError;
+use crate::logic::command::{Reaction, ReactionKind, ReactionTally, ToileEvent, ToileOutcome};
 use crate::logic::model::{ElementId, TargetId};
 
 use super::{REACTIONS, ToileState};
@@ -215,7 +215,9 @@ mod tests {
 
     impl serde::Serialize for Unwritable {
         fn serialize<S: serde::Serializer>(&self, _serializer: S) -> Result<S::Ok, S::Error> {
-            Err(serde::ser::Error::custom("this value refuses to be written"))
+            Err(serde::ser::Error::custom(
+                "this value refuses to be written",
+            ))
         }
     }
 

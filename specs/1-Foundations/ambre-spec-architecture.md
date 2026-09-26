@@ -33,6 +33,7 @@ prefix is `ARCH`.
 | `ARCH-016` | `INV` | The engine MUST survive every route change. | this spec section 2 | `ambre_app::route::tests::cross_kind_open_needs_reload` -- the one route change that is allowed to end it | partial -- nothing holds the lifetime across an ordinary route change; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-011` | `INV` | Each browser tab MUST run a complete client of its own. | this spec section 2 | none | unheld -- two tabs load the same two artefacts twice, and nothing refuses a design that shared one worker between them, which is the shortcut this rule exists to close; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-014` | `INV` | The client MUST NOT rely on a channel disconnection to detect a thread failure. | this spec section 2 | none | unheld -- the panic hook fires before the abort, so the notice does not wait on a channel, and nothing refuses a second detection path that would. A disconnection arrives late, or never, because a wedged thread holds its end open; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ARCH-018` | `INV` | The launcher MUST hold integration and the shell alone: the logic of an application, what one of its commands does included, MUST live in that application's crate. | this spec section 2 | none | fails -- the shell decides what Trame's bold toggle and filter popover do, what Toile's embed and link dialogs send, and what Prose's save becomes; lands with the "The launcher holds no application logic" Story (`ambre-roadmap.md` E8) | failing |
 | `ARCH-017` | `INV` | The Logic thread MUST answer a view once per pass over the commands waiting on its inbound channels, not once per command. | this spec section 2 | not built | unbuilt -- lands with the `ARCH P9` -- the Logic thread drains before it answers Story (`ambre-roadmap.md` E6) | unimplemented |
 | `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | none | unheld -- convergence is covered per application by the two-peer belt, which drives two engines in one process. Nothing drives two tabs, and the two differ in exactly the place that matters: one relay, two sessions, one identity; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -52,7 +53,7 @@ that and a page that looks alive and answers nothing.
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 3 `verified`, 13 `untested`, 1 `unimplemented`. What holds is what the build
+* **Verification.** 3 `verified`, 1 `failing`, 13 `untested`, 1 `unimplemented`. What holds is what the build
   can refuse: a cycle, a cryptographic dependency in the wrong crate, a missing atomics flag.
   Everything else, the failure path and the tab model included, is held by the code having been
   written that way.
@@ -152,7 +153,7 @@ separation is carried by what each crate is allowed to declare.
 | each application crate | `ambre-bus`, `ambre-draw`, `ambre-canvas`, `ambre-chrome`, `ambre-commands` | one crate per application, holding its state, its view and its own interface. It knows neither the Logic runtime nor the worker |
 | `ambre-logic` | `ambre-bus` plus the application crates | the Logic runtime, pure Rust with no browser glue (`ARCH-003`) |
 | `ambre-sync` | `ambre-bus`, `ambre-protocol`, `ambre-crypto`, the transport crates | the Sync worker, and its own entry point |
-| `ambre-app` | everything above except `ambre-sync` | the launcher: it mounts the interface, creates the channels, spawns both workers and relays between them |
+| `ambre-app` | everything above except `ambre-sync` | the launcher: it mounts the interface, creates the channels, spawns both workers and relays between them. It integrates the applications and holds none of their logic (`ARCH-018`) |
 | `ambre-server` | `ambre-core`, `ambre-protocol`, and one signature crate | the relay. It links nothing that could read a document (`ZK-004`) |
 
 Two consequences follow and neither is obvious. The launcher sits **downstream** of every

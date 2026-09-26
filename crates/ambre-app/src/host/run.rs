@@ -244,6 +244,9 @@ where
             let host_e = Rc::clone(&host_c);
             let cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
                 move |event: web_sys::ClipboardEvent| {
+                    // A new copy owns the clipboard until its own asynchronous
+                    // write lands (`UI-THREAD-054`).
+                    host_e.borrow().clip_published().set(false);
                     match host_e.borrow_mut().clipboard_write(cut) {
                         // Nothing selected: let the browser default proceed.
                         ambre_bus::CopyOutcome::Nothing => {}
@@ -257,13 +260,11 @@ where
                         }
                         // Authoritative copy: the full payload is built on the Logic
                         // thread and mirrored to the OS clipboard a frame later
-                        // (`poll_clipboard` -> `async_write_clipboard`). That async
-                        // write needs a user-activation context Firefox denies from
-                        // the rAF loop, so it is best-effort. To make a same-tab
-                        // paste reliable regardless, we ALSO write the ownership
-                        // token synchronously here -- this always reaches the OS
-                        // clipboard. Prevent the default so the browser does not
-                        // clobber the clipboard with the empty textarea.
+                        // (`poll_clipboard` -> `async_write_clipboard`). Until
+                        // that write lands, the ownership token written here is
+                        // all the clipboard holds (`UI-THREAD-007`). Prevent the
+                        // default so the browser does not clobber the clipboard
+                        // with the empty textarea.
                         ambre_bus::CopyOutcome::Deferred => {
                             let token = host_e.borrow().clip_token().to_owned();
                             if let Some(data) = event.clipboard_data() {
@@ -308,14 +309,51 @@ where
                     .get_data("text/html")
                     .ok()
                     .filter(|s| !s.is_empty() && !plain);
-                // Same-tab ownership: the synchronous token survives even when the
-                // async payload write failed (Firefox). So a match means paste our
-                // own in-memory copy at full fidelity.
+                // Same-tab ownership: the synchronous token is here while no
+                // asynchronous write replaced it, or in the HTML a browser
+                // refusing the `web ` types received (`UI-THREAD-056`). A match means paste our own
+                // in-memory copy at full fidelity.
                 let own_copy = !plain && {
                     let token = host_c.borrow().clip_token().to_owned();
                     data.get_data(AMBRE_CLIPBOARD_TOKEN_TYPE)
                         .is_ok_and(|t| !t.is_empty() && t == token)
+                        || html
+                            .as_deref()
+                            .and_then(ambre_bus::ClipboardBlob::html_token)
+                            == Some(token.as_str())
                 };
+                // After the last copy's asynchronous write landed, the token
+                // and the private bytes sit under `web ` types the event cannot
+                // see. Read them back through the asynchronous API. A refused
+                // read pastes what the event carried (`UI-THREAD-054`).
+                if !plain
+                    && !own_copy
+                    && host_c.borrow().clip_published().get()
+                    && let Some(clipboard) = crate::platform::async_clipboard()
+                {
+                    event.prevent_default();
+                    let fallback = ambre_bus::ClipboardBlob {
+                        text,
+                        html,
+                        ambre,
+                        plain: false,
+                    };
+                    let read = clipboard.read();
+                    let host_a = Rc::clone(&host_c);
+                    wasm_bindgen_futures::spawn_local(async move {
+                        let (blob, own_copy) = match crate::platform::read_clipboard_blob(read)
+                            .await
+                        {
+                            Some((blob, token)) => {
+                                let own = token.as_deref() == Some(host_a.borrow().clip_token());
+                                (blob, own)
+                            }
+                            None => (fallback, false),
+                        };
+                        host_a.borrow_mut().paste_clipboard(blob, own_copy);
+                    });
+                    return;
+                }
                 if ambre.is_none() && html.is_none() && text.is_empty() && !own_copy {
                     return;
                 }

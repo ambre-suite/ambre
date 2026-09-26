@@ -51,7 +51,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-042` | `POST` | A paste MUST take the richest half the clipboard holds: this application's own payload, then the HTML half, then the plain-text mirror. | this spec section 3 | `ambre_prose::logic::clipboard::tests::the_richest_half_the_clipboard_holds_wins` | none | verified |
-| `PROSE-UI-043` | `POST` | The kept payload MUST be used only while the system clipboard's text still matches it; otherwise the pasted content MUST come from the system clipboard. | this spec section 3 | `ambre_prose::input_tests::the_kept_payload_serves_only_its_own_copy` | none | verified |
+| `PROSE-UI-043` | `POST` | The kept payload MUST be used only while the system clipboard carries this tab's token; otherwise the pasted content MUST come from the system clipboard (`UI-THREAD-007`). | this spec section 3 | `ambre_prose::input_tests::the_kept_payload_serves_only_its_own_copy` | none | verified |
 | `PROSE-UI-221` | `FAIL` | HTML nested deeper than the reader's depth cap MUST paste as its plain-text mirror, and MUST NOT be built into a tree. | this spec section 3 | `ambre_prose::logic::clipboard::html_read::tests::a_tree_nested_past_the_cap_reads_as_nothing` | none | verified |
 | `PROSE-UI-223` | `POST` | A paste of several blocks, or of one typed block, into an empty paragraph MUST give that paragraph the type of the first pasted block. | this spec section 3 | `ambre_prose::logic::clipboard::tests::the_html_half_alone_pastes_what_the_rich_half_does` | none | verified |
 | `PROSE-UI-227` | `POST` | The paste-as-plain-text chord and its context-menu entry MUST insert the plain-text mirror alone, whatever richer half the clipboard holds. | this spec section 4 | `ambre_prose::input_tests::a_plain_paste_carries_the_text_alone`; `ambre_prose::commands::tests::the_context_menu_entries_are_declared_and_left_unbound` | none | verified |
@@ -124,7 +124,7 @@ pub fn paste_clipboard(&mut self, blob: ClipboardBlob, own_copy: bool);
 
 | What the host read | What is inserted |
 |---|---|
-| a payload this application wrote, and the mirror still matches it | the rich content (`PROSE-UI-043`) |
+| a payload this application wrote, and its token is still there | the rich content (`PROSE-UI-043`) |
 | HTML that yields at least one block | the blocks and marks the reader keeps (`PROSE-UI-219`) |
 | anything else | the plain text: one paragraph per line, control characters dropped |
 

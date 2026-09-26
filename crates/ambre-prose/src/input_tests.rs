@@ -1932,8 +1932,8 @@ fn a_refused_copy_deletes_nothing() {
     assert!(matches!(sent[0], ProseCommand::CopyRange { .. }));
 }
 
-/// `PROSE-UI-043`: the kept payload serves only while the clipboard still
-/// holds that copy.
+/// `PROSE-UI-043`: the kept payload serves only on this tab's token, and
+/// the same text without it is another copy.
 #[test]
 fn the_kept_payload_serves_only_its_own_copy() {
     let mut rig = Rig::new(&["hello"]);
@@ -1951,10 +1951,18 @@ fn the_kept_payload_serves_only_its_own_copy() {
         ambre: None,
         plain: false,
     };
-    let ProseInput::Paste { rich, .. } = rig.ui.paste_input(own("hello"), false) else {
+    let ProseInput::Paste { rich, .. } = rig.ui.paste_input(own("other"), true) else {
         panic!("a paste");
     };
-    assert!(rich.is_some(), "the same text keeps the payload");
+    assert!(rich.is_some(), "the token keeps the payload");
+    let ProseInput::Paste { rich, text, .. } = rig.ui.paste_input(own("hello"), false) else {
+        panic!("a paste");
+    };
+    assert!(
+        rich.is_none(),
+        "the same text without the token is another copy"
+    );
+    assert_eq!(text, "hello");
     let ProseInput::Paste { rich, text, .. } = rig.ui.paste_input(own("other"), false) else {
         panic!("a paste");
     };

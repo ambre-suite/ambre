@@ -84,8 +84,11 @@ pub(crate) const AMBRE_CLIPBOARD_WEB_TOKEN_TYPE: &str = "web application/x-ambre
 /// Synchronous same-tab ownership marker (`ambre-spec-clipboard.md`,
 /// `UI-THREAD-007`). Written into the clipboard event's `DataTransfer`
 /// *synchronously* during `copy`/`cut`, it always reaches the OS clipboard. The
-/// async payload write does not: it needs a user-activation context Firefox
-/// denies from the rAF loop. On `paste`, a value here equal to this page's token
+/// async write that follows replaces it. Chrome keeps it under the `web `
+/// variant, which a `paste` event cannot see (`UI-THREAD-054`). Firefox refuses
+/// that variant and the write carries the standard types alone (`UI-THREAD-055`).
+///
+/// On `paste`, a value here equal to this page's token
 /// proves the clipboard still holds THIS tab's own last copy. The view then
 /// pastes its in-memory `last_clip` at full fidelity. Any foreign copy (another
 /// app / tab) overwrites the clipboard and drops the marker, so its absence
@@ -107,44 +110,61 @@ pub(crate) fn base64_decode(s: &str) -> Option<Vec<u8>> {
 /// `text/html` a view wrote for another editor, the private `web ` payload type
 /// and the `web ` ownership token. The write replaces
 /// the whole clipboard, so it re-publishes everything the copy event established
-/// rather than dropping the token a frame after the copy (`UI-THREAD-023`). Runs
-/// in addition to the synchronous `setData` (which serves Ctrl+V); any failure
-/// is ignored -- Ctrl+V still works.
+/// rather than dropping the token a frame after the copy (`UI-THREAD-023`).
+/// Where the browser refuses the `web ` types, it writes the standard ones
+/// alone (`UI-THREAD-055`). Runs
+/// in addition to the synchronous `setData`; a failure is ignored, and the
+/// synchronous formats stay. A success replaces them, so `published` records
+/// it and the next `paste` event reads the clipboard back (`UI-THREAD-054`).
 pub(crate) fn async_write_clipboard(
     tsv: String,
     html: Option<String>,
     payload_b64: Option<String>,
     token: String,
+    published: Rc<std::cell::Cell<bool>>,
 ) {
     let Some(clipboard) = web_sys::window().map(|w| w.navigator().clipboard()) else {
         return;
     };
     wasm_bindgen_futures::spawn_local(async move {
-        // Build the `{ mime: Promise<string> }` record ClipboardItem expects.
-        let record = js_sys::Object::new();
-        let text_promise = js_sys::Promise::resolve(&JsValue::from_str(&tsv));
-        let _ = js_sys::Reflect::set(&record, &JsValue::from_str("text/plain"), &text_promise);
-        if let Some(html) = html {
-            let p = js_sys::Promise::resolve(&JsValue::from_str(&html));
-            let _ = js_sys::Reflect::set(&record, &JsValue::from_str("text/html"), &p);
-        }
-        if let Some(b64) = payload_b64 {
-            let p = js_sys::Promise::resolve(&JsValue::from_str(&b64));
-            let _ = js_sys::Reflect::set(&record, &JsValue::from_str(AMBRE_CLIPBOARD_WEB_TYPE), &p);
-        }
-        let token_promise = js_sys::Promise::resolve(&JsValue::from_str(&token));
-        let _ = js_sys::Reflect::set(
-            &record,
-            &JsValue::from_str(AMBRE_CLIPBOARD_WEB_TOKEN_TYPE),
-            &token_promise,
-        );
-        let Ok(item) = web_sys::ClipboardItem::new_with_record_from_str_to_str_promise(&record)
-        else {
-            return;
+        let text = ("text/plain", Some(tsv.as_str()));
+        let marked = html
+            .as_deref()
+            .map(|h| ambre_bus::ClipboardBlob::mark_html(h, &token));
+        let html = ("text/html", html.as_deref());
+        let payload = (AMBRE_CLIPBOARD_WEB_TYPE, payload_b64.as_deref());
+        let token = (AMBRE_CLIPBOARD_WEB_TOKEN_TYPE, Some(token.as_str()));
+        // Firefox rejects the `web ` types in the ClipboardItem constructor
+        // (throwaway Firefox 156 run). The copy event left only the token, so
+        // without a second attempt no other application could paste the copy.
+        // The standard write carries the token in an HTML comment where the
+        // view wrote HTML (`UI-THREAD-055`, `UI-THREAD-056`).
+        let (item, web) = match clipboard_item(&[text, html, payload, token]) {
+            Some(item) => (item, true),
+            None => match clipboard_item(&[text, ("text/html", marked.as_deref())]) {
+                Some(item) => (item, false),
+                None => return,
+            },
         };
         let items = js_sys::Array::of1(&item);
-        let _ = wasm_bindgen_futures::JsFuture::from(clipboard.write(&items)).await;
+        let written = wasm_bindgen_futures::JsFuture::from(clipboard.write(&items)).await;
+        // Only a landed write of the `web ` types moves the token out of the
+        // paste event's reach (`UI-THREAD-054`).
+        published.set(web && written.is_ok());
     });
+}
+
+/// Build a ClipboardItem from `(type, value)` pairs, skipping absent values.
+/// `None` when the browser refuses one of the types.
+fn clipboard_item(entries: &[(&str, Option<&str>)]) -> Option<web_sys::ClipboardItem> {
+    let record = js_sys::Object::new();
+    for (kind, value) in entries {
+        if let Some(value) = value {
+            let promise = js_sys::Promise::resolve(&JsValue::from_str(value));
+            js_sys::Reflect::set(&record, &JsValue::from_str(kind), &promise).ok()?;
+        }
+    }
+    web_sys::ClipboardItem::new_with_record_from_str_to_str_promise(&record).ok()
 }
 
 /// The decoded result of an async clipboard read. The shell sends it to the

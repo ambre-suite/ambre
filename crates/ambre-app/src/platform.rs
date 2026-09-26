@@ -114,48 +114,10 @@ pub(crate) async fn paste_from_clipboard(
     toasts: Toasts,
     plain: bool,
 ) {
-    let mut blob = ambre_bus::ClipboardBlob::default();
-    let mut token: Option<String> = None;
-    let mut found = false;
-
-    // Structured read: the private type, the ownership token, the HTML and the plain text,
-    // in whatever order the browser lists them.
-    if let Ok(val) = wasm_bindgen_futures::JsFuture::from(read_promise).await
-        && let Ok(items) = val.dyn_into::<js_sys::Array>()
-    {
-        for item in items.iter() {
-            let Ok(item) = item.dyn_into::<web_sys::ClipboardItem>() else {
-                continue;
-            };
-            let types = item.types();
-            let has = |t: &str| types.iter().any(|v| v.as_string().as_deref() == Some(t));
-            if has(host::AMBRE_CLIPBOARD_WEB_TYPE)
-                && let Some(b64) = read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TYPE).await
-            {
-                blob.ambre = host::base64_decode(&b64);
-                found = true;
-            }
-            if has(host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE)
-                && let Some(t) =
-                    read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE).await
-            {
-                token = Some(t);
-                found = true;
-            }
-            if has("text/html")
-                && let Some(html) = read_clipboard_item(&item, "text/html").await
-            {
-                blob.html = Some(html).filter(|h| !h.is_empty());
-                found = true;
-            }
-            if has("text/plain")
-                && let Some(text) = read_clipboard_item(&item, "text/plain").await
-            {
-                blob.text = text;
-                found = true;
-            }
-        }
-    }
+    let (mut blob, mut token, mut found) = match read_clipboard_blob(read_promise).await {
+        Some((blob, token)) => (blob, token, true),
+        None => (ambre_bus::ClipboardBlob::default(), None, false),
+    };
 
     // Fallback for browsers without structured `read()`.
     if !found
@@ -184,6 +146,69 @@ pub(crate) async fn paste_from_clipboard(
     // The host compares the token and pastes through the active view
     // (`UI-THREAD-024`, `UI-THREAD-025`).
     let _ = paste_tx.try_send(host::ClipboardPaste { blob, token });
+}
+
+/// The asynchronous clipboard, or `None` where it is undefined: outside a
+/// secure context, such as http:// on a LAN IP.
+pub(crate) fn async_clipboard() -> Option<web_sys::Clipboard> {
+    let clipboard = web_sys::window()?.navigator().clipboard();
+    let v: &wasm_bindgen::JsValue = clipboard.as_ref();
+    (!v.is_undefined() && !v.is_null()).then_some(clipboard)
+}
+
+/// Decode a structured `read()`: the private bytes, the ownership token, the
+/// HTML and the plain text, in whatever order the browser lists them. `None`
+/// when the read was refused or surfaced nothing.
+pub(crate) async fn read_clipboard_blob(
+    read_promise: js_sys::Promise,
+) -> Option<(ambre_bus::ClipboardBlob, Option<String>)> {
+    let mut blob = ambre_bus::ClipboardBlob::default();
+    let mut token: Option<String> = None;
+    let mut found = false;
+    let val = wasm_bindgen_futures::JsFuture::from(read_promise)
+        .await
+        .ok()?;
+    let items = val.dyn_into::<js_sys::Array>().ok()?;
+    for item in items.iter() {
+        let Ok(item) = item.dyn_into::<web_sys::ClipboardItem>() else {
+            continue;
+        };
+        let types = item.types();
+        let has = |t: &str| types.iter().any(|v| v.as_string().as_deref() == Some(t));
+        if has(host::AMBRE_CLIPBOARD_WEB_TYPE)
+            && let Some(b64) = read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TYPE).await
+        {
+            blob.ambre = host::base64_decode(&b64);
+            found = true;
+        }
+        if has(host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE)
+            && let Some(t) = read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE).await
+        {
+            token = Some(t);
+            found = true;
+        }
+        if has("text/html")
+            && let Some(html) = read_clipboard_item(&item, "text/html").await
+        {
+            blob.html = Some(html).filter(|h| !h.is_empty());
+            found = true;
+        }
+        if has("text/plain")
+            && let Some(text) = read_clipboard_item(&item, "text/plain").await
+        {
+            blob.text = text;
+            found = true;
+        }
+    }
+    // A browser that refused the `web ` types left the token in the HTML
+    // (`UI-THREAD-056`).
+    let token = token.or_else(|| {
+        blob.html
+            .as_deref()
+            .and_then(ambre_bus::ClipboardBlob::html_token)
+            .map(str::to_owned)
+    });
+    found.then_some((blob, token))
 }
 
 /// Read one MIME entry of a [`web_sys::ClipboardItem`] as a string (its blob
