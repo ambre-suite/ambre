@@ -335,6 +335,7 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
         );
         let handles = ruler.visible.then(|| {
             [
+                (RulerHandle::IndentFirst, "First-line indent"),
                 (RulerHandle::IndentLeft, "Left indent"),
                 (RulerHandle::IndentRight, "Right indent"),
             ]

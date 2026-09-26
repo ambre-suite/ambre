@@ -15,6 +15,8 @@ use crate::ui::ProseUiState;
 /// One handle of the ruler.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RulerHandle {
+    /// Where the first line starts, from the left indent.
+    IndentFirst,
     /// Where every line of the paragraph starts.
     IndentLeft,
     /// Where every line of the paragraph ends.
@@ -40,6 +42,7 @@ pub struct RulerState {
     pub px_per_pt: f32,
     /// The caret block's indents as the page lays it out, in points
     /// (`PROSE-UI-075`).
+    pub indent_first: f32,
     pub indent_left: f32,
     pub indent_right: f32,
 }
@@ -49,6 +52,9 @@ impl RulerState {
     #[must_use]
     pub fn handle_x(&self, handle: RulerHandle) -> f32 {
         match handle {
+            RulerHandle::IndentFirst => {
+                self.page_left_px + (self.indent_left + self.indent_first) * self.px_per_pt
+            }
             RulerHandle::IndentLeft => self.page_left_px + self.indent_left * self.px_per_pt,
             RulerHandle::IndentRight => {
                 self.page_left_px + self.content_width_px - self.indent_right * self.px_per_pt
@@ -64,12 +70,19 @@ impl RulerState {
     pub fn points_at(&self, handle: RulerHandle, x: f32) -> f32 {
         if self.px_per_pt <= 0.0 || !x.is_finite() {
             return match handle {
+                RulerHandle::IndentFirst => self.indent_first,
                 RulerHandle::IndentLeft => self.indent_left,
                 RulerHandle::IndentRight => self.indent_right,
             };
         }
         let column_pt = self.content_width_px / self.px_per_pt;
         let (raw, other) = match handle {
+            // The first line counts from the left indent, and both side
+            // indents narrow the room it has.
+            RulerHandle::IndentFirst => (
+                (x - self.page_left_px) / self.px_per_pt - self.indent_left,
+                self.indent_left + self.indent_right,
+            ),
             RulerHandle::IndentLeft => {
                 ((x - self.page_left_px) / self.px_per_pt, self.indent_right)
             }
@@ -139,6 +152,7 @@ impl ProseUiState {
             page_left_px: self.column.left_px(&self.viewport) + layout.margin_left_px * scale,
             content_width_px: layout.content_width_px * scale,
             px_per_pt: PX_PER_PT * scale,
+            indent_first: 0.0,
             indent_left: 0.0,
             indent_right: 0.0,
         };
@@ -151,6 +165,8 @@ impl ProseUiState {
             .and_then(|run| run.data().style().cloned());
         if let Some(style) = style {
             ruler.visible = true;
+            // A hanging indent is laid out as none (`PROSE-FEAT-310`).
+            ruler.indent_first = style.indent_first_px.max(0.0) / PX_PER_PT;
             ruler.indent_left = style.indent_left_px / PX_PER_PT;
             ruler.indent_right = style.indent_right_px / PX_PER_PT;
         }
@@ -170,6 +186,9 @@ impl ProseUiState {
         let block_id = self.cursor.as_ref()?.block_id;
         let mut style = ParagraphStyle::default();
         match release.handle {
+            RulerHandle::IndentFirst if release.points != ruler.indent_first => {
+                style.indent_first = Some(release.points);
+            }
             RulerHandle::IndentLeft if release.points != ruler.indent_left => {
                 style.indent_left = Some(release.points);
             }
@@ -198,6 +217,7 @@ mod tests {
         state.handle_command(ProseCommand::SetParagraphStyle {
             block_id: quoted,
             style: ParagraphStyle {
+                indent_first: Some(24.0),
                 indent_left: Some(36.0),
                 indent_right: Some(18.0),
                 ..ParagraphStyle::default()
@@ -226,13 +246,17 @@ mod tests {
         caret_in(&mut ui, quoted);
         let ruler = ui.ruler();
         assert!(ruler.visible);
+        assert!((ruler.indent_first - 24.0).abs() < 1e-3);
         assert!((ruler.indent_left - 36.0).abs() < 1e-3);
         assert!((ruler.indent_right - 18.0).abs() < 1e-3);
         // A block with no stored indent shows the zero it is laid out with.
         caret_in(&mut ui, plain);
         let ruler = ui.ruler();
         assert!(ruler.visible);
-        assert_eq!((ruler.indent_left, ruler.indent_right), (0.0, 0.0));
+        assert_eq!(
+            (ruler.indent_first, ruler.indent_left, ruler.indent_right),
+            (0.0, 0.0, 0.0)
+        );
     }
 
     /// `PROSE-UI-065`: the scale is the content column, wherever the column
@@ -249,9 +273,14 @@ mod tests {
             assert!((ruler.page_left_px - left).abs() < 1e-3);
             assert!((ruler.content_width_px - layout.content_width_px * zoom).abs() < 1e-3);
             // A handle placed at its value reads back the same value.
-            for handle in [RulerHandle::IndentLeft, RulerHandle::IndentRight] {
+            for handle in [
+                RulerHandle::IndentFirst,
+                RulerHandle::IndentLeft,
+                RulerHandle::IndentRight,
+            ] {
                 let back = ruler.points_at(handle, ruler.handle_x(handle));
                 let value = match handle {
+                    RulerHandle::IndentFirst => ruler.indent_first,
                     RulerHandle::IndentLeft => ruler.indent_left,
                     RulerHandle::IndentRight => ruler.indent_right,
                 };
@@ -319,6 +348,10 @@ mod tests {
         assert!(left + ruler.indent_right <= column_pt - 36.0 + 1e-3);
         let right = ruler.points_at(RulerHandle::IndentRight, far_left);
         assert!(right + ruler.indent_left <= column_pt - 36.0 + 1e-3);
+        // The first line counts from the left indent, and stops as short.
+        assert_eq!(ruler.points_at(RulerHandle::IndentFirst, far_left), 0.0);
+        let first = ruler.points_at(RulerHandle::IndentFirst, far_right);
+        assert!(first + ruler.indent_left + ruler.indent_right <= column_pt - 36.0 + 1e-3);
         // No caret, no command.
         ui.cursor = None;
         let release = RulerRelease {
@@ -326,5 +359,29 @@ mod tests {
             points: 10.0,
         };
         assert_eq!(ui.ruler_release(release), None);
+    }
+
+    /// `PROSE-UI-230`: the first-line handle sits past the left indent, and
+    /// its release writes the first-line indent alone.
+    #[test]
+    fn the_first_line_handle_writes_the_first_line_indent_alone() {
+        let (_, mut ui, [_, quoted]) = indented();
+        caret_in(&mut ui, quoted);
+        let ruler = ui.ruler();
+        let expected = ruler.page_left_px + (36.0 + 24.0) * ruler.px_per_pt;
+        assert!((ruler.handle_x(RulerHandle::IndentFirst) - expected).abs() < 1e-3);
+        let mut drag = RulerDrag::press(RulerHandle::IndentFirst, expected);
+        drag.move_to(ruler.page_left_px + (36.0 + 48.0) * ruler.px_per_pt);
+        let command = ui.ruler_release(drag.release(&ruler));
+        assert_eq!(
+            command,
+            Some(ProseCommand::SetParagraphStyle {
+                block_id: quoted,
+                style: ParagraphStyle {
+                    indent_first: Some(48.0),
+                    ..ParagraphStyle::default()
+                },
+            })
+        );
     }
 }

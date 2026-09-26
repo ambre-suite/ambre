@@ -150,8 +150,10 @@ impl ParleyRunData {
     /// Where a code-point offset sits inside the run: the caret's box.
     #[must_use]
     pub fn caret_box(&self, offset: u32) -> BoundingBox {
-        Cursor::from_byte_index(&self.layout, self.byte_of(offset), Affinity::Downstream)
-            .geometry(&self.layout, 1.0)
+        let caret =
+            Cursor::from_byte_index(&self.layout, self.byte_of(offset), Affinity::Downstream)
+                .geometry(&self.layout, 1.0);
+        self.past_indent(caret)
     }
 
     /// The boxes a code-point range covers, one per line it crosses. Empty
@@ -174,7 +176,32 @@ impl ParleyRunData {
     /// affinity names: the caret's box.
     #[must_use]
     pub fn caret_box_at(&self, offset: u32, upstream: bool) -> BoundingBox {
-        self.cursor(offset, upstream).geometry(&self.layout, 1.0)
+        self.past_indent(self.cursor(offset, upstream).geometry(&self.layout, 1.0))
+    }
+
+    /// A caret in an empty run, moved past the first-line indent: the run
+    /// has no character for the caret to stand before (`PROSE-FEAT-309`).
+    fn past_indent(&self, mut caret: BoundingBox) -> BoundingBox {
+        if !self.text.is_empty() {
+            return caret;
+        }
+        let indent = self
+            .layout
+            .lines()
+            .next()
+            .and_then(|line| {
+                line.items().find_map(|item| match item {
+                    ambre_draw::PositionedLayoutItem::InlineBox(b) => Some(b.x + b.width),
+                    ambre_draw::PositionedLayoutItem::GlyphRun(_) => None,
+                })
+            })
+            .unwrap_or(0.0);
+        let shift = f64::from(indent) - caret.x0;
+        if shift > 0.0 {
+            caret.x0 += shift;
+            caret.x1 += shift;
+        }
+        caret
     }
 
     /// The line a caret sits on, the first one being zero.
@@ -721,6 +748,32 @@ mod tests {
             let back = run.offset_at(caret.x0 as f32 + 0.1, (caret.y0 + caret.y1) as f32 / 2.0);
             assert_eq!(back, offset, "offset {offset}");
         }
+    }
+
+    /// `PROSE-FEAT-309`: the first line starts at its indent, and the lines
+    /// after it at the left edge. A caret in an empty paragraph sits where
+    /// its text will start.
+    #[test]
+    fn the_first_line_starts_at_its_indent() {
+        let mut measurer = shipped_measurer();
+        let mut indented = style();
+        indented.indent_first_px = 40.0;
+        let text = "one two three four five six seven eight nine ten eleven";
+        let (plain_metrics, plain) = measurer.measure_run(text, &style(), 120.0);
+        let (metrics, run) = measurer.measure_run(text, &indented, 120.0);
+        let run = run.data();
+        assert!(metrics.line_count >= plain_metrics.line_count);
+        let lines = run.range_boxes(0, run.len());
+        assert!((lines[0].x0 - 40.0).abs() < 1e-3);
+        assert!(lines[1..].iter().all(|line| line.x0.abs() < 1e-3));
+        assert!((run.caret_box(0).x0 - 40.0).abs() < 1e-3);
+        // A click inside the indent lands before the first character.
+        assert_eq!(run.offset_at(5.0, 5.0), 0);
+        // The plain run is untouched.
+        assert!(plain.data().caret_box(0).x0.abs() < 1e-3);
+        let (_, empty) = measurer.measure_run("", &indented, 120.0);
+        assert!((empty.data().caret_box(0).x0 - 40.0).abs() < 1e-3);
+        assert!((empty.data().caret_box_at(0, true).x0 - 40.0).abs() < 1e-3);
     }
 
     #[test]

@@ -3,10 +3,10 @@
 **Type:** Vertical (feature)
 **Implementation:** partial
 
-> A horizontal scale above the page, carrying two handles: where every line starts and where every
-> line ends. Drag one and the paragraph moves with it.
+> A horizontal scale above the page, carrying three handles. Where the first line starts, where the
+> rest of the paragraph starts, and where every line ends. Drag one and the paragraph moves with it.
 
-The two values it writes are the paragraph's, and they belong to
+The three values it writes are the paragraph's, and they belong to
 `features/ambre-spec-prose-inline-styles.md`. The page width it is drawn against belongs to
 `features/ambre-spec-prose-pagination.md`.
 
@@ -29,6 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
+| `PROSE-UI-230` | `POST` | Releasing the first-line handle MUST write the first-line indent alone, counted from the left indent. | this spec section 3 | `ambre_prose::view::ruler::tests::the_first_line_handle_writes_the_first_line_indent_alone` | none | verified |
 | `PROSE-UI-063` | `POST` | Releasing a handle MUST write the paragraph once, whatever the length of the drag. | this spec section 3 | `ambre_prose::view::ruler::tests::a_drag_of_any_length_writes_the_paragraph_once` | none | verified |
 | `PROSE-UI-076` | `FRAME` | A handle in motion MUST NOT touch the document: the paint follows the pointer and nothing is written until the release. | this spec section 3 | `ambre_prose::view::ruler::tests::a_drag_of_any_length_writes_the_paragraph_once` | none | verified |
 | `PROSE-UI-228` | `POST` | A released handle MUST stay inside the content column. | this spec section 3 | `ambre_prose::view::ruler::tests::a_handle_stays_inside_the_column_and_short_of_the_other` | none | verified |
@@ -39,7 +40,7 @@ status values are normative in `ambre-spec-template.md`.
   no document write happens during the gesture.
 * **Boundary.** none: the ruler reads view state and emits one command on release. It holds no key
   and opens no socket (`PROSE-UI-002`).
-* **Verification.** 6 `verified`, 1 `untested`. Host tests hold every row on the view's state:
+* **Verification.** 7 `verified`, 1 `untested`. Host tests hold every row on the view's state:
   a drag of any length yields one command on release, and the motion writes nothing. The element
   has no command channel, so it cannot write during the gesture. `PROSE-UI-065` stays open in CSS
   pixels, a placement under a live zoom that lands in the wasm tier
@@ -64,7 +65,7 @@ names the row each scenario rests on.
 
 ## 3. MODEL
 
-**Containers.** This feature owns none. It writes two of the nine paragraph properties, through
+**Containers.** This feature owns none. It writes three of the nine paragraph properties, through
 the command of `features/ambre-spec-prose-inline-styles.md`.
 
 **The state the view publishes.** The ruler is a DOM element fixed to the editor chrome, so it does
@@ -83,11 +84,12 @@ pub struct RulerState {
     /// How many screen pixels one point takes, at the zoom in force.
     pub px_per_pt:        f32,
     /// The indents of the block the caret is in, as laid out, in points.
+    pub indent_first:     f32,
     pub indent_left:      f32,
     pub indent_right:     f32,
 }
 
-pub enum RulerHandle { IndentLeft, IndentRight }
+pub enum RulerHandle { IndentFirst, IndentLeft, IndentRight }
 ```
 
 The view publishes canvas pixels and the host converts them to CSS pixels. The element holds the
@@ -126,7 +128,7 @@ both from the layout. A zoom moves the ruler with the page (`PROSE-UI-065`,
 |---|---|
 | a press on a handle | the handle follows the pointer, and nothing is written |
 | the release | the paragraph's indent is set, in one operation |
-| a caret move to another block | the two handles jump to that block's values |
+| a caret move to another block | the three handles jump to that block's values |
 | a zoom, or a horizontal scroll | the scale and the handles move with the page column |
 
 The element, its keyboard reachability and its pointer capture are the shared chrome toolkit's, and
@@ -147,9 +149,9 @@ are not respecified here (`ambre-spec-chrome.md`).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The first-line indent has no handle.** The layout places every line at the left indent and
-  never reads the first-line one. A handle for it would move nothing and break `PROSE-UI-075`. It
-  lands with the `The first-line indent is laid out` Story (`ambre-roadmap.md` E5).
+* **The first-line handle stops at the left indent.** A hanging indent is laid out as none
+  (`PROSE-FEAT-310`), so the handle shows zero for it and cannot drag past the left indent. It
+  lands with the `Hanging indents` Story (`ambre-roadmap.md` E5).
 * **A block outside the page column shows no handles.** A table cell, a header, a footer and a
   note are measured against another width than the content column. The ruler hides its handles
   there.
@@ -157,7 +159,7 @@ are not respecified here (`ambre-spec-chrome.md`).
   drag writes one `SetParagraphStyle` addressed to one block. Whether a selection spanning ten
   paragraphs indents ten paragraphs or one is undecided, and it is what an author expects to
   differ.
-* **The ruler carries no tab stops and no margin handles.** It writes two of the nine paragraph
+* **The ruler carries no tab stops and no margin handles.** It writes three of the nine paragraph
   properties. The page margins, which the same scale displays in every comparable editor, are
   `meta/page` and reach no gesture at all (`ambre-spec-prose-schema.md section 3`).
 * **The scale carries no graduation.** A release rounds to whole points, and the page format is in

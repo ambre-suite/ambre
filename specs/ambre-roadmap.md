@@ -110,7 +110,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Rich paste: tables and pictures | V1 | an HTML table lands as a table and a pasted picture lands in the text, where the reader now keeps one paragraph per cell and drops the picture |
 | `[x]` Paste as plain text | MVP | a chord and a context-menu entry that insert the plain-text mirror alone, as every word processor offers |
 | `[x]` The interactive ruler | MVP | the ruler above the page, its indent handles following the caret's block, and a drag that writes the paragraph once on release |
-| `[ ]` The first-line indent is laid out | MVP | the layout breaks every line at the left indent and never reads the first-line one, which the document stores and the schema declares. A paragraph's first line starts at its own indent, a hanging one included, and the ruler gains the handle for it |
+| `[x]` The first-line indent is laid out | MVP | the layout breaks every line at the left indent and never reads the first-line one, which the document stores and the schema declares. A paragraph's first line starts at its own indent, a hanging one included, and the ruler gains the handle for it |
+| `[ ]` Hanging indents | V1 | a negative first-line indent starts the first line left of the rest, as a bibliography or a definition list sets it. The layout carries the indent as a box ahead of the text, which has no negative width, so the value is laid out as none and the ruler's handle stops at the left indent |
 | `[ ]` A drag that scrolls, and text dropped into the page | MVP | a selection dragged past the edge of the window scrolls and follows the text, and text dropped into the page lands at the drop point |
 | `[ ]` Inertial scroll | MVP | a flick keeps the column moving, slowing down, and stops at either end of the column |
 | `[x]` The native format | MVP | a Prose document saved to and read from an `.ambre` file |

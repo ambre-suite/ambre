@@ -486,6 +486,18 @@ fn build(
             builder.push(StyleProperty::Strikethrough(true), range);
         }
     }
+    // The first-line indent is an empty box ahead of the text, so the line
+    // breaks, aligns and hit-tests around it (`PROSE-FEAT-309`). Only a whole
+    // paragraph takes it: a draft is a piece typed inside one. A hanging
+    // indent has no box that could express it (`PROSE-FEAT-310`).
+    if width_px.is_some() && style.indent_first_px > 0.0 {
+        builder.push_inline_box(parley::InlineBox {
+            id: 0,
+            index: 0,
+            width: style.indent_first_px,
+            height: 0.0,
+        });
+    }
     let mut layout: Layout<ParleyBrush> = builder.build(text);
     layout.break_all_lines(width_px);
     layout.align(
