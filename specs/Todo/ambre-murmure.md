@@ -29,7 +29,8 @@ Murmure is the command and discussion center. Unlike classic SaaS tools, every m
   * One "Threads" view lists every followed thread with unread replies. A thread never archives on a fixed delay.
   * The user can mark a whole thread as read.
 * **Forum channels:** Each post has a title and tags and opens its own thread. The forum works on mobile, tags included.
-* **Direct Messages (DM):** 1:1 channels or restricted groups with forward secrecy.
+* **Direct Messages (DM):** A direct message is a private channel with no space, between two or more members. A member may give it a name. It uses the same key model as any channel, and it offers no forward secrecy (see *Direct messages are channels*).
+* **Conversion:** A direct message becomes a private channel of a space. It keeps its identifier and its segments. The converting member keeps the history for later members or starts them fresh.
 
 ### B. Chat Experience
 * **Message Editor:** Simplified version of the **Prose** engine (Markdown, emojis, `@` mentions, code blocks).
@@ -77,7 +78,7 @@ Channel storage layout (`channel_{id}/`):
 
 `Loro::Doc (meta)`:
 
-- `"channel"` (Map) -- `{name, type, created, topic}` -- `name` and `topic` for a private channel or a direct message only; the `space` document names a public channel
+- `"channel"` (Map) -- `{name, type, created, topic}` -- `type` is `dm`, `private` or `public`; `name` and `topic` for a private channel or a direct message, where `name` is optional for a direct message; the `space` document names a public channel
 - `"members"` (Map) -- `{"pubkey_alice": {role, joined}}`
 - `"pinned"` (Array) -- `[{msg_id, segment_id}]`
 - `"segments"` (Array), for example:
@@ -138,11 +139,34 @@ At most two segments accept deltas: the active one and the closing one.
 
 **Sealing.** When the grace period of a closing segment ends:
 
-1. Client acquires Redis lock (`channel:{id}:seal`, SET NX, TTL 30 s)
-2. Encodes a shallow Loro snapshot of the segment, with no history, encrypts it, PUT to Object Storage
-3. Builds and PUTs the search index of the segment (section 5)
-4. Updates Doc meta (`state: "sealed"`)
-5. Old segment deltas are purged (snapshot is sufficient)
+1. Any online member client asks the relay for a seal lease, `SealLease(channel_id, seg_id)`.
+2. The relay grants the lease to one client, for a bounded time. The relay freezes the segment:
+   it refuses every later delta for it, and answers with the last `seq`.
+3. The client encodes a shallow Loro snapshot of the deltas up to that `seq`, with no history,
+   encrypts it and PUTs it to Object Storage.
+4. The client builds and PUTs the search index of the segment (section 5).
+5. The client sends `SealCommit(seg_id, snapshot_id, horizon)`. The relay checks the lease and
+   records the seal time, which retention reads.
+6. The client updates Doc meta (`state: "sealed"`).
+
+A lease that expires releases the segment to the next client. The relay reuses the horizon of a
+document snapshot (`ambre-spec-sequencer.md`).
+
+**The relay knows the state of each segment.** It already infers the `seg_id` from the object
+paths and the traffic. The state is outside the `ZK-007` set today, like the retention duration.
+
+**An offline edit can meet a frozen segment.** The relay refuses the delta. The Sync worker then
+rewrites the edit as an amendment (see *Amendments to a sealed segment*). Without that rewrite, the
+edit is lost.
+
+**The deltas are purged after a second client confirms the seal.** The relay is blind, so a
+malicious member can seal a snapshot that drops messages. A document keeps its deltas behind ten
+snapshots, but a sealed segment purges them, so the loss would be final.
+
+1. A second member client rebuilds the state from the deltas and compares it with the snapshot.
+2. On a match, the second client confirms, and the relay purges the deltas.
+3. With no confirmation, the relay purges after a verification delay. That delay needs a row in
+   `ambre-spec-budgets.md`.
 
 The grace period needs a row in `ambre-spec-budgets.md`, for example 24 h, to measure before it is
 fixed. A message younger than the grace period is never in a sealed segment. So an edit of a recent
@@ -226,6 +250,60 @@ sessions (integrity / DoS). E2EE protects content, not membership metadata or in
 ### Key management
 
 One channel = one document from a crypto standpoint, with its Document Key. Sharing = encrypting the Document Key with each member's X25519 pubkey. When a member leaves: rotation via the flow described in section 6.
+
+### Direct messages are channels
+
+A direct message and a channel share one model: one `channel_id`, one `meta` document, one chain of
+segments, one Document Key.
+
+| | Direct message | Private channel | Public channel |
+| :--- | :--- | :--- | :--- |
+| `type` in `meta` | `dm` | `private` | `public` |
+| space | none | one | one |
+| name | optional, in `meta`; composed from the members at display when absent | in `meta` | in the `space` document |
+| key held by | the members | the members | the members and the `space` document |
+
+**The name of a direct message is optional.** Any member may set it or change it in `meta`. With no
+name, the client composes one from the member names at display, and never stores it. A stored
+composition would go stale when a member renames, as `CHROME-080` rules for a document.
+
+**No forward secrecy.** Three choices of this sketch require every key to stay available:
+
+- a new device or a new member reads the full history (see *New member onboarding*);
+- compaction and sealing encrypt the full state under the current key;
+- the search index on the relay is encrypted under the channel key.
+
+Matrix met the same conflict: its key backup keeps every Megolm key. What protects a direct message
+is the key rotation when a member leaves, and the retention of a space.
+
+**Conversion.** A member converts a direct message into a private channel of a space, in one act:
+
+1. The client sets `type: "private"` and writes a name in `meta`.
+2. The relay records the space of the channel.
+3. The `channel_id` and the segments stay.
+4. The converting member chooses the history of later members: keep it, or start fresh.
+
+A direct message converts to a private channel only. A private channel becomes public through a
+second act by a space admin, which writes its key into the catalogue.
+
+**Keep is the default.** The key stays, and every later member reads the whole history.
+
+**Start fresh uses a history boundary.** The conversion rotates the key and records a history
+boundary in `meta`. A later member receives only the keys after the boundary, so the older
+segments stay unreadable to that member. The members of the direct message keep the older keys
+and still read the whole history.
+
+**The boundary protects against later members only.** A member of the direct message can still
+copy the text or pass on an older key.
+
+**Each member of the direct message is warned.** The warning names the space and the history
+choice before the conversion applies. The same warning appears when a third member joins a
+direct message of two.
+
+**The history boundary is general.** Any invite into a private channel can use it, as "invite
+without history". The conversion is its first use.
+
+A member of the direct message who is not a member of the space stays a member of the channel.
 
 ### Channel list and personal state
 
@@ -326,7 +404,7 @@ The zero-knowledge boundary table must record both before either ships.
 
 Choice: access to **the entire history** (Document Key is shared). Consistent with a collaborative office suite (unlike Signal which limits to member join time).
 
-* Each rotation creates a new Document Key. A new member needs every key since the channel start.
+* Each rotation creates a new Document Key. A new member needs every key since the latest history boundary, or since the channel start when there is none (see *Direct messages are channels*).
 * The inviting client sends one signed bundle of all these keys, as Matrix MSC4268 does.
 * The Matrix MSC3061 implementation forwarded keys one by one, and it had a vulnerability.
 
@@ -461,6 +539,12 @@ A re-seal replaces the sealed index (section 3, *Amendments to a sealed segment*
 | **Sealing on size alone** | The last message before the cut lands in a sealed segment, and its first typo fix creates an amendments document. |
 | **Retention applied by a client** | No erasure happens while no admin is online. |
 | **A retention setting per channel** | Two settings for one space, and a member cannot tell which one holds. |
+| **Forward secrecy for direct messages** | A full history on a new device, the compaction and the search index all need every key. Reconsider it only for a separate product: direct messages with no history on the relay, as Signal does. |
+| **A separate model for direct messages** | Converting a direct message into a channel would copy its history into a new document, with new identifiers and a new key. One model makes the conversion a change of `type`. |
+| **A direct message converted straight into a public channel** | The whole space would read a history written for a few members. The public step is a second act, by a space admin. |
+| **A history duration chosen at conversion** | Keys change at a rotation, not on a date. A cut inside a segment would split and re-seal it under two keys. A cut at a segment edge would show a false duration. The retention of the space already bounds the history. |
+| **A client-side lock on sealing** | A client does not reach Redis. The relay arbitrates through a lease. |
+| **Purging the deltas at the seal** | A false snapshot from a malicious member would lose messages for good. |
 | **A sealed index document of the user's channels** | The relay already holds the membership. A second list drifts after a revoke and shows a channel whose key is gone. |
 | **Bookmarks and followed threads in local storage** | A new device starts empty, and a new device is where the user needs them most. |
 | **Private channels in the space catalogue** | Every space member reads the catalogue, so each private channel would show its name and existence to the whole space. |
