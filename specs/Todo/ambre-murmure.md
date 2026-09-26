@@ -35,7 +35,7 @@ Murmure is the command and discussion center. Unlike classic SaaS tools, every m
 * **Message Editor:** Simplified version of the **Prose** engine (Markdown, emojis, `@` mentions, code blocks).
 * **Reactions:** Emoji additions on messages with CRDT aggregation (no conflict on reaction counts). A reaction is a light reply: custom emoji per space, and a reaction never counts in the unread badge.
 * **Pins:** Shared with the channel, through the `pinned` array of the `meta` document.
-* **Bookmarks:** Personal, and a different feature from a pin. The client stores a bookmark in local storage.
+* **Bookmarks:** Personal, and a different feature from a pin. The client stores a bookmark in the personal document (see *Channel list and personal state*).
 * **Status & Presence:** Real-time indicators (Online, Busy, Typing...) via WebSocket relay.
   * Each indicator tells the relay when a member is active, and that timing is metadata.
   * Each indicator has a user setting. The default is an open decision.
@@ -107,7 +107,7 @@ Channel storage layout (`channel_{id}/`):
 A reply can land in a later segment than its root. So the reply count and the last replier cannot live in the root segment alone.
 
 * Proposal: a per-channel `threads` document maps each root `msg_id` to `{reply_count, last_reply_ts, last_author}`.
-* The "followed" state is personal. The client stores it with the bookmarks, outside the shared documents.
+* The "followed" state is personal. The client stores it with the bookmarks, in the personal document.
 * Open question: the size of the `threads` document in a channel with years of history. It may need the same segment chain.
 
 ### Object Storage
@@ -178,6 +178,54 @@ sessions (integrity / DoS). E2EE protects content, not membership metadata or in
 ### Key management
 
 One channel = one document from a crypto standpoint, with its Document Key. Sharing = encrypting the Document Key with each member's X25519 pubkey. When a member leaves: rotation via the flow described in section 6.
+
+### Channel list and personal state
+
+Three stores hold what the channel sidebar shows. Each fact has one owner.
+
+| Fact | Owner | Visible to the relay |
+| :--- | :--- | :--- |
+| The channels a user can read | the relay, through `channel_members` | yes, routing metadata |
+| The channel name and topic | the channel `meta` document | no, sealed |
+| The categories and the channel order of a space | the `space` document | no, sealed |
+| The personal layout, mute, bookmarks and followed threads | the personal document | no, sealed |
+| The notification level | the personal document, with a copy on the relay | yes, the copy |
+| The read cursor | the relay, through `channel_read_cursors` | yes |
+
+**The channel list is membership.** The client asks the relay for its channels. The answer carries
+each `channel_id` and its wrapped Document Key. The client then opens each `meta` document and
+decrypts the name. The launcher lists documents the same way today (`CHROME-044`). No document holds
+a second copy of that list, because such a copy drifts after a revoke.
+
+**The space document holds the shared structure.** It is a sealed Loro document per space. It maps
+each `channel_id` to its category and its position. It also lists the public channels that a
+member has not joined yet. Every member of the space sees the same content.
+
+**The personal document holds the personal state.** It is one Loro document per user, and the user
+is its only member. Its Document Key is random and wrapped for the user's own X25519 key. So it
+reuses the membership path and adds no derivation domain beside the two that `ZK-009` freezes.
+
+- `"layout"` (Map) -- `{channel_id: {group, position, hidden, collapsed}}`
+- `"notify"` (Map) -- `{channel_id: "all" | "mentions" | "none"}`
+- `"bookmarks"` (Map) -- `{msg_id: {channel_id, segment_id, added}}`
+- `"followed"` (Map) -- `{root_msg_id: {channel_id, since}}`
+
+Loro merges the edits of several devices. Each key is a channel or a message, so a
+last-writer-wins map fits every entry. A new device finds the document through a
+`settings_doc_id` column on the user row. The relay already knows that the user is its member, so
+the column tells the relay nothing new.
+
+**Leave and hide are two acts.**
+
+- Leave removes the `channel_members` row. A private channel then rotates its Document Key.
+- Hide sets `hidden` in the personal document. The user keeps the key and can still read.
+
+A user who hides a channel and believes they left still receives its traffic.
+
+**The notification level has two copies.** The personal document is the source of truth for the
+interface. The client writes a copy of each level to the relay, because the relay decides which
+push to send (section 4). The copy and `channel_read_cursors` are outside the `ZK-007` set today.
+The zero-knowledge boundary table must record both before either ships.
 
 ### New member onboarding
 
@@ -294,6 +342,9 @@ The index format assumes that a sealed segment is immutable. The sketch does not
 | **Searchable encryption on the relay** (keyed-hash token per word, SSE) | The relay sees which queries repeat and which documents match. Published leakage-abuse attacks (Cash et al., 2015) recover content from that leak. It breaks the zero-knowledge pillar. |
 | **Full download and re-index on each device** | The Element model: Seshat (Rust, tantivy) indexes locally on desktop only. Element Web still has no search in encrypted rooms. A new device waits for the full history. |
 | **SQLite/FTS5 compiled to WASM** | A C library, against the Rust-first pillar. |
+| **A sealed index document of the user's channels** | The relay already holds the membership. A second list drifts after a revoke and shows a channel whose key is gone. |
+| **Bookmarks and followed threads in local storage** | A new device starts empty, and a new device is where the user needs them most. |
+| **A personal key derived from the Master Seed** | It adds a third derivation domain beside the two that `ZK-009` freezes. A wrapped random key reuses the membership path. |
 | **Client-side filtering of each push after decryption** | Web Push requires a visible notification for each push. Safari cancels the subscription after three silent pushes. |
 
 ### Product
