@@ -464,7 +464,7 @@ a space, beyond the space each channel belongs to.
 `Loro::Doc (space)`:
 
 - `"categories"` (Map) -- `{category_id: {name, position}}`
-- `"channels"` (Map) -- `{channel_id: {name, topic, category_id, position, key}}`
+- `"channels"` (Map) -- `{channel_id: {name, topic, category_id, position, key}}`, where `key` is the channel key sealed under the space key, so that no key reaches the Logic thread
 
 The catalogue lists public channels only. Every member of the space reads it, so a private channel
 in it would show its name and its existence to the whole space. A private channel and a direct
@@ -484,8 +484,8 @@ channel or a direct message only.
 | no | yes | a private channel or a direct message |
 
 **Joining a public channel needs no other member.** The `key` field holds the Document Key of the
-channel, sealed by the space document. The client wraps that key for its own X25519 key and asks
-the relay for a membership row. The relay grants the row to a space member only for a channel it
+channel, sealed under the space key. The Sync worker unseals it and wraps it for its own X25519
+key, then asks the relay for a membership row. The relay grants the row to a space member only for a channel it
 knows as public in that space. So the relay holds the public flag and the space of each channel.
 That flag is outside the `ZK-007` set today, like the notification level below.
 

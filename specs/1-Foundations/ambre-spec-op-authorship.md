@@ -70,13 +70,22 @@ prefix is `AUTHOR`, and it belongs to this document alone.
 
 **CRDT containers.** one per document, the peer registry.
 
-- `"peers"` (Map) -- `{peer_id: {user, nonce}}`. An absent key means the PeerID resolves to no user.
+- `"peers"` (Map) -- from a `PeerId` to a `PeerEntry`. An absent key means the PeerID resolves to no user.
 
 **The derivation.**
 
 ```text
 nonce   = 128 random bits, drawn when the client opens the document
 peer_id = first 64 bits of BLAKE2b(b"ambre-peer-v1" || signing_pubkey || nonce)
+```
+
+```rust
+pub struct SessionNonce([u8; 16]);
+pub struct PeerId(u64);                  // the Loro PeerID, derived and never drawn
+pub struct PeerEntry { pub user: UserId, pub nonce: SessionNonce }
+impl PeerId {
+    pub fn derive(signing_key: &PublicKey, nonce: &SessionNonce) -> PeerId;
+}
 ```
 
 The client sets the PeerID on the Loro document before its first operation. A second device, a

@@ -260,6 +260,7 @@
 | Server, per open document | ~50 KB | No in-process blob cache: `LIST doc:{id}:pending` buffers in Redis, ~50 deltas of ~1 KB over the 15 s window |
 | Documents held in memory, per client | < 32 MB, to measure | Every document the Logic thread holds for a list with activity badges, pinned ones included. Held by eviction (`RESID-001`) |
 | Local store, per client | < 500 MB, to measure | Inside the browser quota. Held by eviction (`RESID-002`) |
+| Murmure segment, at its close | 5000 messages or 2 MB of snapshot, whichever comes first | Bounds the first display of a channel and every final snapshot. A first estimate, to measure |
 | Light subscription, per document not held | < 1 KB | The key, the counters and the cursor (`RESID-004`) |
 | Color emoji font | loaded on first use, size to measure | Charged to the fonts row above. A full color emoji font weighs about 10 MB, so its size decides whether the fonts row still holds |
 

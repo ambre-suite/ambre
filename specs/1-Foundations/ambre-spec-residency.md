@@ -90,10 +90,12 @@ prefix is `RESID`, and it belongs to this document alone.
 
 ```rust
 pub struct ActivitySummary {
-    pub kind: ActivityKind,       // Content, Reaction, Edit or Other
-    pub mentions: Vec<UserId>,    // the users the update names
-    pub anchor: Option<Vec<u8>>,  // an application key, for example a thread root
+    pub kind: ActivityKind,              // Content, Reaction, Edit or Other
+    pub mentions: Vec<UserId>,           // the users the update names
+    pub anchor: Option<ActivityAnchor>,  // an application key, for example a thread root
 }
+pub enum ActivityKind { Content, Reaction, Edit, Other }
+pub struct ActivityAnchor(Vec<u8>);     // opaque to the foundation, typed by the application
 ```
 
 The Sync worker reads the summary with no Loro document and advances the counters (`RESID-014`).

@@ -169,12 +169,13 @@ recent. **Nothing triggers any of it** (`SRV-038`).
 1. A member client asks for the finalize lease of the segment. The relay grants it to one client
    (`SRV-113`) and locks the segment for good (`SRV-114`). A later delta is refused with an answer
    that names the lock, so the client rewrites the edit as an amendment (`SRV-115`).
-2. The client uploads the final snapshot and commits it with its horizon. The relay refuses a
+2. The client uploads the final snapshot and commits it with its horizon, a `Seq`. The relay refuses a
    commit without the live lease (`SRV-116`), and records the finalization time (`SRV-117`).
 3. The deltas stay until a second member client confirms the snapshot against them, or until the
    verification delay passes (`SRV-118`). A false snapshot therefore loses nothing at once.
 
-The durations are rows of `ambre-spec-budgets.md section 8`.
+The lease names the segment by its `DocumentId`, and the commit carries its `SnapshotId` and its
+horizon `Seq`. The durations are rows of `ambre-spec-budgets.md section 8`.
 
 **A replay.** A client asks for everything after a number it names.
 

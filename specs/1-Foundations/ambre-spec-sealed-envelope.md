@@ -108,6 +108,15 @@ signature says who wrote the frame, the tag says under which key, and only then 
 | 4. read the version byte and decompress under the ceiling | an unknown version, and a bomb | drop, and warn |
 | 5. split an update into its nonce, its summary and its delta | a body too short for its parts | drop, and warn |
 
+```rust
+pub struct UpdateBody {
+    pub nonce: SessionNonce,                 // ambre-spec-op-authorship.md
+    pub summary: Option<ActivitySummary>,    // ambre-spec-residency.md
+    pub delta: CrdtDelta,
+}
+pub struct CrdtDelta(Vec<u8>);               // a Loro update, opaque to the envelope
+```
+
 **Why the nonce and the summary ride inside.** The session nonce binds each operation to its signer
 (`ambre-spec-op-authorship.md`). The activity summary tells a client what an update holds with no
 document loaded (`ambre-spec-residency.md`). Either one outside the ciphertext would tell the relay

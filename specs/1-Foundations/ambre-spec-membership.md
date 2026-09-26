@@ -172,6 +172,20 @@ client check what the relay serves.
   (`SYNC-106`). Murmure accepts a self-join to a public channel of a space, checked against the
   sealed catalogue of that space.
 
+```rust
+pub struct MembershipEntry {
+    pub document: DocumentId,
+    pub member: UserId,
+    pub act: MembershipAct,
+    pub role: Role,
+    pub previous: Option<EntryDigest>,  // absent on the first entry alone
+    pub author: UserId,
+    pub signature: Signature,
+}
+pub enum MembershipAct { Create, Invite, Revoke, ChangeRole, SelfJoin }
+pub struct EntryDigest([u8; 32]);
+```
+
 What the relay can still do is withhold the latest entries. It can show a list that is late, never
 a list it made up. A revoke also rotates the key, so a revoked member reads nothing new either way.
 

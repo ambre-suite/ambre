@@ -1,0 +1,119 @@
+# AMBRE -- FEATURE: MESSAGES
+**Type:** Vertical (feature)
+**Implementation:** design-only
+
+> A member writes a message, edits it, or deletes it. Nobody else can change it: every client
+> refuses a change that does not come from its author.
+
+---
+
+## 1. CONTRACT
+
+The only mandatory read. Stated in user terms: no container, no type, no function. Grammar and
+status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`, shared with
+`ambre-spec-murmure-schema.md` and every feature of this application.
+
+### 1.1 The state
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-078` | `INV` | A message MUST carry the author who signed the delta that created it. | this spec section 3; `ambre-spec-op-authorship.md` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-079` | `CONC` | Two peers MUST accept and refuse the same deltas on a message. | this spec section 3; `AUTHOR-007` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.2 Send a message
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-080` | `POST` | A sent message MUST be appended to the active segment with a fresh `MessageId` and its author. | this spec section 3; `MURMURE-002` | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-081` | `POST` | A sent message MUST carry an activity summary of kind content, with its mentions. | this spec section 3; `SYNC-113` | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-082` | `FAIL` | Given a delta that creates a message under another author, every client MUST refuse the delta. | this spec section 3 | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-083` | `FRAME` | Sending a message MUST NOT change another message. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.3 Edit a message
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-084` | `POST` | An edit MUST change the content of the message and mark it edited. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-085` | `FAIL` | Given a delta that edits a message of another author, every client MUST refuse the delta. | this spec section 3 | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-086` | `FRAME` | Editing a message MUST NOT change its author, its identity or its reactions. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.4 Delete a message
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-087` | `POST` | A delete MUST mark the message deleted and empty its content. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-088` | `POST` | A delete of a message in a final segment MUST write an amendment with `by: author`. | this spec section 3; `features/ambre-spec-murmure-segments.md` | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-089` | `FAIL` | Given a delta that deletes a message of another author, every client MUST refuse the delta. | this spec section 3 | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-090` | `FRAME` | Deleting a message MUST NOT delete its thread. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+* **Budget.** the authorship check imports each received delta into a fork of its segment, a row
+  of `ambre-spec-budgets.md section 1`.
+* **Boundary.** a message is sealed like any delta (`ZK-001`), and its kind rides in the sealed
+  summary (`SYNC-113`). The relay never learns whether a frame is a message, an edit or a delete.
+* **Verification.** 13 `unimplemented`: no message exists in the code.
+
+---
+
+## 2. WHAT EACH USER SEES
+
+| Alice does | Bob does | The segment holds | Each user sees | Test |
+|---|---|---|---|---|
+| sends a message | -- | one message, authored by Alice | the message, by Alice | none |
+| edits her message | reacts to it at the same instant | the edit and the reaction | the edited message, with Bob's reaction (`MURMURE-086`) | none |
+| -- | Mallory sends a delta that edits Alice's message | Alice's message unchanged | the message as Alice wrote it (`MURMURE-085`) | none |
+| deletes a message that has replies | -- | a deleted message, and its thread | the replies stay reachable (`MURMURE-090`) | none |
+
+---
+
+## 3. MODEL
+
+**CRDT containers.** the message map of `ambre-spec-murmure-schema.md section 3`: `id`, `author`,
+`ts`, `content`, `attachments`, `thread`, `reactions`, `edited` and `deleted`.
+
+**The authorship check, in steps.** It runs on each received delta, before import.
+
+1. Import the delta into a fork of its document.
+2. Read the operations the delta produced.
+3. Refuse the delta when it creates a message under another author (`MURMURE-082`).
+4. Refuse it when it changes a message container created by another author's PeerID
+   (`MURMURE-085`, `MURMURE-089`).
+5. Refuse it when it writes a reaction under another user's key (`MURMURE-094`).
+6. Import it into the real document otherwise.
+
+A PeerID resolves to its user through `ambre-spec-op-authorship.md`. Every client runs the same
+check on the same delta, so every client reaches the same verdict (`MURMURE-079`).
+
+**Moderation is not here.** Only the author changes a message. A moderator who hides a message is
+the `Moderation` Story (`ambre-roadmap.md` E5).
+
+**Code.** not built.
+
+---
+
+## 4. SURFACE
+
+| Trigger | Behaviour |
+|---|---|
+| Enter in the composer | the message is sent |
+| edit on one's own message | the message opens in the composer |
+| up arrow in an empty composer | the last own message opens for edit |
+| delete on one's own message | the message shows as deleted |
+| the same actions on another member's message | not offered |
+
+---
+
+## 5. REJECTED ALTERNATIVES
+
+| Decision | Rejected alternative | Why not |
+| :--- | :--- | :--- |
+| The check runs before import | a filter at display | the filter detects and prevents nothing: a last-writer-wins value is already overwritten |
+| A delete empties the content | a tombstone that keeps the text | the text would stay readable to every member, against the wish of its author |
+| Only the author changes a message | a moderator role in the same check | a role lives in another document, and a revoke concurrent with a delete has no single answer without the relay |
+
+---
+
+## 6. NOT BUILT, AND NOT YET RULED
+
+* **Nothing is built.** No message, and no authorship check, exists.
+* **The fork is not measured.** Its cost is an estimate, and a prototype decides whether a fork per
+  delta holds the budget.
