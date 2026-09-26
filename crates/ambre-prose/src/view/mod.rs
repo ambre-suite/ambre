@@ -14,6 +14,7 @@ pub mod column;
 pub mod hit;
 pub mod paint;
 pub mod provisional;
+pub mod ruler;
 pub mod slash;
 pub mod toolbar;
 

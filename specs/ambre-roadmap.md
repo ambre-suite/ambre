@@ -109,7 +109,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Rich clipboard: HTML in and out | MVP | a copy writes HTML beside the text and the private bytes, and a paste from a web page, Google Docs or Word keeps its blocks, lists, links and marks, read on the Logic thread through an allow-list with a depth cap |
 | `[ ]` Rich paste: tables and pictures | V1 | an HTML table lands as a table and a pasted picture lands in the text, where the reader now keeps one paragraph per cell and drops the picture |
 | `[x]` Paste as plain text | MVP | a chord and a context-menu entry that insert the plain-text mirror alone, as every word processor offers |
-| `[ ]` The interactive ruler | MVP | the ruler above the page, its indent handles following the caret's block, and a drag that writes the paragraph once on release |
+| `[x]` The interactive ruler | MVP | the ruler above the page, its indent handles following the caret's block, and a drag that writes the paragraph once on release |
+| `[ ]` The first-line indent is laid out | MVP | the layout breaks every line at the left indent and never reads the first-line one, which the document stores and the schema declares. A paragraph's first line starts at its own indent, a hanging one included, and the ruler gains the handle for it |
 | `[ ]` A drag that scrolls, and text dropped into the page | MVP | a selection dragged past the edge of the window scrolls and follows the text, and text dropped into the page lands at the drop point |
 | `[ ]` Inertial scroll | MVP | a flick keeps the column moving, slowing down, and stops at either end of the column |
 | `[x]` The native format | MVP | a Prose document saved to and read from an `.ambre` file |

@@ -183,6 +183,7 @@ impl ProseView {
         self.publish_hover();
         self.take_intent();
         self.take_format();
+        self.take_ruler();
         self.take_slash_pick();
         self.publish_toolbar();
         // The input held behind a structural command goes out once the
@@ -233,6 +234,47 @@ impl ProseView {
             send_edit(&mut self.outbox, self.document_id, command);
         }
         self.busy_pub.publish(self.outbox.is_busy());
+    }
+
+    /// Act on a released ruler handle: one command for the whole drag
+    /// (`PROSE-UI-063`). One that waits behind a busy outbox stays in its
+    /// signal for a later frame.
+    fn take_ruler(&mut self) {
+        if self.fatal || self.outbox.is_busy() {
+            return;
+        }
+        let Some(release) = self.annotations.ruler_release.get_untracked() else {
+            return;
+        };
+        self.annotations.ruler_release.set(None);
+        if let Some(command) = self.state.ruler_release(release) {
+            send_edit(&mut self.outbox, self.document_id, command);
+        }
+        self.busy_pub.publish(self.outbox.is_busy());
+    }
+
+    /// Publish the ruler in CSS pixels. The release comes back in points, so
+    /// the pixels it was measured in never reach the view.
+    fn publish_ruler(&self) {
+        let mut ruler = self.state.ruler();
+        let (left, top) = to_css(ruler.page_left_px, 0.0);
+        let (right, _) = to_css(ruler.page_left_px + ruler.content_width_px, 0.0);
+        let factor = if ruler.content_width_px > 0.0 {
+            (right - left) / ruler.content_width_px
+        } else {
+            1.0
+        };
+        ruler.page_left_px = left;
+        ruler.top_px = top;
+        ruler.content_width_px = right - left;
+        ruler.px_per_pt *= factor;
+        if self
+            .annotations
+            .ruler
+            .with_untracked(|shown| *shown != ruler)
+        {
+            self.annotations.ruler.set(ruler);
+        }
     }
 
     /// Act on the slash menu item picked with the pointer. It goes down the
@@ -286,6 +328,7 @@ impl ProseView {
         }
         // The slash menu sits at the caret, and moves when the bar does.
         self.publish_slash();
+        self.publish_ruler();
     }
 
     /// Publish the hovered suggestion, where the popover goes.

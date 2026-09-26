@@ -18,6 +18,7 @@ use ambre_commands::CommandId;
 
 use crate::events::{SuggestionKind, TriState};
 use crate::view::annotate::{AnnotationIntent, HoveredSuggestion, PanelThread};
+use crate::view::ruler::{RulerDrag, RulerHandle, RulerRelease, RulerState};
 use crate::view::slash::SlashMenuState;
 use crate::view::toolbar::{ToolbarState, state_of};
 
@@ -45,6 +46,10 @@ pub struct ProseSignals {
     pub slash: RwSignal<SlashMenuState>,
     /// The menu item picked with the pointer, until the view drains it.
     pub slash_pick: RwSignal<Option<usize>>,
+    /// The ruler, in CSS pixels (`PROSE-UI-064`).
+    pub ruler: RwSignal<RulerState>,
+    /// A released ruler handle, until the view drains it (`PROSE-UI-063`).
+    pub ruler_release: RwSignal<Option<RulerRelease>>,
 }
 
 impl Default for ProseSignals {
@@ -66,6 +71,8 @@ impl ProseSignals {
             format: RwSignal::new(None),
             slash: RwSignal::new(SlashMenuState::default()),
             slash_pick: RwSignal::new(None),
+            ruler: RwSignal::new(RulerState::default()),
+            ruler_release: RwSignal::new(None),
         }
     }
 }
@@ -292,6 +299,90 @@ pub fn ProseSlashMenu(signals: ProseSignals) -> impl IntoView {
             <ul class="ambre-prose-slash-menu" style=style role="listbox" aria-label="Insert">
                 {items.collect_view()}
             </ul>
+        })
+    }
+}
+
+/// The height of the ruler, in CSS pixels.
+const RULER_HEIGHT_PX: f32 = 22.0;
+
+/// The ruler above the page (`features/ambre-spec-prose-ruler.md section 4`).
+///
+/// It renders what the view published. A handle in motion is painted at the
+/// pointer and writes nothing (`PROSE-UI-076`). Its release goes back to the
+/// view as one value, and the view sends one command (`PROSE-UI-063`).
+#[component]
+pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
+    let drag = RwSignal::new(None::<RulerDrag>);
+    let release = move |ev: web_sys::PointerEvent| {
+        let Some(mut held) = drag.get_untracked() else {
+            return;
+        };
+        held.move_to(ev.client_x() as f32);
+        drag.set(None);
+        let ruler = signals.ruler.get_untracked();
+        signals.ruler_release.set(Some(held.release(&ruler)));
+    };
+    move || {
+        let ruler = signals.ruler.get();
+        if ruler.content_width_px <= 0.0 {
+            return None;
+        }
+        let style = format!(
+            "position: fixed; left: {}px; top: {}px; width: {}px; height: {RULER_HEIGHT_PX}px; \
+             z-index: 59;",
+            ruler.page_left_px, ruler.top_px, ruler.content_width_px
+        );
+        let handles = ruler.visible.then(|| {
+            [
+                (RulerHandle::IndentLeft, "Left indent"),
+                (RulerHandle::IndentRight, "Right indent"),
+            ]
+            .map(|(handle, label)| {
+                let x = move || {
+                    drag.get()
+                        .filter(|d| d.handle == handle)
+                        .map_or_else(|| ruler.handle_x(handle), |d| d.at_px)
+                        - ruler.page_left_px
+                };
+                view! {
+                    <div
+                        class="ambre-prose-ruler-handle"
+                        role="slider"
+                        aria-label=label
+                        style=move || format!(
+                            "position: absolute; left: {}px; top: 0; transform: translateX(-50%); \
+                             touch-action: none; cursor: ew-resize;",
+                            x()
+                        )
+                        on:mousedown=|ev: web_sys::MouseEvent| ev.prevent_default()
+                        on:pointerdown=move |ev: web_sys::PointerEvent| {
+                            ev.prevent_default();
+                            let target = event_target::<web_sys::Element>(&ev);
+                            let _ = target.set_pointer_capture(ev.pointer_id());
+                            drag.set(Some(RulerDrag::press(handle, ev.client_x() as f32)));
+                        }
+                        on:pointermove=move |ev: web_sys::PointerEvent| {
+                            drag.update(|d| {
+                                if let Some(d) = d.as_mut().filter(|d| d.handle == handle) {
+                                    d.move_to(ev.client_x() as f32);
+                                }
+                            });
+                        }
+                        on:pointerup=release
+                        on:pointercancel=move |_| drag.set(None)
+                    >
+                        "\u{25BC}"
+                    </div>
+                }
+            })
+            .into_iter()
+            .collect_view()
+        });
+        Some(view! {
+            <div class="ambre-prose-ruler" style=style role="group" aria-label="Ruler">
+                {handles}
+            </div>
         })
     }
 }

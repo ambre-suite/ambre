@@ -1536,6 +1536,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
             <ambre_prose::chrome::ProseSuggestionPopover signals=prose_signals />
             <ambre_prose::chrome::ProseFormatBar signals=prose_signals />
             <ambre_prose::chrome::ProseSlashMenu signals=prose_signals />
+            <ambre_prose::chrome::ProseRuler signals=prose_signals />
         })}
 
         // The deck panel (`toile-presentation`): the surface that adds a frame
