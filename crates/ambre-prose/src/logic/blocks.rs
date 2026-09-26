@@ -183,7 +183,7 @@ impl ProseState {
     }
 
     /// Write the attributes one initializer carries.
-    fn write_init(&self, id: &TreeID, init: &BlockInit) -> Result<(), String> {
+    pub(super) fn write_init(&self, id: &TreeID, init: &BlockInit) -> Result<(), String> {
         let tree = doc::blocks(&self.doc);
         let Some(node) = doc::node_of(&tree, id) else {
             return Err("the block vanished before its attributes landed".to_owned());

@@ -15,6 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
+| `prose-clipboard` | Copy, cut and paste. | implemented | 14 |  |
 | `prose-comments` | A discussion attached to a passage of the text. | implemented | 36 |  |
 | `prose-cross-references` | A pointer from one place in the document to another: "see page 4", "see section 2.1", or a label the author chose. | implemented | 16 |  |
 | `prose-engine` | An author types a word and every collaborator reads it. | implemented | 42 |  |
@@ -36,12 +37,11 @@
 | `prose-text-editing` | Typing, deleting, splitting and joining paragraphs. | partial | 45 |  |
 | `prose-toolbar` | Select a few words and a small bar appears above them. | partial | 19 |  |
 | `prose-track-changes` | A reviewer edits without changing the document. | partial | 40 |  |
-| `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | partial | 19 |  |
+| `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | partial | 21 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
-| `prose-clipboard` | Copy, cut and paste. | design-only | 14 |  |
 | `prose-images` | A picture in the document. | design-only | 38 |  |
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | design-only | 8 |  |
 | `prose-ruler` | A horizontal scale above the page, carrying three handles. | design-only | 5 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 13 implemented, 9 partial, 6 design-only. 669 contract rows, 3 loose.**
+**28 features: 14 implemented, 9 partial, 5 design-only. 671 contract rows, 3 loose.**

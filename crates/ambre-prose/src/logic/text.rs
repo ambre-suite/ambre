@@ -242,9 +242,9 @@ impl ProseState {
 }
 
 /// One run of body text and the marks it carries.
-struct MarkedRun {
-    text: String,
-    marks: Vec<(String, loro::LoroValue)>,
+pub(super) struct MarkedRun {
+    pub(super) text: String,
+    pub(super) marks: Vec<(String, loro::LoroValue)>,
 }
 
 /// The marked runs a body holds between two code-point offsets.
@@ -254,7 +254,7 @@ struct MarkedRun {
 /// blocks carry between them must be unchanged (`PROSE-042`), and a mark is
 /// part of it. This reads the rich-text value instead and keeps each run's
 /// attributes beside its text.
-fn marked_runs(body: &LoroText, start: usize, end: usize) -> Vec<MarkedRun> {
+pub(super) fn marked_runs(body: &LoroText, start: usize, end: usize) -> Vec<MarkedRun> {
     let loro::LoroValue::List(runs) = body.get_richtext_value() else {
         return Vec::new();
     };
@@ -302,7 +302,7 @@ fn marked_runs(body: &LoroText, start: usize, end: usize) -> Vec<MarkedRun> {
 /// The CRDT engine's own refusal of an insertion. A mark the engine refuses is
 /// logged rather than raised. The text is the content, and losing it to a
 /// rejected attribute would be the worse answer.
-fn write_runs(target: &LoroText, dest: usize, runs: &[MarkedRun]) -> Result<(), String> {
+pub(super) fn write_runs(target: &LoroText, dest: usize, runs: &[MarkedRun]) -> Result<(), String> {
     let mut at = dest;
     for run in runs {
         target.insert(at, &run.text).map_err(|e| format!("{e:?}"))?;

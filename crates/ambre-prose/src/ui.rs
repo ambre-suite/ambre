@@ -366,6 +366,12 @@ pub struct ProseUiState {
     /// A link target a press asked to open, until the host takes it
     /// (`PROSE-UI-071`).
     pub followed: Option<String>,
+    /// The payload of the last copy, until the host mirrors it to the system
+    /// clipboard (`PROSE-UI-041`).
+    pub(crate) pending_clip: Option<ambre_bus::ClipboardBlob>,
+    /// The payload of the last copy, kept for a paste back into the same tab
+    /// while the system clipboard still holds its text (`PROSE-UI-043`).
+    pub(crate) last_clip: Option<ambre_bus::ClipboardBlob>,
     /// The suggestion under the pointer, for the accept or reject popover
     /// (`PROSE-UI-148`).
     pub hovered: Option<crate::view::annotate::HoveredSuggestion>,
@@ -529,6 +535,14 @@ impl ProseUiState {
     /// paragraph (`PROSE-UI-141`), because the event names the block minted.
     pub fn apply_event(&mut self, event: &ProseEvent) {
         match event {
+            ProseEvent::Clipboard { text, payload } => {
+                let blob = ambre_bus::ClipboardBlob {
+                    text: text.clone(),
+                    ambre: Some(payload.clone()),
+                };
+                self.last_clip = Some(blob.clone());
+                self.pending_clip = Some(blob);
+            }
             // The view does not interpret the bytes; the host saves them.
             ProseEvent::ExportReady {
                 filename,

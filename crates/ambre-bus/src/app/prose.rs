@@ -853,11 +853,16 @@ pub enum ProseCommand {
     /// Hand the view the zero-based pages `first` to `last`, both included.
     /// The view sends it when the canvas nears a page the layout in force
     /// does not carry (`PROSE-UI-211`); it writes nothing.
-    ShowPages { first: u32, last: u32 },
+    ShowPages {
+        first: u32,
+        last: u32,
+    },
     /// Hand the view the pages around the page `block_id` starts on. The view
     /// sends it to reveal a block the layout in force does not carry
     /// (`PROSE-UI-212`); it writes nothing.
-    ShowBlock { block_id: BlockId },
+    ShowBlock {
+        block_id: BlockId,
+    },
 
     // -- Word count (`features/ambre-spec-prose-word-count.md`) --
     /// Recount the four text tallies. The view sends it once a run of changes
@@ -870,6 +875,33 @@ pub enum ProseCommand {
     ReadMarks {
         anchor: (BlockId, u32),
         focus: (BlockId, u32),
+    },
+
+    // -- Clipboard (`features/ambre-spec-prose-clipboard.md`) --
+    /// Build the clipboard payload of a whole selection. The endpoints
+    /// arrive in either order; it writes nothing (`PROSE-UI-040`,
+    /// `PROSE-UI-109`).
+    CopyRange {
+        anchor: (BlockId, u32),
+        focus: (BlockId, u32),
+    },
+    /// Insert a payload this application copied, at one place, marks and
+    /// block structure kept (`PROSE-UI-107`). The bytes are the ones the
+    /// Logic thread built; the view only carries them (`PROSE-UI-105`).
+    /// Bytes another application wrote do not decode, and `text`, the
+    /// plain-text mirror read beside them, is pasted instead
+    /// (`PROSE-UI-042`).
+    PasteRich {
+        at: (BlockId, u32),
+        payload: Vec<u8>,
+        text: String,
+    },
+    /// Insert plain text of several lines at one place, one paragraph per
+    /// line, the first joining the paragraph there (`PROSE-UI-042`). Text of
+    /// one line travels as [`ProseCommand::InsertText`].
+    PasteText {
+        at: (BlockId, u32),
+        text: String,
     },
     /// Apply one presence mark over a whole selection, or remove it. Every
     /// block the selection covers changes in one commit, so one undo takes
@@ -1110,6 +1142,8 @@ impl ProseCommand {
             Self::Noop => "nothing",
             Self::Sync { .. } => "catching up",
             Self::InsertText { .. } => "typing",
+            Self::CopyRange { .. } => "copying",
+            Self::PasteRich { .. } | Self::PasteText { .. } => "pasting",
             Self::DeleteText { .. } => "deleting text",
             Self::DeleteRange { .. } => "deleting the selection",
             Self::SplitBlock { .. } => "splitting the block",
@@ -1258,6 +1292,10 @@ pub enum ProseEvent {
         focus: (BlockId, u32),
         marks: ActiveMarks,
     },
+    /// The clipboard payload of the selection a [`ProseCommand::CopyRange`]
+    /// named: its plain-text mirror, and this application's own bytes
+    /// (`PROSE-UI-108`).
+    Clipboard { text: String, payload: Vec<u8> },
     /// A cell a merge covers still holds text: masked, not destroyed. A hint,
     /// and it blocks nothing (`PROSE-FEAT-255`).
     MergeConflictDetected { cell_id: BlockId },
@@ -1265,7 +1303,8 @@ pub enum ProseEvent {
     /// of `cell`, at its start (`PROSE-FEAT-250`, `PROSE-FEAT-251`).
     CellEntered { cell: BlockId, block: BlockId },
     /// Where the caret lands after an undo or a redo: the edit taken back or
-    /// put back (`PROSE-UI-045`). The view collapses any selection to it
+    /// put back (`PROSE-UI-045`). After a paste, it lands after the text
+    /// pasted. The view collapses any selection to it
     /// (`PROSE-UI-073`) and writes nothing back (`PROSE-UI-074`).
     CaretPlaced { block: BlockId, offset: u32 },
     /// Every footnote, in the order of its calls, orphans last

@@ -237,7 +237,7 @@ impl ProseState {
         self.commit_with(Vec::new())
     }
 
-    fn selected_spans(
+    pub(super) fn selected_spans(
         &self,
         anchor: (BlockId, u32),
         focus: (BlockId, u32),

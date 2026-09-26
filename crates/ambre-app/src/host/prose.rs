@@ -497,15 +497,45 @@ impl ProseView {
         })
     }
 
-    pub fn clipboard_write(&mut self, _cut: bool) -> ambre_bus::CopyOutcome {
-        ambre_bus::CopyOutcome::Nothing
+    /// One input the host builds itself rather than translates.
+    fn feed(&mut self, input: &ProseInput) -> bool {
+        if self.fatal || self.outbox.is_busy() {
+            return false;
+        }
+        let (outbox, document_id) = (&mut self.outbox, self.document_id);
+        let mut send = |command| send_edit(outbox, document_id, command);
+        let consumed = self.state.handle_input(input, &mut send);
+        self.busy_pub.publish(self.outbox.is_busy());
+        self.publish_toolbar();
+        self.dirty |= consumed;
+        consumed
+    }
+
+    /// A copy or a cut: the Logic thread builds the payload of the whole
+    /// selection, and a frame later [`poll_clipboard`](Self::poll_clipboard)
+    /// hands it over (`PROSE-UI-040`, `PROSE-UI-041`). With nothing selected
+    /// the browser keeps its default.
+    pub fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
+        if self.state.selection().is_none() {
+            return ambre_bus::CopyOutcome::Nothing;
+        }
+        if self.feed(&ProseInput::Copy { cut }) {
+            ambre_bus::CopyOutcome::Deferred
+        } else {
+            ambre_bus::CopyOutcome::Nothing
+        }
     }
 
     pub fn poll_clipboard(&mut self) -> Option<ambre_bus::ClipboardBlob> {
-        None
+        self.state.poll_clipboard()
     }
 
-    pub fn paste_clipboard(&mut self, _blob: ambre_bus::ClipboardBlob, _own_copy: bool) {}
+    /// A paste of what the host read, or of the payload kept from the last
+    /// copy while the clipboard is still that copy (`PROSE-UI-043`).
+    pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
+        let input = self.state.paste_input(blob, own_copy);
+        self.feed(&input);
+    }
 
     /// Another document of the same type: the state starts over, and the
     /// first layout of the new one arrives from the Logic thread.

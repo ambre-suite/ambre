@@ -32,6 +32,7 @@
 mod bands;
 mod blocks;
 mod catchup;
+mod clipboard;
 mod comments;
 mod derived;
 mod docfile;
@@ -607,6 +608,11 @@ impl ProseState {
             } => self.update_toc_config(&tree_id(block_id), max_level, numbered),
             ProseCommand::CountWords => self.count_words(),
             ProseCommand::ReadMarks { anchor, focus } => self.read_marks(anchor, focus),
+            ProseCommand::CopyRange { anchor, focus } => self.copy_range(anchor, focus),
+            ProseCommand::PasteRich { at, payload, text } => {
+                self.paste_rich((tree_id(at.0), at.1), &payload, &text)
+            }
+            ProseCommand::PasteText { at, text } => self.paste_text((tree_id(at.0), at.1), &text),
             ProseCommand::FormatSelection {
                 anchor,
                 focus,

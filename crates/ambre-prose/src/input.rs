@@ -97,6 +97,17 @@ pub enum ProseInput {
     /// The input method committed its text: one insertion at the caret
     /// (`PROSE-UI-029`).
     ComposeEnd(String),
+    /// Copy the selection, and delete it after for a cut
+    /// (`PROSE-UI-044`).
+    Copy {
+        cut: bool,
+    },
+    /// Paste over the selection or at the caret: this application's own
+    /// bytes when there are any, the plain text otherwise (`PROSE-UI-042`).
+    Paste {
+        text: String,
+        rich: Option<Vec<u8>>,
+    },
 }
 
 /// A command sent, as the view keeps track of it.
@@ -138,7 +149,9 @@ impl Sent {
             | ProseCommand::DeleteRange { .. }
             | ProseCommand::InsertBlock { .. }
             | ProseCommand::InsertTable { .. }
-            | ProseCommand::InsertToc { .. } => Self::Barrier,
+            | ProseCommand::InsertToc { .. }
+            | ProseCommand::PasteRich { .. }
+            | ProseCommand::PasteText { .. } => Self::Barrier,
             _ => return None,
         })
     }
@@ -349,7 +362,82 @@ impl ProseUiState {
                 self.dragging.is_some()
             }
             ProseInput::Release => self.dragging.take().is_some(),
+            ProseInput::Copy { cut } => self.copy(*cut, send),
+            ProseInput::Paste { text, rich } => self.paste(text, rich.as_deref(), send),
         }
+    }
+
+    /// The payload of the last copy, once, for the host to mirror to the
+    /// system clipboard (`PROSE-UI-041`).
+    pub fn poll_clipboard(&mut self) -> Option<ambre_bus::ClipboardBlob> {
+        self.pending_clip.take()
+    }
+
+    /// The paste that what the host read stands for. The payload kept from
+    /// the last copy serves while the clipboard is still that copy: the host
+    /// found its token, or the text still matches. Otherwise what the host
+    /// read serves (`PROSE-UI-043`).
+    #[must_use]
+    pub fn paste_input(&self, read: ambre_bus::ClipboardBlob, own_copy: bool) -> ProseInput {
+        match &self.last_clip {
+            Some(kept) if own_copy || kept.text == read.text => ProseInput::Paste {
+                text: kept.text.clone(),
+                rich: kept.ambre.clone(),
+            },
+            _ => ProseInput::Paste {
+                text: read.text,
+                rich: read.ambre,
+            },
+        }
+    }
+
+    /// Ask the Logic thread for the payload of the whole selection. A cut
+    /// deletes it once the copy is sent, and not when the copy was refused
+    /// (`PROSE-UI-044`, `PROSE-UI-110`).
+    fn copy(&mut self, cut: bool, send: &mut dyn FnMut(ProseCommand) -> SendResult) -> bool {
+        let Some((anchor, focus)) = self.selection() else {
+            return false;
+        };
+        if !send(ProseCommand::CopyRange { anchor, focus }).accepted() {
+            return true;
+        }
+        if cut {
+            self.take_selection(send);
+        }
+        true
+    }
+
+    /// Paste over the selection, or at the caret. The content leaves as a
+    /// command, and the view keeps no model of it (`PROSE-UI-013`).
+    fn paste(
+        &mut self,
+        text: &str,
+        rich: Option<&[u8]>,
+        send: &mut dyn FnMut(ProseCommand) -> SendResult,
+    ) -> bool {
+        if rich.is_none() && !text.contains('\n') {
+            return self.type_into_menu(text, send);
+        }
+        if !self.take_selection(send) {
+            return true;
+        }
+        let Some(cursor) = self.cursor else {
+            return false;
+        };
+        let at = (cursor.block_id, cursor.offset);
+        let command = match rich {
+            Some(payload) => ProseCommand::PasteRich {
+                at,
+                payload: payload.to_vec(),
+                text: text.to_owned(),
+            },
+            None => ProseCommand::PasteText {
+                at,
+                text: text.replace("\r\n", "\n"),
+            },
+        };
+        send(command);
+        true
     }
 
     /// Type a run of text, and open, narrow or close the slash menu with it.

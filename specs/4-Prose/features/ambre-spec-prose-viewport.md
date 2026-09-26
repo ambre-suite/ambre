@@ -39,6 +39,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-126` | `POST` | A scroll MUST move the column by the distance the gesture asks for, up to the clamp. | this spec section 3 | `ambre_prose::view::tests::a_scroll_moves_by_the_gesture_up_to_the_ends_and_nothing_else` | none | verified |
 | `PROSE-UI-127` | `FRAME` | A scroll MUST NOT change the zoom, MUST NOT rebuild the column and MUST NOT write to the document. | derived | `ambre_prose::view::tests::a_scroll_moves_by_the_gesture_up_to_the_ends_and_nothing_else` | none | verified |
 | `PROSE-UI-211` | `POST` | A frame whose built pages the layout in force does not carry MUST ask the Logic thread once for those pages and a margin around them. | this spec section 2 | `ambre_prose::view::tests::a_scroll_asks_for_the_pages_around_the_canvas` | none | verified |
+| `PROSE-UI-217` | `POST` | A flick released with speed MUST keep the column moving, each frame slower than the last, until it stops or meets an end of the column, where it MUST stop. | this spec section 3 | not built | unbuilt -- lands with the "Inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-218` | `FRAME` | A press, a new scroll or a new layout MUST stop the motion a flick left, and the motion MUST NOT write to the document. | derived | not built | unbuilt -- lands with the "Inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-212` | `POST` | Revealing a block the layout in force does not carry MUST ask for its pages, then scroll to it once a layout carries it. | this spec section 2 | `ambre_prose::view::tests::revealing_a_block_not_carried_asks_for_it_then_shows_it` | none | verified |
 
 ### 1.3 Zoom about a point
@@ -66,10 +68,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the scroll offset and the zoom are view state on the UI thread, where
   `UI-THREAD-004` bans a network, crypto or persistence path. `PROSE-UI-010`
   (`features/ambre-spec-prose-engine.md section 1`) keeps both out of the document.
-* **Verification.** 12 `verified`, 7 `unimplemented`. The state rows are property tests over the
+* **Verification.** 12 `verified`, 9 `unimplemented`. The state rows are property tests over the
   column in `crates/ambre-prose`, being arithmetic over three numbers; the others are host tests of
   the view. `PROSE-UI-025` and the zoom rows wait on the
-  "One zoom model" Story (`ambre-roadmap.md` E8).
+  "One zoom model" Story (`ambre-roadmap.md` E8), and the flick rows on the
+  "Inertial scroll" Story (`ambre-roadmap.md` E5).
 
 ---
 
@@ -216,8 +219,6 @@ The zoom control itself is chrome, not canvas, and lives with the rest of the ap
   centring are specified here. The "One zoom model" Story (`ambre-roadmap.md` E8) exists to make
   them one implementation across the applications. Until it lands, the spreadsheet has no keyboard
   zoom at all.
-* **Nothing rules on inertial scroll.** A momentum term is carried in the view state. No rule
-  says how it decays, whether it survives a relayout, or what stops it at the ends of the column.
 * **The zoom does not survive a reload.** It is view state and nothing writes it anywhere. A
   reader who zooms to a hundred and fifty per cent does it again on the next visit.
 * **A page wider than the viewport has no horizontal scroll.** The column pins to the left edge

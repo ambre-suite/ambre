@@ -43,7 +43,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-176` | `POST` | One insertion command MUST leave carrying the same text at the same position. | this spec section 3 | `ambre_prose::input_tests::typing_fills_the_draft_and_sends_one_insertion_per_run` | none | verified |
 | `PROSE-UI-138` | `POST` | Each keystroke sent MUST be its own entry of the draft, kept when the caret moves to another block. | this spec section 3 | `ambre_prose::input_tests::each_keystroke_is_its_own_entry_of_the_draft` | none | verified |
 | `PROSE-UI-139` | `FRAME` | Typing MUST NOT change the structure of the document, the paragraph's settings, or the marks the run lands beside. | this spec section 3 | `ambre_prose::input_tests::typing_leaves_the_structure_the_settings_and_the_marks_alone` | none | verified |
-| `PROSE-UI-204` | `POST` | Text dropped into the page MUST be inserted at the drop point as one insertion, drawn from the draft first. | this spec section 4 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-204` | `POST` | Text dropped into the page MUST be inserted at the drop point as one insertion, drawn from the draft first. | this spec section 4 | not built | unbuilt -- lands with the "A drag that scrolls, and text dropped into the page" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Take the active selection
 

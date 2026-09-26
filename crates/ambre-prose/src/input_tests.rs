@@ -1887,3 +1887,98 @@ fn held_text_is_never_dropped() {
         Some("ab\u{4f60}!")
     );
 }
+
+/// `PROSE-UI-044`, `PROSE-UI-111`: a cut asks for the copy before it deletes,
+/// and deletes the selection and nothing else.
+#[test]
+fn a_cut_copies_before_it_deletes_the_selection() {
+    let mut rig = Rig::new(&["keep", "hello world"]);
+    let [keep, block] = rig.blocks()[..] else {
+        panic!("two paragraphs");
+    };
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: block,
+        offset: 5,
+        anchor: Some((block, 0)),
+    });
+    assert!(rig.input(ProseInput::Copy { cut: true }));
+    assert!(matches!(rig.sent[0], ProseCommand::CopyRange { .. }));
+    assert!(
+        rig.sent.len() > 1,
+        "the selection is deleted after the copy"
+    );
+    rig.deliver();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some(" world"));
+    assert_eq!(rig.logic.text_of(&keep).as_deref(), Some("keep"));
+    assert!(
+        rig.ui
+            .poll_clipboard()
+            .is_some_and(|clip| clip.text == "hello")
+    );
+}
+
+/// `PROSE-UI-110`: a cut whose copy found no room deletes nothing.
+#[test]
+fn a_refused_copy_deletes_nothing() {
+    let mut rig = Rig::new(&["hello world"]);
+    rig.ui.select_all();
+    let mut sent = Vec::new();
+    rig.ui
+        .handle_input(&ProseInput::Copy { cut: true }, &mut |command| {
+            sent.push(command);
+            SendResult::Dropped
+        });
+    assert_eq!(sent.len(), 1);
+    assert!(matches!(sent[0], ProseCommand::CopyRange { .. }));
+}
+
+/// `PROSE-UI-043`: the kept payload serves only while the clipboard still
+/// holds that copy.
+#[test]
+fn the_kept_payload_serves_only_its_own_copy() {
+    let mut rig = Rig::new(&["hello"]);
+    let block = rig.blocks()[0];
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: block,
+        offset: 5,
+        anchor: Some((block, 0)),
+    });
+    rig.input(ProseInput::Copy { cut: false });
+    rig.deliver();
+    let own = |text: &str| ambre_bus::ClipboardBlob {
+        text: text.to_owned(),
+        ambre: None,
+    };
+    let ProseInput::Paste { rich, .. } = rig.ui.paste_input(own("hello"), false) else {
+        panic!("a paste");
+    };
+    assert!(rich.is_some(), "the same text keeps the payload");
+    let ProseInput::Paste { rich, text } = rig.ui.paste_input(own("other"), false) else {
+        panic!("a paste");
+    };
+    assert!(rich.is_none());
+    assert_eq!(text, "other");
+}
+
+/// `PROSE-UI-013`: a paste leaves as one command, and the view writes no
+/// model of it.
+#[test]
+fn a_paste_leaves_as_a_command() {
+    let mut rig = Rig::new(&["ab"]);
+    let block = rig.blocks()[0];
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: block,
+        offset: 1,
+        anchor: None,
+    });
+    rig.input(ProseInput::Paste {
+        text: "x\r\ny".to_owned(),
+        rich: None,
+    });
+    assert!(matches!(
+        &rig.sent[..],
+        [ProseCommand::PasteText { text, .. }] if text == "x\ny"
+    ));
+    rig.deliver();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("ax"));
+}

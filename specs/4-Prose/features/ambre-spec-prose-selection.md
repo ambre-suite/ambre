@@ -67,8 +67,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-038` | `POST` | While a drag holds past the edge of the window, each tick MUST scroll and then re-resolve the pointer, so the selection follows the text being revealed. | this spec section 2 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-163` | `FRAME` | A tick MUST NOT run once the pointer is released: releasing MUST leave nothing armed. | this spec section 2 | not built | unbuilt -- lands with the "Ruler, clipboard and inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-038` | `POST` | While a drag holds past the edge of the window, each tick MUST scroll and then re-resolve the pointer, so the selection follows the text being revealed. | this spec section 2 | not built | unbuilt -- lands with the "A drag that scrolls, and text dropped into the page" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-163` | `FRAME` | A tick MUST NOT run once the pointer is released: releasing MUST leave nothing armed. | this spec section 2 | not built | unbuilt -- lands with the "A drag that scrolls, and text dropped into the page" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Press Escape
 
