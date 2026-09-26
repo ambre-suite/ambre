@@ -519,7 +519,7 @@ impl EmbedSessions {
     /// (`TOILE-UI-338`, `TOILE-UI-339`).
     ///
     /// The order is the whole point. Writing the open set first and sending
-    /// afterwards loses a command for good on a full channel. The set already
+    /// afterwards loses a command for good on a full queue. The set already
     /// marks the work done, so no later frame retries it.
     ///
     /// * A dropped open leaves a blank placeholder until the user leaves the
@@ -532,7 +532,7 @@ impl EmbedSessions {
     /// offers the close again.
     ///
     /// `send` returns whether the command left. A caller that cannot send (a
-    /// full channel, a disconnected one) returns `false` and the state stays as
+    /// full queue, a disconnected one) returns `false` and the state stays as
     /// it was.
     pub fn sync<F>(&mut self, display: &DisplayViewport, now_ms: f64, mut send: F)
     where
@@ -561,7 +561,7 @@ impl EmbedSessions {
             .collect();
         for document_id in gone {
             match self.open[&document_id] {
-                // Deadline reached: close for real, if the channel takes it.
+                // Deadline reached: close for real, if the queue takes it.
                 Some(deadline) if now_ms >= deadline => {
                     if send(LogicCommand::CloseDocument { document_id }) {
                         self.open.remove(&document_id);
@@ -982,7 +982,7 @@ mod tests {
 
     // -- Session lifecycle + debounce -----------------------------------------
 
-    /// Reconcile with a channel that takes everything, returning what left.
+    /// Reconcile with a queue that takes everything, returning what left.
     fn sync(s: &mut EmbedSessions, dv: &DisplayViewport, now_ms: f64) -> Vec<LogicCommand> {
         let mut sent = Vec::new();
         s.sync(dv, now_ms, |cmd| {
@@ -992,7 +992,7 @@ mod tests {
         sent
     }
 
-    /// Reconcile with a channel that refuses everything, returning what the
+    /// Reconcile with a queue that refuses everything, returning what the
     /// registry offered it. The registry MUST record nothing from it.
     fn sync_refused(s: &mut EmbedSessions, dv: &DisplayViewport, now_ms: f64) -> Vec<LogicCommand> {
         let mut offered = Vec::new();
@@ -1003,7 +1003,7 @@ mod tests {
         offered
     }
 
-    /// Close every child through a channel that takes everything.
+    /// Close every child through a queue that takes everything.
     fn close_all(s: &mut EmbedSessions) -> Vec<LogicCommand> {
         let mut sent = Vec::new();
         s.close_all(|cmd| {
@@ -1135,7 +1135,7 @@ mod tests {
         assert!(!s.is_open(&a) && !s.is_open(&b));
     }
 
-    /// `TOILE-UI-338`: when the channel refuses an open, the next frame offers
+    /// `TOILE-UI-338`: when the queue refuses an open, the next frame offers
     /// it again. Recording it before it left used to lose it for good: the set
     /// marked the work done, so no frame retried. The embed then stayed a blank
     /// placeholder until the user left the board.
@@ -1154,8 +1154,8 @@ mod tests {
         assert!(sync(&mut s, &dv, 32.0).is_empty());
     }
 
-    /// `TOILE-UI-339`: when the channel refuses a close, the next frame offers
-    /// it again, so a full channel defers the session rather than leaking it.
+    /// `TOILE-UI-339`: when the queue refuses a close, the next frame offers
+    /// it again, so a full queue defers the session rather than leaking it.
     /// Forgetting the child before the command left used to leave a session
     /// open with nothing that named it, which `close_all` could not reclaim
     /// either.
@@ -1176,7 +1176,7 @@ mod tests {
         assert!(!s.is_open(&child));
     }
 
-    /// `TOILE-UI-339` on the way out: a child whose close the channel refuses
+    /// `TOILE-UI-339` on the way out: a child whose close the queue refuses
     /// stays in the registry. A caller that tries again still reclaims it.
     #[test]
     fn close_all_keeps_what_the_channel_refused() {
@@ -1188,7 +1188,7 @@ mod tests {
         ]);
         sync(&mut s, &dv, 0.0);
 
-        // Only `a` gets through; the channel refuses `b`, which must survive
+        // Only `a` gets through; the queue refuses `b`, which must survive
         // the sweep.
         s.close_all(
             |cmd| matches!(cmd, LogicCommand::CloseDocument { document_id } if document_id == a),

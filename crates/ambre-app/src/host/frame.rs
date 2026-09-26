@@ -28,7 +28,7 @@ fn web_embed_layer() -> Option<web_sys::HtmlElement> {
 /// Builds a child `AppView` for a nested `doc_embed`. Supplied by the
 /// launcher, which alone can name the concrete app views and holds the leptos
 /// owner their (throwaway) chrome signals need. Given the embedded document's id,
-/// type and child canvas size, it wires a demultiplexed Logic->UI channel and
+/// type and child canvas size, it wires a demultiplexed Logic->UI queue and
 /// returns the view. `FrameHost` stays app-agnostic: it only calls this.
 pub type MakeChild = Rc<dyn Fn(DocumentId, DocType, Size) -> AppView>;
 
@@ -207,7 +207,7 @@ impl FrameHost {
     /// Reconcile the child views against the top-level view's visible `doc_embed`s
     /// and pump each one. Creates a child when its embed enters the cull set,
     /// resizes it when its box changes, and drops it when it leaves. Dropping the
-    /// child also drops its demultiplexed Logic->UI channel, so the relay reclaims
+    /// child also drops its demultiplexed Logic->UI queue, so the relay reclaims
     /// the route on its next send. Returns whether any child needs the board
     /// recomposited this frame (a fresh child, a resize, or a self-driven content
     /// change). A no-op when the launcher installed no child factory.

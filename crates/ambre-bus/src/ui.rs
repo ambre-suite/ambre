@@ -7,7 +7,7 @@
 //! A document type is therefore defined in one place, whichever direction the
 //! message travels.
 //!
-//! Carried over a `flume` channel in shared memory -- typed Rust values by move,
+//! Carried over a `flume` queue in shared memory -- typed Rust values by move,
 //! no serialization. The symmetric UI -> Logic direction (commands) lives in
 //! [`crate::logic`].
 //!
@@ -143,7 +143,7 @@ pub enum UiEvent {
     /// This is the **graceful** path: a thread that detects an unrecoverable condition
     /// emits this before exiting. The **ungraceful** path is a panic, which is
     /// `panic=abort` under multi-threaded WASM, and it never reaches a receiver at all.
-    /// Nothing is dropped, so the sender leaks in shared memory and the channel reads empty
+    /// Nothing is dropped, so the sender leaks in shared memory and the queue reads empty
     /// rather than disconnected. That path goes through the page's fatal hook instead
     /// (`ambre-spec-architecture.md`, `ARCH-008`).
     FatalError { message: String },
@@ -153,7 +153,7 @@ impl UiEvent {
     /// The `DocumentId` this event is addressed to, for the per-document fan-out a nested
     /// `doc_embed` needs (`architecture` / `toile-embeds`). A Toile embedding another
     /// document owns a child view, whose Logic->UI stream must be demultiplexed out of the
-    /// single shared channel. Only the variants a *view* consumes carry a routing id.
+    /// single shared queue. Only the variants a *view* consumes carry a routing id.
     /// Service-plane and app-global events (`Rest`, `DocumentShared`, channel/meeting push,
     /// errors, `FatalError`) return `None` and stay on the top-level path.
     pub fn routed_document_id(&self) -> Option<DocumentId> {

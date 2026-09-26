@@ -14,9 +14,9 @@
 //   - Cryptography, compression, network -- handled exclusively by ambre-sync.
 //   - Rendering -- handled by the UI Thread (wgpu + QuadRenderer + GlyphAtlas).
 //
-// Transport: UI <-> Logic uses `flume` channels in the shared memory of the
+// Transport: UI <-> Logic uses `flume` queues in the shared memory of the
 // Main instance, carrying typed Rust values by move (no postcard, no `Any`).
-// Logic-bound `SyncCommand`s are sent to a `flume` channel whose receiver is on
+// Logic-bound `SyncCommand`s are sent to a `flume` queue whose receiver is on
 // the Main thread, which relays them to the separate Sync worker via
 // `postMessage`. `LogicEvent`s arrive the same way in reverse.
 // ============================================================================
@@ -317,12 +317,12 @@ impl LiveDoc {
 
 /// All mutable state owned by the Logic thread.
 struct LogicState {
-    /// Outbound channel: Logic -> UI Thread.
+    /// Outbound queue: Logic -> UI Thread.
     to_ui: flume::Sender<UiEvent>,
-    /// Outbound channel: Logic -> Sync (drained by the Main thread, relayed to
+    /// Outbound queue: Logic -> Sync (drained by the Main thread, relayed to
     /// the Sync worker via postMessage).
     to_sync: flume::Sender<SyncCommand>,
-    /// Outbound channel: Logic -> Main, carrying full document snapshots for
+    /// Outbound queue: Logic -> Main, carrying full document snapshots for
     /// local persistence. The Main thread owns the IndexedDB store, whose
     /// callbacks need a live event loop this blocking loop cannot offer. Here we
     /// only export the bytes and hand them over.
@@ -422,14 +422,14 @@ impl LogicState {
 }
 
 // -----------------------------------------------------------------------------
-// Entry point: drain both inbound channels, then park on the shared Waker.
+// Entry point: drain both inbound queues, then park on the shared Waker.
 // -----------------------------------------------------------------------------
 
 /// Run the Logic thread to completion.
 ///
-/// Blocks on `flume::Selector` waiting on both inbound channels at once,
+/// Blocks on `flume::Selector` waiting on both inbound queues at once,
 /// dispatching each message through [`LogicState`]. Exits when **both** inbound
-/// channels disconnect (the UI Thread and the Sync relay both gone).
+/// queues disconnect (the UI Thread and the Sync relay both gone).
 ///
 /// `Selector::wait` parks the worker via flume's Atomics-backed blocking path,
 /// which wakes correctly across the UI/Logic worker boundary. Only flume's
@@ -457,9 +457,9 @@ pub fn run(
     let mut ui_open = true;
     let mut sync_open = true;
     while ui_open || sync_open {
-        // Build a selector over only the still-open channels and block until one
-        // yields. A closed channel resolves immediately with `Err`, which we map
-        // to "mark closed" -- so a single open channel keeps the loop running.
+        // Build a selector over only the still-open queues and block until one
+        // yields. A closed queue resolves immediately with `Err`, which we map
+        // to "mark closed" -- so a single open queue keeps the loop running.
         let mut selector = Selector::new();
         if ui_open {
             selector = selector.recv(&from_ui, Inbound::Command);

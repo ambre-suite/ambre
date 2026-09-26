@@ -7,7 +7,7 @@
 //! callback, which only fires when an event loop is idle. The Logic thread
 //! blocks on `flume::Selector` (Atomics-backed) and therefore starves its own
 //! event loop. The store is owned and driven by the **Main thread** instead
-//! (see `ambre-app`). Logic exports snapshot bytes over a `flume` channel, and
+//! (see `ambre-app`). Logic exports snapshot bytes over a `flume` queue, and
 //! the Main thread persists them here. Reads/opens return a `flume::Receiver`
 //! the Main thread awaits via `recv_async` (never blocking the page).
 

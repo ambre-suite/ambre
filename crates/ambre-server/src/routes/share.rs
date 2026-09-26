@@ -165,7 +165,7 @@ pub async fn revoke_from_document(
     db::remove_document_member(&state.db, &doc_id, &target).await?;
     tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, "member revoked");
 
-    // Notify the revoked user directly on their personal channel so their client
+    // Notify the revoked user directly on their personal topic so their client
     // closes the document. Targeted (not a doc broadcast): only the removed user
     // learns they were revoked, and no remaining member can mistake this for their
     // own revocation. Best-effort -- the membership row is the source of truth.

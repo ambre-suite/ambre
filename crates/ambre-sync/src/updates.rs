@@ -608,7 +608,7 @@ impl SyncState {
             }
         };
 
-        // Off the wasm path (host tests / mock relay) there is no event channel
+        // Off the wasm path (host tests / mock relay) there is no event queue
         // and no real S3: sealing is the observable behavior, stop here.
         let Some(tx) = self.event_tx.clone() else {
             tracing::info!(
@@ -1146,7 +1146,7 @@ mod tests {
         assert!(state.documents[&doc].known_snapshots.contains(&new_id));
     }
 
-    /// On the host (no event channel), `SendSnapshot` seals the payload without
+    /// On the host (no event queue), `SendSnapshot` seals the payload without
     /// attempting any network upload and leaves the document state untouched.
     #[test]
     fn send_snapshot_on_host_path_seals_without_upload() {

@@ -2,7 +2,7 @@
 // ============================================================================
 // ToileView: the Toile app's `AppView` variant. It owns the local view state
 // (camera, selection, active tool, last DisplayViewport) and the UI<->Logic
-// channels. It exposes the inherent driver methods the `FrameHost` dispatches
+// queues. It exposes the inherent driver methods the `FrameHost` dispatches
 // every frame (`ambre-app/src/host`). Those methods are update, plan_repaint,
 // paint_content, paint_overlay, resize, handle_input, clipboard and
 // set_document.
@@ -210,7 +210,7 @@ pub struct ToileView {
     document_id: DocumentId,
     to_logic: flume::Sender<LogicCommand>,
     from_logic: flume::Receiver<UiEvent>,
-    /// The lossless send path: it keeps an edit a full channel could not take,
+    /// The lossless send path: it keeps an edit a full queue could not take,
     /// and offers it again on a later frame (`BUS-011`).
     outbox: Outbox,
     /// The busy level the chrome reads while the outbox holds anything
@@ -438,14 +438,14 @@ pub struct ToileView {
 
     /// The element that anchors a thread the panel opened, awaiting the
     /// `SelectionStats` reply that carries its bounds. The camera then comes to
-    /// it (`TOILE-UI-309`). The same channel as the find focus, and the view
+    /// it (`TOILE-UI-309`). The same reply as the find focus, and the view
     /// reads it after. `cfg`-agnostic so the dispatch arm stays uniform.
     pending_comment_focus: Option<ElementId>,
 
     /// Set while a Fit / Zoom-to-selection awaits the `SelectionStats` reply whose
     /// bounds it will frame (`toile-viewport`). The reply treats both the same
     /// way, fitting the returned bounds, so a flag suffices. The view reads it
-    /// before the find-focus recenter that shares the same stats channel.
+    /// before the find-focus recenter that shares the same stats reply.
     /// `cfg`-agnostic so the dispatch arm stays uniform.
     pending_fit: bool,
 
@@ -711,7 +711,7 @@ impl ToileView {
 
     /// Offer one lossy command to the Logic thread (`BUS-023`).
     ///
-    /// Returns whether the command reached the channel. A full one drops it and
+    /// Returns whether the command reached the queue. A full one drops it and
     /// nothing holds it. The caller offers the request again on a later frame
     /// (`BUS-024`), or undoes what it recorded for it. Every drop is logged: a
     /// board that stops re-culling leaves no trace of why (`TOILE-UI-313`). The
@@ -744,7 +744,7 @@ impl ToileView {
 
     /// Send a mutating command (edits) through the lossless outbox.
     ///
-    /// On a full channel the outbox holds the command for a later frame
+    /// On a full queue the outbox holds the command for a later frame
     /// (`BUS-011`), and the board refuses input until the queue drains
     /// (`BUS-016`). The return says whether the command is on its way, so
     /// a caller mirroring it into the view state can decline (`BUS-018`).
@@ -773,10 +773,10 @@ impl ToileView {
         }
     }
 
-    /// Offer the held lossless commands to the channel, then publish the busy
+    /// Offer the held lossless commands to the queue, then publish the busy
     /// level the chrome shows and the input gate reads (`BUS-016`).
     ///
-    /// Called from the frame hook. A disconnected channel is fatal here as
+    /// Called from the frame hook. A disconnected queue is fatal here as
     /// everywhere else: the Logic thread is gone, and it answers nothing.
     fn flush_outbox(&mut self) {
         if self.fatal {
@@ -1349,7 +1349,7 @@ impl ToileView {
     /// child"). Driven from `plan_repaint`, the one per-frame hook carrying the
     /// frame clock.
     fn drive_embed_lifecycle(&mut self, now_ms: f64) {
-        // The session set records only what the channel actually took, so the
+        // The session set records only what the queue actually took, so the
         // next frame offers a refused command again rather than losing it
         // (`TOILE-UI-338`, `TOILE-UI-339`). `fatal` is the one case that
         // reports success on a send nobody made. The view is tearing down and
@@ -1765,7 +1765,7 @@ impl ToileView {
 
     /// Send this peer's sample if it changed or the heartbeat is due
     /// (`TOILE-UI-073`). Lossy: a dropped sample is corrected by the next one,
-    /// and presence must never displace an edit on a full channel.
+    /// and presence must never displace an edit on a full queue.
     fn broadcast_presence(&mut self, now_ms: f64) {
         if let Some(payload) = self.presence_out.due(self.presence_sample(), now_ms) {
             // A dropped sample is not re-offered: the next one carries a fresher
@@ -1864,7 +1864,7 @@ impl ToileView {
     fn clear_deck(&mut self) {}
 
     /// Drain the intent the panel or the composer emitted this frame. The DOM
-    /// names no camera and holds no command channel, so the view carries each
+    /// names no camera and holds no command queue, so the view carries each
     /// one out (`TOILE-UI-023`). Wasm-only; a host no-op keeps `update`
     /// cfg-agnostic.
     #[cfg(target_arch = "wasm32")]
@@ -3033,7 +3033,7 @@ impl ToileView {
 
 impl ToileView {
     pub fn update(&mut self) {
-        // Offer the held edits to the channel first: the Logic thread drained
+        // Offer the held edits to the queue first: the Logic thread drained
         // while the frame was out. The board stays busy for as long as one
         // command waits (`BUS-011`, `BUS-016`).
         self.flush_outbox();
@@ -3107,7 +3107,7 @@ impl ToileView {
         }
 
         // Flush the coalesced viewport request (at most one per frame). A full
-        // channel takes none, and the request goes back into the slot. The next
+        // queue takes none, and the request goes back into the slot. The next
         // frame offers it again: dropped outright, it leaves the board painting
         // the previous culled set until the camera moves (`TOILE-UI-275`,
         // `BUS-024`).
@@ -3586,7 +3586,7 @@ impl ToileView {
     /// board and replies with `ToileEvent::Clipboard`. The payload is mirrored to
     /// the OS clipboard next frame by [`poll_clipboard`](Self::poll_clipboard). A
     /// cut appends [`ToileCommand::DeleteElements`] on the same selection
-    /// immediately after -- channel order guarantees Logic captured the payload
+    /// immediately after -- queue order guarantees Logic captured the payload
     /// before the delete. An empty selection returns [`CopyOutcome::Nothing`].
     pub fn clipboard_write(&mut self, cut: bool) -> ambre_bus::CopyOutcome {
         // An open inline edit takes precedence over the board selection: copy /

@@ -73,7 +73,7 @@ pub enum Move {
 
 /// What the deck panel asks the canvas view to do (`TOILE-FEAT-026`). The DOM
 /// holds no board state, so every intent is drained by the view, which owns the
-/// command channel. The view turns each into one `SetSlideOrder`, except
+/// command queue. The view turns each into one `SetSlideOrder`, except
 /// `Goto`, which is local playback.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DeckIntent {

@@ -38,7 +38,7 @@ impl TrameView {
     /// Emit a `ResizeCol`, then update the local metric cache so the grid
     /// reflows before the echoing `DataReset` confirms it (`TRAME-UI-041`).
     ///
-    /// A size is a document write, so it goes out lossless: a full channel
+    /// A size is a document write, so it goes out lossless: a full queue
     /// holds it (`BUS-011`). The local map takes the width only once the outbox
     /// carries the command: a width the document never took hides the loss
     /// (`TRAME-UI-127`).

@@ -4,7 +4,7 @@
 // page's main JS thread (the UI thread).
 //
 // SPA model (ambre-spec-architecture): the ENGINE is created once and lives for
-// the whole session. That is the inter-thread channels, the Logic thread, the
+// the whole session. That is the inter-thread queues, the Logic thread, the
 // Sync worker, the local-persistence store, and the wgpu canvas. A
 // `leptos_router` shell drives a CLIENT-side route: pushState, no full page
 // load. Navigating between the document list and a document only swaps the
@@ -12,7 +12,7 @@
 // in-memory session keys across a navigation.
 //
 //   - UI (this main thread) + Logic (a `wasm_thread` worker) share this Main
-//     wasm instance's memory and talk over `flume` channels.
+//     wasm instance's memory and talk over `flume` queues.
 //   - Sync is a SEPARATE wasm instance in its own Web Worker (own memory),
 //     spawned here via `web_sys::Worker` and reached over `postMessage`. The
 //     main thread relays Logic<->Sync traffic in the single per-frame relay.
@@ -75,7 +75,7 @@ use host::{AppView, ClipboardPaste, DocSwitcher};
 
 use landing::{DocItem, LandingSignals};
 
-/// Capacity of every inter-thread channel.
+/// Capacity of every inter-thread queue.
 ///
 /// Deliberately generous: P3 traffic is request/response and never approaches
 /// it. The hot viewport path is coalesced to <=1 send/frame on the UI side
@@ -113,20 +113,20 @@ struct TofuPrompt {
 /// views (`TOILE-UI-097`).
 type ChildRoutes = Rc<RefCell<HashMap<DocumentId, Vec<flume::Sender<UiEvent>>>>>;
 
-/// What a child's channel could not take yet, oldest first, by document
+/// What a child's queue could not take yet, oldest first, by document
 /// (`TOILE-UI-340`).
 type ChildBacklog = Rc<RefCell<HashMap<DocumentId, VecDeque<UiEvent>>>>;
 
 /// How many events may wait for one child before the oldest are dropped.
 ///
 /// A child is pumped once per frame, so a backlog only forms on a burst larger
-/// than the channel itself. Past this the client is saturated for good and no
+/// than the queue itself. Past this the client is saturated for good and no
 /// amount of memory fixes it. The real answer is the busy signal `BUS-016`
 /// prescribes, which lands with its own Story. Until then the bound is what
 /// keeps a stalled child from growing without limit, and it says so out loud.
 const CHILD_BACKLOG_LIMIT: usize = CHANNEL_CAPACITY;
 
-/// Hand `ev` to every live view of `id`, deferring what a full channel refuses
+/// Hand `ev` to every live view of `id`, deferring what a full queue refuses
 /// (`TOILE-UI-340`).
 ///
 /// The old path dropped it: a `Full` fell through the disconnected test and then
@@ -148,7 +148,7 @@ fn send_to_child(routes: &ChildRoutes, backlog: &ChildBacklog, id: DocumentId, e
 
 /// Offer `ev` to each live view of `id`, dropping the senders whose view is
 /// gone. Reports whether every remaining one took it; `false` means at least one
-/// channel was full and the event must be re-offered.
+/// queue was full and the event must be re-offered.
 fn offer_to_child(routes: &ChildRoutes, id: DocumentId, ev: &UiEvent) -> bool {
     let mut routes = routes.borrow_mut();
     let Some(senders) = routes.get_mut(&id) else {
@@ -193,7 +193,7 @@ fn defer_for_child(backlog: &ChildBacklog, id: DocumentId, ev: UiEvent) {
 }
 
 /// Re-offer every deferred event, oldest first, stopping at the first one a
-/// channel still refuses so the order is kept (`TOILE-UI-340`).
+/// queue still refuses so the order is kept (`TOILE-UI-340`).
 fn flush_child_backlog(routes: &ChildRoutes, backlog: &ChildBacklog) {
     let ids: Vec<DocumentId> = backlog.borrow().keys().copied().collect();
     for id in ids {
@@ -473,7 +473,7 @@ pub fn main() {
         }
     }));
 
-    // Inter-thread channels (all `flume`, in this Main instance's shared heap).
+    // Inter-thread queues (all `flume`, in this Main instance's shared heap).
     //   UI    --LogicCommand--> Logic      Logic --UiEvent--> UI
     //   Logic --SyncCommand---> [main relay] --postMessage--> Sync worker
     //   Sync worker --postMessage--> [main relay] --LogicEvent--> Logic
@@ -499,18 +499,18 @@ pub fn main() {
     // Per-document Logic->UI fan-out for nested `doc_embed` children. A child
     // view built by `make_child` (below) registers a demultiplexed sender here.
     // The relay routes every doc-tagged event whose `document_id` is a live child
-    // to those channels, instead of the shared top-level `view_tx`. So a child's
+    // to those queues, instead of the shared top-level `view_tx`. So a child's
     // stream never reaches the parent view (which ignores `document_id`).
     // Dropping a child drops its receiver, so the relay reclaims that slot on its
     // next send to it.
     //
     // A LIST of senders per document, not one. Two embeds of a single document
-    // are two views (`TOILE-UI-097`), each with its own channel, and both must
+    // are two views (`TOILE-UI-097`), each with its own queue, and both must
     // see the document's events. One slot per document had the second
     // registration evict the first, leaving that embed painting a view nothing
     // fed.
     let child_routes: ChildRoutes = Rc::new(RefCell::new(HashMap::new()));
-    // What a child's channel could not take yet (`TOILE-UI-340`).
+    // What a child's queue could not take yet (`TOILE-UI-340`).
     let child_backlog: ChildBacklog = Rc::new(RefCell::new(HashMap::new()));
 
     // Command keymap (the keyboard view of the registry). The active app binds
@@ -527,24 +527,24 @@ pub fn main() {
     // signal. The floating selection toolbar transform-syncs onto it.
     let anchor_pub = ambre_canvas::AnchorPublisher::new();
 
-    // Canvas->DOM perf channel: the view publishes the per-frame perf snapshot
+    // Canvas->DOM perf signal: the view publishes the per-frame perf snapshot
     // (fps + timings), the dispatcher mirrors it into the `perf_snap` signal the
     // status bar renders. The HUD left the wgpu overlay (`trame-status-bar`)
     // -- no point shaping debug glyphs on the GPU every frame.
     let perf_pub = ambre_canvas::PerfPublisher::new();
 
-    // Canvas->DOM filter-open channel (`trame-shared-filter`): the view raises this
+    // Canvas->DOM filter-open signal (`trame-shared-filter`): the view raises this
     // one-shot intent when an in-canvas autofilter button is clicked. The per-frame
     // relay consumes it (after mirroring the anchor) and opens the DOM
     // FilterPopover through the same path as the context-menu "Filter by column"
     // entry. So there is one filter code path with two entry points.
     let filter_open_pub = ambre_canvas::FilterOpenPublisher::new();
 
-    // Canvas->DOM busy channel (`BUS-016`): the active view raises this level
+    // Canvas->DOM busy signal (`BUS-016`): the active view raises this level
     // while its lossless outbox holds a command the Logic thread has not taken.
     // The view refuses input for as long as it is up, so the shell owes the user
     // a reason. One publisher covers the session: an embedded child sends on the
-    // same channel as its host board, so both meet the same saturation.
+    // same signal as its host board, so both meet the same saturation.
     let busy_pub = ambre_canvas::BusyPublisher::new();
 
     // Formula bar signals (HTML input -> TrameView sync). RwSignal is Copy, so
@@ -690,7 +690,7 @@ pub fn main() {
     let initial_doc = boot_doc.unwrap_or_else(DocumentId::new);
 
     // Spawn the Logic thread (shares this instance's memory). Owns the UI/Sync
-    // halves of its channels. The Sync-bound half (`logic_to_sync_tx`) is relayed
+    // halves of its queues. The Sync-bound half (`logic_to_sync_tx`) is relayed
     // to the Sync worker by the per-frame loop, and `sync_to_logic_tx` is fed by
     // the worker's onmessage handler.
     wasm_thread::Builder::new()
@@ -789,7 +789,7 @@ pub fn main() {
     let chrome_status_slot: Rc<RefCell<Option<RwSignal<ChromeStatus>>>> =
         Rc::new(RefCell::new(None));
 
-    // The Paste-button channel: the shell decodes an async clipboard read and
+    // The Paste-button signal: the shell decodes an async clipboard read and
     // hands the transport to the host, which routes it to the active view
     // (`UI-THREAD-024`). `Send`, so it crosses the Router's Send boundary.
     let (paste_tx, paste_rx) = flume::unbounded::<ClipboardPaste>();
@@ -1128,13 +1128,13 @@ pub fn main() {
             }
         }
 
-        // Re-offer what a child's channel could not take on an earlier turn
+        // Re-offer what a child's queue could not take on an earlier turn
         // (`TOILE-UI-340`). Ordered, and ahead of the fresh stream, so a child
         // never sees a later delta before an earlier one.
         flush_child_backlog(&child_routes_relay, &child_backlog_relay);
 
         while let Ok(ev) = logic_to_ui_rx.try_recv() {
-            // Fan a nested child's stream out to its own view channels, and skip
+            // Fan a nested child's stream out to its own view queues, and skip
             // every top-level chrome mirror below. A child's events must not
             // drive the parent's formula bar, zoom chip or status band. Only a
             // document that is a LIVE child is diverted; the top-level document's
@@ -1615,14 +1615,14 @@ pub fn main() {
     // Child-view factory for nested `doc_embed`s. `FrameHost` cannot build an
     // `AppView` (it is app-agnostic, and the chrome signals need a reactive owner
     // it does not have), so the launcher supplies this. Each call registers a
-    // demultiplexed Logic->UI channel and returns a view in embedded mode (it does
+    // demultiplexed Logic->UI queue and returns a view in embedded mode (it does
     // not grab the text pipe). The chrome signals below are throwaway: no DOM
     // reads them, so every child shares one dead set. It is created here, in the
     // launcher's leptos owner, where `RwSignal::new` is valid.
     let child_to_logic = ui_to_logic_tx.clone();
     let child_routes_factory = Rc::clone(&child_routes);
     let child_theme_ctl = theme_ctl.clone();
-    // An embedded child sends on its host board's UI->Logic channel, so the two
+    // An embedded child sends on its host board's UI->Logic queue, so the two
     // share one busy level rather than each holding a level nobody reads.
     let child_busy_pub = busy_pub.clone();
     let ch_toile_ctx_scope = RwSignal::new(ambre_toile::ui::menu::CtxScope::default());
@@ -1663,7 +1663,7 @@ pub fn main() {
                               size: ambre_draw::Size,
                               text_input: ambre_canvas::TextInput|
           -> AppView {
-        // Demultiplexed Logic->UI channel for this child (registered for the relay
+        // Demultiplexed Logic->UI queue for this child (registered for the relay
         // fan-out; dropped with the child when its embed leaves the cull set).
         let (child_tx, child_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
         child_routes_factory

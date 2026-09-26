@@ -407,7 +407,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     });
                 }
             } else if id == trame_chrome::BOLD || id == trame_chrome::ITALIC {
-                // Bold/Italic are part of the single style channel: toggle the
+                // Bold/Italic are part of the single style event: toggle the
                 // toolbar state and emit a `SetCellStyle` (`trame-cell-styles`).
                 let is_bold = id == trame_chrome::BOLD;
                 let cur = if is_bold {
@@ -1428,7 +1428,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         })}
         // Toile top menu bar + zoom control (toile-menus): the low- frequency menus
         // (File/Edit/View/Object/Present) and the zoom cluster. Every entry routes
-        // through the shared `on_command` path, the same channel the context menu
+        // through the shared `on_command` path, the same path the context menu
         // uses. The zoom readout mirrors the `zoom` signal the canvas view
         // publishes each frame.
         {boot_is_toile.then(|| view! {

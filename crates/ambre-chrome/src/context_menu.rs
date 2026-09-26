@@ -3,7 +3,7 @@
 // DOM context menu (ambre-spec-chrome.md, CHROME-003).
 //
 // Opened from the canvas right-click: the launcher's wgpu-side handler reads
-// the click point and sets `pos` (the Canvas -> DOM signal channel). This
+// the click point and sets `pos` (the Canvas -> DOM signal). This
 // component renders a `role="menu"` popover at those viewport coordinates,
 // flipped if it would overflow, with arrow/Home/End/Enter/Escape keyboard
 // navigation and close on Escape / click-outside.

@@ -11,7 +11,7 @@ use super::*;
 fn bold_stays_on_the_cell_not_the_selection() {
     let mut state = TrameState::new();
 
-    // Select A1 (0,0) and bold it via the single style channel.
+    // Select A1 (0,0) and bold it via the single style event.
     state.handle_command(TrameCommand::SetActiveCell {
         row: 0,
         col: 0,

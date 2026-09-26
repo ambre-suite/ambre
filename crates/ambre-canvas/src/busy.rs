@@ -16,7 +16,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-/// The level channel a view uses to say it cannot take more input.
+/// The level signal a view uses to say it cannot take more input.
 ///
 /// The view calls [`publish`](Self::publish) from its frame hook; the chrome
 /// reads [`is_busy`](Self::is_busy) and shows the notice. Cheap to clone (shared

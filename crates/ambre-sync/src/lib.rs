@@ -18,13 +18,13 @@
 //
 // Transport: inbound `SyncCommand`s arrive over `postMessage` from the Main
 // instance, decoded by `ambre-sync-worker` and fed into [`run_wasm`] via an
-// in-worker `flume` channel. Outbound `LogicEvent`s are emitted through a
+// in-worker `flume` queue. Outbound `LogicEvent`s are emitted through a
 // [`LogicSink`] (the worker posts them back to Main via `postMessage`).
 //
-// This is now a SINGLE worker. The internal event bus and the command channel
+// This is now a SINGLE worker. The internal event bus and the command queue
 // both have their producer and consumer on it, so flume's async waker fires
 // correctly. The old cross-worker freeze that motivated `sab_channel` cannot
-// happen here. The select loop awaits both channels' `recv_async`; the worker's
+// happen here. The select loop awaits both queues' `recv_async`; the worker's
 // JS event loop stays free for WebSocket / fetch.
 //
 // WebSocket topology (when implemented):
@@ -63,10 +63,10 @@ use blake2::Digest;
 use hex::encode;
 
 /// Sink for events flowing Sync -> Logic. Sync no longer shares memory with the
-/// Logic thread, so it cannot hold a channel `Sender<LogicEvent>` directly:
+/// Logic thread, so it cannot hold a queue `Sender<LogicEvent>` directly:
 /// instead it calls this type-erased closure. In the wasm worker the closure
 /// postcard-encodes the event and `postMessage`s it to the Main instance. In
-/// native tests it pushes into a `flume` channel (see [`LogicSink::channel`]).
+/// native tests it pushes into a `flume` queue (see [`LogicSink::channel`]).
 ///
 /// `Rc`-backed (clonable, `'static`) so it can be captured by the `spawn_local`
 /// HTTP tasks and JS callbacks. Single-threaded by construction (one worker).
@@ -74,7 +74,7 @@ use hex::encode;
 pub struct LogicSink(std::rc::Rc<dyn Fn(LogicEvent)>);
 
 /// Returned by [`LogicSink::send`]. The send is infallible in practice (the
-/// closure always accepts the event); the type mirrors a channel `SendError` so
+/// closure always accepts the event); the type mirrors a queue `SendError` so
 /// existing call sites are unchanged. The failed event is boxed so the `Err`
 /// variant stays small, the `LogicEvent` payload being large. `send` is in
 /// practice infallible, so this never allocates on the hot path.
@@ -86,7 +86,7 @@ impl LogicSink {
         Self(std::rc::Rc::new(f))
     }
 
-    /// A sink backed by a fresh `flume` channel, returning the receiver so a
+    /// A sink backed by a fresh `flume` queue, returning the receiver so a
     /// (native) test can drain what Sync emits.
     pub fn channel() -> (Self, flume::Receiver<LogicEvent>) {
         let (tx, rx) = flume::unbounded();
@@ -102,7 +102,7 @@ impl LogicSink {
     ///
     /// # Errors
     ///
-    /// Never today. The sink owns a closure that swallows a closed channel, and
+    /// Never today. The sink owns a closure that swallows a closed queue, and
     /// the signature keeps the `Result` for a sink that can refuse.
     pub fn send(&self, event: LogicEvent) -> Result<(), SendError> {
         (self.0)(event);
@@ -637,7 +637,7 @@ pub struct SyncState {
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<flume::Sender<Vec<u8>>>,
 
-    // -- Internal event channel (carries WS frames + HTTP results into the     --
+    // -- Internal event queue (carries WS frames + HTTP results into the     --
     // -- non-blocking select loop; producer and consumer are the same worker)  --
     event_tx: Option<flume::Sender<SyncEvent>>,
 
@@ -713,7 +713,7 @@ impl SyncState {
         }
     }
 
-    /// Stores the sender half of the internal event channel. Called once by
+    /// Stores the sender half of the internal event queue. Called once by
     /// [`run_wasm`] before the select loop, so JS closures and HTTP tasks can
     /// push events into the main loop without blocking.
     #[allow(dead_code)]
@@ -1062,7 +1062,7 @@ impl SyncState {
 /// Async entry point for the Sync worker (`ambre-sync-worker` calls this from
 /// `spawn_local`). Single-worker model:
 ///
-/// - `cmd_rx`: in-worker `flume` channel fed by the worker's `onmessage` handler
+/// - `cmd_rx`: in-worker `flume` queue fed by the worker's `onmessage` handler
 ///   (decoded `SyncCommand`s relayed from the Main instance via `postMessage`).
 /// - `logic_sink`: emits `LogicEvent`s back to Main (postMessage).
 ///
@@ -1088,7 +1088,7 @@ pub async fn run_wasm(
         futures_util::select! {
             cmd = cmd_rx.recv_async().fuse() => match cmd {
                 Ok(cmd) => state.handle_command(cmd),
-                // Command channel closed: the Main instance is gone (teardown).
+                // Command queue closed: the Main instance is gone (teardown).
                 Err(_) => break,
             },
             ev = event_rx.recv_async().fuse() => match ev {

@@ -8,7 +8,7 @@
 //!
 //! Rationale (`ambre-spec-message-bus.md`): the four transport **envelopes**
 //! (`LogicCommand` / `UiEvent` / `SyncCommand` / `LogicEvent`) are still split
-//! by direction. Each is bound to one channel hop. But the per-app **content
+//! by direction. Each is bound to one queue hop. But the per-app **content
 //! plane** is grouped by app. A document type's command and event share its
 //! whole value-type vocabulary (identity, styles, geometry). Co-locating them
 //! keeps one app in one place, and stops the event side reaching across into the

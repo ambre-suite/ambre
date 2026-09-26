@@ -28,18 +28,18 @@ use crate::error::AppError;
 use crate::redis_ops;
 use crate::state::AppState;
 
-/// Redis PubSub channel name for a document's live broadcasts.
+/// Redis PubSub topic name for a document's live broadcasts.
 fn doc_pubsub_channel(document_id: &DocumentId) -> String {
     format!("doc:{document_id}")
 }
 
-/// Redis PubSub channel name for a Murmure channel's live broadcasts.
+/// Redis PubSub topic name for a Murmure channel's live broadcasts.
 fn chan_pubsub_channel(channel_id: &ChannelId) -> String {
     format!("chan:{channel_id}")
 }
 
-/// Redis PubSub channel name for a user's personal events (for example a document was
-/// shared with them). Every connection subscribes to its own user channel for
+/// Redis PubSub topic name for a user's personal events (for example a document was
+/// shared with them). Every connection subscribes to its own user topic for
 /// the whole session so server-initiated, non-document-scoped pushes reach it.
 pub(crate) fn user_pubsub_channel(user_id: &UserId) -> String {
     format!("user:{user_id}")
@@ -190,14 +190,14 @@ async fn handle_ws(
 
     // Live broadcasts (a peer's update / ephemeral / membership change) are
     // published to Redis PubSub by the writer's connection. THIS connection
-    // registers its outbound queue with the process-wide hub for every channel
-    // it watches. The hub holds the single Redis subscriber per channel, and
+    // registers its outbound queue with the process-wide hub for every topic
+    // it watches. The hub holds the single Redis subscriber per topic, and
     // fans each message in-process to all registered connections. (The writer's
     // own broadcast is echoed back to it too; a client's CRDT import of its own
     // ops is an idempotent no-op.)
     let pubsub = state.pubsub.clone();
 
-    // Personal channel: subscribe for the whole session so server-initiated
+    // Personal topic: subscribe for the whole session so server-initiated
     // pushes reach this connection even when no document is open. A
     // `DocumentShared` on a fresh invite is one.
     pubsub
@@ -325,7 +325,7 @@ async fn handle_ws(
         }
     }
 
-    // Deregister every channel this connection watched from the hub (the hub
+    // Deregister every topic this connection watched from the hub (the hub
     // drops its Redis subscription when the last interested connection leaves).
     for doc_id in &conn.doc_subscriptions {
         // A closed connection is a departure from every document it watched

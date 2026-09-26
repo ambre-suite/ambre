@@ -39,16 +39,16 @@ pub mod host;
 //    on every target so app crates can name the handle in host-side tests) ----
 pub mod text_input;
 
-// -- Selection anchor: canvas->DOM channel for floating chrome UI ------------
+// -- Selection anchor: canvas->DOM signal for floating chrome UI ------------
 pub mod anchor;
 
 // -- One-shot UI intents: canvas->DOM "open a floating surface now" pulses ----
 pub mod intent;
 
-// -- Busy level: canvas->DOM channel for a view that refuses input -----------
+// -- Busy level: canvas->DOM signal for a view that refuses input -----------
 pub mod busy;
 
-// -- Perf snapshot: canvas->DOM channel for the performance HUD --------------
+// -- Perf snapshot: canvas->DOM signal for the performance HUD --------------
 pub mod perf;
 
 // -- Design tokens (generated from tokens.ron): Palette + Theme + ThemeControl

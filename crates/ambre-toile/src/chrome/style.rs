@@ -14,7 +14,7 @@
 //
 // The z-order / lock buttons are pure `CommandId`s already resolved by the view
 // against its selection (`ui::menu`). So they reuse the shared `on_command`
-// channel verbatim -- identical to the context menu and top menu bar. Values that
+// path verbatim -- identical to the context menu and top menu bar. Values that
 // differ across the selection show a "Mixed" hint (the mask from `ui::style`).
 //
 // Colour editing uses the shared `ambre_chrome::ColorPopover` in ARGB mode
@@ -48,7 +48,7 @@ const RESTYLE_DEBOUNCE: Duration = Duration::from_millis(120);
 
 /// The style / property inspector. `model` is the published common style (`None`
 /// hides the panel), and `scope` gates the lock/unlock buttons. `on_command` is
-/// the shared command sink (z-order / lock). `restyle` is the whole-style channel
+/// the shared command sink (z-order / lock). `restyle` is the whole-style callback
 /// the view turns into `RestyleElements` against the live selection.
 #[component]
 pub fn StyleInspector(

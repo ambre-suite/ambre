@@ -3,7 +3,7 @@
 // The send discipline of the lossy class (`BUS-023`, `BUS-024`).
 //
 // A lossy command asks the Logic thread for something the screen already shows:
-// a viewport slice, a hit test, a set of aggregates. A full channel drops it,
+// a viewport slice, a hit test, a set of aggregates. A full queue drops it,
 // and the next frame offers it again. A command that changes the document
 // carries intent given once, so the lossy class refuses it and the caller owes
 // the outbox (`BUS-011`).
@@ -17,15 +17,15 @@ use crate::LogicCommand;
 /// What one lossy send did.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LossyOutcome {
-    /// The command reached the channel.
+    /// The command reached the queue.
     Sent,
-    /// The channel was full. Nothing holds the command, so the caller re-offers
+    /// The queue was full. Nothing holds the command, so the caller re-offers
     /// it on the next frame or undoes what it drew for it (`BUS-024`).
     Dropped,
     /// The command changes the document, and the lossy class carries no such
     /// command (`BUS-023`). Nothing was sent: the caller owes it the outbox.
     Refused,
-    /// The Logic thread is gone. This channel carries nothing again.
+    /// The Logic thread is gone. This queue carries nothing again.
     Disconnected,
 }
 
@@ -49,7 +49,7 @@ pub fn is_lossy_class(cmd: &LogicCommand) -> bool {
 
 /// Send one lossy command, and say what became of it.
 ///
-/// Never blocks: the UI thread runs the frame. A full channel drops the
+/// Never blocks: the UI thread runs the frame. A full queue drops the
 /// command rather than holding it, because the next frame carries the same
 /// request over a state that has moved on.
 pub fn send_lossy(to_logic: &flume::Sender<LogicCommand>, cmd: LogicCommand) -> LossyOutcome {

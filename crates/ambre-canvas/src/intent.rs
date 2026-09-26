@@ -1,6 +1,6 @@
 // ambre-canvas/src/intent.rs
 // ============================================================================
-// One-shot UI intents: canvas->DOM channel for "open a floating chrome surface
+// One-shot UI intents: canvas->DOM signal for "open a floating chrome surface
 // now" pulses (`trame-shared-filter`). Unlike `AnchorPublisher`, which the view
 // re-publishes every frame and the chrome reads non-destructively, these carry
 // a single edge. The view raises the flag on a click. The launcher consumes it
@@ -18,7 +18,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-/// One-slot, take-once channel: the view raises the flag (`publish`), the chrome
+/// One-slot, take-once signal: the view raises the flag (`publish`), the chrome
 /// consumes it once per frame (`take`, which resets it). Cheap to clone (shared
 /// `Rc<Cell>`).
 #[derive(Clone, Default)]

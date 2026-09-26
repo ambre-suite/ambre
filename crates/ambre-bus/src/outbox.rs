@@ -3,7 +3,7 @@
 // The send discipline of the lossless class (`BUS-011`, `BUS-016`, `BUS-018`).
 //
 // A view holds a bounded sender to the Logic thread and must never block, so
-// every send is a `try_send`. A lossy command drops itself on a full channel,
+// every send is a `try_send`. A lossy command drops itself on a full queue,
 // and the next frame resends the state; a lossless one carries intent the user
 // gave once. The outbox holds such a command instead,
 // reads busy while it holds anything, and the view refuses input until the queue
@@ -25,16 +25,16 @@ pub const HOLD_CAPACITY: usize = 64;
 /// What one lossless send did, and what the outbox holds after it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SendOutcome {
-    /// The command reached the channel, and the outbox holds nothing.
+    /// The command reached the queue, and the outbox holds nothing.
     Sent,
-    /// The channel was full. The outbox holds the command for a later frame,
+    /// The queue was full. The outbox holds the command for a later frame,
     /// and the view is busy until the queue drains.
     Held,
     /// The hold queue is full, so the outbox took nothing. Nothing carries the
     /// command any further, and the view MUST NOT act as though it left
     /// (`BUS-018`).
     Refused,
-    /// The Logic thread is gone. This channel carries nothing again.
+    /// The Logic thread is gone. This queue carries nothing again.
     Disconnected,
 }
 
@@ -49,7 +49,7 @@ impl SendOutcome {
 
 /// The lossless send path from one view to the Logic thread.
 ///
-/// Wraps the bounded sender and the hold queue a full channel feeds. A view
+/// Wraps the bounded sender and the hold queue a full queue feeds. A view
 /// owns one per open document and drives it from two places: the command
 /// emitters call [`send`](Self::send), and the frame hook calls
 /// [`flush`](Self::flush).
@@ -104,11 +104,11 @@ impl Outbox {
         }
     }
 
-    /// Offer the held commands to the channel, oldest first.
+    /// Offer the held commands to the queue, oldest first.
     ///
-    /// Stops on the first one the channel refuses, so the queue keeps its
+    /// Stops on the first one the queue refuses, so the queue keeps its
     /// order. Returns what the outbox holds afterwards: `Sent` when it is
-    /// empty, `Held` when the channel filled again.
+    /// empty, `Held` when the queue filled again.
     pub fn flush(&mut self) -> SendOutcome {
         while let Some(cmd) = self.held.pop_front() {
             match self.to_logic.try_send(cmd) {
@@ -169,7 +169,7 @@ mod tests {
         assert_eq!(outbox.send(cmd(1)), SendOutcome::Sent);
         assert_eq!(outbox.send(cmd(2)), SendOutcome::Held);
         assert!(outbox.is_busy());
-        // The channel took one and the outbox holds the other, so it kept both.
+        // The queue took one and the outbox holds the other, so it kept both.
         assert_eq!(rx.len(), 1);
         assert_eq!(outbox.held(), 1);
     }
@@ -207,7 +207,7 @@ mod tests {
         let mut outbox = Outbox::with_capacity(tx, 4);
         outbox.send(cmd(1));
         outbox.send(cmd(2));
-        // The channel is full, so the outbox holds this one.
+        // The queue is full, so the outbox holds this one.
         assert_eq!(outbox.send(cmd(3)), SendOutcome::Held);
         // The reader frees a slot, and the next send must still queue behind 3.
         assert!(rx.recv().is_ok());

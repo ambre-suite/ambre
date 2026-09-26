@@ -221,7 +221,7 @@ pub struct CommentDraft {
 
 /// What the panel and the composer ask the canvas view to do
 /// (`TOILE-UI-023`). The DOM holds no board state, so the view drains every
-/// intent: it owns the camera and the command channel.
+/// intent: it owns the camera and the command queue.
 #[derive(Clone, Debug, PartialEq)]
 pub enum CommentIntent {
     /// Post the draft composer's first message, opening the thread.

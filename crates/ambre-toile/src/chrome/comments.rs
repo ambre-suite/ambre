@@ -12,7 +12,7 @@
 //     nothing is written until the user posts.
 //
 // Every action leaves as a `CommentIntent` the canvas view drains: the DOM
-// names no camera and holds no command channel.
+// names no camera and holds no command queue.
 // ============================================================================
 
 use ambre_bus::app::toile::{CommentSummary, CommentThread};

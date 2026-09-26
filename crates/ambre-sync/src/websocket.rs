@@ -227,7 +227,7 @@ impl SyncState {
         }
     }
 
-    /// Processes one [`SyncEvent`] received from the internal event channel.
+    /// Processes one [`SyncEvent`] received from the internal event queue.
     /// Dispatches WebSocket frames to the existing [`handle_ws_message`]
     /// pipeline, applies state mutations from HTTP result events, and handles
     /// disconnection / errors.
@@ -860,7 +860,7 @@ impl SyncState {
 
             WsServerMsg::DocumentRevoked { document_id } => {
                 // The server removed us from this document (targeted push on our
-                // personal channel). Close it locally and tell the Logic thread we
+                // personal topic). Close it locally and tell the Logic thread we
                 // were revoked so the UI can react.
                 tracing::info!("Sync: DocumentRevoked {document_id:?}");
                 self.documents.remove(&document_id);

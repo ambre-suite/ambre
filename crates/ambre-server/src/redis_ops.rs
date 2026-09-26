@@ -440,7 +440,7 @@ pub async fn refresh_consume(redis: &Client, token: &str) -> Result<Option<Refre
     Ok(Some(data))
 }
 
-/// Publishes a message to the Redis PubSub channel for the given document.
+/// Publishes a message to the Redis PubSub topic for the given document.
 ///
 /// All active subscribers (across Axum instances) receive the message.
 pub async fn doc_broadcast(
@@ -459,7 +459,7 @@ pub async fn doc_broadcast(
     Ok(())
 }
 
-/// Publishes a message to a user's personal PubSub channel (`user:{id}`).
+/// Publishes a message to a user's personal PubSub topic (`user:{id}`).
 ///
 /// Reaches every live connection of that user, whatever documents they have
 /// open. Used for server-initiated, non-document-scoped pushes such as
@@ -477,7 +477,7 @@ pub async fn user_broadcast(
     Ok(())
 }
 
-/// Publishes a message to the Redis PubSub channel for the given channel.
+/// Publishes a message to the Redis PubSub topic for the given channel.
 pub async fn chan_broadcast(
     redis: &Client,
     channel_id: &ambre_core::ChannelId,
@@ -530,7 +530,7 @@ pub async fn doc_presence_update(
 /// for a connection that dies without either; this is the prompt path.
 ///
 /// Removing a field nobody wrote is not an error: the relay drops what it holds
-/// and says so on the document channel either way.
+/// and says so on the document topic either way.
 pub async fn doc_presence_remove(
     redis: &Client,
     document_id: &ambre_core::DocumentId,

@@ -1,6 +1,6 @@
 // ambre-canvas/src/anchor.rs
 // ============================================================================
-// Selection anchor: the canvas->DOM channel for floating chrome glued to content
+// Selection anchor: the canvas->DOM signal for floating chrome glued to content
 // that pans and zooms with it (`ambre-spec-ui.md`, the canvas/DOM boundary).
 //
 // The canvas view owns the scroll/zoom and the selection, so it -- and only it
@@ -26,7 +26,7 @@ pub struct Anchor {
     pub y: f64,
 }
 
-/// One-slot channel: the view writes the current selection anchor (or `None` to
+/// One-slot signal: the view writes the current selection anchor (or `None` to
 /// hide), the chrome reads it from its per-frame pump. Cheap to clone (shared
 /// `Rc<Cell>`); lives on the UI thread only, so it stays `!Send`.
 #[derive(Clone, Default)]

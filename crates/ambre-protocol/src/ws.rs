@@ -73,7 +73,7 @@ pub enum WsServerMsg {
     Ephemeral(Ephemeral),
 
     /// A peer stopped watching a document: they unsubscribed, or their
-    /// connection closed. Broadcast on the document channel to everyone still
+    /// connection closed. Broadcast on the document topic to everyone still
     /// there, so a departure is a message and not a timeout
     /// (`1-Foundations/ambre-spec-presence.md`, `PRESENCE-014`).
     ///
@@ -107,19 +107,19 @@ pub enum WsServerMsg {
 
     /// The document key was rotated: every REMAINING member must re-fetch its
     /// freshly wrapped `doc_key_enc` from `/members` and swap it in. Broadcast on
-    /// the document channel. Carries no user identity: it is not a revocation
+    /// the document topic. Carries no user identity: it is not a revocation
     /// signal. No recipient can mistake it for "you were revoked" (that is the
     /// separate, targeted `DocumentRevoked`). Rotation typically follows a revoke,
     /// but the two are distinct events.
     KeyRotationRequired { document_id: DocumentId },
 
     /// The authenticated user was removed from a document. Pushed ONLY to the
-    /// revoked user, on their per-user channel (`user:{id}`), by the server's
+    /// revoked user, on their per-user topic (`user:{id}`), by the server's
     /// revoke handler. The client closes the document locally. Distinct from
     /// `KeyRotationRequired` so a member managing keys never revokes themselves.
     DocumentRevoked { document_id: DocumentId },
 
-    /// A document was just shared with this user. Pushed on the per-user channel
+    /// A document was just shared with this user. Pushed on the per-user topic
     /// (`user:{id}`), which every connection subscribes to, so the invitee learns
     /// about the new document without polling. The client refreshes its document
     /// list and notifies the user.

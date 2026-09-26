@@ -69,7 +69,7 @@ const AMBRE_CLIPBOARD_TYPE: &str = "application/x-ambre";
 
 /// The same payload under the `web ` prefix the *asynchronous* Clipboard API
 /// (`navigator.clipboard.read`/`write`) requires for a custom type. This is the
-/// channel the toolbar/menu Paste button uses, since it cannot ride a native
+/// signal the toolbar/menu Paste button uses, since it cannot ride a native
 /// `paste` event (`ambre-spec-clipboard.md`).
 pub(crate) const AMBRE_CLIPBOARD_WEB_TYPE: &str = "web application/x-ambre";
 

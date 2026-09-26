@@ -28,7 +28,7 @@ pub struct Toggles {
 impl Toggles {
     /// Resolve the history-enabled signals from a store built over
     /// [`super::COMMANDS`]. Bold/italic now live in [`StyleState`] (the single
-    /// style channel), not the command store.
+    /// style event), not the command store.
     pub fn from_store(store: &CommandStates) -> Self {
         Self {
             undo_enabled: store.enabled_signal(UNDO).expect("undo registered"),
@@ -40,7 +40,7 @@ impl Toggles {
 /// The active cell's resolved rich style, mirrored into `Copy` signals so the
 /// formatting toolbar's selects/swatches/toggles reflect the selection. Fed by
 /// [`TrameEvent::StyleApplied`] via [`apply_style_event`] -- this is the single
-/// style channel, so bold/italic live here too. Lives in the `<Router>` subtree.
+/// style event, so bold/italic live here too. Lives in the `<Router>` subtree.
 #[derive(Clone, Copy)]
 pub struct StyleState {
     pub bold: RwSignal<bool>,

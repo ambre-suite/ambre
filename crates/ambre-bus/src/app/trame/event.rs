@@ -43,7 +43,7 @@ pub enum TrameEvent {
     /// [`SetActiveCell`](super::TrameCommand::SetActiveCell). It drives the whole
     /// formatting toolbar: bold/italic/underline toggles, font/size selects, colour
     /// swatches, align buttons, cell-format / border menus, wrap. Bold and italic ride
-    /// alongside the [`CellStyle`]. They are part of the single style channel, not a
+    /// alongside the [`CellStyle`]. They are part of the single style event, not a
     /// separate per-flag event (`trame-cell-styles`).
     ///
     /// [`CellStyle`]: super::CellStyle

@@ -373,7 +373,7 @@ pub fn resolve_menu_command(
 
     Some(match id {
         COPY => vec![ToileCommand::CopyElements { ids: ids() }],
-        // Cut = copy then delete; the channel preserves order, so the copy
+        // Cut = copy then delete; the queue preserves order, so the copy
         // captures the selection before the delete removes it (`toile-clipboard`).
         CUT => vec![
             ToileCommand::CopyElements { ids: ids() },

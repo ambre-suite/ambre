@@ -108,7 +108,7 @@ impl<T: RequestTag> RequestRegistry<T> {
     }
 
     /// Drop all pending entries whose deadline has passed. Call once per frame
-    /// before draining the inbound channel, so queued events don't match an
+    /// before draining the inbound queue, so queued events don't match an
     /// already-expired id.
     pub fn expire(&mut self, now_ms: f64) {
         self.pending.retain(|_id, entry| entry.deadline_ms > now_ms);

@@ -5,7 +5,7 @@
 //   - `handle_logic_event`:  Sync -> Logic (real-time push, service responses).
 // Both are pure Rust (no wasm glue). The whole routing layer is therefore
 // exercised on the host by the `tests` module at the bottom, with mock flume
-// channels.
+// queues.
 // ============================================================================
 
 use super::*;
@@ -272,7 +272,7 @@ impl LogicState {
             }
 
             // Initial hydration complete: any snapshot was applied by the
-            // preceding RemoteSnapshot arm (channel order is preserved), so the
+            // preceding RemoteSnapshot arm (queue order is preserved), so the
             // UI can dismiss its loading overlay.
             LogicEvent::DocumentReady { document_id, role } => {
                 // Sync has now resolved our real role from the members response;
@@ -406,7 +406,7 @@ impl LogicState {
 
 // -----------------------------------------------------------------------------
 // Tests -- the dispatcher is 100% pure Rust (no wasm glue), so the whole routing
-// layer is exercisable on the host with mock flume channels. These pin the
+// layer is exercisable on the host with mock flume queues. These pin the
 // command/event mapping that is otherwise hand-written boilerplate (see the
 // service plane of ambre-spec-message-bus.md).
 // -----------------------------------------------------------------------------
@@ -426,7 +426,7 @@ mod tests {
     ) {
         let (to_ui, ui_rx) = flume::unbounded();
         let (to_sync, sync_rx) = flume::unbounded();
-        // The persist channel is drained by the Main thread in production; tests
+        // The persist queue is drained by the Main thread in production; tests
         // keep the receiver alive so sends never fail.
         let (to_persist, persist_rx) = flume::unbounded();
         std::mem::forget(persist_rx);
@@ -570,7 +570,7 @@ mod tests {
     // -- The sealed file (`DOCFILE-014`) ---------------------------------------
 
     /// Open a document and ask for a sealed `.ambre`, returning the state, the
-    /// UI channel, and the service request the seal produced.
+    /// UI queue, and the service request the seal produced.
     fn sealing(doc_type: DocType) -> (LogicState, flume::Receiver<UiEvent>, RequestId, Vec<u8>) {
         let document_id = DocumentId::new();
         let (mut state, ui, sync_rx) = harness();

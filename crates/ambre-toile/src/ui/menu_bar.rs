@@ -10,7 +10,7 @@
 // host-unit-tested, exactly like `ui::menu`, `ui::palette` and `ui::find`.
 // The wasm-only Leptos component that renders these (`chrome::TopMenuBar`)
 // consumes them. It routes every selection through the same `on_command` path
-// as the context menu, the shared command channel of the chrome surfaces.
+// as the context menu, the shared command path of the chrome surfaces.
 //
 // The Edit / Object rows REUSE the ids already declared for the context menu
 // (`ui::menu`). A menu id is minted once and shared by every trigger, so a

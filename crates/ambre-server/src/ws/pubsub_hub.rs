@@ -7,7 +7,7 @@
 // subscribed", and juggling N independent subscribers on one connection
 // desynchronises its command/reply stream. Instead a SINGLE task owns ONE
 // `PubSubStream` on the shared RESP3 connection. It fans every received message
-// out IN-PROCESS to the WS connections that registered interest. Redis channel
+// out IN-PROCESS to the WS connections that registered interest. Redis topic
 // (un)subscriptions are ref-counted: SUBSCRIBE on the first interested
 // connection, UNSUBSCRIBE when the last one leaves.
 // ============================================================================
@@ -45,8 +45,8 @@ impl PubSubHub {
     /// Spawn the hub task on the shared command connection and return its handle.
     ///
     /// RESP3 lets the one multiplexed connection carry both ordinary commands and
-    /// this single PubSub subscriber. The stream is seeded on a private channel
-    /// (never published to) so it always exists and channels can be added/removed
+    /// this single PubSub subscriber. The stream is seeded on a private topic
+    /// (never published to) so it always exists and topics can be added/removed
     /// dynamically.
     pub fn spawn(redis: rustis::client::Client) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel::<HubCmd>(256);
@@ -75,7 +75,7 @@ impl PubSubHub {
     }
 }
 
-/// Private channel the hub stream is seeded on so it always exists. Never
+/// Private topic the hub stream is seeded on so it always exists. Never
 /// published to; its messages (none) are simply ignored.
 const HUB_PRIVATE_CHANNEL: &str = "__ambre_pubsub_hub__";
 
@@ -88,7 +88,7 @@ async fn hub_loop(redis: rustis::client::Client, mut cmd_rx: mpsc::Receiver<HubC
         }
     };
 
-    // channel -> (conn_id -> sink). The presence of an entry for a channel means
+    // topic -> (conn_id -> sink). The presence of an entry for a topic means
     // we hold a live Redis SUBSCRIBE on it; emptying it triggers UNSUBSCRIBE.
     let mut routes: HashMap<String, HashMap<String, mpsc::Sender<Vec<u8>>>> = HashMap::new();
 
@@ -127,7 +127,7 @@ async fn hub_loop(redis: rustis::client::Client, mut cmd_rx: mpsc::Receiver<HubC
             },
             msg = pubsub.next() => match msg {
                 Some(Ok(m)) => {
-                    // Every channel this hub subscribes to is a name it built
+                    // Every topic this hub subscribes to is a name it built
                     // itself. A name that is not text is therefore a defect
                     // here, rather than a peer's doing. Say so, instead of
                     // routing a lossy reading of it.
@@ -136,7 +136,7 @@ async fn hub_loop(redis: rustis::client::Client, mut cmd_rx: mpsc::Receiver<HubC
                         continue;
                     };
                     if let Some(sinks) = routes.get(channel) {
-                        // Fan out to every connection watching this channel. A
+                        // Fan out to every connection watching this topic. A
                         // full outbound queue drops the message for that one
                         // connection (it will re-sync via RequestMissing); it
                         // never blocks the hub or the other subscribers.

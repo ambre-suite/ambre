@@ -11,9 +11,9 @@
 //   here  --(postcard LogicEvent  bytes, Transferable ArrayBuffer)-->  Main
 //
 // Inbound bytes are decoded in `onmessage` and pushed into an in-worker `flume`
-// channel feeding [`crate::run_wasm`]. Outbound events go through a
+// queue feeding [`crate::run_wasm`]. Outbound events go through a
 // [`crate::LogicSink`] that encodes and posts them back. Producer and consumer
-// of every internal channel live in THIS worker. The event loop therefore stays
+// of every internal queue live in THIS worker. The event loop therefore stays
 // free for WebSocket / fetch callbacks, and flume's wakers fire correctly.
 // ============================================================================
 

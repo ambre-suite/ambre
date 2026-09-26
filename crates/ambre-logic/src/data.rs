@@ -152,7 +152,7 @@ impl LogicState {
     /// The registry is **flat**. A document embedded in a Toile via a `doc_embed`
     /// is an ordinary entry here, keyed by its own `DocumentId`. Its commands
     /// arrive addressed straight to it. Nesting adds no routing step. The child's
-    /// view holds the child's id and emits through the same channel, so a command
+    /// view holds the child's id and emits through the same queue, so a command
     /// never travels through the parent.
     pub(crate) fn handle_app_command(&mut self, document_id: DocumentId, command: AppCommand) {
         let Some(doc) = self.docs.get_mut(&document_id) else {

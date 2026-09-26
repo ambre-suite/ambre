@@ -6,7 +6,7 @@ use super::*;
 impl TrameView {
     /// Swap the active document in place (SPA route change). Drop every
     /// document-scoped field back to its `new()` value, preserving the shared,
-    /// route-independent plumbing (channels, text pipe, anchor, theme) and the
+    /// route-independent plumbing (queues, text pipe, anchor, theme) and the
     /// current canvas size. Then force a full repaint and a fresh initial
     /// viewport fetch for the new document. No-op if already current.
     pub fn set_document(&mut self, document_id: DocumentId) {
@@ -79,7 +79,7 @@ impl TrameView {
                 self.text_input.announce(&message);
             }
             // Both schema notices are the chrome's to toast. Announcing them here
-            // too puts them on the a11y channel, which is the only surface a
+            // too puts them on the a11y path, which is the only surface a
             // screen-reader user has for either (`SCHEMA-003`, `SCHEMA-008`).
             TrameEvent::DocumentRefused { reason } => {
                 tracing::warn!("[UI] Trame refused a document: {reason}");
@@ -121,7 +121,7 @@ impl TrameView {
             TrameEvent::DataReset | TrameEvent::CondFormatsUpdated { .. } => {
                 self.needs_full = true;
                 // Queued rather than sent here, so the one flush below carries
-                // it and re-offers it when the channel is full (`BUS-024`). A
+                // it and re-offers it when the queue is full (`BUS-024`). A
                 // dropped re-fetch would leave the cache showing the content
                 // this event just invalidated.
                 self.pending_viewport
@@ -188,7 +188,7 @@ impl TrameView {
     }
 
     pub fn update(&mut self) {
-        // Offer the held commands to the channel first: the Logic thread drained
+        // Offer the held commands to the queue first: the Logic thread drained
         // while the frame was out. The grid stays busy for as long as one
         // command waits (`BUS-011`, `BUS-016`).
         self.flush_outbox();
@@ -232,7 +232,7 @@ impl TrameView {
 
         // The first fetch of the document joins the coalescing queue, so it
         // takes the same re-offer as every other one. Sent and forgotten, a full
-        // channel on the opening frame would leave the grid empty for good.
+        // queue on the opening frame would leave the grid empty for good.
         if !self.initial_viewport_sent {
             self.initial_viewport_sent = true;
             self.needs_full = true;
@@ -242,7 +242,7 @@ impl TrameView {
 
         // Flush the coalesced viewport request: at most one ScrollViewport per
         // frame, regardless of how many arrow keys fired since the last frame
-        // (`BUS-012`). A full channel drops it, and the request goes back in the
+        // (`BUS-012`). A full queue drops it, and the request goes back in the
         // queue for the next frame (`BUS-024`).
         if let Some(cmd) = self.pending_viewport.take()
             && !self.send_command_lossy(cmd.clone())

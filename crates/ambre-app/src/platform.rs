@@ -339,8 +339,8 @@ pub(crate) fn post_to_worker(worker: &web_sys::Worker, bytes: &[u8]) {
 /// thread. The single place where UI affordances become IPC payloads; every
 /// trigger routes through here.
 ///
-/// Returns `Ok(())` once the Logic channel takes the command. Returns an error
-/// when that channel is full, because the lossless traffic class forbids
+/// Returns `Ok(())` once the Logic queue takes the command. Returns an error
+/// when that queue is full, because the lossless traffic class forbids
 /// dropping a formatting command in silence.
 pub(crate) fn dispatch_command(
     id: CommandId,
@@ -622,8 +622,8 @@ pub(crate) fn install_command_keys(
 /// payload (`DOCFILE-002`, `DOCFILE-003`, `DOCFILE-013`).
 ///
 /// * The payload reaches the engine through the local snapshot store, never
-///   through a channel. The path always reloads the page (below), and a
-///   channel does not survive that.
+///   through a queue. The path always reloads the page (below), and a
+///   queue does not survive that.
 /// * The store is where a document's bytes already wait for a boot. The file
 ///   therefore lands exactly where a refresh would have left them, and the
 ///   existing restore leg picks it up, schema gate included (`SCHEMA-006`).

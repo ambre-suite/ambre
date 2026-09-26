@@ -3,7 +3,7 @@
 // Process-global fatal latch.
 //
 // An unrecoverable error is a panic on the Logic thread, or a Sync-worker death
-// surfaced as a channel disconnect. The UI (render) thread is usually still
+// surfaced as a queue disconnect. The UI (render) thread is usually still
 // alive then, and pumping requestAnimationFrame. It reads this latch every
 // frame and, once set, paints a terminal screen on the canvas instead of
 // holding the last good frame (see `host::FrameHost`).
@@ -11,7 +11,7 @@
 // The UI and Logic threads share one wasm linear memory (`wasm_thread`), so a
 // plain process-global is visible across both. The Sync worker is a SEPARATE
 // wasm instance and does NOT share this memory. Its death reaches us only as a
-// `UiEvent::FatalError` / channel `Disconnected`, which the view forwards here.
+// `UiEvent::FatalError` / queue `Disconnected`, which the view forwards here.
 //
 // The matching JS `window.ambreFatal` DOM overlay (index.html) stays as the
 // last-resort fallback for a panic on the UI thread itself. There the rAF loop

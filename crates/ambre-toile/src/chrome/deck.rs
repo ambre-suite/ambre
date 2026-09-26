@@ -7,7 +7,7 @@
 // rank, the two reorder steps and the drop. Then the board's other frames, each
 // addable at the end of the deck. Every word it renders was read back from the
 // board, and every action leaves as a `DeckIntent` the canvas view drains. The
-// DOM names no command channel, and the panel keeps no order of its own.
+// DOM names no command queue, and the panel keeps no order of its own.
 // ============================================================================
 
 use ambre_bus::app::toile::{DeckView, FrameId};

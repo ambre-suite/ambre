@@ -4,7 +4,7 @@
 //
 // These hold the crypto-glue logic -- hex/base64 decoding, X25519 ECDH key
 // wrapping, and server-response mapping -- with NO IO. The surrounding handlers
-// in `lib.rs` only do `fetch` (wasm-only) plus channel plumbing. Pulling the
+// in `lib.rs` only do `fetch` (wasm-only) plus queue plumbing. Pulling the
 // decisions out here makes them unit-testable natively (`cargo test`), without
 // a browser or a live server. ECDH primitive correctness itself is covered by
 // `ambre-crypto` (`wrap_unwrap_roundtrip`); here we test the GLUE: peer-key
@@ -150,7 +150,7 @@ pub(crate) fn map_members(entries: Vec<http::DocumentMemberEntry>) -> Vec<Member
 // Transport boundary + orchestration tasks.
 //
 // The three sharing handlers in `lib.rs` used to inline their `fetch` calls and
-// their channel plumbing inside a `spawn_local`. That made the orchestration --
+// their queue plumbing inside a `spawn_local`. That made the orchestration --
 // which call fires when, which error maps to which event -- reachable only from
 // a real browser. Abstracting the HTTP surface behind `ShareHttp` lets the tasks
 // below run on `tokio` in native tests against a `FakeHttp`. Every error branch
@@ -195,7 +195,7 @@ impl ShareHttp for GlooHttp {
     }
 }
 
-/// Sends a `LogicEvent::ApiError` (the error channel for the sharing tasks).
+/// Sends a `LogicEvent::ApiError` (the error path for the sharing tasks).
 fn api_error(logic_tx: &LogicSink, request: &str, code: u16, message: String) {
     let _ = logic_tx.send(LogicEvent::ApiError {
         id: None,
@@ -673,7 +673,7 @@ mod tests {
         }
     }
 
-    /// Fresh event + logic channels with their receivers.
+    /// Fresh event + logic queues with their receivers.
     fn channels() -> (
         flume::Sender<SyncEvent>,
         flume::Receiver<SyncEvent>,

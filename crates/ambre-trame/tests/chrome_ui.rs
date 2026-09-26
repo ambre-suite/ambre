@@ -66,7 +66,7 @@ fn style_applied(
 // -----------------------------------------------------------------------------
 
 /// `apply_style_event` fans a `StyleApplied` out into every `StyleState` signal
-/// the formatting toolbar subscribes to. This is the single style channel, so
+/// the formatting toolbar subscribes to. This is the single style event, so
 /// bold/italic/merged (reported beside the style) land here too.
 #[wasm_bindgen_test]
 fn style_applied_mirrors_into_style_state() {

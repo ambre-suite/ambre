@@ -14,7 +14,7 @@ impl SyncState {
 
         if let Some(tx) = event_tx {
             // WASM path: spawn an async HTTP task; the result flows back
-            // through the SyncEvent channel into handle_sync_event.
+            // through the SyncEvent queue into handle_sync_event.
             wasm_bindgen_futures::spawn_local(async move {
                 let url = format!("{url_scheme}://{api_base}/api/keys/master");
                 match http::get_json_auth::<http::MasterKeyResponse>(&url, auth.clone()).await {

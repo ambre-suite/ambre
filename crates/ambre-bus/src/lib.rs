@@ -1,6 +1,6 @@
 //! IPC message types for inter-thread communication in Ambre.
 //!
-//! Four thread envelopes, one per channel direction:
+//! Four thread envelopes, one per queue direction:
 //! - `LogicCommand` (UI -> Logic) and `UiEvent` (Logic -> UI) -- see [`ui`].
 //! - `SyncCommand` (Logic -> Sync) -- see [`command`].
 //! - `LogicEvent` (Sync -> Logic) -- see [`event`].
@@ -16,7 +16,7 @@
 //!   correlatable request/response family carried by `...::Rest { id, ... }` on all
 //!   four envelopes, defined once and forwarded verbatim.
 //!
-//! Transport split: `LogicCommand`/`UiEvent` travel UI <-> Logic over `flume` channels in
+//! Transport split: `LogicCommand`/`UiEvent` travel UI <-> Logic over `flume` queues in
 //! shared memory (typed Rust values, no serialization). The `SyncCommand`/`LogicEvent`
 //! envelope crosses a `postMessage` boundary to the separate Sync worker. It, and the
 //! `Rest*` payloads it carries, derives `Serialize`/`Deserialize` and is postcard-encoded

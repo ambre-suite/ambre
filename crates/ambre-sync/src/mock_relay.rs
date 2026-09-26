@@ -8,13 +8,13 @@ use ambre_protocol::ws::{WsClientMsg, WsServerMsg};
 ///
 /// Manages document subscriptions, ordered update delivery (sequenced by a
 /// global `Seq`), and snapshot tracking. Clients connect via bidirectional
-/// `flume` channels, one channel pair per client. The full SecSync
+/// `flume` queues, one queue pair per client. The full SecSync
 /// pipeline (crypto, compression, quarantine) can then be exercised
 /// without a network or real server.
 ///
-/// Each client's outbound channel carries raw `WsClientMsg` bytes (encoded
+/// Each client's outbound queue carries raw `WsClientMsg` bytes (encoded
 /// by `ambre_protocol::ws::encode_client_msg`), and each client's inbound
-/// channel delivers `WsServerMsg` values.
+/// queue delivers `WsServerMsg` values.
 pub struct MockBlindRelay {
     /// Documents managed by this relay: client set -> list of updates (with
     /// their global sequence number).
@@ -42,7 +42,7 @@ impl MockBlindRelay {
     }
 
     /// Register a client and process all of its queued messages.
-    /// Returns a channel pair: the client sends raw `WsClientMsg` bytes here,
+    /// Returns a queue pair: the client sends raw `WsClientMsg` bytes here,
     /// and receives `WsServerMsg` events on the returned receiver.
     pub fn connect(
         &mut self,

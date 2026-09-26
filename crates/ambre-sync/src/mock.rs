@@ -55,8 +55,8 @@ impl MockWsTransport {
     ///
     /// # Panics
     ///
-    /// When the client channel is closed. This is test scaffolding, and a
-    /// closed channel there is the test itself going wrong.
+    /// When the client queue is closed. This is test scaffolding, and a
+    /// closed queue there is the test itself going wrong.
     pub fn recv_client_msg(&self) -> Result<WsClientMsg, WireDecodeError> {
         let wire = self.server_rx.recv().expect("client channel disconnected");
         decode_client_msg(&wire)
@@ -66,7 +66,7 @@ impl MockWsTransport {
     ///
     /// # Panics
     ///
-    /// When the server channel is closed, for the reason
+    /// When the server queue is closed, for the reason
     /// [`Self::recv_client_msg`] states.
     pub fn send_server_msg(&self, msg: WsServerMsg) {
         self.server_tx

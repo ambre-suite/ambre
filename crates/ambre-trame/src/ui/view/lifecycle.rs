@@ -116,7 +116,7 @@ impl TrameView {
     /// Send a lossy `TrameCommand` to the Logic thread: a request that changes
     /// nothing, over a state the screen already draws.
     ///
-    /// Returns whether the command reached the channel. A full one drops it and
+    /// Returns whether the command reached the queue. A full one drops it and
     /// nothing holds it. The caller MUST read this and either offer the request
     /// again next frame or undo what it drew for it (`BUS-024`).
     /// A caller that ignores it leaves the screen ahead of the document, which
@@ -155,7 +155,7 @@ impl TrameView {
     /// Send a lossless `TrameCommand` to the Logic thread (edits, cell
     /// selection) through the outbox.
     ///
-    /// On a full channel the outbox holds the command for a later frame
+    /// On a full queue the outbox holds the command for a later frame
     /// (`BUS-011`), and the grid refuses input until the queue drains
     /// (`BUS-016`). `Ok(())` therefore means the command is on its way, not
     /// that it already left.
@@ -182,7 +182,7 @@ impl TrameView {
         }
     }
 
-    /// Offer the held lossless commands to the channel, then publish the busy
+    /// Offer the held lossless commands to the queue, then publish the busy
     /// level the chrome shows and the input gate reads (`BUS-016`).
     ///
     /// Called from the frame hook.
@@ -214,7 +214,7 @@ impl TrameView {
         self.fatal = true;
         tracing::error!("Trame: fatal -- {reason}; the UI is now inert");
         // Latch the canvas terminal screen. A Sync-worker death is a SEPARATE
-        // wasm instance, so it reaches us only as this channel disconnect; the
+        // wasm instance, so it reaches us only as this queue disconnect; the
         // panic-hook latch never fires for it. Forward it to the host here.
         ambre_canvas::signal_fatal(reason);
     }
@@ -242,7 +242,7 @@ impl TrameView {
     /// [`TrameEvent::SelectionStats`], mirrored into the signal by the launcher's
     /// event loop.
     ///
-    /// The request is lossy, and a full channel drops it. The band is then
+    /// The request is lossy, and a full queue drops it. The band is then
     /// cleared rather than left showing another selection's totals
     /// (`TRAME-UI-136`): an unanswered band reads as an absence, stale numbers
     /// as a fact.

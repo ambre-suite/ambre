@@ -1,6 +1,6 @@
 // ambre-canvas/src/perf.rs
 // ============================================================================
-// Perf snapshot: the canvas->DOM channel for the performance HUD (fps + frame
+// Perf snapshot: the canvas->DOM signal for the performance HUD (fps + frame
 // timings), the symmetric counterpart of `AnchorPublisher` for debug metrics.
 //
 // The perf HUD used to be shaped as glyphs on the wgpu overlay every frame --
@@ -17,7 +17,7 @@ use std::rc::Rc;
 
 use crate::view::PerfSnapshot;
 
-/// One-slot channel: the view writes the current frame's perf snapshot, the
+/// One-slot signal: the view writes the current frame's perf snapshot, the
 /// chrome reads it from its per-frame pump. Cheap to clone (shared `Rc<Cell>`);
 /// lives on the UI thread only, so it stays `!Send`.
 #[derive(Clone, Default)]
