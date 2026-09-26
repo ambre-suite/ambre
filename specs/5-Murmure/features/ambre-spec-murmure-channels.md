@@ -140,5 +140,3 @@ the active segment (`SYNC-128`, `MURMURE-060`).
 * **Nothing is built.** No private channel and no direct message exist.
 * **Converting a direct message into a channel is not ruled here.** It is the
   `Direct message conversion` Story (`ambre-roadmap.md` E5).
-* **Nothing states who rotates when nobody is online.** The rotation waits for the next member
-  client, and the leaving member reads nothing new meanwhile only because the relay removed the row.

@@ -92,5 +92,6 @@ and the canvas plays its frames while it is on screen.
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing is built.** No attachment exists in Murmure.
-* **The media address still derives from the plaintext.** `SYNC-050` states the defect, and this
-  feature waits on its fix.
+* **The media address still derives from the plaintext.** `SYNC-050` states the defect. Its fix is
+  the `The media address is not the plaintext` Story (`ambre-roadmap.md` E7), which `MURMURE-129`
+  needs first.
