@@ -34,6 +34,7 @@ that component's prefix instead.
 | `ZK-012` | `INV` | A passphrase MUST NOT appear in a request the client sends to the relay. | README pillar "Zero-Knowledge"; audit `N4` | none | unheld -- neither the client request type nor the relay one declares a passphrase field, so the rule holds by absence, and nothing fails the day a writer adds one back; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ZK-013` | `INV` | The relay MUST see no field of an ephemeral frame beyond `document_id`, `pub_key` and `counter`. | `ambre-spec-broadcast.md`, `SRV-050` | none | unheld -- `ambre_server::ws::handler::message::ephemeral_binding_tests::forged_author_key_writes_no_presence` holds the author binding, not the field set, and nothing compares what the frame carries to the three fields named here; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ZK-014` | `INV` | A presigned S3 URL MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-052` | none | unheld -- the lifetime is one operational figure with a 900 s default, and no upper bound is enforced anywhere; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ZK-015` | `INV` | What the relay learns of a Murmure channel MUST be limited to `{the documents of the channel and their kind, the space of the channel, its public flag, the state and finalization time of each segment, the retention duration of the space, the read cursor of each member}`. | this spec section 2; `Todo/ambre-murmure.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
@@ -95,6 +96,11 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
     role, the wrapped document key and the inviter whose exchange key wrapped it.
   * The inviter column tells the relay who invited whom. The unwrap needs the inviter's exchange
     key, so that edge of the graph is accepted too.
+  * The signed membership log repeats that graph with a signature on each act, so a client can check
+    it (`SYNC-101`). It teaches the relay nothing it did not hold.
+* **Accepted, for a Murmure channel only:** the grouping of its documents and the few facts the
+  relay needs to finalize and to expire them (`ZK-015`). The relay never learns the kind of an update:
+  the activity summary is sealed (`SYNC-113`).
 * **Not accepted, and stated as a defect:** a media blob's address, which is a hash of its
   plaintext, and its media type (`ambre-spec-media.md`, `SYNC-050`, `SYNC-053`).
 

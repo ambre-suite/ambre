@@ -26,6 +26,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 |---|---|---|---|---|---|---|
 | `SYNC-039` | `INV` | No key material MUST cross to the Logic thread on a member row. | `ambre-spec-zero-knowledge.md`, `ZK-002` | type-level -- the member row the bus declares carries an identity, a name, an address and a role, and no key field, so there is no shape for one to travel in | none | verified |
 | `SYNC-092` | `INV` | The wrapped key, the member directory and this client's role MUST come from one answer, never from two fetches. | this spec section 3 | none | unheld -- one request returns all three and the open reads them together, so the rule is held by the request having been written that way. Nothing refuses a second fetch, and a second fetch is exactly how the three drift: a role read after a revocation no longer matches the directory the presence layer resolves against; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-101` | `INV` | Every invite, revoke and role change MUST be recorded as an entry of the membership log, signed by the member who made it. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-102` | `INV` | An entry MUST name its document, its member, its act and the digest of the entry before it. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-103` | `INV` | A member row MUST count as verified only when a chain of valid entries links it to the first entry of the log. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-104` | `INV` | The first entry of a log MUST reach a new member from its inviter, sealed with the wrapped key, never from the relay alone. | this spec section 3; `SYNC-073` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-038` | `INV` | The member list shown to the user MUST NOT carry an invented identity. | this spec section 3 | none | fails -- a member row whose identifier does not parse is given a freshly generated one, so the list shows a person nothing can act on and a revoke aimed at that row addresses nobody, section 6. The presence directory takes the opposite branch and drops the row, which is `SYNC-015`; lands with the `The member list shows no invented identity` Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.2 A document is shared with someone
@@ -57,9 +61,26 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-015` | `FAIL` | An ephemeral frame whose author key matches no member MUST be dropped, never delivered under a guessed identity. | this spec section 3 | `ambre_sync::ephemeral_tests::unknown_author_key_is_not_resolved`; `ambre_sync::sharing::tests::presence_directory_skips_unparsable_rows_without_inventing_ids` -- three malformed rows vanish and only the sound one survives, a fabricated identity here attributing a cursor to the wrong person | none | verified |
 | `SYNC-094` | `FRAME` | Rebuilding the directory MUST NOT keep an entry the new membership does not carry. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_sync::ephemeral_tests::refreshing_the_directory_drops_revoked_members` -- a key that resolved before the rebuild resolves to nothing after it, where a merge instead of a replacement would leave a revoked member's cursor on the document for as long as the tab stays open | none | verified |
 
+### 1.5 A membership change is recorded
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-105` | `POST` | An invite MUST post its signed entry and the wrapped key in one request. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-106` | `POST` | An entry signed by the member it adds MUST count as valid only under a rule of the application that owns the document. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-107` | `FRAME` | Recording an entry MUST NOT change an earlier entry of the log. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.6 A member list is checked
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-108` | `FAIL` | Given a member row with no valid chain, the client MUST show it as unverified. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-109` | `FAIL` | Given an invite replayed after a later revoke of the same member, the client MUST count the member as revoked. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-110` | `POST` | The role a client shows for a member MUST be the role of the latest valid entry for that member. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-111` | `FRAME` | Checking a member list MUST NOT block the open of the document. | this spec section 3 | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** the key exchange costs one elliptic-curve operation per member at open, charged to
   the crypto rows of `ambre-spec-budgets.md section 1`. The directory and the role are read off an
-  answer the open already fetches, so both are free.
+  answer the open already fetches, so both are free. The log adds one check per entry.
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
@@ -135,6 +156,25 @@ trusted-key store's job (`ambre-spec-key-verification.md`), and presence does no
 | the role | the read-only role | hiding an affordance the user has beats offering one the relay refuses (`SYNC-017`) |
 | the list shown to the user | a fresh identifier, which is the defect | nothing chose it: the list degrades rather than dropping the row (`SYNC-038`) |
 
+**The signed membership log.** The relay stays the authority on access, and the log lets each
+client check what the relay serves.
+
+- An invite, a revoke and a role change each add one entry, signed by the member who acts
+  (`SYNC-101`).
+- An entry names the document, the member, the act, the role and the digest of the entry before it
+  (`SYNC-102`). The first entry is the creation, signed by the creator.
+- A new member learns the first entry from its inviter, inside the sealed wrap (`SYNC-104`). So a
+  relay cannot hand a new member a log rooted at a creator of its own.
+- A client walks the chain from the first entry. A row it cannot link is shown as unverified
+  (`SYNC-103`, `SYNC-108`). A revoke is an entry too, so an old invite replayed after it changes
+  nothing (`SYNC-109`).
+- An entry the member signs for themselves is valid only under a rule of the owning application
+  (`SYNC-106`). Murmure accepts a self-join to a public channel of a space, checked against the
+  sealed catalogue of that space.
+
+What the relay can still do is withhold the latest entries. It can show a list that is late, never
+a list it made up. A revoke also rotates the key, so a revoked member reads nothing new either way.
+
 **A document the relay does not know is this client's own.** A missing document on open means it
 exists on this client alone and has not been created on the relay yet. The local user is then the
 only party, and holds the owning role. That inference is right for an absence and wrong for a failure,
@@ -177,6 +217,9 @@ authority: the role here hides what the relay would refuse anyway.
 | An unresolvable role is the read-only one | defaulting to the owning role | offering an affordance the relay refuses costs a confusing error after the edit, where hiding one the user has costs a click through a menu. The role is a user-experience gate, so the failure directions are asymmetric |
 | An unresolvable role is the read-only one | refusing the open | it turns a gate on affordances into a gate on reading, for a value that is missing rather than denied |
 | A failed unwrap stops the open | opening with a fresh key and repairing later | it was the behaviour audit `H3` found: a random key opens the document and then poisons it, because this client seals its edits under a key nobody else holds, and every peer sees a commitment failure on content that looks like ordinary history |
+| The relay serves a signed log beside its table | a member list the client takes on the relay's word | the relay could show any member, or hide any member. The rule would have to be added to every membership already created, and those created before it could never be checked |
+| A revoke is a signed entry | signing the invites alone | the relay could serve an old invite again after a revoke, and the member would reappear verified |
+| The first entry travels with the wrapped key | fetching the first entry from the relay | the relay could root a whole log at a creator of its own making, and every entry would check |
 | Membership is the relay's table | membership as a CRDT container inside the document | adding a member would take a delta, so the relay could not answer "who may read this" without opening the document, and no invite could reach someone who cannot yet decrypt |
 
 ---
@@ -200,6 +243,10 @@ authority: the role here hides what the relay would refuse anyway.
   appear until something refetches.
 * **No test drives an open.** The whole open path runs in a browser: the members request, the
   unwrap, the directory and the role. The host tier reaches its pure transforms alone.
+* **The signed membership log is unbuilt.** No entry is signed today, and every member row is taken
+  on the relay's word (`SYNC-101` to `SYNC-111`).
+* **A relay can withhold the latest entries.** Nothing tells a client that its list is late. A
+  signed head of the log, pinned by each member, would make the gap visible, and no rule states it.
 * **Nothing rules on a member who cannot be reached.** An invitee whose address resolves to no
   account is refused. An account that exists and never opens the document keeps a wrapped key for
   ever, and no rule bounds that.

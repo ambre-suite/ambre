@@ -176,7 +176,8 @@ One row per crate: what runs, what stands in for the world, and the belt an incr
 | `ambre-server` | yes | -- (db tier) | `#[sqlx::test]`, a local Valkey | ACL per role **and per membership**, Ed25519 accept and refuse, the Redis Lua clock cases (valid, mismatch, first update, two concurrent clients), the rank clamp on both the granted and the target role, the size cap on both durable paths, and a postcard round trip per message variant -- the document plane only: the four channel variants and the share notice have none |
 | `ambre-toile` | yes | -- | `ToileState::with_peer`, `RecordingSurface` | CRDT convergence, and the spatial index against a full rebuild |
 | `ambre-draw`, `ambre-pdf` | tooling | -- | they **are** the seam | `RecordingSurface` is exercised by every consumer |
-| `ambre-prose`, `ambre-murmure` | -- | -- | -- | none yet: stubs |
+| `ambre-prose` | -- | -- | -- | none yet: a stub |
+| `ambre-murmure` | -- | -- | -- | none yet: a stub. The belt it lands with: CRDT convergence of a channel across its documents, a forged delta refused by the authorship check, a false final snapshot caught by the second client, and eviction held to its byte budget |
 
 **A belt is a floor, not a list.** It says what an increment cannot land without. The tests that
 verify a rule are named in that rule's `Mechanism` cell and nowhere else. A list of intended

@@ -132,14 +132,14 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` `SYNC P4` / `SRV P1` -- channels | MVP | channel membership and history, and unread tracking |
 | `[ ]` Spaces and the channel catalogue | MVP | a space, its catalogue of public channels with their names, categories and keys, and joining a public channel with no other member online |
 | `[ ]` Private channels and direct messages | MVP | invite-only channels, and direct messages between two or more members with an optional name |
-| `[ ]` Channel segments and sealing | MVP | the chain of segments, closing and sealing through a relay lease, and the second client that confirms a seal before the deltas go |
+| `[ ]` Channel segments and finalization | MVP | the chain of segments, closing and finalizing through a relay lease, and the second client that confirms a seal before the deltas go |
 | `[ ]` Message authorship | MVP | an edit, a delete or a reaction takes effect only from the member entitled to it |
-| `[ ]` Message edits and deletes | MVP | editing and deleting a message, amendments to a sealed segment, and the re-seal that turns a delete into an erasure |
+| `[ ]` Message edits and deletes | MVP | editing and deleting a message, amendments to a final segment, and the re-finalization that turns a delete into an erasure |
 | `[ ]` Reactions, mentions and threads | MVP | emoji reactions, `@` mentions, and reply chains with a reply count on the root |
 | `[ ]` Typing and presence in a channel | MVP | typing indicators and presence on the channel plane |
 | `[ ]` The message list and the composer | MVP | the virtualized message list, and a composer built on the Prose editor |
 | `[ ]` Notifications in an open tab | MVP | a system notification for a mention or a direct message while a tab is open |
-| `[ ]` Search in loaded segments | MVP | local search over the active segment and the sealed segments already fetched |
+| `[ ]` Search in loaded segments | MVP | local search over the active segment and the final segments already fetched |
 | `[ ]` Attachments | MVP | files and images attached to a message through the shared media flow |
 | `[ ]` Emoji | MVP | Unicode emoji drawn in messages and reactions, with a picker |
 | `[ ]` Animated images | MVP | an animated GIF plays in the message list, and stays still under reduced motion |
@@ -150,7 +150,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Mute and hide | V1 | a channel muted or hidden, kept in the user settings |
 | `[ ]` The personal sidebar | V1 | personal groups and order of channels, and bookmarks, kept in the user settings |
 | `[ ]` Followed threads | V1 | one view of every followed thread with unread replies, and marking a thread as read |
-| `[ ]` Search on a new device | V1 | a signed index per sealed segment, queried before its segment is fetched |
+| `[ ]` Search on a new device | V1 | a signed index per final segment, queried before its segment is fetched |
 | `[ ]` Space retention | V1 | one retention duration per space, applied by the relay |
 | `[ ]` Direct message conversion | V1 | a direct message becomes a private channel of a space, with its history or from a fresh start |
 | `[ ]` Forum channels | V1 | posts with a title and tags, each opening its own thread |

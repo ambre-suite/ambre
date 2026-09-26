@@ -25,6 +25,8 @@ prefix is `BUS`.
 | `BUS-002` | `INV` | A document command MUST reach the Logic thread as a variant of a closed sum, never as an opaque payload. | this spec section 2 | exhaustive-match -- `AppCommand` and `AppEvent` are closed enums, so a missing document type fails the exhaustive `match` in `ambre_logic::data::handle_app_command` | none | verified |
 | `BUS-006` | `INV` | The document registry MUST stay flat: an embedded child MUST be addressed by its own identity, in one lookup. | this spec section 2; `ambre-spec-toile-embeds.md`, `TOILE-084` | `ambre_logic::dispatch::tests::an_embedded_child_is_gated_by_its_own_role_not_the_boards`; `::owning_the_board_grants_nothing_on_a_document_embedded_in_it` -- each seeds a parent and a child side by side and asserts the child's role decides, which only holds if the child is its own entry | none | verified |
 | `BUS-001` | `INV` | A message on the UI to Logic path MUST travel as a typed Rust value by move: nothing on that path MUST be encoded. | this spec section 2; `ambre-spec-architecture.md section 2` | none | unheld -- the path is a `conduit` channel over the shared heap and `LogicCommand` derives no `Serialize`, so an encoder has nothing to call today. Nothing refuses the derive that would add one; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `BUS-025` | `INV` | A Murmure command MUST reach the Logic thread as a variant of the content plane, addressed to its channel. | this spec section 2; `BUS-002` | not built | unbuilt -- lands with the `ARCH P7` -- the Murmure engine core Story (`ambre-roadmap.md` E5) | unimplemented |
+| `BUS-026` | `INV` | No envelope MUST carry a channel message as opaque bytes. | this spec section 2 | not built | unbuilt -- lands with the `ARCH P7` -- the Murmure engine core Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 The interface sends a command
 
@@ -100,7 +102,7 @@ thread.
 |---|---|---|---|
 | **Content** | `LogicCommand::App` / `UiEvent::{Viewport,Presence}` | `AppCommand` / `AppEvent`, typed and closed | by document identity, to that document's state |
 | **Service** | the `Rest { id, .. }` variant of all four envelopes | `RestCommand` / `RestEvent`, defined once | relayed verbatim, plus a state hook for the few that change the registry. Two are served inside Sync and reach no relay: the seal and the open of a file (`DOCFILE-014`) |
-| **Network** | `SyncCommand::Send*` / `LogicEvent::Remote*` and the pushes | opaque bytes: CRDT deltas, channel messages | applied to the document, or forwarded |
+| **Network** | `SyncCommand::Send*` / `LogicEvent::Remote*` and the pushes | opaque bytes: CRDT deltas | applied to the document, or forwarded |
 
 **Four envelopes, one per hop.** The direction is carried by the type name, so a `Command` always
 travels towards the downstream worker and an `Event` always flows back.
@@ -120,8 +122,8 @@ pub enum LogicCommand {
     OpenDocument { document_id: DocumentId, doc_type: DocType },
     // control and local restore variants, one per fire-and-forget operation
 }
-pub enum AppCommand { Trame(TrameCommand), Toile(ToileCommand) }
-pub enum AppEvent { Trame(TrameEvent), Toile(ToileEvent) }
+pub enum AppCommand { Trame(TrameCommand), Toile(ToileCommand) } // Murmure(MurmureCommand) is designed
+pub enum AppEvent { Trame(TrameEvent), Toile(ToileEvent) }       // Murmure(MurmureEvent) is designed
 pub struct RequestId(pub u64);
 ```
 
@@ -134,7 +136,8 @@ one module per row of the table above.
 | Shape | Where it goes |
 |---|---|
 | a correlated request with a success answer: session, document and channel management, sharing, media, a local seal or open | `RestCommand` and `RestEvent`, one variant each |
-| a control operation with no answer: open, close, send a channel message | an explicit envelope variant |
+| a control operation with no answer: open, close | an explicit envelope variant |
+| a Murmure message, reaction or edit | a content-plane command addressed to its channel (`BUS-025`) |
 | a server push: a remote change, a connection status, a revocation, a meeting event | an explicit envelope variant |
 | a failure: an authentication error, an interface error | an explicit envelope variant, correlated by identity only where a route recorded one |
 
@@ -232,9 +235,9 @@ The bus has no control of its own. What a user meets is what it does under load.
 * **A stale viewport answer is dropped in one application.** Trame compares an incoming version
   against the last one it accepted. Toile's viewport request carries no version, so a late answer is
   applied whenever it lands (`BUS-017`).
-* **No rule covers a channel message payload.** The channel plane still carries opaque bytes on both
-  envelopes, which is the `ARCH P7` Story (`ambre-roadmap.md` E5). The bus states nothing about what
-  those bytes are.
+* **The channel variants of the code carry opaque bytes.** Both envelopes still hold them. The design
+  moves a channel onto the content plane (`BUS-025`, `BUS-026`). That is the
+  `ARCH P7` Story (`ambre-roadmap.md` E5).
 * **Nothing bounds how long a service request may stay outstanding.** A request whose answer never
   arrives leaves its route recorded, and nothing times it out.
 

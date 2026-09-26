@@ -58,6 +58,16 @@
 | boundary | the line between what the relay learns and what it never learns | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | channel | a Murmure conversation: public, private or direct | | `Todo/ambre-murmure.md` |
 | topic | a publish-subscribe address of the relay fan-out | | `1-Foundations/ambre-spec-broadcast.md` |
+| space | a group of Murmure channels, itself a document | | `Todo/ambre-murmure.md` |
+| catalogue | the sealed list of the public channels of a space | | `Todo/ambre-murmure.md` |
+| segment | one time slice of a Murmure channel, held as one document | | `Todo/ambre-murmure.md` |
+| finalize | close a segment for good, as one immutable snapshot | | `Todo/ambre-murmure.md` |
+| amendment | a late edit or delete of a final segment | | `Todo/ambre-murmure.md` |
+| history boundary | the key rotation a later member cannot read past | | `Todo/ambre-murmure.md` |
+| membership log | the signed record of every invite, revoke and role change | | `1-Foundations/ambre-spec-membership.md` |
+| residency | where a document lives: in memory, on disk, or neither | | `1-Foundations/ambre-spec-residency.md` |
+| activity summary | the sealed header that tells what an update holds | | `1-Foundations/ambre-spec-residency.md` |
+| light subscription | what a document not held in memory still costs | | `1-Foundations/ambre-spec-residency.md` |
 | peer | one participant of a document | | `1-Foundations/ambre-spec-presence.md` |
 | PeerID | the Loro identifier of one writing session | | `1-Foundations/ambre-spec-op-authorship.md` |
 | session nonce | the random value a PeerID derives from | | `1-Foundations/ambre-spec-op-authorship.md` |

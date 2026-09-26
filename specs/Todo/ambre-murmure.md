@@ -74,7 +74,7 @@ replay and the access check.
 | :--- | :--- | :--- |
 | `meta` | one per channel | name, topic, pins, the list of segments |
 | segment | one per time slice | the messages of that slice |
-| amendments | one per amended sealed segment | the late edits and deletes of that segment |
+| amendments | one per amended final segment | the late edits and deletes of that segment |
 | thread | one per message with replies | the replies to that message |
 
 **The relay groups them.** It keeps `channel_documents(channel_id, document_id, kind)`. Access to
@@ -100,7 +100,7 @@ one. It already infers most of that from the traffic. The mapping is outside the
 - `"channel"` (Map) -- `{name, type, created, topic}` -- `type` is `dm`, `private` or `public`; `name` and `topic` for a private channel or a direct message, where `name` is optional for a direct message; the `space` document names a public channel
 - `"pinned"` (Array) -- `[{msg_id, segment_id}]`
 - `"segments"` (Array), for example:
-  - `{id: "seg_001", document_id, from_ts: 1710000000, to_ts: 1720000000, msg_count: 5000, state: "sealed", amended: true}`
+  - `{id: "seg_001", document_id, from_ts: 1710000000, to_ts: 1720000000, msg_count: 5000, state: "final", amended: true}`
   - `{id: "seg_002", document_id, from_ts: 1720000000, to_ts: 1730000000, msg_count: 5000, state: "closing", amended: false}`
   - `{id: "seg_003", document_id, from_ts: 1730000000, to_ts: null, msg_count: 1847, state: "active", amended: false}`
 
@@ -150,7 +150,7 @@ the topic of the channel when a thread document receives a frame. The relay alre
 document is a thread of this channel, so the signal teaches it nothing. The client then reloads
 the head of that thread if its root is on screen.
 
-**A very long thread becomes a chain of segments**, with the same closing and sealing as a channel.
+**A very long thread becomes a chain of segments**, with the same closing and finalization as a channel.
 
 **"Also send to channel"** writes the reply in the thread and a copy in the active segment. The copy
 carries `also_in_thread`, so the channel reader sees the decision and can open the thread.
@@ -163,10 +163,10 @@ Every document of a channel uses the document layout of `ambre-spec-object-store
 own `document_id`. No object name carries a channel branch. Attachments use the media layout of
 the same document.
 
-### Segment sealing
+### Segment finalization
 
-A segment moves through three states: `active`, `closing`, `sealed`. Closing and sealing are two
-acts, so that a recent message is never in a sealed segment.
+A segment moves through three states: `active`, `closing`, `final`. Closing and finalizing are two
+acts, so that a recent message is never in a final segment.
 
 **Closing.** When the active segment exceeds ~5000 messages or ~2 MB of snapshot:
 
@@ -175,17 +175,17 @@ acts, so that a recent message is never in a sealed segment.
 
 At most two segments accept deltas: the active one and the closing one.
 
-**Sealing.** When the grace period of a closing segment ends:
+**Finalizing.** When the grace period of a closing segment ends:
 
-1. Any online member client asks the relay for a seal lease, `SealLease(document_id)` on the segment.
-2. The relay grants the lease to one client, for a bounded time. The relay freezes the segment:
+1. Any online member client asks the relay for a finalize lease, `FinalizeLease(document_id)` on the segment.
+2. The relay grants the lease to one client, for a bounded time. The relay locks the segment:
    it refuses every later delta for it, and answers with the last `seq`.
 3. The client encodes a shallow Loro snapshot of the deltas up to that `seq`, with no history,
    encrypts it and PUTs it to Object Storage.
 4. The client builds and PUTs the search index of the segment (section 5).
-5. The client sends `SealCommit(document_id, snapshot_id, horizon)`. The relay checks the lease and
-   records the seal time, which retention reads.
-6. The client updates Doc meta (`state: "sealed"`).
+5. The client sends `FinalizeCommit(document_id, snapshot_id, horizon)`. The relay checks the lease and
+   records the finalization time, which retention reads.
+6. The client updates Doc meta (`state: "final"`).
 
 A lease that expires releases the segment to the next client. The relay reuses the horizon of a
 document snapshot (`ambre-spec-sequencer.md`).
@@ -193,13 +193,13 @@ document snapshot (`ambre-spec-sequencer.md`).
 **The relay knows the state of each segment.** It already knows each segment as a document of the
 channel. The state is outside the `ZK-007` set today, like the retention duration.
 
-**An offline edit can meet a frozen segment.** The relay refuses the delta. The Sync worker then
-rewrites the edit as an amendment (see *Amendments to a sealed segment*). Without that rewrite, the
+**An offline edit can meet a locked segment.** The relay refuses the delta. The Sync worker then
+rewrites the edit as an amendment (see *Amendments to a final segment*). Without that rewrite, the
 edit is lost.
 
-**The deltas are purged after a second client confirms the seal.** The relay is blind, so a
+**The deltas are purged after a second client confirms the finalization.** The relay is blind, so a
 malicious member can seal a snapshot that drops messages. A document keeps its deltas behind ten
-snapshots, but a sealed segment purges them, so the loss would be final.
+snapshots, but a final segment purges them, so the loss would be final.
 
 1. A second member client rebuilds the state from the deltas and compares it with the snapshot.
 2. On a match, the second client confirms, and the relay purges the deltas.
@@ -207,21 +207,21 @@ snapshots, but a sealed segment purges them, so the loss would be final.
    `ambre-spec-budgets.md`.
 
 The grace period needs a row in `ambre-spec-budgets.md`, for example 24 h, to measure before it is
-fixed. A message younger than the grace period is never in a sealed segment. So an edit of a recent
+fixed. A message younger than the grace period is never in a final segment. So an edit of a recent
 message is an ordinary delta, and never creates an amendments document.
 
 **The sealed snapshot is shallow.** A full Loro snapshot keeps the deleted text in its history. A
-shallow snapshot drops that history. So a message deleted before sealing leaves no text in the
+shallow snapshot drops that history. So a message deleted before finalizing leaves no text in the
 sealed ciphertext.
 
-Sealed segments are **immutable** -- no more deltas, just a final snapshot. This simplifies storage and sync.
+Final segments are **immutable** -- no more deltas, just a final snapshot. This simplifies storage and sync.
 
-### Amendments to a sealed segment
+### Amendments to a final segment
 
 An edit or a delete of a message older than the grace period is rare. It goes to the amendments
-document of its segment, never to the sealed snapshot.
+document of its segment, never to the final snapshot.
 
-`Loro::Doc (amendments)`, one per sealed segment, created on the first amendment:
+`Loro::Doc (amendments)`, one per final segment, created on the first amendment:
 
 - `"amendments"` (Map) -- `{msg_id: {content: Loro::Text} | {deleted: true, by: "author" | "moderator"}}`
 
@@ -229,8 +229,8 @@ The segment entry in `meta` carries `amended: true` once the document exists. So
 the amendments document only when it exists. A reader applies the amendments over the sealed
 snapshot.
 
-**Re-sealing makes a delete an erasure.** An amendment hides a deleted message, and the original text
-stays in the sealed ciphertext. A client re-seals the segment, rarely and in batches:
+**Re-finalizing makes a delete an erasure.** An amendment hides a deleted message, and the original text
+stays in the sealed ciphertext. A client re-finalizes the segment, rarely and in batches:
 
 1. It writes a new shallow snapshot with the amendments folded in.
 2. It rebuilds and PUTs the search index.
@@ -303,14 +303,14 @@ beside the session nonce: `{kind: message | reaction | edit, mentions: [user], t
 **2. In memory, a cache bounded in bytes, evicted least recently viewed.**
 
 - The channel on screen and the open thread are pinned, and never evicted.
-- Fetched sealed segments go first: they are immutable and reload with no loss.
+- Fetched final segments go first: they are immutable and reload with no loss.
 - Eviction writes a local snapshot, then drops the Loro document and its Sync state. A reopen starts
   from that snapshot and replays the deltas after it.
 - The bound needs a row in `ambre-spec-budgets.md`, for example 32 MB for the Murmure documents of
   the Logic thread, to measure.
 
 **3. On disk, a local cache bounded in bytes, evicted least recently viewed.** It stays inside the
-browser quota and needs its own budget row. Sealed segments go first.
+browser quota and needs its own budget row. Final segments go first.
 
 **A background channel costs a light subscription.** It holds the key, the counters and the cursor,
 a few hundred bytes. The full state of an open document stays for the documents in memory.
@@ -378,7 +378,7 @@ composition would go stale when a member renames, as `CHROME-080` rules for a do
 **No forward secrecy.** Three choices of this sketch require every key to stay available:
 
 - a new device or a new member reads the full history (see *New member onboarding*);
-- compaction and sealing encrypt the full state under the current key;
+- compaction and finalization encrypt the full state under the current key;
 - the search index on the relay is encrypted under the channel key.
 
 Matrix met the same conflict: its key backup keeps every Megolm key. What protects a direct message
@@ -561,7 +561,7 @@ A client can hold a message whose key is missing, for example on a new device.
 ### History and retention
 
 **The default is the full history.** Murmure keeps every segment as long as the space exists. A
-sealed segment weighs about 2 MB.
+final segment weighs about 2 MB.
 
 **Retention is a space setting.** A space admin sets one duration N for the whole space. No channel
 overrides it.
@@ -570,8 +570,8 @@ overrides it.
 the erasure promise of the General Data Protection Regulation (GDPR) would be false.
 
 - The relay holds N in plaintext. N is outside the `ZK-007` set today, like the public flag.
-- The relay deletes a sealed segment, its index and its amendments once the seal time is older
-  than N. The relay knows the seal time without a key.
+- The relay deletes a final segment, its index and its amendments once the finalization time is older
+  than N. The relay knows the finalization time without a key.
 - A client removes the missing segment from the `segments` array of `meta` when it finds the gap.
 
 **The guarantee is a range.** A message stays at least N, and at most N plus the time span of its
@@ -598,10 +598,10 @@ segment. The interface states that range, never N alone.
 ## 5. LOCAL SEARCH
 The relay is blind, so it cannot search. The client builds and queries every index. The hard case is a new device: it holds only the active segment.
 
-### Index per sealed segment
-* **Build:** The client that seals a segment also builds the inverted index of that segment.
+### Index per final segment
+* **Build:** The client that finalizes a segment also builds the inverted index of that segment.
 * **Store:** The client encrypts the index with the Document Key and PUTs it beside the snapshot of the segment document.
-* **Immutable:** A sealed segment is immutable, so its index is immutable too. The index needs no incremental update.
+* **Immutable:** A final segment is immutable, so its index is immutable too. The index needs no incremental update.
 * **Active segment:** Each client indexes the active segment locally, message by message.
 * **Relay view:** One more encrypted blob, with a size close to the snapshot size that the relay already sees.
 
@@ -614,7 +614,7 @@ The result list shows the coverage, for example "searched 2 of 14 segments", and
 
 ### Integrity
 A malicious member can publish a false index.
-* The sealing client signs the index.
+* The finalizing client signs the index.
 * The client checks each match against the decrypted segment content. This check removes every false positive.
 * A false negative stays possible. A client can rebuild an index in the background and compare it with the signed one.
 
@@ -627,12 +627,12 @@ A malicious member can publish a false index.
 Author, date, channel, file type, and "replies to me", including replies that did not mention the user.
 
 ### Amended segments
-The index of a sealed segment stays immutable.
-1. The client queries the sealed index.
+The index of a final segment stays immutable.
+1. The client queries the index of the final segment.
 2. The client drops the matches whose `msg_id` the amendments document deletes.
 3. The client queries a small index of the amendments document, built on the fly.
 
-A re-seal replaces the sealed index (section 3, *Amendments to a sealed segment*).
+A re-finalization replaces the index (section 3, *Amendments to a final segment*).
 
 ---
 
@@ -676,18 +676,18 @@ A re-seal replaces the sealed index (section 3, *Amendments to a sealed segment*
 | **Searchable encryption on the relay** (keyed-hash token per word, SSE) | The relay sees which queries repeat and which documents match. Published leakage-abuse attacks (Cash et al., 2015) recover content from that leak. It breaks the zero-knowledge pillar. |
 | **Full download and re-index on each device** | The Element model: Seshat (Rust, tantivy) indexes locally on desktop only. Element Web still has no search in encrypted rooms. A new device waits for the full history. |
 | **SQLite/FTS5 compiled to WASM** | A C library, against the Rust-first pillar. |
-| **Deltas on a sealed segment** | Every old segment becomes a surface of concurrent writes again, and its search index becomes mutable. Segmentation exists to prevent both. |
-| **A new sealed snapshot on each edit** | A typo fix would need the seal lock and a full index rebuild. |
+| **Deltas on a final segment** | Every old segment becomes a surface of concurrent writes again, and its search index becomes mutable. Segmentation exists to prevent both. |
+| **A new final snapshot on each edit** | A typo fix would need the finalize lease and a full index rebuild. |
 | **Amendments in the active segment** | Loading an old segment would need every later segment, to find its amendments. |
-| **Sealing on size alone** | The last message before the cut lands in a sealed segment, and its first typo fix creates an amendments document. |
+| **Finalizing on size alone** | The last message before the cut lands in a final segment, and its first typo fix creates an amendments document. |
 | **Retention applied by a client** | No erasure happens while no admin is online. |
 | **A retention setting per channel** | Two settings for one space, and a member cannot tell which one holds. |
 | **Forward secrecy for direct messages** | A full history on a new device, the compaction and the search index all need every key. Reconsider it only for a separate product: direct messages with no history on the relay, as Signal does. |
 | **A separate model for direct messages** | Converting a direct message into a channel would copy its history into a new document, with new identifiers and a new key. One model makes the conversion a change of `type`. |
 | **A direct message converted straight into a public channel** | The whole space would read a history written for a few members. The public step is a second act, by a space admin. |
-| **A history duration chosen at conversion** | Keys change at a rotation, not on a date. A cut inside a segment would split and re-seal it under two keys. A cut at a segment edge would show a false duration. The retention of the space already bounds the history. |
-| **A client-side lock on sealing** | A client does not reach Redis. The relay arbitrates through a lease. |
-| **Purging the deltas at the seal** | A false snapshot from a malicious member would lose messages for good. |
+| **A history duration chosen at conversion** | Keys change at a rotation, not on a date. A cut inside a segment would split and re-finalize it under two keys. A cut at a segment edge would show a false duration. The retention of the space already bounds the history. |
+| **A client-side lock on finalization** | A client does not reach Redis. The relay arbitrates through a lease. |
+| **Purging the deltas at the finalization** | A false snapshot from a malicious member would lose messages for good. |
 | **Roles in a last-writer-wins map** | Compaction would drop every past role. A client could no longer check a moderation against the role its author held. |
 | **Moderation in the minimal form** | A role lives in `meta` and a message in a segment, two documents. A revoke concurrent with a delete has no single answer without the relay check and the role log. |
 | **A dedicated channel plane, with its own `seq` per segment in the relay Lua** | A second pipeline to build and secure beside the document one. A channel as a set of documents reuses the sequencer, the snapshots, the replay and the access check. |

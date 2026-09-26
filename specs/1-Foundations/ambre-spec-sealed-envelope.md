@@ -37,6 +37,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-021` | `POST` | A payload at or below the compression threshold MUST NOT be compressed. | this spec section 2 | `ambre_sync::pipeline::tests::compression_threshold` -- a payload exactly at the threshold comes back marked raw, and one byte over comes back compressed and round-trips | none | verified |
 | `SYNC-003` | `POST` | Every sealed message MUST use a fresh 192-bit nonce drawn from the operating system generator. | this spec section 2 | none | unheld -- sealing is exercised (`ambre_crypto::tests::prop_roundtrip_encrypt_decrypt`), and nonce freshness is asserted nowhere: no test seals the same payload twice and compares the two nonces; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-022` | `POST` | A snapshot MUST pass the wire checks before it is uploaded, because no relay ever sees it. | this spec section 2 | none | unheld -- the seal calls the check and returns its error, and no test hands the seal a snapshot that fails one: the two refusals the check can raise are unreached from here; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-112` | `POST` | The payload of an update MUST carry the session nonce of its author inside the ciphertext. | this spec section 2; `ambre-spec-op-authorship.md` (`AUTHOR-010`) | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-113` | `POST` | An update that carries an activity summary MUST carry it inside the ciphertext. | this spec section 2; `ambre-spec-residency.md` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-020` | `FRAME` | The seal MUST NOT place the compression version outside the ciphertext, where the relay would read it. | `ZK-007`; this spec section 2 | none | unheld -- `ambre_sync::pipeline::tests::roundtrip_snapshot_large_compresses` and `::roundtrip_update_small` recover the version through the seal, which shows where it is today; nothing refuses a version byte moved into the public metadata, and a byte there tells the relay how compressible a document is; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 An inbound frame is opened
@@ -52,6 +54,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-072` | `FAIL` | A signature MUST be accepted only in its canonical form. | audit `M13` | none | unheld -- the client verifier and the relay one both call the strict form, which refuses a non-canonical scalar and a small-order key, and no test presents a second valid signature over one message; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-091` | `POST` | A failed check MUST reach the user's client as a warning. | this spec section 2 | none | unheld -- every refusal returns a typed error and the caller raises one warning code for all of them, so a reader cannot tell a corrupt frame from a wrong key, and a wrong key is the one that means a re-key was missed. No test drives the path; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SYNC-023` | `FRAME` | A frame that fails any check MUST NOT be applied in part. | this spec section 2 | none | unheld -- each refusal returns before the payload reaches the engine, so the whole-frame drop is held by the checks running ahead of the apply; no test asserts the document is unchanged after a refused frame; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-114` | `POST` | An opened update MUST reach the Logic thread with its session nonce and its activity summary beside the delta. | this spec section 2 | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** four rows of `ambre-spec-budgets.md section 1`. The outbound seal of 1 KB is under
   200 us, the inbound open under 350 us, and the round trip under 600 us. A 100 KB snapshot
@@ -60,10 +63,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** this is the boundary `ambre-spec-zero-knowledge.md` draws, on the client side. Every
   byte of user content that leaves the client leaves through the seal here. `SYNC-001` and
   `SYNC-020` keep the metadata down to the whitelist `ZK-007` names.
-* **Verification.** 8 `verified`, 1 `failing`, 8 `untested`. What holds is refusal: a tampered byte,
-  a wrong document and a wrong key fail closed. So do a bad signature, a replayed counter, a
-  decompression bomb and an unknown codec. What is loose is every rule stated as an absence. No unsealed
-  send is forbidden, no nonce asserted fresh, no order established.
+* **Verification.** 8 `verified`, 1 `failing`, 8 `untested`, 3 `unimplemented`. What holds is
+  refusal: a tampered byte, a wrong document and a wrong key fail closed. So do a bad signature, a
+  replayed counter, a decompression bomb and an unknown codec. What is loose is every rule stated as
+  an absence. No unsealed send is forbidden, no nonce asserted fresh, no order established.
 ---
 
 ## 2. MODEL
@@ -84,7 +87,8 @@ metadata and by their transport. The seal and the open are the same code for all
 1. compress the payload when it is over the threshold, and record which of the two ways in one
    version byte (`SYNC-021`);
 2. form the plaintext as the version byte followed by the body, so the version is sealed with it
-   (`SYNC-020`);
+   (`SYNC-020`). The body of an update holds the session nonce of its author (`SYNC-112`). It holds
+   the activity summary when the application writes one (`SYNC-113`), and then the delta;
 3. encrypt with XChaCha20-Poly1305 under the document key, with a fresh 192-bit nonce
    (`SYNC-003`). The public metadata is the additional data that binds the ciphertext to it;
 4. commit the key: an HMAC-SHA256 over the nonce, the ciphertext and the metadata bytes
@@ -102,6 +106,12 @@ signature says who wrote the frame, the tag says under which key, and only then 
 | 2. verify the commitment tag against the document key | a frame moved from another document, or a wrong key | drop, and warn |
 | 3. open the cipher, with the metadata as the additional data | a mutated byte anywhere | drop, and warn |
 | 4. read the version byte and decompress under the ceiling | an unknown version, and a bomb | drop, and warn |
+| 5. split an update into its nonce, its summary and its delta | a body too short for its parts | drop, and warn |
+
+**Why the nonce and the summary ride inside.** The session nonce binds each operation to its signer
+(`ambre-spec-op-authorship.md`). The activity summary tells a client what an update holds with no
+document loaded (`ambre-spec-residency.md`). Either one outside the ciphertext would tell the relay
+when a session starts, or what kind of change a member made.
 
 **Why the commitment tag exists.** XChaCha20-Poly1305 is not key-committing: one ciphertext can in
 theory open under two keys. The HMAC binds the frame to one key, which is what stops a compromised
@@ -184,5 +194,7 @@ say which of the four refusals fired.
 | Which user is behind an author key | `ambre-spec-membership.md`, `SYNC-014` |
 | What a rotation does to a frame sealed under an older key | `ambre-spec-key-rotation.md` |
 | How a media blob is addressed and transferred | `ambre-spec-media.md` |
+| What the session nonce binds | `ambre-spec-op-authorship.md` |
+| What an activity summary holds, and who reads it | `ambre-spec-residency.md` |
 | What the relay does with a frame it cannot open | `ambre-spec-sequencer.md`, `ambre-spec-broadcast.md` |
 | What a presence payload holds, and what it paints | `ambre-spec-presence.md` |

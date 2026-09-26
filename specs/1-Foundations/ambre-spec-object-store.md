@@ -25,6 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-004` | `INV` | A snapshot MUST be reachable only through the document it belongs to. | audit `C4`; this spec section 3 | `ambre_server::s3::tests::snapshot_key_validation_scopes_to_document` -- the lookup filters on the document and the snapshot together, so a member of one document cannot name another's | none | verified |
 | `SRV-052` | `INV` | A presigned link MUST expire within fifteen minutes. | `ambre-spec-zero-knowledge.md`, `ZK-008` | none | unheld -- the lifetime is one operational figure with a fifteen-minute default and no ceiling, so a deployment may set a day with no code change, and no test reads the expiry back out of a link; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-059` | `INV` | The relay MUST NOT hold an address derived from a blob's plaintext. | `ZK-007`; `ambre-spec-media.md`, `SYNC-050` | none | fails -- the address is a hash of the plaintext, the confirmation stores it beside the document, and the object name is built from it, so the relay can hash a file it already has and ask whether this document holds it; lands with the `The media address is not the plaintext` Story (`ambre-roadmap.md` E7) | failing |
+| `SRV-121` | `INV` | A Murmure channel MUST add no branch to the layout: each of its documents MUST take the layout of a document. | this spec section 3; `Todo/ambre-murmure.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Issue a presigned link
 
@@ -91,9 +92,11 @@ Two peers over one document, sharing the address of a blob and never the bytes.
       * `snapshots`, then one object per snapshot identifier
       * `deltas`, then one object per sequence number, zero-padded to ten digits so the names sort
       * `media`, then one object per address
+      * `index`, one object, for a final Murmure segment only
 
-The padding is what makes a listing of a document's deltas come back in order. The channel branches
-the design once described exist in no code and in no name (`ambre-spec-broadcast.md`, `SRV-047`).
+The padding is what makes a listing of a document's deltas come back in order. A Murmure channel
+adds no branch: each of its documents takes this layout under its own identifier (`SRV-121`). A
+final segment adds one object, its sealed search index.
 
 **Three kinds of blob**, and the caps and the paths differ for each.
 

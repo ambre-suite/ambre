@@ -69,6 +69,22 @@ sequence has already moved.
 | `SRV-085` | `FAIL` | A replay MUST be refused, and answered with nothing, when the caller's membership no longer holds. | this spec section 3; `ambre-spec-membership.md` | none | unheld -- the handler re-checks membership on a short cache before it reads the index; no test revokes a membership mid-session and asks again, which is the one path that keeps a revoked member from pulling the whole history down; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-086` | `FAIL` | A second replay of one document within the throttle window MUST be refused, and answered with nothing. | this spec section 3 | none | unheld -- the handler records the instant of each served replay and drops a call that arrives inside the interval; no test calls twice; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
+### 1.6 A segment is finalized
+
+A Murmure segment is a document the relay closes to deltas for good. The client writes the final
+snapshot, and the relay arbitrates who writes it.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-113` | `POST` | The relay MUST grant the finalize lease of a segment to one client at a time. | this spec section 3; `Todo/ambre-murmure.md` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-114` | `POST` | Granting a finalize lease MUST lock the segment against deltas for good. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-115` | `FAIL` | Given a delta for a locked segment, the relay MUST refuse it with an answer that names the lock. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-116` | `FAIL` | Given a finalize commit from a client that holds no live lease, the relay MUST refuse it. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-117` | `POST` | An accepted finalization MUST record the finalization time of the segment. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-118` | `POST` | The deltas of a final segment MUST be purged only once a second member client confirms the finalization, or once the verification delay has passed. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-119` | `POST` | A lease that expires MUST let another client take the lease of the same segment. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-120` | `FRAME` | Finalizing a segment MUST NOT touch a delta of any other document. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** three rows of `ambre-spec-budgets.md section 3`. The live receive and broadcast
   under 5 ms, the ordering check under 1 ms, the flush batch under 2 s for a thousand deltas.
   All three read **none exists**, as does the cold start of the same table.
@@ -146,6 +162,18 @@ storage. It records it against the document with the highest delta number it had
 that number is the horizon. The trim removes every delta at or below the lowest horizon of the
 snapshots the document still keeps (`SRV-039`, `SRV-083`). The hourly pass keeps the ten most
 recent. **Nothing triggers any of it** (`SRV-038`).
+
+**A finalization.** A Murmure segment ends as one immutable snapshot (`Todo/ambre-murmure.md`).
+
+1. A member client asks for the finalize lease of the segment. The relay grants it to one client
+   (`SRV-113`) and locks the segment for good (`SRV-114`). A later delta is refused with an answer
+   that names the lock, so the client rewrites the edit as an amendment (`SRV-115`).
+2. The client uploads the final snapshot and commits it with its horizon. The relay refuses a
+   commit without the live lease (`SRV-116`), and records the finalization time (`SRV-117`).
+3. The deltas stay until a second member client confirms the snapshot against them, or until the
+   verification delay passes (`SRV-118`). A false snapshot therefore loses nothing at once.
+
+The durations are rows of `ambre-spec-budgets.md section 8`.
 
 **A replay.** A client asks for everything after a number it names.
 
@@ -227,6 +255,8 @@ sees is how long a document takes to open.
 * **The snapshot chain proof is stored and never checked.** The record carries a parent hash and a
   chain proof, and the relay validates neither -- which it could not, being blind. Whether any
   client checks them is `ambre-spec-delta-order.md`.
+* **Finalization is unbuilt.** No segment exists, and no lease, lock or purge after confirmation
+  (`SRV-113` to `SRV-120`).
 * **No test drives a failing store.** Every recovery path here is reached only when the index, the
   queue or object storage refuses a single operation. The suite has no way to make one refuse
   (`ambre-spec-testing.md section 9`).

@@ -28,6 +28,7 @@
 | Passphrase-sealed file, one seal or one open (Argon2id, then one AEAD pass over the whole container) | < 1 s | < 2 s | Sync | the login work factor, deliberately: 64 MiB, 3 passes, 1 lane, paid per file rather than per session, because it is also what an offline guessing attack pays (`ambre-spec-docfile.md`, `DOCFILE-014`). The 64 MiB is the largest transient the Sync worker allocates, and it is released with the call -- **none exists** |
 | Quarantine release, 100 updates | < 1 ms | -- | Sync | criterion -- **none exists** |
 | `doc.import()` Loro update (1 KB delta) | < 2 ms | -- | Logic | criterion |
+| Murmure authorship check, one received delta imported into a fork of its segment | < 5 ms, to measure | -- | Logic | **none exists** -- the fork copies up to one segment of about 2 MB (`ambre-spec-op-authorship.md`) |
 | Trame formula DAG recompute (10k cells) | < 50 ms | -- | Logic | custom benchmark -- **none exists** |
 | Scroll viewport response (P1, end-to-end) | < 15 ms | -- | Logic -> UI | benchmark e2e |
 | Trame CSV import (10k lines) | < 200 ms | -- | Logic | criterion -- **none exists** |
@@ -257,6 +258,10 @@
 | Trame DAG plus cache | < 50 MB, per 100k formula cells | |
 | Toile board plus index, 50 000 elements | proportional to the element count, inside the < 100 MB total | The R-tree adds a small multiple of its leaf count over the bounds map it mirrors |
 | Server, per open document | ~50 KB | No in-process blob cache: `LIST doc:{id}:pending` buffers in Redis, ~50 deltas of ~1 KB over the 15 s window |
+| Documents held in memory, per client | < 32 MB, to measure | Every document the Logic thread holds for a list with activity badges, pinned ones included. Held by eviction (`RESID-001`) |
+| Local store, per client | < 500 MB, to measure | Inside the browser quota. Held by eviction (`RESID-002`) |
+| Light subscription, per document not held | < 1 KB | The key, the counters and the cursor (`RESID-004`) |
+| Color emoji font | loaded on first use, size to measure | Charged to the fonts row above. A full color emoji font weighs about 10 MB, so its size decides whether the fonts row still holds |
 
 ---
 
@@ -267,3 +272,16 @@
 | `just fixtures` | ~30 s | A slow corpus is a corpus developers stop regenerating |
 | `just fixtures-check` in CI | ~10 s | Holds only because the frozen set is capped at three per `doc_type`, and the check loads and migrates every one |
 | Committed fixture artifact | 256 KB each, ~5 MB total | Indicative cap over `fixtures/current/` and `fixtures/frozen/`. The scale corpora are git-ignored and produced on demand (`ambre-spec-fixtures.md section 2`) |
+
+---
+
+## 8. POLICY DURATIONS
+
+A duration a rule waits on before it acts. Each figure is a first estimate, to measure.
+
+| Duration | Target | Why this order of size | Method |
+|---|---|---|---|
+| Grace period before a closing Murmure segment is finalized | 24 h | a typo fix lands within minutes, so a day keeps every recent edit out of a sealed segment | **none exists** |
+| Finalize lease | 30 s | long enough to encode, seal and upload one segment of about 2 MB | **none exists** |
+| Verification delay before the deltas of a final segment are purged | 7 days | the time for a second member client to come online and confirm the seal | **none exists** |
+| Delay between a Murmure delete after the finalization and its erasure | < 30 days | the re-finalization runs in batches, and an erasure request expects an answer within a month | **none exists** |

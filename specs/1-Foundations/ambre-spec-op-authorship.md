@@ -35,7 +35,7 @@ prefix is `AUTHOR`, and it belongs to this document alone.
 |---|---|---|---|---|---|---|
 | `AUTHOR-008` | `POST` | A delta MUST carry the operations of the sending session alone. | this spec section 3 | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `AUTHOR-009` | `POST` | The first delta of a session MUST write the registry entry of its PeerID. | this spec section 3 | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `AUTHOR-010` | `POST` | The session nonce MUST travel inside the sealed payload of the delta. | this spec section 3; `ZK-007` | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `AUTHOR-010` | `POST` | The session nonce MUST travel inside the sealed payload of the delta. | this spec section 3; `ZK-007`; `SYNC-112` | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `AUTHOR-011` | `FRAME` | Sending a delta MUST NOT write a registry entry for another PeerID, nor add a field the relay reads. | this spec section 3; `ZK-007` | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Receive a delta

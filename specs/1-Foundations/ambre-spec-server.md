@@ -30,6 +30,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-014` | `INV` | Relay code MUST contain no unchecked memory access. | README pillar "Security" | none | unheld -- the workspace measures zero unchecked access today, and this crate carries no crate-level refusal of it: two crates of seventeen do (`ambre-spec-testing.md section 8`); lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-021` | `INV` | Any instance MUST be able to serve any client: no request state MUST live in the process. | this spec section 3 | none | unheld -- every store is external and the one process-wide object is the fan-out hub, which holds no request, and nothing boots two instances to observe it. The one exception is stated by `ambre-spec-session.md`, `SRV-024`; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated. | `ambre-spec-architecture.md section 2` | none | unheld -- the relay serves the requests and not the page, so the two headers are the deployment's obligation on whatever serves the page and the worker bootstrap, and nothing in continuous integration reads them back; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-103` | `INV` | Membership of a channel MUST grant access to each document the channel groups, and to no other document. | this spec section 3; `Todo/ambre-murmure.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-104` | `INV` | The register MUST keep the signed membership entries of a document beside its member rows. | this spec section 3; `SYNC-101` | not built | unbuilt -- lands with the `Signed membership log` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 A request is classified and limited
 
@@ -63,6 +65,29 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-016` | `FAIL` | A caller MUST NOT grant a role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::share::tests::editor_cannot_grant_owner` -- the refusal; `::owner_can_grant_any_valid_role`; `::doc_role_rank_ordering` -- the ordering the clamp is read off | none | verified |
 | `SRV-070` | `FAIL` | A caller MUST NOT change a member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::editor_cannot_demote_owner_via_invite` -- the invitation is also the role-change path, so this is the half a clamp on the granted role alone leaves open | none | verified |
 | `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | none | fails -- the delete removes the rows and nothing else, so the document's sequence counter and its per-author clock hash stay in the ephemeral store with no expiry; lands with the `A deleted document leaves nothing` Story (`ambre-roadmap.md` E7) | failing |
+
+### 1.5 A member joins a public channel alone
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-105` | `FAIL` | Given a caller who is not a member of the space of the channel, a self-join MUST be refused. | this spec section 3; `Todo/ambre-murmure.md` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-106` | `FAIL` | Given a channel the relay does not hold as public, a self-join MUST be refused. | this spec section 3 | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-107` | `POST` | An accepted self-join MUST store the entry the joining member signed, beside the new member row. | this spec section 3; `SYNC-106` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-108` | `FRAME` | A self-join MUST NOT grant a role above editor. | this spec section 3 | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.6 A client asks for activity
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-109` | `POST` | The answer MUST say, per document, whether its last number is past the read cursor of the caller. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-110` | `FRAME` | The answer MUST NOT carry a count of frames. | this spec section 3; `ZK-015` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.7 A space applies its retention
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-111` | `POST` | A final segment MUST be deleted, with its index and its amendments, once its finalization time is older than the retention of its space. | this spec section 3; `Todo/ambre-murmure.md` | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-112` | `FRAME` | Applying retention MUST NOT delete an active or a closing segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the per-operation targets of `ambre-spec-budgets.md section 3`, and the roughly
   50 KB per open document of `ambre-spec-budgets.md section 6`. Every relay row of that register
@@ -115,6 +140,22 @@ makes a restart of any one of them survivable.
 | the name | a sealed blob, opened by the client (`ambre-spec-sync.md`, `SYNC-067`) |
 | one member row per participant | a role, plus the document key sealed for that member |
 | the wrapper of a member's key | the identity whose exchange key seals it, which the client needs to open it |
+| the membership log | one signed entry per invite, revoke and role change, served beside the member rows (`SRV-104`) |
+
+**What a Murmure channel adds to the register.** Every document of a channel is an ordinary
+document row. The register adds only what the relay needs to route, seal and expire them, which is
+the set `ZK-015` names.
+
+| Record | Holds | Read by |
+|---|---|---|
+| a channel | its space and its public flag | the self-join (`SRV-105`, `SRV-106`) |
+| a channel document | the channel, the document and its kind | the access check (`SRV-103`) |
+| a segment | its state and its finalization time | the finalization (`ambre-spec-sequencer.md`) and the retention (`SRV-111`) |
+| a space | its retention duration | the retention (`SRV-111`) |
+| a read cursor | a member, a document and a number | the activity answer (`SRV-109`) |
+
+A space is a document like any other, so its members are its member rows. A direct message is a
+channel with no space.
 
 A document with no name stores nothing rather than a placeholder. The listing returns each sealed
 name beside the caller's own sealed key. A client therefore reads its whole list in one answer,
@@ -202,8 +243,9 @@ group needs a token.
 | organizations | the organization, its members and the escrow release | `ambre-spec-organizations.md` |
 | the socket | one upgrade | `ambre-spec-broadcast.md` |
 
-**What the surface does not carry.** Channels and meetings have no route at all: the register
-declares their tables and nothing serves them (`ambre-spec-broadcast.md`, `SRV-047`).
+**What the surface does not carry.** Meetings have no route at all. The channel routes are
+designed and unbuilt (`SRV-103` to `SRV-112`). They create a channel, join a public channel alone,
+read the activity, and set the retention of a space.
 
 ---
 
@@ -241,7 +283,8 @@ declares their tables and nothing serves them (`ambre-spec-broadcast.md`, `SRV-0
   branch can never succeed, so it is one query per probe and no capability (`SRV-018`).
 * **The register declares four tables nothing serves.** Channels, their members, their read cursors
   and meetings exist in the durable schema, and no route and no handler writes any of them
-  (`ambre-spec-broadcast.md`).
+  (`ambre-spec-broadcast.md`). The design replaces the channel member table: a channel grants
+  access through its documents (`SRV-103`).
 * **The declared schema and the migrated schema differ in three places.** The address is unique and
   case-insensitive, and the master material is optional until an account completes its setup. An
   address also carries whether a provider verified it. All three are rules of
