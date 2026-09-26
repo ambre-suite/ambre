@@ -1947,13 +1947,14 @@ fn the_kept_payload_serves_only_its_own_copy() {
     rig.deliver();
     let own = |text: &str| ambre_bus::ClipboardBlob {
         text: text.to_owned(),
+        html: None,
         ambre: None,
     };
     let ProseInput::Paste { rich, .. } = rig.ui.paste_input(own("hello"), false) else {
         panic!("a paste");
     };
     assert!(rich.is_some(), "the same text keeps the payload");
-    let ProseInput::Paste { rich, text } = rig.ui.paste_input(own("other"), false) else {
+    let ProseInput::Paste { rich, text, .. } = rig.ui.paste_input(own("other"), false) else {
         panic!("a paste");
     };
     assert!(rich.is_none());
@@ -1973,12 +1974,43 @@ fn a_paste_leaves_as_a_command() {
     });
     rig.input(ProseInput::Paste {
         text: "x\r\ny".to_owned(),
+        html: None,
         rich: None,
     });
     assert!(matches!(
         &rig.sent[..],
-        [ProseCommand::PasteText { text, .. }] if text == "x\ny"
+        [ProseCommand::Paste { text, .. }] if text == "x\ny"
     ));
     rig.deliver();
     assert_eq!(rig.logic.text_of(&block).as_deref(), Some("ax"));
+}
+
+/// `PROSE-UI-219`: a one-line paste with an HTML half still leaves as a
+/// paste, so its marks reach Logic. The view hands the half on untouched.
+#[test]
+fn an_html_half_keeps_a_short_paste_off_the_typing_path() {
+    let mut rig = Rig::new(&["ab"]);
+    let block = rig.blocks()[0];
+    rig.ui.cursor = Some(CursorPosition {
+        block_id: block,
+        offset: 1,
+        anchor: None,
+    });
+    let blob = ambre_bus::ClipboardBlob {
+        text: "x".to_owned(),
+        html: Some("<b>x</b>".to_owned()),
+        ambre: None,
+    };
+    let input = rig.ui.paste_input(blob, false);
+    assert!(matches!(
+        &input,
+        ProseInput::Paste { html: Some(html), .. } if html == "<b>x</b>"
+    ));
+    rig.input(input);
+    assert!(matches!(
+        &rig.sent[..],
+        [ProseCommand::Paste { html: Some(html), .. }] if html == "<b>x</b>"
+    ));
+    rig.deliver();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("axb"));
 }

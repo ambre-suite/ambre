@@ -413,7 +413,7 @@ impl FrameHost {
         // opaque Ambre bytes for a full-fidelity internal round-trip.
         if let Some(blob) = self.view.poll_clipboard() {
             let payload_b64 = blob.ambre.as_deref().map(base64_encode);
-            async_write_clipboard(blob.text, payload_b64, self.clip_token.clone());
+            async_write_clipboard(blob.text, blob.html, payload_b64, self.clip_token.clone());
         }
 
         // Deliver any lazily-fetched font faces (CJK/Arabic/Devanagari) that

@@ -873,6 +873,7 @@ impl ToileView {
             ToileEvent::Clipboard(payload) => {
                 let blob = ambre_bus::ClipboardBlob {
                     text: String::new(),
+                    html: None,
                     ambre: postcard::to_allocvec(&payload).ok(),
                 };
                 self.last_clip = Some(blob.clone());

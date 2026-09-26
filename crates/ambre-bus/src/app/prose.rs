@@ -885,23 +885,17 @@ pub enum ProseCommand {
         anchor: (BlockId, u32),
         focus: (BlockId, u32),
     },
-    /// Insert a payload this application copied, at one place, marks and
-    /// block structure kept (`PROSE-UI-107`). The bytes are the ones the
-    /// Logic thread built; the view only carries them (`PROSE-UI-105`).
-    /// Bytes another application wrote do not decode, and `text`, the
-    /// plain-text mirror read beside them, is pasted instead
-    /// (`PROSE-UI-042`).
-    PasteRich {
-        at: (BlockId, u32),
-        payload: Vec<u8>,
-        text: String,
-    },
-    /// Insert plain text of several lines at one place, one paragraph per
-    /// line, the first joining the paragraph there (`PROSE-UI-042`). Text of
-    /// one line travels as [`ProseCommand::InsertText`].
-    PasteText {
+    /// Insert what the clipboard held at one place, in one commit. The
+    /// Logic thread takes the richest half it can read (`PROSE-UI-042`).
+    /// This application's own bytes come first, marks and block structure
+    /// kept (`PROSE-UI-107`). The HTML another application wrote comes next,
+    /// then the plain text, one paragraph per line. The view only carries the halves
+    /// (`PROSE-UI-105`).
+    Paste {
         at: (BlockId, u32),
         text: String,
+        html: Option<String>,
+        payload: Option<Vec<u8>>,
     },
     /// Apply one presence mark over a whole selection, or remove it. Every
     /// block the selection covers changes in one commit, so one undo takes
@@ -1143,7 +1137,7 @@ impl ProseCommand {
             Self::Sync { .. } => "catching up",
             Self::InsertText { .. } => "typing",
             Self::CopyRange { .. } => "copying",
-            Self::PasteRich { .. } | Self::PasteText { .. } => "pasting",
+            Self::Paste { .. } => "pasting",
             Self::DeleteText { .. } => "deleting text",
             Self::DeleteRange { .. } => "deleting the selection",
             Self::SplitBlock { .. } => "splitting the block",
@@ -1293,9 +1287,13 @@ pub enum ProseEvent {
         marks: ActiveMarks,
     },
     /// The clipboard payload of the selection a [`ProseCommand::CopyRange`]
-    /// named: its plain-text mirror, and this application's own bytes
-    /// (`PROSE-UI-108`).
-    Clipboard { text: String, payload: Vec<u8> },
+    /// named: its plain-text mirror (`PROSE-UI-108`), its HTML for another
+    /// editor, and this application's own bytes.
+    Clipboard {
+        text: String,
+        html: String,
+        payload: Vec<u8>,
+    },
     /// A cell a merge covers still holds text: masked, not destroyed. A hint,
     /// and it blocks nothing (`PROSE-FEAT-255`).
     MergeConflictDetected { cell_id: BlockId },

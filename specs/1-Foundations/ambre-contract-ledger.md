@@ -19,16 +19,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2595 rows: 2322 shipped, of which 775 loose. 273 unbuilt.**
+**2604 rows: 2328 shipped, of which 775 loose. 276 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 227 | 221 | 542 | 557 | 1547 |
+| `verified` | 227 | 221 | 542 | 563 | 1553 |
 | `failing` | 39 | 46 | 22 |  | 107 |
 | `untested` | 266 | 143 | 234 | 3 | 646 |
 | `human-review` | 7 | 1 | 1 | 1 | 10 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
-| `unimplemented` | 55 | 56 | 23 | 139 | 273 |
+| `unimplemented` | 55 | 56 | 23 | 142 | 276 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -130,7 +130,7 @@
 | `ambre-spec-toile-viewport.md` | 32 | 30 | 16 | 14 | 2 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 7 | 9 |  |
 | `ambre-spec-prose-schema.md` | 29 | 28 | 27 | 1 | 1 |
-| `ambre-spec-prose-clipboard.md` | 14 | 14 | 14 |  |  |
+| `ambre-spec-prose-clipboard.md` | 23 | 20 | 20 |  | 3 |
 | `ambre-spec-prose-comments.md` | 36 | 36 | 36 |  |  |
 | `ambre-spec-prose-cross-references.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-prose-engine.md` | 42 | 42 | 42 |  |  |
@@ -189,7 +189,7 @@
 | `ambre-spec-pdf-export.md` | PDF-001..007 |
 | `ambre-spec-presence.md` | PRESENCE-001..014 |
 | `ambre-spec-prose-accessibility.md` | PROSE-UI-066..069,077..081 |
-| `ambre-spec-prose-clipboard.md` | PROSE-UI-013,040..044,105..112 |
+| `ambre-spec-prose-clipboard.md` | PROSE-UI-013,040..044,105..112,219..227 |
 | `ambre-spec-prose-comments.md` | PROSE-FEAT-001,009,075..081,185..204,279,295..297; PROSE-UI-049..050,144 |
 | `ambre-spec-prose-cross-references.md` | PROSE-FEAT-014,072..074,128..135; PROSE-UI-048,084..086 |
 | `ambre-spec-prose-engine.md` | PROSE-001,003..004,023..026,043..063,098,104..106; PROSE-FEAT-005..006; PROSE-IO-042; PROSE-UI-001..003,010,015,149..150 |

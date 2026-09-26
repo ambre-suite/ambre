@@ -106,6 +106,7 @@ pub enum ProseInput {
     /// bytes when there are any, the plain text otherwise (`PROSE-UI-042`).
     Paste {
         text: String,
+        html: Option<String>,
         rich: Option<Vec<u8>>,
     },
 }
@@ -150,8 +151,7 @@ impl Sent {
             | ProseCommand::InsertBlock { .. }
             | ProseCommand::InsertTable { .. }
             | ProseCommand::InsertToc { .. }
-            | ProseCommand::PasteRich { .. }
-            | ProseCommand::PasteText { .. } => Self::Barrier,
+            | ProseCommand::Paste { .. } => Self::Barrier,
             _ => return None,
         })
     }
@@ -363,7 +363,9 @@ impl ProseUiState {
             }
             ProseInput::Release => self.dragging.take().is_some(),
             ProseInput::Copy { cut } => self.copy(*cut, send),
-            ProseInput::Paste { text, rich } => self.paste(text, rich.as_deref(), send),
+            ProseInput::Paste { text, html, rich } => {
+                self.paste(text, html.as_deref(), rich.as_deref(), send)
+            }
         }
     }
 
@@ -382,10 +384,12 @@ impl ProseUiState {
         match &self.last_clip {
             Some(kept) if own_copy || kept.text == read.text => ProseInput::Paste {
                 text: kept.text.clone(),
+                html: kept.html.clone(),
                 rich: kept.ambre.clone(),
             },
             _ => ProseInput::Paste {
                 text: read.text,
+                html: read.html,
                 rich: read.ambre,
             },
         }
@@ -412,10 +416,11 @@ impl ProseUiState {
     fn paste(
         &mut self,
         text: &str,
+        html: Option<&str>,
         rich: Option<&[u8]>,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> bool {
-        if rich.is_none() && !text.contains('\n') {
+        if rich.is_none() && html.is_none() && !text.contains('\n') {
             return self.type_into_menu(text, send);
         }
         if !self.take_selection(send) {
@@ -425,18 +430,12 @@ impl ProseUiState {
             return false;
         };
         let at = (cursor.block_id, cursor.offset);
-        let command = match rich {
-            Some(payload) => ProseCommand::PasteRich {
-                at,
-                payload: payload.to_vec(),
-                text: text.to_owned(),
-            },
-            None => ProseCommand::PasteText {
-                at,
-                text: text.replace("\r\n", "\n"),
-            },
-        };
-        send(command);
+        send(ProseCommand::Paste {
+            at,
+            text: text.replace("\r\n", "\n"),
+            html: html.map(str::to_owned),
+            payload: rich.map(<[u8]>::to_vec),
+        });
         true
     }
 

@@ -609,10 +609,17 @@ impl ProseState {
             ProseCommand::CountWords => self.count_words(),
             ProseCommand::ReadMarks { anchor, focus } => self.read_marks(anchor, focus),
             ProseCommand::CopyRange { anchor, focus } => self.copy_range(anchor, focus),
-            ProseCommand::PasteRich { at, payload, text } => {
-                self.paste_rich((tree_id(at.0), at.1), &payload, &text)
-            }
-            ProseCommand::PasteText { at, text } => self.paste_text((tree_id(at.0), at.1), &text),
+            ProseCommand::Paste {
+                at,
+                text,
+                html,
+                payload,
+            } => self.paste(
+                (tree_id(at.0), at.1),
+                &text,
+                html.as_deref(),
+                payload.as_deref(),
+            ),
             ProseCommand::FormatSelection {
                 anchor,
                 focus,

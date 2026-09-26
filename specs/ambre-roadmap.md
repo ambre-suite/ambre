@@ -106,13 +106,16 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` A provisional cell on the UI thread | MVP | text typed into a table cell shows nothing until the Logic thread answers, where a paragraph, a band and a note show it at once. The cell's paragraph is shaped at its column's width, and its row grows until the answer (`PROSE-UI-213`) |
 | `[x]` Collaborative cursors and annotations | MVP | remote carets, comment highlights, track-change highlights |
 | `[x]` Copy and paste | MVP | copy, cut and paste through the Logic thread: the plain text and this application's own bytes on the system clipboard, the marks and the block types kept on a paste back |
+| `[x]` Rich clipboard: HTML in and out | MVP | a copy writes HTML beside the text and the private bytes, and a paste from a web page, Google Docs or Word keeps its blocks, lists, links and marks, read on the Logic thread through an allow-list with a depth cap |
+| `[ ]` Rich paste: tables and pictures | V1 | an HTML table lands as a table and a pasted picture lands in the text, where the reader now keeps one paragraph per cell and drops the picture |
+| `[ ]` Paste as plain text | MVP | a chord and a context-menu entry that insert the plain-text mirror alone, as every word processor offers |
 | `[ ]` The interactive ruler | MVP | the ruler above the page, its indent handles following the caret's block, and a drag that writes the paragraph once on release |
 | `[ ]` A drag that scrolls, and text dropped into the page | MVP | a selection dragged past the edge of the window scrolls and follows the text, and text dropped into the page lands at the drop point |
 | `[ ]` Inertial scroll | MVP | a flick keeps the column moving, slowing down, and stops at either end of the column |
 | `[x]` The native format | MVP | a Prose document saved to and read from an `.ambre` file |
 | `[x]` A Prose fixture corpus | MVP | Trame and Toile each carry a fixture generator and Prose carries none, so `fixtures/` holds no Prose document and the schema has reached version 9 with no artifact frozen at any version. Each migration is held by one hand-built document in a unit test, never by a real file. A seeded generator writing a document with styled text, a table, a band, a footnote and a comment gives the current corpus, and the next schema bump its first frozen artifact (`ambre-spec-fixtures.md`) |
 | `[ ]` Markdown interop | MVP | Markdown import and export, with a report of what was lost |
-| `[ ]` HTML interop | V1 | HTML import and export, including a paste from a web page |
+| `[ ]` HTML interop | V1 | HTML import and export of whole documents, beside the clipboard reader |
 | `[ ]` DOCX interop | V1 | Word import and export, comments and track changes included |
 | `[ ]` PDF export | V1 | a paginated PDF with working links and metadata |
 | `[ ]` Images | V1 | images in the document, resolved through the shared media flow and embedded on export |

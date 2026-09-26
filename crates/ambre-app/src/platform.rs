@@ -116,7 +116,7 @@ pub(crate) async fn paste_from_clipboard(
     let mut token: Option<String> = None;
     let mut found = false;
 
-    // Structured read: the private type, the ownership token and the plain text,
+    // Structured read: the private type, the ownership token, the HTML and the plain text,
     // in whatever order the browser lists them.
     if let Ok(val) = wasm_bindgen_futures::JsFuture::from(read_promise).await
         && let Ok(items) = val.dyn_into::<js_sys::Array>()
@@ -138,6 +138,12 @@ pub(crate) async fn paste_from_clipboard(
                     read_clipboard_item(&item, host::AMBRE_CLIPBOARD_WEB_TOKEN_TYPE).await
             {
                 token = Some(t);
+                found = true;
+            }
+            if has("text/html")
+                && let Some(html) = read_clipboard_item(&item, "text/html").await
+            {
+                blob.html = Some(html).filter(|h| !h.is_empty());
                 found = true;
             }
             if has("text/plain")

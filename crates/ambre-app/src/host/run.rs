@@ -290,6 +290,8 @@ where
                     .filter(|s| !s.is_empty())
                     .and_then(|b64| base64_decode(&b64));
                 let text = data.get_data("text/plain").unwrap_or_default();
+                // The formatting another editor wrote, for a view that reads it.
+                let html = data.get_data("text/html").ok().filter(|s| !s.is_empty());
                 // Same-tab ownership: the synchronous token survives even when the
                 // async payload write failed (Firefox). So a match means paste our
                 // own in-memory copy at full fidelity.
@@ -298,7 +300,7 @@ where
                     data.get_data(AMBRE_CLIPBOARD_TOKEN_TYPE)
                         .is_ok_and(|t| !t.is_empty() && t == token)
                 };
-                if ambre.is_none() && text.is_empty() && !own_copy {
+                if ambre.is_none() && html.is_none() && text.is_empty() && !own_copy {
                     return;
                 }
                 // Prevent the native insert (which would also fire `input` and
@@ -306,7 +308,7 @@ where
                 event.prevent_default();
                 host_c
                     .borrow_mut()
-                    .paste_clipboard(ambre_bus::ClipboardBlob { text, ambre }, own_copy);
+                    .paste_clipboard(ambre_bus::ClipboardBlob { text, html, ambre }, own_copy);
             },
         );
         ta.add_event_listener_with_callback("paste", cb.as_ref().unchecked_ref())

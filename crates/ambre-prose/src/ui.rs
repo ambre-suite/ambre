@@ -535,9 +535,14 @@ impl ProseUiState {
     /// paragraph (`PROSE-UI-141`), because the event names the block minted.
     pub fn apply_event(&mut self, event: &ProseEvent) {
         match event {
-            ProseEvent::Clipboard { text, payload } => {
+            ProseEvent::Clipboard {
+                text,
+                html,
+                payload,
+            } => {
                 let blob = ambre_bus::ClipboardBlob {
                     text: text.clone(),
+                    html: Some(html.clone()),
                     ambre: Some(payload.clone()),
                 };
                 self.last_clip = Some(blob.clone());

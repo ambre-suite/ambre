@@ -1,10 +1,11 @@
 # AMBRE -- FEATURE: CLIPBOARD
 
 **Type:** Vertical (feature)
-**Implementation:** implemented
+**Implementation:** partial -- text and HTML go both ways; tables, pictures and a plain paste do not.
 
 > Copy, cut and paste. Copying inside Ambre keeps the formatting and the structure of what was
-> copied. Copying out of it leaves readable plain text. Pasting from elsewhere brings the text in.
+> copied. Copying out of it leaves plain text and HTML. A paste from a web page, Google Docs or
+> Word keeps its headings, lists, links and marks.
 
 ---
 
@@ -18,10 +19,15 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-UI-013` | `INV` | A paste MUST be routed through the Logic thread as a command: the view MUST NOT insert clipboard content into a model of its own. | this spec section 3 | `ambre_prose::input_tests::a_paste_leaves_as_a_command` | none | verified |
-| `PROSE-UI-105` | `INV` | The view MUST NOT serialize document content: the payload MUST be built where the document lives. | this spec section 5 | structural -- the payload type is private to `crates/ambre-prose/src/logic/clipboard.rs`, and the view sends the selection's two ends; `ambre_prose::logic::clipboard::tests::a_copy_covers_the_whole_selection_and_writes_nothing` | none | verified |
+| `PROSE-UI-105` | `INV` | The view MUST NOT serialize document content: the payload MUST be built where the document lives. | this spec section 5 | structural -- the payload type is private to `crates/ambre-prose/src/logic/clipboard/mod.rs`, and the view sends the selection's two ends; `ambre_prose::logic::clipboard::tests::a_copy_covers_the_whole_selection_and_writes_nothing` | none | verified |
 | `PROSE-UI-041` | `INV` | The view MUST NOT touch the system clipboard: reading and writing it MUST be the host's, inside the window the user's gesture opens. | this spec section 3; `ambre-spec-clipboard.md` | structural -- `web-sys` is a wasm-only dependency of `crates/ambre-prose` given to the reply field, and no Prose source names the clipboard API, which the host in `crates/ambre-app/src/host/mod.rs` alone reads and writes | none | verified |
-| `PROSE-UI-106` | `INV` | No format other than the plain-text mirror and this application's own bytes MUST be read from or written to the system clipboard. | this spec section 5 | structural -- `ambre_bus::ClipboardBlob` holds the plain text and this application's bytes and nothing else, and the host adds only the token that names its copy | none | verified |
+| `PROSE-UI-106` | `INV` | No format other than the plain-text mirror, the HTML half and this application's own bytes MUST be read from or written to the system clipboard. | this spec section 5 | structural -- `ambre_bus::ClipboardBlob` holds the plain text, the HTML and this application's bytes and nothing else, and the host adds only the token that names its copy | none | verified |
 | `PROSE-UI-107` | `IO` | Content copied in Ambre and pasted back into Ambre MUST return with the marks and the block structure it was copied with. | this spec section 3 | `ambre_prose::logic::clipboard::tests::a_rich_paste_keeps_types_and_marks` | none | verified |
+| `PROSE-UI-219` | `IO` | A paste of HTML MUST keep its headings, paragraphs, lists, to-do items, code blocks, links and character formatting, Google Docs and Word fragments included. | this spec section 3 | `ambre_prose::logic::clipboard::tests::each_html_fixture_pastes_as_its_golden_says` -- a Word, a Google Docs, a web page and a PDF viewer fixture, each against a golden text | none | verified |
+| `PROSE-UI-220` | `INV` | A paste of HTML MUST insert only text and the formatting this document knows: no script, style, hidden content, embedded object or link outside http, https and mailto MUST reach the document. | this spec section 5 | `ambre_prose::logic::clipboard::html_read::tests::hostile_markup_leaves_only_its_text` | none | verified |
+| `PROSE-UI-224` | `INV` | A paste of HTML MUST NOT turn a page's theme into marks: the style of an element holding blocks, and a body ink black or near it, MUST set no mark. | this spec section 3 | `ambre_prose::logic::clipboard::html_read::tests::a_web_page_keeps_its_formatting_and_drops_its_theme` | none | verified |
+| `PROSE-UI-225` | `IO` | A paste of an HTML table MUST land as a table, its rows, columns and merged cells kept. | this spec section 3 | not built | unbuilt -- lands with the "Rich paste: tables and pictures" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-226` | `IO` | A paste of HTML holding a picture the clipboard also carries MUST land the picture at its place in the text. | this spec section 3 | not built | unbuilt -- lands with the "Rich paste: tables and pictures" Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Copy
 
@@ -29,6 +35,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-UI-040` | `POST` | The copied payload MUST be built from the whole selection, never trimmed to what is on screen. | this spec section 3 | `ambre_prose::logic::clipboard::tests::a_copy_covers_the_whole_selection_and_writes_nothing` | none | verified |
 | `PROSE-UI-108` | `POST` | The payload MUST carry a plain-text mirror of the selection, readable by an application that knows nothing of Ambre. | this spec section 3 | `ambre_prose::logic::clipboard::tests::a_copy_covers_the_whole_selection_and_writes_nothing` | none | verified |
+| `PROSE-UI-222` | `POST` | A copy MUST also write an HTML half that keeps the block types, the lists, the links and the marks, with every character of the text escaped. | this spec section 3 | `ambre_prose::logic::clipboard::tests::the_html_half_alone_pastes_what_the_rich_half_does` | none | verified |
 | `PROSE-UI-109` | `FRAME` | A copy MUST NOT write to the document, and MUST NOT move or shrink the selection it read. | derived | `ambre_prose::logic::clipboard::tests::a_copy_covers_the_whole_selection_and_writes_nothing` | none | verified |
 
 ### 1.3 Cut
@@ -43,19 +50,23 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-042` | `POST` | A paste MUST have exactly two outcomes: the rich payload, or the plain-text mirror. | this spec section 3 | `ambre_prose::logic::clipboard::tests::foreign_bytes_paste_as_plain_text` | none | verified |
+| `PROSE-UI-042` | `POST` | A paste MUST take the richest half the clipboard holds: this application's own payload, then the HTML half, then the plain-text mirror. | this spec section 3 | `ambre_prose::logic::clipboard::tests::the_richest_half_the_clipboard_holds_wins` | none | verified |
 | `PROSE-UI-043` | `POST` | The kept payload MUST be used only while the system clipboard's text still matches it; otherwise the pasted content MUST come from the system clipboard. | this spec section 3 | `ambre_prose::input_tests::the_kept_payload_serves_only_its_own_copy` | none | verified |
+| `PROSE-UI-221` | `FAIL` | HTML nested deeper than the reader's depth cap MUST paste as its plain-text mirror, and MUST NOT be built into a tree. | this spec section 3 | `ambre_prose::logic::clipboard::html_read::tests::a_tree_nested_past_the_cap_reads_as_nothing` | none | verified |
+| `PROSE-UI-223` | `POST` | A paste of several blocks, or of one typed block, into an empty paragraph MUST give that paragraph the type of the first pasted block. | this spec section 3 | `ambre_prose::logic::clipboard::tests::the_html_half_alone_pastes_what_the_rich_half_does` | none | verified |
+| `PROSE-UI-227` | `POST` | The paste-as-plain-text chord and its context-menu entry MUST insert the plain-text mirror alone, whatever richer half the clipboard holds. | this spec section 4 | not built | unbuilt -- lands with the "Paste as plain text" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-UI-112` | `FRAME` | A paste MUST NOT change a block outside the range it replaces, and MUST NOT reformat the text that surrounds it. | derived | `ambre_prose::logic::clipboard::tests::a_paste_mid_paragraph_leaves_the_neighbours_alone` | none | verified |
 
-* **Budget.** none: a copy walks the selection once, a paste is an ordinary insertion, and
-  `ambre-spec-budgets.md` budgets neither. What a very large paste costs is in section 6.
+* **Budget.** the HTML read holds the "Prose HTML clipboard import" row of `ambre-spec-budgets.md`.
+  A copy walks the selection once and a paste of the other halves is an ordinary insertion; the
+  registry budgets neither. What a very large paste costs is in section 6.
 * **Boundary.** the system clipboard leaves the application, and it is the one path here that does.
   It carries the user's own selection, already plaintext on their machine; nothing is encrypted,
   nothing is sent, and the host performs the write (`PROSE-UI-041`). The browser's own handling is
   outside Ambre's control, and gates the mirror (`ambre-spec-clipboard.md`).
-* **Verification.** 14 `verified`. The Logic rows are host tests over a real document, a round
-  trip included; the view rows drive the input queue with a recording sender. `PROSE-UI-041`,
-  `PROSE-UI-105` and `PROSE-UI-106` are held by where the types live.
+* **Verification.** 20 `verified`, 3 `unimplemented`. The Logic rows are host tests over a real
+  document, a round trip included; the view rows drive the input queue with a recording sender.
+  `PROSE-UI-041`, `PROSE-UI-105` and `PROSE-UI-106` are held by where the types live.
 
 ---
 
@@ -70,7 +81,8 @@ Two peers, one selection. The last column names the row each line rests on.
 | cuts a sentence | edits the same sentence at that moment | the deletion and Bob's edit, merged | the sentence gone on both screens, Bob's edit kept where it survived | none -- `PROSE-UI-044` |
 | pastes into a text editor outside Ambre | -- | nothing | the plain text of what she copied | none -- `PROSE-UI-108` |
 | copies in Ambre, copies again in another application, pastes back | -- | the second copy's text | the other application's text, not the earlier rich payload | none -- `PROSE-UI-043` |
-| pastes a paragraph from a web page | -- | its text, inserted at the caret | plain text, without the page's formatting | none -- `PROSE-UI-042` |
+| pastes a titled list from a web page | -- | a heading and list items, bold and links kept | the page's structure, in the document's own styles | none -- `PROSE-UI-219` |
+| copies in Ambre, pastes into Google Docs | -- | nothing | the headings, lists and formatting she copied | none -- `PROSE-UI-222` |
 
 ---
 
@@ -84,16 +96,18 @@ payload of `ambre-bus`:
 
 ```rust
 /// What crosses to the host, and back. `text` is the plain-text mirror every other
-/// application can read; `ambre` is this application's own bytes, under its private type.
-pub struct ClipboardBlob { pub text: String, pub ambre: Option<Vec<u8>> }
+/// application can read, `html` the formatted half other editors read, and `ambre` this
+/// application's own bytes, under its private type.
+pub struct ClipboardBlob { pub text: String, pub html: Option<String>, pub ambre: Option<Vec<u8>> }
 ```
 
 **The three steps of a copy.**
 
 1. The view asks the Logic thread for the payload (`PROSE-UI-040`); it serializes nothing
    (`PROSE-UI-105`).
-2. The Logic thread walks the selection in the document and answers with the two halves.
-3. The host writes both to the system clipboard on the next frame (`PROSE-UI-041`). The view
+2. The Logic thread walks the selection in the document and answers with the three halves:
+   the text, the HTML and the bytes.
+3. The host writes all three to the system clipboard on the next frame (`PROSE-UI-041`). The view
    keeps the payload in memory for a paste back into the same tab.
 
 ```rust
@@ -105,14 +119,36 @@ pub fn poll_clipboard(&mut self) -> Option<ClipboardBlob>;
 pub fn paste_clipboard(&mut self, blob: ClipboardBlob, own_copy: bool);
 ```
 
-**The two outcomes of a paste** (`PROSE-UI-042`):
+**The three outcomes of a paste** (`PROSE-UI-042`). The view sends every half it holds in one
+`Paste` command, and the Logic thread takes the first that reads:
 
 | What the host read | What is inserted |
 |---|---|
-| a payload this application wrote, and the mirror still matches it | the rich content, through `PasteRich` (`PROSE-UI-043`) |
-| anything else, including text from another application | the plain text, through `PasteText`: one paragraph per line, control characters dropped |
+| a payload this application wrote, and the mirror still matches it | the rich content (`PROSE-UI-043`) |
+| HTML that yields at least one block | the blocks and marks the reader keeps (`PROSE-UI-219`) |
+| anything else | the plain text: one paragraph per line, control characters dropped |
 
-Both leave as commands, so the document is written by the Logic thread and the view keeps no
+**Reading HTML.** The parse runs on the Logic thread, never on the UI thread. A tokenizer pass
+first measures the nesting depth. A fragment deeper than 128 elements is not built
+(`PROSE-UI-221`), since the tree builder costs the square of the depth. The WHATWG tree builder
+of `html5ever` then fills an arena, and one iterative walk keeps an allow-list.
+
+Blocks are headings, paragraphs, list items (bullet, ordered with its numeral style, to-do), and
+code with its language. Marks are the usual character formats, inline code, and http, https and
+mailto links. The colour, highlight, size and family of an inline style come too. Each value
+passes the same validation a typed mark does. Scripts, styles, hidden elements, SVG and MathML,
+embedded objects and Word's list glyphs leave nothing (`PROSE-UI-220`).
+
+The style of a container and a near-black ink
+are the page's theme, and set no mark (`PROSE-UI-224`). A table reads as one paragraph per cell
+and a picture reads as nothing, until `PROSE-UI-225` and `PROSE-UI-226` land. A PDF viewer's
+text layer reads as one paragraph per visual line, as its plain text does.
+
+**Writing HTML.** The copy writes one element per block, groups consecutive list items into one
+list, and escapes every text and attribute value (`PROSE-UI-222`). An empty paragraph at the
+paste point takes the first block's type, as Word and Google Docs do (`PROSE-UI-223`).
+
+All three leave as commands, so the document is written by the Logic thread and the view keeps no
 model of what was pasted (`PROSE-UI-013`). Opening a Word or Markdown *file* is a document
 import, not a paste (`features/ambre-spec-prose-import-export.md`).
 
@@ -129,10 +165,11 @@ deletion is the ordinary cross-paragraph one
 A payload opens with four bytes of its own, so bytes another Ambre application wrote under the
 same clipboard type paste as their plain text. Only the formatting marks travel: a comment or a
 suggestion anchor stays in the document it was copied from. A paste of several blocks into a band
-or a note is refused, as a split there is. A paste of one line with no payload is typing, and
-joins the draft.
+or a note is refused, as a split there is. A paste of one line with neither a payload nor HTML
+is typing, and joins the draft.
 
-**Code:** `crates/ambre-prose/src/logic/clipboard.rs` (the payload, the copy and the paste),
+**Code:** `crates/ambre-prose/src/logic/clipboard/` (the payload, the HTML halves, the copy and
+the paste),
 `crates/ambre-prose/src/input.rs` (the copy, cut and paste inputs), and
 `crates/ambre-app/src/host/prose.rs` (the host entries).
 
@@ -144,9 +181,10 @@ joins the draft.
 |---|---|
 | the copy chord, or the menu entry | asks for the payload and mirrors it |
 | the cut chord | the same, then deletes the selection |
-| the paste chord | inserts the rich payload, or the plain text |
+| the paste chord | inserts the rich payload, the HTML, or the plain text |
 | a paste with no selection | inserts at the caret |
 | a paste over a selection | deletes it first (`PROSE-UI-030`) |
+| the paste-as-plain-text chord, or its menu entry | `PROSE-UI-227`, on the "Paste as plain text" Story (`ambre-roadmap.md` E5) |
 | dropping text into the page | `PROSE-UI-204`, on the "A drag that scrolls, and text dropped into the page" Story (`ambre-roadmap.md` E5) |
 
 The legacy chords and the fold of `Ctrl` and `Cmd` are decided for every application in
@@ -162,7 +200,9 @@ their chord lists, and decodes none of the three itself.
 | The Logic thread builds the payload | serializing the selection in the view | it requires the view to hold the document, which is the one thing `PROSE-UI-001` forbids. The document lives on the Logic thread, and that is the only place the whole selection can be read |
 | The payload covers the selection, never the window | building the payload from the display list | the display list is culled by construction, so a user selecting forty pages gets what was built for the frame. The loss is invisible until the paste, and then it is silent |
 | The host owns the system clipboard | calling the clipboard from the view | browsers grant clipboard access only inside the window a user gesture opens, and that window is the host's event handler. A worker or a view that asks later is refused, and the refusal cannot be retried or reported usefully |
-| The clipboard carries plain text and this application's own bytes, and nothing else | a markup payload beside the two | it doubles the write and adds an untrusted parse. A third format is a third writer and a third reader while the rich half already carries everything, and markup invites a paste path that sanitizes untrusted content on the UI thread, which is where it must never happen |
+| The clipboard carries plain text, HTML and this application's own bytes | plain text and the private bytes only | a paste from Google Docs, Word or a web page loses every heading, list and link, and a copy into them does too. HTML is the one rich format every browser exposes; RTF and Markdown are not readable from a web page |
+| HTML is read on the Logic thread through an allow-list | sanitizing markup on the UI thread and inserting what survives | the UI thread would parse untrusted content inside the frame budget. An allow-list that emits the document's own blocks and marks keeps nothing it does not know, so no markup survives to be escaped later |
+| An arena sink for `html5ever` | `markup5ever_rcdom` | its authors publish it as unofficial and meant for tests, and its reference-counted nodes free a deep tree recursively |
 | The kept payload is gated on the mirror | pasting the kept payload whenever there is one | it pastes what the user copied ten minutes ago. The payload in memory is not what the clipboard holds, since another application may have replaced it, and the plain-text mirror is the one field both sides wrote and can compare |
 | A cut copies first | deleting and then copying | it loses the content if the copy is refused, with nothing on the clipboard to show for it. The other order makes the failure harmless |
 | Importing a file is not a paste | routing a file drop through the paste path | it puts an untrusted document parse on a gesture that has no report. A dropped or opened document needs a parser, a report of what was lost, and a progress path for a large file; a paste has none of those and must not grow them |

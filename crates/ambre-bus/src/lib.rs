@@ -64,6 +64,9 @@ pub use ui::{AppEvent, UiEvent};
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ClipboardBlob {
     pub text: String,
+    /// The `text/html` half, for an application that reads formatting but
+    /// not Ambre's own bytes. `None` when the active app writes none.
+    pub html: Option<String>,
     pub ambre: Option<Vec<u8>>,
 }
 

@@ -104,12 +104,18 @@ pub(crate) fn base64_decode(s: &str) -> Option<Vec<u8>> {
 
 /// Best-effort asynchronous publish of a copied range to the OS clipboard via
 /// `navigator.clipboard.write`. It carries the tab-separated `text/plain`, the
-/// private `web ` payload type and the `web ` ownership token. The write replaces
+/// `text/html` a view wrote for another editor, the private `web ` payload type
+/// and the `web ` ownership token. The write replaces
 /// the whole clipboard, so it re-publishes everything the copy event established
 /// rather than dropping the token a frame after the copy (`UI-THREAD-023`). Runs
 /// in addition to the synchronous `setData` (which serves Ctrl+V); any failure
 /// is ignored -- Ctrl+V still works.
-pub(crate) fn async_write_clipboard(tsv: String, payload_b64: Option<String>, token: String) {
+pub(crate) fn async_write_clipboard(
+    tsv: String,
+    html: Option<String>,
+    payload_b64: Option<String>,
+    token: String,
+) {
     let Some(clipboard) = web_sys::window().map(|w| w.navigator().clipboard()) else {
         return;
     };
@@ -118,6 +124,10 @@ pub(crate) fn async_write_clipboard(tsv: String, payload_b64: Option<String>, to
         let record = js_sys::Object::new();
         let text_promise = js_sys::Promise::resolve(&JsValue::from_str(&tsv));
         let _ = js_sys::Reflect::set(&record, &JsValue::from_str("text/plain"), &text_promise);
+        if let Some(html) = html {
+            let p = js_sys::Promise::resolve(&JsValue::from_str(&html));
+            let _ = js_sys::Reflect::set(&record, &JsValue::from_str("text/html"), &p);
+        }
         if let Some(b64) = payload_b64 {
             let p = js_sys::Promise::resolve(&JsValue::from_str(&b64));
             let _ = js_sys::Reflect::set(&record, &JsValue::from_str(AMBRE_CLIPBOARD_WEB_TYPE), &p);

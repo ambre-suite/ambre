@@ -1,0 +1,19 @@
+Heading level=1
+  "Rapport annuel"
+Paragraph
+  "Le chiffre d\u{2019}affaires progresse de "
+  "12\u{a0}%" b
+  ", et la "
+  "marge" fg=#c00000
+  " recule "
+  "l\u{e9}g\u{e8}rement" i
+  "."
+ListItem list=Bullet
+  "Ventes"
+ListItem list=Bullet
+  "Achats" u
+Paragraph
+Paragraph
+  "Voir "
+  "le d\u{e9}tail" a=https://example.com/rapport
+  "."

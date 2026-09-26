@@ -3,10 +3,16 @@
 //!
 //! A copy walks the whole selection in the document (`PROSE-UI-040`). It
 //! answers with the plain text every application reads (`PROSE-UI-108`), and
-//! with this application's own bytes, which keep the marks and the blocks. A rich paste writes those bytes back in one commit, so one
-//! undo takes it back (`PROSE-UI-107`).
+//! with this application's own bytes, which keep the marks and the blocks.
+//! A rich paste writes those bytes back in one commit, so one undo takes it
+//! back (`PROSE-UI-107`). A copy also writes HTML, and a paste reads the HTML
+//! another editor wrote, both through the blocks this module defines.
 
-use loro::{LoroValue, TreeID};
+mod html_read;
+mod html_write;
+mod sink;
+
+use loro::{LoroValue, TreeID, TreeParentId};
 use serde::{Deserialize, Serialize};
 
 use ambre_bus::app::prose::{BlockInit, ListStyle, OrderedStyle};
@@ -189,14 +195,17 @@ impl ProseState {
             });
         }
         let mut outcome = ProseOutcome::nothing();
+        let html = html_write::write(&blocks);
         let payload = Payload {
             magic: MAGIC,
             blocks,
         };
         match postcard::to_allocvec(&payload) {
-            Ok(payload) => outcome
-                .display
-                .push(ProseEvent::Clipboard { text, payload }),
+            Ok(payload) => outcome.display.push(ProseEvent::Clipboard {
+                text,
+                html,
+                payload,
+            }),
             Err(e) => tracing::warn!("Prose: a copy could not be encoded: {e}"),
         }
         outcome
@@ -204,7 +213,7 @@ impl ProseState {
 
     /// Write plain text of several lines at `at`, one paragraph per line,
     /// the way a rich payload of paragraphs lands (`PROSE-UI-042`).
-    pub(super) fn paste_text(&mut self, at: (TreeID, u32), text: &str) -> ProseOutcome {
+    fn paste_text(&mut self, at: (TreeID, u32), text: &str) -> ProseOutcome {
         let blocks = text
             .split('\n')
             .map(|line| ClipBlock {
@@ -229,17 +238,36 @@ impl ProseState {
     /// blocks of their own kind. The last one takes the text that followed
     /// `at` (`PROSE-UI-107`). Nothing outside that paragraph changes
     /// (`PROSE-UI-112`). The caret lands after what was pasted.
-    pub(super) fn paste_rich(
+    ///
+    /// The richest half the clipboard held wins: this application's bytes,
+    /// then HTML, then the plain text. Bytes another application wrote do not
+    /// decode, and HTML with no text in it reads as no block. Each then falls
+    /// through to the next half.
+    pub(super) fn paste(
         &mut self,
         at: (TreeID, u32),
-        bytes: &[u8],
         text: &str,
+        html: Option<&str>,
+        bytes: Option<&[u8]>,
     ) -> ProseOutcome {
-        match postcard::from_bytes::<Payload>(bytes) {
-            Ok(payload) if payload.magic == MAGIC => self.paste_blocks(at, payload),
-            // Another application's bytes: its plain text comes in instead.
-            _ => self.paste_text(at, text),
+        if let Some(Ok(payload)) = bytes.map(postcard::from_bytes::<Payload>)
+            && payload.magic == MAGIC
+        {
+            return self.paste_blocks(at, payload);
         }
+        if let Some(html) = html {
+            let blocks = html_read::read(html);
+            if !blocks.is_empty() {
+                return self.paste_blocks(
+                    at,
+                    Payload {
+                        magic: MAGIC,
+                        blocks,
+                    },
+                );
+            }
+        }
+        self.paste_text(at, text)
     }
 
     fn paste_blocks(&mut self, at: (TreeID, u32), payload: Payload) -> ProseOutcome {
@@ -254,6 +282,11 @@ impl ProseState {
         let Some((first, rest)) = payload.blocks.split_first() else {
             return ProseOutcome::nothing();
         };
+        if len == 0
+            && let Err(refused) = self.adopt(&at.0, first)
+        {
+            return refused;
+        }
         let Some((last, middle)) = rest.split_last() else {
             if let Err(e) = write_runs(&body, pos, &marked(first)) {
                 return Self::err_write(&e);
@@ -302,6 +335,37 @@ impl ProseState {
             offset,
         }])
     }
+
+    /// Give an empty paragraph the type of the first pasted block.
+    ///
+    /// Word and Google Docs do the same: a heading pasted on an empty line
+    /// lands as a heading. A typed target, or one whose parent refuses the
+    /// type, keeps its own.
+    fn adopt(&mut self, id: &TreeID, first: &ClipBlock) -> Result<(), ProseOutcome> {
+        let tree = doc::blocks(&self.doc);
+        let init = first.kind.init();
+        let kind = init.block_type();
+        if kind == BlockType::Paragraph
+            || doc::block_type_of(&tree, id) != Some(BlockType::Paragraph)
+        {
+            return Ok(());
+        }
+        let parent = match tree.parent(*id) {
+            Some(TreeParentId::Node(parent)) => Some(parent),
+            Some(TreeParentId::Root) => None,
+            _ => return Ok(()),
+        };
+        if !doc::nesting_allows(&tree, parent, kind) {
+            return Ok(());
+        }
+        let Some(node) = doc::node_of(&tree, id) else {
+            return Err(Self::err_no_block(id));
+        };
+        if let Err(e) = node.insert(doc::K_TYPE, i64::from(kind.code())) {
+            return Err(Self::err_write(&format!("{e:?}")));
+        }
+        self.write_init(id, &init).map_err(|e| Self::err_write(&e))
+    }
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -309,6 +373,7 @@ mod tests {
     use super::*;
     use crate::events::{BlockInit, ProseCommand};
     use crate::view::tests::append;
+    use ambre_bus::app::prose::OrderedStyle;
 
     fn copied(
         state: &mut ProseState,
@@ -317,7 +382,7 @@ mod tests {
     ) -> (String, Vec<u8>, bool) {
         let outcome = state.handle_command(ProseCommand::CopyRange { anchor, focus });
         let wrote = outcome.update.is_some();
-        let Some(ProseEvent::Clipboard { text, payload }) = outcome.display.into_iter().next()
+        let Some(ProseEvent::Clipboard { text, payload, .. }) = outcome.display.into_iter().next()
         else {
             panic!("a copy answers with the clipboard");
         };
@@ -369,10 +434,11 @@ mod tests {
         );
         let (text, payload, _) = copied(&mut state, (heading, 0), (item, 4));
         let target = append(&mut state, BlockInit::Paragraph, "");
-        state.handle_command(ProseCommand::PasteRich {
+        state.handle_command(ProseCommand::Paste {
             at: (target, 0),
-            payload,
             text,
+            html: None,
+            payload: Some(payload),
         });
         let roots = state.root_blocks();
         let pasted = &roots[roots.len() - 3..];
@@ -389,10 +455,11 @@ mod tests {
     #[test]
     fn foreign_bytes_paste_as_plain_text() {
         let (mut state, first) = document();
-        state.handle_command(ProseCommand::PasteRich {
+        state.handle_command(ProseCommand::Paste {
             at: (first, 0),
-            payload: b"not a payload".to_vec(),
             text: "one\ntwo".to_owned(),
+            html: None,
+            payload: Some(b"not a payload".to_vec()),
         });
         let roots = state.root_blocks();
         assert_eq!(state.text_of(&roots[0]).as_deref(), Some("one"));
@@ -407,9 +474,11 @@ mod tests {
         let before = append(&mut state, BlockInit::Paragraph, "before");
         let middle = append(&mut state, BlockInit::Paragraph, "headtail");
         let after = append(&mut state, BlockInit::Paragraph, "after");
-        let outcome = state.handle_command(ProseCommand::PasteText {
+        let outcome = state.handle_command(ProseCommand::Paste {
             at: (middle, 4),
             text: "A\nB".to_owned(),
+            html: None,
+            payload: None,
         });
         assert!(outcome.update.is_some());
         let roots = state.root_blocks();
@@ -422,5 +491,219 @@ mod tests {
         assert_eq!(state.text_of(&roots[at + 1]).as_deref(), Some("Btail"));
         assert_eq!(roots[at + 2], after);
         assert_eq!(state.text_of(&after).as_deref(), Some("after"));
+    }
+
+    fn clipboard(
+        state: &mut ProseState,
+        anchor: (BlockId, u32),
+        focus: (BlockId, u32),
+    ) -> ProseEvent {
+        let outcome = state.handle_command(ProseCommand::CopyRange { anchor, focus });
+        outcome.display.into_iter().next().expect("a copy answers")
+    }
+
+    /// The text, the type and the marks of each root block past `from`.
+    fn shape(state: &ProseState, from: usize) -> Vec<(String, Option<BlockType>, String)> {
+        state.root_blocks()[from..]
+            .iter()
+            .map(|block| {
+                (
+                    state.text_of(block).unwrap_or_default(),
+                    state.block_type_of(block),
+                    format!("{:?}", state.marks_of(block)),
+                )
+            })
+            .collect()
+    }
+
+    /// `PROSE-UI-219`, `PROSE-UI-222`: the HTML half of a copy, pasted alone,
+    /// lands as the rich half does: the same blocks, types and marks.
+    #[test]
+    fn the_html_half_alone_pastes_what_the_rich_half_does() {
+        let (mut state, _) = document();
+        let heading = append(&mut state, BlockInit::Heading { level: 2 }, "Title");
+        let body = append(&mut state, BlockInit::Paragraph, "bold and red and linked");
+        for (range, key, value) in [
+            ((0, 4), "b", None),
+            ((9, 12), "fg", Some("#ff0000")),
+            ((17, 23), "a", Some("https://example.com/?a=1&b=2")),
+        ] {
+            state.handle_command(ProseCommand::ApplyMark {
+                block_id: body,
+                range,
+                key: key.to_owned(),
+                value: value.map(str::to_owned),
+            });
+        }
+        append(
+            &mut state,
+            BlockInit::ListItem {
+                style: ListStyle::Ordered(OrderedStyle::UpperRoman),
+            },
+            "item",
+        );
+        let code = append(
+            &mut state,
+            BlockInit::CodeBlock {
+                lang: "rust".to_owned(),
+            },
+            "a < b && c",
+        );
+        let ProseEvent::Clipboard {
+            text,
+            html,
+            payload,
+        } = clipboard(&mut state, (heading, 0), (code, 10))
+        else {
+            panic!("a copy answers with the clipboard");
+        };
+        let count = state.root_blocks().len();
+        let rich = append(&mut state, BlockInit::Paragraph, "");
+        state.handle_command(ProseCommand::Paste {
+            at: (rich, 0),
+            text: text.clone(),
+            html: None,
+            payload: Some(payload),
+        });
+        let middle = state.root_blocks().len();
+        let from_html = append(&mut state, BlockInit::Paragraph, "");
+        state.handle_command(ProseCommand::Paste {
+            at: (from_html, 0),
+            text,
+            html: Some(html),
+            payload: None,
+        });
+        let original = shape(&state, count - 4);
+        assert_eq!(shape(&state, count)[..4], original[..4]);
+        assert_eq!(shape(&state, middle)[..4], original[..4]);
+    }
+
+    /// `PROSE-UI-042`: the richest half wins. This application's bytes beat
+    /// the HTML, the HTML beats the text, and HTML that reads as no block
+    /// leaves the text to land.
+    #[test]
+    fn the_richest_half_the_clipboard_holds_wins() {
+        let (mut state, first) = document();
+        state.handle_command(ProseCommand::InsertText {
+            block_id: first,
+            pos: 0,
+            text: "own".to_owned(),
+        });
+        let ProseEvent::Clipboard { payload, .. } = clipboard(&mut state, (first, 0), (first, 3))
+        else {
+            panic!("a copy answers with the clipboard");
+        };
+        let paste = |state: &mut ProseState, html: Option<&str>, payload: Option<Vec<u8>>| {
+            let target = append(state, BlockInit::Paragraph, "");
+            state.handle_command(ProseCommand::Paste {
+                at: (target, 0),
+                text: "plain".to_owned(),
+                html: html.map(str::to_owned),
+                payload,
+            });
+            state.text_of(&target).unwrap_or_default()
+        };
+        assert_eq!(paste(&mut state, Some("<p>html</p>"), Some(payload)), "own");
+        assert_eq!(
+            paste(&mut state, Some("<p>html</p>"), Some(b"foreign".to_vec())),
+            "html"
+        );
+        assert_eq!(paste(&mut state, Some("<script>x</script>"), None), "plain");
+        let deep = format!("{}x", "<div>".repeat(10_000));
+        assert_eq!(paste(&mut state, Some(&deep), None), "plain");
+    }
+
+    /// One root block as golden text: its type and attributes on one line.
+    /// Each run follows on its own line, its text escaped to ASCII and its
+    /// marks sorted.
+    fn golden_block(state: &ProseState, block: &BlockId) -> String {
+        let mut kind = match state.block_type_of(block) {
+            Some(kind) => format!("{kind:?}"),
+            None => "?".to_owned(),
+        };
+        if let Some(level) = state.heading_level_of(block) {
+            kind.push_str(&format!(" level={level}"));
+        }
+        if let Some(style) = state.list_style_of(block) {
+            kind.push_str(&format!(" list={style:?}"));
+        }
+        if let Some(lang) = state.code_lang_of(block).filter(|lang| !lang.is_empty()) {
+            kind.push_str(&format!(" lang={lang}"));
+        }
+        let mut out = kind;
+        let Some(LoroValue::List(runs)) = state.marks_of(block) else {
+            return out;
+        };
+        for run in runs.iter() {
+            let LoroValue::Map(fields) = run else {
+                continue;
+            };
+            let text = match fields.get("insert") {
+                Some(LoroValue::String(text)) => text.to_string(),
+                _ => String::new(),
+            };
+            out.push_str(&format!("\n  \"{}\"", text.escape_default()));
+            if let Some(LoroValue::Map(marks)) = fields.get("attributes") {
+                let mut marks: Vec<String> = marks
+                    .iter()
+                    .map(|(key, value)| match value {
+                        LoroValue::String(value) if value.is_empty() => key.to_string(),
+                        LoroValue::String(value) => {
+                            format!("{key}={}", value.escape_default())
+                        }
+                        other => format!("{key}={other:?}"),
+                    })
+                    .collect();
+                marks.sort();
+                for mark in marks {
+                    out.push(' ');
+                    out.push_str(&mark);
+                }
+            }
+        }
+        out
+    }
+
+    /// `PROSE-UI-219`, `PROSE-UI-224`: each HTML fixture lands as the golden
+    /// file beside it says. The paste command writes it into an empty
+    /// document, and every block, attribute, run and mark value is compared.
+    ///
+    /// The golden is text a reviewer reads, not a document: a failure names
+    /// the line that moved. `AMBRE_BLESS=1` rewrites the goldens from what the
+    /// paste produced, and the diff is then the review.
+    #[test]
+    fn each_html_fixture_pastes_as_its_golden_says() {
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/logic/clipboard/fixtures");
+        let bless = std::env::var_os("AMBRE_BLESS").is_some();
+        let mut failures = Vec::new();
+        for name in ["word", "google-docs", "web-page", "pdfjs"] {
+            let html = std::fs::read_to_string(dir.join(format!("{name}.html")))
+                .expect("the fixture is committed");
+            let (mut state, first) = document();
+            state.handle_command(ProseCommand::Paste {
+                at: (first, 0),
+                text: String::new(),
+                html: Some(html),
+                payload: None,
+            });
+            let mut got: String = state
+                .root_blocks()
+                .iter()
+                .map(|block| golden_block(&state, block))
+                .collect::<Vec<_>>()
+                .join("\n");
+            got.push('\n');
+            let path = dir.join(format!("{name}.expected"));
+            if bless {
+                std::fs::write(&path, &got).expect("the golden is written");
+                continue;
+            }
+            let want = std::fs::read_to_string(&path).unwrap_or_default();
+            if want != got {
+                failures.push(format!("== {name}.expected\n-- want\n{want}-- got\n{got}"));
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 }

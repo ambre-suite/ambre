@@ -15,7 +15,6 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `prose-clipboard` | Copy, cut and paste. | implemented | 14 |  |
 | `prose-comments` | A discussion attached to a passage of the text. | implemented | 36 |  |
 | `prose-cross-references` | A pointer from one place in the document to another: "see page 4", "see section 2.1", or a label the author chose. | implemented | 16 |  |
 | `prose-engine` | An author types a word and every collaborator reads it. | implemented | 42 |  |
@@ -29,6 +28,7 @@
 | `prose-tables` | A grid of cells inside the document. | implemented | 47 |  |
 | `prose-undo` | Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one item is in running text. | implemented | 3 |  |
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | implemented | 13 |  |
+| `prose-clipboard` | Copy, cut and paste. | partial | 23 |  |
 | `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | partial | 49 | 1 |
 | `prose-page-rendering` | What a page looks like on the canvas. | partial | 23 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | partial | 49 |  |
@@ -44,4 +44,4 @@
 | `prose-ruler` | A horizontal scale above the page, carrying three handles. | design-only | 5 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 14 implemented, 9 partial, 5 design-only. 671 contract rows, 3 loose.**
+**28 features: 13 implemented, 10 partial, 5 design-only. 680 contract rows, 3 loose.**

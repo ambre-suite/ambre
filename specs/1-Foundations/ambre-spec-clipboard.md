@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `UI-THREA
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `UI-THREAD-006` | `INV` | The clipboard MUST carry a `text/plain` mirror plus one app-agnostic private type. | this spec section 2 | none | unheld -- the launcher owns the type names and every application serializes behind them. Nothing reads the written item back to check that both are on it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
-| `UI-THREAD-043` | `INV` | An application MUST NOT define a clipboard type of its own. | this spec section 2, the three names | none | unheld -- a per-application type would have to be added to the launcher, which owns all of them, so the rule holds by where the names live. Nothing refuses that addition; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `UI-THREAD-043` | `INV` | An application MUST NOT define a clipboard type of its own. | this spec section 2, the four names | none | unheld -- a per-application type would have to be added to the launcher, which owns all of them, so the rule holds by where the names live. Nothing refuses that addition; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-024` | `INV` | Every paste affordance MUST reach the view through one path, whatever the gesture that raised it. | this spec section 3 | none | unheld -- the paste event and the Paste button both hand the decoded transport to the host, and no test drives a paste with two rungs available to see which one answers; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `UI-THREAD-025` | `INV` | The host MUST NOT name an application on a clipboard path: it MUST address the active view. | this spec section 2 | none | unheld -- the button path builds no application command, and nothing drives a paste in a second application to see the affordance answer; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -75,16 +75,18 @@ shape is serialized onto the operating system clipboard.
 
 ```rust
 /// `text` is the plain-text mirror every other application can read; `ambre` is
-/// the active application's own bytes, opaque to the host.
-pub struct ClipboardBlob { pub text: String, pub ambre: Option<Vec<u8>> }
+/// the active application's own bytes, opaque to the host. `html` is the formatted half
+/// other editors read and write; only Prose fills it today.
+pub struct ClipboardBlob { pub text: String, pub html: Option<String>, pub ambre: Option<Vec<u8>> }
 ```
 
-**The three names on the clipboard.** The host owns all three, and an application names none
+**The four names on the clipboard.** The host owns all four, and an application names none
 (`UI-THREAD-006`).
 
 | Name | Written by | Carries |
 |---|---|---|
 | `text/plain` | both writes | the mirror, for a paste into another application |
+| `text/html` | both writes, when the application built it | the formatted half, for a paste into a word processor or a mail client |
 | `application/x-ambre` | the synchronous copy event | the application's bytes, base64 |
 | `web application/x-ambre` | the asynchronous write | the same bytes, under the prefix that API demands |
 | `application/x-ambre-token` | the synchronous copy event | one random value per page load, proving a same-tab copy |

@@ -1,0 +1,30 @@
+Heading level=2
+  "Histoire" ff=Linux Libertine
+Paragraph
+  "Le langage "
+  "Rust" b
+  " est n\u{e9} chez "
+  "Mozilla" a=https://fr.wikipedia.org/wiki/Mozilla fg=#3366cc
+  " en 2006"
+  "[1]" sup
+  ". Il vise la "
+  "s\u{fb}ret\u{e9}" i
+  " m\u{e9}moire sans ramasse-miettes."
+Paragraph
+  "Le logo"
+ListItem list=Bullet
+  "cargo" bg=#f8f9fa c
+  ", le gestionnaire de paquets\u{a0};"
+ListItem list=Bullet
+  "crates.io" a=https://crates.io/
+  ", le d\u{e9}p\u{f4}t."
+Paragraph
+  "Version"
+Paragraph
+  "Date"
+Paragraph
+  "1.0"
+Paragraph
+  "2015"
+CodeBlock
+  "fn main() {\n    println!(\"<ok>\");\n}" bg=#f8f9fa

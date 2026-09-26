@@ -51,6 +51,16 @@ parley = { workspace = true }
 # budgeted in `ambre-spec-budgets.md section 5`.
 unicode-segmentation = { workspace = true }
 
+# The HTML reader of a paste from a web page, a word processor or another
+# editor (`features/ambre-spec-prose-clipboard.md`), and later of an HTML
+# import, which must be the same reader (`PROSE-IO-025`). Clipboard HTML is
+# routinely malformed, and only a WHATWG tree builder closes the implied tags
+# as a browser does; a hand-rolled tokenizer would drift on every source.
+# Pure Rust, maintained by Servo, and budgeted in `ambre-spec-budgets.md
+# section 5`. The tree it builds is Prose's own arena, not `markup5ever_rcdom`,
+# which its authors publish as unsupported and test-only.
+html5ever = { workspace = true }
+
 # The UI -> Logic channel the view sends on. Shared memory between the two
 # threads, so a command moves rather than serializes.
 flume = { workspace = true }
@@ -74,6 +84,13 @@ proptest = { workspace = true }
 # draw calls are asserted on, off any GPU (`PROSE-UI-117`, `PROSE-UI-118`).
 # The same crate as the runtime dependency, with its test double switched on.
 ambre-draw = { path = "../ambre-draw", features = ["testing"] }
+# The HTML paste bench holds the "Prose HTML clipboard import" row of the
+# budget registry. Host-only, as the other benches of the workspace are.
+criterion = { workspace = true }
+
+[[bench]]
+name = "html_paste"
+harness = false
 
 [lints]
 workspace = true

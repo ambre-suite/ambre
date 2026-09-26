@@ -1,0 +1,13 @@
+Heading level=2
+  "Plan de la semaine" ff=Arial fs=16
+Paragraph
+  "Important" b ff=Arial fs=11
+  " : relire le contrat" bg=#ffff00 ff=Arial fs=11
+  " avant " ff=Arial fs=11
+  "jeudi" a=https://example.com/contrat?id=4&v=2 ff=Arial fg=#1155cc fs=11 u
+ListItem list=Ordered(Decimal)
+  "Appeler le client" ff=Arial fs=11 i
+ListItem list=Ordered(Decimal)
+  "Envoyer le devis" ff=Arial fs=11 s
+Paragraph
+  "x = 1" ff=Courier New fs=10
