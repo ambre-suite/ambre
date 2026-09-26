@@ -31,10 +31,12 @@ pub(crate) type Spot = (BlockId, u32);
 
 impl ProseUiState {
     /// The run the view draws a text block with. The provisional one serves
-    /// while it reads what the view shows, the laid one otherwise.
+    /// while it reads what the view shows, the laid one otherwise, a cell's
+    /// included.
     pub(crate) fn run_of(&self, block: BlockId) -> Option<&ParleyRunData> {
         self.provisional_run(block)
             .or_else(|| self.shaped.blocks.get(&tree_id(block)))
+            .or_else(|| self.cell_run(block).map(|(run, _)| run))
             .map(|run| run.data())
     }
 

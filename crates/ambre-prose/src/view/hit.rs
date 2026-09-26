@@ -9,8 +9,10 @@ use loro::TreeID;
 
 use crate::events::{BlockId, block_id, tree_id};
 use crate::layout::place::BlockLayout;
+use crate::layout::run::{CellShape, TableShape};
 use crate::ui::ProseUiState;
 use crate::view::column::DocPos;
+use ambre_bus::app::prose::VAlign;
 
 /// The part of a block one page shows.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -20,6 +22,62 @@ pub(crate) struct Fragment {
     pub height: f32,
     /// The top of the fragment's first line, from the top of the run.
     pub run_top: f32,
+}
+
+/// Where a cell and its text sit, from the top-left corner of its table.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct CellFrame {
+    pub x0: f32,
+    pub y0: f32,
+    pub x1: f32,
+    pub y1: f32,
+    /// The top-left corner of the text: inside the padding, at the cell's
+    /// vertical alignment (`PROSE-UI-180`).
+    pub text_x: f32,
+    pub text_y: f32,
+}
+
+/// The frame of `cell` in `table`. The view draws and hits it alike.
+pub(crate) fn cell_frame(table: &TableShape, cell: &CellShape) -> Option<CellFrame> {
+    let y0 = *table.row_tops.get(cell.rows.start)?;
+    let y1 = *table.row_tops.get(cell.rows.end)?;
+    let pad = cell.style.padding_px;
+    let room = (y1 - y0 - 2.0 * pad - cell.content_px).max(0.0);
+    let shift = match cell.style.valign {
+        VAlign::Top => 0.0,
+        VAlign::Middle => room / 2.0,
+        VAlign::Bottom => room,
+    };
+    Some(CellFrame {
+        x0: cell.x_px,
+        y0,
+        x1: cell.x_px + cell.width_px,
+        y1,
+        text_x: cell.x_px + pad,
+        text_y: y0 + pad + shift,
+    })
+}
+
+/// The block and the offset under `(x, y)` in `table`, both from its
+/// top-left corner, and whether the run hit is provisional.
+fn cell_hit(ui: &ProseUiState, table: &TableShape, x: f32, y: f32) -> Option<(BlockId, u32, bool)> {
+    let (cell, frame) = table.cells.iter().find_map(|cell| {
+        let frame = cell_frame(table, cell)?;
+        (x >= frame.x0 && x < frame.x1 && y >= frame.y0 && y < frame.y1).then_some((cell, frame))
+    })?;
+    let y = y - frame.text_y;
+    let mut chosen = cell.blocks.first()?;
+    for held in &cell.blocks {
+        if y >= held.1 {
+            chosen = held;
+        }
+    }
+    let (held, top, run) = chosen;
+    let id = block_id(*held);
+    let data = run.data();
+    let x = x - frame.text_x - data.indent_px();
+    let y = (y - top).clamp(0.0, data.height().max(0.0));
+    Some((id, data.offset_at(x, y), ui.provisional_run(id).is_some()))
 }
 
 /// The fragment of `block` on `page`, or `None` when the block shows nothing
@@ -225,6 +283,15 @@ impl ProseUiState {
         let chosen = chosen?;
         let block = self.shaped.block(chosen.index)?;
         let piece = chosen.fragment;
+        // A press in a table lands in the cell under it, in the text drawn
+        // there (`PROSE-UI-216`).
+        if let Some(table) = &chosen.table {
+            let x = x_in_page - layout.margin_left_px;
+            let y = (y_body - piece.top).clamp(0.0, piece.height.max(0.0)) + piece.run_top;
+            if let Some(hit) = cell_hit(self, table, x, y) {
+                return Some(hit);
+            }
+        }
         let offset = match &chosen.run {
             Some(run) => {
                 let run = run.data();

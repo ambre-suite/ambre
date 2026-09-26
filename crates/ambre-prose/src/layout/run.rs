@@ -400,6 +400,9 @@ pub struct ShapedLayout {
     pub notes: HashMap<Uuid, ShapedRun>,
     /// The cells of every table of the window, placed and shaped.
     pub tables: HashMap<TreeID, Arc<TableShape>>,
+    /// Where each text block a cell of `tables` holds sits: its table, its
+    /// cell and its place in the cell.
+    cells: HashMap<TreeID, CellAt>,
     /// Every block of the document, by its place in the flow. The Logic
     /// thread shares one map between the layouts it hands, and builds it
     /// again only when a block is added, removed or moved.
@@ -413,6 +416,14 @@ pub struct ShapedLayout {
     /// The blocks each page of the window shows, by their place in the flow.
     /// A frame reads its pages and never the whole document (`PROSE-UI-007`).
     page_blocks: Vec<Vec<usize>>,
+}
+
+/// Where a text block sits in the tables of a layout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CellAt {
+    table: TreeID,
+    cell: usize,
+    block: usize,
 }
 
 /// The two ends of the text of a document, which a selection of the whole
@@ -458,15 +469,49 @@ impl ShapedLayout {
             order: Arc::new(order_of(&layout.blocks)),
             ends,
         };
+        let cells = tables
+            .iter()
+            .flat_map(|(table, shape)| {
+                shape
+                    .cells
+                    .iter()
+                    .enumerate()
+                    .flat_map(move |(cell, held)| {
+                        held.blocks
+                            .iter()
+                            .enumerate()
+                            .map(move |(block, (id, _, _))| {
+                                (
+                                    *id,
+                                    CellAt {
+                                        table: *table,
+                                        cell,
+                                        block,
+                                    },
+                                )
+                            })
+                    })
+            })
+            .collect();
         Self {
             version,
             layout,
             blocks,
             notes,
             tables,
+            cells,
             ..Self::default()
         }
         .with_window(window)
+    }
+
+    /// The cell that holds text block `block`, and its run there.
+    #[must_use]
+    pub fn cell_run(&self, block: &TreeID) -> Option<(&CellShape, &ShapedRun)> {
+        let at = self.cells.get(block)?;
+        let cell = self.tables.get(&at.table)?.cells.get(at.cell)?;
+        let (_, _, run) = cell.blocks.get(at.block)?;
+        Some((cell, run))
     }
 
     /// The same layout, read as the window `window` describes.

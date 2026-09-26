@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-202` | `OBS` | Deleted text MUST leave the screen before the document answers. | this spec section 3 | `ambre_prose::view::paint::tests::deleted_text_leaves_the_screen_before_the_answer` | none | verified |
 | `PROSE-UI-206` | `OBS` | A deletion MUST NOT take off the screen the text typed before it that no layout carries yet. | this spec section 3 | `ambre_prose::input_tests::a_deletion_leaves_the_text_typed_before_it_drawn` | none | verified |
 | `PROSE-UI-203` | `OBS` | The paragraph a split opens MUST be drawn, with the text typed into it, before the document answers. | this spec section 3 | `ambre_prose::view::paint::tests::the_paragraph_a_split_opens_is_drawn_before_the_answer` | none | verified |
-| `PROSE-UI-213` | `OBS` | Text typed into a table cell MUST be drawn in the cell before the document answers. | this spec section 3 | not built | unbuilt -- lands with the "A provisional cell on the UI thread" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-213` | `OBS` | Text typed into a table cell MUST be drawn in the cell before the document answers. | this spec section 3 | `ambre_prose::view::paint::tests::a_draft_in_a_cell_is_drawn_before_the_document_answers` | none | verified |
 | `PROSE-UI-215` | `INV` | Shaping a paragraph of up to 2 000 characters that an edit in flight changes MUST hold the text layout budget in the browser. A longer one is shaped all the same, at its own cost. | this spec section 3; `ambre-spec-budgets.md section 2` | not built | unbuilt -- lands with the "Keystroke latency probes" Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.2 Type a run of text
@@ -70,6 +70,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-116` | `POST` | A mark covering the point the paragraph parts MUST cover, on each half, exactly the characters it covered before. | this spec section 3 | `ambre_prose::logic::text::tests::a_mark_across_the_cut_reaches_both_halves` | none | verified |
 | `PROSE-042` | `FRAME` | The split MUST NOT change the text the two paragraphs carry between them, marks included, or the identity of the source paragraph. | this spec section 3 | `ambre_prose::logic::text::tests::a_split_leaves_the_text_the_two_paragraphs_carry_between_them`; `::a_split_carries_the_marks_of_the_text_it_moves`; `ambre_prose::logic::convergence_tests::a_split_and_a_concurrent_insertion_both_survive` | none | verified |
 | `PROSE-UI-214` | `POST` | A press in the paragraph a split opens MUST land in it once the document has named it, before a layout carries it. | this spec section 3 | `ambre_prose::view::paint::tests::a_press_in_the_paragraph_a_split_opens_lands_in_it` | none | verified |
+| `PROSE-UI-216` | `POST` | A press in a table cell MUST land in that cell's text, at the offset under the pointer, whether the run drawn there is laid or provisional. | this spec section 3 | `ambre_prose::view::paint::tests::a_press_in_a_cell_lands_in_its_text` | none | verified |
 
 ### 1.6 Compose with an input method
 
@@ -99,7 +100,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. Every mutation leaves as a command (`PROSE-UI-002`,
   `features/ambre-spec-prose-engine.md section 1`).
-* **Verification.** 41 `verified`, 0 `untested`, 3 `unimplemented`. `PROSE-101` reads two tests,
+* **Verification.** 43 `verified`, 0 `untested`, 2 `unimplemented`. `PROSE-101` reads two tests,
   because the paragraph the caret started in is the one a deletion does not remove.
 
 ---
@@ -156,8 +157,10 @@ with the Logic thread's function and faces. Its lines break where the answer's w
 deletion stays (`PROSE-UI-206`). The blocks below move by what it grew.
 
 A split draws its block parted and the paragraph it opens below, with the text held behind it
-(`PROSE-UI-203`). A press there lands in the new block (`PROSE-UI-214`). A cell keeps its run
-until the answer (`PROSE-UI-213`).
+(`PROSE-UI-203`). A press there lands in the new block (`PROSE-UI-214`). A cell's paragraph is
+shaped at its column's width, inside the padding (`PROSE-UI-213`). Its row grows to hold it until
+the answer, and never shrinks before it. A press in a cell lands in the text drawn there
+(`PROSE-UI-216`).
 
 The draft holds what was typed during one round trip, so it needs no cap. A Logic thread that
 never answers has failed, and the fatal path takes the view down with it (`ARCH-009`).

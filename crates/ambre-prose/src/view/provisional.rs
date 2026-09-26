@@ -146,6 +146,60 @@ impl ProseUiState {
             .filter(|_| self.provisional_fresh())
     }
 
+    /// The run a cell block is laid out in, and the width of its cell's
+    /// text: the column's, inside the padding.
+    pub(crate) fn cell_run(&self, block: BlockId) -> Option<(&ShapedRun, f32)> {
+        let (cell, run) = self.shaped.cell_run(&tree_id(block))?;
+        Some((run, (cell.width_px - 2.0 * cell.style.padding_px).max(0.0)))
+    }
+
+    /// `table` with the cell blocks drawn provisionally in place of their
+    /// runs, and what it grew. A block pushes the blocks below it in its
+    /// cell, and a cell its last row when it outgrows the rows it spans. A
+    /// row never shrinks before the answer.
+    fn provisional_table(&self, table: &TableShape) -> (TableShape, f32) {
+        let mut shape = table.clone();
+        let mut growth = vec![0.0_f32; table.row_tops.len().saturating_sub(1)];
+        for cell in &mut shape.cells {
+            let mut shift = 0.0_f32;
+            for (block, top, run) in &mut cell.blocks {
+                *top += shift;
+                if let Some(new) = self.provisional.runs.get(&crate::events::block_id(*block)) {
+                    shift += new.data().height() - run.data().height();
+                    *run = new.clone();
+                }
+            }
+            if shift == 0.0 {
+                continue;
+            }
+            cell.content_px = (cell.content_px + shift).max(0.0);
+            let spanned = match (
+                table.row_tops.get(cell.rows.start),
+                table.row_tops.get(cell.rows.end),
+            ) {
+                (Some(y0), Some(y1)) => y1 - y0,
+                _ => continue,
+            };
+            let lack = cell.content_px + 2.0 * cell.style.padding_px - spanned;
+            if let Some(slot) = cell
+                .rows
+                .end
+                .checked_sub(1)
+                .and_then(|last| growth.get_mut(last))
+            {
+                *slot = slot.max(lack);
+            }
+        }
+        let mut grown = 0.0_f32;
+        for (at, lack) in growth.iter().enumerate() {
+            grown += lack.max(0.0);
+            if let Some(top) = shape.row_tops.get_mut(at + 1) {
+                *top += grown;
+            }
+        }
+        (shape, grown)
+    }
+
     /// Shape again every block the draft or a split changes, on the
     /// contexts of the thread that paints. Runs already shaped from the
     /// same state are kept.
@@ -168,13 +222,18 @@ impl ProseUiState {
         let mut runs = HashMap::new();
         let mut ghost = None;
         for block in blocks {
-            // A block of the flow, a band or a note. A cell keeps its run
-            // until the answer: its width is its column's.
-            if !self.shaped.carries(&tree_id(block)) && !self.is_band(block) {
-                continue;
-            }
-            let Some(laid) = self.shaped.blocks.get(&tree_id(block)).map(ShapedRun::data) else {
-                continue;
+            // A block of the flow, a band or a note, at the width of the
+            // text; a cell's, at its column's inside the padding.
+            let (laid, width) = if self.shaped.carries(&tree_id(block)) || self.is_band(block) {
+                let Some(laid) = self.shaped.blocks.get(&tree_id(block)) else {
+                    continue;
+                };
+                (laid.data(), width)
+            } else {
+                let Some((laid, text_px)) = self.cell_run(block) else {
+                    continue;
+                };
+                (laid.data(), text_px)
             };
             let Some(style) = laid.style().cloned() else {
                 continue;
@@ -271,6 +330,15 @@ impl ProseUiState {
                     continue;
                 };
                 piece.top += shift;
+                let mut table = Arc::clone(table);
+                if drawn && page == *block.page_span().end() {
+                    let (grown_table, grown) = self.provisional_table(&table);
+                    if grown > 0.0 || grown_table.cells != table.cells {
+                        piece.height += grown;
+                        shift += grown;
+                        table = Arc::new(grown_table);
+                    }
+                }
                 if piece.top >= body {
                     continue;
                 }
@@ -279,7 +347,7 @@ impl ProseUiState {
                     index: *index,
                     fragment: piece,
                     run: None,
-                    table: Some(Arc::clone(table)),
+                    table: Some(table),
                     provisional: false,
                 });
                 continue;

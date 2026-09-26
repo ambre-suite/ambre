@@ -15,8 +15,7 @@ use crate::layout::run::{CellStyle, ParleyRunData, ShapedRun, TableShape};
 use crate::ui::ProseUiState;
 use crate::view::HighlightKind;
 use crate::view::cache::{RunCache, RunKey};
-use crate::view::hit::Fragment;
-use ambre_bus::app::prose::VAlign;
+use crate::view::hit::{Fragment, cell_frame};
 
 /// The colours a page is painted with, filled by the host from the generated
 /// theme tokens (`ambre-spec-design-tokens.md`). The painter holds no colour
@@ -571,32 +570,21 @@ impl ProseUiState {
         top: f64,
     ) {
         for cell in &table.cells {
-            let (Some(y0), Some(y1)) = (
-                table.row_tops.get(cell.rows.start),
-                table.row_tops.get(cell.rows.end),
-            ) else {
+            let Some(frame) = cell_frame(table, cell) else {
                 continue;
             };
-            let x0 = left + f64::from(cell.x_px);
             let bounds = Rect::new(
-                x0,
-                top + f64::from(*y0),
-                x0 + f64::from(cell.width_px),
-                top + f64::from(*y1),
+                left + f64::from(frame.x0),
+                top + f64::from(frame.y0),
+                left + f64::from(frame.x1),
+                top + f64::from(frame.y1),
             );
             paint_cell_box(surface, palette, &cell.style, bounds);
-            let pad = f64::from(cell.style.padding_px);
-            let room = (bounds.height() - 2.0 * pad - f64::from(cell.content_px)).max(0.0);
-            let shift = match cell.style.valign {
-                VAlign::Top => 0.0,
-                VAlign::Middle => room / 2.0,
-                VAlign::Bottom => room,
-            };
             surface.push_clip(bounds);
             for (block, y, run) in &cell.blocks {
                 let placed = Placed {
-                    origin_x: x0 + pad + f64::from(run.data().indent_px()),
-                    origin_y: bounds.y0 + pad + shift + f64::from(*y),
+                    origin_x: left + f64::from(frame.text_x + run.data().indent_px()),
+                    origin_y: top + f64::from(frame.text_y + *y),
                     clip: bounds,
                 };
                 self.paint_block(surface, palette, block_id(*block), run, &placed, true);
@@ -1384,6 +1372,46 @@ mod tests {
         assert!(drawn_glyphs(&paint(&mut ui), 4));
     }
 
+    /// `PROSE-UI-213`: a draft typed into a cell is drawn there before the
+    /// document answers, wrapped at its column's width. Its row grows until
+    /// the answer, and the cell beside it with it.
+    #[test]
+    fn a_draft_in_a_cell_is_drawn_before_the_document_answers() {
+        use crate::logic::tables::tests::{cell_at, document_with_table, first_block_of};
+        let (mut state, table) = document_with_table(1, 1, 2);
+        state.load_faces(&crate::layout::fonts::shipped_faces());
+        let cell = cell_at(&state, table, 0, 0);
+        let block = block_id(first_block_of(&state, cell));
+        let mut ui = view_of(&mut state);
+        let laid = ui.shaped.tables[&table].clone();
+        let row = laid.row_tops[1] - laid.row_tops[0];
+
+        ui.draft.push_str(1, "Cell", &block, 0);
+        shape(&mut ui);
+        assert_eq!(provisional(&ui, block), "Cell");
+        assert!(drawn_glyphs(&paint(&mut ui), 4));
+
+        // A column is half the text wide: this wraps over many lines.
+        let long = "word ".repeat(60);
+        ui.draft.clear();
+        ui.draft.push_str(1, &long, &block, 0);
+        shape(&mut ui);
+        let run = ui.provisional_run(block).expect("the cell is shaped again");
+        let text_px = laid.cells[0].width_px - 2.0 * laid.cells[0].style.padding_px;
+        assert!(run.data().line_count() > 1, "the draft wraps in its column");
+        let widest = (0..=run.data().len())
+            .map(|at| run.data().caret_box(at).x0)
+            .fold(0.0, f64::max);
+        assert!(widest <= f64::from(text_px) + 0.5, "at the column's width");
+        let (pieces, _) = ui.pieces(0);
+        let grown = pieces
+            .iter()
+            .find_map(|piece| piece.table.clone())
+            .expect("the table is drawn");
+        let tall = grown.row_tops[1] - grown.row_tops[0];
+        assert!(tall > row + run.data().height() / 2.0, "the row grows");
+    }
+
     /// Where offset `at` of the paragraph drawn for `block` sits, from its
     /// left edge.
     fn x_of(ui: &ProseUiState, block: BlockId, at: u32) -> f64 {
@@ -1693,6 +1721,73 @@ mod tests {
         // A keystroke replayed before the next frame shapes again.
         ui.draft.push_str(2, "z", &minted, 2);
         assert_eq!(ui.place_at(point.0, point.1), Some((minted, 3)));
+    }
+
+    /// The screen point of offset `at` in the text of `block`, a cell of
+    /// the table drawn on page 0.
+    fn cell_point(ui: &ProseUiState, block: BlockId, at: u32) -> (f32, f32) {
+        let (pieces, _) = ui.pieces(0);
+        let piece = pieces
+            .iter()
+            .find(|piece| piece.table.is_some())
+            .expect("the table is drawn");
+        let table = piece.table.as_ref().expect("a table");
+        let (frame, top, run) = table
+            .cells
+            .iter()
+            .find_map(|cell| {
+                let (_, top, run) = cell
+                    .blocks
+                    .iter()
+                    .find(|(held, _, _)| block_id(*held) == block)?;
+                Some((
+                    crate::view::hit::cell_frame(table, cell)?,
+                    *top,
+                    run.clone(),
+                ))
+            })
+            .expect("the block is in a cell");
+        let run = ui.provisional_run(block).cloned().unwrap_or(run);
+        let caret = run.data().caret_box(at);
+        let layout = &ui.shaped.layout;
+        let x =
+            layout.margin_left_px + frame.text_x + run.data().indent_px() + caret.x0 as f32 + 0.5;
+        let y = ui.column.page_top_y(0)
+            + layout.body_top_px()
+            + piece.fragment.top
+            + frame.text_y
+            + top
+            + (caret.y0 + caret.y1) as f32 / 2.0;
+        let scale = ui.viewport.scale();
+        (
+            ui.column.left_px(&ui.viewport) + x * scale,
+            (y - ui.viewport.scroll_y) * scale,
+        )
+    }
+
+    /// `PROSE-UI-216`: a press in a cell lands in its text, at the offset
+    /// under the pointer. It does so in a laid run and in a draft.
+    #[test]
+    fn a_press_in_a_cell_lands_in_its_text() {
+        use crate::logic::tables::tests::{cell_at, document_with_table, first_block_of, type_in};
+        let (mut state, table) = document_with_table(1, 1, 2);
+        state.load_faces(&crate::layout::fonts::shipped_faces());
+        let (left, right) = (cell_at(&state, table, 0, 0), cell_at(&state, table, 0, 1));
+        type_in(&mut state, right, "abcdef");
+        let (left, right) = (
+            block_id(first_block_of(&state, left)),
+            block_id(first_block_of(&state, right)),
+        );
+        let mut ui = view_of(&mut state);
+        let point = cell_point(&ui, right, 3);
+        assert_eq!(ui.place_at(point.0, point.1), Some((right, 3)));
+
+        ui.draft.push_str(1, &"word ".repeat(60), &left, 0);
+        shape(&mut ui);
+        let point = cell_point(&ui, left, 200);
+        assert_eq!(ui.place_at(point.0, point.1), Some((left, 200)));
+        let point = cell_point(&ui, right, 3);
+        assert_eq!(ui.place_at(point.0, point.1), Some((right, 3)));
     }
 
     fn thread(block: BlockId, start: u32, end: u32) -> crate::events::CommentThread {
