@@ -7,8 +7,7 @@
 
 use crate::events::{BlockId, CursorPosition, block_id, tree_id};
 use crate::layout::run::ParleyRunData;
-use crate::ui::{ProseUiState, chars};
-use crate::view::hit::fragment;
+use crate::ui::ProseUiState;
 
 /// A walk of the caret with the keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,12 +30,21 @@ pub enum Direction {
 pub(crate) type Spot = (BlockId, u32);
 
 impl ProseUiState {
-    /// The run a text block was shaped into, in the layout in force.
+    /// The run the view draws a text block with. The provisional one serves
+    /// while it reads what the view shows, the laid one otherwise.
     pub(crate) fn run_of(&self, block: BlockId) -> Option<&ParleyRunData> {
-        self.shaped
-            .blocks
-            .get(&tree_id(block))
+        self.provisional_run(block)
+            .or_else(|| self.shaped.blocks.get(&tree_id(block)))
             .map(|run| run.data())
+    }
+
+    /// The text a block shows, the draft laid over the layout in force.
+    pub(crate) fn shown_text(&self, block: BlockId) -> Option<String> {
+        if let Some(run) = self.provisional_run(block) {
+            return Some(run.data().text().to_owned());
+        }
+        let laid = self.shaped.blocks.get(&tree_id(block))?.data();
+        Some(self.draft.text_of(block, laid.text()))
     }
 
     /// The first and the last text block of the document, the last with its
@@ -66,39 +74,30 @@ impl ProseUiState {
 
     /// How many code points a block holds, the draft typed into it counted.
     pub(crate) fn block_len(&self, block: BlockId) -> u32 {
+        if let Some(run) = self.provisional_run(block) {
+            return run.data().len();
+        }
         let laid = self.run_of(block).map_or(0, ParleyRunData::len);
-        match self.draft.shown() {
-            Some((anchored, ..)) if anchored == block => laid.saturating_add(self.draft.unlaid()),
-            _ => laid,
-        }
+        let len = i64::from(laid) + self.draft.delta(block);
+        u32::try_from(len.max(0)).unwrap_or(u32::MAX)
     }
 
-    /// A document offset, as the layout in force counts it: the draft it
-    /// does not carry yet is taken out.
+    /// A document offset, as the run [`Self::run_of`] gives counts it. A laid
+    /// run lacks the draft, so the draft is taken out; a provisional one
+    /// holds it.
     pub(crate) fn to_laid(&self, block: BlockId, offset: u32) -> u32 {
-        match self.draft.shown() {
-            Some((anchored, at, text)) if anchored == block => {
-                let n = chars(&text);
-                if offset <= at {
-                    offset
-                } else if offset >= at.saturating_add(n) {
-                    offset - n
-                } else {
-                    at
-                }
-            }
-            _ => offset,
+        if self.provisional_run(block).is_some() {
+            return offset;
         }
+        self.draft.to_laid(block, offset)
     }
 
-    /// An offset of the layout in force, as the document counts it.
+    /// An offset of the run [`Self::run_of`] gives, as the document counts it.
     pub(crate) fn to_doc(&self, block: BlockId, laid: u32) -> u32 {
-        match self.draft.shown() {
-            Some((anchored, at, text)) if anchored == block && laid > at => {
-                laid.saturating_add(chars(&text))
-            }
-            _ => laid,
+        if self.provisional_run(block).is_some() {
+            return laid;
         }
+        self.draft.to_doc(block, laid)
     }
 
     /// The two ends of the selection in flow order, or `None` for a caret
@@ -306,11 +305,15 @@ impl ProseUiState {
         let run = self.run_of(cursor.block_id)?;
         let caret = run.caret_box_at(laid, self.caret_upstream);
         let (y0, y1) = (caret.y0 as f32, caret.y1 as f32);
-        let tops = run.line_tops();
         let body_top = self.shaped.layout.body_top_px();
         let last = *block.page_span().end();
         for page in block.page_span() {
-            let Some(piece) = fragment(block, page, &tops) else {
+            let (pieces, _) = self.pieces(page);
+            let Some(piece) = pieces
+                .iter()
+                .find(|piece| piece.index == index)
+                .map(|piece| piece.fragment)
+            else {
                 continue;
             };
             if page == last || y0 < piece.run_top + piece.height {
@@ -404,7 +407,10 @@ impl ProseUiState {
     /// side (`PROSE-UI-032`). That is the end of the text before it, or the
     /// start of the text after it.
     pub(crate) fn place_at(&self, x: f32, y: f32) -> Option<Spot> {
-        let (block, laid) = self.hit_test(x, y)?;
+        let (block, laid, provisional) = self.hit(x, y)?;
+        if provisional {
+            return Some((block, laid));
+        }
         if self.run_of(block).is_some() {
             return Some((block, self.to_doc(block, laid)));
         }

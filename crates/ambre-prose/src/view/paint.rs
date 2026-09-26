@@ -15,7 +15,7 @@ use crate::layout::run::{CellStyle, ParleyRunData, ShapedRun, TableShape};
 use crate::ui::ProseUiState;
 use crate::view::HighlightKind;
 use crate::view::cache::{RunCache, RunKey};
-use crate::view::hit::fragment;
+use crate::view::hit::Fragment;
 use ambre_bus::app::prose::VAlign;
 
 /// The colours a page is painted with, filled by the host from the generated
@@ -63,6 +63,22 @@ struct Placed {
     origin_x: f64,
     origin_y: f64,
     clip: Rect,
+}
+
+/// Where a run is drawn: from the left of the content box, at the top of
+/// its fragment, clipped to it.
+fn place(left: f64, body_top: f64, content_width: f64, run: &ShapedRun, piece: Fragment) -> Placed {
+    let clip_top = body_top + f64::from(piece.top);
+    Placed {
+        origin_x: left + f64::from(run.data().indent_px()),
+        origin_y: clip_top - f64::from(piece.run_top),
+        clip: Rect::new(
+            left,
+            clip_top,
+            left + content_width,
+            clip_top + f64::from(piece.height),
+        ),
+    }
 }
 
 /// The code-point range of `block` a selection from `start` to `end` covers,
@@ -239,19 +255,19 @@ fn draw_shape<S: DrawSurface>(surface: &mut S, shape: &ShapedRun, x: f64, y: f64
 }
 
 impl ProseUiState {
-    /// Shape the draft the way the block it is typed into was shaped
-    /// (`PROSE-UI-134`), on the contexts of the thread that paints.
+    /// Shape again the paragraphs the draft or a split changes
+    /// (`PROSE-UI-201`), and the composition, on the contexts of the thread
+    /// that paints.
     ///
-    /// Only the draft is shaped, never a block: the runs came with the
-    /// layout (`PROSE-UI-006`). A draft already shaped is kept.
+    /// A paragraph shaped here is drawn in place of its run until a layout
+    /// carries what it shows. Paragraphs already shaped from the same state
+    /// are kept.
     pub fn shape_draft(
         &mut self,
         font_cx: &mut parley::FontContext,
         layout_cx: &mut parley::LayoutContext<ambre_draw::ParleyBrush>,
     ) {
-        let draft = self.draft.shown();
-        let kept = self.draft_shape.take();
-        self.draft_shape = self.reshape(kept, draft, font_cx, layout_cx);
+        self.shape_provisional(font_cx, layout_cx);
         // The composition is shaped apart: it sits at the caret, wherever the
         // draft is (`PROSE-UI-142`).
         let compose = self
@@ -349,17 +365,15 @@ impl ProseUiState {
         let left = f64::from(layout.margin_left_px);
         let body_top = f64::from(layout.body_top_px());
         let content_width = f64::from(layout.content_width_px);
-        let indices = self.blocks_on(page).to_vec();
-        let mut drawn: Vec<(BlockId, ShapedRun, Placed)> = Vec::with_capacity(indices.len());
-        for index in indices {
-            let Some(block) = self.shaped.block(index) else {
+        let (pieces, ghost_at) = self.pieces(page);
+        let mut drawn: Vec<(BlockId, ShapedRun, Placed)> = Vec::with_capacity(pieces.len());
+        for piece in pieces {
+            let Some(block) = self.shaped.block(piece.index) else {
                 continue;
             };
-            if let Some(table) = self.shaped.tables.get(&block.block_id).cloned() {
-                let Some(piece) = fragment(block, page, &table.row_tops) else {
-                    continue;
-                };
-                let clip_top = body_top + f64::from(piece.top);
+            let fragment = piece.fragment;
+            if let Some(table) = piece.table {
+                let clip_top = body_top + f64::from(fragment.top);
                 // A table may be wider than the text: it grows to the right
                 // rather than squeezing its columns.
                 let right = table
@@ -371,7 +385,7 @@ impl ProseUiState {
                     left,
                     clip_top,
                     left + right + 1.0,
-                    clip_top + f64::from(piece.height) + 1.0,
+                    clip_top + f64::from(fragment.height) + 1.0,
                 );
                 surface.push_clip(clip);
                 self.paint_table(
@@ -379,33 +393,49 @@ impl ProseUiState {
                     palette,
                     &table,
                     left,
-                    clip_top - f64::from(piece.run_top),
+                    clip_top - f64::from(fragment.run_top),
                 );
                 surface.pop_clip();
                 continue;
             }
-            let Some(run) = self.shaped.blocks.get(&block.block_id).cloned() else {
+            let Some(run) = piece.run else {
                 continue;
-            };
-            let Some(piece) = fragment(block, page, &run.data().line_tops()) else {
-                continue;
-            };
-            let clip_top = body_top + f64::from(piece.top);
-            let placed = Placed {
-                origin_x: left + f64::from(run.data().indent_px()),
-                origin_y: clip_top - f64::from(piece.run_top),
-                clip: Rect::new(
-                    left,
-                    clip_top,
-                    left + content_width,
-                    clip_top + f64::from(piece.height),
-                ),
             };
             let id = block_id(block.block_id);
+            let placed = place(left, body_top, content_width, &run, fragment);
             surface.push_clip(placed.clip);
             self.paint_block(surface, palette, id, &run, &placed, true);
             surface.pop_clip();
             drawn.push((id, run, placed));
+        }
+        // The paragraph a split opens, below the block it parts
+        // (`PROSE-UI-203`).
+        if let (Some(at), Some(ghost)) = (ghost_at, self.ghost().cloned()) {
+            let placed = place(left, body_top, content_width, &ghost.run, at);
+            surface.push_clip(placed.clip);
+            match self.splitting.and_then(|split| split.new_block) {
+                Some(new_block) => {
+                    self.paint_block(surface, palette, new_block, &ghost.run, &placed, true);
+                }
+                None => {
+                    let data = ghost.run.data();
+                    draw_shape(
+                        surface,
+                        &ghost.run,
+                        placed.origin_x,
+                        placed.origin_y,
+                        palette.text,
+                    );
+                    if let Some(caret) = ghost.caret {
+                        let rect = to_rect(&placed, &data.caret_box(caret));
+                        surface.fill_rect(
+                            Rect::new(rect.x0, rect.y0, rect.x0 + CARET_WIDTH_PX, rect.y1),
+                            palette.accent,
+                        );
+                    }
+                }
+            }
+            surface.pop_clip();
         }
         self.paint_bands(surface, palette, page);
         self.paint_notes(surface, palette, page);
@@ -447,25 +477,20 @@ impl ProseUiState {
                 }
             }
         }
-        // The draft and the composition, placed before the run is drawn: the
-        // text after each one moves right by its width (`PROSE-UI-199`).
-        let draft = self
-            .draft
-            .shown()
-            .filter(|(anchored, ..)| *anchored == id)
-            .and_then(|(_, at, text)| {
-                let (shaped_text, shape) = self.draft_shape.as_ref()?;
-                (*shaped_text == text).then(|| {
-                    let origin = data.caret_box(at);
-                    let width = f64::from(shape.data().layout().full_width());
-                    let end = at.saturating_add(crate::ui::chars(&text));
-                    (data.line_of(at, false), origin, width, end, shape)
-                })
-            });
+        // The composition, placed before the run is drawn: the text after it
+        // moves right by its width (`PROSE-UI-199`).
         let caret = self
             .cursor
             .as_ref()
             .filter(|cursor| local && cursor.block_id == id && cursor.anchor.is_none())
+            // Parted and not yet answered, the block leaves its caret to the
+            // paragraph drawn below it (`PROSE-UI-203`).
+            .filter(|_| {
+                !(self.ghost().is_some()
+                    && self
+                        .splitting
+                        .is_some_and(|split| split.block == id && split.new_block.is_none()))
+            })
             .map(|cursor| {
                 let laid = self.to_laid(id, cursor.offset);
                 let caret = data.caret_box_at(laid, self.caret_upstream);
@@ -482,21 +507,10 @@ impl ProseUiState {
                 (line, caret.x0, width, shape)
             })
         });
-        // The caret sits after the draft once it is past the draft's end.
-        let after_draft = matches!(
-            (draft, caret),
-            (Some((draft_line, _, _, end, _)), Some((line, _, offset))) if draft_line == line && offset >= end
-        );
-        let mut insertions: Vec<Insertion> = draft
-            .map(|(line, origin, width, ..)| Insertion {
-                line,
-                x: origin.x0,
-                width,
-            })
+        let insertions: Vec<Insertion> = compose
+            .map(|(line, x, width, _)| Insertion { line, x, width })
             .into_iter()
-            .chain(compose.map(|(line, x, width, _)| Insertion { line, x, width }))
             .collect();
-        insertions.sort_by(|a, b| a.line.cmp(&b.line).then(a.x.total_cmp(&b.x)));
         draw_run(
             surface,
             &mut self.runs,
@@ -527,20 +541,8 @@ impl ProseUiState {
                 }
             }
         }
-        // The draft, under the caret and over the confirmed runs, before the
-        // document has answered (`PROSE-UI-134`).
-        if let Some((line, origin, _, _, shape)) = draft {
-            let before = compose
-                .filter(|(at_line, x, ..)| *at_line == line && *x <= origin.x0 && !after_draft)
-                .map_or(0.0, |(_, _, width, _)| width);
-            let x = placed.origin_x + origin.x0 + before;
-            draw_shape(surface, shape, x, placed.origin_y + origin.y0, palette.text);
-        }
         if let Some((_, caret, _)) = caret {
             let mut rect = to_rect(placed, &caret);
-            if after_draft && let Some((_, _, width, ..)) = draft {
-                rect.x0 += width;
-            }
             // The composition in progress, at the caret, and the caret after
             // it. It never waits on the document (`PROSE-UI-142`).
             if let Some((_, _, width, shape)) = compose {
@@ -611,7 +613,7 @@ impl ProseUiState {
         let right = left + f64::from(self.shaped.layout.content_width_px);
         let local = self.band_page == Some(page);
         for slot in self.band_slots(page) {
-            let Some(run) = self.shaped.blocks.get(&slot.block).cloned() else {
+            let Some(run) = self.drawn_of(slot.block).cloned() else {
                 continue;
             };
             let (from, to) = (f64::from(slot.top), f64::from(slot.bottom));
@@ -666,7 +668,7 @@ impl ProseUiState {
                     &[],
                 );
             }
-            if let Some(text) = self.shaped.blocks.get(&slot.block).cloned() {
+            if let Some(text) = self.drawn_of(slot.block).cloned() {
                 let placed = Placed {
                     origin_x: left + f64::from(text.data().indent_px()),
                     origin_y: top,
@@ -753,7 +755,9 @@ mod tests {
     use ambre_draw::testing::{DrawOp, RecordingSurface};
 
     use super::PagePalette;
-    use crate::events::{BlockId, BlockInit, CursorPosition, ProseCommand, RemoteCursor, block_id};
+    use crate::events::{
+        BlockId, BlockInit, CursorPosition, ProseCommand, RemoteCursor, block_id, tree_id,
+    };
     use crate::logic::ProseState;
     use crate::ui::ProseUiState;
     use crate::view::cache::RunKey;
@@ -1297,142 +1301,118 @@ mod tests {
         assert!((y2 - y1 - room).abs() < 0.5, "the text sits at the bottom");
     }
 
+    /// Shape the paragraphs the draft changes, as the host does each frame.
+    fn shape(ui: &mut ProseUiState) {
+        let mut font_cx = parley::FontContext::new();
+        for bytes in crate::layout::fonts::shipped_faces() {
+            crate::layout::fonts::register_faces(&mut font_cx, bytes);
+        }
+        let mut layout_cx = parley::LayoutContext::new();
+        ui.shape_draft(&mut font_cx, &mut layout_cx);
+    }
+
+    /// The text of the paragraph drawn for `block` in place of its run.
+    fn provisional(ui: &ProseUiState, block: BlockId) -> String {
+        ui.provisional_run(block)
+            .expect("the paragraph is shaped again")
+            .data()
+            .text()
+            .to_owned()
+    }
+
+    fn drawn_glyphs(surface: &RecordingSurface, n: usize) -> bool {
+        surface
+            .ops()
+            .iter()
+            .any(|op| matches!(op, DrawOp::Glyphs { glyph_count, .. } if *glyph_count == n))
+    }
+
     /// `PROSE-UI-142`: a composition opened away from a draft still in
     /// flight is drawn at once, in glyphs of its own at the caret.
     #[test]
     fn a_composition_away_from_the_draft_is_drawn_at_once() {
-        let (_, shaped) = laid_out(1, 20);
+        let (_, shaped) = laid_out(1, 3);
         let mut ui = ProseUiState::default();
         ui.resize(1200.0, 900.0);
         ui.apply_layout(shaped);
         let id = first_block(&ui);
-        ui.draft.push_str("abc", &id, 3);
+        ui.draft.push_str(1, "abc", &id, 14);
         ui.cursor = Some(CursorPosition {
             block_id: id,
             offset: 0,
             anchor: None,
         });
         ui.composing = "ni".to_owned();
-        let mut font_cx = parley::FontContext::new();
-        for bytes in crate::layout::fonts::shipped_faces() {
-            crate::layout::fonts::register_faces(&mut font_cx, bytes);
-        }
-        let mut layout_cx = parley::LayoutContext::new();
-        ui.shape_draft(&mut font_cx, &mut layout_cx);
+        shape(&mut ui);
         let surface = paint(&mut ui);
-        let drawn = |n: usize| {
-            surface
-                .ops()
-                .iter()
-                .any(|op| matches!(op, DrawOp::Glyphs { glyph_count, .. } if *glyph_count == n))
-        };
-        assert!(drawn(3), "the draft is drawn");
-        assert!(drawn(2), "the composition is drawn");
+        assert!(
+            drawn_glyphs(&surface, 17),
+            "the draft is drawn in its paragraph"
+        );
+        assert!(drawn_glyphs(&surface, 2), "the composition is drawn");
     }
 
-    /// `PROSE-UI-134`: the draft is drawn at the caret before the document
-    /// has answered, in glyphs of its own over the confirmed run.
+    /// `PROSE-UI-134`: the draft is drawn at its anchor before the document
+    /// has answered, in the paragraph shaped again around it.
     #[test]
     fn a_draft_is_drawn_before_the_document_answers() {
-        let (_, shaped) = laid_out(1, 20);
+        let (_, shaped) = laid_out(1, 3);
         let mut ui = ProseUiState::default();
         ui.resize(1200.0, 900.0);
         ui.apply_layout(shaped);
         let id = first_block(&ui);
-        ui.cursor = Some(CursorPosition {
-            block_id: id,
-            offset: 3,
-            anchor: None,
-        });
-        let count = |surface: &RecordingSurface| surface.count(glyphs);
-        let confirmed = count(&paint(&mut ui));
-        ui.draft.push_str("abc", &id, 3);
-        let mut font_cx = parley::FontContext::new();
-        for bytes in crate::layout::fonts::shipped_faces() {
-            crate::layout::fonts::register_faces(&mut font_cx, bytes);
-        }
-        let mut layout_cx = parley::LayoutContext::new();
-        ui.shape_draft(&mut font_cx, &mut layout_cx);
-        let surface = paint(&mut ui);
-        // The line the draft joins is drawn in two slices (`PROSE-UI-199`).
-        assert_eq!(count(&surface), confirmed + 2);
-        assert!(
-            surface
-                .ops()
-                .iter()
-                .any(|op| matches!(op, DrawOp::Glyphs { glyph_count: 3, .. }))
-        );
+        assert!(drawn_glyphs(&paint(&mut ui), 14));
+        ui.draft.push_str(1, "abc", &id, 4);
+        shape(&mut ui);
+        assert_eq!(provisional(&ui, id), "wordabc word word");
+        assert!(drawn_glyphs(&paint(&mut ui), 17));
     }
 
-    /// The width of the draft `text` typed at the start of `block`.
-    fn draft_width(ui: &mut ProseUiState, block: BlockId, text: &str) -> f64 {
-        ui.draft.clear();
-        ui.draft.push_str(text, &block, 0);
-        let mut font_cx = parley::FontContext::new();
-        for bytes in crate::layout::fonts::shipped_faces() {
-            crate::layout::fonts::register_faces(&mut font_cx, bytes);
-        }
-        let mut layout_cx = parley::LayoutContext::new();
-        ui.shape_draft(&mut font_cx, &mut layout_cx);
-        let (_, shape) = ui.draft_shape.as_ref().expect("the draft is shaped");
-        f64::from(shape.data().layout().full_width())
+    /// `PROSE-UI-134`: a draft typed into a header is drawn there before the
+    /// document answers, as body text is.
+    #[test]
+    fn a_draft_in_a_header_is_drawn_before_the_document_answers() {
+        let mut state = ProseState::with_peer(1).expect("a document is built");
+        state.load_faces(&crate::layout::fonts::shipped_faces());
+        append(&mut state, BlockInit::Paragraph, "Body");
+        state.handle_command(ProseCommand::SetHeaderEnabled { enabled: true });
+        let header = state.bands().header.expect("the header block");
+        let mut ui = view_of(&mut state);
+        ui.draft.push_str(1, "Head", &header, 0);
+        shape(&mut ui);
+        assert_eq!(provisional(&ui, header), "Head");
+        assert!(drawn_glyphs(&paint(&mut ui), 4));
     }
 
-    /// `PROSE-UI-199`: the text after the draft is drawn a draft's width to
-    /// the right, clipped at the draft's point, and never under it.
+    /// Where offset `at` of the paragraph drawn for `block` sits, from its
+    /// left edge.
+    fn x_of(ui: &ProseUiState, block: BlockId, at: u32) -> f64 {
+        ui.run_of(block).expect("a run").caret_box(at).x0
+    }
+
+    /// `PROSE-UI-199`: the text after the draft is drawn after it, a draft's
+    /// width to the right of where it was, and never under it.
     #[test]
     fn the_text_after_a_draft_moves_right_by_its_width() {
-        let (_, shaped) = laid_out(1, 20);
+        let (_, shaped) = laid_out(1, 3);
         let mut ui = ProseUiState::default();
         ui.resize(1200.0, 900.0);
         ui.apply_layout(shaped);
         let id = first_block(&ui);
-        ui.cursor = Some(CursorPosition {
-            block_id: id,
-            offset: 3,
-            anchor: None,
-        });
-        let clips = |surface: &RecordingSurface| {
-            surface
-                .ops()
-                .iter()
-                .filter(|op| matches!(op, DrawOp::PushClip { .. }))
-                .count()
-        };
-        let before = clips(&paint(&mut ui));
-        let width = draft_width(&mut ui, id, "abc");
+        let after = x_of(&ui, id, 4);
+        ui.draft.push_str(1, "abc", &id, 4);
+        shape(&mut ui);
+        let width = x_of(&ui, id, 7) - x_of(&ui, id, 4);
+        assert!(width > 0.0, "the draft takes room");
+        assert!((x_of(&ui, id, 7) - (after + width)).abs() < 0.5);
+    }
+
+    /// The width of `text` typed at the start of `block`, as drawn.
+    fn draft_width(ui: &mut ProseUiState, block: BlockId, text: &str) -> f64 {
         ui.draft.clear();
-        ui.draft.push_str("abc", &id, 3);
-        let mut font_cx = parley::FontContext::new();
-        for bytes in crate::layout::fonts::shipped_faces() {
-            crate::layout::fonts::register_faces(&mut font_cx, bytes);
-        }
-        let mut layout_cx = parley::LayoutContext::new();
-        ui.shape_draft(&mut font_cx, &mut layout_cx);
-        let surface = paint(&mut ui);
-        assert_eq!(
-            clips(&surface),
-            before + 2,
-            "the line is drawn in two slices"
-        );
-        let lines: Vec<(usize, f64)> = surface
-            .ops()
-            .iter()
-            .filter_map(|op| match op {
-                DrawOp::Glyphs {
-                    glyph_count,
-                    transform,
-                    ..
-                } if *glyph_count > 3 => Some((*glyph_count, transform.translation().x)),
-                _ => None,
-            })
-            .collect();
-        let moved = lines.iter().any(|(count, x)| {
-            lines
-                .iter()
-                .any(|(other, left)| other == count && ((x - left) - width).abs() < 0.01)
-        });
-        assert!(moved, "one slice is moved right by the draft's width");
+        ui.draft.push_str(1, text, &block, 0);
+        shape(ui);
+        x_of(ui, block, crate::ui::chars(text))
     }
 
     /// `PROSE-UI-200`: the draft takes the style its block is laid out in,
@@ -1445,13 +1425,15 @@ mod tests {
         ui.resize(1200.0, 900.0);
         ui.apply_layout(state.shaped_layout());
         let paragraph = first_block(&ui);
+        let laid = ui.shaped.blocks[&tree_id(heading)].data().style().cloned();
         let plain = draft_width(&mut ui, paragraph, "abc");
         let titled = draft_width(&mut ui, heading, "abc");
-        let (_, shape) = ui.draft_shape.as_ref().expect("the draft is shaped");
-        let block = ui.run_of(heading).and_then(|run| run.style());
+        let run = ui
+            .provisional_run(heading)
+            .expect("the heading is shaped again");
         assert_eq!(
-            shape.data().style(),
-            block,
+            run.data().style(),
+            laid.as_ref(),
             "the draft is in the heading's style"
         );
         assert!(titled > plain, "the heading's bold reaches the draft");
@@ -1472,17 +1454,19 @@ mod tests {
         let mut ui = ProseUiState::default();
         ui.resize(1200.0, 900.0);
         ui.apply_layout(state.shaped_layout());
-        let mut font_cx = parley::FontContext::new();
-        for bytes in crate::layout::fonts::shipped_faces() {
-            crate::layout::fonts::register_faces(&mut font_cx, bytes);
-        }
-        let mut layout_cx = parley::LayoutContext::new();
-        let mut bold_at = |ui: &mut ProseUiState, at: u32| {
+        let id = block;
+        let bold_at = |ui: &mut ProseUiState, at: u32| {
             ui.draft.clear();
-            ui.draft.push_str("abc", &block, at);
-            ui.shape_draft(&mut font_cx, &mut layout_cx);
-            let (_, shape) = ui.draft_shape.as_ref().expect("the draft is shaped");
-            shape.data().marks().iter().any(|span| span.bold)
+            ui.draft.push_str(1, "abc", &id, at);
+            shape(ui);
+            let run = ui
+                .provisional_run(id)
+                .expect("the paragraph is shaped again");
+            let (start, end) = (at as usize, at as usize + 3);
+            run.data()
+                .marks()
+                .iter()
+                .any(|span| span.bold && span.start <= start && span.end >= end)
         };
         assert!(bold_at(&mut ui, 4), "after the bold word");
         assert!(!bold_at(&mut ui, 9), "after the plain word");
@@ -1526,7 +1510,7 @@ mod tests {
     }
 
     /// `PROSE-UI-208`: a draft typed right after an underlined word is
-    /// drawn underlined, its line starting where the word's ends.
+    /// drawn underlined, one line running from the word through the draft.
     #[test]
     fn a_draft_after_an_underlined_word_is_drawn_underlined() {
         let (mut state, _) = laid_out(1, 2);
@@ -1540,32 +1524,175 @@ mod tests {
         let mut ui = ProseUiState::default();
         ui.resize(1200.0, 900.0);
         ui.apply_layout(state.shaped_layout());
-        ui.draft.push_str("abc", &block, 4);
-        let mut font_cx = parley::FontContext::new();
-        for bytes in crate::layout::fonts::shipped_faces() {
-            crate::layout::fonts::register_faces(&mut font_cx, bytes);
-        }
-        let mut layout_cx = parley::LayoutContext::new();
-        ui.shape_draft(&mut font_cx, &mut layout_cx);
+        let id = block;
         let text = palette().text;
-        let lines: Vec<(f64, f64)> = paint(&mut ui)
-            .ops()
-            .iter()
-            .filter_map(|op| match op {
-                DrawOp::StrokeLine { x0, x1, color, .. } if *color == text => Some((*x0, *x1)),
-                _ => None,
-            })
-            .collect();
-        // The word's line is stroked in both slices of its line, the clip
-        // hiding the second; the draft's comes last.
-        let (Some(word), Some(draft)) = (lines.first(), lines.last()) else {
+        let lines = |ui: &mut ProseUiState| -> Vec<(f64, f64)> {
+            paint(ui)
+                .ops()
+                .iter()
+                .filter_map(|op| match op {
+                    DrawOp::StrokeLine { x0, x1, color, .. } if *color == text => Some((*x0, *x1)),
+                    _ => None,
+                })
+                .collect()
+        };
+        let word = lines(&mut ui);
+        ui.draft.push_str(1, "abc", &id, 4);
+        shape(&mut ui);
+        let drawn = lines(&mut ui);
+        let (Some(word), Some(line)) = (word.first(), drawn.first()) else {
             panic!("the word and the draft are underlined");
         };
-        assert!(lines.len() >= 2, "the draft carries its own line");
+        assert_eq!(drawn.len(), 1, "one line under the word and the draft");
+        assert!((line.0 - word.0).abs() < 0.5, "it starts with the word");
+        assert!(line.1 > word.1 + 1.0, "it runs on under the draft");
+    }
+
+    /// `PROSE-UI-201`: a draft longer than its line wraps where the
+    /// document will wrap the paragraph, before the document answers.
+    #[test]
+    fn a_long_draft_wraps_as_the_paragraph_will() {
+        let (mut state, _) = laid_out(1, 3);
+        let block = *state.root_blocks().last().expect("a block");
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_layout(state.shaped_layout());
+        let id = block;
+        let typed = " more".repeat(40);
+        ui.draft.push_str(1, &typed, &id, 14);
+        shape(&mut ui);
+        let drawn = ui
+            .provisional_run(id)
+            .expect("the paragraph is shaped again");
+        state.handle_command(ProseCommand::InsertText {
+            block_id: id,
+            pos: 14,
+            text: typed.clone(),
+        });
+        let answered = state.shaped_layout();
+        let laid = answered.blocks[&tree_id(block)].data();
+        assert!(drawn.data().line_count() > 1, "the draft wraps");
+        assert_eq!(drawn.data().text(), laid.text());
+        assert_eq!(drawn.data().line_tops(), laid.line_tops());
+        let starts = |run: &crate::layout::run::ParleyRunData| {
+            (0..run.line_count())
+                .map(|line| run.at_line(line, 0.0).0)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(starts(drawn.data()), starts(laid), "the lines break alike");
+    }
+
+    /// `PROSE-UI-202`: the text a deletion takes out is gone from the screen
+    /// before the document answers.
+    #[test]
+    fn deleted_text_leaves_the_screen_before_the_answer() {
+        let (_, shaped) = laid_out(1, 3);
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_layout(shaped);
+        let id = first_block(&ui);
+        ui.draft.push_delete(1, &id, 0, 5);
+        shape(&mut ui);
+        assert_eq!(provisional(&ui, id), "word word");
+        let surface = paint(&mut ui);
+        assert!(drawn_glyphs(&surface, 9));
+        assert!(!drawn_glyphs(&surface, 14), "the old line is not drawn");
+    }
+
+    /// `PROSE-UI-203`: the paragraph a split opens is drawn below the part
+    /// it leaves, with the text typed into it, before the document answers.
+    /// The blocks after it move down to make room.
+    #[test]
+    fn the_paragraph_a_split_opens_is_drawn_before_the_answer() {
+        let (_, shaped) = laid_out(2, 3);
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_layout(shaped);
+        let first = first_block(&ui);
+        let top_of_second = |ui: &ProseUiState| {
+            let pieces = ui.pieces(0).0;
+            let at = pieces
+                .iter()
+                .position(|piece| {
+                    ui.shaped.block(piece.index).map(|b| b.block_id) == Some(tree_id(first))
+                })
+                .expect("the split block is drawn");
+            pieces[at + 1].fragment.top
+        };
+        let before = top_of_second(&ui);
+        ui.splitting = Some(crate::view::provisional::Splitting {
+            block: first,
+            at: 10,
+            new_block: None,
+        });
+        // Typed while the split is unanswered: held, and drawn.
+        ui.queued
+            .push_back(crate::input::ProseInput::Text("xy".to_owned()));
+        shape(&mut ui);
+        assert_eq!(provisional(&ui, first), "word word ");
+        let ghost = ui.ghost().expect("the new paragraph is shaped").run.clone();
+        assert_eq!(ghost.data().text(), "xyword");
+        let surface = paint(&mut ui);
+        assert!(drawn_glyphs(&surface, 6), "the new paragraph is drawn");
+        let moved = top_of_second(&ui) - before;
         assert!(
-            (draft.0 - word.1).abs() < 0.5,
-            "the draft's line follows the word's"
+            (moved - ghost.data().height()).abs() < 0.5,
+            "the next block moves down by the new paragraph"
         );
+        // The document answers with the block it minted: the text typed
+        // into it is drawn there, and the caret with it.
+        let minted = BlockId::new(9, 9);
+        ui.apply_event(&crate::events::ProseEvent::BlockSplit {
+            source: first,
+            new_block: minted,
+        });
+        ui.queued.clear();
+        ui.draft.push_str(1, "xy", &minted, 0);
+        shape(&mut ui);
+        assert_eq!(provisional(&ui, minted), "xyword");
+        assert_eq!(ui.block_len(minted), 6);
+    }
+
+    /// `PROSE-UI-214`: a press in the paragraph a split opens lands in the
+    /// block the document minted, before a layout carries it. It still does
+    /// when an input replayed since has made the drawn paragraph stale.
+    #[test]
+    fn a_press_in_the_paragraph_a_split_opens_lands_in_it() {
+        let (_, shaped) = laid_out(2, 3);
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_layout(shaped);
+        let first = first_block(&ui);
+        ui.splitting = Some(crate::view::provisional::Splitting {
+            block: first,
+            at: 10,
+            new_block: None,
+        });
+        let minted = BlockId::new(9, 9);
+        ui.apply_event(&crate::events::ProseEvent::BlockSplit {
+            source: first,
+            new_block: minted,
+        });
+        ui.draft.push_str(1, "xy", &minted, 0);
+        shape(&mut ui);
+        let at = ui.pieces(0).1.expect("the new paragraph is drawn");
+        let run = ui.ghost().expect("shaped").run.clone();
+        let caret = run.data().caret_box(3);
+        let layout = &ui.shaped.layout;
+        let x = layout.margin_left_px + run.data().indent_px() + caret.x0 as f32 + 0.5;
+        let y = ui.column.page_top_y(0)
+            + layout.body_top_px()
+            + at.top
+            + (caret.y0 + caret.y1) as f32 / 2.0;
+        let scale = ui.viewport.scale();
+        let point = (
+            ui.column.left_px(&ui.viewport) + x * scale,
+            (y - ui.viewport.scroll_y) * scale,
+        );
+        assert_eq!(ui.place_at(point.0, point.1), Some((minted, 3)));
+        // A keystroke replayed before the next frame shapes again.
+        ui.draft.push_str(2, "z", &minted, 2);
+        assert_eq!(ui.place_at(point.0, point.1), Some((minted, 3)));
     }
 
     fn thread(block: BlockId, start: u32, end: u32) -> crate::events::CommentThread {

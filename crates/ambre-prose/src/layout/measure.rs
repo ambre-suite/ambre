@@ -303,25 +303,13 @@ impl Measurer {
         self.shaped = self.shaped.saturating_add(1);
         let absent = fonts::missing_scripts(&mut self.font_cx, text);
         self.missing.extend(absent);
-        let family = fonts::resolve(&style.font_family).face_name();
-        let mut layout = self.build(text, marks, style, family, style.line_height, width_px);
-        // `AtLeast` is a floor on the height the font asked for, so it takes a
-        // measured line to apply. One re-shape, and only for that one mode.
-        if let Some(floor_px) = style.at_least_floor_px
-            && layout.height() > 0.0
-            && let lines = layout.len().max(1) as f32
-            && layout.height() / lines < floor_px
-        {
-            layout = self.build(
-                text,
-                marks,
-                style,
-                family,
-                LineHeight::Absolute(floor_px),
-                width_px,
-            );
-        }
-        layout
+        shape_paragraph(
+            &mut self.font_cx,
+            &mut self.layout_cx,
+            (text, marks),
+            style,
+            width_px,
+        )
     }
 
     /// Shape one run and keep its heights alone.
@@ -399,26 +387,43 @@ impl Measurer {
         let metrics = self.measure(&text, &style, style.text_width_px(content_width_px));
         (style, metrics)
     }
+}
 
-    fn build(
-        &mut self,
-        text: &str,
-        marks: &[MarkedSpan],
-        style: &EffectiveStyle,
-        family: &str,
-        line_height: LineHeight,
-        width_px: f32,
-    ) -> Layout<ParleyBrush> {
+/// Shape a paragraph broken to `width_px`, as the Logic thread lays it out
+/// (`PROSE-UI-201`).
+///
+/// The one path both threads take, so a paragraph the view shapes itself
+/// breaks where the pagination will.
+pub fn shape_paragraph(
+    font_cx: &mut FontContext,
+    layout_cx: &mut LayoutContext<ParleyBrush>,
+    (text, marks): (&str, &[MarkedSpan]),
+    style: &EffectiveStyle,
+    width_px: f32,
+) -> Layout<ParleyBrush> {
+    let family = fonts::resolve(&style.font_family).face_name();
+    let shaped = |font_cx: &mut FontContext, layout_cx: &mut _, height| {
         build(
-            &mut self.font_cx,
-            &mut self.layout_cx,
+            font_cx,
+            layout_cx,
             (text, marks),
             style,
             family,
-            line_height,
+            height,
             Some(width_px),
         )
+    };
+    let layout = shaped(font_cx, layout_cx, style.line_height);
+    // `AtLeast` is a floor on the height the font asked for, so it takes a
+    // measured line to apply. One re-shape, and only for that one mode.
+    if let Some(floor_px) = style.at_least_floor_px
+        && layout.height() > 0.0
+        && let lines = layout.len().max(1) as f32
+        && layout.height() / lines < floor_px
+    {
+        return shaped(font_cx, layout_cx, LineHeight::Absolute(floor_px));
     }
+    layout
 }
 
 /// Shape a draft the way the block it is typed into was shaped

@@ -44,119 +44,252 @@ pub use crate::view::column::Viewport;
 /// keystroke (`features/ambre-spec-prose-word-count.md section 4`).
 pub const RECOUNT_DELAY_MS: f64 = 500.0;
 
-/// What was typed and not yet confirmed, held apart from the document rather
-/// than written into a second copy of it.
+/// What this view drew and the layout in force does not carry yet: the text
+/// typed and the text deleted. It is held apart from the document, never
+/// written into a second copy of it.
 ///
-/// It carries text and an anchor and no structure: it cannot express a split, a
-/// deletion or a mark (`PROSE-UI-135`). It is painted under the caret and it
-/// never reaches the wire (`PROSE-UI-150`): what reaches the wire is the
-/// command the same keystroke emitted.
+/// Each entry is one command sent, inside one block. It cannot express a split
+/// or a mark (`PROSE-UI-135`). It never reaches the wire (`PROSE-UI-150`): what
+/// reaches the wire is the command the same keystroke emitted.
 ///
-/// Positions count code points of the document as it will read once every
-/// command sent has landed. The layout in force lags behind it by the text
-/// the draft still shows.
+/// An entry counts code points of the block as it reads once every entry
+/// before it applied. Laid over the text of the layout in force, the entries
+/// give the text the view shows (`PROSE-UI-201`, `PROSE-UI-202`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DraftBuffer {
-    /// Sent and not yet confirmed, drawn over the confirmed runs.
-    pub pending_text: String,
-    pub block_id: Option<BlockId>,
-    /// Where the pending text starts.
-    pub insert_pos: u32,
-    /// Confirmed, and not yet in the layout in force. It is drawn until a
-    /// layout carrying it is taken, so a keystroke never blinks out.
-    landed_text: String,
-    /// The length of each insertion sent and not yet confirmed, oldest first.
-    pieces: VecDeque<u32>,
+    edits: Vec<DraftEdit>,
+    /// Moves on every change, so a paragraph shaped from the draft can tell
+    /// it still reads what it was shaped from.
+    generation: u64,
+}
+
+/// One command sent inside a block, and whether the Logic thread took it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DraftEdit {
+    /// The number the Logic thread acknowledges this command by.
+    seq: u64,
+    block: BlockId,
+    at: u32,
+    change: Change,
+    /// Taken as drawn: the document holds it, and the next layout will.
+    confirmed: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Change {
+    Insert(String),
+    Delete(u32),
 }
 
 impl DraftBuffer {
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.pending_text.is_empty() && self.landed_text.is_empty()
+        self.edits.is_empty()
     }
 
-    /// Where the next keystroke lands to extend this draft.
+    /// A number that moves whenever what the draft shows does.
     #[must_use]
-    pub fn end(&self) -> u32 {
-        self.insert_pos.saturating_add(chars(&self.pending_text))
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
 
-    /// Append text sent to `pos` in `block_id` (`PROSE-UI-136`). The draft
-    /// re-anchors only when the caret left its end, so consecutive keystrokes
-    /// accumulate in one draft (`PROSE-UI-138`).
-    pub fn push_str(&mut self, text: &str, block_id: &BlockId, pos: u32) {
-        if self.block_id != Some(*block_id) || pos != self.end() {
-            self.clear();
-            self.block_id = Some(*block_id);
-            self.insert_pos = pos;
-        }
-        self.pending_text.push_str(text);
-        self.pieces.push_back(chars(text));
+    /// Text sent to `pos` in `block_id`, acknowledged as `seq`
+    /// (`PROSE-UI-136`). Each keystroke is its own entry, so each confirms on
+    /// its own (`PROSE-UI-138`).
+    pub fn push_str(&mut self, seq: u64, text: &str, block_id: &BlockId, pos: u32) {
+        self.push(seq, *block_id, pos, Change::Insert(text.to_owned()));
     }
 
-    /// Take in one change this peer made. The oldest insertion sent is
-    /// confirmed when the change inserted it, where it was sent to
-    /// (`PROSE-UI-005`). Answers whether it was.
-    pub fn confirm(&mut self, edit: &TextEdit) -> bool {
-        let Some(front) = self.pieces.front().copied() else {
-            return false;
-        };
-        if self.block_id != Some(edit.block_id)
-            || edit.at != self.insert_pos
-            || edit.delta != i64::from(front)
-        {
-            return false;
-        }
-        self.pieces.pop_front();
-        let cut = byte_at(&self.pending_text, front);
-        let rest = self.pending_text.split_off(cut);
-        let confirmed = std::mem::replace(&mut self.pending_text, rest);
-        self.landed_text.push_str(&confirmed);
-        self.insert_pos = self.insert_pos.saturating_add(front);
-        true
-    }
-
-    /// Move the anchor by what a collaborator's change did before it
-    /// (`PROSE-UI-028`).
-    pub fn shift(&mut self, edits: &[TextEdit]) {
-        if let Some(block) = self.block_id {
-            self.insert_pos = rebase::through_all(self.insert_pos, block, edits);
+    /// A deletion sent over `start..end` in `block_id`, acknowledged as
+    /// `seq`. The text typed before it stays drawn (`PROSE-UI-206`).
+    pub fn push_delete(&mut self, seq: u64, block_id: &BlockId, start: u32, end: u32) {
+        let (start, end) = (start.min(end), start.max(end));
+        if end > start {
+            self.push(seq, *block_id, start, Change::Delete(end - start));
         }
     }
 
-    /// A layout was taken: what landed is in its runs now.
-    pub fn laid(&mut self) {
-        self.landed_text.clear();
-    }
-
-    /// The text to draw, and where it goes in the layout in force.
-    #[must_use]
-    pub fn shown(&self) -> Option<(BlockId, u32, String)> {
-        let block = self.block_id?;
-        if self.is_empty() {
-            return None;
-        }
-        let at = self.insert_pos.saturating_sub(chars(&self.landed_text));
-        Some((
+    fn push(&mut self, seq: u64, block: BlockId, at: u32, change: Change) {
+        self.edits.push(DraftEdit {
+            seq,
             block,
             at,
-            format!("{}{}", self.landed_text, self.pending_text),
-        ))
+            change,
+            confirmed: false,
+        });
+        self.bump();
     }
 
-    /// How many code points the document holds past the layout in force, in
-    /// the anchored block.
+    fn bump(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
+    }
+
+    /// The command acknowledged as `seq` was taken as drawn
+    /// (`PROSE-UI-005`). The entries confirm in the order they were sent.
+    pub fn confirm(&mut self, seq: u64) {
+        if let Some(edit) = self.edits.iter_mut().find(|edit| edit.seq == seq) {
+            edit.confirmed = true;
+        }
+    }
+
+    /// Move every entry by what a collaborator's change did before it
+    /// (`PROSE-UI-028`).
+    pub fn shift(&mut self, edits: &[TextEdit]) {
+        for edit in &mut self.edits {
+            edit.at = rebase::through_all(edit.at, edit.block, edits);
+        }
+        self.bump();
+    }
+
+    /// A layout was taken: what the Logic thread confirmed is in its runs
+    /// now. Confirmed entries lead the log, since they confirm in order.
+    pub fn laid(&mut self) {
+        let before = self.edits.len();
+        self.edits.retain(|edit| !edit.confirmed);
+        if self.edits.len() != before {
+            self.bump();
+        }
+    }
+
+    /// Drop what the draft holds of a block, the block being gone
+    /// (`PROSE-UI-143`).
+    pub fn forget(&mut self, block: BlockId) {
+        self.edits.retain(|edit| edit.block != block);
+        self.bump();
+    }
+
+    /// The blocks the draft changes, each once, in the order first touched.
+    pub fn blocks(&self) -> Vec<BlockId> {
+        let mut blocks: Vec<BlockId> = Vec::new();
+        for edit in &self.edits {
+            if !blocks.contains(&edit.block) {
+                blocks.push(edit.block);
+            }
+        }
+        blocks
+    }
+
+    /// Whether the draft changes `block`.
     #[must_use]
-    pub fn unlaid(&self) -> u32 {
-        chars(&self.landed_text).saturating_add(chars(&self.pending_text))
+    pub fn touches(&self, block: BlockId) -> bool {
+        self.edits.iter().any(|edit| edit.block == block)
+    }
+
+    fn of(&self, block: BlockId) -> impl DoubleEndedIterator<Item = &DraftEdit> {
+        self.edits.iter().filter(move |edit| edit.block == block)
+    }
+
+    /// The text `block` shows: `laid`, as the layout in force holds it, with
+    /// every entry laid over it in order.
+    #[must_use]
+    pub fn text_of(&self, block: BlockId, laid: &str) -> String {
+        let mut text = laid.to_owned();
+        for edit in self.of(block) {
+            let start = byte_at(&text, edit.at);
+            match &edit.change {
+                Change::Insert(inserted) => text.insert_str(start, inserted),
+                Change::Delete(len) => {
+                    let end = byte_at(&text, edit.at.saturating_add(*len));
+                    text.replace_range(start..end, "");
+                }
+            }
+        }
+        text
+    }
+
+    /// The marked spans of the text [`Self::text_of`] gives, from those of
+    /// the laid text. Text typed after a mark takes it (`PROSE-UI-208`).
+    #[must_use]
+    pub fn marks_of(
+        &self,
+        block: BlockId,
+        laid: &str,
+        marks: &[crate::layout::measure::MarkedSpan],
+    ) -> Vec<crate::layout::measure::MarkedSpan> {
+        let mut text = laid.to_owned();
+        let mut marks = marks.to_vec();
+        for edit in self.of(block) {
+            let start = byte_at(&text, edit.at);
+            match &edit.change {
+                Change::Insert(inserted) => {
+                    let n = inserted.len();
+                    // A mark expands after its range: text typed at its end
+                    // joins it, text typed at its start does not.
+                    for mark in &mut marks {
+                        if mark.start >= start {
+                            mark.start += n;
+                            mark.end += n;
+                        } else if mark.end >= start {
+                            mark.end += n;
+                        }
+                    }
+                    text.insert_str(start, inserted);
+                }
+                Change::Delete(len) => {
+                    let end = byte_at(&text, edit.at.saturating_add(*len));
+                    let gone = end - start;
+                    let squeeze = |at: usize| {
+                        if at <= start {
+                            at
+                        } else if at >= end {
+                            at - gone
+                        } else {
+                            start
+                        }
+                    };
+                    for mark in &mut marks {
+                        mark.start = squeeze(mark.start);
+                        mark.end = squeeze(mark.end);
+                    }
+                    marks.retain(|mark| mark.end > mark.start);
+                    text.replace_range(start..end, "");
+                }
+            }
+        }
+        marks
+    }
+
+    /// How many code points `block` holds past the layout in force, negative
+    /// when the draft deleted more than it typed.
+    #[must_use]
+    pub fn delta(&self, block: BlockId) -> i64 {
+        self.of(block)
+            .map(|edit| match &edit.change {
+                Change::Insert(text) => i64::from(chars(text)),
+                Change::Delete(len) => -i64::from(*len),
+            })
+            .sum()
+    }
+
+    /// An offset of the layout in force, as the view's text counts it. An
+    /// offset at an insertion stays before it.
+    #[must_use]
+    pub fn to_doc(&self, block: BlockId, laid: u32) -> u32 {
+        self.of(block).fold(laid, |at, edit| match &edit.change {
+            Change::Insert(text) if at > edit.at => at.saturating_add(chars(text)),
+            Change::Delete(len) if at > edit.at => at.saturating_sub(*len).max(edit.at),
+            _ => at,
+        })
+    }
+
+    /// An offset of the view's text, as the layout in force counts it.
+    /// Inside text the layout lacks, it lands where that text goes.
+    #[must_use]
+    pub fn to_laid(&self, block: BlockId, offset: u32) -> u32 {
+        self.of(block)
+            .rev()
+            .fold(offset, |at, edit| match &edit.change {
+                Change::Insert(text) if at > edit.at => at.saturating_sub(chars(text)).max(edit.at),
+                Change::Delete(len) if at > edit.at => at.saturating_add(*len),
+                _ => at,
+            })
     }
 
     pub fn clear(&mut self) {
-        self.pending_text.clear();
-        self.landed_text.clear();
-        self.pieces.clear();
-        self.block_id = None;
-        self.insert_pos = 0;
+        if !self.edits.is_empty() {
+            self.edits.clear();
+            self.bump();
+        }
     }
 }
 
@@ -262,8 +395,11 @@ pub struct ProseUiState {
     /// The block last asked for in a [`ProseCommand::ShowBlock`].
     pub(crate) asked_block: Option<BlockId>,
     pub draft: DraftBuffer,
-    /// The draft as last shaped, and the text it was shaped from.
-    pub(crate) draft_shape: Option<(String, ShapedRun)>,
+    /// The blocks the draft or a split changes, shaped again on this thread
+    /// (`PROSE-UI-201`).
+    pub(crate) provisional: crate::view::provisional::Provisional,
+    /// A split sent and not yet laid out (`PROSE-UI-203`).
+    pub(crate) splitting: Option<crate::view::provisional::Splitting>,
     /// The composition as last shaped, and the text it was shaped from.
     pub(crate) compose_shape: Option<(String, ShapedRun)>,
     /// The marks the Logic thread read for a selection, and that selection
@@ -424,7 +560,14 @@ impl ProseUiState {
             }
             ProseEvent::Synced { acked } => {
                 self.take_acked(*acked, true);
-                self.syncs.pop_front();
+                // A split the document refused mints nothing to wait for.
+                if self.syncs.pop_front() == Some(true)
+                    && self
+                        .splitting
+                        .is_some_and(|split| split.new_block.is_none())
+                {
+                    self.splitting = None;
+                }
             }
             ProseEvent::DocUpdated { .. } => self.changed = true,
             ProseEvent::CellEntered { block, .. } => self.place_caret(*block, 0),
@@ -465,7 +608,12 @@ impl ProseUiState {
             }
             ProseEvent::RevealBlock { page, .. } => self.reveal_page = Some(*page),
             ProseEvent::CaretPlaced { block, offset } => self.place_caret(*block, *offset),
-            ProseEvent::BlockSplit { new_block, .. } => self.place_caret(*new_block, 0),
+            ProseEvent::BlockSplit { new_block, .. } => {
+                if let Some(split) = self.splitting.as_mut() {
+                    split.new_block = Some(*new_block);
+                }
+                self.place_caret(*new_block, 0);
+            }
             ProseEvent::FindResults { matches, current } => {
                 self.find_matches = matches.clone();
                 self.find_current = *current;
@@ -515,9 +663,12 @@ impl ProseUiState {
                 continue;
             };
             if as_drawn {
-                self.draft.confirm(&edit);
+                self.draft.confirm(self.popped);
             } else {
-                ends_draft |= edit.delta > 0;
+                // The document did not do what the view drew: the catch-up
+                // redraws it, and the entries after it counted on it.
+                let _ = edit;
+                ends_draft = true;
             }
         }
         if ends_draft {
@@ -560,8 +711,8 @@ impl ProseUiState {
             {
                 self.slash = None;
             }
-            if self.draft.block_id == Some(*gone) {
-                self.draft.clear();
+            if self.draft.touches(*gone) {
+                self.draft.forget(*gone);
             }
             let Some(cursor) = &mut self.cursor else {
                 continue;
@@ -753,7 +904,7 @@ mod tests {
         let (tx, rx) = flume::bounded::<LogicCommand>(4);
         let block = BlockId::new(1, 0);
         let mut state = ProseUiState::default();
-        state.draft.push_str("hel", &block, 0);
+        state.draft.push_str(1, "hel", &block, 0);
         send_command(
             &tx,
             a_document(),
@@ -780,10 +931,10 @@ mod tests {
     fn a_confirming_change_clears_the_draft_it_covers() {
         let block = BlockId::new(1, 0);
         let mut state = ProseUiState::default();
-        state.draft.push_str("hel", &block, 0);
+        state.draft.push_str(1, "hel", &block, 0);
         // A change alone keeps the draft: the text is not laid out yet.
         state.apply_event(&ProseEvent::DocUpdated { delta: vec![1] });
-        assert_eq!(state.draft.pending_text, "hel");
+        assert_eq!(state.draft.text_of(block, ""), "hel");
         let typed = TextEdit {
             block_id: block,
             at: 0,
@@ -798,7 +949,7 @@ mod tests {
             removed: Vec::new(),
         });
         assert!(state.inflight.is_empty());
-        assert_eq!(state.draft.unlaid(), 3);
+        assert_eq!(state.draft.text_of(block, ""), "hel");
         state.draft.laid();
         assert!(state.draft.is_empty());
     }
@@ -807,12 +958,12 @@ mod tests {
     fn an_event_carrying_no_change_leaves_the_draft_alone() {
         let block = BlockId::new(1, 0);
         let mut state = ProseUiState::default();
-        state.draft.push_str("hel", &block, 0);
+        state.draft.push_str(1, "hel", &block, 0);
         state.apply_event(&ProseEvent::MediaArrived {
             content_hash: "abc".to_owned(),
             blocks: Vec::new(),
         });
-        assert_eq!(state.draft.pending_text, "hel");
+        assert_eq!(state.draft.text_of(block, ""), "hel");
     }
 
     #[test]
@@ -827,17 +978,19 @@ mod tests {
     }
 
     #[test]
-    fn consecutive_keystrokes_in_one_block_accumulate_in_one_draft() {
+    fn the_draft_lays_its_entries_over_the_laid_text_in_order() {
         let block = BlockId::new(1, 0);
         let other = BlockId::new(1, 1);
         let mut draft = DraftBuffer::default();
-        draft.push_str("he", &block, 0);
-        draft.push_str("llo", &block, 2);
-        assert_eq!(draft.pending_text, "hello");
-        assert_eq!(draft.insert_pos, 0);
-        draft.push_str("x", &other, 0);
-        assert_eq!(draft.pending_text, "x");
-        assert_eq!(draft.block_id, Some(other));
+        draft.push_str(1, "he", &block, 0);
+        draft.push_str(2, "llo", &block, 2);
+        draft.push_delete(3, &block, 1, 3);
+        assert_eq!(draft.text_of(block, "!"), "hlo!");
+        assert_eq!(draft.delta(block), 3);
+        assert_eq!(draft.text_of(other, "ab"), "ab");
+        // An offset of the laid text, and back.
+        assert_eq!(draft.to_doc(block, 1), 4);
+        assert_eq!(draft.to_laid(block, 4), 1);
     }
 
     #[test]

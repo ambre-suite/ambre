@@ -102,8 +102,8 @@ pub enum ProseInput {
 /// A command sent, as the view keeps track of it.
 enum Sent {
     /// An insertion or a deletion inside one block, in the text the view
-    /// shows.
-    Text(TextEdit),
+    /// shows, with the text an insertion carries.
+    Text(TextEdit, Option<String>),
     /// A command that changes the blocks.
     Barrier,
 }
@@ -115,18 +115,24 @@ impl Sent {
                 block_id,
                 pos,
                 text,
-            } => Self::Text(TextEdit {
-                block_id: *block_id,
-                at: *pos,
-                delta: i64::from(chars(text)),
-            }),
+            } => Self::Text(
+                TextEdit {
+                    block_id: *block_id,
+                    at: *pos,
+                    delta: i64::from(chars(text)),
+                },
+                Some(text.clone()),
+            ),
             ProseCommand::DeleteText { block_id, range } => {
                 let (start, end) = (range.0.min(range.1), range.0.max(range.1));
-                Self::Text(TextEdit {
-                    block_id: *block_id,
-                    at: start,
-                    delta: -i64::from(end - start),
-                })
+                Self::Text(
+                    TextEdit {
+                        block_id: *block_id,
+                        at: start,
+                        delta: -i64::from(end - start),
+                    },
+                    None,
+                )
             }
             ProseCommand::SplitBlock { .. }
             | ProseCommand::DeleteRange { .. }
@@ -194,7 +200,19 @@ impl ProseUiState {
         let mut barrier = false;
         for note in sent {
             match note {
-                Sent::Text(edit) => self.inflight.push_back(edit),
+                Sent::Text(edit, text) => {
+                    // The number the Logic thread will acknowledge it by.
+                    let seq = self.popped + self.inflight.len() as u64 + 1;
+                    match text {
+                        Some(text) => self.draft.push_str(seq, &text, &edit.block_id, edit.at),
+                        None => {
+                            let len = u32::try_from(edit.delta.unsigned_abs()).unwrap_or(0);
+                            self.draft
+                                .push_delete(seq, &edit.block_id, edit.at, edit.at + len);
+                        }
+                    }
+                    self.inflight.push_back(edit);
+                }
                 Sent::Barrier => barrier = true,
             }
         }
@@ -427,7 +445,6 @@ impl ProseUiState {
         if !send(erase).accepted() {
             return true;
         }
-        self.draft.clear();
         self.set_caret(menu.origin);
         send(item.command.resolve(menu.origin.0));
         true
@@ -454,7 +471,6 @@ impl ProseUiState {
             text: text.clone(),
         };
         if send(command).accepted() {
-            self.draft.push_str(&text, &cursor.block_id, cursor.offset);
             self.advance_cursor(chars(&text));
         }
         true
@@ -487,7 +503,6 @@ impl ProseUiState {
         if !send(command).accepted() {
             return false;
         }
-        self.draft.clear();
         self.set_caret(start);
         self.reveal_caret();
         true
@@ -575,7 +590,6 @@ impl ProseUiState {
             }
         };
         if send(command).accepted() {
-            self.draft.clear();
             self.set_caret(caret);
             self.reveal_caret();
         }
@@ -583,37 +597,19 @@ impl ProseUiState {
     }
 
     /// The grapheme boundary beside a place, in document offsets, reading the
-    /// draft where the place is inside it. `None` at the edge of the block.
+    /// text the view shows. `None` at the edge of the block.
     fn grapheme_beside(&self, spot: Spot, forward: bool) -> Option<u32> {
         use unicode_segmentation::UnicodeSegmentation;
-        if let Some((block, at, text)) = self.draft.shown()
-            && block == spot.0
-            && spot.1 >= at
-            && spot.1 <= at.saturating_add(chars(&text))
-        {
-            let rel = spot.1 - at;
-            let boundaries: Vec<u32> = text
-                .grapheme_indices(true)
-                .map(|(byte, _)| chars(text.get(..byte).unwrap_or("")))
-                .chain(std::iter::once(chars(&text)))
-                .collect();
-            let found = if forward {
-                boundaries.iter().find(|b| **b > rel)
-            } else {
-                boundaries.iter().rev().find(|b| **b < rel)
-            };
-            if let Some(b) = found {
-                return Some(at + b);
-            }
-        }
-        let run = self.run_of(spot.0)?;
-        let laid = self.to_laid(spot.0, spot.1);
-        let moved = if forward {
-            run.grapheme_after(laid)
+        let text = self.shown_text(spot.0)?;
+        let boundaries = text
+            .grapheme_indices(true)
+            .map(|(byte, _)| chars(text.get(..byte).unwrap_or("")))
+            .chain(std::iter::once(chars(&text)));
+        if forward {
+            boundaries.into_iter().find(|b| *b > spot.1)
         } else {
-            run.grapheme_before(laid)
-        }?;
-        Some(self.to_doc(spot.0, moved))
+            boundaries.into_iter().rfind(|b| *b < spot.1)
+        }
     }
 
     /// Enter: the selection goes, then the paragraph parts at the caret. The
@@ -631,7 +627,12 @@ impl ProseUiState {
             pos: cursor.offset,
         };
         if send(command).accepted() {
-            self.draft.clear();
+            // Drawn parted until the document answers (`PROSE-UI-203`).
+            self.splitting = Some(crate::view::provisional::Splitting {
+                block: cursor.block_id,
+                at: cursor.offset,
+                new_block: None,
+            });
         }
         true
     }

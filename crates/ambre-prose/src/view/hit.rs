@@ -154,7 +154,7 @@ impl ProseUiState {
             .chain(notes)
             .find(|(_, top, bottom)| y_in_page >= *top && y_in_page < *bottom)?;
         let slot = BandSlot { block, top, bottom };
-        let run = self.shaped.blocks.get(&slot.block)?.data();
+        let run = self.drawn_of(slot.block)?.data();
         let x = x_in_page - self.shaped.layout.margin_left_px - run.indent_px();
         let y = (y_in_page - slot.top).clamp(0.0, (slot.bottom - slot.top).max(0.0));
         Some((block_id(slot.block), run.offset_at(x, y)))
@@ -174,6 +174,16 @@ impl ProseUiState {
     /// page that shows no block.
     #[must_use]
     pub fn hit_test(&self, x_px: f32, y_px: f32) -> Option<(BlockId, u32)> {
+        self.hit(x_px, y_px)
+            .map(|(block, offset, _)| (block, offset))
+    }
+
+    /// The same, and whether the offset was read off a provisional run: it
+    /// then counts the document's code points already.
+    ///
+    /// A point in the paragraph a split opens lands in it once the document
+    /// has named it, before a layout carries it (`PROSE-UI-214`).
+    pub(crate) fn hit(&self, x_px: f32, y_px: f32) -> Option<(BlockId, u32, bool)> {
         let DocPos::OnPage {
             page,
             x_in_page,
@@ -184,35 +194,38 @@ impl ProseUiState {
         };
         // A header, a footer or a note answers like body text (`PROSE-UI-033`,
         // `PROSE-UI-187`).
-        if let Some(hit) = self.band_hit(page, x_in_page, y_in_page) {
-            return Some(hit);
+        if let Some((block, offset)) = self.band_hit(page, x_in_page, y_in_page) {
+            let provisional = self.provisional_run(block).is_some();
+            return Some((block, offset, provisional));
         }
         let layout = &self.shaped.layout;
         let y_body = y_in_page - layout.body_top_px();
-        let mut chosen: Option<(&BlockLayout, Fragment)> = None;
-        for index in self.blocks_on(page) {
-            let Some(block) = self.shaped.block(*index) else {
-                continue;
-            };
-            let tops = self
-                .shaped
-                .blocks
-                .get(&block.block_id)
-                .map(|run| run.data().line_tops())
-                .unwrap_or_default();
-            let Some(piece) = fragment(block, page, &tops) else {
-                continue;
-            };
+        let (pieces, ghost_at) = self.pieces(page);
+        if let (Some(at), Some(new_block), Some(ghost)) = (
+            ghost_at,
+            self.splitting.and_then(|split| split.new_block),
+            self.provisional.ghost(),
+        ) && y_body >= at.top
+            && y_body < at.top + at.height
+        {
+            let run = ghost.run.data();
+            let x = x_in_page - layout.margin_left_px - run.indent_px();
+            return Some((new_block, run.offset_at(x, y_body - at.top), true));
+        }
+        let mut chosen: Option<&crate::view::provisional::Piece> = None;
+        for piece in &pieces {
             let first = chosen.is_none();
-            if first || y_body >= piece.top {
-                chosen = Some((block, piece));
+            if first || y_body >= piece.fragment.top {
+                chosen = Some(piece);
             }
-            if y_body < piece.top + piece.height {
+            if y_body < piece.fragment.top + piece.fragment.height {
                 break;
             }
         }
-        let (block, piece) = chosen?;
-        let offset = match self.shaped.blocks.get(&block.block_id) {
+        let chosen = chosen?;
+        let block = self.shaped.block(chosen.index)?;
+        let piece = chosen.fragment;
+        let offset = match &chosen.run {
             Some(run) => {
                 let run = run.data();
                 let x = x_in_page - layout.margin_left_px - run.indent_px();
@@ -221,7 +234,7 @@ impl ProseUiState {
             }
             None => 0,
         };
-        Some((block_id(block.block_id), offset))
+        Some((block_id(block.block_id), offset, chosen.provisional))
     }
 }
 

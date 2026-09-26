@@ -164,8 +164,7 @@ fn typing_fills_the_draft_and_sends_one_insertion_per_run() {
             text: " w\u{e9}".to_owned(),
         }]
     );
-    assert_eq!(rig.ui.draft.pending_text, " w\u{e9}");
-    assert_eq!(rig.ui.draft.insert_pos, 5);
+    assert_eq!(rig.ui.shown_text(block).as_deref(), Some("hello w\u{e9}"));
     assert_eq!(rig.caret().offset, 8);
     // Nothing reached the document: the view wrote its own state alone.
     assert_eq!(rig.logic.text_of(&block).as_deref(), Some("hello"));
@@ -187,36 +186,36 @@ fn a_dropped_insertion_leaves_no_echo() {
     assert_eq!(rig.caret().offset, 5);
 }
 
-/// `PROSE-UI-138`: keystrokes at the draft's end accumulate in it; one sent
-/// elsewhere re-anchors it.
+/// `PROSE-UI-138`: each keystroke is an entry of the draft, and a block keeps
+/// its entries when the caret moves to another.
 #[test]
-fn keystrokes_at_the_end_of_the_draft_accumulate_in_it() {
+fn each_keystroke_is_its_own_entry_of_the_draft() {
     let mut rig = Rig::new(&["hello", "world"]);
     let (first, second) = (rig.blocks()[0], rig.blocks()[1]);
     rig.ui.set_caret((first, 0));
     rig.type_text("a");
     rig.type_text("b");
-    assert_eq!(rig.ui.draft.pending_text, "ab");
-    assert_eq!(rig.ui.draft.insert_pos, 0);
+    assert_eq!(rig.ui.shown_text(first).as_deref(), Some("abhello"));
     rig.ui.set_caret((second, 2));
     rig.type_text("c");
-    assert_eq!(rig.ui.draft.pending_text, "c");
-    assert_eq!(rig.ui.draft.block_id, Some(second));
-    assert_eq!(rig.ui.draft.insert_pos, 2);
+    assert_eq!(rig.ui.shown_text(second).as_deref(), Some("wocrld"));
+    assert_eq!(rig.ui.shown_text(first).as_deref(), Some("abhello"));
+    assert_eq!(rig.ui.draft.blocks(), vec![first, second]);
 }
 
-/// `PROSE-UI-135`: what is not text never enters the draft. A split and a
-/// deletion leave as commands, and the draft holds nothing of them.
+/// `PROSE-UI-135`: a split never enters the draft. A deletion leaves as a
+/// command, and the draft holds the text it takes out.
 #[test]
-fn a_split_and_a_deletion_leave_as_commands_and_not_as_draft() {
+fn a_split_never_enters_the_draft() {
     let mut rig = Rig::new(&["hello"]);
     let block = rig.blocks()[0];
     rig.ui.set_caret((block, 5));
     rig.type_text("!");
     rig.key(ProseKey::Backspace, false, false);
-    assert!(rig.ui.draft.is_empty());
+    assert_eq!(rig.ui.shown_text(block).as_deref(), Some("hello"));
+    let before = rig.ui.draft.clone();
     rig.key(ProseKey::Enter, false, false);
-    assert!(rig.ui.draft.is_empty());
+    assert_eq!(rig.ui.draft, before);
     assert!(matches!(
         rig.sent.as_slice(),
         [
@@ -225,6 +224,31 @@ fn a_split_and_a_deletion_leave_as_commands_and_not_as_draft() {
             ProseCommand::SplitBlock { pos: 5, .. },
         ]
     ));
+}
+
+/// `PROSE-UI-206`: a deletion sent after text no layout carries yet takes
+/// out what it deletes and leaves that text drawn.
+#[test]
+fn a_deletion_leaves_the_text_typed_before_it_drawn() {
+    let mut rig = Rig::new(&["hello"]);
+    let block = rig.blocks()[0];
+    rig.ui.set_caret((block, 5));
+    rig.type_text("abc");
+    rig.ui.set_caret((block, 1));
+    rig.key(ProseKey::Backspace, false, false);
+    assert_eq!(rig.ui.shown_text(block).as_deref(), Some("elloabc"));
+    let mut font_cx = parley::FontContext::new();
+    for bytes in crate::layout::fonts::shipped_faces() {
+        crate::layout::fonts::register_faces(&mut font_cx, bytes);
+    }
+    let mut layout_cx = parley::LayoutContext::new();
+    rig.ui.shape_draft(&mut font_cx, &mut layout_cx);
+    let drawn = rig.ui.run_of(block).map(|run| run.text().to_owned());
+    assert_eq!(drawn.as_deref(), Some("elloabc"));
+    assert_eq!(rig.caret().offset, 0);
+    rig.deliver();
+    rig.lay();
+    assert_eq!(rig.logic.text_of(&block).as_deref(), Some("elloabc"));
 }
 
 /// `PROSE-124`: two deletions sent before the layout comes back read their
@@ -281,8 +305,7 @@ fn a_confirmed_run_leaves_the_draft_once_it_is_laid_out() {
     rig.type_text("!");
     rig.deliver();
     // Confirmed, and still drawn: the layout in force does not carry it yet.
-    assert!(rig.ui.draft.pending_text.is_empty());
-    assert_eq!(rig.ui.draft.shown(), Some((block, 5, "!".to_owned())));
+    assert_eq!(rig.ui.shown_text(block).as_deref(), Some("hello!"));
     rig.lay();
     assert!(rig.ui.draft.is_empty());
     assert_eq!(rig.caret().offset, 6);
@@ -328,7 +351,10 @@ fn a_remote_insertion_before_the_draft_shifts_it() {
             text: ">> ".to_owned(),
         },
     );
-    assert_eq!(rig.ui.draft.insert_pos, 9);
+    assert_eq!(
+        rig.ui.draft.text_of(block, ">> hello world"),
+        ">> hello big world"
+    );
     assert_eq!(rig.caret().offset, 13);
     // The insertion was sent before the view saw the collaborator's, and it
     // still lands where it was typed.
@@ -413,7 +439,7 @@ fn the_draft_is_dropped_only_with_its_block() {
     rig.ui.apply_event(&ProseEvent::RemoteCursors {
         cursors: Vec::new(),
     });
-    assert_eq!(rig.ui.draft.pending_text, "!");
+    assert_eq!(rig.ui.shown_text(second).as_deref(), Some("two!"));
     receive(
         &mut rig,
         &mut other,
@@ -490,7 +516,7 @@ fn a_press_places_the_caret_and_collapses_the_selection() {
     );
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
     assert_eq!(rig.ui.runs.built(), 0);
-    assert!(rig.ui.draft_shape.is_none());
+    assert!(rig.ui.provisional_run(block).is_none());
 }
 
 /// `PROSE-UI-009`: a press in the margin still lands in the text.
@@ -1773,10 +1799,7 @@ fn a_composition_ends_in_one_insertion() {
         }]
     );
     assert!(rig.ui.composing.is_empty());
-    assert_eq!(
-        rig.ui.draft.shown(),
-        Some((block, 5, "\u{4f60}".to_owned()))
-    );
+    assert_eq!(rig.ui.shown_text(block).as_deref(), Some("hello\u{4f60}"));
     rig.deliver();
     rig.lay();
     assert_eq!(rig.logic.text_of(&block).as_deref(), Some("hello\u{4f60}"));

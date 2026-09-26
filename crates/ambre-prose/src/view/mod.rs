@@ -3,8 +3,9 @@
 //! `features/ambre-spec-prose-viewport.md`).
 //!
 //! Everything here runs on the UI thread and reads what the Logic thread
-//! handed over. A layout arrives shaped (`PROSE-UI-006`), and nothing in this
-//! module shapes a block, reads the document or sends a command.
+//! handed over. A layout arrives shaped (`PROSE-UI-006`). Only the paragraphs an
+//! edit in flight changes are shaped here (`provisional`), and nothing reads the
+//! document or sends a command.
 
 pub mod annotate;
 pub mod cache;
@@ -12,6 +13,7 @@ pub mod caret;
 pub mod column;
 pub mod hit;
 pub mod paint;
+pub mod provisional;
 pub mod slash;
 pub mod toolbar;
 
@@ -71,6 +73,13 @@ impl ProseUiState {
         self.clamp_scroll();
         // What the draft confirmed is in these runs now.
         self.draft.laid();
+        if self
+            .splitting
+            .and_then(|split| split.new_block)
+            .is_some_and(|new_block| self.shaped.index_of(&tree_id(new_block)).is_some())
+        {
+            self.splitting = None;
+        }
         self.settle_awaited_block();
         // A request lost on a full channel is made again from here.
         self.asked_pages = None;
