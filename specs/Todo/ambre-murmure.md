@@ -68,7 +68,7 @@ Channel storage layout (`channel_{id}/`):
 - `meta` -- lightweight Loro::Doc (name, topic, members, pinned)
 - `segments/`:
   - `seg_001` -- messages 1-5000 (sealed, read-only)
-  - `seg_002` -- messages 5001-10000 (sealed, read-only)
+  - `seg_002` -- messages 5001-10000 (closing, writable for edits until its grace period ends)
   - `seg_003` -- messages 10001-... (active segment, writable)
 
 **The client only loads the active segment + metadata** (~2 MB max on first display). Older segments are lazy-loaded when scrolling up.
@@ -81,9 +81,9 @@ Channel storage layout (`channel_{id}/`):
 - `"members"` (Map) -- `{"pubkey_alice": {role, joined}}`
 - `"pinned"` (Array) -- `[{msg_id, segment_id}]`
 - `"segments"` (Array), for example:
-  - `{id: "seg_001", from_ts: 1710000000, to_ts: 1720000000, msg_count: 5000, sealed: true}`
-  - `{id: "seg_002", from_ts: 1720000000, to_ts: 1730000000, msg_count: 5000, sealed: true}`
-  - `{id: "seg_003", from_ts: 1730000000, to_ts: null, msg_count: 1847, sealed: false}`
+  - `{id: "seg_001", from_ts: 1710000000, to_ts: 1720000000, msg_count: 5000, state: "sealed", amended: true}`
+  - `{id: "seg_002", from_ts: 1720000000, to_ts: 1730000000, msg_count: 5000, state: "closing", amended: false}`
+  - `{id: "seg_003", from_ts: 1730000000, to_ts: null, msg_count: 1847, state: "active", amended: false}`
 
 ### CRDT Structure -- Segment (one Loro::Doc per segment)
 
@@ -120,19 +120,67 @@ Object storage paths:
 - `channels/{channel_id}/meta/snapshots/{snapshot_id}`
 - `channels/{channel_id}/meta/deltas/{seq:010}`
 - `channels/{channel_id}/segments/{seg_id}/snapshot` -- sealed = final snapshot only
-- `channels/{channel_id}/segments/{seg_id}/deltas/{seq:010}` -- active segment only
+- `channels/{channel_id}/segments/{seg_id}/deltas/{seq:010}` -- active or closing segment only
+- `channels/{channel_id}/segments/{seg_id}/amendments/...` -- sealed segment only, created on the first amendment
 - `channels/{channel_id}/media/{content_hash}`
 
 ### Segment sealing
 
-When the active segment exceeds ~5000 messages (or ~2 MB snapshot):
+A segment moves through three states: `active`, `closing`, `sealed`. Closing and sealing are two
+acts, so that a recent message is never in a sealed segment.
+
+**Closing.** When the active segment exceeds ~5000 messages or ~2 MB of snapshot:
+
+1. The client opens a new active segment in `meta`. New messages go there.
+2. The old segment becomes `closing`. It still accepts edits and deletes as ordinary deltas.
+
+At most two segments accept deltas: the active one and the closing one.
+
+**Sealing.** When the grace period of a closing segment ends:
 
 1. Client acquires Redis lock (`channel:{id}:seal`, SET NX, TTL 30 s)
-2. Encodes the final segment snapshot, encrypts it, PUT to Object Storage
-3. Updates Doc meta (marks `sealed: true`, creates new segment)
-4. Old segment deltas are purged (snapshot is sufficient)
+2. Encodes a shallow Loro snapshot of the segment, with no history, encrypts it, PUT to Object Storage
+3. Builds and PUTs the search index of the segment (section 5)
+4. Updates Doc meta (`state: "sealed"`)
+5. Old segment deltas are purged (snapshot is sufficient)
+
+The grace period needs a row in `ambre-spec-budgets.md`, for example 24 h, to measure before it is
+fixed. A message younger than the grace period is never in a sealed segment. So an edit of a recent
+message is an ordinary delta, and never creates an amendments document.
+
+**The sealed snapshot is shallow.** A full Loro snapshot keeps the deleted text in its history. A
+shallow snapshot drops that history. So a message deleted before sealing leaves no text in the
+sealed ciphertext.
 
 Sealed segments are **immutable** -- no more deltas, just a final snapshot. This simplifies storage and sync.
+
+### Amendments to a sealed segment
+
+An edit or a delete of a message older than the grace period is rare. It goes to the amendments
+document of its segment, never to the sealed snapshot.
+
+`Loro::Doc (amendments)`, one per sealed segment, created on the first amendment:
+
+- `"amendments"` (Map) -- `{msg_id: {content: Loro::Text} | {deleted: true}}`
+
+The segment entry in `meta` carries `amended: true` once the document exists. So a client fetches
+the amendments document only when it exists. A reader applies the amendments over the sealed
+snapshot.
+
+**Re-sealing makes a delete an erasure.** An amendment hides a deleted message, and the original text
+stays in the sealed ciphertext. A client re-seals the segment, rarely and in batches:
+
+1. It writes a new shallow snapshot with the amendments folded in.
+2. It rebuilds and PUTs the search index.
+3. It removes from the amendments document the entries that the new snapshot folded in.
+
+The delay between a delete and its erasure needs a row in `ambre-spec-budgets.md`.
+
+**Who may amend.** The author edits a message. The author or a moderator deletes it. The relay
+cannot read an amendment, so the merging client must refuse one whose signer has no such right.
+Nothing binds a Loro operation to the key that signed its delta today. The gap exists in the
+active segment too, where a member can rewrite the message of another member. That question stays
+open.
 
 ### Messaging compaction
 
@@ -289,11 +337,24 @@ A client can hold a message whose key is missing, for example on a new device.
 * The message shows the cause and the remedy, for example "key bundle not received, ask a member".
 * A bare "unable to decrypt" is forbidden. Element users rank that state as a main complaint.
 
-### Optional retention
+### History and retention
 
-With segments, a retention policy = deleting segments older than N months (`DELETE` Object Storage + Doc meta update). Useful for GDPR / right to erasure compliance.
+**The default is the full history.** Murmure keeps every segment as long as the space exists. A
+sealed segment weighs about 2 MB.
 
-Retention is an explicit admin policy. Without one, Murmure keeps the full history as long as the organization keeps it.
+**Retention is a space setting.** A space admin sets one duration N for the whole space. No channel
+overrides it.
+
+**The relay applies retention.** A client-side policy would never erase while no admin is online, so
+the erasure promise of the General Data Protection Regulation (GDPR) would be false.
+
+- The relay holds N in plaintext. N is outside the `ZK-007` set today, like the public flag.
+- The relay deletes a sealed segment, its index and its amendments once the seal time is older
+  than N. The relay knows the seal time without a key.
+- A client removes the missing segment from the `segments` array of `meta` when it finds the gap.
+
+**The guarantee is a range.** A message stays at least N, and at most N plus the time span of its
+segment. The interface states that range, never N alone.
 
 ### UI
 
@@ -344,8 +405,13 @@ A malicious member can publish a false index.
 ### Filters
 Author, date, channel, file type, and "replies to me", including replies that did not mention the user.
 
-### Open point
-The index format assumes that a sealed segment is immutable. The sketch does not say how a user edits or deletes an old message in a sealed segment. Decide that before the index format is frozen.
+### Amended segments
+The index of a sealed segment stays immutable.
+1. The client queries the sealed index.
+2. The client drops the matches whose `msg_id` the amendments document deletes.
+3. The client queries a small index of the amendments document, built on the fly.
+
+A re-seal replaces the sealed index (section 3, *Amendments to a sealed segment*).
 
 ---
 
@@ -389,6 +455,12 @@ The index format assumes that a sealed segment is immutable. The sketch does not
 | **Searchable encryption on the relay** (keyed-hash token per word, SSE) | The relay sees which queries repeat and which documents match. Published leakage-abuse attacks (Cash et al., 2015) recover content from that leak. It breaks the zero-knowledge pillar. |
 | **Full download and re-index on each device** | The Element model: Seshat (Rust, tantivy) indexes locally on desktop only. Element Web still has no search in encrypted rooms. A new device waits for the full history. |
 | **SQLite/FTS5 compiled to WASM** | A C library, against the Rust-first pillar. |
+| **Deltas on a sealed segment** | Every old segment becomes a surface of concurrent writes again, and its search index becomes mutable. Segmentation exists to prevent both. |
+| **A new sealed snapshot on each edit** | A typo fix would need the seal lock and a full index rebuild. |
+| **Amendments in the active segment** | Loading an old segment would need every later segment, to find its amendments. |
+| **Sealing on size alone** | The last message before the cut lands in a sealed segment, and its first typo fix creates an amendments document. |
+| **Retention applied by a client** | No erasure happens while no admin is online. |
+| **A retention setting per channel** | Two settings for one space, and a member cannot tell which one holds. |
 | **A sealed index document of the user's channels** | The relay already holds the membership. A second list drifts after a revoke and shows a channel whose key is gone. |
 | **Bookmarks and followed threads in local storage** | A new device starts empty, and a new device is where the user needs them most. |
 | **Private channels in the space catalogue** | Every space member reads the catalogue, so each private channel would show its name and existence to the whole space. |
