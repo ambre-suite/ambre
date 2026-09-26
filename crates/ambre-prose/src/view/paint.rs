@@ -158,6 +158,7 @@ fn draw_run<S: DrawSurface>(
             .peekable();
         if cuts.peek().is_none() {
             surface.draw_glyphs(&glyphs, &brush, transform);
+            draw_lines(surface, &glyphs, placed.origin_x, placed.origin_y, color);
             continue;
         }
         let (mut from, mut shift) = (-BAND, 0.0);
@@ -167,6 +168,13 @@ fn draw_run<S: DrawSurface>(
             surface.push_clip(Rect::new(left, -BAND, right, BAND));
             let moved = Affine::translate((placed.origin_x + shift, placed.origin_y));
             surface.draw_glyphs(&glyphs, &brush, moved);
+            draw_lines(
+                surface,
+                &glyphs,
+                placed.origin_x + shift,
+                placed.origin_y,
+                color,
+            );
             surface.pop_clip();
         };
         for cut in cuts {
@@ -180,6 +188,42 @@ fn draw_run<S: DrawSurface>(
     }
 }
 
+/// Draw the underline and the strike-through a glyph run carries, at the
+/// offsets and thicknesses its font gives (`PROSE-UI-209`).
+fn draw_lines<S: DrawSurface>(
+    surface: &mut S,
+    glyphs: &parley::GlyphRun<'_, ambre_draw::ParleyBrush>,
+    x: f64,
+    y: f64,
+    color: Color,
+) {
+    let style = glyphs.style();
+    let metrics = glyphs.run().metrics();
+    let lines = [
+        (
+            style.underline.as_ref(),
+            metrics.underline_offset,
+            metrics.underline_size,
+        ),
+        (
+            style.strikethrough.as_ref(),
+            metrics.strikethrough_offset,
+            metrics.strikethrough_size,
+        ),
+    ];
+    let left = x + f64::from(glyphs.offset());
+    let right = left + f64::from(glyphs.advance());
+    for (line, offset, size) in lines {
+        let Some(line) = line else {
+            continue;
+        };
+        let size = line.size.unwrap_or(size);
+        let offset = line.offset.unwrap_or(offset);
+        let at = y + f64::from(glyphs.baseline() - offset + size / 2.0);
+        surface.stroke_line(left, at, right, at, color, f64::from(size));
+    }
+}
+
 /// Draw every glyph of a shaped text at `(x, y)`.
 fn draw_shape<S: DrawSurface>(surface: &mut S, shape: &ShapedRun, x: f64, y: f64, color: Color) {
     let transform = Affine::translate((x, y));
@@ -188,6 +232,7 @@ fn draw_shape<S: DrawSurface>(surface: &mut S, shape: &ShapedRun, x: f64, y: f64
         for item in line.items() {
             if let PositionedLayoutItem::GlyphRun(glyphs) = item {
                 surface.draw_glyphs(&glyphs, &brush, transform);
+                draw_lines(surface, &glyphs, x, y, color);
             }
         }
     }
@@ -231,7 +276,7 @@ impl ProseUiState {
     ) -> Option<(String, ShapedRun)> {
         let (block, at, text) = wanted?;
         let run = self.run_of(block);
-        let mut style = run
+        let style = run
             .and_then(ParleyRunData::style)
             .cloned()
             .unwrap_or_else(|| {
@@ -241,21 +286,23 @@ impl ProseUiState {
                     false,
                 )
             });
-        // Typed after a bold or italic span, the text lands in it
-        // (`PROSE-UI-208`).
-        let (bold, italic) = run.map_or((false, false), |run| run.marks_before(at));
-        style.bold |= bold;
-        style.italic |= italic;
-        // A shape is kept only in the style it was made in: the same text
-        // typed into another block is shaped again (`PROSE-UI-200`).
+        // Typed after a marked span, the text lands in it (`PROSE-UI-208`).
+        let marks = [crate::layout::measure::MarkedSpan {
+            start: 0,
+            end: text.len(),
+            ..run.map(|run| run.marks_before(at)).unwrap_or_default()
+        }];
+        // A shape is kept only in the style and the marks it was made in: the
+        // same text typed elsewhere is shaped again (`PROSE-UI-200`).
         if let Some(kept) = kept
             && kept.0 == text
             && kept.1.data().style() == Some(&style)
+            && kept.1.data().marks() == marks
         {
             return Some(kept);
         }
-        let layout = shape_draft(font_cx, layout_cx, &text, &style);
-        let run = ShapedRun::styled(&text, layout, &style);
+        let layout = shape_draft(font_cx, layout_cx, (&text, &marks), &style);
+        let run = ShapedRun::marked(&text, layout, &style, &marks);
         Some((text, run))
     }
 
@@ -1434,11 +1481,90 @@ mod tests {
             ui.draft.push_str("abc", &block, at);
             ui.shape_draft(&mut font_cx, &mut layout_cx);
             let (_, shape) = ui.draft_shape.as_ref().expect("the draft is shaped");
-            shape.data().style().is_some_and(|style| style.bold)
+            shape.data().marks().iter().any(|span| span.bold)
         };
         assert!(bold_at(&mut ui, 4), "after the bold word");
         assert!(!bold_at(&mut ui, 9), "after the plain word");
         assert!(!bold_at(&mut ui, 0), "before any text");
+    }
+
+    /// `PROSE-UI-209`: an underline and a strike-through are each drawn as
+    /// one line across the text they cover, the strike above the underline.
+    #[test]
+    fn an_underline_and_a_strike_through_are_drawn_across_their_text() {
+        let (mut state, _) = laid_out(1, 2);
+        let block = *state.root_blocks().last().expect("a block");
+        for key in ["u", "s"] {
+            state.handle_command(ProseCommand::ApplyMark {
+                block_id: block,
+                range: (0, 4),
+                key: key.to_owned(),
+                value: None,
+            });
+        }
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_layout(state.shaped_layout());
+        let text = palette().text;
+        let surface = paint(&mut ui);
+        let lines: Vec<(f64, f64, f64)> = surface
+            .ops()
+            .iter()
+            .filter_map(|op| match op {
+                DrawOp::StrokeLine {
+                    x0, y0, x1, color, ..
+                } if *color == text => Some((*x0, *x1, *y0)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(lines.len(), 2, "one underline and one strike-through");
+        let (under, strike) = (lines[0], lines[1]);
+        assert!(under.1 > under.0, "the underline spans the word");
+        assert!((under.0 - strike.0).abs() < 0.01 && (under.1 - strike.1).abs() < 0.01);
+        assert!(strike.2 < under.2, "the strike sits above the underline");
+    }
+
+    /// `PROSE-UI-208`: a draft typed right after an underlined word is
+    /// drawn underlined, its line starting where the word's ends.
+    #[test]
+    fn a_draft_after_an_underlined_word_is_drawn_underlined() {
+        let (mut state, _) = laid_out(1, 2);
+        let block = *state.root_blocks().last().expect("a block");
+        state.handle_command(ProseCommand::ApplyMark {
+            block_id: block,
+            range: (0, 4),
+            key: "u".to_owned(),
+            value: None,
+        });
+        let mut ui = ProseUiState::default();
+        ui.resize(1200.0, 900.0);
+        ui.apply_layout(state.shaped_layout());
+        ui.draft.push_str("abc", &block, 4);
+        let mut font_cx = parley::FontContext::new();
+        for bytes in crate::layout::fonts::shipped_faces() {
+            crate::layout::fonts::register_faces(&mut font_cx, bytes);
+        }
+        let mut layout_cx = parley::LayoutContext::new();
+        ui.shape_draft(&mut font_cx, &mut layout_cx);
+        let text = palette().text;
+        let lines: Vec<(f64, f64)> = paint(&mut ui)
+            .ops()
+            .iter()
+            .filter_map(|op| match op {
+                DrawOp::StrokeLine { x0, x1, color, .. } if *color == text => Some((*x0, *x1)),
+                _ => None,
+            })
+            .collect();
+        // The word's line is stroked in both slices of its line, the clip
+        // hiding the second; the draft's comes last.
+        let (Some(word), Some(draft)) = (lines.first(), lines.last()) else {
+            panic!("the word and the draft are underlined");
+        };
+        assert!(lines.len() >= 2, "the draft carries its own line");
+        assert!(
+            (draft.0 - word.1).abs() < 0.5,
+            "the draft's line follows the word's"
+        );
     }
 
     fn thread(block: BlockId, start: u32, end: u32) -> crate::events::CommentThread {

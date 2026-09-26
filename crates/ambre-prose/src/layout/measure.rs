@@ -23,13 +23,16 @@ use crate::layout::run::ShapedRun;
 pub(crate) const PX_PER_PT: f32 = 96.0 / 72.0;
 
 /// A byte range of a block's text and the inline marks the shaper reads on
-/// it. Only the marks that change the glyphs are kept (`PROSE-UI-207`).
+/// it. A mark either changes the glyphs (`PROSE-UI-207`) or draws a line
+/// across them (`PROSE-UI-209`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MarkedSpan {
     pub start: usize,
     pub end: usize,
     pub bold: bool,
     pub italic: bool,
+    pub underline: bool,
+    pub strike: bool,
 }
 
 /// The text of a block and the spans of it that carry bold or italic, in
@@ -50,16 +53,17 @@ pub fn marked_text(text: &LoroText) -> (String, Vec<MarkedSpan>) {
                 .and_then(|marks| marks.get(key))
                 .is_some_and(|value| !matches!(value, LoroValue::Null))
         };
-        let (bold, italic) = (on("b"), on("i"));
-        let start = out.len();
+        let span = MarkedSpan {
+            start: out.len(),
+            end: out.len() + insert.len(),
+            bold: on("b"),
+            italic: on("i"),
+            underline: on("u"),
+            strike: on("s"),
+        };
         out.push_str(&insert);
-        if bold || italic {
-            spans.push(MarkedSpan {
-                start,
-                end: out.len(),
-                bold,
-                italic,
-            });
+        if span.bold || span.italic || span.underline || span.strike {
+            spans.push(span);
         }
     }
     (out, spans)
@@ -425,14 +429,14 @@ impl Measurer {
 pub fn shape_draft(
     font_cx: &mut FontContext,
     layout_cx: &mut LayoutContext<ParleyBrush>,
-    text: &str,
+    (text, marks): (&str, &[MarkedSpan]),
     style: &EffectiveStyle,
 ) -> Layout<ParleyBrush> {
     let family = fonts::resolve(&style.font_family).face_name();
     build(
         font_cx,
         layout_cx,
-        (text, &[]),
+        (text, marks),
         style,
         family,
         style.line_height,
@@ -468,7 +472,13 @@ fn build(
             builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
         }
         if span.italic {
-            builder.push(StyleProperty::FontStyle(FontStyle::Italic), range);
+            builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
+        }
+        if span.underline {
+            builder.push(StyleProperty::Underline(true), range.clone());
+        }
+        if span.strike {
+            builder.push(StyleProperty::Strikethrough(true), range);
         }
     }
     let mut layout: Layout<ParleyBrush> = builder.build(text);

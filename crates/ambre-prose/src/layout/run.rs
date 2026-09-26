@@ -61,19 +61,26 @@ impl ParleyRunData {
         }
     }
 
-    /// Whether the code point before `offset` is bold, then italic. Text
-    /// typed at `offset` takes these marks, since both expand after their
-    /// range (`ambre-spec-prose-schema.md section 3`).
+    /// The marks of the code point before `offset`, its range aside. Text
+    /// typed at `offset` takes them, since each expands after its range
+    /// (`ambre-spec-prose-schema.md section 3`).
     #[must_use]
-    pub fn marks_before(&self, offset: u32) -> (bool, bool) {
+    pub fn marks_before(&self, offset: u32) -> MarkedSpan {
         let Some(previous) = offset.checked_sub(1) else {
-            return (false, false);
+            return MarkedSpan::default();
         };
         let byte = self.byte_of(previous);
         self.marks
             .iter()
             .find(|span| span.start <= byte && byte < span.end)
-            .map_or((false, false), |span| (span.bold, span.italic))
+            .copied()
+            .unwrap_or_default()
+    }
+
+    /// The marked spans the text was shaped with, in bytes.
+    #[must_use]
+    pub fn marks(&self) -> &[MarkedSpan] {
+        &self.marks
     }
 
     /// The style the text was shaped in, when the shaper recorded it.
