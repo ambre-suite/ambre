@@ -260,6 +260,15 @@ admin also rotates the key of each public channel and writes the new keys to the
 cost grows with the number of public channels. That cost is the price of joining without a
 member online.
 
+**Each public channel keeps its own key.** A space member reads every key in the catalogue, so a
+shared key would expose nothing more to that member. The gain is for a member of one channel who
+is not a member of the space, such as a bot or a guest. That member holds the key of one channel
+and reads no other channel.
+
+**The rotation needs a budget row before Murmure ships.** The row goes in `ambre-spec-budgets.md`
+and bounds the rotation on a space leave. A measure against that row decides whether the shared key
+comes back (section 8).
+
 **The notification level has two copies.** The user settings are the source of truth for the
 interface. The client writes a copy of each level to the relay, because the relay decides which
 push to send (section 4). The copy and `channel_read_cursors` are outside the `ZK-007` set today.
