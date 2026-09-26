@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: TEXT EDITING
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- typing, deleting, splitting and composing ship, each drawn before
-the document answers. Text dropped into the page is not built
+**Implementation:** partial -- typing, deleting, splitting, composing and dropping text ship, each
+drawn before the document answers. The latency probe is not built
 
 > Typing, deleting, splitting and joining paragraphs. A keystroke shows on the glass at once and
 > reaches the document a moment later. Two authors typing in the same paragraph never wait for
@@ -43,7 +43,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-176` | `POST` | One insertion command MUST leave carrying the same text at the same position. | this spec section 3 | `ambre_prose::input_tests::typing_fills_the_draft_and_sends_one_insertion_per_run` | none | verified |
 | `PROSE-UI-138` | `POST` | Each keystroke sent MUST be its own entry of the draft, kept when the caret moves to another block. | this spec section 3 | `ambre_prose::input_tests::each_keystroke_is_its_own_entry_of_the_draft` | none | verified |
 | `PROSE-UI-139` | `FRAME` | Typing MUST NOT change the structure of the document, the paragraph's settings, or the marks the run lands beside. | this spec section 3 | `ambre_prose::input_tests::typing_leaves_the_structure_the_settings_and_the_marks_alone` | none | verified |
-| `PROSE-UI-204` | `POST` | Text dropped into the page MUST be inserted at the drop point as one insertion, drawn from the draft first. | this spec section 4 | not built | unbuilt -- lands with the "A drag that scrolls, and text dropped into the page" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-204` | `POST` | Text dropped into the page MUST be inserted at the drop point as one insertion, drawn from the draft first. | this spec section 4 | `ambre_prose::input_tests::dropped_text_is_one_insertion_at_the_drop_point` | none | verified |
 
 ### 1.3 Take the active selection
 
@@ -100,7 +100,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. Every mutation leaves as a command (`PROSE-UI-002`,
   `features/ambre-spec-prose-engine.md section 1`).
-* **Verification.** 43 `verified`, 0 `untested`, 2 `unimplemented`. `PROSE-101` reads two tests,
+* **Verification.** 44 `verified`, 0 `untested`, 1 `unimplemented`. `PROSE-101` reads two tests,
   because the paragraph the caret started in is the one a deletion does not remove.
 
 ---

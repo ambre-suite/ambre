@@ -138,6 +138,7 @@ web-sys = { version = "0.3.85", features = [
     "ClipboardItem",
     "CompositionEvent",
     "DataTransfer",
+    "DragEvent",
     "CssStyleDeclaration",
     "Document",
     "DomRect",

@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: CARET AND SELECTION
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- a press, a drag and the keys move the caret; links and bands do not
+**Implementation:** implemented
 
 > Where the caret is, where it goes, and what a drag selects. A click lands on the character under
 > it. The arrow keys walk the text the reader sees rather than the text as it is stored. A
@@ -67,8 +67,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-038` | `POST` | While a drag holds past the edge of the window, each tick MUST scroll and then re-resolve the pointer, so the selection follows the text being revealed. | this spec section 2 | not built | unbuilt -- lands with the "A drag that scrolls, and text dropped into the page" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-163` | `FRAME` | A tick MUST NOT run once the pointer is released: releasing MUST leave nothing armed. | this spec section 2 | not built | unbuilt -- lands with the "A drag that scrolls, and text dropped into the page" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-038` | `POST` | While a drag holds past the edge of the window, each tick MUST scroll and then re-resolve the pointer, so the selection follows the text being revealed. | this spec section 2 | `ambre_prose::input_tests::a_drag_past_the_edge_scrolls_and_the_selection_follows` | none | verified |
+| `PROSE-UI-163` | `FRAME` | A tick MUST NOT run once the pointer is released: releasing MUST leave nothing armed. | this spec section 2 | `ambre_prose::input_tests::a_released_drag_leaves_nothing_armed` | none | verified |
 
 ### 1.6 Press Escape
 
@@ -100,7 +100,8 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: `PROSE-UI-010` (`features/ambre-spec-prose-engine.md section 1`) keeps the
   selection out of the document, and the UI thread reaches no network, crypto or persistence path
   (`UI-THREAD-004`).
-* **Verification.** 35 `verified`, and 2 `unimplemented`: the drag's scroll tick.
+* **Verification.** 37 `verified`. The scroll tick is driven by hand in the tests, as the host drives
+  it once a frame.
   `PROSE-UI-008` is a round trip: the point the layout draws an offset at resolves back to that
   offset, at any zoom and scroll. `PROSE-UI-071` holds by the shape of the view: it sets a field
   and opens nothing, and the shell is the one reader of that field.
@@ -186,12 +187,12 @@ path can leave the caret off screen (`PROSE-UI-035`).
 
 ```rust
 /// Extend the drag to a pointer position. The anchor is the one captured on pointer-down
-/// (`PROSE-UI-037`); a pointer past the top or bottom edge arms the autoscroll.
-pub fn update_drag_selection(state: &mut ProseUiState, x: f32, y: f32);
+/// (`PROSE-UI-037`); a pointer near the top or bottom edge arms the autoscroll.
+pub fn update_drag(&mut self, x: f32, y: f32);
 
-/// One armed tick: scroll by the armed velocity, clamp it (`PROSE-UI-025`), then re-resolve
-/// the last pointer position so the selection follows the revealed text (`PROSE-UI-038`).
-pub fn tick_autoscroll(state: &mut ProseUiState);
+/// One tick, once a frame: scroll by the armed speed, clamped (`PROSE-UI-025`), then
+/// re-resolve the last pointer so the selection follows the revealed text (`PROSE-UI-038`).
+pub fn tick_autoscroll(&mut self, now_ms: f64) -> bool;
 ```
 
 The armed velocity and the anchor live in the UI state and nowhere else

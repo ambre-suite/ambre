@@ -9,6 +9,16 @@ use crate::events::{BlockId, CursorPosition, block_id, tree_id};
 use crate::layout::run::ParleyRunData;
 use crate::ui::ProseUiState;
 
+/// How far from the top or the bottom of the canvas a drag arms the
+/// autoscroll, in screen pixels.
+const AUTOSCROLL_BAND_PX: f32 = 32.0;
+/// How deep past the band the speed still grows, in screen pixels.
+const AUTOSCROLL_DEPTH_PX: f32 = 160.0;
+/// Screen pixels per millisecond for each pixel of depth: 2 px/ms at most.
+const AUTOSCROLL_GAIN: f32 = 1.0 / 80.0;
+/// The longest step one tick takes, so a stalled frame does not jump.
+const AUTOSCROLL_MAX_STEP_MS: f64 = 50.0;
+
 /// A walk of the caret with the keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
@@ -401,6 +411,7 @@ impl ProseUiState {
             cursor.anchor = None;
         }
         self.dragging = None;
+        self.drag_pointer = None;
     }
 
     /// The place under a canvas point, in document offsets.
@@ -435,16 +446,29 @@ impl ProseUiState {
     /// (`PROSE-UI-037`).
     pub(crate) fn start_drag(&mut self, anchor: Spot) {
         self.dragging = Some(anchor);
+        self.drag_pointer = None;
+        self.autoscroll_ms = None;
+    }
+
+    /// The release of a drag: nothing stays armed (`PROSE-UI-163`). Answers
+    /// whether a drag was in flight.
+    pub(crate) fn end_drag(&mut self) -> bool {
+        self.drag_pointer = None;
+        self.autoscroll_ms = None;
+        self.dragging.take().is_some()
     }
 
     /// Extend a drag to the point under the pointer. The anchor is the one
     /// the press captured (`PROSE-UI-161`), and the window does not scroll
-    /// (`PROSE-UI-162`).
+    /// (`PROSE-UI-162`). A pointer near an edge arms the autoscroll.
     pub fn update_drag(&mut self, x: f32, y: f32) {
         let Some(anchor) = self.dragging else {
             return;
         };
-        let Some(focus) = self.place_at(x, y) else {
+        self.drag_pointer = Some((x, y));
+        // A pointer off the text resolves on the edge line of the canvas.
+        let edge = y.clamp(0.0, (self.viewport.height_px - 1.0).max(0.0));
+        let Some(focus) = self.place_at(x, y).or_else(|| self.place_at(x, edge)) else {
             return;
         };
         if !self.joins(anchor, focus) {
@@ -457,6 +481,46 @@ impl ProseUiState {
         });
         self.caret_upstream = false;
         self.x_goal = None;
+    }
+
+    /// The autoscroll speed the last pointer of a drag asks for, in screen
+    /// pixels per millisecond, down for a positive one. Zero away from the
+    /// edges: the speed grows with how deep the pointer is in the band.
+    fn autoscroll_speed(&self) -> f32 {
+        let Some((_, y)) = self.drag_pointer.filter(|_| self.dragging.is_some()) else {
+            return 0.0;
+        };
+        let bottom = self.viewport.height_px - AUTOSCROLL_BAND_PX;
+        let depth = if y < AUTOSCROLL_BAND_PX {
+            y - AUTOSCROLL_BAND_PX
+        } else if y > bottom {
+            y - bottom
+        } else {
+            0.0
+        };
+        depth.clamp(-AUTOSCROLL_DEPTH_PX, AUTOSCROLL_DEPTH_PX) * AUTOSCROLL_GAIN
+    }
+
+    /// One autoscroll tick, once a frame (`PROSE-UI-038`). A drag held near
+    /// an edge scrolls, and then the last pointer is resolved again, so the
+    /// selection follows the text being revealed. Answers whether the view
+    /// moved. With no drag in flight nothing is armed (`PROSE-UI-163`).
+    pub fn tick_autoscroll(&mut self, now_ms: f64) -> bool {
+        let speed = self.autoscroll_speed();
+        if speed == 0.0 {
+            self.autoscroll_ms = None;
+            return false;
+        }
+        let Some(last) = self.autoscroll_ms.replace(now_ms) else {
+            return false;
+        };
+        let elapsed = (now_ms - last).clamp(0.0, AUTOSCROLL_MAX_STEP_MS) as f32;
+        let before = self.viewport.scroll_y;
+        self.scroll_by(speed * elapsed);
+        if let Some((x, y)) = self.drag_pointer {
+            self.update_drag(x, y);
+        }
+        self.viewport.scroll_y != before
     }
 
     /// The word under a place, or the whole paragraph, as a selection

@@ -536,9 +536,20 @@ where
                     },
                     _ => return,
                 };
+                let is_down = matches!(ev, InputEvent::PointerDown { .. });
                 let consumed = host_c.borrow_mut().handle_input(&ev);
                 if consumed {
                     event.prevent_default();
+                    // A drag keeps its moves past the canvas edge, so the
+                    // page can scroll under it (`PROSE-UI-038`).
+                    if is_down
+                        && host_c.borrow().captures_pointer()
+                        && let Some(target) = event
+                            .current_target()
+                            .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+                    {
+                        let _ = target.set_pointer_capture(event.pointer_id());
+                    }
                 }
             },
         );
@@ -546,6 +557,42 @@ where
             canvas
                 .add_event_listener_with_callback(event_type, cb.as_ref().unchecked_ref())
                 .expect("add pointer listener");
+        }
+        cb.forget();
+    }
+
+    // -- Dropped text -> view. -----------------------------------------------
+    // `dragover` must be cancelled for the canvas to accept a drop. Only plain
+    // text is read; a dropped file is left to the browser (`PROSE-UI-204`).
+    {
+        let host_c = Rc::clone(&host);
+        let dpr = web_sys::window()
+            .map(|w| w.device_pixel_ratio())
+            .unwrap_or(1.0);
+        let cb = Closure::<dyn FnMut(web_sys::DragEvent)>::new(move |event: web_sys::DragEvent| {
+            let Some(data) = event.data_transfer() else {
+                return;
+            };
+            if event.type_() == "dragover" {
+                if data.types().includes(&"text/plain".into(), 0) {
+                    event.prevent_default();
+                }
+                return;
+            }
+            let text = data.get_data("text/plain").unwrap_or_default();
+            if text.is_empty() {
+                return;
+            }
+            let x = (event.offset_x() as f64 * dpr) as f32;
+            let y = (event.offset_y() as f64 * dpr) as f32;
+            if host_c.borrow_mut().drop_text(x, y, text) {
+                event.prevent_default();
+            }
+        });
+        for event_type in &["dragover", "drop"] {
+            canvas
+                .add_event_listener_with_callback(event_type, cb.as_ref().unchecked_ref())
+                .expect("add drop listener");
         }
         cb.forget();
     }

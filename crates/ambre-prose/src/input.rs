@@ -6,7 +6,7 @@
 //! function in. Every mutation leaves through that function (`PROSE-UI-004`);
 //! the view writes its draft and its caret, and nothing else.
 
-use crate::events::{BlockInit, ProseCommand, TextEdit};
+use crate::events::{BlockInit, CursorPosition, ProseCommand, TextEdit};
 use crate::ui::{ProseUiState, SendResult, chars};
 use crate::view::caret::{Direction, Spot};
 
@@ -88,6 +88,13 @@ pub enum ProseInput {
         y: f32,
     },
     Release,
+    /// Text dropped into the page at a point: one insertion there
+    /// (`PROSE-UI-204`).
+    Drop {
+        x: f32,
+        y: f32,
+        text: String,
+    },
     /// An item of the slash menu picked with the pointer, by its place in
     /// the filtered list.
     SlashPick(usize),
@@ -361,7 +368,8 @@ impl ProseUiState {
                 self.update_drag(*x, *y);
                 self.dragging.is_some()
             }
-            ProseInput::Release => self.dragging.take().is_some(),
+            ProseInput::Release => self.end_drag(),
+            ProseInput::Drop { x, y, text } => self.drop_text(*x, *y, text, send),
             ProseInput::Copy { cut } => self.copy(*cut, send),
             ProseInput::Paste { text, html, rich } => {
                 self.paste(text, html.as_deref(), rich.as_deref(), send)
@@ -438,6 +446,37 @@ impl ProseUiState {
             html: html.map(str::to_owned),
             payload: rich.map(<[u8]>::to_vec),
         });
+        true
+    }
+
+    /// Text dropped at a point: the caret goes there, collapsed, and the text
+    /// takes the paste path (`PROSE-UI-204`). One line is one insertion,
+    /// drawn from the draft; several lines are one paste. A drop off the
+    /// text changes nothing.
+    fn drop_text(
+        &mut self,
+        x: f32,
+        y: f32,
+        text: &str,
+        send: &mut dyn FnMut(ProseCommand) -> SendResult,
+    ) -> bool {
+        let Some((block_id, offset)) = self.place_at(x, y) else {
+            return false;
+        };
+        self.slash = None;
+        self.end_drag();
+        self.cursor = Some(CursorPosition {
+            block_id,
+            offset,
+            anchor: None,
+        });
+        self.caret_upstream = false;
+        self.x_goal = None;
+        let text = text.replace("\r\n", "\n");
+        if text.contains('\n') {
+            return self.paste(&text, None, None, send);
+        }
+        self.type_text(&text, send);
         true
     }
 

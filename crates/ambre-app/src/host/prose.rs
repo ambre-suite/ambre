@@ -390,6 +390,11 @@ impl ProseView {
         if let Some(command) = self.state.window_request() {
             send_command(&self.to_logic, self.document_id, command);
         }
+        // A drag held near an edge scrolls the page (`PROSE-UI-038`).
+        if self.state.tick_autoscroll(now_ms) {
+            self.publish_toolbar();
+            self.dirty = true;
+        }
         let theme = self.theme_ctl.get();
         if theme != self.theme {
             self.theme = theme;
@@ -578,6 +583,12 @@ impl ProseView {
     pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
         let input = self.state.paste_input(blob, own_copy);
         self.feed(&input);
+    }
+
+    /// Text dropped on the canvas: one insertion at the drop point
+    /// (`PROSE-UI-204`).
+    pub fn drop_text(&mut self, x: f32, y: f32, text: String) -> bool {
+        self.feed(&ProseInput::Drop { x, y, text })
     }
 
     /// Another document of the same type: the state starts over, and the

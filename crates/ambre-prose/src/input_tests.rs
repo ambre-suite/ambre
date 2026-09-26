@@ -2069,3 +2069,94 @@ fn a_plain_paste_carries_the_text_alone() {
             .is_some_and(|marks| !format!("{marks:?}").contains("\"b\""))
     );
 }
+
+/// `PROSE-UI-038`: a drag held past the bottom edge scrolls on each tick,
+/// and the selection follows the text being revealed.
+#[test]
+fn a_drag_past_the_edge_scrolls_and_the_selection_follows() {
+    let lines: Vec<String> = (0..80).map(|i| format!("line {i}")).collect();
+    let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+    let mut rig = Rig::new(&refs);
+    let first = rig.blocks()[0];
+    rig.press(rig.point_of(first, 2), false, 0.0);
+    let (x, _) = rig.point_of(first, 2);
+    let bottom = rig.ui.viewport.height_px + 40.0;
+    rig.input(ProseInput::Drag { x, y: bottom });
+    let before = rig.ui.selection().expect("a selection").1;
+    assert!(
+        !rig.ui.tick_autoscroll(0.0),
+        "the first tick only starts the clock"
+    );
+    let mut now = 0.0;
+    for _ in 0..20 {
+        now += 16.0;
+        assert!(rig.ui.tick_autoscroll(now));
+        rig.lay();
+    }
+    assert!(rig.ui.viewport.scroll_y > 0.0);
+    let after = rig.ui.selection().expect("a selection").1;
+    assert_ne!(after, before, "the focus follows the revealed text");
+    assert_eq!(rig.caret().anchor, Some((first, 2)));
+}
+
+/// `PROSE-UI-163`: once released, no tick scrolls, and nothing is armed.
+#[test]
+fn a_released_drag_leaves_nothing_armed() {
+    let lines: Vec<String> = (0..80).map(|i| format!("line {i}")).collect();
+    let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+    let mut rig = Rig::new(&refs);
+    let first = rig.blocks()[0];
+    rig.press(rig.point_of(first, 2), false, 0.0);
+    let (x, _) = rig.point_of(first, 2);
+    let bottom = rig.ui.viewport.height_px + 40.0;
+    rig.input(ProseInput::Drag { x, y: bottom });
+    rig.ui.tick_autoscroll(0.0);
+    rig.input(ProseInput::Release);
+    let scroll = rig.ui.viewport.scroll_y;
+    assert!(!rig.ui.tick_autoscroll(16.0));
+    assert!(!rig.ui.tick_autoscroll(32.0));
+    assert_eq!(rig.ui.viewport.scroll_y, scroll);
+    // Escape disarms a drag in flight the same way.
+    rig.press(rig.point_of(first, 2), false, 1000.0);
+    rig.input(ProseInput::Drag { x, y: bottom });
+    rig.ui.tick_autoscroll(40.0);
+    rig.key(ProseKey::Escape, false, false);
+    assert!(!rig.ui.tick_autoscroll(56.0));
+    // A drag away from the edges arms nothing.
+    rig.press(rig.point_of(first, 2), false, 2000.0);
+    let (x, y) = rig.point_of(first, 4);
+    rig.input(ProseInput::Drag { x, y });
+    rig.ui.tick_autoscroll(80.0);
+    assert!(!rig.ui.tick_autoscroll(96.0));
+}
+
+/// `PROSE-UI-204`: dropped text goes in at the drop point as one insertion,
+/// and the draft shows it before the Logic thread answers.
+#[test]
+fn dropped_text_is_one_insertion_at_the_drop_point() {
+    let mut rig = Rig::new(&["hello world"]);
+    let block = rig.blocks()[0];
+    rig.press(rig.point_of(block, 0), false, 0.0);
+    let (x, y) = rig.point_of(block, 6);
+    assert!(rig.input(ProseInput::Drop {
+        x,
+        y,
+        text: "big ".to_owned()
+    }));
+    assert_eq!(
+        rig.sent,
+        vec![ProseCommand::InsertText {
+            block_id: block,
+            pos: 6,
+            text: "big ".to_owned()
+        }]
+    );
+    assert_eq!(rig.caret().offset, 10);
+    assert_eq!(rig.caret().anchor, None);
+    assert_eq!(rig.ui.shown_text(block).as_deref(), Some("hello big world"));
+    rig.deliver();
+    assert_eq!(
+        rig.logic.text_of(&block).as_deref(),
+        Some("hello big world")
+    );
+}

@@ -311,6 +311,18 @@ impl FrameHost {
         self.view.paste_clipboard(blob, own_copy);
     }
 
+    /// Text dropped on the canvas at a point, in canvas pixels. Only Prose
+    /// takes it (`PROSE-UI-204`); answers whether it did.
+    pub fn drop_text(&mut self, x: f32, y: f32, text: String) -> bool {
+        self.view.drop_text(x, y, text)
+    }
+
+    /// Whether a consumed press captures the pointer, so a drag keeps its
+    /// moves past the canvas edge. Only Prose asks for it (`PROSE-UI-038`).
+    pub fn captures_pointer(&self) -> bool {
+        self.view.captures_pointer()
+    }
+
     /// Switch the active document on the live view, keeping the GPU surface.
     pub fn set_document(&mut self, document_id: DocumentId) {
         self.view.set_document(document_id);

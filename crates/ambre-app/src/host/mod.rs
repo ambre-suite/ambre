@@ -301,6 +301,19 @@ impl AppView {
         }
     }
 
+    /// Text dropped at a canvas point. Only Prose takes it.
+    fn drop_text(&mut self, x: f32, y: f32, text: String) -> bool {
+        match self {
+            AppView::Trame(_) | AppView::Toile(_) => false,
+            AppView::Prose(v) => v.drop_text(x, y, text),
+        }
+    }
+
+    /// Whether a consumed press captures the pointer. Only Prose does.
+    fn captures_pointer(&self) -> bool {
+        matches!(self, AppView::Prose(_))
+    }
+
     /// Swap the active document in place, keeping the GPU surface.
     fn set_document(&mut self, document_id: DocumentId) {
         match self {

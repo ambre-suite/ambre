@@ -185,7 +185,7 @@ the paste),
 | a paste with no selection | inserts at the caret |
 | a paste over a selection | deletes it first (`PROSE-UI-030`) |
 | the paste-as-plain-text chord, or its menu entry | inserts the plain text alone, the kept copy ignored too (`PROSE-UI-227`) |
-| dropping text into the page | `PROSE-UI-204`, on the "A drag that scrolls, and text dropped into the page" Story (`ambre-roadmap.md` E5) |
+| dropping text into the page | inserts at the drop point (`PROSE-UI-204`) |
 
 The legacy chords and the fold of `Ctrl` and `Cmd` are decided for every application in
 `1-Foundations/ambre-spec-commands.md section 2`. Prose takes the shared clipboard identities and
