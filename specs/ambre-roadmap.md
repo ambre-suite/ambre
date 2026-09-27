@@ -168,6 +168,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Bounded float objects | V1 | an absurd image or chart size cannot make layout cost unbounded |
 | `[ ]` A fill extrapolates a date series | V1 | a drag over two dates repeats them: the fill extrapolates numbers alone, and a date pattern the corpus promises is detected nowhere |
 | `[x]` Trame on the shared kinetic scroll | MVP | the grid keeps its own momentum, apart from the "One kinetic scroll" model (E8): it moves onto it, a finger pans and flicks the grid, and a range dragged past the edge of the grid scrolls and follows. Today a finger selects and nothing scrolls under a drag |
+| `[ ]` Trame answers once per pass | V1 | since `ARCH P9` the Logic thread answers each document once per pass, but the grid engine still recomputes its filters, its totals and the visible cells after every command. A burst of typing or a fast fill pays that once per command, all but the last stale. Scheduled only if the Keystroke latency probes Story (`ambre-roadmap.md` E6) shows the grid falling behind |
 
 ### Toile
 
@@ -188,6 +189,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Boolean operations reach a surface | V1 | union, intersection and difference are built and tested behind a command no menu entry, no button and no chord invokes |
 | `[ ]` Every connector shape a user can make | V1 | the format stores path kinds and anchors the tool writes for none of them, so a document can hold an arrow no gesture produces |
 | `[x]` Toile on the shared kinetic scroll | MVP | a finger pans the board and a flick keeps it moving, on the "One kinetic scroll" model (E8), wherever the active tool does not draw; and an element or a marquee dragged past the edge of the board pans it. Today a finger acts as the mouse, with no flick, and nothing pans under a drag |
+| `[ ]` Toile answers once per pass | V1 | since `ARCH P9` the Logic thread answers each document once per pass, but the board engine still sends its scene changes after every command. A drag or a burst of typing on a note pays that once per command, all but the last stale. Scheduled only if the Keystroke latency probes Story (`ambre-roadmap.md` E6) shows the board falling behind |
 
 ---
 
