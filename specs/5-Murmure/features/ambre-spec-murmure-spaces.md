@@ -57,8 +57,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-235` | `POST` | Each private channel the member leaves that way MUST owe a rotation. | this spec section 3; `SYNC-127` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-237` | `FRAME` | Leaving a space MUST NOT remove the member from a direct message or from a channel of another space. | this spec section 3 | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 
-* **Budget.** a leave costs one rotation per public channel. No row of
-  `ambre-spec-budgets.md section 8` bounds it yet, and the design asks for one.
+* **Budget.** a leave costs one rotation per public channel, bounded by the space leave row of
+  `ambre-spec-budgets.md section 1`.
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
 * **Verification.** 19 `unimplemented`: no space exists in the code.
@@ -139,5 +139,3 @@ takes the sealed value.
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing is built.** No space, no catalogue and no self-join exist.
-* **No row bounds the rotation of a leave.** It grows with the number of public channels, and the
-  measure that decides whether a shared key returns does not exist.

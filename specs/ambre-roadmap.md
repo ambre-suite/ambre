@@ -145,6 +145,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Attachments | MVP | files and images attached to a message through the shared media flow |
 | `[ ]` Emoji | MVP | Unicode emoji drawn in messages and reactions, with a picker |
 | `[ ]` Animated images | MVP | an animated GIF plays in the message list, and stays still under reduced motion |
+| `[ ]` Murmure measured on a phone | MVP | the Murmure budgets measured in WASM on a mid-range phone, in place of the desktop figures and the ratio they assume: segment replay and snapshot import, the JSON authorship check, the envelope open, the rotation of a space leave, the color emoji font size, and the two residency memory budgets. The `segment` bench of `ambre-murmure` is the starting point |
 | `[ ]` Moderation | V1 | a moderator hides the message of another member |
 | `[ ]` Custom emoji | V1 | emoji a space admin adds for the members of that space |
 | `[ ]` Presence settings | V1 | turning off the presence and typing indicators, kept in the user settings |
