@@ -15,6 +15,7 @@ fixtures = ["ambre-core/fixtures"]
 [dependencies]
 ambre-core = { path = "../ambre-core" }
 ambre-bus = { path = "../ambre-bus" }
+pulldown-cmark = { workspace = true }
 
 # The command registry the shell's palette and keymap read: Prose's table
 # declares its entries there, as ambre-toile's and ambre-trame's do. A leaf

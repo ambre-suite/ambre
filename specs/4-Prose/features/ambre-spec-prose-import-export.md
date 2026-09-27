@@ -23,17 +23,17 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-001` | `INV` | Every conversion MUST run in the Logic thread. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-043` | `INV` | No part of a document MUST reach the relay while a conversion runs. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-044` | `INV` | A reader and a writer MUST meet in the intermediate form alone: neither MUST know the other. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-009` | `INV` | A reader MUST NOT emit a command. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-045` | `INV` | A writer MUST NOT read the document. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-046` | `INV` | The walk from the document into the intermediate form MUST be one, shared by every writer. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-004` | `INV` | Every fidelity loss MUST raise a warning naming the construct that was dropped. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-005` | `INV` | A reader MUST warn before it drops an element it does not recognise. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-001` | `INV` | Every conversion MUST run in the Logic thread. | this spec section 3; `ZK-001` | structural -- the reader, the writer, the walk and the builder run inside `ProseState::handle_command`, which only the Logic worker holds; `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks` | none | verified |
+| `PROSE-IO-043` | `INV` | No part of a document MUST reach the relay while a conversion runs. | this spec section 3; `ZK-001` | structural -- an import leaves as the one delta its commit produces, which Sync seals like any edit; `ambre_prose::logic::interop::tests::an_export_is_idempotent_and_writes_nothing` -- an export writes no delta | none | verified |
+| `PROSE-IO-044` | `INV` | A reader and a writer MUST meet in the intermediate form alone: neither MUST know the other. | this spec section 3 | structural -- `crates/ambre-prose/src/interop/markdown_read.rs` and `markdown_write.rs` share `ProseIr`, and neither names the other outside its tests | none | verified |
+| `PROSE-IO-009` | `INV` | A reader MUST NOT emit a command. | this spec section 3 | structural -- `markdown_read::read` returns a `ProseIr` and names no command, document or engine type | none | verified |
+| `PROSE-IO-045` | `INV` | A writer MUST NOT read the document. | this spec section 3 | structural -- `markdown_write::write` takes a `&ProseIr` and nothing else | none | verified |
+| `PROSE-IO-046` | `INV` | The walk from the document into the intermediate form MUST be one, shared by every writer. | this spec section 3; `ambre-spec-budgets.md section 1` | structural -- `ProseState::walk` in `crates/ambre-prose/src/logic/interop.rs` is the one walk, and the Markdown export calls it | none | verified |
+| `PROSE-IO-004` | `INV` | Every fidelity loss MUST raise a warning naming the construct that was dropped. | this spec section 3 | `ambre_prose::interop::markdown_write::tests::what_markdown_lacks_is_reported_once_each`; `ambre_prose::interop::markdown_write::tests::commonmark_writes_no_table_todo_or_footnote`; `ambre_prose::logic::interop::tests::a_styled_cell_is_reported_on_export` | none | verified |
+| `PROSE-IO-005` | `INV` | A reader MUST warn before it drops an element it does not recognise. | this spec section 3 | `ambre_prose::interop::markdown_read::tests::an_unknown_element_is_reported_and_its_text_kept` | none | verified |
 | `PROSE-IO-006` | `INV` | A writer that emits an approximation MUST record it in the report. | this spec section 3 | not built | unbuilt -- lands with the "DOCX interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-047` | `INV` | A conversion that finished MUST answer with a report, and one that produced nothing MUST answer with an error: the two MUST NOT be one type. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-047` | `INV` | A conversion that finished MUST answer with a report, and one that produced nothing MUST answer with an error: the two MUST NOT be one type. | this spec section 3 | structural -- `ConversionReport` and `InteropError` are two types; `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing` | none | verified |
+| `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Large-file import" Story (`ambre-roadmap.md` E6) | unimplemented |
 | `PROSE-IO-025` | `INV` | The reader an HTML import uses MUST be the reader a rich paste uses: they MUST NOT be two readers. | this spec section 3; `features/ambre-spec-prose-clipboard.md` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-049` | `INV` | The native file MUST reuse the shared container rather than restate it. | this spec section 3; `ambre-spec-docfile.md section 3` | structural -- `crates/ambre-prose/src/logic/docfile.rs` declares no header of its own and calls the shared writer and reader; `ambre_prose::logic::docfile::tests::the_header_names_prose_and_the_payload_is_the_snapshot` | none | verified |
 | `PROSE-IO-012` | `IO` | The native file MUST be the only lossless round trip. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_prose::logic::docfile::tests::the_round_trip_loses_nothing` -- a bare engine fed the payload re-exports the same file, and a live state reading it holds the same text and marks | none | verified |
@@ -43,19 +43,19 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-027` | `POST` | A user MUST be able to bring a file into the document. | this spec section 4 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-002` | `POST` | An import MUST write through typed commands. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-050` | `POST` | The commands MUST be built in tree order, parent before child. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-051` | `POST` | The whole file MUST apply as one batch: one undo MUST take the import back. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-027` | `POST` | A user MUST be able to bring a file into the document. | this spec section 4 | `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks`; `ambre_prose::commands::tests::the_save_entry_is_declared_once` -- the palette lists the import | none | verified |
+| `PROSE-IO-002` | `POST` | An import MUST write through a typed operation list the engine applies as one change. | this spec section 3 | `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks` -- the builder emits typed `ImportOp`s | none | verified |
+| `PROSE-IO-050` | `POST` | The commands MUST be built in tree order, parent before child. | this spec section 3 | `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks` -- a nested item and the cells land under their parent; structural -- `build` pushes a parent before it recurses | none | verified |
+| `PROSE-IO-051` | `POST` | The whole file MUST apply as one batch: one undo MUST take the import back. | this spec section 3 | `ambre_prose::logic::interop::tests::one_undo_takes_the_import_back` | none | verified |
 | `PROSE-IO-026` | `POST` | A construct the block tree refuses MUST be lifted to the nearest place the tree allows, never dropped. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-052` | `POST` | Every lift MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-053` | `POST` | The report MUST reach the user: a construct changed in silence MUST NOT be the outcome. | this spec section 4 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-021` | `POST` | An import of a large file MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-053` | `POST` | The report MUST reach the user: a construct changed in silence MUST NOT be the outcome. | this spec section 4 | `ambre_prose::interop::tests::a_report_reads_as_one_sentence`; structural -- `ImportCompleted` carries the report, and `ambre_prose::chrome::notify_event` toasts it | none | verified |
+| `PROSE-IO-021` | `POST` | An import of a large file MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Large-file import" Story (`ambre-roadmap.md` E6) | unimplemented |
 | `PROSE-IO-054` | `POST` | An imported picture naming a remote address MUST be reported as unresolved. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-023` | `FRAME` | An import MUST NOT fetch a remote address a picture names. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-055` | `FRAME` | An import MUST NOT mutate the document directly. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-011` | `FAIL` | A failed import MUST leave the document untouched: a partial application MUST NOT be observable. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5); the readers are the first `cargo-fuzz` targets | unimplemented |
+| `PROSE-IO-055` | `FRAME` | An import MUST NOT mutate the document before its reader has finished: the reader and the builder read no document, and the typed operation list is the only writer. | this spec section 3 | structural -- `build` reads no document, and `apply_import` alone writes | none | verified |
+| `PROSE-IO-011` | `FAIL` | A failed import MUST leave the document untouched: a partial application MUST NOT be observable. | this spec section 3 | `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing` | partial -- a write the engine refuses midway leaves the earlier writes pending, and the next commit takes them; lands with the "An import lands whole or not at all" Story (`ambre-roadmap.md` E5) | untested |
+| `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | `ambre_prose::interop::markdown_read::tests::bytes_that_are_not_text_fail_typed`; `ambre_prose::interop::markdown_read::tests::a_hostile_nesting_is_capped` | partial -- no `cargo-fuzz` target yet; lands with the "Fuzzing the untrusted readers" Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 Take the document out as a file
 
@@ -63,10 +63,10 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-IO-028` | `POST` | A user MUST be able to take the document out as a file. | this spec section 4 | `ambre_logic::dispatch::tests::a_prose_document_saves_to_a_native_file_and_reopens` -- the save command goes through the real dispatcher; `ambre_prose::commands::tests::the_save_entry_is_declared_once` -- the palette lists the entry | none | verified |
 | `PROSE-IO-056` | `POST` | The exported bytes MUST reach the browser download path. | this spec section 4 | `ambre_prose::ui::tests::a_written_file_is_handed_to_the_host_once` -- the view holds the bytes for the host once | unheld -- the Blob hand-off in `crates/ambre-app/src/host/prose.rs` runs in a browser; lands with the "The browser-driven belt" Story (`ambre-roadmap.md` E9) | untested |
-| `PROSE-IO-003` | `POST` | An export MUST be idempotent: the same document exported twice MUST yield the same bytes, up to the stamp the format writes. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-003` | `POST` | An export MUST be idempotent: the same document exported twice MUST yield the same bytes, up to the stamp the format writes. | this spec section 3 | `ambre_prose::logic::interop::tests::an_export_is_idempotent_and_writes_nothing` | none | verified |
 | `PROSE-IO-020` | `POST` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | `ambre_logic::dispatch::tests::a_prose_document_saves_to_a_native_file_and_reopens`; structural -- `ProseEvent::ExportReady` carries `media_type`, set from `ExportFormat::media_type` | none | verified |
 | `PROSE-IO-022` | `POST` | An export MUST omit the comments and the suggestions the user did not ask for. | this spec section 4; `ZK-001` | not built | unbuilt -- lands with the "HTML interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-057` | `POST` | An export of a large document MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-057` | `POST` | An export of a large document MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the "Large-file import" Story (`ambre-roadmap.md` E6) | unimplemented |
 | `PROSE-IO-017` | `FRAME` | An export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | `ambre_prose::logic::docfile::tests::an_export_changes_nothing` -- the version vector is the same after the export | none | verified |
 
 ### 1.4 Save a native file
@@ -95,8 +95,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-018` | `POST` | A Markdown export MUST report every construct the flavour has no syntax for, the page model included. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-061` | `FRAME` | A Markdown export MUST NOT emit a table, a to-do item or a footnote the chosen flavour has no syntax for. | this spec section 3 | not built | unbuilt -- lands with the "Markdown interop" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-018` | `POST` | A Markdown export MUST report every construct the flavour has no syntax for, the page model included. | this spec section 3 | `ambre_prose::interop::markdown_write::tests::what_markdown_lacks_is_reported_once_each`; `ambre_prose::logic::interop::tests::the_page_model_is_reported` | none | verified |
+| `PROSE-IO-061` | `FRAME` | A Markdown export MUST NOT emit a table, a to-do item or a footnote the chosen flavour has no syntax for. | this spec section 3 | `ambre_prose::interop::markdown_write::tests::commonmark_writes_no_table_todo_or_footnote` | none | verified |
 
 ### 1.8 Import an HTML file
 
@@ -119,9 +119,8 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread, `PROSE-IO-043` keeps the document off the relay, and `PROSE-
   IO-016` stops an imported file executing or fetching.
-* **Verification.** 9 `verified`, 1 `untested`, 39 `unimplemented`. The native file is built,
-  and no conversion is. `PROSE-IO-009` and `PROSE-IO-045` become type errors once both halves take
-  the intermediate form.
+* **Verification.** 27 `verified`, 3 `untested`, 19 `unimplemented`. The native file and the
+  Markdown pair are built. The Word and HTML pairs are not, and no conversion runs in slices yet.
 
 ---
 
@@ -387,7 +386,7 @@ other is a file it could not open.
    any parse failure (`PROSE-IO-010`, `PROSE-IO-011`);
 2. lift every block the tree refuses to the nearest place it allows, and record each lift
    (`PROSE-IO-026`);
-3. build the commands, in tree order, parent before child (`PROSE-IO-002`, `PROSE-IO-050`);
+3. build the typed operation list, in tree order, parent before child (`PROSE-IO-002`, `PROSE-IO-050`);
 4. apply them as one batch, so the whole file is one undo item (`PROSE-IO-051`);
 5. hand the report to the view (`PROSE-IO-053`).
 

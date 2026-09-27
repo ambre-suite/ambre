@@ -242,6 +242,7 @@ impl ProseState {
 }
 
 /// One run of body text and the marks it carries.
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct MarkedRun {
     pub(super) text: String,
     pub(super) marks: Vec<(String, loro::LoroValue)>,

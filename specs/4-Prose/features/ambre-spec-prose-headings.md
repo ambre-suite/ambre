@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-030` | `OBS` | The number drawn in front of a heading MUST be the one its position implies, read from the headings before it in document order. | this spec section 3 | `ambre_prose::numbering::tests::a_heading_is_numbered_by_the_headings_before_it` -- it reads the numbers off a six-heading document; `ambre_prose::numbering::tests::an_insertion_renumbers_what_follows_it` | none | verified |
 | `PROSE-FEAT-090` | `INV` | The document MUST NOT hold a heading's number, nor its place in the outline. | this spec section 3; this spec section 5 | `ambre_prose::numbering::tests::numbering_leaves_the_document_untouched` -- it compares the whole document value across a numbering pass; structural -- no container of section 3 carries a number or an outline place | none | verified |
 | `PROSE-FEAT-029` | `OBS` | A heading whose stored level is outside one to six MUST be numbered as the nearest level inside it. | this spec section 3 | `ambre_prose::numbering::tests::a_level_outside_the_range_is_numbered_at_the_nearest_one` -- it stores a zero and a nine the way an import does, and reads the numbers back | none | verified |
-| `PROSE-FEAT-091` | `INV` | The stored level MUST stay the level the document carries: no numbering pass and no export MUST rewrite it to the level it was read as. | this spec section 3 | `ambre_prose::numbering::tests::a_level_outside_the_range_is_numbered_at_the_nearest_one` -- it reads the stored levels back after the pass | partial -- the numbering half is held, and no export writes a level yet; the export half lands with the `Markdown interop` Story (`ambre-roadmap.md` E5) | untested |
+| `PROSE-FEAT-091` | `INV` | The stored level MUST stay the level the document carries: no numbering pass and no export MUST rewrite it to the level it was read as. | this spec section 3 | `ambre_prose::numbering::tests::a_level_outside_the_range_is_numbered_at_the_nearest_one` -- it reads the stored levels back after the pass; `ambre_prose::logic::interop::tests::the_walk_keeps_a_stored_level_outside_the_range` -- the export reads the stored level; `ambre_prose::interop::markdown_write::tests::a_level_beyond_six_is_spelled_six_and_reported` | none | verified |
 | `PROSE-FEAT-031` | `INV` | A level MUST reach a block only through a typed command; it MUST NOT be written as an untyped attribute. | this spec section 3 | type-level -- a level reaches a block through `BlockInit::Heading` and `ProseCommand::SetHeadingLevel` alone, and neither carries an untyped attribute name | none | verified |
 
 ### 1.2 Turn a paragraph into a heading, or change its level
@@ -35,10 +35,9 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 1`: both walk the block tree once per layout.
 * **Boundary.** none of its own: a heading is a block like any other, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 7 `verified`, 1 `untested`. The numbering is a pure read over the block tree,
-  so a test builds a document and reads the numbers back. `PROSE-FEAT-031` is compiler-held: an
-  untyped attribute write is a variant that is not there. The one gap is the export half of
-  `PROSE-FEAT-091`, which no writer reaches yet.
+* **Verification.** 8 `verified`. The numbering is a pure read over the block tree, so a test
+  builds a document and reads the numbers back. `PROSE-FEAT-031` is compiler-held: an untyped
+  attribute write is a variant that is not there. The Markdown export reads the stored level.
 
 ---
 

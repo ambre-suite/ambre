@@ -567,6 +567,7 @@ impl ProseUiState {
                 filename,
                 media_type,
                 data,
+                ..
             } => {
                 self.pending_export = Some((filename.clone(), media_type, data.clone()));
             }
@@ -670,6 +671,7 @@ impl ProseUiState {
             ProseEvent::MediaArrived { .. }
             | ProseEvent::MergeConflictDetected { .. }
             | ProseEvent::DocumentRefused { .. }
+            | ProseEvent::ImportCompleted { .. }
             | ProseEvent::Error(_) => {}
         }
     }
@@ -849,6 +851,9 @@ mod tests {
             filename: "document.ambre".to_owned(),
             media_type: "application/octet-stream",
             data: vec![1, 2, 3],
+            report: ambre_bus::app::prose::ConversionReport::clean(
+                ambre_bus::app::prose::ConversionFormat::Ambre,
+            ),
         });
         assert_eq!(
             state.take_export(),

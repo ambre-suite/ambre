@@ -250,7 +250,7 @@ docx-rs = "0.4"
 # simple-text, or rayon unless explicitly enabled).
 krilla = { version = "0.7", default-features = false }
 html5ever = "0.39"
-pulldown-cmark = "0.13"
+pulldown-cmark = { version = "0.13", default-features = false }
 
 
 [workspace.package]

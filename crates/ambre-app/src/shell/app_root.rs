@@ -359,9 +359,10 @@ pub(crate) fn AppRoot() -> impl IntoView {
                 palette_open.set(true);
                 return;
             }
-            // Prose declares one command beside the palette: the native save.
-            // It maps to one typed command, so it is built here rather than
-            // through a table (`PROSE-IO-020`).
+            // Prose declares its file commands beside the palette: the native
+            // save, and the Markdown import and export. Each maps to one typed
+            // command, so it is built here rather than through a table
+            // (`PROSE-IO-020`).
             if boot_is_prose {
                 if id == ambre_prose::commands::SAVE_FILE
                     && let Some(document_id) = current_doc.get_untracked()
@@ -371,6 +372,23 @@ pub(crate) fn AppRoot() -> impl IntoView {
                         command: AppCommand::Prose(
                             ambre_bus::app::prose::ProseCommand::ExportDocument {
                                 format: ambre_bus::app::prose::ExportFormat::Ambre,
+                            },
+                        ),
+                    });
+                } else if id == ambre_prose::commands::IMPORT_MARKDOWN
+                    && let Some(document_id) = current_doc.get_untracked()
+                {
+                    open_markdown_picker(document_id, tx.clone(), toasts);
+                } else if id == ambre_prose::commands::EXPORT_MARKDOWN
+                    && let Some(document_id) = current_doc.get_untracked()
+                {
+                    let _ = tx.try_send(LogicCommand::App {
+                        document_id,
+                        command: AppCommand::Prose(
+                            ambre_bus::app::prose::ProseCommand::ExportDocument {
+                                format: ambre_bus::app::prose::ExportFormat::Markdown(
+                                    ambre_bus::app::prose::MarkdownFlavor::Gfm,
+                                ),
                             },
                         ),
                     });

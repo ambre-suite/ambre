@@ -116,7 +116,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Inertial scroll | MVP | a flick keeps the column moving, slowing down, and stops at either end of the column |
 | `[x]` The native format | MVP | a Prose document saved to and read from an `.ambre` file |
 | `[x]` A Prose fixture corpus | MVP | Trame and Toile each carry a fixture generator and Prose carries none, so `fixtures/` holds no Prose document and the schema has reached version 9 with no artifact frozen at any version. Each migration is held by one hand-built document in a unit test, never by a real file. A seeded generator writing a document with styled text, a table, a band, a footnote and a comment gives the current corpus, and the next schema bump its first frozen artifact (`ambre-spec-fixtures.md`) |
-| `[ ]` Markdown interop | MVP | Markdown import and export, with a report of what was lost |
+| `[x]` Markdown interop | MVP | Markdown import and export, with a report of what was lost |
+| `[ ]` An import lands whole or not at all | MVP | an import writes block by block into one pending transaction, and a write the engine refuses midway leaves the earlier ones pending for the next commit to take (`PROSE-IO-011`). Apply on a fork and merge on success, or validate every operation before the first write |
 | `[ ]` HTML interop | V1 | HTML import and export of whole documents, beside the clipboard reader |
 | `[ ]` DOCX interop | V1 | Word import and export, comments and track changes included |
 | `[ ]` PDF export | V1 | a paginated PDF with working links and metadata |
@@ -132,6 +133,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
+| `[ ]` Large-file import | V1 | a very large import or export stays responsive and reports its progress, in Prose and in Toile: the conversion is sliced so the Logic thread keeps serving edits between slices. Until then a Prose import past 16 MiB is refused |
 | `[ ]` `ARCH P4` -- offline durability | -- | edit while offline and lose nothing on reconnect |
 | `[x]` `ARCH P9` -- the Logic thread drains before it answers | MVP | the Logic loop takes one message, applies it and answers the view, so a burst of ten keystrokes costs ten layouts or ten derivations, nine of them stale before they are drawn. On a slow device the answer falls further behind with each keystroke. Every queued command applied first, then one answer per document written, bounds the lag to one pass whatever the typing rate |
 | `[x]` Keystroke latency probes | MVP | three budgets govern typing -- the local echo, the confirmation and the moved caret -- and nothing measures any of them. Marks on both threads, run on a slow phone and a slow laptop, over a long document, a burst and a large paste (`ambre-spec-budgets.md`) |
@@ -180,7 +182,6 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Snap to the board grid | V1 | a drag, a resize and a nudge quantize to the grid step the board asks for, which is drawn today and magnetic nowhere |
 | `[ ]` Rich text on the board | V1 | a note body converges character by character and carries per-run formatting, on the shared text substrate Prose unblocks. Today it is one whole value and one style per element |
 | `[ ]` Engine and render optimization | -- | a large board stays fluid: bulk index updates, cheaper layer diffs, memoized routing, atlas eviction. It is where the parent-lookup scan, the paint-order rewrite and the uncalled connectors land |
-| `[ ]` Large-file import | -- | a very large import stays responsive and reports progress |
 | `[ ]` Figma and Miro import | V1 | open a board exported from either, reporting every construct it had to drop |
 | `[ ]` PNG export | V1 | a board or a frame rendered back to a raster image, without blocking the visible frame |
 | `[ ]` An export does not freeze the board | V1 | the deck's PDF export runs to completion inside the Logic thread's command loop, so a large deck stops every local edit and every remote apply for as long as it takes -- the budget says 3 s at 50 slides, and no benchmark has ever measured it. Take the walk off the loop, and measure it |
@@ -304,7 +305,7 @@ owns the subsystem.
 | `[ ]` The Trame belts | -- | the same debt across the grid viewport, the cell surface, the number formats and the data tools |
 | `[ ]` The Toile belts | -- | the same debt across the board surface, the connectors, the presentation and the interop converters |
 | `[x]` The container and schema belts | -- | the shipped rows no test would fail on across the `.ambre` container, the schema register and the fixture corpora: the header a wire payload must never carry, the bump obligation a reviewer holds today, and the writers a version freeze binds |
-| `[ ]` Fuzzing the untrusted readers | -- | a `cargo-fuzz` target on the wire decode, the `.ambre` container and the formula parser, each of which is fed by a relay or by a user's file |
+| `[ ]` Fuzzing the untrusted readers | MVP | a `cargo-fuzz` target on the wire decode, the `.ambre` container, the formula parser and the Markdown reader, each of which is fed by a relay or by a user's file. A panic in the wire decode is a crash any peer of a shared document can cause remotely |
 | `[ ]` The suite checked adversarially | -- | `cargo-mutants` over the crates whose tests are generated, so a test that asserts nothing fails |
 | `[ ]` The workspace lints | -- | `forbid(unsafe_code)` in every crate instead of two, and a workspace lint table in place of the default clippy set |
 | `[ ]` Snapshot tests of the wire and the surfaces | -- | `insta` over the recording surface's operation sequences, the wire encodings and the PDF primitives |

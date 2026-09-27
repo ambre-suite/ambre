@@ -315,31 +315,43 @@ impl ProseState {
             // (`PROSE-FEAT-228`).
             return Self::err_table(format!("{rows} by {cols}"));
         }
-        let table = match self.mint_placed(parent_id, after_id, BlockType::Table) {
-            Ok(id) => id,
-            Err(refused) => return refused,
-        };
+        match self.mint_table(parent_id, after_id, rows, cols) {
+            Ok(_) => self.commit_with(Vec::new()),
+            Err(refused) => refused,
+        }
+    }
+
+    /// Mint a table of `rows` by `cols` without committing it, for a caller
+    /// that writes more in the same commit.
+    pub(super) fn mint_table(
+        &self,
+        parent_id: Option<TreeID>,
+        after_id: Option<TreeID>,
+        rows: u32,
+        cols: u32,
+    ) -> Result<TreeID, ProseOutcome> {
+        let table = self.mint_placed(parent_id, after_id, BlockType::Table)?;
         let Some(attrs) = self.table_attrs(&table) else {
-            return Self::err_write("the attribute map refused a container");
+            return Err(Self::err_write("the attribute map refused a container"));
         };
         let Some(widths) = doc::movable_list_at(&attrs, doc::A_COL_WIDTHS) else {
-            return Self::err_write("the width list refused a container");
+            return Err(Self::err_write("the width list refused a container"));
         };
         for _ in 0..cols {
             if let Err(e) = widths.push(f64::from(doc::DEFAULT_COLUMN_WIDTH_PT)) {
-                return Self::err_write(&format!("{e:?}"));
+                return Err(Self::err_write(&format!("{e:?}")));
             }
         }
         if doc::map_at(&attrs, doc::A_MERGED).is_none() {
-            return Self::err_write("the region map refused a container");
+            return Err(Self::err_write("the region map refused a container"));
         }
         let cols = usize::try_from(cols).unwrap_or(usize::MAX);
         for _ in 0..rows {
             if self.mint_row(&table, cols).is_none() {
-                return Self::err_write("the tree refused a row");
+                return Err(Self::err_write("the tree refused a row"));
             }
         }
-        self.commit_with(Vec::new())
+        Ok(table)
     }
 
     /// A row of one cell per column, after `after_row` or first

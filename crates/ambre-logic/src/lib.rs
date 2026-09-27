@@ -257,6 +257,9 @@ impl DocState {
                 filename,
                 media_type: ambre_bus::app::prose::ExportFormat::Ambre.media_type(),
                 data,
+                report: ambre_bus::app::prose::ConversionReport::clean(
+                    ambre_bus::app::prose::ConversionFormat::Ambre,
+                ),
             }),
         }
     }

@@ -1079,6 +1079,22 @@ pub enum ProseCommand {
     ExportDocument {
         format: ExportFormat,
     },
+    /// Bring a file into the document, after its last block, as one batch
+    /// (`PROSE-IO-027`, `PROSE-IO-051`). Answers
+    /// [`ProseEvent::ImportCompleted`], or a refusal carrying an
+    /// [`InteropError`] when the file produced nothing (`PROSE-IO-047`).
+    ImportDocument {
+        format: ImportFormat,
+        data: Vec<u8>,
+    },
+}
+
+/// The formats a file enters the editor in
+/// (`features/ambre-spec-prose-import-export.md section 3`). A reader adds its
+/// variant on the day it lands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImportFormat {
+    Markdown,
 }
 
 /// The formats a document leaves the editor in
@@ -1089,6 +1105,72 @@ pub enum ProseCommand {
 pub enum ExportFormat {
     /// The native file: the shared header over the document's own snapshot.
     Ambre,
+    /// Markdown text, in the flavour named.
+    Markdown(MarkdownFlavor),
+}
+
+/// The Markdown dialects a writer targets. GFM adds the table, the to-do item
+/// and the footnote that CommonMark has no syntax for (`PROSE-IO-061`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MarkdownFlavor {
+    Gfm,
+    CommonMark,
+}
+
+/// The format a report speaks of.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConversionFormat {
+    Ambre,
+    Markdown,
+}
+
+/// What a finished conversion lost, for the user to read (`PROSE-IO-004`,
+/// `PROSE-IO-053`). A conversion that produced nothing answers an
+/// [`InteropError`] instead: the two are never one type (`PROSE-IO-047`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConversionReport {
+    pub format: ConversionFormat,
+    pub warnings: Vec<ConversionWarning>,
+}
+
+impl ConversionReport {
+    /// A report of nothing lost.
+    #[must_use]
+    pub fn clean(format: ConversionFormat) -> Self {
+        Self {
+            format,
+            warnings: Vec::new(),
+        }
+    }
+}
+
+/// One fidelity loss. The same construct lost twice is one warning with its
+/// count, so a long file does not bury the user in repeats.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ConversionWarning {
+    /// A construct the format has no syntax for, dropped or approximated.
+    FeatureNotSupported {
+        feature: &'static str,
+        format: ConversionFormat,
+        count: u32,
+    },
+    /// An element the reader does not recognise, dropped with its markup
+    /// and its text kept where it has any (`PROSE-IO-005`).
+    ElementDropped { element: &'static str, count: u32 },
+    /// A block the tree refuses where the file put it, moved to the nearest
+    /// place it allows (`PROSE-IO-026`, `PROSE-IO-052`).
+    BlockLifted { block: &'static str, count: u32 },
+}
+
+/// Why a conversion produced nothing (`PROSE-IO-010`, `PROSE-IO-047`).
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum InteropError {
+    /// The bytes do not read as the format named.
+    #[error("the file could not be read: {0}")]
+    ParseFailed(String),
+    /// The file is larger than a conversion accepts.
+    #[error("the file is too large to import ({0} bytes)")]
+    TooLarge(usize),
 }
 
 impl ExportFormat {
@@ -1097,6 +1179,7 @@ impl ExportFormat {
     pub const fn media_type(self) -> &'static str {
         match self {
             Self::Ambre => "application/octet-stream",
+            Self::Markdown(_) => "text/markdown; charset=utf-8",
         }
     }
 }
@@ -1205,6 +1288,7 @@ impl ProseCommand {
             Self::Undo => "undoing",
             Self::Redo => "redoing",
             Self::ExportDocument { .. } => "saving to a file",
+            Self::ImportDocument { .. } => "importing a file",
         }
     }
 }
@@ -1270,7 +1354,12 @@ pub enum ProseEvent {
         filename: String,
         media_type: &'static str,
         data: Vec<u8>,
+        /// What the format could not carry (`PROSE-IO-018`).
+        report: ConversionReport,
     },
+    /// An import landed, and what the file lost on the way in
+    /// (`PROSE-IO-053`).
+    ImportCompleted { report: ConversionReport },
     /// The entries of one table-of-contents block, rebuilt from a layout
     /// (`PROSE-FEAT-003`).
     TocUpdated {
@@ -1461,6 +1550,9 @@ pub enum ProseRefusal {
     /// A write the CRDT engine itself refused.
     #[error("the document engine could not write the change: {0}")]
     WriteFailed(String),
+    /// A file that produced nothing (`PROSE-IO-047`).
+    #[error(transparent)]
+    Interop(#[from] InteropError),
 }
 
 #[cfg(test)]

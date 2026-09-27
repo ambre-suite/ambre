@@ -45,13 +45,65 @@ pub(crate) fn dispatch_to_current(
 /// Open a transient `<input type="file">` picker for a CSV import
 /// (`trame-import-export`). On selection it reads the file bytes off the main
 /// thread (`File::array_buffer`). It then sends a [`TrameCommand::ImportCsv`]
-/// to the Logic thread, which converts them into a new sheet client-side. The
-/// picker element never reaches the DOM. The code leaks the change closure,
-/// because the picker is one-shot and lives only until the user picks a file.
+/// to the Logic thread, which converts them into a new sheet client-side.
 pub(crate) fn open_csv_picker(
     document_id: DocumentId,
     tx: ambre_bus::conduit::Sender<LogicCommand>,
     toasts: Toasts,
+) {
+    open_file_picker(
+        ".csv,text/csv",
+        "Could not read the CSV file",
+        toasts,
+        move |data| {
+            let _ = tx.try_send(LogicCommand::App {
+                document_id,
+                command: AppCommand::Trame(TrameCommand::ImportCsv {
+                    data,
+                    delimiter: None,
+                    has_header: false,
+                    target_sheet_id: None,
+                    start_row: 0,
+                    start_col: 0,
+                }),
+            });
+        },
+    );
+}
+
+/// Open a transient `<input type="file">` picker for a Markdown import
+/// (`PROSE-IO-027`). The bytes go to the Logic thread, which converts them
+/// client-side (`PROSE-IO-001`).
+pub(crate) fn open_markdown_picker(
+    document_id: DocumentId,
+    tx: ambre_bus::conduit::Sender<LogicCommand>,
+    toasts: Toasts,
+) {
+    open_file_picker(
+        ".md,.markdown,text/markdown",
+        "Could not read the Markdown file",
+        toasts,
+        move |data| {
+            let _ = tx.try_send(LogicCommand::App {
+                document_id,
+                command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::ImportDocument {
+                    format: ambre_bus::app::prose::ImportFormat::Markdown,
+                    data,
+                }),
+            });
+        },
+    );
+}
+
+/// Open a transient file picker and hand the chosen file's bytes to `on_bytes`.
+/// The picker element never reaches the DOM. The code leaks the change
+/// closure, because the picker is one-shot and lives only until the user picks
+/// a file.
+fn open_file_picker(
+    accept: &str,
+    unreadable: &'static str,
+    toasts: Toasts,
+    on_bytes: impl Fn(Vec<u8>) + Clone + 'static,
 ) {
     let Some(document) = web_sys::window().and_then(|w| w.document()) else {
         return;
@@ -64,31 +116,18 @@ pub(crate) fn open_csv_picker(
         return;
     };
     input.set_type("file");
-    let _ = input.set_attribute("accept", ".csv,text/csv");
+    let _ = input.set_attribute("accept", accept);
 
     let picker = input.clone();
     let onchange = Closure::<dyn FnMut()>::new(move || {
         let Some(file) = picker.files().and_then(|fs| fs.get(0)) else {
             return;
         };
-        let tx = tx.clone();
+        let on_bytes = on_bytes.clone();
         wasm_bindgen_futures::spawn_local(async move {
             match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
-                Ok(buf) => {
-                    let data = js_sys::Uint8Array::new(&buf).to_vec();
-                    let _ = tx.try_send(LogicCommand::App {
-                        document_id,
-                        command: AppCommand::Trame(TrameCommand::ImportCsv {
-                            data,
-                            delimiter: None,
-                            has_header: false,
-                            target_sheet_id: None,
-                            start_row: 0,
-                            start_col: 0,
-                        }),
-                    });
-                }
-                Err(_) => toasts.warning("Could not read the CSV file"),
+                Ok(buf) => on_bytes(js_sys::Uint8Array::new(&buf).to_vec()),
+                Err(_) => toasts.warning(unreadable),
             }
         });
     });

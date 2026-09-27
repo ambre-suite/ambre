@@ -52,6 +52,7 @@ pub mod count;
 pub mod doc;
 pub mod events;
 pub mod input;
+pub mod interop;
 pub mod layout;
 pub mod link;
 pub mod logic;

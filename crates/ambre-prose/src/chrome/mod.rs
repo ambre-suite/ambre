@@ -12,7 +12,9 @@
 use leptos::prelude::*;
 
 mod menu;
+mod notify;
 pub use menu::context_entries;
+pub use notify::notify_event;
 
 use ambre_commands::CommandId;
 

@@ -1199,6 +1199,8 @@ pub fn main() {
             // refused file, a finished export -- as toasts (`TOILE-IO-022`). The
             // app owns the event->toast mapping; the launcher names no variant.
             toile_chrome::notify_event(&toasts, &ev);
+            // Prose's conversion reports, the same way (`PROSE-IO-053`).
+            ambre_prose::chrome::notify_event(&toasts, &ev);
             match &ev {
                 // Non-fatal sync warnings surface as a transient warning toast.
                 // They never reach the fatal path. The session keeps running and

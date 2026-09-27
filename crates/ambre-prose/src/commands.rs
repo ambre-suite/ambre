@@ -23,6 +23,12 @@ pub const PALETTE: CommandId = CommandId("prose.palette.open");
 /// Save the document to a native `.ambre` file (`PROSE-IO-028`).
 pub const SAVE_FILE: CommandId = CommandId("prose.file.save");
 
+/// Bring a Markdown file in after the last block (`PROSE-IO-027`).
+pub const IMPORT_MARKDOWN: CommandId = CommandId("prose.file.import_markdown");
+
+/// Take the document out as GFM Markdown.
+pub const EXPORT_MARKDOWN: CommandId = CommandId("prose.file.export_markdown");
+
 /// The clipboard intents carry the shared identities: a cut is one command in
 /// every application (`UI-THREAD-011`).
 pub const CUT: CommandId = ambre_commands::shared::CUT;
@@ -101,6 +107,14 @@ fn palette_title(_: &Locale) -> String {
     "Command palette".into()
 }
 
+fn import_markdown_title(_: &Locale) -> String {
+    "Import a Markdown file".into()
+}
+
+fn export_markdown_title(_: &Locale) -> String {
+    "Export to Markdown (.md)".into()
+}
+
 fn save_file_title(_: &Locale) -> String {
     // The file is not sealed, and the label says so (`DOCFILE-009`).
     "Save to a file (.ambre, not encrypted)".into()
@@ -147,6 +161,20 @@ pub const COMMANDS: &[Command] = &[
         id: SAVE_FILE,
         title: save_file_title,
         icon: Some(IconId("content-save")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
+        id: IMPORT_MARKDOWN,
+        title: import_markdown_title,
+        icon: Some(IconId("file-import-outline")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
+        id: EXPORT_MARKDOWN,
+        title: export_markdown_title,
+        icon: Some(IconId("file-export-outline")),
         keybindings: &[],
         category: FILE,
     },
@@ -200,11 +228,14 @@ pub fn bind_keys(keymap: &mut Keymap) {
 mod tests {
     use super::*;
 
-    /// `PROSE-IO-028`: the save entry is declared, so the palette lists it.
+    /// `PROSE-IO-028`, `PROSE-IO-027`: the save, import and export entries
+    /// are declared once each, so the palette lists them.
     #[test]
     fn the_save_entry_is_declared_once() {
-        let saves = COMMANDS.iter().filter(|c| c.id == SAVE_FILE).count();
-        assert_eq!(saves, 1);
+        for id in [SAVE_FILE, IMPORT_MARKDOWN, EXPORT_MARKDOWN] {
+            let declared = COMMANDS.iter().filter(|c| c.id == id).count();
+            assert_eq!(declared, 1, "{id:?}");
+        }
         let mut keymap = Keymap::new();
         bind_keys(&mut keymap);
         assert_eq!(keymap.resolve(KeyBinding::primary('k')), Some(PALETTE));
