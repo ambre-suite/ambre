@@ -101,11 +101,14 @@ Two peers over one document, sharing the address of a blob and never the bytes.
   * `documents`
     * one directory per document
       * `snapshots`, then one object per snapshot identifier
-      * `deltas`, then one object per sequence number, zero-padded to ten digits so the names sort
+      * `deltas`, then one object per oversized delta, named by its sequence number, zero-padded to
+        ten digits so the names sort
+      * `batches`, then one object per batch of deltas, named by its first and last numbers
       * `media`, then one object per address
       * `index`, one object, for a final Murmure segment only
 
-The padding is what makes a listing of a document's deltas come back in order. A Murmure channel
+The padding is what makes a listing of a document's deltas come back in order. A small delta has
+no object: it lives in its index row (`ambre-spec-sequencer.md`, `SRV-148`). A Murmure channel
 adds no branch: each of its documents takes this layout under its own identifier (`SRV-121`). A
 final segment adds one object, its sealed search index.
 

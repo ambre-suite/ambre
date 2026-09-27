@@ -261,6 +261,8 @@
 | Trame DAG plus cache | < 50 MB, per 100k formula cells | |
 | Toile board plus index, 50 000 elements | proportional to the element count, inside the < 100 MB total | The R-tree adds a small multiple of its leaf count over the bounds map it mirrors |
 | Server, per open document | ~50 KB | No in-process blob cache: `LIST doc:{id}:pending` buffers in Redis, ~50 deltas of ~1 KB over the 15 s window |
+| Server, inline delta size | < 64 KB | A delta past it keeps an object of its own (`SRV-149`) |
+| Server, inline deltas per document | 256 deltas or 256 KB, whichever comes first | Past it, the oldest move into one batch object (`SRV-150`, `SRV-151`). Bounds the register at the documents in use times this figure |
 | Documents held in memory, per client | < 32 MB, to measure | Every document the Logic thread holds for a list with activity badges, pinned ones included. Held by eviction (`RESID-001`) |
 | Local store, per client | < 500 MB, to measure | Inside the browser quota. Held by eviction (`RESID-002`) |
 | Murmure segment, at its close | 5000 messages or 2 MB of snapshot, whichever comes first | Bounds the first display of a channel and every final snapshot. Measured with chat-length bodies: 5000 messages make a snapshot of 879 KB, 581 KB shallow, so the message count binds first |
@@ -290,4 +292,5 @@ A duration a rule waits on before it acts. Each figure is a first estimate, to m
 | Grace period before a closing Murmure segment is finalized | 24 h | a typo fix lands within minutes, so a day keeps every recent edit out of a sealed segment | **none exists** |
 | Murmure message grouping span | 5 min | consecutive messages of one author inside the span share one header, as every chat product groups them | **none exists** |
 | Finalize lease | 30 s | long enough to encode, seal and upload one segment of about 2 MB | **none exists** |
+| Idle delay before a document's inline deltas move to a batch object | 24 h | a document untouched for a day is rarely opened within the next, and its tail then costs one object read | **none exists** |
 | Delay between a Murmure delete after the finalization and its erasure | < 30 days | the re-finalization runs in batches, and an erasure request expects an answer within a month | **none exists** |
