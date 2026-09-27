@@ -17,7 +17,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-355` | `INV` | A forum MUST be a channel of type forum, whose messages are posts. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Forum channels` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-355` | `INV` | A forum MUST be a public or private channel whose layout is forum, and whose messages are posts. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Forum channels` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-356` | `INV` | A post MUST carry a title. | this spec section 3 | not built | unbuilt -- lands with the `Forum channels` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-357` | `INV` | The tags of a forum MUST be defined in its `meta` document, by its owner alone. | this spec section 3 | not built | unbuilt -- lands with the `Forum channels` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-358` | `OBS` | A forum, its tags and its filter MUST work at the phone width. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `Forum channels` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -36,12 +36,13 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-363` | `POST` | A forum MUST list its posts by last activity, and filter them by tag. | this spec section 3 | not built | unbuilt -- lands with the `Forum channels` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-416` | `FAIL` | Given a post tag the forum no longer defines, the forum MUST leave it out of the post and of the filter. | this spec section 3; `MURMURE-357` | not built | unbuilt -- lands with the `Forum channels` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-364` | `FRAME` | Filtering a forum MUST NOT load a thread document. | this spec section 3; `MURMURE-112` | not built | unbuilt -- lands with the `Forum channels` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none of its own: a post is a message, and its thread is a thread document.
 * **Boundary.** the title, the tags and the posts are sealed like any message (`ZK-001`). The relay
   learns that a channel is a forum no more than it learns any channel type: the type is in `meta`.
-* **Verification.** 10 `unimplemented`: no forum exists in the code.
+* **Verification.** 11 `unimplemented`: no forum exists in the code.
 
 ---
 
@@ -58,16 +59,15 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 ## 3. MODEL
 
 **CRDT containers.** of `ambre-spec-murmure-schema.md section 3`: the `tags` map of `meta`, and
-the `title` and `tags` of a message. `ChannelType::Forum` names the kind of channel.
+the `title` and `tags` of a message. `ChannelLayout::Forum` makes a channel a forum,
+whatever its type: a forum is public or private like any channel.
 
 ```rust
 pub struct TagId(Uuid);   // minted by the owner's client
 ```
 
-**A post is a message with a title, and a thread from its first line.** Posting creates the thread
-document at once (`MURMURE-359`), so every reply goes to the thread and the forum stays one line per
-post. The thread is the one model of `features/ambre-spec-murmure-threads.md`: a forum adds no second
-way to reply.
+**A post opens its thread at once** (`MURMURE-359`). Every reply goes to the thread, so the forum
+stays one line per post, under the one thread model of `features/ambre-spec-murmure-threads.md`.
 
 **Tags belong to the forum.** Its owner defines them in `meta` (`MURMURE-357`). An author picks among
 them (`MURMURE-360`). A post keeps its tags in a map keyed by tag, so two edits of one tag never

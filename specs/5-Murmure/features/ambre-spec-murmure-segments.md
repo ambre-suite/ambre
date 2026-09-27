@@ -17,7 +17,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-062` | `INV` | A message younger than the grace period MUST NOT be in a final segment. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-062` | `INV` | A message sent live, and younger than the grace period, MUST NOT be in a final segment. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-063` | `INV` | A final snapshot MUST be shallow: it MUST hold no text deleted before the finalization. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-222` | `INV` | An active segment MUST NOT hold more deltas past its latest snapshot than the budget register allows. | this spec section 3; `ambre-spec-budgets.md section 6`; `SRV-038` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-239` | `OBS` | A dropped snapshot MUST be shown to the members of the channel, with its author and its reporter. | this spec section 3; `AUTHOR-023` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |

@@ -18,7 +18,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-338` | `INV` | A pin MUST be one entry of the `pinned` map of the channel, keyed by its message. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Pinned messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-339` | `INV` | A channel MUST hold at most the pin cap of the budget register. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `Pinned messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-339` | `OBS` | The pinned list MUST show at most the pin cap of the budget register, newest first. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `Pinned messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Pin a message
 
@@ -40,7 +40,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-345` | `POST` | The pinned list MUST show the pins newest first, loading their segments alone. | this spec section 3; `MURMURE-023` | not built | unbuilt -- lands with the `Pinned messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-346` | `FAIL` | Given a pin whose message was deleted, the list MUST leave it out. | this spec section 3 | not built | unbuilt -- lands with the `Pinned messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-346` | `FAIL` | Given a pin whose message was deleted, or whose segment expired, the list MUST leave it out. | this spec section 3 | not built | unbuilt -- lands with the `Pinned messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-347` | `FRAME` | Showing the pins MUST NOT move a read cursor. | this spec section 3 | not built | unbuilt -- lands with the `Pinned messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** a pin is one small entry of `meta`, and the pin cap of `ambre-spec-budgets.md
@@ -57,6 +57,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|
 | pins the decision of the week | -- | one pin | the message in the pinned list (`MURMURE-340`) | none |
 | pins a message | pins the same message at once | one entry, keyed by the message | one pin, not two (`MURMURE-338`) | none |
+| pins the fiftieth message | pins another at the same moment | fifty-one entries | the fifty newest pins (`MURMURE-339`) | none |
 | deletes a pinned message | opens the pinned list | the pin, and the deleted message | no line for it (`MURMURE-346`) | none |
 
 ---

@@ -33,12 +33,13 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-351` | `POST` | Opening a link MUST open its channel at the message, loading its segment. | this spec section 3; `MURMURE-023` | not built | unbuilt -- lands with the `A link to a message` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-352` | `FAIL` | Given a link to a channel the user does not belong to, the client MUST say so, and show nothing of the channel. | this spec section 3; `SRV-047` | not built | unbuilt -- lands with the `A link to a message` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-353` | `FAIL` | Given a link to a deleted message, the client MUST open the channel where it was, and show it deleted. | this spec section 3; `MURMURE-185` | not built | unbuilt -- lands with the `A link to a message` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-414` | `FAIL` | Given a link to a message whose segment expired, the client MUST open the channel where its history now starts. | this spec section 3; `MURMURE-304` | not built | unbuilt -- lands with the `A link to a message` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-354` | `FRAME` | Opening a link MUST NOT move a read cursor. | this spec section 3 | not built | unbuilt -- lands with the `A link to a message` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none of its own: opening a link loads one segment, as scrolling does.
 * **Boundary.** a link carries identifiers alone (`MURMURE-348`): no key and no text. A person
   who is not a member holds no key, so the relay refuses the subscription and shows nothing.
-* **Verification.** 7 `unimplemented`: no link exists in the code.
+* **Verification.** 8 `unimplemented`: no link exists in the code.
 
 ---
 

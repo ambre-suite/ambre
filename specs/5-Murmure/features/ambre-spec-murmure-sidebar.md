@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-278` | `POST` | Muting a channel MUST set its notification level to none. | this spec section 3; `MURMURE-268` | not built | unbuilt -- lands with the `Mute and hide` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-278` | `POST` | Muting a channel MUST set its notification level to mentions. | this spec section 3; `MURMURE-268` | not built | unbuilt -- lands with the `Mute and hide` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-279` | `FRAME` | Muting a channel MUST NOT change its membership. | this spec section 3 | not built | unbuilt -- lands with the `Mute and hide` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Hide a channel
@@ -52,7 +52,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-287` | `POST` | Bookmarking a message MUST store its channel, its segment and its identifier in the user settings. | this spec section 3 | not built | unbuilt -- lands with the `The personal sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-288` | `FAIL` | Given a bookmark whose message was deleted, or whose channel the user lost, the list MUST show it as gone. | this spec section 3 | not built | unbuilt -- lands with the `The personal sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-288` | `FAIL` | Given a bookmark whose message was deleted or expired, or whose channel the user lost, the list MUST show it as gone. | this spec section 3 | not built | unbuilt -- lands with the `The personal sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-289` | `FRAME` | Bookmarking a message MUST NOT change the message. | this spec section 3 | not built | unbuilt -- lands with the `The personal sidebar` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none of its own: every entry is a small value in the settings document, which the
@@ -67,8 +67,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | Alice does | Bob does | The settings of Alice hold | Alice sees | Test |
 |---|---|---|---|---|
-| mutes a busy channel | posts in it | the level none | no count, no push (`MURMURE-275`, `MURMURE-278`) | none |
-| mutes that channel | mentions her in it | the level none | the mention badge (`MURMURE-298`) | none |
+| mutes a busy channel | posts in it | the level mentions | no count, no push (`MURMURE-275`, `MURMURE-278`) | none |
+| mutes that channel | mentions her in it | the level mentions | the mention badge, and a push (`MURMURE-298`) | none |
 | hides a channel | mentions her in it | the channel hidden | the channel back in the sidebar (`MURMURE-281`) | none |
 | moves a channel to a group "Clients" on her laptop | -- | the group and the position | the same group on her phone (`MURMURE-277`) | none |
 | bookmarks a message | deletes that message | the bookmark | the bookmark marked gone (`MURMURE-288`) | none |
@@ -85,7 +85,7 @@ channel lives in `notify`, owned by `features/ambre-spec-murmure-notifications.m
 
 | Act | The channel | The key | Traffic | Where it lives |
 |---|---|---|---|---|
-| mute | stays in the sidebar, dimmed, with its mentions | kept | received | `notify`, set to none |
+| mute | stays in the sidebar, dimmed, with its mentions | kept | received | `notify`, set to mentions |
 | hide | leaves the sidebar until a mention | kept | received | `layout`, `hidden` |
 | leave | leaves every list | rotated for the others | none | the membership log |
 

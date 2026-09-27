@@ -43,7 +43,7 @@ A deleted message takes its files with it, so the erasure a delete promises cove
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-240` | `POST` | Deleting a message MUST ask the relay to erase every attachment it carries. | this spec section 3; `SRV-139` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-240` | `POST` | Deleting a message MUST ask the relay to erase every file it carries: its attachments and the image of its preview. | this spec section 3; `SRV-139` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-241` | `FAIL` | Given an erase the relay did not complete, the client MUST keep it queued and retry until it completes. | this spec section 3 | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-242` | `FRAME` | Deleting a message MUST NOT erase a file another member uploaded. | this spec section 3; `SRV-140` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
 

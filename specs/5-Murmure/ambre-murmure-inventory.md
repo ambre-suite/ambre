@@ -22,13 +22,13 @@
 | `murmure-composer` | The field where a member writes. | design-only | 20 |  |
 | `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | design-only | 13 |  |
 | `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | design-only | 10 |  |
-| `murmure-forums` | A forum is a channel of posts. | design-only | 10 |  |
+| `murmure-forums` | A forum is a channel of posts. | design-only | 11 |  |
 | `murmure-import` | A team moving from Slack or Discord brings its history along. | design-only | 9 |  |
 | `murmure-keyboard` | No frequent action in Murmure needs the mouse. | design-only | 13 |  |
 | `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | design-only | 17 |  |
 | `murmure-link-previews` | A link in a message shows a preview: the title and image of a web page, or the name of an Ambre document. | design-only | 8 |  |
 | `murmure-mentions` | A member names another in a message with `@`. | design-only | 13 |  |
-| `murmure-message-links` | A member copies a link to one message and pastes it anywhere. | design-only | 7 |  |
+| `murmure-message-links` | A member copies a link to one message and pastes it anywhere. | design-only | 8 |  |
 | `murmure-message-list` | The conversation of a channel, newest at the bottom. | design-only | 20 |  |
 | `murmure-messages` | A member writes a message, edits it, or deletes it. | design-only | 22 |  |
 | `murmure-moderation` | A moderator removes the message of another member. | design-only | 10 |  |
@@ -39,8 +39,8 @@
 | `murmure-segments` | A channel grows for years and still opens fast. | design-only | 21 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 | `murmure-spaces` | A team gathers in a space. | design-only | 30 |  |
-| `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | design-only | 16 |  |
+| `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | design-only | 17 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | design-only | 9 |  |
 | `murmure-unread` | The sidebar shows where something new is, and how much. | design-only | 11 |  |
 
-**27 features: 0 implemented, 0 partial, 27 design-only. 392 contract rows, 0 loose.**
+**27 features: 0 implemented, 0 partial, 27 design-only. 395 contract rows, 0 loose.**

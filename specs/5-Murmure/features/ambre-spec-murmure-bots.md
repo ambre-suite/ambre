@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-387` | `OBS` | A message a machine wrote MUST show the machine badge and its declared host beside its name. | this spec section 3; `MACH-003`, `MACH-004` | not built | unbuilt -- lands with the `Murmure bots and webhooks` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MURMURE-388` | `INV` | A bot MUST reach a channel through one class of `ambre-spec-machine-access.md`, invited like a guest. | this spec section 3; `MACH-001` | not built | unbuilt -- lands with the `Murmure bots and webhooks` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `MURMURE-389` | `INV` | A slash command a bot registers MUST live in the `commands` map of the channel `meta` document. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Murmure bots and webhooks` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MURMURE-389` | `INV` | The slash commands of a bot MUST be listed in the `commands` map of the channel `meta` document, written by the member who added it. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Murmure bots and webhooks` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.2 Run a slash command
 
@@ -75,6 +75,9 @@ the `machine` origin of a merged post, in `ambre-spec-murmure-schema.md section 
 | a bot that reads the channel and answers | machine member | the whole channel |
 | a slash command, a button | addressed machine | the frames addressed to it alone |
 | a webhook | inbox writer, through an encrypting bridge | nothing |
+
+**Commands are listed by a member.** An addressed bot holds no key of the channel, so it cannot write
+`meta`. The member who adds it writes its commands there (`MURMURE-389`).
 
 **A slash command stays between the member and the bot.** The client completes it from the
 `commands` map, then sends it as an addressed frame (`MURMURE-390`). The other members see the

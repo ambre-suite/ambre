@@ -59,10 +59,9 @@ original author's name and time.
 imported message is authored by the importing member, which the authorship check requires
 (`MURMURE-366`, `MURMURE-078`). The origin names the original author, for display alone.
 
-**The history lands final.** An imported message will never be edited by its original author, so
-the import writes whole final segments in archive order (`MURMURE-369`). The channel opens on its
-first live segment, after them. The import confirms its own final snapshots: it is their only
-author (`AUTHOR-021`).
+**The history lands final** (`MURMURE-369`). The grace period of `MURMURE-062` guards the edits of
+a live message, which an imported one never had. The import is the only author of those snapshots,
+so it confirms them itself (`AUTHOR-021`).
 
 **Formats.** The Slack export and the JSON export of Discord. The report follows the shared model
 of the `One interop vocabulary` Story (`ambre-roadmap.md` E8).

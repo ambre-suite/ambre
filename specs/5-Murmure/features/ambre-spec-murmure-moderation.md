@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-306` | `POST` | Removing a message MUST delete it with `by: moderator`, in the message or in an amendment of its locked segment. | this spec section 3; `MURMURE-088` | not built | unbuilt -- lands with the `Moderation` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-312` | `POST` | A removal MUST cite the membership entry that gives its signer the standing. | this spec section 3; `SYNC-102` | not built | unbuilt -- lands with the `Moderation` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-310` | `POST` | Removing a message MUST erase its attachments. | this spec section 3; `SRV-158` | not built | unbuilt -- lands with the `Moderation` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-310` | `POST` | Removing a message MUST erase every file it carries: its attachments and the image of its preview. | this spec section 3; `SRV-158` | not built | unbuilt -- lands with the `Moderation` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-311` | `FRAME` | Removing a message MUST NOT change its author, its thread or its reactions. | this spec section 3 | not built | unbuilt -- lands with the `Moderation` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.3 Check a removal

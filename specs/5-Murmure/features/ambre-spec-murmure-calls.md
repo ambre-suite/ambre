@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-408` | `POST` | Starting a call MUST post a call message in the channel that the members can join from. | this spec section 3 | not built | unbuilt -- lands with the `Rendez-Vous` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `MURMURE-409` | `POST` | The call message MUST show who is in the call, and that the call ended once it ends. | this spec section 3 | not built | unbuilt -- lands with the `Rendez-Vous` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MURMURE-409` | `POST` | The call message MUST show who is in the call and whether it ended, read from the meeting, never written into the message. | this spec section 3 | not built | unbuilt -- lands with the `Rendez-Vous` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `MURMURE-410` | `FRAME` | Starting a call MUST NOT change the membership of the channel. | this spec section 3 | not built | unbuilt -- lands with the `Rendez-Vous` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 
 ### 1.3 Join a call
@@ -56,9 +56,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 **CRDT containers.** the `call` of a message, in `ambre-spec-murmure-schema.md section 3`: the
 identifier of the Rendez-Vous meeting.
 
-**Murmure starts the call, Rendez-Vous runs it.** A call message carries the meeting identifier
-(`MURMURE-408`). The key of the meeting derives from the key of the channel, so only its members
-can join (`MURMURE-407`). Media, signalling and the key schedule are Rendez-Vous.
+**Murmure starts the call, Rendez-Vous runs it.** A call message names the meeting (`MURMURE-408`).
+Its live state comes from the meeting, since no member may write the message of another
+(`MURMURE-409`). The meeting key derives from the channel key, so only members join
+(`MURMURE-407`).
 
 **Code.** not built.
 

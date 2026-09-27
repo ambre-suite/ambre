@@ -97,7 +97,8 @@ pub struct MediaType(String);           // a lower-case type and subtype
 pub struct ByteSize(u64);
 pub struct SealedChannelKey(Vec<u8>);   // a channel key, sealed under the space key
 pub enum DocumentKind { Space, Meta, Segment, Amendments, Thread }
-pub enum ChannelType { Direct, Private, Public, Forum }
+pub enum ChannelType { Direct, Private, Public }
+pub enum ChannelLayout { Stream, Forum }  // absent means a stream
 pub enum SegmentState { Active, Closing, Final }
 pub enum DeletedBy { Author, Moderator }
 pub enum MentionTarget { User(UserId), Channel }
@@ -119,7 +120,7 @@ concurrent writers race for. Every document also carries the `peers` registry of
 | `space` | `categories` | Map | a `CategoryId` | `{name: String, position: u32}` | the category entry | spaces | design |
 | `space` | `channels` | Map | a `ChannelId` | `{name: String, topic: String, category_id: CategoryId, position: u32, key: SealedChannelKey}` | the field | spaces | design |
 | `space` | `emoji` | Map | a `CustomEmojiId` | `{name: String, media_ref, media_type: MediaType}` | the entry | emoji | design |
-| `meta` | `channel` | Map | `type`, `name`, `topic` | `ChannelType`, String, String | the key | channels | design |
+| `meta` | `channel` | Map | `type`, `layout`, `name`, `topic` | `ChannelType`, `ChannelLayout`, String, String | the key | channels | design |
 | `meta` | `segments` | List | position | `{document_id: DocumentId, from_ts: Timestamp, to_ts: Timestamp, msg_count: u32, state: SegmentState, amended: bool}` | the field | segments | design |
 | `meta` | `pinned` | Map | a `MessageId` | `{segment: DocumentId, pinned_at: Timestamp}` | the entry | pins | design |
 | `meta` | `tags` | Map | a `TagId`, for a forum | `{name: String}` | the entry | forums | design |

@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-107` | `POST` | The first reply to a message MUST set the `thread` field of its root to the thread document. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-107` | `POST` | The first reply to a message whose `thread` field is absent MUST set it to the thread document. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-109` | `POST` | A reply also sent to the channel MUST write a copy in the active segment that names its thread. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-110` | `FRAME` | Replying MUST NOT change the root message beyond its `thread` field. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -47,13 +47,14 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-292` | `POST` | The Threads view MUST list every followed thread with unread replies, newest first. | this spec section 3; `MURMURE-260` | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-293` | `POST` | Marking a thread read MUST move its read cursor to its last reply. | this spec section 3; `MURMURE-114` | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-294` | `POST` | Unfollowing a thread MUST remove it from the Threads view and from the user settings. | this spec section 3 | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-415` | `FAIL` | Given a followed thread whose document expired, the client MUST drop it from the Threads view and from the user settings. | this spec section 3; `SRV-156` | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-295` | `FRAME` | Following a thread MUST NOT subscribe the client to it. | this spec section 3; `MURMURE-112` | not built | unbuilt -- lands with the `Followed threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** a thread head is a small read per visible root, inside the memory rows of
   `ambre-spec-budgets.md section 6`.
 * **Boundary.** a thread is a document of its channel, sealed like the others (`ZK-001`). The relay
   learns that a document is a thread of the channel, and when it changes (`ZK-015`, `SRV-101`).
-* **Verification.** 16 `unimplemented`: no thread exists in the code.
+* **Verification.** 17 `unimplemented`: no thread exists in the code.
 
 ---
 

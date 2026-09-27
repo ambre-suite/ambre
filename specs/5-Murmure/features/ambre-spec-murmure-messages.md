@@ -38,7 +38,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-084` | `POST` | An edit MUST change the content of the message and mark it edited. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-085` | `FAIL` | Given a delta that edits a message of another author, every client MUST refuse the delta. | this spec section 3 | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-253` | `FAIL` | Given a delta that amends a message of another author, every client MUST refuse the delta. | this spec section 3; `MURMURE-073` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-253` | `FAIL` | Given a delta that amends a message of another author, with no moderator standing behind it, every client MUST refuse the delta. | this spec section 3; `MURMURE-073`; `MURMURE-307` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-086` | `FRAME` | Editing a message MUST NOT change its author, its identity or its reactions. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Delete a message
@@ -47,7 +47,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-087` | `POST` | A delete MUST mark the message deleted and empty its content. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-088` | `POST` | A delete of a message in a locked segment MUST write an amendment with `by: author`. | this spec section 3; `features/ambre-spec-murmure-segments.md` | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-089` | `FAIL` | Given a delta that deletes a message of another author, every client MUST refuse the delta. | this spec section 3 | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-089` | `FAIL` | Given a delta that deletes a message of another author, with no moderator standing behind it, every client MUST refuse the delta. | this spec section 3; `MURMURE-307` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-090` | `FRAME` | Deleting a message MUST NOT delete its thread. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Receive a delta
@@ -100,7 +100,8 @@ no document, in microseconds.
 3. Refuse the delta when it creates a message under another author (`MURMURE-082`).
 4. Refuse it when it changes a field, the `content` or the `attachments` of a message created by
    another author's PeerID (`MURMURE-085`, `MURMURE-089`). One field is open to all: the `thread`
-   field, set once by the first reply, while it is absent (`MURMURE-255`).
+   field, set once by the first reply, while it is absent (`MURMURE-255`). One change is open to a
+   moderator: a removal whose standing the membership log proves (`MURMURE-307`).
 5. Refuse it when it writes a reaction under another user's key (`MURMURE-094`). The `reactions`
    map is the one container of a message that others write, entry by entry.
 6. On an amendments document, read the message in its locked segment. Refuse the delta when the
