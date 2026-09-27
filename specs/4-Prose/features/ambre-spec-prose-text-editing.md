@@ -1,8 +1,8 @@
 # AMBRE -- FEATURE: TEXT EDITING
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- typing, deleting, splitting, composing and dropping text ship, each
-drawn before the document answers. The latency probe is not built
+**Implementation:** implemented -- typing, deleting, splitting, composing and dropping text ship, each
+drawn before the document answers. The latency probe is built, and read by hand
 
 > Typing, deleting, splitting and joining paragraphs. A keystroke shows on the glass at once and
 > reaches the document a moment later. Two authors typing in the same paragraph never wait for
@@ -33,7 +33,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-206` | `OBS` | A deletion MUST NOT take off the screen the text typed before it that no layout carries yet. | this spec section 3 | `ambre_prose::input_tests::a_deletion_leaves_the_text_typed_before_it_drawn` | none | verified |
 | `PROSE-UI-203` | `OBS` | The paragraph a split opens MUST be drawn, with the text typed into it, before the document answers. | this spec section 3 | `ambre_prose::view::paint::tests::the_paragraph_a_split_opens_is_drawn_before_the_answer` | none | verified |
 | `PROSE-UI-213` | `OBS` | Text typed into a table cell MUST be drawn in the cell before the document answers. | this spec section 3 | `ambre_prose::view::paint::tests::a_draft_in_a_cell_is_drawn_before_the_document_answers` | none | verified |
-| `PROSE-UI-215` | `INV` | Shaping a paragraph of up to 2 000 characters that an edit in flight changes MUST hold the text layout budget in the browser. A longer one is shaped all the same, at its own cost. | this spec section 3; `ambre-spec-budgets.md section 2` | not built | unbuilt -- lands with the "Keystroke latency probes" Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-UI-215` | `INV` | Shaping a paragraph of up to 2 000 characters that an edit in flight changes MUST hold the text layout budget in the browser. A longer one is shaped all the same, at its own cost. | this spec section 3; `ambre-spec-budgets.md section 2` | none | partial -- `scripts/keystroke_probes.mjs` reads the `ambre:shape-draft` probe by hand on a desktop, never on the slow devices the budget names, and no threshold fails a build; lands with the "The performance budgets given a mechanism" Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 Type a run of text
 
@@ -100,7 +100,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the draft is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. Every mutation leaves as a command (`PROSE-UI-002`,
   `features/ambre-spec-prose-engine.md section 1`).
-* **Verification.** 44 `verified`, 0 `untested`, 1 `unimplemented`. `PROSE-101` reads two tests,
+* **Verification.** 44 `verified`, 1 `untested`. `PROSE-101` reads two tests,
   because the paragraph the caret started in is the one a deletion does not remove.
 
 ---

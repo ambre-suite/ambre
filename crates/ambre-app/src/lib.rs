@@ -1152,7 +1152,14 @@ pub fn main() {
         // never sees a later delta before an earlier one.
         flush_child_backlog(&child_routes_relay, &child_backlog_relay);
 
+        // Mark the turn that takes Logic's answers off the channel: the mark
+        // splits a keystroke's confirmation between the relay and the view.
+        let mut relayed = false;
         while let Ok(ev) = logic_to_ui_rx.try_recv() {
+            if !relayed {
+                relayed = true;
+                host::mark(ambre_prose::probe::RELAY);
+            }
             // Fan a nested child's stream out to its own view channels, and skip
             // every top-level chrome mirror below. A child's events must not
             // drive the parent's formula bar, zoom chip or status band. Only a

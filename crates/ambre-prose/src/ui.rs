@@ -87,6 +87,12 @@ impl DraftBuffer {
         self.edits.is_empty()
     }
 
+    /// Each entry's acknowledgement number, and whether the Logic thread
+    /// confirmed it. The keystroke probes read it (`ambre-spec-budgets.md`).
+    pub fn entries(&self) -> impl Iterator<Item = (u64, bool)> + '_ {
+        self.edits.iter().map(|edit| (edit.seq, edit.confirmed))
+    }
+
     /// A number that moves whenever what the draft shows does.
     #[must_use]
     pub fn generation(&self) -> u64 {

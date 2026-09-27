@@ -26,6 +26,8 @@
 //! * [`schema`] -- the persisted version register and the migration registry.
 //! * [`layout`] -- pagination: the page box, family resolution, and the passes
 //!   that measure and place (`features/ambre-spec-prose-pagination.md`).
+//! * [`probe`] -- the keystroke latency probes: when a keystroke echoed,
+//!   was confirmed and was drawn (`ambre-spec-budgets.md`).
 //! * [`logic`] -- the engine: the command entry point, the remote and snapshot
 //!   paths, presence, and the picture cache.
 //! * [`events`] -- the IPC contract, re-exported from `ambre-bus`, plus the
@@ -56,6 +58,7 @@ pub mod logic;
 pub mod mark;
 pub mod note;
 pub mod numbering;
+pub mod probe;
 pub(crate) mod rebase;
 pub mod schema;
 pub mod style;

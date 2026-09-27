@@ -33,6 +33,7 @@ use ambre_canvas::{
 use ambre_draw::{DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
 use ambre_prose::input::{ProseInput, ProseKey};
+use ambre_prose::probe::{KeyProbe, Measure, SHAPE};
 use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
 use ambre_prose::view::annotate::{HoveredSuggestion, PanelThread, ScreenRect};
 use ambre_prose::view::paint::PagePalette;
@@ -106,6 +107,9 @@ pub struct ProseView {
     layout_cx: LayoutContext<ParleyBrush>,
     /// The clock of the last frame, to count presses in place.
     now_ms: f64,
+    /// The keystrokes in flight, from their input to their frame.
+    probe: KeyProbe,
+    timeline: super::probe::Timeline,
 }
 
 impl ProseView {
@@ -141,6 +145,8 @@ impl ProseView {
             annotations,
             layout_cx: LayoutContext::new(),
             now_ms: 0.0,
+            probe: KeyProbe::default(),
+            timeline: super::probe::Timeline::new(),
         }
     }
 
@@ -164,7 +170,15 @@ impl ProseView {
                         event: AppEvent::Prose(event),
                     },
                 ) if document_id == self.document_id => {
+                    let laid = matches!(
+                        event,
+                        ambre_bus::app::prose::ProseEvent::LayoutShaped { .. }
+                    );
                     self.state.apply_event(&event);
+                    let answered =
+                        self.probe
+                            .answered(super::probe::now_ms(), &self.state.draft, laid);
+                    self.timeline.record(answered);
                     if let Some((filename, media_type, data)) = self.state.take_export() {
                         download(&filename, media_type, &data);
                     }
@@ -377,6 +391,7 @@ impl ProseView {
 
     pub fn plan_repaint(&mut self, now_ms: f64, _hud_tick: bool) -> RepaintPlan {
         self.now_ms = now_ms;
+        self.timeline.summarize(now_ms);
         self.flush_outbox();
         // A recount is owed half a second after the text last changed
         // (`PROSE-FEAT-124`). A full channel drops it, and the next change
@@ -429,10 +444,20 @@ impl ProseView {
         _text_cache: &mut TextCache,
         _strip: Option<Rect>,
     ) {
+        let start = super::probe::now_ms();
         self.state.shape_draft(font_cx, &mut self.layout_cx);
+        if !self.state.draft.is_empty() {
+            self.timeline.record(vec![Measure {
+                name: SHAPE,
+                start,
+                end: super::probe::now_ms(),
+            }]);
+        }
         let backdrop = Rect::new(0.0, 0.0, f64::from(self.size.0), f64::from(self.size.1));
         surface.fill_rect(backdrop, self.theme.palette().content_pending);
         self.state.paint(surface, &page_palette(self.theme));
+        let painted = self.probe.painted(super::probe::now_ms());
+        self.timeline.record(painted);
     }
 
     pub fn paint_overlay(
@@ -492,9 +517,21 @@ impl ProseView {
                 let Some(input) = self.translate(ev) else {
                     return false;
                 };
+                let start = super::probe::now_ms();
                 let (outbox, document_id) = (&mut self.outbox, self.document_id);
-                let mut send = |command| send_edit(outbox, document_id, command);
+                let mut sent = false;
+                let mut send = |command| {
+                    sent = true;
+                    send_edit(outbox, document_id, command)
+                };
                 let consumed = self.state.handle_input(&input, &mut send);
+                // A key or typed text starts the three keystroke measures.
+                if consumed && matches!(input, ProseInput::Key { .. } | ProseInput::Text(_)) {
+                    let echoed =
+                        self.probe
+                            .handled(start, super::probe::now_ms(), &self.state.draft, sent);
+                    self.timeline.record(echoed);
+                }
                 // The shell's one open-URL path takes the target
                 // (`PROSE-UI-071`).
                 if let Some(url) = self.state.followed.take() {
@@ -590,7 +627,13 @@ impl ProseView {
     /// copy while the clipboard is still that copy (`PROSE-UI-043`).
     pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
         let input = self.state.paste_input(blob, own_copy);
-        self.feed(&input);
+        let start = super::probe::now_ms();
+        if self.feed(&input) {
+            let echoed = self
+                .probe
+                .handled(start, super::probe::now_ms(), &self.state.draft, true);
+            self.timeline.record(echoed);
+        }
     }
 
     /// A finger on the canvas: a pan scrolls the column and a flick keeps it

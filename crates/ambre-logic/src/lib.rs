@@ -572,6 +572,47 @@ impl LogicState {
     }
 }
 
+/// The worker's clock, in milliseconds, or `None` off the browser.
+#[cfg(target_arch = "wasm32")]
+fn pass_clock() -> Option<f64> {
+    let performance = js_sys::Reflect::get(&js_sys::global(), &"performance".into()).ok()?;
+    let now = js_sys::Reflect::get(&performance, &"now".into()).ok()?;
+    let now: js_sys::Function = wasm_bindgen::JsCast::dyn_into(now).ok()?;
+    now.call0(&performance).ok()?.as_f64()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn pass_clock() -> Option<f64> {
+    None
+}
+
+/// Stamp one pass on the worker's timeline as `ambre:logic-pass`, beside the
+/// keystroke probes of the view (`ambre-spec-budgets.md` section 1). It is
+/// read on the worker's own clock, so it says how long the pass took, never
+/// when against the view's marks.
+#[cfg(target_arch = "wasm32")]
+fn stamp_pass(start: Option<f64>) {
+    let (Some(start), Some(end)) = (start, pass_clock()) else {
+        return;
+    };
+    let Ok(performance) = js_sys::Reflect::get(&js_sys::global(), &"performance".into()) else {
+        return;
+    };
+    let options = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(&options, &"start".into(), &start.into());
+    let _ = js_sys::Reflect::set(&options, &"end".into(), &end.into());
+    let Ok(measure) = js_sys::Reflect::get(&performance, &"measure".into()) else {
+        return;
+    };
+    let Ok(measure) = wasm_bindgen::JsCast::dyn_into::<js_sys::Function>(measure) else {
+        return;
+    };
+    let _ = measure.call2(&performance, &"ambre:logic-pass".into(), &options);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn stamp_pass(_start: Option<f64>) {}
+
 // -----------------------------------------------------------------------------
 // Entry point: drain both inbound channels, then park on the shared Waker.
 // -----------------------------------------------------------------------------
@@ -619,13 +660,16 @@ pub fn run(
         if sync_open {
             selector = selector.recv(&from_sync, Inbound::Event);
         }
-        match selector.wait() {
+        let inbound = selector.wait();
+        let start = pass_clock();
+        match inbound {
             Inbound::Command(Ok(command)) => state.handle_logic_command(command),
             Inbound::Command(Err(_)) => ui_open = false,
             Inbound::Event(Ok(event)) => state.handle_logic_event(event),
             Inbound::Event(Err(_)) => sync_open = false,
         }
         state.drain_pass(&from_ui, &from_sync);
+        stamp_pass(start);
     }
 
     tracing::info!("Ambre Logic thread exiting (both inbound channels disconnected)");

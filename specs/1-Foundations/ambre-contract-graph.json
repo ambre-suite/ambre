@@ -6223,7 +6223,7 @@
   {"edge": "verified-by", "from": "PROSE-UI-213", "to": "ambre_prose::view::paint::tests::a_draft_in_a_cell_is_drawn_before_the_document_answers"},
   {"edge": "cites-section", "from": "PROSE-UI-215", "section": "3", "to": "4-Prose/features/ambre-spec-prose-text-editing.md"},
   {"edge": "cites-document", "from": "PROSE-UI-215", "section": "2", "to": "ambre-spec-budgets.md"},
-  {"edge": "lands-with", "from": "PROSE-UI-215", "to": "Keystroke latency probes"},
+  {"edge": "lands-with", "from": "PROSE-UI-215", "to": "The performance budgets given a mechanism"},
   {"edge": "cites-section", "from": "PROSE-UI-136", "section": "3", "to": "4-Prose/features/ambre-spec-prose-text-editing.md"},
   {"edge": "verified-by", "from": "PROSE-UI-136", "to": "ambre_prose::input_tests::typing_fills_the_draft_and_sends_one_insertion_per_run"},
   {"edge": "cites-section", "from": "PROSE-UI-176", "section": "3", "to": "4-Prose/features/ambre-spec-prose-text-editing.md"},

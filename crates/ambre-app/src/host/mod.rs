@@ -55,6 +55,9 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 // FrameHost and `run_with` live in sibling modules; both reach the shared types
 // (AppView, DocSwitcher, helpers) via `use super::*`.
 mod frame;
+mod probe;
+
+pub(crate) use probe::mark;
 mod prose;
 mod run;
 mod web_embed;
