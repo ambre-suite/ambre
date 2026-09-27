@@ -2,6 +2,7 @@
 // TrameView: keyboard/pointer navigation, wheel/momentum scrolling, cursor moves, resize arming.
 
 use super::*;
+use ambre_draw::kinetic::Release;
 
 impl TrameView {
     /// Input routing while NOT editing a cell.
@@ -48,17 +49,14 @@ impl TrameView {
             // Dragging the handle grows the destination rectangle, locked to the
             // dominant axis (a fill handle never fills two directions at once).
             InputEvent::PointerMove { x, y } if self.fill_drag.is_some() => {
-                if let Some((row, col)) = self.state.cell_at(*x, *y)
-                    && let Some((src, block)) = self.fill_drag
-                {
-                    self.state.fill_preview = Some(fill_dest(src, row, col, block));
-                    self.edit_dirty = true; // repaint the preview outline.
-                }
+                self.drag_point = Some((*x, *y));
+                self.follow_drag();
                 true
             }
             // Release: emit the fill, grow the selection over the filled range,
             // and clear the drag/preview.
             InputEvent::PointerUp { ctrl, .. } if self.fill_drag.is_some() => {
+                self.drag_point = None;
                 self.end_fill_drag(*ctrl);
                 true
             }
@@ -204,13 +202,13 @@ impl TrameView {
             // Drag with the button held grows the live selection rectangle to the
             // cell under the cursor (mouse range selection).
             InputEvent::PointerMove { x, y } if self.selecting_drag => {
-                if let Some((row, col)) = self.state.cell_at(*x, *y) {
-                    self.extend_cell(row, col);
-                }
+                self.drag_point = Some((*x, *y));
+                self.follow_drag();
                 true
             }
             InputEvent::PointerUp { .. } if self.selecting_drag => {
                 self.selecting_drag = false;
+                self.drag_point = None;
                 true
             }
             // Bare hover (no button held) advertises the affordance under the cursor
@@ -447,51 +445,16 @@ impl TrameView {
             _ => (1.0, 1.0),                      // DOM_DELTA_PIXEL
         };
         let (px, py) = (dx * sx, dy * sy);
-
-        // The fingers are driving: any active momentum is overridden by the
-        // direct input, so cancel the coast.
-        self.coasting = false;
-
-        // A notched mouse wheel emits discrete, widely-spaced events: line/page
-        // units (`delta_mode != 0`) or chunky pixel jumps. Those must NOT feed
-        // the velocity estimator, otherwise a single click launches a momentum
-        // coast and scrolls far past one row. Only high-resolution pixel input
-        // (touchpad two-finger glide) gets kinetic scrolling.
-        let discrete =
-            delta_mode != 0 || px.abs() >= DISCRETE_WHEEL_PX || py.abs() >= DISCRETE_WHEEL_PX;
-        if discrete {
-            // No inertia: disarm any pending gesture and apply the step 1:1.
-            self.fling_vx = 0.0;
-            self.fling_vy = 0.0;
-            self.last_wheel_ms = 0.0;
-            self.scroll_accum_x += px;
-            self.scroll_accum_y += py;
-            self.apply_scroll_accum();
-            return true;
+        // The shared model applies the step one for one, and lets a trackpad
+        // glide coast once it pauses; a notch never coasts (`KINETIC-002`, `KINETIC-009`).
+        let (px, py) = self
+            .kinetic
+            .wheel(px as f32, py as f32, delta_mode != 0, self.perf.now());
+        self.scroll_accum_x += f64::from(px);
+        self.scroll_accum_y += f64::from(py);
+        if matches!(self.apply_scroll_accum(), ScrollOutcome::Edge) {
+            self.kinetic.stop();
         }
-
-        // Update the velocity estimate (physical px/ms) from this sample's
-        // interval, smoothed to ride out jitter. A long gap means a fresh
-        // gesture, so seed from the sample alone rather than blending stale
-        // velocity. Clamp dt so a near-zero interval can't blow it up.
-        let now = self.perf.now();
-        let gap = now - self.last_wheel_ms;
-        if self.last_wheel_ms == 0.0 || gap > FLING_GAP_MS {
-            let dt = gap.clamp(1.0, 16.0);
-            self.fling_vx = px / dt;
-            self.fling_vy = py / dt;
-        } else {
-            let dt = gap.clamp(1.0, 100.0);
-            let b = FLING_VELOCITY_BLEND;
-            self.fling_vx = b * (px / dt) + (1.0 - b) * self.fling_vx;
-            self.fling_vy = b * (py / dt) + (1.0 - b) * self.fling_vy;
-        }
-        self.last_wheel_ms = now;
-
-        // Apply the delta immediately for a 1:1 feel while the fingers move.
-        self.scroll_accum_x += px;
-        self.scroll_accum_y += py;
-        self.apply_scroll_accum();
         true
     }
 
@@ -521,62 +484,105 @@ impl TrameView {
         }
     }
 
-    /// Advance the momentum coast by one frame. Called every frame from
-    /// `update`. Starts coasting when a flick's velocity outlives the gesture,
-    /// then integrates the decaying velocity into the scroll accumulator.
-    /// Stops once the speed dies down or the viewport hits an edge.
+    /// Advance the kinetic motion by one frame, from `update`. The motion
+    /// stops once it dies down or the viewport meets an edge.
     pub(crate) fn step_momentum(&mut self) {
-        let now = self.perf.now();
-
-        // Begin a coast: the gesture ended (gap elapsed) but the fingers left
-        // with enough speed. `last_wheel_ms == 0` means no gesture is pending.
-        if !self.coasting {
-            if self.last_wheel_ms == 0.0 || now - self.last_wheel_ms < FLING_GAP_MS {
-                return;
-            }
-            // Gesture window closed: decide whether to fling or just disarm.
-            self.last_wheel_ms = 0.0;
-            if self.fling_vx.hypot(self.fling_vy) < FLING_START_PX_PER_MS {
-                self.fling_vx = 0.0;
-                self.fling_vy = 0.0;
-                return;
-            }
-            self.coasting = true;
-            self.last_coast_ms = now;
-            // Don't integrate on the launch frame: `dt` would be 0. Start
-            // moving next frame, once a real interval has elapsed.
+        let Some((dx, dy)) = self.kinetic.tick(self.perf.now()) else {
             return;
-        }
-
-        let dt = now - self.last_coast_ms;
-        self.last_coast_ms = now;
-        if dt <= 0.0 {
-            return;
-        }
-        let dt = dt.min(100.0);
-
-        // Integrate over the *measured* frame dt and apply friction scaled to
-        // that same dt. The coast is then identical at 60 Hz or 240 Hz; it
-        // just runs in finer steps at higher refresh rates.
-        self.scroll_accum_x += self.fling_vx * dt;
-        self.scroll_accum_y += self.fling_vy * dt;
-        let decay = FLING_FRICTION.powf(dt / 16.667);
-        self.fling_vx *= decay;
-        self.fling_vy *= decay;
-
-        // Stop on a border, or once the speed has bled off.
-        if matches!(self.apply_scroll_accum(), ScrollOutcome::Edge)
-            || self.fling_vx.hypot(self.fling_vy) < FLING_STOP_PX_PER_MS
-        {
+        };
+        self.scroll_accum_x += f64::from(dx);
+        self.scroll_accum_y += f64::from(dy);
+        if matches!(self.apply_scroll_accum(), ScrollOutcome::Edge) {
             self.stop_fling();
         }
     }
 
-    /// Halt any momentum coast and clear its residue.
+    /// Grow the held selection or fill preview to the cell the drag points
+    /// at, the nearest edge cell once it leaves the cell area.
+    fn follow_drag(&mut self) {
+        let Some((x, y)) = self.drag_point else {
+            return;
+        };
+        let Some((row, col)) = self.state.drag_cell_at(x, y) else {
+            return;
+        };
+        if let Some((src, block)) = self.fill_drag {
+            self.state.fill_preview = Some(fill_dest(src, row, col, block));
+            self.edit_dirty = true; // repaint the preview outline.
+        } else if self.selecting_drag {
+            self.extend_cell(row, col);
+        }
+    }
+
+    /// Scroll a selection or fill drag held at an edge, once a frame
+    /// (`KINETIC-007`). The first tick only starts the clock.
+    pub(crate) fn step_edge_scroll(&mut self) {
+        let held = self.selecting_drag || self.fill_drag.is_some();
+        let speed = self
+            .drag_point
+            .filter(|_| held)
+            .map(|(x, y)| self.state.edge_scroll_speed(x, y))
+            .filter(|&(sx, sy)| sx != 0.0 || sy != 0.0);
+        let Some((sx, sy)) = speed else {
+            self.edge_ms = None;
+            return;
+        };
+        let now = self.perf.now();
+        let Some(last) = self.edge_ms.replace(now) else {
+            return;
+        };
+        let dt = (now - last).clamp(0.0, ambre_draw::kinetic::MAX_STEP_MS);
+        self.scroll_accum_x += sx * dt;
+        self.scroll_accum_y += sy * dt;
+        if matches!(self.apply_scroll_accum(), ScrollOutcome::Moved) {
+            self.follow_drag();
+        }
+    }
+
+    /// A finger went down on the grid. It stops any motion left
+    /// (`KINETIC-006`).
+    pub fn touch_down(&mut self, x: f32, y: f32, now_ms: f64) {
+        self.stop_fling();
+        self.kinetic.press(x, y, now_ms);
+    }
+
+    /// A finger moved: past the tap slop the grid follows it, cell by cell.
+    pub fn touch_move(&mut self, x: f32, y: f32, now_ms: f64) {
+        if let Some((dx, dy)) = self.kinetic.sample(x, y, now_ms) {
+            self.scroll_accum_x += f64::from(dx);
+            self.scroll_accum_y += f64::from(dy);
+            self.apply_scroll_accum();
+        }
+    }
+
+    /// A finger lifted. A pan released with speed keeps moving; a tap is a
+    /// click where it landed.
+    pub fn touch_up(&mut self, now_ms: f64) {
+        if let Release::Tap { x, y } = self.kinetic.release(now_ms) {
+            let (x, y) = (f64::from(x), f64::from(y));
+            for ev in [
+                InputEvent::PointerDown {
+                    x,
+                    y,
+                    button: 0,
+                    shift: false,
+                    ctrl: false,
+                },
+                InputEvent::PointerUp {
+                    x,
+                    y,
+                    button: 0,
+                    ctrl: false,
+                },
+            ] {
+                self.handle_input(&ev);
+            }
+        }
+    }
+
+    /// Halt any kinetic motion and clear its residue.
     pub(crate) fn stop_fling(&mut self) {
-        self.coasting = false;
-        self.fling_vx = 0.0;
-        self.fling_vy = 0.0;
+        self.kinetic.stop();
         self.scroll_accum_x = 0.0;
         self.scroll_accum_y = 0.0;
     }

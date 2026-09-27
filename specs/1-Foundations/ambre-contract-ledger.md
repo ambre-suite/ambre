@@ -19,14 +19,14 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2624 rows: 2355 shipped, of which 780 loose. 269 unbuilt.**
+**2626 rows: 2357 shipped, of which 781 loose. 269 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 235 | 221 | 542 | 577 | 1575 |
-| `failing` | 41 | 46 | 22 |  | 109 |
-| `untested` | 268 | 143 | 234 | 4 | 649 |
-| `human-review` | 7 | 1 | 1 | 1 | 10 |
+| `verified` | 236 | 221 | 542 | 577 | 1576 |
+| `failing` | 40 | 46 | 22 |  | 108 |
+| `untested` | 268 | 144 | 234 | 4 | 650 |
+| `human-review` | 8 | 1 | 1 | 1 | 11 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
 | `unimplemented` | 56 | 57 | 24 | 132 | 269 |
 
@@ -53,7 +53,7 @@
 | `ambre-spec-high-density.md` | 9 | 5 | 0 | 5 | 4 |
 | `ambre-spec-key-rotation.md` | 12 | 11 | 2 | 9 | 1 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 5 | 13 |  |
-| `ambre-spec-kinetic-scroll.md` | 8 | 8 | 6 | 2 |  |
+| `ambre-spec-kinetic-scroll.md` | 9 | 9 | 7 | 2 |  |
 | `ambre-spec-launcher.md` | 17 | 17 | 7 | 10 |  |
 | `ambre-spec-media.md` | 11 | 11 | 0 | 11 |  |
 | `ambre-spec-membership.md` | 17 | 17 | 12 | 5 |  |
@@ -86,7 +86,7 @@
 | `ambre-spec-trame-find-replace.md` | 6 | 6 | 4 | 2 |  |
 | `ambre-spec-trame-formula-engine.md` | 39 | 38 | 30 | 8 | 1 |
 | `ambre-spec-trame-function-library.md` | 28 | 21 | 10 | 11 | 7 |
-| `ambre-spec-trame-grid-viewport.md` | 19 | 17 | 6 | 11 | 2 |
+| `ambre-spec-trame-grid-viewport.md` | 20 | 18 | 6 | 12 | 2 |
 | `ambre-spec-trame-headers.md` | 9 | 9 | 4 | 5 |  |
 | `ambre-spec-trame-import-export.md` | 40 | 27 | 15 | 12 | 13 |
 | `ambre-spec-trame-named-ranges.md` | 10 | 10 | 3 | 7 |  |
@@ -181,7 +181,7 @@
 | `ambre-spec-high-density.md` | CANVAS-031..035,043..046 |
 | `ambre-spec-key-rotation.md` | SYNC-041..048,078..081 |
 | `ambre-spec-key-verification.md` | CHROME-046..055,071..078 |
-| `ambre-spec-kinetic-scroll.md` | KINETIC-001..008 |
+| `ambre-spec-kinetic-scroll.md` | KINETIC-001..009 |
 | `ambre-spec-launcher.md` | CHROME-035..045,079..084 |
 | `ambre-spec-locale.md` | LOCALE-001..013 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077 |
@@ -270,7 +270,7 @@
 | `ambre-spec-trame-find-replace.md` | TRAME-UI-077..080,083,138 |
 | `ambre-spec-trame-formula-engine.md` | TRAME-005..009,011..013,021,032..048,208..220 |
 | `ambre-spec-trame-function-library.md` | TRAME-014,049..061,194..207 |
-| `ambre-spec-trame-grid-viewport.md` | TRAME-UI-004..005,007,012..013,024..029,049,143..149 |
+| `ambre-spec-trame-grid-viewport.md` | TRAME-UI-004..005,007,012..013,024..029,049,143..149,175 |
 | `ambre-spec-trame-headers.md` | TRAME-UI-043..048,121..123 |
 | `ambre-spec-trame-import-export.md` | TRAME-IO-001..015,017..019,025..030,033..048 |
 | `ambre-spec-trame-named-ranges.md` | TRAME-062..069,155..156 |

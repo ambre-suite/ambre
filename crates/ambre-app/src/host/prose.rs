@@ -459,14 +459,17 @@ impl ProseView {
         }
         match ev {
             InputEvent::Wheel { dy, delta_mode, .. } => {
-                // A new scroll stops the motion a flick left (`PROSE-UI-218`).
-                self.state.stop_fling();
+                // A new scroll stops the motion a flick left, and a glide
+                // may leave its own (`PROSE-UI-218`, `KINETIC-002`).
                 let px = match delta_mode {
                     1 => dy * LINE_PX,
                     2 => dy * f64::from(self.size.1),
                     _ => *dy,
                 };
-                self.state.scroll_by(px as f32);
+                let now = web_sys::window()
+                    .and_then(|w| w.performance())
+                    .map_or(self.now_ms, |p| p.now());
+                self.state.wheel(px as f32, *delta_mode != 0, now);
                 // The text moved from under the pointer, and the bar with it
                 // (`PROSE-UI-055`).
                 self.state.hovered = None;

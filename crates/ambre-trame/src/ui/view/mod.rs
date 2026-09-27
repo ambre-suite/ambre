@@ -115,31 +115,6 @@ impl Clock for PerfClock<'_> {
     }
 }
 
-// -- Kinetic (momentum) touchpad scrolling ------------------------------------
-// Firefox/Linux does not deliver an OS momentum phase after a two-finger flick,
-// so we synthesise it: track the scroll velocity while the fingers drive, then
-// coast with friction once the wheel events stop.
-//
-/// Gap (ms) with no `wheel` event after which the gesture is considered ended
-/// and coasting may begin. Continuous touchpad scrolling fires well under this.
-const FLING_GAP_MS: f64 = 60.0;
-/// Velocity retained per 16.667 ms of coasting (~ exponential friction). This
-/// is a *time constant*, not a per-frame factor. The decay is raised to `dt /
-/// 16.667` each frame. The deceleration curve over wall-clock time is
-/// therefore identical at 60 Hz, 240 Hz, or any variable refresh rate.
-const FLING_FRICTION: f64 = 0.94;
-/// Minimum speed (physical px/ms) at gesture end to bother coasting at all.
-const FLING_START_PX_PER_MS: f64 = 0.05;
-/// Speed (physical px/ms) below which coasting stops.
-const FLING_STOP_PX_PER_MS: f64 = 0.012;
-/// Smoothing for the running velocity estimate: weight of the newest sample.
-const FLING_VELOCITY_BLEND: f64 = 0.8;
-/// A single pixel-mode `wheel` delta at or above this (physical px) is treated
-/// as a notched mouse wheel, not a touchpad glide. It is applied 1:1 with no
-/// inertia. Touchpad events stay well below this; a mouse notch (Chrome ~100
-/// px/dpr, Firefox uses line mode anyway) sits comfortably above it.
-const DISCRETE_WHEEL_PX: f64 = 40.0;
-
 /// Result of folding the pixel accumulator into a viewport pan.
 pub(crate) enum ScrollOutcome {
     /// Less than a whole row/col accumulated; nothing to do yet.
@@ -404,17 +379,13 @@ pub struct TrameView {
     /// truncated away each frame.
     scroll_accum_x: f64,
     scroll_accum_y: f64,
-    /// Running scroll velocity estimate (physical px/ms) from recent wheel
-    /// events; drives the momentum coast once the fingers lift.
-    fling_vx: f64,
-    fling_vy: f64,
-    /// Timestamp (perf ms) of the last wheel event. `>0` means a gesture is in
-    /// progress / just ended, and we should watch for the fling gap.
-    last_wheel_ms: f64,
-    /// True while coasting after a flick; cleared by a new wheel or a stop.
-    coasting: bool,
-    /// Timestamp (perf ms) of the last coast step, for the per-frame integration.
-    last_coast_ms: f64,
+    /// The shared kinetic scroll: wheel glides, finger pans and the motion
+    /// either leaves (`1-Foundations/ambre-spec-kinetic-scroll.md`).
+    kinetic: ambre_draw::kinetic::Kinetic,
+    /// Where a held selection or fill drag last pointed, and when the edge
+    /// scroll last ticked (`KINETIC-007`).
+    drag_point: Option<(f64, f64)>,
+    edge_ms: Option<f64>,
 
     /// The last grid copy/cut was a cut: the source range
     /// ([`TrameUiState::clipboard_anchor`]) is cleared after the next paste

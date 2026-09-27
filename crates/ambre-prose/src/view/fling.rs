@@ -35,6 +35,14 @@ impl ProseUiState {
         }
     }
 
+    /// A wheel event, in screen pixels: the column takes its step now. A
+    /// trackpad glide that pauses keeps its momentum; a notch never does
+    /// (`KINETIC-002`). `stepped` marks a line or page delta mode.
+    pub fn wheel(&mut self, dy: f32, stepped: bool, now_ms: f64) {
+        let (_, dy) = self.kinetic.wheel(0.0, dy, stepped, now_ms);
+        self.scroll_by(dy);
+    }
+
     /// Stop the motion a flick left (`PROSE-UI-218`).
     pub fn stop_fling(&mut self) {
         self.kinetic.stop();

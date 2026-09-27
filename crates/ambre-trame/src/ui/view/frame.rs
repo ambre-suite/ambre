@@ -231,6 +231,7 @@ impl TrameView {
         // Advance any touchpad momentum coast before the viewport flush, so the
         // ScrollViewport it produces ships this same frame.
         self.step_momentum();
+        self.step_edge_scroll();
 
         // The first fetch of the document joins the coalescing queue, so it
         // takes the same re-offer as every other one. Sent and forgotten, a full

@@ -4,8 +4,8 @@
 //! Pure arithmetic over timed pointer positions: no DOM, no GPU, no
 //! application state. The model hands back distances in screen pixels. Each
 //! application moves its own view by them: a column of pages, a grid of
-//! cells, a board under a zoom. A wheel never reaches it: the momentum of a
-//! trackpad is the platform's (`KINETIC-002`).
+//! cells, a board under a zoom. A trackpad glide that stops keeps its
+//! momentum; a wheel notch never does (`KINETIC-002`, `KINETIC-009`).
 
 /// How far a pointer may move, in screen pixels, and still be a tap.
 pub const TAP_SLOP_PX: f32 = 8.0;
@@ -19,6 +19,17 @@ pub const DECAY_MS: f32 = 325.0;
 pub const STOP_SPEED: f32 = 0.02;
 /// The longest step one tick takes, so a stalled frame does not jump.
 pub const MAX_STEP_MS: f64 = 50.0;
+
+/// A pixel wheel step at or past this, in screen pixels, is a notch.
+/// Trackpad glides stay well under it; a notch sits well over it.
+pub const WHEEL_NOTCH_PX: f32 = 40.0;
+/// A pause between wheel events this long, in milliseconds, ends a glide.
+pub const WHEEL_GAP_MS: f64 = 60.0;
+/// A glide slower than this at its end, in screen pixels per millisecond,
+/// leaves no motion.
+pub const WHEEL_START_SPEED: f32 = 0.05;
+/// The weight of the newest wheel sample in the glide speed.
+pub const WHEEL_BLEND: f32 = 0.8;
 
 /// How far from an edge a drag starts to scroll, in screen pixels.
 pub const EDGE_BAND_PX: f32 = 32.0;
@@ -44,6 +55,14 @@ pub enum Release {
 pub struct Kinetic {
     pressed: Option<Pan>,
     motion: Option<Motion>,
+    glide: Option<Glide>,
+}
+
+/// A trackpad glide under way: its speed so far and its last event.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Glide {
+    speed: (f32, f32),
+    last_ms: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -66,6 +85,7 @@ impl Kinetic {
     /// A pointer went down. It stops any motion left (`KINETIC-006`).
     pub fn press(&mut self, x: f32, y: f32, now_ms: f64) {
         self.motion = None;
+        self.glide = None;
         self.pressed = Some(Pan {
             start: (x, y),
             last: (x, y),
@@ -127,10 +147,54 @@ impl Kinetic {
         Release::Fling
     }
 
+    /// A wheel event, already in screen pixels. The answer is the step the
+    /// view takes now, one for one. A notch stops any motion and never starts
+    /// one; a glide feeds a speed the motion starts from once the glide
+    /// pauses (`KINETIC-002`, `KINETIC-009`). `stepped` marks a line or page delta mode.
+    pub fn wheel(&mut self, dx: f32, dy: f32, stepped: bool, now_ms: f64) -> (f32, f32) {
+        self.motion = None;
+        if stepped || dx.abs() >= WHEEL_NOTCH_PX || dy.abs() >= WHEEL_NOTCH_PX {
+            self.glide = None;
+            return (dx, dy);
+        }
+        let speed = match self.glide {
+            Some(glide) if now_ms - glide.last_ms <= WHEEL_GAP_MS => {
+                let dt = (now_ms - glide.last_ms).clamp(1.0, 100.0) as f32;
+                let b = WHEEL_BLEND;
+                (
+                    b * dx / dt + (1.0 - b) * glide.speed.0,
+                    b * dy / dt + (1.0 - b) * glide.speed.1,
+                )
+            }
+            _ => (dx / 16.0, dy / 16.0),
+        };
+        self.glide = Some(Glide {
+            speed,
+            last_ms: now_ms,
+        });
+        (dx, dy)
+    }
+
     /// One tick of the motion, once a frame. The answer is how far the view
     /// moves, each tick less than the one before; the first tick only starts
     /// the clock (`KINETIC-005`). The motion stops below the stop speed.
+    /// A glide that paused past the gap launches its motion here.
     pub fn tick(&mut self, now_ms: f64) -> Option<(f32, f32)> {
+        if self.motion.is_none() {
+            let glide = self.glide?;
+            if now_ms - glide.last_ms < WHEEL_GAP_MS {
+                return Some((0.0, 0.0));
+            }
+            self.glide = None;
+            if glide.speed.0.hypot(glide.speed.1) < WHEEL_START_SPEED {
+                return None;
+            }
+            self.motion = Some(Motion {
+                speed: glide.speed,
+                last_ms: Some(now_ms),
+            });
+            return Some((0.0, 0.0));
+        }
         let motion = self.motion.as_mut()?;
         let Some(last) = motion.last_ms.replace(now_ms) else {
             return Some((0.0, 0.0));
@@ -149,11 +213,13 @@ impl Kinetic {
     /// stops it (`KINETIC-006`).
     pub fn stop(&mut self) {
         self.motion = None;
+        self.glide = None;
     }
 
-    /// Whether a motion is under way.
+    /// Whether a motion is under way, or a glide may still launch one: the
+    /// application keeps ticking while this holds.
     pub fn moving(&self) -> bool {
-        self.motion.is_some()
+        self.motion.is_some() || self.glide.is_some()
     }
 
     /// The speed of the motion under way, in screen pixels per millisecond.
@@ -265,6 +331,31 @@ mod tests {
         let mut kinetic = flicked();
         kinetic.stop();
         assert_eq!(kinetic.tick(96.0), None);
+    }
+
+    /// `KINETIC-002`, `KINETIC-009`: a glide that pauses carries on; a notch never starts a
+    /// motion and stops one under way.
+    #[test]
+    fn a_glide_that_pauses_carries_on_and_a_notch_never_does() {
+        let mut kinetic = Kinetic::default();
+        for step in 0..6 {
+            let t = 8.0 * f64::from(step);
+            assert_eq!(kinetic.wheel(0.0, 12.0, false, t), (0.0, 12.0));
+        }
+        // Inside the gap the glide waits; past it the motion starts.
+        assert_eq!(kinetic.tick(60.0), Some((0.0, 0.0)));
+        assert_eq!(kinetic.tick(110.0), Some((0.0, 0.0)));
+        let (_, dy) = kinetic.tick(126.0).expect("a motion");
+        assert!(dy > 0.0, "{dy}");
+        // A notch stops it, moves one for one, and leaves nothing behind.
+        assert_eq!(kinetic.wheel(0.0, 100.0, false, 130.0), (0.0, 100.0));
+        assert!(!kinetic.moving());
+        assert_eq!(kinetic.tick(300.0), None);
+        kinetic.wheel(0.0, 3.0, true, 400.0);
+        assert_eq!(kinetic.tick(600.0), None);
+        // A glide that dies out slowly leaves no motion.
+        kinetic.wheel(0.0, 0.5, false, 700.0);
+        assert_eq!(kinetic.tick(800.0), None);
     }
 
     /// `KINETIC-007`: the edge speed is zero away from the edges, grows with

@@ -1,12 +1,12 @@
 # AMBRE -- FEATURE: THE KINETIC SCROLL
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the one model is built and Prose runs on it. Trame keeps its own
-momentum, and Toile has none
+**Implementation:** partial -- the one model is built, and Prose and Trame run on it. Toile has no
+touch path yet
 
 > A finger moves the view the same way in every editor. A tap stays a tap, a pan follows the finger,
-> a flick coasts to a stop, and a drag held near an edge scrolls. A trackpad's own momentum is left
-> to the platform.
+> a flick coasts to a stop, and a drag held near an edge scrolls. A trackpad glide that stops keeps
+> its momentum; a wheel notch never does.
 
 Three editors scroll three spaces: a column of pages, a grid of cells, an endless board. One model
 turns timed pointer positions into distances on the screen, and each application moves its own view
@@ -24,8 +24,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `KINETIC`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `KINETIC-001` | `INV` | An application's pan, flick and edge scroll MUST come from the one shared model. | this spec section 2 | none | fails -- Prose runs on it and Trame coasts on a model of its own; lands with the `Trame on the shared kinetic scroll` Story (`ambre-roadmap.md` E6) | failing |
-| `KINETIC-002` | `INV` | A wheel event MUST NOT start a flick in any application. | this spec section 4 | none | fails -- Trame's grid estimates a speed from a pixel wheel glide and coasts on it; lands with the `Trame on the shared kinetic scroll` Story (`ambre-roadmap.md` E6) | failing |
+| `KINETIC-001` | `INV` | An application's pan, flick, wheel momentum and edge scroll MUST come from the one shared model. | this spec section 2 | human-review -- the reviewer refuses a speed estimate, a decay or an edge speed an application computes for itself | unheld -- no gate tells a speed estimate from any other arithmetic | human-review |
 
 ### 1.2 Pan and flick
 
@@ -47,14 +46,23 @@ The user drags a selection or an object towards an edge of the view and holds it
 | `KINETIC-007` | `POST` | A drag held in the edge band, or past it, MUST scroll at a speed that grows with its depth, up to a cap. | this spec section 2 | `ambre_draw::kinetic::tests::the_edge_speed_grows_with_depth_and_is_capped` | none | verified |
 | `KINETIC-008` | `FRAME` | A drag away from both edges MUST NOT scroll the view. | this spec section 2 | `ambre_draw::kinetic::tests::the_edge_speed_grows_with_depth_and_is_capped` | none | verified |
 
+### 1.4 The wheel turns
+
+The user glides two fingers on a trackpad and lifts them, or turns a notched wheel.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `KINETIC-002` | `POST` | A trackpad glide that pauses MUST keep the view moving at the glide's speed. | this spec section 4 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does` | fails -- Prose and Trame hold it, and Toile's board stops dead after a glide; lands with the `Toile on the shared kinetic scroll` Story (`ambre-roadmap.md` E6) | failing |
+| `KINETIC-009` | `FRAME` | A wheel notch, a line step or a page step MUST NOT start a motion. | this spec section 4 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does` | none | verified |
+
 * **Budget.** none of its own: a tick is a multiplication and an exponential. What it costs is the
   scroll the application's viewport already carries in `ambre-spec-budgets.md`.
 * **Boundary.** none: the model is view state on the UI thread. It writes no document and sends no
   command, so nothing here reaches the relay.
-* **Verification.** 6 `verified`, 2 `failing`. The model's rows are unit tests of
+* **Verification.** 7 `verified`, 1 `failing`, 1 `human-review`. The model's rows are unit tests of
   `crates/ambre-draw`, which knows no application. Prose's own rows hold what its column does with
-  the distances (`4-Prose/features/ambre-spec-prose-viewport.md`). The two state rows fail on Trame
-  alone, and Toile has no touch path to break them.
+  the distances (`4-Prose/features/ambre-spec-prose-viewport.md`), and Trame's grid rows what its
+  grid does (`2-Trame/features/ambre-spec-trame-grid-viewport.md`).
 
 ---
 
@@ -114,7 +122,8 @@ depends on, and it depends on nothing.
 | a finger lifted while moving | the view coasts and slows to a stop (`KINETIC-004`, `KINETIC-005`) |
 | a press during a coast | the coast stops (`KINETIC-006`) |
 | a selection or an object dragged near an edge | the view scrolls, faster the deeper it goes (`KINETIC-007`) |
-| the wheel, a trackpad glide | the application's own scroll, and the platform's momentum alone (`KINETIC-002`) |
+| a trackpad glide | the view follows each step, and coasts once the glide pauses (`KINETIC-002`) |
+| a wheel notch, a line or a page step | the view takes the step once, with no coast, and a coast under way stops (`KINETIC-009`) |
 
 ---
 
@@ -122,7 +131,8 @@ depends on, and it depends on nothing.
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
-| A wheel never starts a flick | estimating a speed from a pixel wheel glide and coasting on it | macOS and most trackpads already send their momentum as more wheel events, so a second coast doubles it or starts where the platform stopped. Telling a trackpad from a mouse from the size of a step is a guess, and Trame and Toile each wrote a different guess |
+| A pixel glide that pauses coasts, a notch never does | leaving every wheel momentum to the platform | Firefox on Linux sends no momentum after a two-finger flick, so the sheet stops dead under the fingers. Where the platform does send it, its events keep the glide alive, and the model's coast starts only once they fade below the start speed |
+| A pixel step past the notch size is a notch | telling a trackpad from a mouse by the device | the browser names neither. A notch arrives as one large step or in line mode; a glide stays under the size |
 | One model with one set of constants | a model per application | two curves under one gesture make the same flick travel two distances, and the user feels the switch from a text to a sheet |
 | The model hands back distances, and the application moves its view | a model that owns a scroll offset | a column scrolls in pixels, a grid by whole cells with a remainder, a board in two dimensions under a zoom. Owning the offset would force one space on three |
 | The application reports the edge it met | bounds handed to the model | the bounds move with every layout, and a grid meets an edge as a whole cell. The application already knows, after it moves, whether it moved |
@@ -132,11 +142,8 @@ depends on, and it depends on nothing.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Trame keeps its own momentum.** Its grid coasts on a trackpad glide
-  (`2-Trame/features/ambre-spec-trame-grid-viewport.md section 3`), against `KINETIC-002`, and no
-  finger pans it. Both land with the
-  `Trame on the shared kinetic scroll` Story (`ambre-roadmap.md` E6).
-* **Toile has no touch path.** A finger acts as the mouse, and nothing pans under a drag. It lands
+* **Toile has no touch path, and no wheel momentum.** A finger acts as the mouse, a glide stops
+  dead, and nothing pans under a drag. It lands
   with the `Toile on the shared kinetic scroll` Story (`ambre-roadmap.md` E6).
 * **A cancelled pointer is not ruled.** The browser may cancel a gesture it takes over; the press
   then stays until the next one replaces it.

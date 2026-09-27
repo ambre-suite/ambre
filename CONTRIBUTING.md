@@ -92,6 +92,7 @@ row lives in the spec of the component it constrains, and the table below is the
 | `UI-THREAD-003` | a value the dispatcher pushes into a signal, and that also lives in the state of a view | `ambre-spec-ui.md` |
 | `DOCFILE-008` | a version bump whose commit freezes no artifact for a `doc_type` | `ambre-spec-docfile.md` |
 | `FIXTURE-005` | a committed artifact that comes from a real user document | `ambre-spec-fixtures.md` |
+| `KINETIC-001` | a speed estimate, a decay or an edge speed an application computes for itself | `ambre-spec-kinetic-scroll.md` |
 | `FIXTURE-024` | a benchmark figure reported as a frame-rate validation | `ambre-spec-fixtures.md` |
 
 A new `human-review` row adds a line to the table. The corpus is the arbiter, and
