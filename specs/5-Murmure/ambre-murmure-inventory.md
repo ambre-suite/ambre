@@ -16,7 +16,7 @@
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
 | `murmure-attachments` | A member drops a file or an image into a message. | design-only | 12 |  |
-| `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | design-only | 25 |  |
+| `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | design-only | 38 |  |
 | `murmure-composer` | The field where a member writes. | design-only | 20 |  |
 | `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | design-only | 5 |  |
 | `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | design-only | 10 |  |
@@ -25,14 +25,15 @@
 | `murmure-mentions` | A member names another in a message with `@`. | design-only | 13 |  |
 | `murmure-message-list` | The conversation of a channel, newest at the bottom. | design-only | 20 |  |
 | `murmure-messages` | A member writes a message, edits it, or deletes it. | design-only | 22 |  |
+| `murmure-moderation` | A moderator removes the message of another member. | design-only | 10 |  |
 | `murmure-notifications` | A member learns that someone mentioned them or wrote to them directly. | design-only | 15 |  |
 | `murmure-reactions` | A member answers a message with an emoji. | design-only | 7 |  |
-| `murmure-search` | A member finds a message by its words, in the channels they have loaded. | design-only | 5 |  |
+| `murmure-search` | A member finds a message by its words, in the channels they have loaded. | design-only | 16 |  |
 | `murmure-segments` | A channel grows for years and still opens fast. | design-only | 21 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
-| `murmure-spaces` | A team gathers in a space. | design-only | 25 |  |
+| `murmure-spaces` | A team gathers in a space. | design-only | 30 |  |
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | design-only | 16 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | design-only | 9 |  |
 | `murmure-unread` | The sidebar shows where something new is, and how much. | design-only | 11 |  |
 
-**19 features: 0 implemented, 0 partial, 19 design-only. 277 contract rows, 0 loose.**
+**20 features: 0 implemented, 0 partial, 20 design-only. 316 contract rows, 0 loose.**

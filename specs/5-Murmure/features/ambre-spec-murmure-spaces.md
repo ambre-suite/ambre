@@ -23,6 +23,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-034` | `INV` | A guest of a channel MUST NOT be a member of the space document. | this spec section 3 | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-236` | `INV` | A removal from a channel MUST count as verified when the log of its space holds a signed removal of the same member. | this spec section 3; `SYNC-106` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-254` | `INV` | A key link of a public channel MUST count as verified when an admin of its space signed it. | this spec section 3; `SYNC-121`, `SRV-146` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-301` | `INV` | A space with no retention set MUST keep every segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-302` | `OBS` | The interface MUST state the retention as a range: at least its duration, at most that plus the span of a segment. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Create a space
 
@@ -68,11 +70,19 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-249` | `FAIL` | Given a space delete from a member who does not own the space document, the relay MUST refuse it. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-250` | `FRAME` | Deleting a space MUST NOT delete a direct message. | this spec section 3; `MURMURE-046` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.7 Set the retention of a space
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-303` | `POST` | Setting the retention MUST be the act of a space admin, recorded on the relay for the whole space. | this spec section 3; `SRV-111`, `ZK-015` | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-304` | `POST` | A client that finds an expired segment MUST remove it from the `segments` list, and show where the history now starts. | this spec section 3; `MURMURE-219` | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-317` | `FRAME` | Setting the retention MUST NOT change a key or a membership. | this spec section 3 | not built | unbuilt -- lands with the `Space retention` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** a leave costs one rotation per public channel, bounded by the space leave row of
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 25 `unimplemented`: no space exists in the code.
+* **Verification.** 30 `unimplemented`: no space exists in the code.
 
 ---
 
@@ -113,6 +123,13 @@ from each channel of the space, and each private one owes a rotation (`SRV-136`)
 the space, signed in its log, is what verifies each channel removal (`MURMURE-236`). A guest is
 never a member of the space, so a guest's channels are not touched.
 
+**Retention is one setting of the space.** A space admin sets one duration for every channel of the
+space (`MURMURE-303`). The relay applies it: a policy in a client would erase nothing while no admin
+is online, and the erasure promise would be false. A final segment older than the duration goes,
+with its index, its amendments, its thread documents and its files (`SRV-111`, `SRV-156`). A message
+therefore stays at least the duration, and at most the duration plus the span of its segment. The
+interface states that range, never the duration alone (`MURMURE-302`).
+
 **The keys, on a leave.** An admin need not be a member of a public channel to re-key it
 (`SRV-146`). The link it signs is verified by its role in the space, not in the channel
 (`MURMURE-254`). The first admin client online after the leave rotates the space key, then the key of
@@ -146,6 +163,8 @@ takes the sealed value.
 | The catalogue names a public channel | the name in the channel `meta` document | a member who has not joined holds no key for `meta`, so the channel to join would have no name |
 | The catalogue carries the sealed key | a member online to wrap the key | a join would wait on another member, and a space leave pays for the catalogue with a rotation |
 | A space leave takes its private channels | keeping them, and offering to leave | a member an admin removed from the space would keep reading its private channels |
+| The relay applies retention | a client applies it | no erasure happens while no admin is online |
+| One retention per space | one per channel | two settings for one space, and a member cannot tell which one holds |
 
 ---
 

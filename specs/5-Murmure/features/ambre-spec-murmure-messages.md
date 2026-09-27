@@ -113,8 +113,8 @@ check reads the author from the locked segment itself, which is immutable and ch
 A PeerID resolves to its user through `ambre-spec-op-authorship.md`. Every client runs the same
 check on the same delta, so every client reaches the same verdict (`MURMURE-079`).
 
-**Moderation is not here.** Only the author changes a message. A moderator who hides a message is
-the `Moderation` Story (`ambre-roadmap.md` E5).
+**Moderation is the one exception.** Only the author changes a message, except a removal by a
+moderator whose standing the membership log proves (`features/ambre-spec-murmure-moderation.md`).
 
 **Code.** not built.
 

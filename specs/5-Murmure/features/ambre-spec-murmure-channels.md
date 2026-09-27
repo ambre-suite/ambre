@@ -22,6 +22,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-047` | `INV` | Two direct messages MUST NOT exist for one set of members. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-252` | `INV` | A direct message MUST have no owner. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-264` | `INV` | The relay MUST keep the key links of a channel under its `meta` document, where they serve every document of the channel. | this spec section 3; `SYNC-117` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-333` | `OBS` | An archived channel MUST show as archived, with no composer. | this spec section 3 | not built | unbuilt -- lands with the `Archived channels` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Create a private channel
 
@@ -74,12 +75,39 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-245` | `POST` | A private channel or a direct message whose last member leaves MUST be deleted. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-246` | `FRAME` | Deleting a channel MUST NOT touch another channel. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.8 Convert a direct message into a private channel
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-323` | `POST` | Converting a direct message MUST make it a private channel of the chosen space, keeping its identifier and its segments. | this spec section 3; `SRV-159` | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-324` | `FAIL` | Given a conversion by a member who does not belong to the chosen space, the relay MUST refuse it. | this spec section 3 | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-325` | `POST` | A conversion MUST warn every member, naming the space and the history choice, before it applies. | this spec section 3 | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-326` | `POST` | A conversion that starts fresh MUST rotate the key with no link, so a later member reads nothing before it. | this spec section 3; `SYNC-116` | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-329` | `POST` | A conversion MUST make the converting member the owner of the channel. | this spec section 3; `MURMURE-252` | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-327` | `FRAME` | Converting a direct message MUST NOT remove any of its members. | this spec section 3 | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.9 Invite without history
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-328` | `POST` | An invite into a private channel MUST offer to start the invitee after a new history boundary. | this spec section 3; `MURMURE-326` | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-335` | `FRAME` | An invite without history MUST NOT change the keys the current members hold. | this spec section 3 | not built | unbuilt -- lands with the `Direct message conversion` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.10 Archive a channel
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-330` | `POST` | Archiving a channel MUST keep it readable, and make the relay refuse every write to it. | this spec section 3; `SRV-160` | not built | unbuilt -- lands with the `Archived channels` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-331` | `FAIL` | Given an archive from a member who does not own the channel, the relay MUST refuse it. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Archived channels` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-332` | `POST` | Unarchiving a channel MUST let it take writes again. | this spec section 3 | not built | unbuilt -- lands with the `Archived channels` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-334` | `FRAME` | Archiving a channel MUST NOT change its keys or its members. | this spec section 3 | not built | unbuilt -- lands with the `Archived channels` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** an invite wraps one key. The invitee then walks the key chain back to the boundary,
   one small open per rotation, charged to the crypto rows of `ambre-spec-budgets.md section 1`. A
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 25 `unimplemented`: no channel exists in the code.
+* **Verification.** 38 `unimplemented`: no channel exists in the code.
 
 ---
 
@@ -132,8 +160,23 @@ goes with it (`MURMURE-243`). An owner who leaves hands the role on first (`MURM
 for the others. It goes once its last member leaves, as a private channel does (`MURMURE-245`). A
 public channel stays listed with no member, for the next one to join.
 
-Archiving keeps a channel readable and closed to writes: the `Archived channels` Story (`ambre-roadmap.md` E5)
-holds it.
+**An archive closes a channel and keeps it.** The owner archives it: every member still reads it,
+and the relay refuses every write (`MURMURE-330`, `SRV-160`). Unarchiving opens it again.
+
+**A direct message becomes a private channel.** A member of the direct message who belongs to the
+space converts it, in one act (`MURMURE-323`). The identifier and the segments stay, and the
+converting member becomes the owner (`MURMURE-329`). Every member is warned first, with the space
+and the history choice (`MURMURE-325`). A member who is not in the space stays in the channel
+(`MURMURE-327`).
+
+**Keep, or start fresh.** Keep is the default: the key stays, and a later member reads the whole
+history. Start fresh rotates the key and leaves no link, so the chain stops there
+(`MURMURE-326`). The members of the direct message keep the older keys. The boundary protects the
+history from later members only: a member can still copy the text. Any invite into a private
+channel can use the same boundary, as an invite without history (`MURMURE-328`).
+
+A direct message becomes private, never public: making it public is a second act, by a space admin,
+who writes its key into the catalogue.
 
 **Code.** not built.
 
@@ -162,11 +205,12 @@ holds it.
 | No forward secrecy | forward secrecy for direct messages | a full history on a new device, the final snapshots and the search index all need every key |
 | The channel list is the membership | a sealed document listing the channels of a user | a second list drifts after a revoke, and shows a channel whose key is gone |
 | A channel is deleted, not archived, in its first form | archiving first | an archive keeps every byte, so it answers neither an erasure request nor the storage a dead channel holds |
+| A direct message converts to private | straight into a public channel | the whole space would read a history written for a few members |
+| Keep or start fresh | a history duration chosen at conversion | keys change at a rotation, not on a date: a cut inside a segment would split it under two keys |
+| Archive keeps a channel | archive deletes it | a closed project still holds decisions its members come back to |
 
 ---
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing is built.** No private channel and no direct message exist.
-* **Converting a direct message into a channel is not ruled here.** It is the
-  `Direct message conversion` Story (`ambre-roadmap.md` E5).

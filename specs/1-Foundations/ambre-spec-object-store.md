@@ -61,6 +61,7 @@ A member takes back a file they uploaded, such as the attachment of a message th
 |---|---|---|---|---|---|---|
 | `SRV-139` | `POST` | An erase request MUST remove the blob from object storage, with its media row. | this spec section 3; `SRV-057` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-140` | `FAIL` | Given an erase request from a member who did not upload the blob, the relay MUST refuse it. | this spec section 3; `SRV-138` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-158` | `POST` | The owner of a channel, or an admin of its space, MUST be able to erase a file of that channel. | this spec section 3; `SRV-140` | not built | unbuilt -- lands with the `Moderation` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-141` | `FRAME` | Erasing a blob MUST NOT remove another object of the document. | this spec section 3; `SRV-079` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the presigned link of `ambre-spec-budgets.md section 3`, under 50 ms, and the

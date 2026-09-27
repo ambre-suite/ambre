@@ -39,106 +39,6 @@ stay one command away.
 
 Each heading names its Story in `ambre-roadmap.md` E5, unless it says otherwise.
 
-### Moderation
-
-A moderator hides the message of another member. A hide is within the power of the relay already:
-the relay can withhold any frame. So the relay may check that the role still holds, with no new
-power.
-
-1. The relay refuses a moderation from a member whose role it has revoked. The relay orders every
-   frame, so the answer is unique.
-2. Each client checks that the signer held the moderator role in the signed membership log, at the
-   entry the operation cites. Every client reads the same log, so every client agrees.
-
-The MVP keeps that path open. The roles live in the signed membership log, which only grows. An
-amendment records whether the author or a moderator deleted (`DeletedBy`).
-
-### Search on a new device
-
-A new device holds only the active segment, and the relay cannot search.
-
-**An index per final segment.**
-
-* The client that finalizes a segment builds its inverted index.
-* It seals the index under the channel key, and uploads it beside the snapshot of the segment.
-* A final segment is immutable, so its index is too. The index needs no incremental update.
-* The relay sees one more sealed blob, with a size close to the snapshot it already sees.
-
-**A query on a new device.**
-
-1. The client downloads the segment indexes. An index is much smaller than its snapshot.
-2. The client queries the indexes.
-3. The client fetches and decrypts only the segments with a match.
-
-The result list shows its coverage, for example "searched 2 of 14 segments", and offers to fetch
-the rest. A partial result is never silent.
-
-**Integrity.** A malicious member can publish a false index.
-
-* The finalizing client signs the index.
-* The client checks each match against the decrypted segment. That check removes every false
-  positive.
-* A false negative stays possible. A client can rebuild an index in the background and compare.
-
-**Amended segments.** The index of a final segment stays immutable. The client drops the matches
-the amendments delete, and queries a small index of the amendments document built on the fly. A
-re-finalization replaces the index.
-
-**Storage and stack.** The index lives in the Origin Private File System (OPFS), inside a worker,
-and not in memory. Synchronous OPFS access exists only in a worker. The stack is pure Rust:
-`unicode-segmentation` with diacritic folding for French, `fst` for the terms, `roaring` for the
-posting lists. tantivy is richer, but its WASM support is fragile, and it needs a prototype first.
-
-**Filters.** Author, date, channel, file type, and "replies to me", including replies that did not
-mention the user.
-
-### Space retention
-
-**The default is the full history.** Murmure keeps every segment as long as the space exists.
-
-**Retention is a space setting.** A space admin sets one duration N for the whole space. No channel
-overrides it.
-
-**The relay applies retention.** A client-side policy would never erase while no admin is online,
-so the erasure promise of the General Data Protection Regulation (GDPR) would be false.
-
-- The relay holds N in plaintext. N is outside the `ZK-007` set today, like the public flag.
-- The relay deletes a final segment, its index and its amendments once its finalization is older
-  than N. The relay knows the finalization time without a key.
-- A client removes the missing segment from the `segments` list of `meta` when it finds the gap.
-
-**The guarantee is a range.** A message stays at least N, and at most N plus the time span of its
-segment. The interface states that range, never N alone.
-
-### Direct message conversion
-
-A member converts a direct message into a private channel of a space, in one act:
-
-1. The client sets the type to private and writes a name in `meta`.
-2. The relay records the space of the channel.
-3. The channel identifier and the segments stay.
-4. The converting member chooses the history of later members: keep it, or start fresh.
-
-A direct message converts to a private channel only. A private channel becomes public through a
-second act by a space admin, who writes its key into the catalogue.
-
-**Keep is the default.** The key stays, and every later member reads the whole history.
-
-**Start fresh records a history boundary.** The conversion rotates the key and records the boundary
-in `meta`. A later member receives only the keys after it (`MURMURE-058`). The members of the
-direct message keep the older keys.
-
-**The boundary protects against later members only.** A member of the direct message can still
-copy the text or pass on an older key.
-
-**Each member is warned.** The warning names the space and the history choice before the
-conversion applies.
-
-**The history boundary is general.** Any invite into a private channel can use it, as "invite
-without history". The conversion is its first use.
-
-A member of the direct message who is not a member of the space stays a member of the channel.
-
 ### Pinned messages
 
 A member pins a message for every member of the channel. The `meta` document gains a `pinned` List
@@ -149,11 +49,6 @@ client loads that segment alone to show it.
 
 A link names the channel, the segment and the message. It opens only for a member of the channel:
 the link carries no key.
-
-### Archived channels
-
-An archived channel stays readable and takes no write. The relay refuses its frames, as it does for
-a locked segment.
 
 ### Forum channels
 
@@ -238,15 +133,6 @@ The alternatives a spec of `specs/5-Murmure/` rejects are in that spec. This tab
 | Alternative | Rejected because |
 | :--- | :--- |
 | **Matrix/XMPP protocols** | Native integration into the Ambre sync pipeline keeps one model for every application of the suite. |
-| **Searchable encryption on the relay** (keyed-hash token per word, SSE) | The relay sees which queries repeat and which documents match. Published leakage-abuse attacks (Cash et al., 2015) recover content from that leak. |
-| **Full download and re-index on each device** | The Element model: Seshat (Rust, tantivy) indexes on desktop only, and Element Web has no search in encrypted rooms. A new device waits for the full history. |
-| **SQLite/FTS5 compiled to WASM** | A C library, against the Rust-first pillar. |
-| **Retention applied by a client** | No erasure happens while no admin is online. |
-| **A retention setting per channel** | Two settings for one space, and a member cannot tell which one holds. |
-| **A direct message converted straight into a public channel** | The whole space would read a history written for a few members. The public step is a second act, by a space admin. |
-| **A history duration chosen at conversion** | Keys change at a rotation, not on a date. A cut inside a segment would split it under two keys, and a cut at a segment edge would show a false duration. Retention already bounds the history. |
-| **Roles in a last-writer-wins map** | Compaction would drop every past role. A client could no longer check a moderation against the role its author held. |
-| **Moderation in the MVP** | A role lives in the membership log and a message in a segment. A revoke concurrent with a delete has no single answer without the relay check. |
 
 ### Product
 

@@ -113,8 +113,8 @@
 
 ## 5. WHAT THIS RESEARCH CHALLENGES IN THE SKETCH
 
-* **Local search on a new device.** `ambre-murmure.md` section 2, *Search on a new device*,
-  indexes decrypted content on the client. A new device holds only the active segment. So search is partial until the client
+* **Local search on a new device.** `ambre-spec-murmure-search.md` indexes decrypted content on
+  the client. A new device holds only the active segment. So search is partial until the client
   fetches and decrypts every sealed segment. Row 2 above is the minimum answer.
 * **Pins.** Section 2.B stores pins in local storage, but the `meta` document holds a shared
   `pinned` array. Users expect a pin to be shared with the channel. A personal bookmark is a
