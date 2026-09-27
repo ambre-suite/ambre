@@ -65,7 +65,7 @@ A client that lacks the key a frame or a snapshot names walks the chain back fro
 |---|---|---|---|---|---|---|
 | `SYNC-119` | `POST` | A client that lacks the key a frame or a snapshot names MUST recover it by walking the links back from the current key. | this spec section 3; `SYNC-045` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-120` | `FAIL` | Given a link whose unsealed key does not match the identifier it names, the client MUST refuse that link and every link past it. | this spec section 3; `SYNC-115` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `SYNC-121` | `FAIL` | Given a link whose signer the membership log does not verify, the client MUST refuse the link. | this spec section 3; `SYNC-103` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SYNC-121` | `FAIL` | Given a link whose signer the membership log does not verify, and no rule of the application that owns the document accepts, the client MUST refuse the link. | this spec section 3; `SYNC-103`, `SYNC-106` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SYNC-122` | `FRAME` | A key recovered from the chain MUST NOT become the current key. | this spec section 3 | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Leave on one's own

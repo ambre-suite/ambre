@@ -22,6 +22,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-033` | `INV` | The catalogue MUST hold the key of each public channel it lists, sealed under the key of the space. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-034` | `INV` | A guest of a channel MUST NOT be a member of the space document. | this spec section 3 | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-236` | `INV` | A removal from a channel MUST count as verified when the log of its space holds a signed removal of the same member. | this spec section 3; `SYNC-106` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-254` | `INV` | A key link of a public channel MUST count as verified when an admin of its space signed it. | this spec section 3; `SYNC-121`, `SRV-146` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Create a space
 
@@ -70,7 +71,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 23 `unimplemented`: no space exists in the code.
+* **Verification.** 24 `unimplemented`: no space exists in the code.
 
 ---
 
@@ -111,7 +112,9 @@ from each channel of the space, and each private one owes a rotation (`SRV-136`)
 the space, signed in its log, is what verifies each channel removal (`MURMURE-236`). A guest is
 never a member of the space, so a guest's channels are not touched.
 
-**The keys, on a leave.** The first admin client online after the leave rotates the space key, then the key of
+**The keys, on a leave.** An admin need not be a member of a public channel to re-key it
+(`SRV-146`). The link it signs is verified by its role in the space, not in the channel
+(`MURMURE-254`). The first admin client online after the leave rotates the space key, then the key of
 each public channel. Its Sync worker seals each new key under the new space key, and the catalogue
 takes the sealed value.
 
