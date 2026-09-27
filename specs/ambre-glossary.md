@@ -67,6 +67,7 @@
 | history boundary | a key rotation with no link, which later members cannot read past | | `5-Murmure/features/ambre-spec-murmure-channels.md` |
 | membership log | the signed record of every invite, revoke and role change | | `1-Foundations/ambre-spec-membership.md` |
 | residency | where a document lives: in memory, on disk, or neither | | `1-Foundations/ambre-spec-residency.md` |
+| user settings | one user's own choices, kept in one sealed document that follows them | | `1-Foundations/ambre-spec-user-settings.md` |
 | activity summary | the sealed header that tells what an update holds | | `1-Foundations/ambre-spec-residency.md` |
 | light subscription | what a document not held in memory still costs | | `1-Foundations/ambre-spec-residency.md` |
 | peer | one participant of a document | | `1-Foundations/ambre-spec-presence.md` |

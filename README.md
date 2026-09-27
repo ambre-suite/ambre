@@ -125,6 +125,7 @@ The `specs/` directory is the source of truth for behaviour. Layout:
 | `specs/2-Trame/`, `specs/3-Toile/`, `specs/4-Prose/`, `specs/5-Murmure/` | Vertical specs, one directory per application. |
 | `specs/<app>/features/` | One document per feature, always current: its contract, its model and its whole surface. A feature is the smallest thing a user can name, ship alone and specify end to end. |
 | `specs/Todo/` | Sketches of what has no spec yet: Rendez-Vous, and Murmure beyond its MVP. |
+| `research/` | Working notes that are not specs: the evidence a design decision rests on, such as the Murmure user research. |
 | [`specs/audits/security-audit.md`](specs/audits/security-audit.md) | Numbered audit findings. A contract row that closes a finding cites it. |
 
 An application directory holds a schema document, a generated inventory and one document per

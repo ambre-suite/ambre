@@ -1,13 +1,13 @@
 # AMBRE -- MURMURE: USER RESEARCH ON TEAMS, SLACK AND DISCORD
 
-**Type:** Working note (evidence for the Murmure sketch)
+**Type:** Working note (evidence for the Murmure specs)
 **Implementation:** design-only
 
 > A working note, and not a specification. It records what users like and dislike in the
 > messaging part of Microsoft Teams, Slack and Discord. A second pass adds Zulip for threads and
 > Element for end-to-end encrypted (E2EE) messaging. A third pass compares the bot systems and
-> their E2EE stakes. Video, calls and file storage are out of scope. It declares no contract row. `ambre-murmure.md` stays the sketch; this note is the
-> evidence that the sketch cites.
+> their E2EE stakes. Video, calls and file storage are out of scope. It declares no contract row.
+> The Murmure specs in `specs/5-Murmure/` apply it; this note is the evidence behind them.
 
 ## 1. METHOD AND LIMITS
 

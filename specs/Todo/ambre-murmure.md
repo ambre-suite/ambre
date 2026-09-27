@@ -8,7 +8,7 @@
 > and this sketch no longer restates it.
 >
 > What users like and dislike in Teams, Slack and Discord is in
-> `ambre-murmure-user-research.md`, with a do and do-not table for Murmure. This sketch applies
+> `research/ambre-murmure-user-research.md`, with a do and do-not table for Murmure. This sketch applies
 > that table; the rows it rejects are in section 6.
 
 ## 1. VISION
@@ -296,7 +296,7 @@ The alternatives a spec of `specs/5-Murmure/` rejects are in that spec. This tab
 
 ### Product
 
-From `ambre-murmure-user-research.md`. Several rows hold for the MVP too; the specs apply them.
+From `research/ambre-murmure-user-research.md`. Several rows hold for the MVP too; the specs apply them.
 
 | Alternative | Rejected because |
 | :--- | :--- |
