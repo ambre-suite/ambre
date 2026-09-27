@@ -19,16 +19,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2631 rows: 2362 shipped, of which 784 loose. 269 unbuilt.**
+**2632 rows: 2364 shipped, of which 784 loose. 268 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 238 | 221 | 542 | 577 | 1578 |
+| `verified` | 240 | 221 | 542 | 577 | 1580 |
 | `failing` | 39 | 46 | 22 |  | 107 |
 | `untested` | 268 | 144 | 237 | 4 | 653 |
 | `human-review` | 8 | 1 | 1 | 1 | 11 |
 | `qa-manual` | 5 | 4 | 4 |  | 13 |
-| `unimplemented` | 56 | 57 | 24 | 132 | 269 |
+| `unimplemented` | 55 | 57 | 24 | 132 | 268 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -38,7 +38,7 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 13 | 3 | 10 | 2 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 0 | 7 | 1 |
-| `ambre-spec-architecture.md` | 18 | 17 | 3 | 14 | 1 |
+| `ambre-spec-architecture.md` | 19 | 19 | 5 | 14 |  |
 | `ambre-spec-broadcast.md` | 19 | 16 | 6 | 10 | 3 |
 | `ambre-spec-chrome.md` | 21 | 20 | 9 | 11 | 1 |
 | `ambre-spec-clipboard.md` | 18 | 17 | 2 | 15 | 1 |
@@ -166,7 +166,7 @@
 | :--- | :--- |
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058 |
-| `ambre-spec-architecture.md` | ARCH-001..018 |
+| `ambre-spec-architecture.md` | ARCH-001..019 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..092 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..056 |

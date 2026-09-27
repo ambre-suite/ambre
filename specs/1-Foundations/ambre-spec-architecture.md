@@ -34,7 +34,7 @@ prefix is `ARCH`.
 | `ARCH-011` | `INV` | Each browser tab MUST run a complete client of its own. | this spec section 2 | none | unheld -- two tabs load the same two artefacts twice, and nothing refuses a design that shared one worker between them, which is the shortcut this rule exists to close; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-014` | `INV` | The client MUST NOT rely on a channel disconnection to detect a thread failure. | this spec section 2 | none | unheld -- the panic hook fires before the abort, so the notice does not wait on a channel, and nothing refuses a second detection path that would. A disconnection arrives late, or never, because a wedged thread holds its end open; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-018` | `INV` | The launcher MUST hold integration and the shell alone: the logic of an application, what one of its commands does included, MUST live in that application's crate. | this spec section 2 | none | fails -- the shell decides what Trame's bold toggle and filter popover do, what Toile's embed and link dialogs send, and what Prose's save becomes; lands with the "The launcher holds no application logic" Story (`ambre-roadmap.md` E8) | failing |
-| `ARCH-017` | `INV` | The Logic thread MUST answer a view once per pass over the commands waiting on its inbound channels, not once per command. | this spec section 2 | not built | unbuilt -- lands with the `ARCH P9` -- the Logic thread drains before it answers Story (`ambre-roadmap.md` E6) | unimplemented |
+| `ARCH-017` | `INV` | The Logic thread MUST answer a view once per pass over the commands waiting on its inbound channels, not once per command. | this spec section 2 | `ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once` | none | verified |
 | `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | none | unheld -- convergence is covered per application by the two-peer belt, which drives two engines in one process. Nothing drives two tabs, and the two differ in exactly the place that matters: one relay, two sessions, one identity; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 A thread fails
@@ -48,13 +48,22 @@ that and a page that looks alive and answers nothing.
 | `ARCH-008` | `POST` | A thread failure MUST reach the user out of band. | this spec section 2 | none | unheld -- the panic hook calls the page's fatal hook before the abort, and the terminal screen on the drawing surface is wired to it, and no test drives either; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-015` | `FRAME` | A failing thread MUST NOT write to the document on its way out. | this spec section 2; derived | none | unheld -- the fatal path emits an event and stops, so a half-applied operation is not flushed today. Nothing holds it, and a thread failing mid-write is the one moment the document can be left in a state no peer will ever converge to; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 
+### 1.3 A document closes during a pass
+
+The user types, then closes the document before the Logic thread has answered the keystrokes.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `ARCH-019` | `FRAME` | Closing a document MUST NOT drop the snapshot an edit earlier in the same pass is owed. | this spec section 2 | `ambre_logic::pass_tests::a_document_closed_in_the_pass_keeps_its_last_edit` | none | verified |
+
 * **Budget.** the whole of `ambre-spec-budgets.md`: this stack is what every row of that register
   measures. Its own two rows are the channel hop and the worker hop of `section 1`, and neither is
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 3 `verified`, 1 `failing`, 13 `untested`, 1 `unimplemented`. What holds is what the build
-  can refuse: a cycle, a cryptographic dependency in the wrong crate, a missing atomics flag.
+* **Verification.** 5 `verified`, 1 `failing`, 13 `untested`. What holds is what the build can
+  refuse: a cycle, a cryptographic dependency in the wrong crate, a missing atomics flag. A host test
+  holds the Logic loop's one answer per pass.
   Everything else, the failure path and the tab model included, is held by the code having been
   written that way.
 
@@ -114,10 +123,12 @@ An embedded child adds one more channel, so its event stream never reaches its p
 signal. The UI thread never blocks: it drops a lossy message and reports a full channel for a
 lossless one. The two classes and what each owes are `ambre-spec-message-bus.md`.
 
-**The Logic loop.** It takes one message, applies it and answers every view it wrote, before
-it takes the next. A burst of keystrokes therefore costs one layout per keystroke, and all but
-the last are stale before the view draws them. `ARCH-017` drains the waiting commands first and
-answers once per pass, so the lag stays one pass whatever the typing rate.
+**The Logic loop.** It waits for one message, then applies every message already queued on
+both channels. Each document the pass wrote is owed its layout and its snapshot, and gets them once
+when the pass ends (`ARCH-017`). A burst of keystrokes costs one layout, so the lag stays one pass
+whatever the typing rate. A pass takes only what waited when it began, so a sender that never
+pauses cannot hold the answer back. A document closed during the pass is answered first, so its
+last edit is saved (`ARCH-019`).
 
 **Failure, in two paths.**
 

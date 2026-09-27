@@ -15,6 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
+| `architecture` | How the client is split, and why. | implemented | 19 | 14 |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 | 4 |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 18 | 12 |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 | 5 |
@@ -39,7 +40,6 @@
 | `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | implemented | 14 | 8 |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 | 10 |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 | 7 |
-| `architecture` | How the client is split, and why. | partial | 18 | 14 |
 | `broadcast` | One connection per person, carrying every document they have open. | partial | 19 | 10 |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 21 | 11 |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 18 | 15 |
@@ -56,4 +56,4 @@
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**40 features: 22 implemented, 16 partial, 2 design-only. 614 contract rows, 320 loose.**
+**40 features: 23 implemented, 15 partial, 2 design-only. 615 contract rows, 320 loose.**

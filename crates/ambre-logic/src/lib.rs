@@ -443,6 +443,19 @@ struct LogicState {
     /// boot so the faces are warm before the first export rather than fetched
     /// under it.
     export_cx: Option<parley::FontContext>,
+    /// What each document written during the current pass is owed once the
+    /// pass ends: a layout, a snapshot, or both (`ARCH-017`). A burst of
+    /// keystrokes then costs one layout and one export, not one per key.
+    owed: HashMap<DocumentId, Owed>,
+}
+
+/// The answers a document is owed at the end of a pass (`ARCH-017`).
+#[derive(Default, Clone, Copy)]
+struct Owed {
+    /// The view's layout, handed over when it changed.
+    layout: bool,
+    /// A full snapshot for local persistence.
+    snapshot: bool,
 }
 
 impl LogicState {
@@ -462,6 +475,7 @@ impl LogicState {
             pending_seals: HashMap::new(),
             base_faces: Vec::new(),
             export_cx: None,
+            owed: HashMap::new(),
         }
     }
 
@@ -476,18 +490,47 @@ impl LogicState {
         }
     }
 
-    /// Hand the view a document's layout, when it changed. Called after
-    /// every path that writes the document or its faces, so the view never
-    /// lays text out itself (`PROSE-UI-006`).
-    fn hand_layout(&mut self, document_id: DocumentId) {
-        let Some(event) = self
-            .docs
-            .get_mut(&document_id)
-            .and_then(|doc| doc.state.layout_event())
-        else {
+    /// Owe the view a document's layout. Called after every path that writes
+    /// the document or its faces, so the view never lays text out itself
+    /// (`PROSE-UI-006`). The layout leaves once, when the pass ends.
+    fn owe_layout(&mut self, document_id: DocumentId) {
+        self.owed.entry(document_id).or_default().layout = true;
+    }
+
+    /// Owe local persistence a snapshot of a document the pass changed.
+    fn owe_snapshot(&mut self, document_id: DocumentId) {
+        self.owed.entry(document_id).or_default().snapshot = true;
+    }
+
+    /// Hand every document the pass wrote its owed answers (`ARCH-017`).
+    fn answer_pass(&mut self) {
+        let owed: Vec<DocumentId> = self.owed.keys().copied().collect();
+        for document_id in owed {
+            self.answer_document(document_id);
+        }
+    }
+
+    /// Hand one document what it is owed: its snapshot, then its layout
+    /// when that changed. A document already closed is owed nothing.
+    fn answer_document(&mut self, document_id: DocumentId) {
+        let Some(owed) = self.owed.remove(&document_id) else {
             return;
         };
-        self.send_to_ui(UiEvent::Viewport { document_id, event });
+        let Some(doc) = self.docs.get_mut(&document_id) else {
+            return;
+        };
+        let snapshot = owed.snapshot.then(|| doc.state.export_snapshot());
+        let layout = if owed.layout {
+            doc.state.layout_event()
+        } else {
+            None
+        };
+        if let Some(snapshot) = snapshot {
+            self.send_to_persist(document_id, snapshot);
+        }
+        if let Some(event) = layout {
+            self.send_to_ui(UiEvent::Viewport { document_id, event });
+        }
     }
 
     fn send_to_sync(&self, cmd: SyncCommand) {
@@ -509,14 +552,35 @@ impl LogicState {
     }
 }
 
+impl LogicState {
+    /// Apply the messages already queued on both channels, then answer.
+    ///
+    /// The pass takes only what waited when it began. A sender that never
+    /// pauses therefore delays the answer by one queue's worth, not forever.
+    fn drain_pass(
+        &mut self,
+        from_ui: &flume::Receiver<LogicCommand>,
+        from_sync: &flume::Receiver<LogicEvent>,
+    ) {
+        for command in from_ui.try_iter().take(from_ui.len()) {
+            self.handle_logic_command(command);
+        }
+        for event in from_sync.try_iter().take(from_sync.len()) {
+            self.handle_logic_event(event);
+        }
+        self.answer_pass();
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Entry point: drain both inbound channels, then park on the shared Waker.
 // -----------------------------------------------------------------------------
 
 /// Run the Logic thread to completion.
 ///
-/// Blocks on `flume::Selector` waiting on both inbound channels at once,
-/// dispatching each message through [`LogicState`]. Exits when **both** inbound
+/// Blocks on `flume::Selector` waiting on both inbound channels at once. Once
+/// a message wakes it, it applies everything already queued, then answers each
+/// document it wrote once (`ARCH-017`). Exits when **both** inbound
 /// channels disconnect (the UI Thread and the Sync relay both gone).
 ///
 /// `Selector::wait` parks the worker via flume's Atomics-backed blocking path,
@@ -561,10 +625,122 @@ pub fn run(
             Inbound::Event(Ok(event)) => state.handle_logic_event(event),
             Inbound::Event(Err(_)) => sync_open = false,
         }
+        state.drain_pass(&from_ui, &from_sync);
     }
 
     tracing::info!("Ambre Logic thread exiting (both inbound channels disconnected)");
     // Drop `state` here: document state is released, the outbound Senders are
     // closed, which the UI thread and the Sync relay observe as `Disconnected`.
     let _ = state;
+}
+
+#[cfg(test)]
+mod pass_tests {
+    use super::*;
+    use ambre_bus::app::prose::{ProseCommand, ProseEvent};
+    use ambre_bus::{AppCommand, AppEvent, DocType};
+
+    /// A state with every outbound receiver kept, and one open Prose document
+    /// whose opening answers are already drained.
+    struct Rig {
+        state: LogicState,
+        ui: flume::Receiver<UiEvent>,
+        persist: flume::Receiver<(DocumentId, Vec<u8>)>,
+        _sync: flume::Receiver<SyncCommand>,
+        document_id: DocumentId,
+        block: ambre_bus::app::prose::BlockId,
+    }
+
+    fn rig() -> Rig {
+        let (to_ui, ui) = flume::unbounded();
+        let (to_sync, sync) = flume::unbounded();
+        let (to_persist, persist) = flume::unbounded();
+        let mut state = LogicState::new(to_ui, to_sync, to_persist);
+        let document_id = DocumentId::new();
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Prose,
+        });
+        state.answer_pass();
+        let block = match &state.docs[&document_id].state {
+            DocState::Prose(prose) => prose.root_blocks()[0],
+            other => panic!("the registry opened {other:?}"),
+        };
+        ui.drain().for_each(drop);
+        Rig {
+            state,
+            ui,
+            persist,
+            _sync: sync,
+            document_id,
+            block,
+        }
+    }
+
+    fn keystroke(rig: &Rig, pos: u32) -> LogicCommand {
+        LogicCommand::App {
+            document_id: rig.document_id,
+            command: AppCommand::Prose(ProseCommand::InsertText {
+                block_id: rig.block,
+                pos,
+                text: "a".to_owned(),
+            }),
+        }
+    }
+
+    /// `ARCH-017`: three keystrokes queued before the thread wakes cost one
+    /// layout and one snapshot, and the layout carries all three.
+    #[test]
+    fn a_burst_of_keystrokes_is_answered_once() {
+        let mut rig = rig();
+        let (to_logic, from_ui) = flume::unbounded();
+        let (_to_logic_events, from_sync) = flume::unbounded::<LogicEvent>();
+        for pos in 0..3 {
+            to_logic.send(keystroke(&rig, pos)).expect("queued");
+        }
+        rig.state.drain_pass(&from_ui, &from_sync);
+
+        let layouts = rig
+            .ui
+            .drain()
+            .filter(|event| {
+                matches!(
+                    event,
+                    UiEvent::Viewport {
+                        event: AppEvent::Prose(ProseEvent::LayoutShaped { .. }),
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(layouts, 1, "one layout for the pass");
+        let snapshots: Vec<_> = rig.persist.drain().collect();
+        assert_eq!(snapshots.len(), 1, "one snapshot for the pass");
+        let DocState::Prose(prose) = &rig.state.docs[&rig.document_id].state else {
+            unreachable!("the rig opens Prose");
+        };
+        assert_eq!(
+            prose.export_snapshot(),
+            snapshots[0].1,
+            "the snapshot holds all three"
+        );
+    }
+
+    /// `ARCH-017`: an edit closed in the same pass is still saved, since the
+    /// answer it is owed leaves before the state does.
+    #[test]
+    fn a_document_closed_in_the_pass_keeps_its_last_edit() {
+        let mut rig = rig();
+        let (to_logic, from_ui) = flume::unbounded();
+        let (_to_logic_events, from_sync) = flume::unbounded::<LogicEvent>();
+        to_logic.send(keystroke(&rig, 0)).expect("queued");
+        to_logic
+            .send(LogicCommand::CloseDocument {
+                document_id: rig.document_id,
+            })
+            .expect("queued");
+        rig.state.drain_pass(&from_ui, &from_sync);
+        assert_eq!(rig.persist.drain().count(), 1, "the edit was saved");
+        assert!(!rig.state.docs.contains_key(&rig.document_id));
+    }
 }

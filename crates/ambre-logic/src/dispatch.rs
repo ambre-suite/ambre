@@ -77,7 +77,7 @@ impl LogicState {
                 for event in events {
                     self.send_to_ui(UiEvent::Viewport { document_id, event });
                 }
-                self.hand_layout(document_id);
+                self.owe_layout(document_id);
             }
 
             // -- P3 -- Service plane: forward verbatim, with state hooks --------
@@ -91,11 +91,13 @@ impl LogicState {
                     // handler can emit further commands against it.
                     RestCommand::Logout => {
                         self.docs.clear();
+                        self.owed.clear();
                         self.rest_routes.clear();
                         self.forget_pending_seals(None);
                     }
                     RestCommand::DeleteDocument { document_id } => {
                         self.docs.remove(document_id);
+                        self.owed.remove(document_id);
                         self.rest_routes.retain(|_, d| d != document_id);
                         self.forget_pending_seals(Some(*document_id));
                     }
@@ -137,9 +139,12 @@ impl LogicState {
                 });
                 // An empty document is one blank page (`PROSE-011`), and the
                 // view shows it before anything arrives.
-                self.hand_layout(document_id);
+                self.owe_layout(document_id);
             }
             LogicCommand::CloseDocument { document_id } => {
+                // The last edits of the pass are saved before the state goes,
+                // so closing a document never loses them (`ARCH-017`).
+                self.answer_document(document_id);
                 self.docs.remove(&document_id);
                 // Drop any in-flight service routes for this document. A response
                 // arriving after close has no engine to feed, and must not
@@ -177,7 +182,7 @@ impl LogicState {
                 // A new face re-shapes the runs it covers (`PROSE-111`).
                 let open: Vec<DocumentId> = self.docs.keys().copied().collect();
                 for document_id in open {
-                    self.hand_layout(document_id);
+                    self.owe_layout(document_id);
                 }
                 // The PDF-export context (`toile-pdf-export`), built on the
                 // first delivery and extended by each later one, so a script
@@ -605,6 +610,7 @@ mod tests {
             document_id,
             doc_type: DocType::Prose,
         });
+        state.answer_pass();
         let block = match &state.docs.get(&document_id).expect("a live document").state {
             DocState::Prose(prose) => prose.root_blocks()[0],
             other => panic!("the registry opened {other:?}"),
@@ -618,6 +624,7 @@ mod tests {
             pos: 0,
             text: "typed".to_owned(),
         }));
+        state.answer_pass();
         let drain = |ui: &flume::Receiver<UiEvent>| -> Vec<ProseEvent> {
             std::iter::from_fn(|| ui.try_recv().ok())
                 .filter_map(|event| match event {
