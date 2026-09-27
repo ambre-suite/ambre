@@ -24,6 +24,7 @@ pub mod floatbar;
 pub mod grid;
 pub mod hit;
 pub mod interop;
+pub mod kinetic;
 pub mod label;
 pub mod link;
 pub mod menu;

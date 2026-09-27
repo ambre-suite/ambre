@@ -43,6 +43,6 @@
 | `toile-pdf-export` | Toile's half of the shared PDF export (`ambre-spec-pdf-export.md`): one page per slide, and the clip that keeps a page to its own frame. | partial | 16 | 4 |
 | `toile-reactions` | A user drops an emoji on a note and everyone sees it, with a count. | partial | 35 | 8 |
 | `toile-text-editing` | A user double-clicks a note and types into it, where it sits, at the size it will keep. | partial | 36 | 24 |
-| `toile-viewport` | A user pans and zooms an endless plane. | partial | 32 | 14 |
+| `toile-viewport` | A user pans and zooms an endless plane. | partial | 35 | 17 |
 
-**29 features: 23 implemented, 6 partial, 0 design-only. 814 contract rows, 258 loose.**
+**29 features: 23 implemented, 6 partial, 0 design-only. 817 contract rows, 261 loose.**

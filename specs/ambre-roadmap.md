@@ -187,7 +187,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Auto-layout reaches a frame | V1 | the solver has no caller outside its own tests and the command has no menu entry, no inspector row and no chord: a layout rule is stored, converges, and moves nothing on screen |
 | `[ ]` Boolean operations reach a surface | V1 | union, intersection and difference are built and tested behind a command no menu entry, no button and no chord invokes |
 | `[ ]` Every connector shape a user can make | V1 | the format stores path kinds and anchors the tool writes for none of them, so a document can hold an arrow no gesture produces |
-| `[ ]` Toile on the shared kinetic scroll | MVP | a finger pans the board and a flick keeps it moving, on the "One kinetic scroll" model (E8), wherever the active tool does not draw; and an element or a marquee dragged past the edge of the board pans it. Today a finger acts as the mouse, with no flick, and nothing pans under a drag |
+| `[x]` Toile on the shared kinetic scroll | MVP | a finger pans the board and a flick keeps it moving, on the "One kinetic scroll" model (E8), wherever the active tool does not draw; and an element or a marquee dragged past the edge of the board pans it. Today a finger acts as the mouse, with no flick, and nothing pans under a drag |
 
 ---
 

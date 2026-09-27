@@ -37,6 +37,9 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-UI-026` | `POST` | A pan MUST move the content by the pointer's own displacement, at every zoom. | this spec section 2 | `ambre_toile::ui::viewport::tests::pan_moves_content_with_the_drag` -- it reads the screen displacement of a painted world point equal to the drag, at 2x, the one zoom that exercises the division at all | none | verified |
 | `TOILE-UI-282` | `FRAME` | A pan MUST NOT change the zoom, and MUST NOT change what is selected. | this spec section 2 | none | unheld -- the pan touches one field of the camera and the pointer handler returns before the tool machine sees the move, but no test reads the zoom back after a pan; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-378` | `POST` | A finger pressed on the empty board with the select tool, or with the hand, MUST pan the board. | this spec section 3 | `ambre_toile::ui::kinetic::tests::a_finger_pans_the_empty_board_and_grabs_or_draws_otherwise` | partial -- the choice is tested; the hit test that feeds it is not; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-379` | `FRAME` | A finger pressed on an element, on a handle or with a drawing tool MUST NOT pan the board. | this spec section 3 | `ambre_toile::ui::kinetic::tests::a_finger_pans_the_empty_board_and_grabs_or_draws_otherwise` | partial -- the choice is tested; the hit test that feeds it is not; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-380` | `POST` | A gesture held past an edge of the canvas MUST pan the board towards it, the same screen distance at every zoom. | this spec section 3 | `ambre_toile::ui::kinetic::tests::a_step_moves_the_same_screen_distance_at_any_zoom` | partial -- the speed and the step are tested; the per-frame step of the view is not; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-283` | `POST` | A pan MUST ask for the visible set of the place it landed on. | this spec section 2 | none | unheld -- the drag path queues one cull request per move and the wheel path queues another, and no test drives either handler, section 5; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.3 Zoom in and out
@@ -90,7 +93,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the camera is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What crosses to the Logic thread is a rectangle to cull
   against, never document data (`TOILE-UI-001`).
-* **Verification.** 16 `verified`, 1 `failing`, 13 `untested`, 2 `unimplemented`. What holds is the geometry:
+* **Verification.** 16 `verified`, 1 `failing`, 16 `untested`, 2 `unimplemented`. What holds is the geometry:
   the pure functions of the camera, covered over eighteen tests, and the kind token that names a fit's
   reply (`TOILE-UI-293`). What is loose is the handler layer above them: the wheel, the drag, the fit
   round trip and the resize. Loose too are every frame condition, the anchor at a clamp stop and a
@@ -162,10 +165,13 @@ request carries a kind token the reply echoes, so a pending fit spends only its 
 | Trigger | Behaviour |
 |---|---|
 | the wheel, in the mouse mode | zooms about the cursor |
-| the wheel, in the trackpad mode | pans both axes (`TOILE-UI-289`); a pinch zooms |
+| the wheel, in the trackpad mode | pans both axes (`TOILE-UI-289`), and a glide coasts once it pauses (`1-Foundations/ambre-spec-kinetic-scroll.md`); a pinch zooms |
 | the wheel, in the automatic mode | classified per event, then zooms or pans (`TOILE-UI-027`) |
 | `Ctrl` with the wheel, a pinch | zooms, in every mode (`TOILE-UI-028`) |
 | a drag with the Hand tool, with `Space` held, or with the middle button | pans (`TOILE-UI-026`) |
+| a finger on the empty board with the select tool, or with the hand | pans, and a flick keeps the board moving (`TOILE-UI-378`); a finger that barely moves is a click |
+| a finger on an element or a handle, or with a drawing tool | acts as the mouse: grabs, draws or places (`TOILE-UI-379`) |
+| a move, a resize, a marquee or a stroke held past the edge of the canvas | pans towards that edge, faster the deeper, and the gesture follows (`TOILE-UI-380`) |
 | the zoom control and the View menu | zoom in, zoom out, 100 %, fit the board, fit the selection (`features/ambre-spec-toile-menus.md`) |
 | a canvas resize | keeps the centre and the zoom, and re-culls (`TOILE-UI-296`, `TOILE-UI-297`) |
 

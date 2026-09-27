@@ -518,7 +518,7 @@ where
             move |event: web_sys::PointerEvent| {
                 let x = event.offset_x() as f64 * dpr;
                 let y = event.offset_y() as f64 * dpr;
-                // A finger pans the page on Prose rather than selecting.
+                // A finger pans the view rather than selecting.
                 if event.pointer_type() == "touch" && host_c.borrow().captures_pointer() {
                     let phase = match event.type_().as_str() {
                         "pointerdown" => TouchPhase::Down,

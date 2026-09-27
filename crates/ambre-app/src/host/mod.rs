@@ -317,10 +317,18 @@ impl AppView {
         }
     }
 
-    /// A finger on the canvas. Prose and Trame take it apart from the mouse.
+    /// A finger on the canvas. Every application takes it apart from the
+    /// mouse.
     fn touch(&mut self, phase: TouchPhase, x: f32, y: f32, now_ms: f64) -> bool {
         match self {
-            AppView::Toile(_) => false,
+            AppView::Toile(v) => {
+                let (x, y) = (f64::from(x), f64::from(y));
+                match phase {
+                    TouchPhase::Down => v.touch_down(x, y, now_ms),
+                    TouchPhase::Move => v.touch_move(x, y, now_ms),
+                    TouchPhase::Up => v.touch_up(x, y, now_ms),
+                }
+            }
             AppView::Trame(v) => {
                 match phase {
                     TouchPhase::Down => v.touch_down(x, y, now_ms),
@@ -334,9 +342,9 @@ impl AppView {
     }
 
     /// Whether a consumed press captures the pointer, and a finger pans
-    /// rather than selects. Prose and Trame do.
+    /// rather than selects. Every application does.
     fn captures_pointer(&self) -> bool {
-        matches!(self, AppView::Prose(_) | AppView::Trame(_))
+        true
     }
 
     /// Swap the active document in place, keeping the GPU surface.

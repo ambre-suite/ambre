@@ -1,8 +1,7 @@
 # AMBRE -- FEATURE: THE KINETIC SCROLL
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the one model is built, and Prose and Trame run on it. Toile has no
-touch path yet
+**Implementation:** implemented -- the one model, and Prose, Trame and Toile run on it
 
 > A finger moves the view the same way in every editor. A tap stays a tap, a pan follows the finger,
 > a flick coasts to a stop, and a drag held near an edge scrolls. A trackpad glide that stops keeps
@@ -52,14 +51,14 @@ The user glides two fingers on a trackpad and lifts them, or turns a notched whe
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `KINETIC-002` | `POST` | A trackpad glide that pauses MUST keep the view moving at the glide's speed. | this spec section 4 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does` | fails -- Prose and Trame hold it, and Toile's board stops dead after a glide; lands with the `Toile on the shared kinetic scroll` Story (`ambre-roadmap.md` E6) | failing |
+| `KINETIC-002` | `POST` | A trackpad glide that pauses MUST keep the view moving at the glide's speed. | this spec section 4 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does` | none | verified |
 | `KINETIC-009` | `FRAME` | A wheel notch, a line step or a page step MUST NOT start a motion. | this spec section 4 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does` | none | verified |
 
 * **Budget.** none of its own: a tick is a multiplication and an exponential. What it costs is the
   scroll the application's viewport already carries in `ambre-spec-budgets.md`.
 * **Boundary.** none: the model is view state on the UI thread. It writes no document and sends no
   command, so nothing here reaches the relay.
-* **Verification.** 7 `verified`, 1 `failing`, 1 `human-review`. The model's rows are unit tests of
+* **Verification.** 8 `verified`, 1 `human-review`. The model's rows are unit tests of
   `crates/ambre-draw`, which knows no application. Prose's own rows hold what its column does with
   the distances (`4-Prose/features/ambre-spec-prose-viewport.md`), and Trame's grid rows what its
   grid does (`2-Trame/features/ambre-spec-trame-grid-viewport.md`).
@@ -142,9 +141,6 @@ depends on, and it depends on nothing.
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **Toile has no touch path, and no wheel momentum.** A finger acts as the mouse, a glide stops
-  dead, and nothing pans under a drag. It lands
-  with the `Toile on the shared kinetic scroll` Story (`ambre-roadmap.md` E6).
 * **A cancelled pointer is not ruled.** The browser may cancel a gesture it takes over; the press
   then stays until the next one replaces it.
 

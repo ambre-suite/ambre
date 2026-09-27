@@ -19,13 +19,13 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2626 rows: 2357 shipped, of which 781 loose. 269 unbuilt.**
+**2629 rows: 2360 shipped, of which 783 loose. 269 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 236 | 221 | 542 | 577 | 1576 |
-| `failing` | 40 | 46 | 22 |  | 108 |
-| `untested` | 268 | 144 | 234 | 4 | 650 |
+| `verified` | 237 | 221 | 542 | 577 | 1577 |
+| `failing` | 39 | 46 | 22 |  | 107 |
+| `untested` | 268 | 144 | 237 | 4 | 653 |
 | `human-review` | 8 | 1 | 1 | 1 | 11 |
 | `qa-manual` | 4 | 4 | 4 |  | 12 |
 | `unimplemented` | 56 | 57 | 24 | 132 | 269 |
@@ -53,7 +53,7 @@
 | `ambre-spec-high-density.md` | 9 | 5 | 0 | 5 | 4 |
 | `ambre-spec-key-rotation.md` | 12 | 11 | 2 | 9 | 1 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 5 | 13 |  |
-| `ambre-spec-kinetic-scroll.md` | 9 | 9 | 7 | 2 |  |
+| `ambre-spec-kinetic-scroll.md` | 9 | 9 | 8 | 1 |  |
 | `ambre-spec-launcher.md` | 17 | 17 | 7 | 10 |  |
 | `ambre-spec-media.md` | 11 | 11 | 0 | 11 |  |
 | `ambre-spec-membership.md` | 17 | 17 | 12 | 5 |  |
@@ -128,7 +128,7 @@
 | `ambre-spec-toile-tools.md` | 30 | 30 | 23 | 7 |  |
 | `ambre-spec-toile-undo.md` | 6 | 6 | 1 | 5 |  |
 | `ambre-spec-toile-vector-paths.md` | 13 | 13 | 4 | 9 |  |
-| `ambre-spec-toile-viewport.md` | 32 | 30 | 16 | 14 | 2 |
+| `ambre-spec-toile-viewport.md` | 35 | 33 | 16 | 17 | 2 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 7 | 9 |  |
 | `ambre-spec-prose-schema.md` | 29 | 28 | 27 | 1 | 1 |
 | `ambre-spec-prose-clipboard.md` | 23 | 21 | 21 |  | 2 |
@@ -257,7 +257,7 @@
 | `ambre-spec-toile-tools.md` | TOILE-UI-008..009,036..042,243..261,369..370 |
 | `ambre-spec-toile-undo.md` | TOILE-014,094..098 |
 | `ambre-spec-toile-vector-paths.md` | TOILE-FEAT-006,018,033..037; TOILE-UI-057..058,102..105 |
-| `ambre-spec-toile-viewport.md` | TOILE-UI-002..004,010,025..030,278..298,360 |
+| `ambre-spec-toile-viewport.md` | TOILE-UI-002..004,010,025..030,278..298,360,378..380 |
 | `ambre-spec-toile-z-order.md` | TOILE-057..061,119..129 |
 | `ambre-spec-trame-autofill.md` | TRAME-UI-067..074,133..134 |
 | `ambre-spec-trame-cell-editing.md` | TRAME-FEAT-020..024,047..050; TRAME-UI-010..011,015,050..058,091..092,155..171 |

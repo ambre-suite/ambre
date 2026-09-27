@@ -29,6 +29,7 @@ use ambre_canvas::{
     BusyPublisher, ContentRepaint, FrameStats, InputEvent, OverlayRepaint, PerfPublisher,
     PerfSnapshot, RepaintPlan, TextCache, TextInput, Theme, ThemeControl, WgpuSurface,
 };
+use ambre_draw::kinetic::Release;
 use ambre_draw::{BoundingBox, FontContext, Point, Rect, Vec2};
 
 use crate::logic::animate::AnimatedElement;
@@ -299,6 +300,14 @@ pub struct ToileView {
     last_pointer: Point,
     /// While panning (space-drag / Hand tool): the previous screen position.
     panning: Option<Point>,
+    /// The shared kinetic scroll: wheel glides, finger pans and the motion
+    /// either leaves (`1-Foundations/ambre-spec-kinetic-scroll.md`).
+    kinetic: ambre_draw::kinetic::Kinetic,
+    /// The finger down, if any: `true` when it pans, `false` when it acts
+    /// as the mouse.
+    finger_pans: Option<bool>,
+    /// When the edge pan of a held gesture last ticked (`TOILE-UI-380`).
+    edge_ms: Option<f64>,
     /// Space held: a drag pans in any tool (`toile-viewport`).
     space_down: bool,
 
@@ -615,6 +624,9 @@ impl ToileView {
             click_edit_candidate: None,
             last_pointer: Point::new(canvas_width / 2.0, canvas_height / 2.0),
             panning: None,
+            kinetic: Default::default(),
+            finger_pans: None,
+            edge_ms: None,
             space_down: false,
             pointer_mode: PointerMode::default(),
             detected_mouse: false,
@@ -1118,13 +1130,21 @@ impl ToileView {
             }
         };
         if zoom {
+            // A zoom never coasts, and stops a coast under way.
+            self.kinetic.stop();
             // Zoom about the cursor. A trackpad pinch and a mouse notch both land
             // here; only `dy` drives the factor.
             let factor = (-dy * ZOOM_PER_WHEEL_PX).exp();
             self.cam.zoom_about(self.last_pointer, factor);
         } else {
-            // Two-finger scroll pans the 2D plane in both axes.
-            self.cam.pan_by_screen(Vec2::new(dx, dy));
+            // Two-finger scroll pans the 2D plane in both axes. The model
+            // applies the step one for one, and lets a glide coast once it
+            // pauses; a notch never coasts (`KINETIC-002`, `KINETIC-009`).
+            let now = self.clock_ms();
+            let step = self
+                .kinetic
+                .wheel(-dx as f32, -dy as f32, delta_mode != 0, now);
+            super::kinetic::move_view(&mut self.cam, step);
         }
         self.queue_viewport();
         true
@@ -1384,6 +1404,114 @@ impl ToileView {
         self.embed_sessions
             .close_all(|cmd| send_session(to_logic, fatal, cmd));
         self.embed_focus.blur();
+    }
+
+    /// The time on the frame clock's timeline, for an input that carries
+    /// none.
+    fn clock_ms(&self) -> f64 {
+        #[cfg(target_arch = "wasm32")]
+        if let Some(perf) = web_sys::window().and_then(|w| w.performance()) {
+            return perf.now();
+        }
+        self.frame_now_ms
+    }
+
+    /// A finger went down. It stops any motion left. On the empty board with
+    /// the select tool, or with the hand, it pans (`TOILE-UI-378`);
+    /// otherwise it acts as the mouse.
+    pub fn touch_down(&mut self, x: f64, y: f64, now_ms: f64) -> bool {
+        self.kinetic.stop();
+        let screen = Point::new(x, y);
+        let world = self.cam.screen_to_world() * screen;
+        let grabbable = hit_topmost(&self.display.nodes, world).is_some()
+            || self
+                .machine
+                .hover_handle(&self.selection, &self.display, &self.cam, screen)
+                .is_some();
+        let pans = super::kinetic::finger_pans(self.machine.tool(), grabbable);
+        self.finger_pans = Some(pans);
+        if pans {
+            self.last_pointer = screen;
+            self.kinetic.press(x as f32, y as f32, now_ms);
+            return true;
+        }
+        self.handle_input(&InputEvent::PointerDown {
+            x,
+            y,
+            button: 0,
+            shift: false,
+            ctrl: false,
+        })
+    }
+
+    /// A finger moved: a panning finger drags the board past the tap slop,
+    /// any other acts as the mouse.
+    pub fn touch_move(&mut self, x: f64, y: f64, now_ms: f64) -> bool {
+        match self.finger_pans {
+            Some(true) => {
+                self.last_pointer = Point::new(x, y);
+                if let Some(step) = self.kinetic.sample(x as f32, y as f32, now_ms) {
+                    super::kinetic::move_view(&mut self.cam, step);
+                    self.queue_viewport();
+                }
+                true
+            }
+            Some(false) => self.handle_input(&InputEvent::PointerMove { x, y }),
+            None => false,
+        }
+    }
+
+    /// A finger lifted. A pan released with speed keeps the board moving; a
+    /// finger that never left the tap slop is a click where it went down.
+    pub fn touch_up(&mut self, x: f64, y: f64, now_ms: f64) -> bool {
+        match self.finger_pans.take() {
+            Some(true) => {
+                if let Release::Tap { x, y } = self.kinetic.release(now_ms) {
+                    let (x, y) = (f64::from(x), f64::from(y));
+                    self.handle_input(&InputEvent::PointerDown {
+                        x,
+                        y,
+                        button: 0,
+                        shift: false,
+                        ctrl: false,
+                    });
+                    self.handle_input(&InputEvent::PointerUp {
+                        x,
+                        y,
+                        button: 0,
+                        ctrl: false,
+                    });
+                }
+                true
+            }
+            Some(false) => self.handle_input(&InputEvent::PointerUp {
+                x,
+                y,
+                button: 0,
+                ctrl: false,
+            }),
+            None => false,
+        }
+    }
+
+    /// Pan the board under a gesture held at an edge, once a frame, and let
+    /// the gesture follow (`TOILE-UI-380`). The first tick only starts the
+    /// clock.
+    fn step_edge_pan(&mut self, now_ms: f64) {
+        let held = self.machine.is_active() || self.arrow_drag.is_some();
+        let speed = super::kinetic::edge_pan_speed(&self.cam, self.last_pointer);
+        if !held || speed == (0.0, 0.0) {
+            self.edge_ms = None;
+            return;
+        }
+        let Some(last) = self.edge_ms.replace(now_ms) else {
+            return;
+        };
+        let dt = (now_ms - last).clamp(0.0, ambre_draw::kinetic::MAX_STEP_MS) as f32;
+        super::kinetic::move_view(&mut self.cam, (speed.0 * dt, speed.1 * dt));
+        self.queue_viewport();
+        let at = self.last_pointer;
+        self.handle_pointer_move(at.x, at.y);
     }
 
     fn handle_pointer_down(&mut self, x: f64, y: f64, button: i16, ctrl: bool) -> bool {
@@ -3173,6 +3301,14 @@ impl ToileView {
                 self.viewport_changed = true;
             }
         }
+
+        // A flick or a glide keeps the board moving (`KINETIC-004`), and a
+        // gesture held at an edge pans it (`TOILE-UI-380`).
+        if let Some(step) = self.kinetic.tick(now_ms) {
+            super::kinetic::move_view(&mut self.cam, step);
+            self.queue_viewport();
+        }
+        self.step_edge_pan(now_ms);
 
         // Keep the status-bar aggregates (`toile-status-bar`) in step with the
         // selection. On a change, ask Logic for the fresh count/bounds. The reply
