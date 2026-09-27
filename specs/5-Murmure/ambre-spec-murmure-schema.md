@@ -87,12 +87,16 @@ Grammar and status values are normative in `ambre-spec-template.md`.
 ```rust
 pub struct Timestamp(u64);              // Unix milliseconds, display only: a clock is untrusted
 pub struct Emoji(String);               // exactly one extended grapheme cluster
-pub struct ReactionKey { pub emoji: Emoji, pub user: UserId }  // one map key, encoded as a string
+pub enum ReactionEmoji { Unicode(Emoji), Custom(CustomEmojiId) }
+pub struct ReactionKey { pub emoji: ReactionEmoji, pub user: UserId }  // one map key, encoded as a string
+pub struct CustomEmojiId(Uuid);         // minted by the admin's client
+pub struct TagId(Uuid);                 // minted by the forum owner's client
+pub struct ImportOrigin { pub name: String, pub ts: Timestamp }
 pub struct MediaType(String);           // a lower-case type and subtype
 pub struct ByteSize(u64);
 pub struct SealedChannelKey(Vec<u8>);   // a channel key, sealed under the space key
 pub enum DocumentKind { Space, Meta, Segment, Amendments, Thread }
-pub enum ChannelType { Direct, Private, Public }
+pub enum ChannelType { Direct, Private, Public, Forum }
 pub enum SegmentState { Active, Closing, Final }
 pub enum DeletedBy { Author, Moderator }
 pub enum MentionTarget { User(UserId), Channel }
@@ -113,13 +117,17 @@ concurrent writers race for. Every document also carries the `peers` registry of
 | `space` | `space` | Map | `name` | String | the key | spaces | design |
 | `space` | `categories` | Map | a `CategoryId` | `{name: String, position: u32}` | the category entry | spaces | design |
 | `space` | `channels` | Map | a `ChannelId` | `{name: String, topic: String, category_id: CategoryId, position: u32, key: SealedChannelKey}` | the field | spaces | design |
+| `space` | `emoji` | Map | a `CustomEmojiId` | `{name: String, media_ref, media_type: MediaType}` | the entry | emoji | design |
 | `meta` | `channel` | Map | `type`, `name`, `topic` | `ChannelType`, String, String | the key | channels | design |
 | `meta` | `segments` | List | position | `{document_id: DocumentId, from_ts: Timestamp, to_ts: Timestamp, msg_count: u32, state: SegmentState, amended: bool}` | the field | segments | design |
+| `meta` | `pinned` | Map | a `MessageId` | `{segment: DocumentId, pinned_at: Timestamp}` | the entry | pins | design |
+| `meta` | `tags` | Map | a `TagId`, for a forum | `{name: String}` | the entry | forums | design |
 | segment, thread | `messages` | List | position | one message map | list order, no LWW | messages | design |
-| segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted` | `MessageId`, `UserId`, `Timestamp`, `DocumentId`, `MessageId`, `bool`, `bool` | the key | messages | design |
+| segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted`, `title`, `origin` | `MessageId`, `UserId`, `Timestamp`, `DocumentId`, `MessageId`, `bool`, `bool`, String, `ImportOrigin` | the key | messages | design |
 | segment, thread | `messages/{n}/content` | Text | -- | the message body, with the `mention` mark | none: char-CRDT | messages, mentions | design |
 | segment, thread | `messages/{n}/attachments` | List | position | `{media_ref, name: String, media_type: MediaType, size: ByteSize}`, the reference typed by `ambre-spec-media.md` | list order, no LWW | attachments | design |
-| segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: an `Emoji` and a `UserId` | a `Timestamp` | the entry | reactions | design |
+| segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: a `ReactionEmoji` and a `UserId` | a `Timestamp` | the entry | reactions | design |
+| segment, thread | `messages/{n}/tags` | Map | a `TagId` | `true` | the entry | forums | design |
 | amendments | `amendments` | Map | a `MessageId` | `{content}` or `{deleted: bool, by: DeletedBy}` | the entry | messages | design |
 | amendments | `amendments/{id}/content` | Text | -- | the edited body | none: char-CRDT | messages | design |
 | settings | `murmure/layout` | Map | a `ChannelId` | `{group: SidebarGroup, position: u32, hidden: bool, collapsed: bool}` | the entry | sidebar | design |
@@ -131,7 +139,8 @@ concurrent writers race for. Every document also carries the `peers` registry of
 
 **The `state` of a segment** is `active`, `closing` or `final`. **The `by` of a delete** is `author`
 or `moderator`. **The `mention` mark** carries a user id, or the channel for an `@channel`. It expands
-to nothing: text typed beside it is not part of the mention.
+to nothing: text typed beside it is not part of the mention. **The `emoji` mark** carries a
+`CustomEmojiId` and draws its image.
 
 **Absence is a value** (`MURMURE-018`). No `name` on a direct message means the client composes one
 at display (`MURMURE-016`). No `thread` means the message has no reply. No `amended` segment has no
@@ -142,13 +151,14 @@ amendments document.
 ## 4. HIERARCHY
 
 * a `space` document
-  * `header`, `space`
+  * `header`, `space`, `emoji`
   * `categories`, per category: its name and position
   * `channels`, per public channel: its name, topic, category, position and key
 * a `meta` document, one per channel
-  * `header`, `channel`, `segments`
+  * `header`, `channel`, `segments`, `pinned`, `tags`
 * a segment document, one per time slice of a channel
-  * `header`, and `messages`, per message: its fields, `content`, `attachments` and `reactions`
+  * `header`, and `messages`, per message: its fields, `content`, `attachments`, `reactions` and
+    `tags`
 * an amendments document, one per amended final segment
   * `header`, and `amendments`, per message: `content`, or the delete
 * a thread document, one per message with a reply

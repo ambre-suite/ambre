@@ -18,15 +18,19 @@
 | `murmure-attachments` | A member drops a file or an image into a message. | design-only | 12 |  |
 | `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | design-only | 38 |  |
 | `murmure-composer` | The field where a member writes. | design-only | 20 |  |
-| `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | design-only | 5 |  |
+| `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | design-only | 13 |  |
 | `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | design-only | 10 |  |
+| `murmure-forums` | A forum is a channel of posts. | design-only | 10 |  |
+| `murmure-import` | A team moving from Slack or Discord brings its history along. | design-only | 9 |  |
 | `murmure-keyboard` | No frequent action in Murmure needs the mouse. | design-only | 13 |  |
-| `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | design-only | 12 |  |
+| `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | design-only | 17 |  |
 | `murmure-mentions` | A member names another in a message with `@`. | design-only | 13 |  |
+| `murmure-message-links` | A member copies a link to one message and pastes it anywhere. | design-only | 7 |  |
 | `murmure-message-list` | The conversation of a channel, newest at the bottom. | design-only | 20 |  |
 | `murmure-messages` | A member writes a message, edits it, or deletes it. | design-only | 22 |  |
 | `murmure-moderation` | A moderator removes the message of another member. | design-only | 10 |  |
 | `murmure-notifications` | A member learns that someone mentioned them or wrote to them directly. | design-only | 15 |  |
+| `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-reactions` | A member answers a message with an emoji. | design-only | 7 |  |
 | `murmure-search` | A member finds a message by its words, in the channels they have loaded. | design-only | 16 |  |
 | `murmure-segments` | A channel grows for years and still opens fast. | design-only | 21 |  |
@@ -36,4 +40,4 @@
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | design-only | 9 |  |
 | `murmure-unread` | The sidebar shows where something new is, and how much. | design-only | 11 |  |
 
-**20 features: 0 implemented, 0 partial, 20 design-only. 316 contract rows, 0 loose.**
+**24 features: 0 implemented, 0 partial, 24 design-only. 365 contract rows, 0 loose.**

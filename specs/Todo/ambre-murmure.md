@@ -39,31 +39,6 @@ stay one command away.
 
 Each heading names its Story in `ambre-roadmap.md` E5, unless it says otherwise.
 
-### Pinned messages
-
-A member pins a message for every member of the channel. The `meta` document gains a `pinned` List
-of `{segment: DocumentId, message: MessageId}`, in pin order. A pin names its segment, so the
-client loads that segment alone to show it.
-
-### A link to a message
-
-A link names the channel, the segment and the message. It opens only for a member of the channel:
-the link carries no key.
-
-### Forum channels
-
-Each post has a title and tags, and opens its own thread document. The forum works on a phone,
-tags included.
-
-### Custom emoji
-
-A space admin adds emoji for the members of that space. The images go through the shared media
-flow.
-
-### Chat import
-
-An archive of Slack or Discord, in JSON, imported into a space.
-
 ### Later than V1
 
 * **Unfurling.** A preview of a link or of an internal document (Trame, Toile, Prose) in the

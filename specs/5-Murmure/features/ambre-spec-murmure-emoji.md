@@ -19,6 +19,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-137` | `OBS` | A Unicode emoji MUST be drawn in colour, in a message and in a reaction. | this spec section 3 | not built | unbuilt -- lands with the `Emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-138` | `INV` | The colour emoji font MUST load on first use, never at start. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `Emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-374` | `INV` | A custom emoji MUST belong to one space, listed in its space document. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Custom emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-375` | `INV` | The image of a custom emoji MUST be sealed under the key of its space. | this spec section 3; `ambre-spec-media.md` | not built | unbuilt -- lands with the `Custom emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Pick an emoji
 
@@ -28,10 +30,26 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-140` | `POST` | An emoji picked from a message MUST be added as a reaction. | this spec section 3; `features/ambre-spec-murmure-reactions.md` | not built | unbuilt -- lands with the `Emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-141` | `FRAME` | The picker MUST NOT send a request outside the client. | this spec section 3; `ZK-007` | not built | unbuilt -- lands with the `Emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.4 Add a custom emoji
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-376` | `POST` | Adding a custom emoji MUST be the act of a space admin, its image uploaded through the shared media flow. | this spec section 3; `MURMURE-032` | not built | unbuilt -- lands with the `Custom emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-377` | `FAIL` | Given a name the space already uses, the client MUST refuse the new emoji. | this spec section 3 | not built | unbuilt -- lands with the `Custom emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-378` | `FRAME` | Adding a custom emoji MUST NOT change a message. | this spec section 3 | not built | unbuilt -- lands with the `Custom emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.5 Use a custom emoji
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-379` | `POST` | A custom emoji MUST be offered in the channels of its space alone. | this spec section 3 | not built | unbuilt -- lands with the `Custom emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-380` | `FAIL` | Given a custom emoji the reader cannot resolve, the client MUST draw its name as text. | this spec section 3 | not built | unbuilt -- lands with the `Custom emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-381` | `FRAME` | Using a custom emoji MUST NOT copy its image into the message. | this spec section 3; `MURMURE-017` | not built | unbuilt -- lands with the `Custom emoji` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** the colour emoji font row of `ambre-spec-budgets.md section 6`.
 * **Boundary.** none: an emoji is text inside a sealed message, and the font ships with the
   client.
-* **Verification.** 5 `unimplemented`: no emoji is drawn in colour today.
+* **Verification.** 13 `unimplemented`: no emoji is drawn in colour today.
 
 ---
 
@@ -50,6 +68,15 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 **The font** is a colour emoji font served with the client, loaded on the first emoji to draw. The
 glyph pipeline draws it through the colour atlas the budget register already declares.
+
+**Custom emoji belong to a space.** A space admin adds one: a name, and an image through the shared
+media flow, sealed under the space key (`MURMURE-374` to `MURMURE-376`). The `emoji` map of the space
+document lists them. A message holds the `emoji` mark with the identifier, never the image
+(`MURMURE-381`). A reaction keys it as `ReactionEmoji::Custom`.
+
+**Who can draw it.** Every member of the space reads the space document, so every member draws the
+emoji. A guest, a direct message, or an emoji the admin removed later: the reader cannot resolve it,
+and draws `:name:` as text (`MURMURE-380`).
 
 **Code.** not built.
 
@@ -71,6 +98,8 @@ glyph pipeline draws it through the colour atlas the budget register already dec
 | :--- | :--- | :--- |
 | The font ships with the client | emoji images from a remote service | each emoji drawn would tell that service what the user reads |
 | Loaded on first use | loaded at start | a font of about 10 MB would weigh on every start |
+| Custom emoji belong to a space | custom emoji per user | a member's emoji would draw for nobody else, since nobody else holds the key of the image |
+| An unresolved emoji draws its name | a broken image | the name still says what the author meant |
 
 ---
 

@@ -25,6 +25,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-163` | `OBS` | The sidebar MUST group the public channels of each space by category, then list the private channels and the direct messages. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-164` | `OBS` | A channel to join MUST be shown apart from the joined channels. | this spec section 3; `features/ambre-spec-murmure-spaces.md` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-165` | `OBS` | A channel with activity MUST show a mark, and its count once the count is known. | this spec section 3; `features/ambre-spec-murmure-unread.md` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-382` | `INV` | A split view MUST exist at the desktop width alone. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `Two channels side by side` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Select a channel
 
@@ -40,10 +41,19 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-168` | `POST` | Back from a thread MUST show its channel at the root message; back from a channel MUST show the channel list. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-169` | `FRAME` | Going back MUST NOT move a read cursor. | this spec section 3 | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.4 Show two channels side by side
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-383` | `POST` | Opening a channel beside the current one MUST show both, each with its message list and its composer. | this spec section 3 | not built | unbuilt -- lands with the `Two channels side by side` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-384` | `POST` | A command MUST move the focus from one pane to the other. | this spec section 3; `MURMURE-170` | not built | unbuilt -- lands with the `Two channels side by side` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-385` | `POST` | Closing a pane MUST give its width back to the other. | this spec section 3 | not built | unbuilt -- lands with the `Two channels side by side` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-386` | `FRAME` | A split view MUST NOT hold in view more than the documents of the two channels it shows. | this spec section 3; `RESID-003` | not built | unbuilt -- lands with the `Two channels side by side` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** none of its own: the chrome regions are DOM, and the message list holds the frame
   budget of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the width of a window never leaves the client.
-* **Verification.** 12 `unimplemented`: no Murmure view exists.
+* **Verification.** 17 `unimplemented`: no Murmure view exists.
 
 ---
 
@@ -69,6 +79,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | the sidebar | a view of its own | beside the message list, collapsible | persistent |
 | the message list | a view of its own | beside the sidebar | the centre column |
 | the thread | a view of its own | in place of the message list | a right column, opened on demand |
+
+**Two channels side by side.** Over the desktop width, a second channel opens beside the first,
+with its own list and composer (`MURMURE-383`). The window narrows, and the second pane closes
+(`MURMURE-382`). Each pane keeps its documents in view, and no more (`MURMURE-386`).
 
 On a phone, the application switcher of the suite stays the drawer the adaptive layout declares.
 The channel list is a Murmure view inside it, not a second drawer.

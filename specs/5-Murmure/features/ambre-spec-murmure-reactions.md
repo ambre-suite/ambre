@@ -88,4 +88,3 @@ reactions never race for one value. The authorship check refuses an entry under 
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing is built.** No reaction exists.
-* **Custom emoji are not here.** They are the `Custom emoji` Story (`ambre-roadmap.md` E5).
