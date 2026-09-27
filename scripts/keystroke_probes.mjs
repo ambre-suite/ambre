@@ -40,6 +40,9 @@ async function collect(page) {
     out.confirms = performance
       .getEntriesByName("ambre:confirm", "measure")
       .map((e) => [e.startTime, e.startTime + e.duration]);
+    out.counts = performance
+      .getEntriesByName("ambre:confirm-frames", "mark")
+      .map((e) => e.detail);
     out.relays = performance.getEntriesByName("ambre:relay", "mark").map((e) => e.startTime);
     out.origin = performance.timeOrigin;
     performance.clearMeasures();
@@ -64,20 +67,23 @@ function splitConfirms(confirms, relays) {
   return split;
 }
 
-function line(name, samples) {
+function line(name, samples, unit = "ms") {
   const values = [...(samples ?? [])].sort((a, b) => a - b);
   if (values.length === 0) {
     console.log(`${name.padEnd(18)} no sample`);
     return;
   }
-  const p50 = percentile(values, 0.5).toFixed(2);
-  const p95 = percentile(values, 0.95).toFixed(2);
-  console.log(`${name.padEnd(18)} n=${String(values.length).padStart(4)} p50=${p50} ms p95=${p95} ms`);
+  const digits = unit === "ms" ? 2 : 0;
+  const p50 = percentile(values, 0.5).toFixed(digits);
+  const p95 = percentile(values, 0.95).toFixed(digits);
+  const max = values[values.length - 1].toFixed(digits);
+  console.log(`${name.padEnd(18)} n=${String(values.length).padStart(4)} p50=${p50} ${unit} p95=${p95} ${unit} max=${max} ${unit}`);
 }
 
 function report(scenario, samples) {
   console.log(`\n== ${scenario}`);
   for (const name of NAMES) line(name, samples[name]);
+  line("ambre:confirm-frames", samples.counts, "frames");
   console.log("-- confirmation, split");
   for (const [name, values] of Object.entries(samples.split)) line(`  ${name}`, values);
 }

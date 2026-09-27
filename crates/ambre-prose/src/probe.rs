@@ -16,6 +16,10 @@ pub const ECHO: &str = "ambre:echo";
 /// The name of the confirmation measure: input to the Logic thread's
 /// acknowledgement reaching the view.
 pub const CONFIRM: &str = "ambre:confirm";
+/// The name of the confirmation count: the animation frames that began
+/// between the input and its acknowledgement reaching the view. A count,
+/// not a duration, so it holds at any refresh rate.
+pub const CONFIRM_FRAMES: &str = "ambre:confirm-frames";
 /// The name of the caret measure: input to the first frame that shows it.
 pub const CARET: &str = "ambre:caret";
 
@@ -55,14 +59,30 @@ struct Undrawn {
 /// The keystrokes in flight, from their input to their frame.
 #[derive(Debug, Default)]
 pub struct KeyProbe {
-    /// Draft entries awaiting their confirmation, with their input time.
-    unconfirmed: Vec<(u64, f64)>,
+    /// Draft entries awaiting their confirmation, with their input time and
+    /// the frame count at that input.
+    unconfirmed: Vec<(u64, f64, u64)>,
+    /// The animation frames begun so far.
+    frame: u64,
+    /// The frame counts of the confirmations since the last take.
+    counts: Vec<u32>,
     /// The highest acknowledgement number seen in the draft.
     seen: Option<u64>,
     undrawn: Vec<Undrawn>,
 }
 
 impl KeyProbe {
+    /// An animation frame began. Called once per frame, before its answers
+    /// are applied, whether or not it paints.
+    pub fn frame(&mut self) {
+        self.frame += 1;
+    }
+
+    /// The frame counts of the confirmations since the last call.
+    pub fn take_counts(&mut self) -> Vec<u32> {
+        std::mem::take(&mut self.counts)
+    }
+
     /// An input the view consumed, handled from `start` to `now`. The
     /// entries it added to `draft` are echoed now and wait on their
     /// confirmation. `sent` says whether a command left: one the draft does
@@ -85,7 +105,7 @@ impl KeyProbe {
             self.seen = Some(last);
         }
         self.unconfirmed
-            .extend(fresh.iter().map(|&seq| (seq, start)));
+            .extend(fresh.iter().map(|&seq| (seq, start, self.frame)));
         self.undrawn.push(Undrawn {
             start,
             needs_layout: sent && fresh.is_empty(),
@@ -109,10 +129,13 @@ impl KeyProbe {
             .map(|(seq, _)| seq)
             .collect();
         let mut measures = Vec::new();
-        self.unconfirmed.retain(|&(seq, start)| {
+        let frame = self.frame;
+        let counts = &mut self.counts;
+        self.unconfirmed.retain(|&(seq, start, at)| {
             if pending.contains(&seq) {
                 return true;
             }
+            counts.push(u32::try_from(frame - at).unwrap_or(u32::MAX));
             measures.push(Measure {
                 name: CONFIRM,
                 start,
@@ -267,6 +290,28 @@ mod tests {
         let draft = DraftBuffer::default();
         assert!(probe.handled(0.0, 0.2, &draft, false).is_empty());
         assert_eq!(probe.painted(4.0).len(), 1);
+    }
+
+    /// The count is the frames begun between the key and its answer: the
+    /// frame that echoes it, then the one that applies the answer.
+    #[test]
+    fn a_confirmation_counts_the_frames_it_waited() {
+        let mut probe = KeyProbe::default();
+        let mut draft = DraftBuffer::default();
+        probe.frame();
+        draft.push_str(1, "a", &block(), 0);
+        probe.handled(0.0, 0.1, &draft, true);
+        probe.frame();
+        probe.answered(16.0, &draft, false);
+        assert!(
+            probe.take_counts().is_empty(),
+            "the echo frame has no answer"
+        );
+        probe.frame();
+        draft.confirm(1);
+        probe.answered(33.0, &draft, false);
+        assert_eq!(probe.take_counts(), [2]);
+        assert!(probe.take_counts().is_empty(), "a count is taken once");
     }
 
     #[test]

@@ -33,7 +33,7 @@ use ambre_canvas::{
 use ambre_draw::{DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
 use ambre_prose::input::{ProseInput, ProseKey};
-use ambre_prose::probe::{KeyProbe, Measure, SHAPE};
+use ambre_prose::probe::{CONFIRM_FRAMES, KeyProbe, Measure, SHAPE};
 use ambre_prose::ui::{ProseUiState, send_command, send_edit, status_figures};
 use ambre_prose::view::annotate::{HoveredSuggestion, PanelThread, ScreenRect};
 use ambre_prose::view::paint::PagePalette;
@@ -158,6 +158,7 @@ impl ProseView {
     }
 
     pub fn update(&mut self) {
+        self.probe.frame();
         loop {
             match self.from_logic.try_recv() {
                 Ok(
@@ -179,6 +180,8 @@ impl ProseView {
                         self.probe
                             .answered(super::probe::now_ms(), &self.state.draft, laid);
                     self.timeline.record(answered);
+                    self.timeline
+                        .count(CONFIRM_FRAMES, self.probe.take_counts());
                     if let Some((filename, media_type, data)) = self.state.take_export() {
                         download(&filename, media_type, &data);
                     }

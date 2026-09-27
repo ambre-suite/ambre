@@ -31,6 +31,8 @@ pub(crate) fn now_ms() -> f64 {
 pub(crate) struct Timeline {
     /// The samples per measure, kept only under `?probes`.
     samples: Option<BTreeMap<&'static str, Vec<f64>>>,
+    /// The samples per count, kept only under `?probes`.
+    counts: Option<BTreeMap<&'static str, Vec<f64>>>,
     last_summary: f64,
     /// A sample landed since the last summary.
     fresh: bool,
@@ -48,6 +50,7 @@ impl Timeline {
             });
         Self {
             samples: wanted.then(BTreeMap::new),
+            counts: wanted.then(BTreeMap::new),
             last_summary: 0.0,
             fresh: false,
         }
@@ -62,6 +65,18 @@ impl Timeline {
                     .entry(measure.name)
                     .or_default()
                     .push(measure.duration());
+                self.fresh = true;
+            }
+        }
+    }
+
+    /// Stamp each count as a mark carrying it in its detail, and keep it
+    /// under `?probes`.
+    pub(crate) fn count(&mut self, name: &'static str, values: Vec<u32>) {
+        for value in values {
+            mark_count(name, value);
+            if let Some(counts) = self.counts.as_mut() {
+                counts.entry(name).or_default().push(f64::from(value));
                 self.fresh = true;
             }
         }
@@ -85,6 +100,14 @@ impl Timeline {
                 )));
             }
         }
+        for (name, values) in self.counts.iter().flatten() {
+            if let Some((p50, p95)) = percentiles(values) {
+                web_sys::console::log_1(&JsValue::from_str(&format!(
+                    "{name}: n={} p50={p50} frames p95={p95} frames",
+                    values.len()
+                )));
+            }
+        }
     }
 }
 
@@ -94,6 +117,23 @@ pub(crate) fn mark(name: &str) {
     if let Some(performance) = web_sys::window().and_then(|w| w.performance()) {
         let _ = performance.mark(name);
     }
+}
+
+/// One `performance.mark(name, { detail: value })`, through `Reflect` like
+/// the measures.
+fn mark_count(name: &str, value: u32) {
+    let Some(performance) = web_sys::window().and_then(|w| w.performance()) else {
+        return;
+    };
+    let options = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(&options, &"detail".into(), &value.into());
+    let Ok(function) = js_sys::Reflect::get(&performance, &"mark".into()) else {
+        return;
+    };
+    let Ok(function) = function.dyn_into::<js_sys::Function>() else {
+        return;
+    };
+    let _ = function.call2(&performance, &name.into(), &options);
 }
 
 /// One `performance.measure(name, { start, end })`. The options form is not
