@@ -20,6 +20,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-046` | `INV` | A direct message MUST belong to no space. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-047` | `INV` | Two direct messages MUST NOT exist for one set of members. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-252` | `INV` | A direct message MUST have no owner. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Create a private channel
 
@@ -35,6 +36,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-051` | `POST` | Opening a direct message with a set of members MUST open the existing one when it exists. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-052` | `POST` | A new direct message MUST wrap its key for each of its members alone. | this spec section 3; `SYNC-010` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-251` | `POST` | A new direct message MUST give every member, its creator included, the editor role. | this spec section 3; `MURMURE-252` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-053` | `FRAME` | Opening a direct message MUST NOT add a member to an existing one. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.4 Name a direct message
@@ -74,7 +76,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 20 `unimplemented`: no channel exists in the code.
+* **Verification.** 22 `unimplemented`: no channel exists in the code.
 
 ---
 
@@ -116,9 +118,10 @@ marks the rotation owed (`SYNC-127`). The first member client to send rotates th
 the active segment (`SYNC-128`, `MURMURE-060`).
 
 **A delete is final.** The owner deletes a channel, and every document, file, member row and cursor
-goes with it (`MURMURE-243`). A direct message has no owner who could delete it for the others: it
-is deleted once its last member leaves (`MURMURE-245`). Archiving, which keeps a channel readable
-and closed to writes, is the `Archived channels` Story (`ambre-roadmap.md` E5).
+goes with it (`MURMURE-243`). Every member of a direct message is an editor, and none is its owner
+(`MURMURE-252`). So nobody can delete it or remove a member for the others: it is deleted once its
+last member leaves (`MURMURE-245`). Archiving, which keeps a channel readable and closed to writes,
+is the `Archived channels` Story (`ambre-roadmap.md` E5).
 
 **Code.** not built.
 

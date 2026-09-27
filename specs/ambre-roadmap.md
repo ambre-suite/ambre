@@ -137,7 +137,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Message authorship | MVP | an edit, a delete or a reaction takes effect only from the member entitled to it |
 | `[ ]` Message edits and deletes | MVP | editing and deleting a message, amendments to a final segment, and the re-finalization that turns a delete into an erasure |
 | `[ ]` Reactions, mentions and threads | MVP | emoji reactions, `@` mentions, and reply chains with a reply count on the root |
-| `[ ]` Typing and presence in a channel | MVP | typing indicators and presence on the channel plane |
+| `[ ]` Typing and presence in a channel | MVP | typing indicators and presence, sealed ephemeral frames on the documents of a channel |
 | `[ ]` The Murmure layout and keyboard | MVP | three columns on a desktop, one view at a time on a phone, channels first in the palette, and the Murmure shortcuts |
 | `[ ]` The message list and the composer | MVP | the virtualized message list, and a composer built on the Prose editor |
 | `[ ]` Notifications in an open tab | MVP | a system notification for a mention or a direct message while a tab is open |

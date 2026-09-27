@@ -61,7 +61,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 |---|---|---|---|---|---|---|
 | `SRV-007` | `FAIL` | Every update, snapshot and presence frame MUST carry a valid signature by the key the caller's token names; an unsigned or forged frame MUST have no effect. | this spec section 3; `ZK-005` | `ambre_server::ws::handler::message::ed25519_tests::invalid_signature_is_rejected`; `::tampered_ciphertext_rejects_signature`; `::unsigned_ephemeral_is_rejected` -- the refusals; `ephemeral_binding_tests::forged_author_key_writes_no_presence`; `routes::tests::handler_tests::create_snapshot_rejects_forged_author` -- the absence of effect on both paths | none | verified |
 | `SRV-008` | `FAIL` | A read-only member MUST produce no write. | this spec section 3 | `ambre_server::ws::handler::message::delta_size_cap_tests::viewer_role_delta_writes_no_pending` -- the live path leaves the queue empty; `routes::tests::handler_tests::media_confirm_upload_denied_to_viewer` -- the request path refuses, and a viewer holds the document key and its own signing key, so this check is the only thing between it and an accepted delta | none | verified |
-| `SRV-015` | `FAIL` | Only an owner MUST be able to remove a member or re-key a document. | this spec section 3 | `ambre_server::routes::tests::handler_tests::rotate_key_denied_to_editor`; `::delete_document_only_by_owner` -- the refusals; `::revoke_then_rotate_replaces_owner_key` -- the owner's own path still completes | none | verified |
+| `SRV-015` | `FAIL` | Outside the exceptions of `SRV-144` to `SRV-146`, only an owner MUST be able to remove a member or re-key a document. | this spec section 3 | `ambre_server::routes::tests::handler_tests::rotate_key_denied_to_editor`; `::delete_document_only_by_owner` -- the refusals; `::revoke_then_rotate_replaces_owner_key` -- the owner's own path still completes | none | verified |
+| `SRV-144` | `POST` | While a rotation is owed, the relay MUST accept it from any member with write access. | this spec section 3; `SYNC-128` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-145` | `POST` | A member MUST be able to remove themselves. | this spec section 3; `SYNC-127` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-146` | `POST` | An admin of a space MUST be able to re-key a public channel of that space. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-spaces.md` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `SRV-016` | `FAIL` | A caller MUST NOT grant a role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::share::tests::editor_cannot_grant_owner` -- the refusal; `::owner_can_grant_any_valid_role`; `::doc_role_rank_ordering` -- the ordering the clamp is read off | none | verified |
 | `SRV-070` | `FAIL` | A caller MUST NOT change a member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::editor_cannot_demote_owner_via_invite` -- the invitation is also the role-change path, so this is the half a clamp on the granted role alone leaves open | none | verified |
 | `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | none | fails -- the delete removes the rows and nothing else, so the document's sequence counter and its per-author clock hash stay in the ephemeral store with no expiry; lands with the `A deleted document leaves nothing` Story (`ambre-roadmap.md` E7) | failing |
@@ -179,7 +182,7 @@ with no document open (`ambre-spec-launcher.md`).
 | Role | May read | May write | May invite | May remove, re-key or delete |
 |---|---|---|---|---|
 | owner | yes | yes | up to owner | yes (`SRV-015`) |
-| editor | yes | yes | up to editor (`SRV-016`) | no |
+| editor | yes | yes | up to editor (`SRV-016`) | itself only; an owed rotation; a public channel of a space it administers (`SRV-144` to `SRV-146`) |
 | viewer | yes | no (`SRV-008`) | no | no |
 
 **Why the clamp is on the target too.** An invitation of an existing member is also the role-change
@@ -278,6 +281,7 @@ read the activity, and set the retention of a space.
 | Cross-origin access is refused by default | a permissive default, adjusted per deployment | a permissive origin is one line, ships silently, and is exactly the mistake nobody notices until it is exploited. A deployment that names no origin gets none, and the permissive fallback exists only in development mode and announces itself (`SRV-068`). |
 | The relay refuses the key a removal left behind | refusing every write until someone rotates | a delta sealed under the new key would wait for nothing, and the document would freeze whenever no member is online |
 | The relay marks a debt and a member rotates | the relay rotating the key itself | the relay holds no key, and a key it chose would break the boundary `ZK-001` draws |
+| Any writer settles an owed rotation | the owner alone | the relay refuses every frame under the old key until the rotation lands, so a channel whose owner is away would stop for everyone |
 
 ---
 

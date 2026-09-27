@@ -109,7 +109,7 @@ cause; the list names the remedy.
 
 ```rust
 pub enum Unreadable {
-    KeyNotReceived,         // no key for this segment reached this client
+    KeyNotReceived,         // the key chain did not reach the key of this segment
     BeforeHistoryBoundary,  // the member was invited without this history
     Damaged,                // the key it names is held, and the segment does not open
 }
@@ -117,7 +117,7 @@ pub enum Unreadable {
 
 | Cause | The band says | Remedy |
 |---|---|---|
-| `KeyNotReceived` | the keys for these messages have not reached this device | ask a member of the channel to share the history |
+| `KeyNotReceived` | the keys for these messages have not reached this device | retry, which fetches the key chain again from the relay |
 | `BeforeHistoryBoundary` | the history before this date was not shared with you | none: the band is the start of the channel |
 | `Damaged` | these messages could not be verified | retry, which fetches the segment again from the relay |
 
