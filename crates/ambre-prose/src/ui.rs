@@ -393,8 +393,7 @@ pub struct ProseUiState {
     pub(crate) autoscroll_ms: Option<f64>,
     /// A finger on the canvas, and the motion a flick left
     /// (`PROSE-UI-217`).
-    pub(crate) touch: Option<crate::view::fling::Touch>,
-    pub(crate) fling: Option<crate::view::fling::Fling>,
+    pub(crate) kinetic: ambre_draw::kinetic::Kinetic,
     /// The last press, to count a second and a third one in place.
     pub(crate) last_press: Option<crate::input::Press>,
     /// A press asked for a first block, and the caret goes to it once a

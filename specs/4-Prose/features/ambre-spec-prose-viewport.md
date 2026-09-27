@@ -186,7 +186,7 @@ Deleting the last twenty pages leaves an offset past the end of a column that no
 | Trigger | Behaviour |
 |---|---|
 | the wheel, a two-finger glide | scrolls the column vertically |
-| a finger dragged on the page | scrolls the column, and a flick keeps it moving (`PROSE-UI-217`); a finger that barely moves is a tap |
+| a finger dragged on the page | scrolls the column, and a flick keeps it moving (`PROSE-UI-217`), on the shared model of `1-Foundations/ambre-spec-kinetic-scroll.md`; a finger that barely moves is a tap |
 | a drag past the top or bottom edge | scrolls while the drag continues (`features/ambre-spec-prose-selection.md`) |
 | a caret move that leaves the viewport | scrolls the minimum needed to bring the caret back, with a margin |
 | `Ctrl` with `=`, `-` or `0` | zooms in, zooms out, returns to a hundred per cent |

@@ -9,16 +9,6 @@ use crate::events::{BlockId, CursorPosition, block_id, tree_id};
 use crate::layout::run::ParleyRunData;
 use crate::ui::ProseUiState;
 
-/// How far from the top or the bottom of the canvas a drag arms the
-/// autoscroll, in screen pixels.
-const AUTOSCROLL_BAND_PX: f32 = 32.0;
-/// How deep past the band the speed still grows, in screen pixels.
-const AUTOSCROLL_DEPTH_PX: f32 = 160.0;
-/// Screen pixels per millisecond for each pixel of depth: 2 px/ms at most.
-const AUTOSCROLL_GAIN: f32 = 1.0 / 80.0;
-/// The longest step one tick takes, so a stalled frame does not jump.
-const AUTOSCROLL_MAX_STEP_MS: f64 = 50.0;
-
 /// A walk of the caret with the keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
@@ -484,21 +474,13 @@ impl ProseUiState {
     }
 
     /// The autoscroll speed the last pointer of a drag asks for, in screen
-    /// pixels per millisecond, down for a positive one. Zero away from the
-    /// edges: the speed grows with how deep the pointer is in the band.
+    /// pixels per millisecond, down for a positive one. It is the shared
+    /// edge speed (`KINETIC-007`).
     fn autoscroll_speed(&self) -> f32 {
-        let Some((_, y)) = self.drag_pointer.filter(|_| self.dragging.is_some()) else {
-            return 0.0;
-        };
-        let bottom = self.viewport.height_px - AUTOSCROLL_BAND_PX;
-        let depth = if y < AUTOSCROLL_BAND_PX {
-            y - AUTOSCROLL_BAND_PX
-        } else if y > bottom {
-            y - bottom
-        } else {
-            0.0
-        };
-        depth.clamp(-AUTOSCROLL_DEPTH_PX, AUTOSCROLL_DEPTH_PX) * AUTOSCROLL_GAIN
+        match self.drag_pointer.filter(|_| self.dragging.is_some()) {
+            Some((_, y)) => ambre_draw::kinetic::edge_speed(y, self.viewport.height_px),
+            None => 0.0,
+        }
     }
 
     /// One autoscroll tick, once a frame (`PROSE-UI-038`). A drag held near
@@ -514,7 +496,7 @@ impl ProseUiState {
         let Some(last) = self.autoscroll_ms.replace(now_ms) else {
             return false;
         };
-        let elapsed = (now_ms - last).clamp(0.0, AUTOSCROLL_MAX_STEP_MS) as f32;
+        let elapsed = (now_ms - last).clamp(0.0, ambre_draw::kinetic::MAX_STEP_MS) as f32;
         let before = self.viewport.scroll_y;
         self.scroll_by(speed * elapsed);
         if let Some((x, y)) = self.drag_pointer {

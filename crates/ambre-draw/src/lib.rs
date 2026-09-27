@@ -9,6 +9,9 @@
 //   - `WgpuSurface`   in `ambre-canvas` (lyon tessellation + wgpu, on-screen) -- live.
 //   - `KrillaSurface` in `ambre-pdf` (krilla, PDF export, Logic thread, lazy-loaded) -- live.
 //
+// `kinetic` is the one kinetic scroll the applications share: pure arithmetic
+// over timed pointer positions, beside the drawing primitives they share.
+//
 // Dependency rule: ambre-draw depends only on kurbo + peniko + parley.
 // No GPU code, no WASM glue, no wgpu, no lyon, no krilla. This keeps the core
 // drawing logic portable and testable.
@@ -16,6 +19,8 @@
 
 pub mod types;
 pub use types::*;
+
+pub mod kinetic;
 
 pub mod peer;
 pub use peer::peer_color;
