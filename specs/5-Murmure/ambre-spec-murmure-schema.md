@@ -96,6 +96,7 @@ pub enum ChannelType { Direct, Private, Public }
 pub enum SegmentState { Active, Closing, Final }
 pub enum DeletedBy { Author, Moderator }
 pub enum MentionTarget { User(UserId), Channel }
+pub enum NotifyLevel { All, Mentions, None }
 ```
 
 ---
@@ -121,6 +122,12 @@ concurrent writers race for. Every document also carries the `peers` registry of
 | segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: an `Emoji` and a `UserId` | a `Timestamp` | the entry | reactions | design |
 | amendments | `amendments` | Map | a `MessageId` | `{content}` or `{deleted: bool, by: DeletedBy}` | the entry | messages | design |
 | amendments | `amendments/{id}/content` | Text | -- | the edited body | none: char-CRDT | messages | design |
+| settings | `murmure/layout` | Map | a `ChannelId` | `{group: SidebarGroup, position: u32, hidden: bool, collapsed: bool}` | the entry | sidebar | design |
+| settings | `murmure/groups` | Map | a `PersonalGroupId` | `{name: String, position: u32}` | the entry | sidebar | design |
+| settings | `murmure/notify` | Map | a `ChannelId` | `NotifyLevel` | the entry | notifications | design |
+| settings | `murmure/bookmarks` | Map | a `MessageId` | `{channel: ChannelId, segment: DocumentId, added: Timestamp}` | the entry | sidebar | design |
+| settings | `murmure/followed` | Map | a `DocumentId`, the thread | `{channel: ChannelId, since: Timestamp}` | the entry | threads | design |
+| settings | `murmure/presence` | Map | `indicators` | bool | the key | typing-presence | design |
 
 **The `state` of a segment** is `active`, `closing` or `final`. **The `by` of a delete** is `author`
 or `moderator`. **The `mention` mark** carries a user id, or the channel for an `@channel`. It expands
@@ -146,6 +153,8 @@ amendments document.
   * `header`, and `amendments`, per message: `content`, or the delete
 * a thread document, one per message with a reply
   * `header`, and `messages`, the same message shape
+* the `murmure` section of the user settings (`ambre-spec-user-settings.md`), one per user
+  * `layout`, `groups`, `notify`, `bookmarks`, `followed` and `presence`
 
 ---
 
@@ -206,4 +215,4 @@ amendments document.
 | Who is a member of a channel or a space | `ambre-spec-membership.md`, `ambre-spec-server.md` |
 | What the relay learns of these documents | `ambre-spec-zero-knowledge.md`, `ZK-015` |
 | Which documents a client holds in memory | `ambre-spec-residency.md` |
-| What the personal state holds | the `User settings` Story (`ambre-roadmap.md` E6) |
+| How the settings document is found, opened and shared out | `ambre-spec-user-settings.md` |

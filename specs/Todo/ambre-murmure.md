@@ -39,49 +39,6 @@ stay one command away.
 
 Each heading names its Story in `ambre-roadmap.md` E5, unless it says otherwise.
 
-### Push notifications
-
-A notification reaches a user with every tab closed. Only the existence of a message is pushed;
-the client decrypts the content on receipt.
-
-* **Levels.** Per channel: all, mentions, none. A large channel defaults to mentions.
-* **Every push shows a notification.** Web Push requires `userVisibleOnly: true`, and Safari
-  cancels a subscription after three silent pushes.
-* **The relay filters.** It stores the level per member and channel, as Matrix MSC4028 does for
-  muted rooms. It sends no push for a muted channel.
-* **Mentions are routed.** For the mentions level, the sender client lists the public keys of the
-  mentioned members in the routing header. The relay pushes to those members only.
-* **The level has two copies.** The user settings are the source of truth for the interface. The
-  client writes a copy to the relay, which decides which push to send.
-* **Cost.** The relay learns the levels, and who mentions whom. The zero-knowledge boundary table
-  records both before this ships.
-
-### Personal state: mute, hide, the personal sidebar, followed threads, presence settings
-
-Murmure keeps no store of its own. It writes one `"murmure"` section in the sealed per-user store
-of the `User settings` Story (`ambre-roadmap.md` E6). That Story decides the key, the layout of the
-document, and how a new device finds the store.
-
-- `"layout"` (Map) -- `{channel_id: {group, position, hidden, collapsed}}`
-- `"notify"` (Map) -- `{channel_id: "all" | "mentions" | "none"}`
-- `"bookmarks"` (Map) -- `{message_id: {channel_id, segment_id, added}}`
-- `"followed"` (Map) -- `{root_message_id: {channel_id, since}}`
-- `"presence"` (Map) -- whether the typing and presence indicators are on
-
-Each key is a channel or a message, so a last-writer-wins map fits every entry. The store merges
-the edits of several devices. The Rust shapes use the newtypes of the schema: `ChannelId`,
-`MessageId`, `Timestamp`.
-
-**Leave and hide are two acts.** Leave adds a signed entry to the membership log, and the relay
-removes the row. Hide sets `hidden`: the user keeps the key and can still read. A user who hides a
-channel and believes they left still receives its traffic, so the interface says which one applies.
-
-**A bookmark is personal, and a pin is shared.** A pin lives in the `meta` document of the
-channel (`Pinned messages`, below). A bookmark lives in the user settings.
-
-**Followed threads.** One "Threads" view lists every followed thread with unread replies. A thread
-never archives on a fixed delay. The user can mark a whole thread as read.
-
 ### Moderation
 
 A moderator hides the message of another member. A hide is within the power of the relay already:
@@ -290,9 +247,6 @@ The alternatives a spec of `specs/5-Murmure/` rejects are in that spec. This tab
 | **A history duration chosen at conversion** | Keys change at a rotation, not on a date. A cut inside a segment would split it under two keys, and a cut at a segment edge would show a false duration. Retention already bounds the history. |
 | **Roles in a last-writer-wins map** | Compaction would drop every past role. A client could no longer check a moderation against the role its author held. |
 | **Moderation in the MVP** | A role lives in the membership log and a message in a segment. A revoke concurrent with a delete has no single answer without the relay check. |
-| **Bookmarks and followed threads in local storage** | A new device starts empty, and a new device is where the user needs them most. |
-| **A Murmure document of its own for personal state** | The `User settings` Story (`ambre-roadmap.md` E6) already plans one sealed store per user. A second store gives the same user two sources of truth. |
-| **Client-side filtering of each push after decryption** | Web Push requires a visible notification for each push. Safari cancels the subscription after three silent pushes. |
 
 ### Product
 

@@ -83,7 +83,7 @@ pub enum MurmurePane {
 }
 pub struct MessageRef { pub segment: DocumentId, pub message: MessageId }
 pub struct SidebarEntry { pub channel: ChannelId, pub group: SidebarGroup, pub activity: Activity }
-pub enum SidebarGroup { Category(CategoryId), Private, Direct, ToJoin }
+pub enum SidebarGroup { Category(CategoryId), Personal(PersonalGroupId), Private, Direct, ToJoin }
 pub enum Activity { None, Some, Count { messages: MessageCount, mentions: MentionCount } }
 pub struct MessageCount(u32);
 pub struct MentionCount(u32);
@@ -121,5 +121,5 @@ The sidebar and the thread panel are DOM chrome, and the message list is canvas 
 
 * **Nothing is built.** No Murmure view exists, and the adaptive chrome has no sidebar yet
   (`CHROME-033`).
-* **The personal order of the sidebar is not here.** Groups and order a user chooses are the
-  `The personal sidebar` Story (`ambre-roadmap.md` E5).
+* **The personal order of the sidebar is not here.** Groups, order, mute, hide and bookmarks are
+  `features/ambre-spec-murmure-sidebar.md`.
