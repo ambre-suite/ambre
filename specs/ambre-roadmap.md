@@ -167,6 +167,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` A machine-readable error | V1 | an error carries a code a host can branch on, not only a sentence |
 | `[ ]` Bounded float objects | V1 | an absurd image or chart size cannot make layout cost unbounded |
 | `[ ]` A fill extrapolates a date series | V1 | a drag over two dates repeats them: the fill extrapolates numbers alone, and a date pattern the corpus promises is detected nowhere |
+| `[ ]` Trame on the shared kinetic scroll | MVP | the grid keeps its own momentum, apart from the "One kinetic scroll" model (E8): it moves onto it, a finger pans and flicks the grid, and a range dragged past the edge of the grid scrolls and follows. Today a finger selects and nothing scrolls under a drag |
 
 ### Toile
 
@@ -186,6 +187,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Auto-layout reaches a frame | V1 | the solver has no caller outside its own tests and the command has no menu entry, no inspector row and no chord: a layout rule is stored, converges, and moves nothing on screen |
 | `[ ]` Boolean operations reach a surface | V1 | union, intersection and difference are built and tested behind a command no menu entry, no button and no chord invokes |
 | `[ ]` Every connector shape a user can make | V1 | the format stores path kinds and anchors the tool writes for none of them, so a document can hold an arrow no gesture produces |
+| `[ ]` Toile on the shared kinetic scroll | MVP | a finger pans the board and a flick keeps it moving, on the "One kinetic scroll" model (E8), wherever the active tool does not draw; and an element or a marquee dragged past the edge of the board pans it. Today a finger acts as the mouse, with no flick, and nothing pans under a drag |
 
 ---
 
@@ -256,7 +258,7 @@ owns the subsystem.
 | `[x]` One command registry | MVP | one description per command -- title, icon, category, chord -- with the menus, the keyboard and the command palette all derived from it instead of built beside it |
 | `[ ]` The launcher holds no application logic | V1 | the shell stops deciding what an application's commands do: each application hands the shell one command handler and its own panels and dialogs, and the launcher keeps the integration and the shell |
 | `[ ]` One find and replace | V1 | one match session with a live cursor, in every app, instead of Trame's whole-grid re-scan |
-| `[ ]` One zoom model | V1 | one zoom engine behind the shared widget: Trame gains keyboard and pinch zoom and zoom-to-selection, Prose gains zoom. Touch and pinch belong here, in every app, and to no other row |
+| `[ ]` One zoom model | V1 | one zoom engine behind the shared widget: Trame gains keyboard and pinch zoom and zoom-to-selection, Prose gains zoom. Pinch belongs here, in every app, and a finger's pan and flick to the "One kinetic scroll" row |
 | `[ ]` One text-editing substrate | V1 | one editing core under both layout drivers: the input pipe, composition, the caret and selection model |
 | `[ ]` One interop vocabulary | V1 | the same import and export events, the same conversion report, the same progress model, in every app |
 | `[ ]` One document locale | V1 | the document carries its locale, so collaborators on differently configured machines read identical numbers and dates |
@@ -268,6 +270,7 @@ owns the subsystem.
 | `[ ]` One selectable PDF | V1 | one glyph-to-character mapping in the shared surface, so exported text is selectable and searchable in every app instead of drawn shapes alone |
 | `[ ]` One undo bound | V1 | a bounded undo depth in every app. What merges into one step stays per app |
 | `[x]` One keymap | MVP | the `Ctrl` and `Cmd` fold, both redo chords, and the legacy copy and paste chords, decided once |
+| `[ ]` One kinetic scroll | MVP | one momentum model under every app: a flick's release speed, its slowdown and its stop, the slop that tells a tap from a pan, and the speed a drag held near an edge scrolls at. Prose moves onto it. Trame coasts on a trackpad glide where Prose leaves it to the platform, with a different curve: which one holds is decided here, once. Trame and Toile adopt it in their own rows |
 | `[ ]` One name for the moving selection end | V1 | `focus` everywhere; the fixed end stays `anchor`. A rename |
 | `[ ]` One floating-menu shell | V1 | one placement, flip and keyboard model under every popover and floating bar |
 | `[ ]` One performance read-out | V1 | the frame read-out available in every app, not in Trame alone |
