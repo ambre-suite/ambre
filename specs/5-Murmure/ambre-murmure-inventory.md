@@ -15,8 +15,8 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `murmure-attachments` | A member drops a file or an image into a message. | design-only | 9 |  |
-| `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | design-only | 16 |  |
+| `murmure-attachments` | A member drops a file or an image into a message. | design-only | 12 |  |
+| `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | design-only | 20 |  |
 | `murmure-composer` | The field where a member writes. | design-only | 19 |  |
 | `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | design-only | 5 |  |
 | `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | design-only | 10 |  |
@@ -29,9 +29,9 @@
 | `murmure-reactions` | A member answers a message with an emoji. | design-only | 7 |  |
 | `murmure-search` | A member finds a message by its words, in the channels they have loaded. | design-only | 5 |  |
 | `murmure-segments` | A channel grows for years and still opens fast. | design-only | 20 |  |
-| `murmure-spaces` | A team gathers in a space. | design-only | 19 |  |
+| `murmure-spaces` | A team gathers in a space. | design-only | 23 |  |
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | design-only | 8 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | design-only | 7 |  |
 | `murmure-unread` | The sidebar shows where something new is, and how much. | design-only | 11 |  |
 
-**18 features: 0 implemented, 0 partial, 18 design-only. 218 contract rows, 0 loose.**
+**18 features: 0 implemented, 0 partial, 18 design-only. 229 contract rows, 0 loose.**

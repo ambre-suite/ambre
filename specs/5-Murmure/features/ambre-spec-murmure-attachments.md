@@ -37,11 +37,21 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-135` | `POST` | An animated GIF MUST be decoded off the render thread. | this spec section 3; `ambre-spec-architecture.md` | not built | unbuilt -- lands with the `Animated images` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-136` | `FRAME` | Animating a GIF MUST NOT stall the frame. | this spec section 3; `ambre-spec-budgets.md section 2` | not built | unbuilt -- lands with the `Animated images` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.4 Delete a message with attachments
+
+A deleted message takes its files with it, so the erasure a delete promises covers them too.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-240` | `POST` | Deleting a message MUST ask the relay to erase every attachment it carries. | this spec section 3; `SRV-139` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-241` | `FAIL` | Given an erase the relay did not complete, the client MUST keep it queued and retry until it completes. | this spec section 3 | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-242` | `FRAME` | Deleting a message MUST NOT erase a file another member uploaded. | this spec section 3; `SRV-140` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** the frame budget of `ambre-spec-budgets.md section 2` bounds the animation, and the
   memory rows of `ambre-spec-budgets.md section 6` bound the decoded frames.
 * **Boundary.** every attachment is sealed (`ZK-001`). Its address must not derive from its
   plaintext, which is the media defect `SYNC-050` states.
-* **Verification.** 9 `unimplemented`: no attachment exists in Murmure.
+* **Verification.** 12 `unimplemented`: no attachment exists in Murmure.
 
 ---
 
@@ -66,6 +76,11 @@ The address defect of that flow must be fixed before or with this feature (`SYNC
 **An animated GIF** is an attachment like any other. The client decodes it off the render thread,
 and the canvas plays its frames while it is on screen.
 
+**A delete takes the files with it** (`MURMURE-240`). The text leaves the ciphertext at the next
+re-finalization; the files leave object storage at once. An erase that fails, offline for
+instance, stays queued until it completes (`MURMURE-241`). A copy sent to the channel from a thread
+shares the file, so it loses the file too: the author asked for it gone.
+
 **Code.** not built.
 
 ---
@@ -86,6 +101,7 @@ and the canvas plays its frames while it is on screen.
 | :--- | :--- | :--- |
 | One media flow for every application | a Murmure upload path | a second path to seal, to address and to review |
 | No GIF search | a search through a third-party service | each search would send what the user types to that service |
+| A delete erases the files at once | keeping them until the re-finalization | nothing refers to a file once its message is empty, so waiting only delays the erasure the delete promised |
 
 ---
 

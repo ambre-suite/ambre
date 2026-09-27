@@ -133,7 +133,8 @@ else, so it is never evicted (`RESID-019`).
 2. A refused write evicts what the relay already holds, in the usual order, and retries once
    (`RESID-017`).
 3. When even an unsent change cannot be stored, the client stops taking edits and warns the user.
-   Editing resumes once the change is sent or space frees (`RESID-018`). No edit is accepted that could be lost.
+   Editing resumes once the change is sent or space frees (`RESID-018`). No edit is accepted
+   that could be lost.
 
 **A reopen** starts from the local snapshot, replays the deltas after its horizon, and replaces the
 counters with the counts it holds (`RESID-010`, `RESID-011`).

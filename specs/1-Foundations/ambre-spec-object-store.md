@@ -26,6 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-052` | `INV` | A presigned link MUST expire within fifteen minutes. | `ambre-spec-zero-knowledge.md`, `ZK-008` | none | unheld -- the lifetime is one operational figure with a fifteen-minute default and no ceiling, so a deployment may set a day with no code change, and no test reads the expiry back out of a link; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-059` | `INV` | The relay MUST NOT hold an address derived from a blob's plaintext. | `ZK-007`; `ambre-spec-media.md`, `SYNC-050` | none | fails -- the address is a hash of the plaintext, the confirmation stores it beside the document, and the object name is built from it, so the relay can hash a file it already has and ask whether this document holds it; lands with the `The media address is not the plaintext` Story (`ambre-roadmap.md` E7) | failing |
 | `SRV-121` | `INV` | A Murmure channel MUST add no branch to the layout: each of its documents MUST take the layout of a document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-138` | `INV` | A media row MUST record the member who uploaded its blob. | this spec section 3 | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Issue a presigned link
 
@@ -51,6 +52,16 @@ happen.
 |---|---|---|---|---|---|---|
 | `SRV-057` | `POST` | An object MUST NOT outlive the document it belongs to. | this spec section 3 | none | fails -- deleting a document removes its rows and no object, so every snapshot, every delta and every picture it ever held stays in storage with nothing left pointing at it; lands with the `A deleted document leaves nothing` Story (`ambre-roadmap.md` E7) | failing |
 | `SRV-079` | `FRAME` | Deleting a document MUST NOT remove an object another document names. | this spec section 3; derived | none | unheld -- the reason it holds today is that nothing is removed at all. The object layout is keyed by document, so the sweep `SRV-057` is missing has one prefix to walk. A sweep written against the blob address instead would reach a picture two documents share; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+
+### 1.4 Erase one blob
+
+A member takes back a file they uploaded, such as the attachment of a message they deleted.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SRV-139` | `POST` | An erase request MUST remove the blob from object storage, with its media row. | this spec section 3; `SRV-057` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-140` | `FAIL` | Given an erase request from a member who did not upload the blob, the relay MUST refuse it. | this spec section 3; `SRV-138` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-141` | `FRAME` | Erasing a blob MUST NOT remove another object of the document. | this spec section 3; `SRV-079` | not built | unbuilt -- lands with the `Attachments` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the presigned link of `ambre-spec-budgets.md section 3`, under 50 ms, and the
   document cold start of the same table, under 500 ms. The cold start's download half is here and
@@ -174,6 +185,7 @@ The store has no surface of its own: every trigger belongs to the document that 
 | A delta's name is its sequence number, zero-padded | a minted identifier per delta | it needs the index to be readable, where padded numbers sort in the order the deltas were accepted and a listing is a replay order with no index at all |
 | An upload is confirmed in a second request | recording the blob when the link is issued | it indexes every abandoned upload, leaving rows that point at nothing. The relay never sees the transfer, so the only moment it can record a blob is when the client says it landed |
 | Storage lifetimes are a bucket policy, not relay code | a collector inside the relay | it would put a retention policy in a binary, for an operational decision that differs per deployment -- and it would still not close `SRV-057`, the object of a deleted document, which is a defect rather than a policy |
+| Only the uploader erases a blob | any member of the document | a member could erase the files of everyone else, and the relay cannot read which message a blob belongs to |
 
 ---
 

@@ -60,12 +60,21 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-060` | `POST` | A rotation MUST close the active segment, so the successor opens under the new key. | this spec section 3; `features/ambre-spec-murmure-segments.md` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-061` | `FRAME` | Leaving a public channel MUST NOT rotate its key. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.7 Delete a channel
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-243` | `POST` | Deleting a channel MUST delete every document it groups, with their objects. | this spec section 3; `SRV-142`, `SRV-057` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-244` | `FAIL` | Given a delete from a member who does not own the channel, the relay MUST refuse it. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-245` | `POST` | A channel whose last member leaves MUST be deleted. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-246` | `FRAME` | Deleting a channel MUST NOT touch another channel. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** an invite wraps one key. The invitee then walks the key chain back to the boundary,
   one small open per rotation, charged to the crypto rows of `ambre-spec-budgets.md section 1`. A
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 16 `unimplemented`: no channel exists in the code.
+* **Verification.** 20 `unimplemented`: no channel exists in the code.
 
 ---
 
@@ -106,6 +115,11 @@ a leave.
 marks the rotation owed (`SYNC-127`). The first member client to send rotates the key and closes
 the active segment (`SYNC-128`, `MURMURE-060`).
 
+**A delete is final.** The owner deletes a channel, and every document, file, member row and cursor
+goes with it (`MURMURE-243`). A direct message has no owner who could delete it for the others: it
+is deleted once its last member leaves (`MURMURE-245`). Archiving, which keeps a channel readable
+and closed to writes, is the `Archived channels` Story (`ambre-roadmap.md` E5).
+
 **Code.** not built.
 
 ---
@@ -132,6 +146,7 @@ the active segment (`SYNC-128`, `MURMURE-060`).
 | A direct message is a channel | a separate model for direct messages | a conversion would copy the history into a new document, with new identifiers and a new key |
 | No forward secrecy | forward secrecy for direct messages | a full history on a new device, the final snapshots and the search index all need every key |
 | The channel list is the membership | a sealed document listing the channels of a user | a second list drifts after a revoke, and shows a channel whose key is gone |
+| A channel is deleted, not archived, in its first form | archiving first | an archive keeps every byte, so it answers neither an erasure request nor the storage a dead channel holds |
 
 ---
 

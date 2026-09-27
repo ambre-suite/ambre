@@ -57,11 +57,20 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-235` | `POST` | Each private channel the member leaves that way MUST owe a rotation. | this spec section 3; `SYNC-127` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-237` | `FRAME` | Leaving a space MUST NOT remove the member from a direct message or from a channel of another space. | this spec section 3 | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.6 Delete a public channel or a space
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-247` | `POST` | Deleting a public channel MUST remove its entry from the catalogue. | this spec section 3; `MURMURE-243` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-248` | `POST` | Deleting a space MUST delete every channel of the space, then the space document. | this spec section 3; `SRV-143` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-249` | `FAIL` | Given a space delete from a member who does not own the space document, the relay MUST refuse it. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-250` | `FRAME` | Deleting a space MUST NOT delete a direct message. | this spec section 3; `MURMURE-046` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** a leave costs one rotation per public channel, bounded by the space leave row of
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 19 `unimplemented`: no space exists in the code.
+* **Verification.** 23 `unimplemented`: no space exists in the code.
 
 ---
 

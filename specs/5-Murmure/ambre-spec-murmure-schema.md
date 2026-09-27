@@ -112,7 +112,6 @@ concurrent writers race for. Every document also carries the `peers` registry of
 | `space` | `categories` | Map | a `CategoryId` | `{name: String, position: u32}` | the category entry | spaces | design |
 | `space` | `channels` | Map | a `ChannelId` | `{name: String, topic: String, category_id: CategoryId, position: u32, key: SealedChannelKey}` | the field | spaces | design |
 | `meta` | `channel` | Map | `type`, `name`, `topic` | `ChannelType`, String, String | the key | channels | design |
-| `meta` | `pinned` | List | position | `{segment: DocumentId, msg_id: MessageId}` | list order, no LWW | messages | design |
 | `meta` | `segments` | List | position | `{document_id: DocumentId, from_ts: Timestamp, to_ts: Timestamp, msg_count: u32, state: SegmentState, amended: bool}` | the field | segments | design |
 | segment, thread | `messages` | List | position | one message map | list order, no LWW | messages | design |
 | segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted` | `MessageId`, `UserId`, `Timestamp`, `DocumentId`, `MessageId`, `bool`, `bool` | the key | messages | design |
@@ -139,7 +138,7 @@ amendments document.
   * `categories`, per category: its name and position
   * `channels`, per public channel: its name, topic, category, position and key
 * a `meta` document, one per channel
-  * `header`, `channel`, `pinned`, `segments`
+  * `header`, `channel`, `segments`
 * a segment document, one per time slice of a channel
   * `header`, and `messages`, per message: its fields, `content`, `attachments` and `reactions`
 * an amendments document, one per amended final segment

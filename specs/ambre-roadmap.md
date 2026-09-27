@@ -159,6 +159,9 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Forum channels | V1 | posts with a title and tags, each opening its own thread |
 | `[ ]` Chat import | V1 | an archive of Slack or Discord imported into a space |
 | `[ ]` Two channels side by side | V1 | a split view that pins and shows two channels at once, each with its own list and composer |
+| `[ ]` Pinned messages | V1 | messages pinned to a channel for every member, in a `pinned` list of the channel `meta` document |
+| `[ ]` A link to a message | V1 | a link that opens a channel at one message, for a member of the channel |
+| `[ ]` Archived channels | V1 | a channel kept readable and closed to writes |
 
 ---
 
@@ -243,7 +246,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` `SYNC P4` hardening | -- | backpressure on the socket, which the two-instance split made unreachable rather than unbuilt; the access token that rides the socket address into the console; the snapshot adopted as a parent before it is downloaded; and the two tokens a sign-out drops without wiping |
 | `[ ]` The production sign-in path | V1 | the two provider routes are registered under a fixed provider name while their handlers read one from the path, so every call answers an internal error and the only sign-in a deployment offers has never run; and the rate limiter sits inside the nested router, which strips the prefix its classifier matches on, so no request is ever counted against the brute-force tier |
 | `[ ]` A document is compacted as its history grows | MVP | the relay never asks anyone for a snapshot, and that request is the only trigger of the client's whole compaction path. So no document is ever compacted: every cold open replays from the first delta, the delta index is never trimmed, and the cold-start budget is unreachable. The same pass removes for good a Prose block a deletion hid, once the session that hid it has ended (`PROSE-121`); a peer offline but still open may then undo into nothing, the loss a deletion caused before. Murmure needs it first: an active segment holds a bounded tail of deltas past its snapshot (`MURMURE-222`) |
-| `[ ]` A deleted document leaves nothing | V1 | deleting a document removes its rows and neither its sealed objects nor its ordering state, so every snapshot, delta and picture stays in storage for ever and the sequence counters stay in the ephemeral store with no expiry |
+| `[ ]` A deleted document leaves nothing | MVP | deleting a document removes its rows and neither its sealed objects nor its ordering state, so every snapshot, delta and picture stays in storage for ever and the sequence counters stay in the ephemeral store with no expiry. A Murmure channel or space delete needs it first (`MURMURE-243`) |
 | `[ ]` A revoke either completes or changes nothing | MVP | the removal is posted first and the rotation can fail after it, so the member is out of the list and their key still opens new content. A member whose exchange key does not parse is skipped and loses the document in silence. A member who leaves posts the removal alone, and the relay refuses the old key until someone rotates |
 | `[ ]` Every sealed object names its key | MVP | the document name and every media blob stay sealed under a key nothing names, so the first revoke blanks the name and every picture for everyone who stayed. Once each names its key, the key chain opens it |
 | `[ ]` A snapshot follows each rotation | V1 | no snapshot seals the state after a rotation, so the history of a document stays a chain of deltas across the key change |

@@ -77,7 +77,7 @@ removes the row. Hide sets `hidden`: the user keeps the key and can still read. 
 channel and believes they left still receives its traffic, so the interface says which one applies.
 
 **A bookmark is personal, and a pin is shared.** A pin lives in the `meta` document of the
-channel. A bookmark lives in the user settings.
+channel (`Pinned messages`, below). A bookmark lives in the user settings.
 
 **Followed threads.** One "Threads" view lists every followed thread with unread replies. A thread
 never archives on a fixed delay. The user can mark a whole thread as read.
@@ -181,6 +181,22 @@ conversion applies.
 without history". The conversion is its first use.
 
 A member of the direct message who is not a member of the space stays a member of the channel.
+
+### Pinned messages
+
+A member pins a message for every member of the channel. The `meta` document gains a `pinned` List
+of `{segment: DocumentId, message: MessageId}`, in pin order. A pin names its segment, so the
+client loads that segment alone to show it.
+
+### A link to a message
+
+A link names the channel, the segment and the message. It opens only for a member of the channel:
+the link carries no key.
+
+### Archived channels
+
+An archived channel stays readable and takes no write. The relay refuses its frames, as it does for
+a locked segment.
 
 ### Forum channels
 
