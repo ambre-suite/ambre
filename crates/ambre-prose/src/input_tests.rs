@@ -2160,3 +2160,93 @@ fn dropped_text_is_one_insertion_at_the_drop_point() {
         Some("hello big world")
     );
 }
+
+/// A document long enough to scroll through, laid out and in view.
+fn long_rig() -> Rig {
+    let lines: Vec<String> = (0..200).map(|i| format!("line {i}")).collect();
+    let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+    Rig::new(&refs)
+}
+
+/// Flick a finger up the canvas at 2 px/ms, and lift it.
+fn flick_up(rig: &mut Rig) {
+    rig.ui.touch_start(300.0, 600.0, 0.0);
+    for step in 1..=5 {
+        rig.ui
+            .touch_move(300.0, 600.0 - 32.0 * step as f32, 16.0 * f64::from(step));
+    }
+    assert_eq!(rig.ui.touch_end(80.0), None, "a pan is no tap");
+}
+
+/// `PROSE-UI-217`: a flick keeps the column moving, each frame slower, and
+/// stops at an end of the column.
+#[test]
+fn a_flick_slows_down_and_stops_at_the_end_of_the_column() {
+    let mut rig = long_rig();
+    flick_up(&mut rig);
+    let speed = rig.ui.fling_speed().expect("a flick is in motion");
+    assert!((speed - 2.0).abs() < 0.01, "the release speed, {speed}");
+    let mut now = 80.0;
+    rig.ui.tick_fling(now);
+    let (mut last_step, mut scroll) = (f32::INFINITY, rig.ui.viewport.scroll_y);
+    while rig.ui.fling_speed().is_some() {
+        now += 16.0;
+        rig.ui.tick_fling(now);
+        rig.lay();
+        let step = rig.ui.viewport.scroll_y - scroll;
+        assert!(
+            step >= 0.0 && step < last_step,
+            "each frame slower than the last"
+        );
+        (last_step, scroll) = (step, rig.ui.viewport.scroll_y);
+        assert!(now < 10_000.0, "the motion stops");
+    }
+    assert!(!rig.ui.tick_fling(now + 16.0));
+    // Near the end of the column, the motion stops there.
+    let end = rig.ui.column.max_scroll(&rig.ui.viewport);
+    rig.ui
+        .scroll_by((end - rig.ui.viewport.scroll_y - 5.0) * rig.ui.viewport.scale());
+    flick_up(&mut rig);
+    for frame in 1..=20 {
+        rig.ui.tick_fling(80.0 + 16.0 * f64::from(frame));
+    }
+    assert_eq!(rig.ui.viewport.scroll_y, end);
+    assert_eq!(rig.ui.fling_speed(), None);
+}
+
+/// `PROSE-UI-218`: a press, a key or a new finger stops the motion, and the
+/// motion writes nothing.
+#[test]
+fn a_press_stops_a_flick_and_the_motion_writes_nothing() {
+    let mut rig = long_rig();
+    let block = rig.blocks()[0];
+    flick_up(&mut rig);
+    rig.ui.tick_fling(80.0);
+    rig.ui.tick_fling(96.0);
+    rig.press(rig.point_of(block, 1), false, 100.0);
+    assert_eq!(rig.ui.fling_speed(), None);
+    flick_up(&mut rig);
+    rig.key(ProseKey::Right, false, false);
+    assert_eq!(rig.ui.fling_speed(), None);
+    flick_up(&mut rig);
+    rig.ui.touch_start(10.0, 10.0, 200.0);
+    assert_eq!(rig.ui.fling_speed(), None);
+    // Panning and flicking send nothing: the sent edits are the press's.
+    assert!(rig.sent.is_empty());
+    assert!(
+        rig.outbox
+            .iter()
+            .all(|c| matches!(c, ProseCommand::Sync { .. }))
+    );
+}
+
+/// A finger that stays inside the slop is a tap, and its point comes back.
+#[test]
+fn a_finger_that_barely_moves_is_a_tap() {
+    let mut rig = long_rig();
+    rig.ui.touch_start(300.0, 400.0, 0.0);
+    assert!(!rig.ui.touch_move(303.0, 402.0, 10.0));
+    assert_eq!(rig.ui.touch_end(20.0), Some((300.0, 400.0)));
+    assert_eq!(rig.ui.viewport.scroll_y, 0.0);
+    assert_eq!(rig.ui.fling_speed(), None);
+}

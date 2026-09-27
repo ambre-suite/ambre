@@ -390,8 +390,11 @@ impl ProseView {
         if let Some(command) = self.state.window_request() {
             send_command(&self.to_logic, self.document_id, command);
         }
-        // A drag held near an edge scrolls the page (`PROSE-UI-038`).
-        if self.state.tick_autoscroll(now_ms) {
+        // A drag held near an edge scrolls the page (`PROSE-UI-038`), and a
+        // flick keeps it moving (`PROSE-UI-217`).
+        if self.state.tick_autoscroll(now_ms) | self.state.tick_fling(now_ms) {
+            self.state.hovered = None;
+            self.publish_hover();
             self.publish_toolbar();
             self.dirty = true;
         }
@@ -456,6 +459,8 @@ impl ProseView {
         }
         match ev {
             InputEvent::Wheel { dy, delta_mode, .. } => {
+                // A new scroll stops the motion a flick left (`PROSE-UI-218`).
+                self.state.stop_fling();
                 let px = match delta_mode {
                     1 => dy * LINE_PX,
                     2 => dy * f64::from(self.size.1),
@@ -583,6 +588,38 @@ impl ProseView {
     pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, own_copy: bool) {
         let input = self.state.paste_input(blob, own_copy);
         self.feed(&input);
+    }
+
+    /// A finger on the canvas: a pan scrolls the column and a flick keeps it
+    /// moving (`PROSE-UI-217`). A tap presses where it landed.
+    pub fn touch(&mut self, phase: super::TouchPhase, x: f32, y: f32, now_ms: f64) -> bool {
+        if self.fatal {
+            return false;
+        }
+        match phase {
+            super::TouchPhase::Down => self.state.touch_start(x, y, now_ms),
+            super::TouchPhase::Move => {
+                if self.state.touch_move(x, y, now_ms) {
+                    self.state.hovered = None;
+                    self.publish_hover();
+                    self.publish_toolbar();
+                    self.dirty = true;
+                }
+            }
+            super::TouchPhase::Up => {
+                if let Some((x, y)) = self.state.touch_end(now_ms) {
+                    self.feed(&ProseInput::Press {
+                        x,
+                        y,
+                        shift: false,
+                        follow: false,
+                        now_ms,
+                    });
+                    self.feed(&ProseInput::Release);
+                }
+            }
+        }
+        true
     }
 
     /// Text dropped on the canvas: one insertion at the drop point

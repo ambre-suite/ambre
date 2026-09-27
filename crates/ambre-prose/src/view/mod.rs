@@ -11,6 +11,7 @@ pub mod annotate;
 pub mod cache;
 pub mod caret;
 pub mod column;
+pub mod fling;
 pub mod hit;
 pub mod paint;
 pub mod provisional;

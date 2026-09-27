@@ -518,6 +518,20 @@ where
             move |event: web_sys::PointerEvent| {
                 let x = event.offset_x() as f64 * dpr;
                 let y = event.offset_y() as f64 * dpr;
+                // A finger pans the page on Prose rather than selecting.
+                if event.pointer_type() == "touch" && host_c.borrow().captures_pointer() {
+                    let phase = match event.type_().as_str() {
+                        "pointerdown" => TouchPhase::Down,
+                        "pointermove" => TouchPhase::Move,
+                        "pointerup" => TouchPhase::Up,
+                        _ => return,
+                    };
+                    let now = event.time_stamp();
+                    if host_c.borrow_mut().touch(phase, x as f32, y as f32, now) {
+                        event.prevent_default();
+                    }
+                    return;
+                }
                 let ev = match event.type_().as_str() {
                     "pointerdown" => InputEvent::PointerDown {
                         x,

@@ -61,6 +61,14 @@ mod web_embed;
 
 pub use frame::{FrameHost, MakeChild};
 pub use prose::{ProseSignals, ProseView};
+
+/// Where a finger is in its gesture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TouchPhase {
+    Down,
+    Move,
+    Up,
+}
 pub use run::run_with;
 
 /// Private clipboard MIME type carrying the base64 postcard
@@ -306,6 +314,14 @@ impl AppView {
         match self {
             AppView::Trame(_) | AppView::Toile(_) => false,
             AppView::Prose(v) => v.drop_text(x, y, text),
+        }
+    }
+
+    /// A finger on the canvas. Only Prose takes it apart from the mouse.
+    fn touch(&mut self, phase: TouchPhase, x: f32, y: f32, now_ms: f64) -> bool {
+        match self {
+            AppView::Trame(_) | AppView::Toile(_) => false,
+            AppView::Prose(v) => v.touch(phase, x, y, now_ms),
         }
     }
 

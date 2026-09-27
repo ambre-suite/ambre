@@ -313,6 +313,10 @@ impl ProseUiState {
         input: &ProseInput,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> bool {
+        // A press or a key stops the motion a flick left (`PROSE-UI-218`).
+        if matches!(input, ProseInput::Press { .. } | ProseInput::Key { .. }) {
+            self.stop_fling();
+        }
         match input {
             ProseInput::Text(text) => self.type_into_menu(text, send),
             ProseInput::Key { key, shift, ctrl } => {

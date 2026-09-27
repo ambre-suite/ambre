@@ -39,8 +39,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-126` | `POST` | A scroll MUST move the column by the distance the gesture asks for, up to the clamp. | this spec section 3 | `ambre_prose::view::tests::a_scroll_moves_by_the_gesture_up_to_the_ends_and_nothing_else` | none | verified |
 | `PROSE-UI-127` | `FRAME` | A scroll MUST NOT change the zoom, MUST NOT rebuild the column and MUST NOT write to the document. | derived | `ambre_prose::view::tests::a_scroll_moves_by_the_gesture_up_to_the_ends_and_nothing_else` | none | verified |
 | `PROSE-UI-211` | `POST` | A frame whose built pages the layout in force does not carry MUST ask the Logic thread once for those pages and a margin around them. | this spec section 2 | `ambre_prose::view::tests::a_scroll_asks_for_the_pages_around_the_canvas` | none | verified |
-| `PROSE-UI-217` | `POST` | A flick released with speed MUST keep the column moving, each frame slower than the last, until it stops or meets an end of the column, where it MUST stop. | this spec section 3 | not built | unbuilt -- lands with the "Inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-UI-218` | `FRAME` | A press, a new scroll or a new layout MUST stop the motion a flick left, and the motion MUST NOT write to the document. | derived | not built | unbuilt -- lands with the "Inertial scroll" Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-UI-217` | `POST` | A flick released with speed MUST keep the column moving, each frame slower than the last, until it stops or meets an end of the column, where it MUST stop. | this spec section 3 | `ambre_prose::input_tests::a_flick_slows_down_and_stops_at_the_end_of_the_column` | none | verified |
+| `PROSE-UI-218` | `FRAME` | A press, a key, a new scroll or a new finger MUST stop the motion a flick left, and the motion MUST NOT write to the document. A layout that arrives MUST NOT stop it: the pages a scroll asks for would. | derived | `ambre_prose::input_tests::a_press_stops_a_flick_and_the_motion_writes_nothing` | none | verified |
 | `PROSE-UI-212` | `POST` | Revealing a block the layout in force does not carry MUST ask for its pages, then scroll to it once a layout carries it. | this spec section 2 | `ambre_prose::view::tests::revealing_a_block_not_carried_asks_for_it_then_shows_it` | none | verified |
 
 ### 1.3 Zoom about a point
@@ -68,11 +68,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the scroll offset and the zoom are view state on the UI thread, where
   `UI-THREAD-004` bans a network, crypto or persistence path. `PROSE-UI-010`
   (`features/ambre-spec-prose-engine.md section 1`) keeps both out of the document.
-* **Verification.** 12 `verified`, 9 `unimplemented`. The state rows are property tests over the
+* **Verification.** 14 `verified`, 7 `unimplemented`. The state rows are property tests over the
   column in `crates/ambre-prose`, being arithmetic over three numbers; the others are host tests of
   the view. `PROSE-UI-025` and the zoom rows wait on the
-  "One zoom model" Story (`ambre-roadmap.md` E8), and the flick rows on the
-  "Inertial scroll" Story (`ambre-roadmap.md` E5).
+  "One zoom model" Story (`ambre-roadmap.md` E8). The flick rows drive the ticks by hand, as the
+  host does once a frame.
 
 ---
 
@@ -186,6 +186,7 @@ Deleting the last twenty pages leaves an offset past the end of a column that no
 | Trigger | Behaviour |
 |---|---|
 | the wheel, a two-finger glide | scrolls the column vertically |
+| a finger dragged on the page | scrolls the column, and a flick keeps it moving (`PROSE-UI-217`); a finger that barely moves is a tap |
 | a drag past the top or bottom edge | scrolls while the drag continues (`features/ambre-spec-prose-selection.md`) |
 | a caret move that leaves the viewport | scrolls the minimum needed to bring the caret back, with a margin |
 | `Ctrl` with `=`, `-` or `0` | zooms in, zooms out, returns to a hundred per cent |

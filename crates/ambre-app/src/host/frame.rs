@@ -317,6 +317,12 @@ impl FrameHost {
         self.view.drop_text(x, y, text)
     }
 
+    /// A finger on the canvas, in canvas pixels. Only Prose takes a touch
+    /// pointer apart (`PROSE-UI-217`); answers whether it did.
+    pub fn touch(&mut self, phase: TouchPhase, x: f32, y: f32, now_ms: f64) -> bool {
+        self.view.touch(phase, x, y, now_ms)
+    }
+
     /// Whether a consumed press captures the pointer, so a drag keeps its
     /// moves past the canvas edge. Only Prose asks for it (`PROSE-UI-038`).
     pub fn captures_pointer(&self) -> bool {
