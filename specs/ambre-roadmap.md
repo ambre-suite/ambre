@@ -369,8 +369,9 @@ owns the subsystem.
 | Story | Touches |
 | :--- | :--- |
 | `[ ]` Split-secret organization recovery | the escrow has a release path and no deposit path, and the quorum is clamped to one so the register advertises no guarantee the relay cannot keep. Threshold reconstruction, and a deposit, are what make the clamp liftable |
-| `[ ]` Rendez-Vous | end-to-end encrypted video, and its signalling on an endpoint of its own |
+| `[ ]` Rendez-Vous | end-to-end encrypted video, and its signalling on an endpoint of its own, and a call started from a Murmure channel |
 | `[ ]` Murmure bots and webhooks | bots holding their own keys, slash commands, interactive messages, and inbound webhooks through an encrypting bridge |
+| `[ ]` Link previews | a preview of a web page fetched once by the sender and sealed in the message, and the name of a linked Ambre document for its members |
 | `[ ]` Cross-app rich paste | a paste from one app into another keeps its structure instead of falling back to plain text |
 | `[ ]` Machine members | a program joins a document as a member, marked as a machine, with its declared host, and its removal rotates the key |
 | `[ ]` Write-only inboxes | a program posts into a document through an asymmetric inbox it cannot read, and a member client merges each post once |

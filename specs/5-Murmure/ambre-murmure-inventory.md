@@ -16,6 +16,8 @@
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
 | `murmure-attachments` | A member drops a file or an image into a message. | design-only | 12 |  |
+| `murmure-bots` | A program takes part in a conversation: it answers a slash command, posts an alert, or offers buttons. | design-only | 12 |  |
+| `murmure-calls` | A member starts a video call from a channel in one click. | design-only | 7 |  |
 | `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | design-only | 38 |  |
 | `murmure-composer` | The field where a member writes. | design-only | 20 |  |
 | `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | design-only | 13 |  |
@@ -24,6 +26,7 @@
 | `murmure-import` | A team moving from Slack or Discord brings its history along. | design-only | 9 |  |
 | `murmure-keyboard` | No frequent action in Murmure needs the mouse. | design-only | 13 |  |
 | `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | design-only | 17 |  |
+| `murmure-link-previews` | A link in a message shows a preview: the title and image of a web page, or the name of an Ambre document. | design-only | 8 |  |
 | `murmure-mentions` | A member names another in a message with `@`. | design-only | 13 |  |
 | `murmure-message-links` | A member copies a link to one message and pastes it anywhere. | design-only | 7 |  |
 | `murmure-message-list` | The conversation of a channel, newest at the bottom. | design-only | 20 |  |
@@ -40,4 +43,4 @@
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | design-only | 9 |  |
 | `murmure-unread` | The sidebar shows where something new is, and how much. | design-only | 11 |  |
 
-**24 features: 0 implemented, 0 partial, 24 design-only. 365 contract rows, 0 loose.**
+**27 features: 0 implemented, 0 partial, 27 design-only. 392 contract rows, 0 loose.**
