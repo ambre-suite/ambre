@@ -35,6 +35,11 @@ impl ProseUiState {
         }
     }
 
+    /// The browser cancelled the finger: no tap and no flick (`KINETIC-010`).
+    pub fn touch_cancel(&mut self) {
+        self.kinetic.cancel();
+    }
+
     /// A wheel event, in screen pixels: the column takes its step now. A
     /// trackpad glide that pauses keeps its momentum; a notch never does
     /// (`KINETIC-002`). `stepped` marks a line or page delta mode.

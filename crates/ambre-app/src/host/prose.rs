@@ -609,6 +609,7 @@ impl ProseView {
                     self.dirty = true;
                 }
             }
+            super::TouchPhase::Cancel => self.state.touch_cancel(),
             super::TouchPhase::Up => {
                 if let Some((x, y)) = self.state.touch_end(now_ms) {
                     self.feed(&ProseInput::Press {

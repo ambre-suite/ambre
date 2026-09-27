@@ -68,6 +68,8 @@ pub enum TouchPhase {
     Down,
     Move,
     Up,
+    /// The browser took the gesture over (`KINETIC-010`).
+    Cancel,
 }
 pub use run::run_with;
 
@@ -327,6 +329,7 @@ impl AppView {
                     TouchPhase::Down => v.touch_down(x, y, now_ms),
                     TouchPhase::Move => v.touch_move(x, y, now_ms),
                     TouchPhase::Up => v.touch_up(x, y, now_ms),
+                    TouchPhase::Cancel => v.touch_cancel(),
                 }
             }
             AppView::Trame(v) => {
@@ -334,6 +337,7 @@ impl AppView {
                     TouchPhase::Down => v.touch_down(x, y, now_ms),
                     TouchPhase::Move => v.touch_move(x, y, now_ms),
                     TouchPhase::Up => v.touch_up(now_ms),
+                    TouchPhase::Cancel => v.touch_cancel(),
                 }
                 true
             }

@@ -22,7 +22,7 @@
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | implemented | 10 | 6 |
 | `fixtures` | Ambre documents in known states, built from a seed instead of by hand. | implemented | 35 | 3 |
 | `key-verification` | Before a document is shared with someone, their key is shown as a short readable fingerprint and the user confirms it. | implemented | 18 | 13 |
-| `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 9 | 1 |
+| `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 11 | 2 |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | implemented | 17 | 10 |
 | `media` | A picture in a document travels apart from it. | implemented | 11 | 11 |
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 17 | 5 |
@@ -56,4 +56,4 @@
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**40 features: 22 implemented, 16 partial, 2 design-only. 612 contract rows, 319 loose.**
+**40 features: 22 implemented, 16 partial, 2 design-only. 614 contract rows, 320 loose.**

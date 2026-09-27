@@ -514,16 +514,24 @@ where
             .map(|w| w.device_pixel_ratio())
             .unwrap_or(1.0);
 
+        // A cancel carries no reliable position, so the last one stands in.
+        let mut last = (0.0, 0.0);
         let cb = Closure::<dyn FnMut(web_sys::PointerEvent)>::new(
             move |event: web_sys::PointerEvent| {
-                let x = event.offset_x() as f64 * dpr;
-                let y = event.offset_y() as f64 * dpr;
+                let cancelled = event.type_() == "pointercancel";
+                let (x, y) = if cancelled {
+                    last
+                } else {
+                    (event.offset_x() as f64 * dpr, event.offset_y() as f64 * dpr)
+                };
+                last = (x, y);
                 // A finger pans the view rather than selecting.
                 if event.pointer_type() == "touch" && host_c.borrow().captures_pointer() {
                     let phase = match event.type_().as_str() {
                         "pointerdown" => TouchPhase::Down,
                         "pointermove" => TouchPhase::Move,
                         "pointerup" => TouchPhase::Up,
+                        "pointercancel" => TouchPhase::Cancel,
                         _ => return,
                     };
                     let now = event.time_stamp();
@@ -542,10 +550,12 @@ where
                         ctrl: event.ctrl_key() || event.meta_key(),
                     },
                     "pointermove" => InputEvent::PointerMove { x, y },
-                    "pointerup" => InputEvent::PointerUp {
+                    // The browser took a mouse gesture over: it ends where
+                    // it last was, as a release (`KINETIC-010`).
+                    "pointerup" | "pointercancel" => InputEvent::PointerUp {
                         x,
                         y,
-                        button: event.button(),
+                        button: if cancelled { 0 } else { event.button() },
                         ctrl: event.ctrl_key() || event.meta_key(),
                     },
                     _ => return,
@@ -567,7 +577,7 @@ where
                 }
             },
         );
-        for event_type in &["pointerdown", "pointermove", "pointerup"] {
+        for event_type in &["pointerdown", "pointermove", "pointerup", "pointercancel"] {
             canvas
                 .add_event_listener_with_callback(event_type, cb.as_ref().unchecked_ref())
                 .expect("add pointer listener");

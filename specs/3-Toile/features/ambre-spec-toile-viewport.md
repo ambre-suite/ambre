@@ -60,7 +60,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-288` | `POST` | An ambiguous wheel event MUST leave the latched guess unchanged, so one gesture does not alternate between panning and zooming. | this spec section 3; section 4 | `ambre_toile::ui::view::wheel_tests::fine_vertical_glide_is_ambiguous` -- it holds the pure classifier returning nothing | partial -- the latch is a field the handler writes, and no test sets it, sends an ambiguous event and reads it back; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-028` | `POST` | `Ctrl` with the wheel, and a trackpad pinch, MUST zoom in every pointer mode. | this spec section 3 | none | unheld -- the rule is three arms of one match and no test drives the handler at all, only the pure classifier under it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-029` | `FRAME` | A wheel event MUST NOT touch a pointer mode the user picked: their choice freezes the detection. | this spec section 3; section 4 | none | unheld -- the classifier has one caller, the automatic arm, so the rule holds by construction today, but nothing guards that fact and no test forces a mode and sends a contrary event; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-UI-289` | `POST` | The wheel in the trackpad mode MUST pan both axes, so a two-finger glide moves the plane diagonally. | this spec section 3 | none | unheld -- the handler pans by the raw event deltas and nothing reads the camera back, and which way a scroll moves the board is not ruled anywhere, section 5; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-289` | `POST` | The wheel in the trackpad mode MUST pan both axes, moving the content against the delta as a page scrolls and as Miro does. | this spec section 3 | `ambre_toile::ui::kinetic::tests::the_wheel_moves_the_content_as_a_page_scrolls` | partial -- the pan is tested; the handler choosing it in the trackpad mode is not; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.5 Fit the board or the selection
 
@@ -165,7 +165,7 @@ request carries a kind token the reply echoes, so a pending fit spends only its 
 | Trigger | Behaviour |
 |---|---|
 | the wheel, in the mouse mode | zooms about the cursor |
-| the wheel, in the trackpad mode | pans both axes (`TOILE-UI-289`), and a glide coasts once it pauses (`1-Foundations/ambre-spec-kinetic-scroll.md`); a pinch zooms |
+| the wheel, in the trackpad mode | pans both axes, the content moving against the delta as a page does (`TOILE-UI-289`), and a glide coasts once it pauses (`1-Foundations/ambre-spec-kinetic-scroll.md`); a pinch zooms |
 | the wheel, in the automatic mode | classified per event, then zooms or pans (`TOILE-UI-027`) |
 | `Ctrl` with the wheel, a pinch | zooms, in every mode (`TOILE-UI-028`) |
 | a drag with the Hand tool, with `Space` held, or with the middle button | pans (`TOILE-UI-026`) |
@@ -216,9 +216,10 @@ pixel wide at every zoom (`features/ambre-spec-toile-board-rendering.md`).
   on its rectangle moves the main camera. No field carries it and nothing paints it.
 * **No handler above the pure geometry has a test.** This crate's rule is that an interaction lands with a
   geometry round trip and a recording of what it painted (`ambre-spec-testing.md section 6`). The wheel, the
-  pan drag, the zoom entries and the resize all read or write the camera, and none is driven. Three go unheld
-  together: the latch a wheel event must not disturb (`TOILE-UI-288`, `TOILE-UI-029`) and the direction a
-  trackpad glide pans (`TOILE-UI-289`). The third is the cull request each of them queues (`TOILE-UI-283`,
+  pan drag, the zoom entries and the resize all read or write the camera, and none is driven. Three
+  go unheld together: first, the latch a wheel event must not disturb (`TOILE-UI-288`,
+  `TOILE-UI-029`). The second is the handler that picks a trackpad pan, whose direction is tested
+  (`TOILE-UI-289`). The third is the cull request each of them queues (`TOILE-UI-283`,
   `TOILE-UI-296`).
 * **The clamp is claimed on both sides and written on one** (`TOILE-UI-281`). The camera clamps its
   zoom and a comment says the culling type matches; it does not. That type is a public struct with a

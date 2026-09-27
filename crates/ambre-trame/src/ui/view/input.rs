@@ -580,6 +580,12 @@ impl TrameView {
         }
     }
 
+    /// The browser cancelled the finger: no click and no flick
+    /// (`KINETIC-010`).
+    pub fn touch_cancel(&mut self) {
+        self.kinetic.cancel();
+    }
+
     /// Halt any kinetic motion and clear its residue.
     pub(crate) fn stop_fling(&mut self) {
         self.kinetic.stop();

@@ -147,6 +147,14 @@ impl Kinetic {
         Release::Fling
     }
 
+    /// The browser cancelled the pointer: it took the gesture over. The pan
+    /// ends with no tap and leaves no motion (`KINETIC-010`).
+    pub fn cancel(&mut self) {
+        self.pressed = None;
+        self.motion = None;
+        self.glide = None;
+    }
+
     /// A wheel event, already in screen pixels. The answer is the step the
     /// view takes now, one for one. A notch stops any motion and never starts
     /// one; a glide feeds a speed the motion starts from once the glide
@@ -356,6 +364,26 @@ mod tests {
         // A glide that dies out slowly leaves no motion.
         kinetic.wheel(0.0, 0.5, false, 700.0);
         assert_eq!(kinetic.tick(800.0), None);
+    }
+
+    /// `KINETIC-010`: a cancelled pan leaves no tap and no motion, even one
+    /// that moved fast.
+    #[test]
+    fn a_cancelled_pan_leaves_no_tap_and_no_motion() {
+        let mut kinetic = Kinetic::default();
+        kinetic.press(100.0, 600.0, 0.0);
+        for step in 1..=5 {
+            let t = 16.0 * f64::from(step);
+            kinetic.sample(100.0, 600.0 - 32.0 * step as f32, t);
+        }
+        kinetic.cancel();
+        assert!(!kinetic.pressed() && !kinetic.moving());
+        assert_eq!(kinetic.release(90.0), Release::Rest);
+        assert_eq!(kinetic.tick(96.0), None);
+        // A tap cancelled before it lifts is no tap either.
+        kinetic.press(10.0, 10.0, 200.0);
+        kinetic.cancel();
+        assert_eq!(kinetic.release(210.0), Release::Rest);
     }
 
     /// `KINETIC-007`: the edge speed is zero away from the edges, grows with

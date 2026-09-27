@@ -5,7 +5,7 @@
 //! screen pixels. The board moves its camera by it, the content going the
 //! other way, so the zoom never changes how far a flick travels.
 
-use ambre_draw::kinetic::edge_speed;
+use ambre_draw::kinetic::{Kinetic, edge_speed};
 use kurbo::{Point, Vec2};
 
 use super::tool::Tool;
@@ -20,6 +20,19 @@ pub fn finger_pans(tool: Tool, grabbable: bool) -> bool {
         Tool::Select => !grabbable,
         _ => false,
     }
+}
+
+/// A wheel event that pans the board: the content moves against the delta,
+/// as a page scrolls, and a glide coasts once it pauses (`TOILE-UI-289`).
+pub fn pan_by_wheel(
+    cam: &mut ViewportTransform,
+    kinetic: &mut Kinetic,
+    delta: (f64, f64),
+    stepped: bool,
+    now_ms: f64,
+) {
+    let step = kinetic.wheel(delta.0 as f32, delta.1 as f32, stepped, now_ms);
+    move_view(cam, step);
 }
 
 /// Move the camera by a view step of the model.
@@ -50,6 +63,27 @@ mod tests {
         assert!(!finger_pans(Tool::Select, true));
         assert!(!finger_pans(Tool::Pen, false));
         assert!(!finger_pans(Tool::Draw, false));
+    }
+
+    /// `TOILE-UI-289`: a wheel turned down moves the content up, and one
+    /// turned right moves it left, as a page scrolls.
+    #[test]
+    fn the_wheel_moves_the_content_as_a_page_scrolls() {
+        let mut cam = ViewportTransform::new(800.0, 600.0);
+        cam.zoom = 2.0;
+        let mut kinetic = Kinetic::default();
+        let world = Point::new(10.0, 10.0);
+        let before = cam.world_to_screen() * world;
+        pan_by_wheel(&mut cam, &mut kinetic, (6.0, 12.0), false, 0.0);
+        let after = cam.world_to_screen() * world;
+        assert!(
+            (after.x - before.x + 6.0).abs() < 1e-6,
+            "{before:?} {after:?}"
+        );
+        assert!(
+            (after.y - before.y + 12.0).abs() < 1e-6,
+            "{before:?} {after:?}"
+        );
     }
 
     /// `TOILE-UI-380`: a view step moves the content by the same screen

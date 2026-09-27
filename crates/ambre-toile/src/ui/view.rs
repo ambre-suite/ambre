@@ -1141,10 +1141,13 @@ impl ToileView {
             // applies the step one for one, and lets a glide coast once it
             // pauses; a notch never coasts (`KINETIC-002`, `KINETIC-009`).
             let now = self.clock_ms();
-            let step = self
-                .kinetic
-                .wheel(-dx as f32, -dy as f32, delta_mode != 0, now);
-            super::kinetic::move_view(&mut self.cam, step);
+            super::kinetic::pan_by_wheel(
+                &mut self.cam,
+                &mut self.kinetic,
+                (dx, dy),
+                delta_mode != 0,
+                now,
+            );
         }
         self.queue_viewport();
         true
@@ -1490,6 +1493,28 @@ impl ToileView {
                 button: 0,
                 ctrl: false,
             }),
+            None => false,
+        }
+    }
+
+    /// The browser cancelled the finger (`KINETIC-010`). A pan ends with no
+    /// click and no flick. A finger acting as the mouse ends its gesture where
+    /// it last was, as a release would (`KINETIC-011`).
+    pub fn touch_cancel(&mut self) -> bool {
+        match self.finger_pans.take() {
+            Some(true) => {
+                self.kinetic.cancel();
+                true
+            }
+            Some(false) => {
+                let at = self.last_pointer;
+                self.handle_input(&InputEvent::PointerUp {
+                    x: at.x,
+                    y: at.y,
+                    button: 0,
+                    ctrl: false,
+                })
+            }
             None => false,
         }
     }
