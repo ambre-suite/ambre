@@ -26,6 +26,7 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-003` | `INV` | A pinned document MUST NOT be evicted. | this spec section 3 | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `RESID-004` | `INV` | A document not held in memory MUST cost only a light subscription: its key, its counters and its cursor. | this spec section 3; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `RESID-005` | `INV` | The activity counters of a document not held in memory MUST come from the activity summaries alone. | this spec section 3; `SYNC-113` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `RESID-020` | `INV` | The local store MUST be requested from the browser as persistent storage. | this spec section 3; `ambre-spec-launcher.md` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Evict a document
 
@@ -53,11 +54,21 @@ prefix is `RESID`, and it belongs to this document alone.
 | `RESID-015` | `FAIL` | Given an update with no summary, the client MUST mark its document as active, with no count. | this spec section 3 | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `RESID-016` | `FRAME` | Counting activity MUST NOT load the document. | this spec section 3 | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.5 Meet the browser quota
+
+The browser can refuse a write before the local store reaches its own budget.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `RESID-017` | `POST` | A write the browser refuses for its quota MUST evict what the relay already holds from the local store, then retry once. | this spec section 3; `RESID-007`, `RESID-008` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `RESID-018` | `FAIL` | Given a change the relay has not acknowledged that the browser still refuses to store, the client MUST stop taking local edits and warn the user until the change is sent or space frees. | this spec section 3 | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `RESID-019` | `FRAME` | Meeting the quota MUST NOT evict a change the relay has not acknowledged. | this spec section 3; `RESID-009` | not built | unbuilt -- lands with the `Document residency` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** three rows of `ambre-spec-budgets.md section 6`: the documents in memory, the local
   store, and one light subscription. All three wait on a measure.
 * **Boundary.** the summary rides inside the ciphertext (`SYNC-113`), so the relay learns nothing
   of it. The local store stays on the device, owned by the launcher (`ambre-spec-launcher.md`).
-* **Verification.** 16 `unimplemented`: no cache and no light subscription exist today. Every row
+* **Verification.** 20 `unimplemented`: no cache and no light subscription exist today. Every row
   lands with one Story.
 
 ---
@@ -113,6 +124,17 @@ A member can lie in a summary. The lie costs one false badge, and the document c
    relay has not acknowledged stays queued (`RESID-009`).
 5. Keep a light subscription, so the counters still move.
 
+**A full browser quota.** Two kinds of data sit in the local store. What the relay already holds
+is a copy: losing it costs a download. A change the relay has not acknowledged exists nowhere
+else, so it is never evicted (`RESID-019`).
+
+1. The client asks the browser for persistent storage, so the browser does not clear the store on
+   its own (`RESID-020`).
+2. A refused write evicts what the relay already holds, in the usual order, and retries once
+   (`RESID-017`).
+3. When even an unsent change cannot be stored, the client stops taking edits and warns the user.
+   Editing resumes once the change is sent or space frees (`RESID-018`). No edit is accepted that could be lost.
+
 **A reopen** starts from the local snapshot, replays the deltas after its horizon, and replaces the
 counters with the counts it holds (`RESID-010`, `RESID-011`).
 
@@ -129,6 +151,7 @@ Residency has no control of its own.
 | memory past the budget | the least recently viewed unpinned document leaves memory, and nothing on screen changes |
 | a document leaves the screen | it loses its pin, and becomes a candidate for eviction |
 | an update arrives for a document not held | its badge moves, and nothing loads |
+| the browser refuses a write for its quota | older copies leave the local store; past that, editing pauses with a warning until the unsent changes reach the relay |
 
 ---
 
@@ -141,6 +164,8 @@ Residency has no control of its own.
 | Counters from a sealed summary | a frame kind the relay reads | one more field outside the `ZK-007` set, for a count the client computes itself |
 | A light subscription | the full Sync state for every document | the full state runs up to 1 MB, and hundreds of documents break the memory budget |
 | Immutable documents leave first | least recently viewed alone | an immutable document reloads with no loss, so it is the cheapest to drop |
+| A refused write evicts, then retries | stopping the document | the relay holds every acknowledged change, so losing the local copy costs a download, never data |
+| Editing pauses when an unsent change cannot be stored | keeping the change in memory alone | a reload or a closed tab offline would lose it, and the user would never know |
 
 ---
 
@@ -150,8 +175,6 @@ Residency has no control of its own.
   has a light subscription.
 * **The three budgets are not measured.** The figures in `ambre-spec-budgets.md section 6` are
   estimates, marked as such.
-* **No rule states what a full browser quota does.** The local store can meet the quota before its
-  own budget, and nothing says which document the client drops then.
 
 ---
 

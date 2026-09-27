@@ -158,6 +158,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Direct message conversion | V1 | a direct message becomes a private channel of a space, with its history or from a fresh start |
 | `[ ]` Forum channels | V1 | posts with a title and tags, each opening its own thread |
 | `[ ]` Chat import | V1 | an archive of Slack or Discord imported into a space |
+| `[ ]` Two channels side by side | V1 | a split view that pins and shows two channels at once, each with its own list and composer |
 
 ---
 

@@ -127,5 +127,5 @@ The engine has no control of its own. It answers the commands the views send.
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing is built.** The crate is a stub, and the protocol still carries the channel plane.
-* **No rule states how many channels stay open.** The view pins one channel, and residency bounds
-  the rest by bytes; a split view showing two channels is not ruled.
+* **Two channels side by side are not here.** The view pins one channel, and residency bounds the
+  rest by bytes. A split view is the `Two channels side by side` Story (`ambre-roadmap.md` E5).
