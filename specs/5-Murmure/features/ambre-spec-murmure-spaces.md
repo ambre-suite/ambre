@@ -21,6 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-032` | `INV` | A member with the viewer role on the space MUST NOT change the catalogue. | this spec section 3; `SRV-008` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-033` | `INV` | The catalogue MUST hold the key of each public channel it lists, sealed under the key of the space. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-034` | `INV` | A guest of a channel MUST NOT be a member of the space document. | this spec section 3 | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-236` | `INV` | A removal from a channel MUST count as verified when the log of its space holds a signed removal of the same member. | this spec section 3; `SYNC-106` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Create a space
 
@@ -52,12 +53,15 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-043` | `POST` | A member leaving a space MUST cause the rotation of the space key and of the key of each public channel. | this spec section 3; `ambre-spec-key-rotation.md` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-044` | `POST` | The catalogue MUST hold the rotated key of each public channel once the rotation completes. | this spec section 3 | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-045` | `FRAME` | Leaving a space MUST NOT change a channel of the catalogue beyond its key. | this spec section 3 | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-234` | `POST` | Leaving a space, or being removed from it, MUST remove the member from every channel of the space, private channels included. | this spec section 3; `SRV-136` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-235` | `POST` | Each private channel the member leaves that way MUST owe a rotation. | this spec section 3; `SYNC-127` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-237` | `FRAME` | Leaving a space MUST NOT remove the member from a direct message or from a channel of another space. | this spec section 3 | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** a leave costs one rotation per public channel. No row of
   `ambre-spec-budgets.md section 8` bounds it yet, and the design asks for one.
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 15 `unimplemented`: no space exists in the code.
+* **Verification.** 19 `unimplemented`: no space exists in the code.
 
 ---
 
@@ -93,7 +97,12 @@ member with the viewer role reads it, and the relay refuses a write from them (`
 5. The joining client walks the key chain back from the key of the catalogue (`SYNC-119`). It
    reads the whole history of the channel, before a rotation too.
 
-**A leave.** The first admin client online after the leave rotates the space key, then the key of
+**A leave takes every channel of the space with it** (`MURMURE-234`). The relay removes the member
+from each channel of the space, and each private one owes a rotation (`SRV-136`). The removal from
+the space, signed in its log, is what verifies each channel removal (`MURMURE-236`). A guest is
+never a member of the space, so a guest's channels are not touched.
+
+**The keys, on a leave.** The first admin client online after the leave rotates the space key, then the key of
 each public channel. Its Sync worker seals each new key under the new space key, and the catalogue
 takes the sealed value.
 
@@ -123,13 +132,12 @@ takes the sealed value.
 | The catalogue lists public channels only | private channels in the catalogue | every member of the space reads the catalogue, so it would show each private channel |
 | The catalogue names a public channel | the name in the channel `meta` document | a member who has not joined holds no key for `meta`, so the channel to join would have no name |
 | The catalogue carries the sealed key | a member online to wrap the key | a join would wait on another member, and a space leave pays for the catalogue with a rotation |
+| A space leave takes its private channels | keeping them, and offering to leave | a member an admin removed from the space would keep reading its private channels |
 
 ---
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing is built.** No space, no catalogue and no self-join exist.
-* **No rule states what a leave does to a private channel of the space.** A member who leaves the
-  space stays a member of a private channel they joined, and nothing states whether they should.
 * **No row bounds the rotation of a leave.** It grows with the number of public channels, and the
   measure that decides whether a shared key returns does not exist.

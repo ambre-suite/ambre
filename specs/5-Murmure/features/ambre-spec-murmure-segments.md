@@ -20,6 +20,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-062` | `INV` | A message younger than the grace period MUST NOT be in a final segment. | this spec section 3; `ambre-spec-budgets.md section 8` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-063` | `INV` | A final snapshot MUST be shallow: it MUST hold no text deleted before the finalization. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-222` | `INV` | An active segment MUST NOT hold more deltas past its latest snapshot than the budget register allows. | this spec section 3; `ambre-spec-budgets.md section 6`; `SRV-038` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-239` | `OBS` | A dropped snapshot MUST be shown to the members of the channel, with its author and its reporter. | this spec section 3; `AUTHOR-023` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Close the active segment
 
@@ -44,6 +45,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-071` | `POST` | A confirming client MUST rebuild the state from the deltas and compare it with the snapshot before it confirms. | this spec section 3; `SRV-118` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-072` | `FAIL` | Given a snapshot that differs from the deltas, the client MUST withhold its confirmation and report the mismatch. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-238` | `POST` | A dropped final snapshot MUST let another member client finalize the segment again. | this spec section 3; `SRV-133`, `SRV-134` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-153` | `FRAME` | Confirming a finalization MUST NOT change the snapshot or the deltas. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Edit a message of a locked segment
@@ -66,7 +68,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   and the row beside it bounds the deltas a cold open replays.
 * **Boundary.** a final snapshot is sealed like any snapshot (`ZK-001`). The relay learns the state
   of each segment and its finalization time (`ZK-015`).
-* **Verification.** 18 `unimplemented`: no segment exists in the code.
+* **Verification.** 20 `unimplemented`: no segment exists in the code.
 
 ---
 
@@ -109,6 +111,10 @@ until another member confirms it, as any snapshot does (`SRV-126`, `AUTHOR-016`)
 4. Another member client confirms, and the deltas go (`SRV-118`). A segment nobody opens again
    keeps its deltas: about 1.8 MB beside a 0.5 MB snapshot, for 5000 messages.
 
+**A mismatch** drops the snapshot, and the deltas stay (`SRV-133`). Another member finalizes
+again (`MURMURE-238`). Every member sees who sealed the snapshot and who refused it
+(`MURMURE-239`). A member who refuses honest snapshots is named just as plainly.
+
 **A re-finalization** runs rarely and in batches. It is what turns a delete into an erasure: the
 deleted text leaves the ciphertext only then.
 
@@ -140,6 +146,7 @@ The segments have no control of their own. A user meets them only as a channel t
 | A full snapshot while the segment is active | a shallow snapshot at each compaction | a client that sends a change made before the snapshot could no longer merge it |
 | A compaction bounds the deltas past the snapshot | smaller segments instead | every close adds a lease, a final snapshot and a search index, and a smaller segment still replays its whole tail |
 | The deltas wait for a confirmation | purging them after a verification delay | a false snapshot nobody checked in time would become the only record of the segment |
+| Both names are shown | naming the author alone | a false report would then accuse an honest member, and nobody would see who made it |
 
 ---
 
@@ -148,5 +155,3 @@ The segments have no control of their own. A user meets them only as a channel t
 * **Nothing is built.** No segment, lease, amendment or re-finalization exists.
 * **The compaction waits on the relay.** `SRV-038` lands with the `A document is compacted as its
   history grows` Story (`ambre-roadmap.md` E7), which `MURMURE-222` needs first.
-* **Nothing states what a reported mismatch leads to.** The deltas stay, and no rule names who
-  finalizes again or how the member who sealed the false snapshot is shown.

@@ -65,6 +65,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-016` | `FAIL` | A caller MUST NOT grant a role above its own. | audit `N2`; this spec section 3 | `ambre_server::routes::share::tests::editor_cannot_grant_owner` -- the refusal; `::owner_can_grant_any_valid_role`; `::doc_role_rank_ordering` -- the ordering the clamp is read off | none | verified |
 | `SRV-070` | `FAIL` | A caller MUST NOT change a member ranked above it. | audit `N2`; this spec section 3 | `ambre_server::routes::tests::handler_tests::editor_cannot_demote_owner_via_invite` -- the invitation is also the role-change path, so this is the half a clamp on the granted role alone leaves open | none | verified |
 | `SRV-017` | `FRAME` | Deleting a document MUST leave no relay state behind it. | this spec section 3 | none | fails -- the delete removes the rows and nothing else, so the document's sequence counter and its per-author clock hash stay in the ephemeral store with no expiry; lands with the `A deleted document leaves nothing` Story (`ambre-roadmap.md` E7) | failing |
+| `SRV-137` | `POST` | A removal MUST delete the read cursor of the member removed. | this spec section 3; `ambre-spec-zero-knowledge.md` | not built | unbuilt -- lands with the `SYNC P4` / `SRV P1` -- channels Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 A member joins a public channel alone
 
@@ -97,6 +98,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-123` | `FAIL` | While a rotation is owed, the relay MUST refuse every frame sealed under the key the removal left behind. | this spec section 3; `SYNC-125` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `SRV-124` | `POST` | A rotation that lands MUST clear the debt of its document. | this spec section 3; `SYNC-128` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `SRV-125` | `FRAME` | Refusing a frame for its key MUST NOT give it a sequence number. | this spec section 3; `ambre-spec-sequencer.md` | not built | unbuilt -- lands with the `A revoke either completes or changes nothing` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-136` | `POST` | A removal from a space MUST remove the member from every channel of that space, and mark each private one as owing a rotation. | this spec section 3; `5-Murmure/features/ambre-spec-murmure-spaces.md` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the per-operation targets of `ambre-spec-budgets.md section 3`, and the roughly
   50 KB per open document of `ambre-spec-budgets.md section 6`. Every relay row of that register

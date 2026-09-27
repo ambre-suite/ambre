@@ -60,6 +60,7 @@ Another member checks it against the signed deltas before anyone opens from it.
 | `AUTHOR-017` | `FAIL` | Given a pending snapshot that differs from the deltas it covers, the client MUST withhold its confirmation and report the mismatch. | this spec section 3 | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `AUTHOR-021` | `POST` | A client MUST confirm its own snapshot only when every operation of another user past the reference snapshot comes from a delta that user signed. | this spec section 3; `SRV-126`, `SRV-130` | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `AUTHOR-022` | `FAIL` | Given a snapshot its author confirmed, whose operations of another user past the reference snapshot differ from the deltas that user signed, the client MUST refuse it and open from the reference snapshot. | this spec section 3; `SRV-131` | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `AUTHOR-023` | `POST` | A mismatch report MUST be signed by its reporter, and name the snapshot and its author. | this spec section 3; `SRV-133` | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `AUTHOR-018` | `FRAME` | Checking a snapshot MUST NOT change the document. | this spec section 3 | not built | unbuilt -- lands with the `Operations bound to their signer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none of its own: one hash per PeerID of a received delta, below any row of
@@ -67,7 +68,7 @@ Another member checks it against the signed deltas before anyone opens from it.
   snapshot costs one import and one comparison. A self-confirmed one compares only what others wrote.
 * **Boundary.** the session nonce rides inside the sealed payload (`AUTHOR-010`), so the relay
   learns nothing beyond the `ZK-007` set. The registry is document content, sealed like the rest.
-* **Verification.** 22 `unimplemented`: no code derives a PeerID today. Every row lands with one
+* **Verification.** 23 `unimplemented`: no code derives a PeerID today. Every row lands with one
   Story, and none holds until it ships.
 
 ---
@@ -199,8 +200,9 @@ The binding has no control of its own.
 
 * **Nothing is built.** Every client draws a random PeerID, and no check reads the PeerIDs of a
   delta.
-* **The Loro calls are not proven.** The design assumes that Loro reads the PeerIDs of a blob with
-  no import. A prototype confirms it before the first row ships.
+* **The Loro calls are named, not tested.** `LoroDoc::decode_import_blob_meta` returns version
+  vectors keyed by PeerID with no import, and the JSON update of Murmure is measured by the
+  `segment_json_check` bench. No test asserts either.
 
 ---
 

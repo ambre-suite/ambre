@@ -42,7 +42,7 @@ Grammar and status values are normative in `ambre-spec-template.md`.
 | `MURMURE-005` | `CONC` | Two peers typing in the same message MUST both keep their text. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-006` | `INV` | A reaction MUST be keyed by its emoji, then by the reacting user. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-007` | `CONC` | Two members reacting with the same emoji at once MUST both appear in the merged reaction. | this spec section 3; this spec section 6 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-008` | `INV` | A mention MUST be a `mention` mark whose value is a user identifier. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-008` | `INV` | A mention MUST be a `mention` mark whose value is a user identifier or the channel itself. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-009` | `INV` | A thread document MUST name its channel and its root message in its `header`. | this spec section 2 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-010` | `INV` | The `segments` list MUST hold at most one `active` and at most one `closing` segment. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-011` | `CONC` | Two peers closing the active segment at once MUST converge on one successor segment. | this spec section 5; this spec section 6 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -94,6 +94,7 @@ pub enum DocumentKind { Space, Meta, Segment, Amendments, Thread }
 pub enum ChannelType { Direct, Private, Public }
 pub enum SegmentState { Active, Closing, Final }
 pub enum DeletedBy { Author, Moderator }
+pub enum MentionTarget { User(UserId), Channel }
 ```
 
 ---
@@ -122,8 +123,8 @@ concurrent writers race for. Every document also carries the `peers` registry of
 | amendments | `amendments/{id}/content` | Text | -- | the edited body | none: char-CRDT | messages | design |
 
 **The `state` of a segment** is `active`, `closing` or `final`. **The `by` of a delete** is `author`
-or `moderator`. **The `mention` mark** carries a user id and expands to nothing: text typed beside
-it is not part of the mention.
+or `moderator`. **The `mention` mark** carries a user id, or the channel for an `@channel`. It expands
+to nothing: text typed beside it is not part of the mention.
 
 **Absence is a value** (`MURMURE-018`). No `name` on a direct message means the client composes one
 at display (`MURMURE-016`). No `thread` means the message has no reply. No `amended` segment has no
@@ -189,6 +190,7 @@ amendments document.
 | Migration | the walk of `ambre-spec-schema-version.md`, per document kind |
 | Bump | `MURMURE-020` |
 | Unknown field | a map key no build knows is ignored on read, so a key a newer client wrote is dropped rather than refused |
+| Delta format | a segment or thread delta is a Loro JSON update of schema version 1 (`MURMURE-227`). A change of that version is a bump (`MURMURE-020`) |
 | Size | a segment closes at the segment size row of `ambre-spec-budgets.md section 6` |
 | Deltas | every document takes the document pipeline: the sequencer, the sealed envelope and the replay. A remote delta carries no version and applies blind, as in the other applications. A segment or thread delta is a Loro JSON update, whose own `schema_version` a client checks (`MURMURE-223`) |
 

@@ -70,7 +70,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 ## 3. MODEL
 
 **CRDT containers.** none. The read cursor is a relay record, one per member and document
-(`ambre-spec-server.md section 3`).
+(`ambre-spec-server.md section 3`). It lives as long as the membership: a removal deletes it
+(`SRV-137`).
 
 **Three sources, one badge.**
 
@@ -106,4 +107,3 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing is built.** The cursor table exists and nothing writes it.
-* **Nothing states how long a cursor lives.** A member who left keeps a cursor row, and no rule removes it.

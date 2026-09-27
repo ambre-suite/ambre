@@ -64,6 +64,9 @@ sequence has already moved.
 | `SRV-129` | `POST` | A pending snapshot MUST be offered for confirmation to a member client, other than its author, that has the document open. | this spec section 3; `AUTHOR-016` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `SRV-130` | `FRAME` | A trim after a confirmation by the author MUST NOT drop a delta another user signed past the reference snapshot. | this spec section 3; `AUTHOR-022` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
 | `SRV-131` | `FRAME` | A trim MUST NOT drop the reference snapshot: the latest one a member other than its author confirmed. | this spec section 3; `AUTHOR-022` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-133` | `POST` | A mismatch report MUST drop the pending snapshot it names. | this spec section 3; `AUTHOR-023` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-134` | `POST` | After a drop, the relay MUST ask a member client other than the author of the dropped snapshot for the next one. | this spec section 3; `SRV-038` | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SRV-135` | `FRAME` | Dropping a snapshot MUST NOT drop a delta. | this spec section 3 | not built | unbuilt -- lands with the `A document is compacted as its history grows` Story (`ambre-roadmap.md` E7) | unimplemented |
 
 ### 1.5 A client asks for what it missed
 
@@ -174,7 +177,9 @@ confirm its own snapshot. The relay then keeps the reference snapshot (`SRV-131`
 another user signed past it (`SRV-130`), and drops the author's own. So the deltas kept stop
 growing while one author writes alone (`SRV-132`).
 
-Only a confirmed snapshot is retained, and moves the trim (`SRV-127`). The trim
+Only a confirmed snapshot is retained, and moves the trim (`SRV-127`). A mismatch report drops
+the pending snapshot and keeps every delta (`SRV-133`, `SRV-135`). The next snapshot comes from
+another member (`SRV-134`). The trim
 removes every delta at or below the lowest horizon of the snapshots the document still keeps
 (`SRV-039`, `SRV-083`). The hourly pass keeps the ten most
 recent. **Nothing triggers any of it** (`SRV-038`).
@@ -251,6 +256,7 @@ sees is how long a document takes to open.
 | A pending snapshot moves no trim | trimming as soon as a snapshot lands | a false snapshot would replace the signed deltas that could prove it false |
 | The deltas of a final segment wait for a confirmation | purging them after a delay | a false snapshot nobody checked in time would become the only record, and every cold open would trust it |
 | The relay offers a snapshot for confirmation | waiting for the next cold open | a document whose other members keep it open would never be confirmed, and its deltas would pile up |
+| A report drops the snapshot at once | the relay weighing the report against the snapshot | the relay reads neither, and the deltas it keeps settle the question at the next snapshot |
 
 ---
 
