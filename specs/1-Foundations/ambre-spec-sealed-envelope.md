@@ -104,7 +104,7 @@ signature says who wrote the frame, the tag says under which key, and only then 
 | Step | Refuses | On failure |
 |---|---|---|
 | 1. verify the signature against the author key the metadata names | a forged author | drop, and warn |
-| 2. verify the commitment tag against the document key | a frame moved from another document, or a wrong key | drop, and warn |
+| 2. verify the commitment tag against the key the frame names (`SYNC-125`) | a frame moved from another document, or a wrong key | drop, and warn |
 | 3. open the cipher, with the metadata as the additional data | a mutated byte anywhere | drop, and warn |
 | 4. read the version byte and decompress under the ceiling | an unknown version, and a bomb | drop, and warn |
 | 5. split an update into its nonce, its summary and its delta | a body too short for its parts | drop, and warn |

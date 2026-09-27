@@ -21,6 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-046` | `INV` | A direct message MUST belong to no space. | this spec section 3; `ambre-spec-murmure-schema.md section 3` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-047` | `INV` | Two direct messages MUST NOT exist for one set of members. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-252` | `INV` | A direct message MUST have no owner. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-264` | `INV` | The relay MUST keep the key links of a channel under its `meta` document, where they serve every document of the channel. | this spec section 3; `SYNC-117` | not built | unbuilt -- lands with the `The key chain` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Create a private channel
 
@@ -58,9 +59,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-059` | `POST` | Leaving a private channel or a direct message MUST rotate its key. | this spec section 3; `ambre-spec-key-rotation.md` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-059` | `POST` | Leaving a private channel or a direct message MUST cause the rotation of its key. | this spec section 3; `ambre-spec-key-rotation.md` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-060` | `POST` | A rotation MUST close the active segment, so the successor opens under the new key. | this spec section 3; `features/ambre-spec-murmure-segments.md` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-262` | `POST` | A rotation MUST lock every segment sealed under the previous key, so a later edit goes to an amendment under the new key. | this spec section 3; `SRV-147` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-061` | `FRAME` | Leaving a public channel MUST NOT rotate its key. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-257` | `FAIL` | Given the last owner leaving a private channel that keeps other members, the client MUST first hand the owner role to one of them. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.7 Delete a channel
 
@@ -68,7 +71,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-243` | `POST` | Deleting a channel MUST delete every document it groups, with their objects. | this spec section 3; `SRV-142`, `SRV-057` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-244` | `FAIL` | Given a delete from a member who does not own the channel, the relay MUST refuse it. | this spec section 3; `SRV-015` | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-245` | `POST` | A channel whose last member leaves MUST be deleted. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-245` | `POST` | A private channel or a direct message whose last member leaves MUST be deleted. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-246` | `FRAME` | Deleting a channel MUST NOT touch another channel. | this spec section 3 | not built | unbuilt -- lands with the `Private channels and direct messages` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** an invite wraps one key. The invitee then walks the key chain back to the boundary,
@@ -76,7 +79,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 22 `unimplemented`: no channel exists in the code.
+* **Verification.** 25 `unimplemented`: no channel exists in the code.
 
 ---
 
@@ -100,6 +103,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 message whose members are exactly the requested set. It learns nothing new by doing so
 (`MURMURE-051`).
 
+**One chain per channel.** Every document of a channel shares its key. So the relay keeps its key
+links once, under the `meta` document, and they open any segment (`MURMURE-264`). A link is never
+document content: no key reaches the Logic thread.
+
 **No forward secrecy.** A direct message keeps every key, like any channel. Each final segment stays
 sealed under the key of its time, and the key chain reaches it. What protects it is the rotation on
 a leave.
@@ -115,13 +122,18 @@ a leave.
 
 **A leave, in steps.** The leaving member adds a signed entry, and the relay removes the row and
 marks the rotation owed (`SYNC-127`). The first member client to send rotates the key and closes
-the active segment (`SYNC-128`, `MURMURE-060`).
+the active segment (`SYNC-128`, `MURMURE-060`). The rotation also locks the closing segment, so an
+edit written after it never travels under the key the member who left still holds (`MURMURE-262`).
 
 **A delete is final.** The owner deletes a channel, and every document, file, member row and cursor
-goes with it (`MURMURE-243`). Every member of a direct message is an editor, and none is its owner
-(`MURMURE-252`). So nobody can delete it or remove a member for the others: it is deleted once its
-last member leaves (`MURMURE-245`). Archiving, which keeps a channel readable and closed to writes,
-is the `Archived channels` Story (`ambre-roadmap.md` E5).
+goes with it (`MURMURE-243`). An owner who leaves hands the role on first (`MURMURE-257`).
+
+**A direct message has no owner.** Every member is an editor (`MURMURE-252`), so nobody deletes it
+for the others. It goes once its last member leaves, as a private channel does (`MURMURE-245`). A
+public channel stays listed with no member, for the next one to join.
+
+Archiving keeps a channel readable and closed to writes: the `Archived channels` Story (`ambre-roadmap.md` E5)
+holds it.
 
 **Code.** not built.
 

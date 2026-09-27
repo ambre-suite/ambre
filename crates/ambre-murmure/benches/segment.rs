@@ -85,21 +85,20 @@ fn build(count: usize) -> Segment {
         let content = message
             .insert_container("content", LoroText::new())
             .expect("content");
+        // The message creates its reactions map, flat and empty, so no
+        // reaction ever creates a container (`MURMURE-256`).
+        let reactions = message
+            .insert_container("reactions", LoroMap::new())
+            .expect("reactions");
         content.insert(0, &body(i)).expect("body");
         commit_delta(&doc, &mut sent, &mut deltas);
 
         if i % 5 == 4 {
             doc.set_peer_id(1 + (i as u64 * 3) % WRITERS)
                 .expect("peer id");
-            let reactions = message
-                .insert_container("reactions", LoroMap::new())
-                .expect("reactions");
-            let users = reactions
-                .insert_container("\u{1F44D}", LoroMap::new())
-                .expect("emoji");
-            users
+            reactions
                 .insert(
-                    "u00000003",
+                    "\u{1F44D}|u00000003",
                     1_700_000_000_000_i64 + i as i64 * 30_000 + 5_000,
                 )
                 .expect("reaction");

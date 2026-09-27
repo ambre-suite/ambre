@@ -27,6 +27,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-080` | `POST` | A sent message MUST be appended to the active segment with a fresh `MessageId` and its author. | this spec section 3; `MURMURE-002` | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-256` | `POST` | A sent message MUST create its `reactions` map, empty. | this spec section 3; `MURMURE-006` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-081` | `POST` | A sent message MUST carry an activity summary of kind content, with its mentions. | this spec section 3; `SYNC-113` | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-082` | `FAIL` | Given a delta that creates a message under another author, every client MUST refuse the delta. | this spec section 3 | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-083` | `FRAME` | Sending a message MUST NOT change another message. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -45,7 +46,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-087` | `POST` | A delete MUST mark the message deleted and empty its content. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-088` | `POST` | A delete of a message in a final segment MUST write an amendment with `by: author`. | this spec section 3; `features/ambre-spec-murmure-segments.md` | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-088` | `POST` | A delete of a message in a locked segment MUST write an amendment with `by: author`. | this spec section 3; `features/ambre-spec-murmure-segments.md` | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-089` | `FAIL` | Given a delta that deletes a message of another author, every client MUST refuse the delta. | this spec section 3 | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-090` | `FRAME` | Deleting a message MUST NOT delete its thread. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -55,6 +56,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-224` | `FAIL` | Given a binary delta on a segment, a thread or an amendments document, every client MUST refuse it. | this spec section 3; `MURMURE-223` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-225` | `POST` | An accepted delta MUST be imported exactly as the check read it. | this spec section 3 | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-255` | `POST` | The check MUST accept a delta that sets the absent `thread` field of another author's message, and nothing else of it. | this spec section 3; `MURMURE-107` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-228` | `FAIL` | Given a JSON update of a schema version the client does not compile, the client MUST refuse it and ask the user to update. | this spec section 3; `MURMURE-019` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-226` | `FRAME` | Checking a delta MUST NOT copy its document. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the `Message authorship` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -62,7 +64,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`. A delta weighs about 1.4 times its binary form on the wire.
 * **Boundary.** a message is sealed like any delta (`ZK-001`), and its kind rides in the sealed
   summary (`SYNC-113`). The relay never learns whether a frame is a message, an edit or a delete.
-* **Verification.** 20 `unimplemented`: no message exists in the code.
+* **Verification.** 22 `unimplemented`: no message exists in the code.
 
 ---
 
@@ -87,7 +89,7 @@ it. The `author` of a message and the key of a reaction are values inside the op
 check needs the operations of the delta, and never the state of the segment.
 
 **A delta travels as a Loro JSON update** (`MURMURE-223`). A binary update opens only by an import
-into a document, and a copy of the segment costs 40 ms at 5000 messages. The JSON form reads with
+into a document, and a copy of the segment costs 52 ms at 5000 messages. The JSON form reads with
 no document, in microseconds.
 
 **The authorship check, in steps.** It runs on each received delta, before import.
@@ -96,15 +98,17 @@ no document, in microseconds.
    `MURMURE-228`).
 2. Read its operations: each carries its container and its value.
 3. Refuse the delta when it creates a message under another author (`MURMURE-082`).
-4. Refuse it when it changes a message container created by another author's PeerID
-   (`MURMURE-085`, `MURMURE-089`).
-5. Refuse it when it writes a reaction under another user's key (`MURMURE-094`).
-6. On an amendments document, refuse it when it amends a message whose `author`, read in the final
-   segment, is another user (`MURMURE-253`).
+4. Refuse it when it changes a field, the `content` or the `attachments` of a message created by
+   another author's PeerID (`MURMURE-085`, `MURMURE-089`). One field is open to all: the `thread`
+   field, set once by the first reply, while it is absent (`MURMURE-255`).
+5. Refuse it when it writes a reaction under another user's key (`MURMURE-094`). The `reactions`
+   map is the one container of a message that others write, entry by entry.
+6. On an amendments document, read the message in its locked segment. Refuse the delta when the
+   segment does not hold it, or when its `author` is another user (`MURMURE-013`, `MURMURE-253`).
 7. Import otherwise, from the update the check read (`MURMURE-225`).
 
 An amendment names its message by identifier, in a document its author did not create. So the
-check reads the author from the final segment itself, which is immutable and cheap to load again.
+check reads the author from the locked segment itself, which is immutable and cheap to load again.
 
 A PeerID resolves to its user through `ambre-spec-op-authorship.md`. Every client runs the same
 check on the same delta, so every client reaches the same verdict (`MURMURE-079`).
@@ -133,9 +137,9 @@ the `Moderation` Story (`ambre-roadmap.md` E5).
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
 | The check runs before import | a filter at display | the filter detects and prevents nothing: a last-writer-wins value is already overwritten |
-| A delta travels as a JSON update | a fork of the segment per delta | a fork encodes and decodes the whole segment: 40 ms at 5000 messages on a desktop |
+| A delta travels as a JSON update | a fork of the segment per delta | a fork encodes and decodes the whole segment: 52 ms at 5000 messages on a desktop |
 | A delta travels as a JSON update | a decoder of our own for the binary format | the binary format is internal to Loro, and it would break at each upgrade |
-| A delta travels as a JSON update | smaller segments | a fork still costs 3 ms at 500 messages on a desktop, and the phone budget is 5 ms |
+| A delta travels as a JSON update | smaller segments | a fork still costs 3.5 ms at 500 messages on a desktop, and the phone budget is 5 ms |
 | A delete empties the content | a tombstone that keeps the text | the text would stay readable to every member, against the wish of its author |
 | Only the author changes a message | a moderator role in the same check | a role lives in another document, and a revoke concurrent with a delete has no single answer without the relay |
 | A late edit goes to an amendments document | new deltas on the final segment | every old segment would take concurrent writes again, and its search index would turn mutable |

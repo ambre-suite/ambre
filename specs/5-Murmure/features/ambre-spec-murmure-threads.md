@@ -20,6 +20,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-105` | `INV` | The replies to a message MUST live in one thread document per root message. | this spec section 3; `ambre-spec-murmure-schema.md section 2` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-106` | `INV` | The reply count and the last replier of a root MUST be read from its thread document. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-108` | `CONC` | Two peers sending the first reply at once MUST converge on one thread document. | this spec section 3; `ambre-spec-murmure-schema.md section 6` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-261` | `INV` | A mention in a reply MUST count on the channel of its thread. | this spec section 3; `MURMURE-233` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Reply in a thread
 
@@ -34,13 +35,14 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-111` | `POST` | A client MUST reload the head of a thread when the relay signals activity on it and its root is on screen. | this spec section 3; `SRV-100` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-260` | `POST` | An activity signal on a thread MUST make the client fetch the summaries of its new deltas, with no document loaded. | this spec section 3; `RESID-014`, `SRV-100` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-112` | `FRAME` | An activity signal MUST NOT load a thread whose root is off screen. | this spec section 3; `RESID-016` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** a thread head is a small read per visible root, inside the memory rows of
   `ambre-spec-budgets.md section 6`.
 * **Boundary.** a thread is a document of its channel, sealed like the others (`ZK-001`). The relay
   learns that a document is a thread of the channel, and when it changes (`ZK-015`, `SRV-101`).
-* **Verification.** 8 `unimplemented`: no thread exists in the code.
+* **Verification.** 10 `unimplemented`: no thread exists in the code.
 
 ---
 
@@ -63,7 +65,9 @@ names the root, and its `messages` list holds the replies.
 segment. Two first replies at once receive the same document (`MURMURE-108`).
 
 **A thread not open.** The client is not subscribed to it. A frame on it makes the relay publish a
-signal on the topic of the channel. The client reloads the head if the root is on screen.
+signal on the topic of the channel. The client then fetches the new deltas and reads their sealed
+summaries alone (`MURMURE-260`). A mention in a reply thus counts on the channel, and can notify
+(`MURMURE-261`). It reloads the head of the thread only if the root is on screen.
 
 **Code.** not built.
 
@@ -85,6 +89,7 @@ signal on the topic of the channel. The client reloads the head if the root is o
 | :--- | :--- | :--- |
 | One document per thread | one `threads` document per channel | it grows with every thread of the channel for years |
 | The relay creates the thread document | each peer creates its own on the first reply | two first replies at once would open two threads for one root |
+| The client fetches the summaries a signal points at | a signal that names the users mentioned | the relay would learn who mentions whom in every thread |
 
 ---
 

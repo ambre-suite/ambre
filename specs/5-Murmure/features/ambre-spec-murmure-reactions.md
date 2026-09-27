@@ -23,7 +23,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-092` | `POST` | A reaction MUST add an entry under its emoji and under the reacting member's own key. | this spec section 3; `MURMURE-006` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-092` | `POST` | A reaction MUST add one entry keyed by its emoji and the reacting member. | this spec section 3; `MURMURE-006` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-093` | `POST` | A reaction MUST carry an activity summary of kind reaction. | this spec section 3; `SYNC-113` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-094` | `FAIL` | Given a delta that writes a reaction under another user's key, every client MUST refuse the delta. | this spec section 3; `features/ambre-spec-murmure-messages.md` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-095` | `FRAME` | Reacting MUST NOT change the content of the message. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -32,7 +32,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-096` | `POST` | Removing a reaction MUST delete the member's own entry under that emoji. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-096` | `POST` | Removing a reaction MUST delete the member's own entry for that emoji. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-097` | `FRAME` | Removing a reaction MUST NOT remove the entry of another member. | this spec section 3; `MURMURE-007` | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none of its own: a reaction is one small delta, charged to the send rows of
@@ -56,7 +56,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 ## 3. MODEL
 
 **CRDT containers.** the `reactions` map of a message, in `ambre-spec-murmure-schema.md section 3`:
-one map per emoji, one entry per user.
+one flat map, one entry per emoji and user. The message creates it empty (`MURMURE-256`), so no
+reaction ever creates a container.
 
 **Why one entry per user.** Each member writes and removes only their own key, so two concurrent
 reactions never race for one value. The authorship check refuses an entry under another key

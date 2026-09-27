@@ -40,7 +40,7 @@ Grammar and status values are normative in `ambre-spec-template.md`.
 | `MURMURE-003` | `INV` | A message's `author` MUST hold a user identifier, never a display name and never a key. | this spec section 3; `ambre-spec-op-authorship.md` | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-004` | `INV` | All message text MUST live in a `LoroText`; a `LoroMap` MUST NOT hold message text. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-005` | `CONC` | Two peers typing in the same message MUST both keep their text. | this spec section 3 | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-006` | `INV` | A reaction MUST be keyed by its emoji, then by the reacting user. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-006` | `INV` | A reaction MUST be one entry of one flat map, keyed by the pair of its emoji and its reacting user. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-007` | `CONC` | Two members reacting with the same emoji at once MUST both appear in the merged reaction. | this spec section 3; this spec section 6 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-008` | `INV` | A mention MUST be a `mention` mark whose value is a user identifier or the channel itself. | this spec section 3 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-009` | `INV` | A thread document MUST name its channel and its root message in its `header`. | this spec section 2 | not built | unbuilt -- lands with the `Reactions, mentions and threads` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -87,6 +87,7 @@ Grammar and status values are normative in `ambre-spec-template.md`.
 ```rust
 pub struct Timestamp(u64);              // Unix milliseconds, display only: a clock is untrusted
 pub struct Emoji(String);               // exactly one extended grapheme cluster
+pub struct ReactionKey { pub emoji: Emoji, pub user: UserId }  // one map key, encoded as a string
 pub struct MediaType(String);           // a lower-case type and subtype
 pub struct ByteSize(u64);
 pub struct SealedChannelKey(Vec<u8>);   // a channel key, sealed under the space key
@@ -117,7 +118,7 @@ concurrent writers race for. Every document also carries the `peers` registry of
 | segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted` | `MessageId`, `UserId`, `Timestamp`, `DocumentId`, `MessageId`, `bool`, `bool` | the key | messages | design |
 | segment, thread | `messages/{n}/content` | Text | -- | the message body, with the `mention` mark | none: char-CRDT | messages, mentions | design |
 | segment, thread | `messages/{n}/attachments` | List | position | `{media_ref, name: String, media_type: MediaType, size: ByteSize}`, the reference typed by `ambre-spec-media.md` | list order, no LWW | attachments | design |
-| segment, thread | `messages/{n}/reactions` | Map | an `Emoji` | a Map from a `UserId` to a `Timestamp` | the user entry | reactions | design |
+| segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: an `Emoji` and a `UserId` | a `Timestamp` | the entry | reactions | design |
 | amendments | `amendments` | Map | a `MessageId` | `{content}` or `{deleted: bool, by: DeletedBy}` | the entry | messages | design |
 | amendments | `amendments/{id}/content` | Text | -- | the edited body | none: char-CRDT | messages | design |
 
@@ -158,8 +159,8 @@ amendments document.
   successor (`MURMURE-011`). The list records it, and the relay holds the state that decides.
 * **`messages`.** A List, not a MovableList: a message never moves. Concurrent appends take the
   order Loro gives them, the same on every peer.
-* **`reactions`.** One map per emoji, one entry per user. A member removes their own entry, never a
-  list slot another member shares (`MURMURE-007`).
+* **`reactions`.** One flat map, one entry per emoji and user. Two first reactors would each create
+  a map per emoji under one key, and Loro keeps one. A flat key never collides (`MURMURE-007`).
 * **`meta`, with no member list.** Membership is the relay's table, checked through the signed log
   of `ambre-spec-membership.md` (`MURMURE-015`).
 
@@ -170,13 +171,14 @@ amendments document.
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
 | A message is keyed by a `MessageId` | its position in the list | a concurrent append moves every position after it, so a pin or a reply would point at another message |
-| A reaction is a map from user to stamp | a list of the users who reacted | two concurrent removals of one list slot remove the wrong member, and two concurrent adds duplicate one |
-| A reaction is a map from user to stamp | a counter per emoji | a counter cannot say who reacted, and a member could not remove their own reaction alone |
+| A reaction is one entry per emoji and user | a list of the users who reacted | two concurrent removals of one list slot remove the wrong member, and two concurrent adds duplicate one |
+| A reaction is one entry per emoji and user | a counter per emoji | a counter cannot say who reacted, and a member could not remove their own reaction alone |
 | The relay arbitrates a close | a successor identifier derived from the closing segment | two peers would create one document twice, and the relay would have to accept a second creation of an existing identifier |
 | The relay arbitrates a close | letting each peer open its own successor | the channel would fork into two active segments, which `MURMURE-010` refuses |
 | The catalogue holds a sealed channel key | the plain channel key in the space document | the space document lives in the Logic thread, and no key material may reach it (`SYNC-039`) |
 | One `header` per document | inferring the kind from the containers present | a reader would guess before it can check, and a document of another channel would read as a valid one |
 | Messages in a List | a MovableList | nothing moves a message, and a MovableList costs more to merge for an operation nobody performs |
+| One flat map keyed by emoji and user | a map per emoji, holding a map per user | two members first reacting with one emoji create two child containers under one key, and one of the two reactions is lost |
 
 ---
 

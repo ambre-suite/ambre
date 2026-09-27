@@ -54,6 +54,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 |---|---|---|---|---|---|---|
 | `MURMURE-073` | `POST` | An edit the relay refuses for a locked segment MUST be rewritten as an amendment. | this spec section 3; `SRV-115` | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-074` | `FRAME` | The rewrite MUST NOT drop the edit. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-263` | `FAIL` | Given a new message the relay refuses for a locked segment, the client MUST send it again to the active segment. | this spec section 3; `SRV-115` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Re-finalize an amended segment
 
@@ -68,7 +69,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   and the row beside it bounds the deltas a cold open replays.
 * **Boundary.** a final snapshot is sealed like any snapshot (`ZK-001`). The relay learns the state
   of each segment and its finalization time (`ZK-015`).
-* **Verification.** 20 `unimplemented`: no segment exists in the code.
+* **Verification.** 21 `unimplemented`: no segment exists in the code.
 
 ---
 
@@ -94,7 +95,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | State | Accepts | Leaves it when |
 |---|---|---|
 | `active` | new messages, edits, deletes | it passes the segment size, and the relay closes it |
-| `closing` | edits and deletes | the grace period ends, and a lease is granted |
+| `closing` | edits and deletes | the grace period ends and a lease is granted, or a rotation locks it (`MURMURE-262`) |
 | `final` | nothing: the amendments document takes late edits | never |
 
 **An active segment is compacted by count, never on a timer.** The relay asks a member client for
@@ -109,7 +110,7 @@ until another member confirms it, as any snapshot does (`SRV-126`, `AUTHOR-016`)
 2. The client exports a shallow snapshot of the deltas up to the number the relay returned.
 3. It uploads the snapshot and its search index, and commits (`SRV-116`).
 4. Another member client confirms, and the deltas go (`SRV-118`). A segment nobody opens again
-   keeps its deltas: about 1.8 MB beside a 0.5 MB snapshot, for 5000 messages.
+   keeps its deltas: about 1.8 MB beside a 0.6 MB snapshot, for 5000 messages.
 
 **A mismatch** drops the snapshot, and the deltas stay (`SRV-133`). Another member finalizes
 again (`MURMURE-238`). Every member sees who sealed the snapshot and who refused it
