@@ -69,8 +69,11 @@ pub enum LogicCommand {
         /// race against [`OpenDocument`](LogicCommand::OpenDocument).
         doc_type: DocType,
         /// Full Loro snapshot (`ExportMode::Snapshot`) read back from local
-        /// storage.
-        snapshot: Vec<u8>,
+        /// storage, when one was saved.
+        snapshot: Option<Vec<u8>>,
+        /// The deltas logged since that snapshot, in no set order. A Loro
+        /// import does not depend on it.
+        deltas: Vec<Vec<u8>>,
     },
 
     // -- P3 -- Service plane (relayed request/response) -------------------------

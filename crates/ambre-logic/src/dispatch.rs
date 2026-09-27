@@ -31,6 +31,7 @@ impl LogicState {
                 document_id,
                 doc_type,
                 snapshot,
+                deltas,
             } => {
                 // Order-independent: the boot-time local restore and the route
                 // poll's `OpenDocument` race on startup. If the restore arrives
@@ -67,13 +68,21 @@ impl LogicState {
                 // (`SCHEMA-012`) and reaches the user as the owning app's own
                 // refusal event. A restore that silently does nothing is
                 // indistinguishable from a document that never existed.
-                let events: Vec<AppEvent> = match doc.import_snapshot(&snapshot) {
-                    Ok(events) => events,
-                    Err(e) => {
+                let mut events: Vec<AppEvent> = match snapshot.map(|s| doc.import_snapshot(&s)) {
+                    Some(Ok(events)) => events,
+                    Some(Err(e)) => {
                         tracing::warn!("Logic: doc {document_id} refused its snapshot: {e}");
                         vec![doc.refusal_event(&e)]
                     }
+                    None => Vec::new(),
                 };
+                // The deltas logged since the snapshot, imported the way a
+                // relay's replay is. The log is folded into a snapshot at once,
+                // so the next restore reads one row.
+                if !deltas.is_empty() {
+                    events.extend(doc.apply_remote_batch(&deltas));
+                    self.owe_snapshot(document_id);
+                }
                 for event in events {
                     self.send_to_ui(UiEvent::Viewport { document_id, event });
                 }
@@ -144,7 +153,7 @@ impl LogicState {
             LogicCommand::CloseDocument { document_id } => {
                 // The last edits of the pass are saved before the state goes,
                 // so closing a document never loses them (`ARCH-017`).
-                self.answer_document(document_id);
+                self.answer_document(document_id, true);
                 self.docs.remove(&document_id);
                 // Drop any in-flight service routes for this document. A response
                 // arriving after close has no engine to feed, and must not
@@ -760,7 +769,8 @@ mod tests {
         reopened.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
             document_id: header.document_id.into(),
             doc_type: header.doc_type,
-            snapshot: header.payload,
+            snapshot: Some(header.payload),
+            deltas: Vec::new(),
         });
         reopened.handle_logic_command(LogicCommand::App {
             document_id,
@@ -1054,7 +1064,8 @@ mod tests {
         state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
             document_id: doc_id,
             doc_type: DocType::Trame,
-            snapshot,
+            snapshot: Some(snapshot),
+            deltas: Vec::new(),
         });
         assert!(state.docs.contains_key(&doc_id));
     }

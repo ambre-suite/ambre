@@ -1,7 +1,9 @@
-//! IndexedDB-backed persistence for Loro CRDT snapshots.
+//! IndexedDB-backed persistence for Loro CRDT snapshots and deltas.
 //!
-//! Saves a full Loro snapshot per document so an edit survives a refresh
-//! straight from local storage (offline-first), independent of the network.
+//! Keeps a full Loro snapshot per document, and the deltas written since it.
+//! An edit then survives a refresh straight from local storage
+//! (offline-first), independent of the network. A keystroke appends its delta; a snapshot
+//! replaces the document's row and drops the deltas it covers.
 //!
 //! Threading: every IndexedDB operation is async and resolves through a JS
 //! callback, which only fires when an event loop is idle. The Logic thread
@@ -54,8 +56,13 @@ const DB_NAME: &str = "ambre-persistence";
 // v2 adds the `trusted_keys` store (`ambre-spec-key-verification.md`).
 // The upgrade handler creates each store only if absent, so bumping the version
 // on an existing v1 database adds `trusted_keys` without touching `snapshots`.
-const DB_VERSION: u32 = 2;
+// v3 adds the `deltas` store, created the same guarded way.
+const DB_VERSION: u32 = 3;
 const STORE_SNAPSHOTS: &str = "snapshots";
+/// The deltas written since each document's snapshot, keyed
+/// `"{document hex}:{unique suffix}"`. A Loro import does not depend on the
+/// order it is fed, so the suffix only has to be unique.
+const STORE_DELTAS: &str = "deltas";
 /// TOFU pinned exchange keys: `UserId` (hex) -> the 32 raw bytes of the X25519
 /// key confirmed on first invitation (`ambre-spec-key-verification.md`).
 const STORE_TRUSTED_KEYS: &str = "trusted_keys";
@@ -113,6 +120,9 @@ impl PersistenceStore {
                 if !existing.contains(STORE_TRUSTED_KEYS) {
                     let _ = db.create_object_store(STORE_TRUSTED_KEYS);
                 }
+                if !existing.contains(STORE_DELTAS) {
+                    let _ = db.create_object_store(STORE_DELTAS);
+                }
             }
         });
         open_request.set_onupgradeneeded(Some(on_upgrade.as_ref().unchecked_ref()));
@@ -146,33 +156,83 @@ impl PersistenceStore {
     /// Save a document's CRDT snapshot (fire-and-forget).
     ///
     /// Stores `snapshot` under `document_id` in the "snapshots" store. The
-    /// transaction auto-commits when the Main thread returns to its event loop.
-    /// Errors are logged, not propagated: a lost snapshot is non-fatal.
+    /// same transaction drops the document's deltas: the snapshot was exported
+    /// after every one of them, so it holds them all. The transaction
+    /// auto-commits when the Main thread returns to its event loop. Errors are
+    /// logged, not propagated: a lost snapshot is non-fatal.
     pub fn save_snapshot(&self, document_id: [u8; 16], snapshot: Vec<u8>) {
-        let key = id_to_hex(&document_id);
+        let _ = self.write_snapshot(document_id, &snapshot);
+    }
+
+    /// Append one delta to a document's log (fire-and-forget).
+    ///
+    /// The next [`save_snapshot`](Self::save_snapshot) folds it away. Errors
+    /// are logged: the next snapshot covers a delta lost here.
+    pub fn save_delta(&self, document_id: [u8; 16], delta: Vec<u8>) {
+        let hex = id_to_hex(&document_id);
+        let key = format!("{hex}:{}", unique_suffix());
         let txn = match self
             .db
-            .transaction_with_str_and_mode(STORE_SNAPSHOTS, IdbTransactionMode::Readwrite)
+            .transaction_with_str_and_mode(STORE_DELTAS, IdbTransactionMode::Readwrite)
+        {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::warn!("Persistence: delta txn failed for {hex}: {e:?}");
+                return;
+            }
+        };
+        let Ok(store) = txn.object_store(STORE_DELTAS) else {
+            return;
+        };
+        if let Err(e) = store.put_with_key(bytes_to_js(&delta).as_ref(), &JsValue::from_str(&key)) {
+            tracing::warn!("Persistence: delta put failed for {hex}: {e:?}");
+        }
+    }
+
+    /// Put `snapshot` and drop the document's deltas, in one transaction.
+    /// `None` when the transaction could not be opened or written to.
+    fn write_snapshot(
+        &self,
+        document_id: [u8; 16],
+        snapshot: &[u8],
+    ) -> Option<web_sys::IdbTransaction> {
+        let key = id_to_hex(&document_id);
+        let stores = js_sys::Array::of2(
+            &JsValue::from_str(STORE_SNAPSHOTS),
+            &JsValue::from_str(STORE_DELTAS),
+        );
+        let txn = match self
+            .db
+            .transaction_with_str_sequence_and_mode(&stores, IdbTransactionMode::Readwrite)
         {
             Ok(t) => t,
             Err(e) => {
                 tracing::warn!("Persistence: save txn failed for {key}: {e:?}");
-                return;
+                return None;
             }
         };
-        let store = match txn.object_store(STORE_SNAPSHOTS) {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::warn!("Persistence: save object_store failed for {key}: {e:?}");
-                return;
-            }
+        let (Ok(snapshots), Ok(deltas)) = (
+            txn.object_store(STORE_SNAPSHOTS),
+            txn.object_store(STORE_DELTAS),
+        ) else {
+            tracing::warn!("Persistence: save object_store failed for {key}");
+            return None;
         };
-
-        let array = Uint8Array::new_with_length(snapshot.len() as u32);
-        array.copy_from(&snapshot);
-        if let Err(e) = store.put_with_key(array.as_ref(), &JsValue::from_str(&key)) {
+        if let Err(e) =
+            snapshots.put_with_key(bytes_to_js(snapshot).as_ref(), &JsValue::from_str(&key))
+        {
             tracing::warn!("Persistence: save put failed for {key}: {e:?}");
+            return None;
         }
+        match deltas_of(&key) {
+            Some(range) => {
+                if let Err(e) = deltas.delete(&range) {
+                    tracing::warn!("Persistence: delta sweep failed for {key}: {e:?}");
+                }
+            }
+            None => tracing::warn!("Persistence: no delta range for {key}"),
+        }
+        Some(txn)
     }
 
     /// Save a snapshot and report when the write is **durable**.
@@ -194,35 +254,10 @@ impl PersistenceStore {
         snapshot: Vec<u8>,
     ) -> oneshot::Receiver<bool> {
         let (tx, rx) = answer();
-        let key = id_to_hex(&document_id);
-
-        let txn = match self
-            .db
-            .transaction_with_str_and_mode(STORE_SNAPSHOTS, IdbTransactionMode::Readwrite)
-        {
-            Ok(t) => t,
-            Err(e) => {
-                tracing::warn!("Persistence: save txn failed for {key}: {e:?}");
-                tx.send(false);
-                return rx;
-            }
-        };
-        let store = match txn.object_store(STORE_SNAPSHOTS) {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::warn!("Persistence: save object_store failed for {key}: {e:?}");
-                tx.send(false);
-                return rx;
-            }
-        };
-
-        let array = Uint8Array::new_with_length(snapshot.len() as u32);
-        array.copy_from(&snapshot);
-        if let Err(e) = store.put_with_key(array.as_ref(), &JsValue::from_str(&key)) {
-            tracing::warn!("Persistence: save put failed for {key}: {e:?}");
+        let Some(txn) = self.write_snapshot(document_id, &snapshot) else {
             tx.send(false);
             return rx;
-        }
+        };
 
         let tx_done = tx.clone();
         let on_complete = Closure::<dyn FnMut(web_sys::Event)>::new(move |_e: web_sys::Event| {
@@ -296,6 +331,53 @@ impl PersistenceStore {
 
         let on_error = Closure::<dyn FnMut(web_sys::Event)>::new(move |_event: web_sys::Event| {
             tx.send(None);
+        });
+        request.set_onerror(Some(on_error.as_ref().unchecked_ref()));
+        on_error.forget();
+
+        rx
+    }
+
+    /// Load every delta written since a document's snapshot, in no set order.
+    ///
+    /// Resolves to an empty list when there is none or the read failed.
+    pub fn load_deltas(&self, document_id: [u8; 16]) -> oneshot::Receiver<Vec<Vec<u8>>> {
+        let (tx, rx) = answer();
+        let key = id_to_hex(&document_id);
+        let request = self
+            .db
+            .transaction_with_str(STORE_DELTAS)
+            .and_then(|txn| txn.object_store(STORE_DELTAS))
+            .ok()
+            .zip(deltas_of(&key))
+            .and_then(|(store, range)| store.get_all_with_key(&range).ok());
+        let Some(request) = request else {
+            tx.send(Vec::new());
+            return rx;
+        };
+
+        let tx_ok = tx.clone();
+        let req = request.clone();
+        let on_success =
+            Closure::<dyn FnMut(web_sys::Event)>::new(move |_event: web_sys::Event| {
+                let deltas = req
+                    .result()
+                    .ok()
+                    .and_then(|v| v.dyn_into::<js_sys::Array>().ok())
+                    .map(|rows| {
+                        rows.iter()
+                            .filter_map(|row| row.dyn_into::<Uint8Array>().ok())
+                            .map(|a| a.to_vec())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                tx_ok.send(deltas);
+            });
+        request.set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
+        on_success.forget();
+
+        let on_error = Closure::<dyn FnMut(web_sys::Event)>::new(move |_event: web_sys::Event| {
+            tx.send(Vec::new());
         });
         request.set_onerror(Some(on_error.as_ref().unchecked_ref()));
         on_error.forget();
@@ -396,23 +478,59 @@ impl PersistenceStore {
         }
     }
 
-    /// Remove a document's snapshot (called on document close / delete).
+    /// Remove a document's snapshot and its deltas (called on document close /
+    /// delete).
     pub fn delete_snapshot(&self, document_id: [u8; 16]) {
         let key = id_to_hex(&document_id);
-        let txn = match self
+        let stores = js_sys::Array::of2(
+            &JsValue::from_str(STORE_SNAPSHOTS),
+            &JsValue::from_str(STORE_DELTAS),
+        );
+        let Ok(txn) = self
             .db
-            .transaction_with_str_and_mode(STORE_SNAPSHOTS, IdbTransactionMode::Readwrite)
-        {
-            Ok(t) => t,
-            Err(_) => return,
-        };
-        let Ok(store) = txn.object_store(STORE_SNAPSHOTS) else {
+            .transaction_with_str_sequence_and_mode(&stores, IdbTransactionMode::Readwrite)
+        else {
             return;
         };
-        if let Err(e) = store.delete(&JsValue::from_str(&key)) {
+        if let Ok(store) = txn.object_store(STORE_SNAPSHOTS)
+            && let Err(e) = store.delete(&JsValue::from_str(&key))
+        {
             tracing::warn!("Persistence: delete failed for {key}: {e:?}");
         }
+        if let (Ok(store), Some(range)) = (txn.object_store(STORE_DELTAS), deltas_of(&key))
+            && let Err(e) = store.delete(&range)
+        {
+            tracing::warn!("Persistence: delta delete failed for {key}: {e:?}");
+        }
     }
+}
+
+/// The key range holding every delta of the document keyed `hex`: from
+/// `"{hex}:"` up to `"{hex};"`, the character after the colon.
+fn deltas_of(hex: &str) -> Option<web_sys::IdbKeyRange> {
+    web_sys::IdbKeyRange::bound(
+        &JsValue::from_str(&format!("{hex}:")),
+        &JsValue::from_str(&format!("{hex};")),
+    )
+    .ok()
+}
+
+/// A key suffix no other delta holds. It is the time, a counter for this
+/// page, and a random draw for another tab writing in the same millisecond.
+fn unique_suffix() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let count = NEXT.fetch_add(1, Ordering::Relaxed);
+    let now = js_sys::Date::now() as u64;
+    let draw = (js_sys::Math::random() * f64::from(u32::MAX)) as u32;
+    format!("{now:015}:{count:010}:{draw:08x}")
+}
+
+/// Copy `bytes` into a fresh JS array.
+fn bytes_to_js(bytes: &[u8]) -> Uint8Array {
+    let array = Uint8Array::new_with_length(bytes.len() as u32);
+    array.copy_from(bytes);
+    array
 }
 
 /// Extract the `IdbDatabase` from an IndexedDB open-request event target.
@@ -555,5 +673,56 @@ mod wasm_tests {
         let key = [0x5Au8; 32];
         store.save_trusted_key(user, key);
         assert_eq!(store.load_trusted_key(user).await.unwrap(), Some(key));
+    }
+
+    #[wasm_bindgen_test]
+    async fn deltas_log_until_a_snapshot_folds_them() {
+        let name = "ambre-test-deltas";
+        delete_db(name).await;
+        let store = PersistenceStore::open_named(name)
+            .await
+            .expect("channel")
+            .expect("store opens");
+        let doc = [5u8; 16];
+        let other = [6u8; 16];
+        assert!(store.load_deltas(doc).await.unwrap().is_empty());
+
+        store.save_delta(doc, vec![1]);
+        store.save_delta(doc, vec![2]);
+        store.save_delta(other, vec![9]);
+        let mut deltas = store.load_deltas(doc).await.unwrap();
+        deltas.sort();
+        assert_eq!(
+            deltas,
+            vec![vec![1], vec![2]],
+            "each document reads its own"
+        );
+
+        // A snapshot holds every delta before it, so it drops them.
+        store.save_snapshot(doc, vec![7, 7]);
+        assert!(store.load_deltas(doc).await.unwrap().is_empty());
+        assert_eq!(store.load_snapshot(doc).await.unwrap(), Some(vec![7, 7]));
+        assert_eq!(store.load_deltas(other).await.unwrap(), vec![vec![9]]);
+
+        // A delete takes both.
+        store.save_delta(doc, vec![3]);
+        store.delete_snapshot(doc);
+        assert!(store.load_deltas(doc).await.unwrap().is_empty());
+        assert_eq!(store.load_snapshot(doc).await.unwrap(), None);
+    }
+
+    #[wasm_bindgen_test]
+    async fn upgrade_v1_to_current_adds_deltas() {
+        let name = "ambre-test-migration-deltas";
+        delete_db(name).await;
+        let doc = [8u8; 16];
+        seed_v1_with_snapshot(name, doc, &[1, 2]).await;
+        let store = PersistenceStore::open_named(name)
+            .await
+            .expect("channel")
+            .expect("the database upgrades cleanly");
+        assert_eq!(store.load_snapshot(doc).await.unwrap(), Some(vec![1, 2]));
+        store.save_delta(doc, vec![4]);
+        assert_eq!(store.load_deltas(doc).await.unwrap(), vec![vec![4]]);
     }
 }

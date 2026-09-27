@@ -272,6 +272,36 @@ impl Paginator {
         &self.layout
     }
 
+    /// Lay the document out again after text alone was typed or erased in
+    /// the blocks named in `dirty`.
+    ///
+    /// No block moved, no setting or mark changed, no footnote call came or
+    /// went. So the page box, the defaults, the note plan and the bands hold
+    /// as they were. A dirty band, note or call holder is the exception: it
+    /// takes [`Paginator::reflow`], which reads them all on every edit.
+    pub fn reflow_text(&mut self, document: &LoroDoc, dirty: &[TreeID]) -> &PageLayout {
+        let still = !self.measured.is_empty()
+            && !self.measurer.coverage_grew(self.layout.missing_scripts)
+            && !dirty
+                .iter()
+                .any(|block| self.notes.touches(block) || self.bands.bands.holds(block));
+        if !still {
+            return self.reflow(document, dirty);
+        }
+        let page_box = self.page_box;
+        let measured = self.remeasure(document, page_box, dirty);
+        let Some(from) = first_difference(&self.measured, &measured) else {
+            self.measured = measured;
+            self.version = self.version.saturating_add(1);
+            self.layout.first_dirty_page = None;
+            return &self.layout;
+        };
+        let placement = self.replace_tail(&measured, page_box, from);
+        let first_dirty = first_dirty_page(&self.layout.blocks, &placement.blocks);
+        self.commit(page_box, measured, placement, first_dirty);
+        &self.layout
+    }
+
     /// Bring every table of contents into step with the pages it lists
     /// (`PROSE-019`).
     ///

@@ -252,6 +252,12 @@ impl NotePlan {
         }
     }
 
+    /// Whether an edit to `block` may change the plan: the block is a note,
+    /// or holds a call.
+    pub(crate) fn touches(&self, block: &TreeID) -> bool {
+        self.calls.contains_key(block) || self.notes.values().any(|(_, _, id)| id == block)
+    }
+
     /// The calls of `block`, the line of each still to find.
     fn calls_of(&self, block: &TreeID) -> &[(u32, Uuid)] {
         self.calls.get(block).map_or(&[], Vec::as_slice)

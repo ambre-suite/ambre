@@ -54,6 +54,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-048` | `POST` | The confirmed-change event of a remote change MUST carry the payload that arrived, never a re-export of the current state. | this spec section 3 | `ambre_prose::logic::convergence_tests::the_confirmed_change_carries_the_bytes_that_were_applied` | none | verified |
 | `PROSE-049` | `FRAME` | A remote change MUST NOT be re-broadcast. | this spec section 3; `ambre-spec-delta-order.md` | type-level -- `ambre_prose::logic::ProseState::apply_remote` answers display events and no outcome, so it has no field a delta could leave by; `ambre_prose::logic::convergence_tests::a_remote_change_is_never_re_broadcast` | none | verified |
+| `PROSE-126` | `POST` | A remote change that brings no operation the document lacks, its own change echoed by the relay among them, MUST answer no event. | this spec section 3 | `ambre_prose::logic::convergence_tests::an_echo_of_this_peers_own_change_answers_nothing` | none | verified |
 
 ### 1.4 Hand a change to the Sync worker
 
@@ -114,7 +115,7 @@ status values are normative in `ambre-spec-template.md`.
   No benchmark runs.
 * **Boundary.** none of its own. `PROSE-025` bans a network call, and `PROSE-043` refuses this
   crate a dependency on `ambre-crypto` or `ambre-sync`. It holds no key and opens no socket.
-* **Verification.** 42 `verified`, nothing else. Seven rows are compiler-held: the crate graph, the
+* **Verification.** 43 `verified`, nothing else. Seven rows are compiler-held: the crate graph, the
   lint wall, the closed command enum, the one return type. Two rows bind a shape no command builds
   yet: the image block, and the block under a table cell. Each is read through the format rather
   than through a gesture. The fan-out is driven across the real dispatcher.
@@ -238,7 +239,9 @@ impl ProseState {
     /// layout and the reshaped runs after a keystroke -- and with one delta.
     pub fn handle_command(&mut self, command: ProseCommand) -> ProseOutcome;
 
-    /// A remote delta or a remote snapshot, routed here by document id.
+    /// A remote delta or a remote snapshot, routed here by document id. One that brings no
+    /// operation this peer lacks, such as its own change echoed by the relay, answers nothing
+    /// (`PROSE-126`).
     pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<ProseEvent>;
 
     /// A remote presence frame. The author is the **Sync-resolved `from_user_id`**, never

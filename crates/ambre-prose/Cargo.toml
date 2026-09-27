@@ -92,5 +92,10 @@ criterion = { workspace = true }
 name = "html_paste"
 harness = false
 
+# The keystroke bench holds the "Logic pass that answers a keystroke" row.
+[[bench]]
+name = "keystroke"
+harness = false
+
 [lints]
 workspace = true

@@ -223,3 +223,23 @@ fn a_call_added_or_removed_lays_out_what_a_full_recomputation_would() {
     assert_eq!(placed(&reflowed), placed(&full));
     assert_eq!(placed(&reflowed)[0].1, 1, "the last note is note one again");
 }
+
+#[test]
+fn text_typed_anywhere_lays_out_what_a_full_recomputation_would() {
+    let (mut state, ids) = document(&[long_text(), "beta".to_owned(), long_text()]);
+    let call = add(&mut state, ids[1], 2, "a note");
+    let _ = state.paginate(&[]);
+    let body = note::block(state.document(), &call).expect("a note block");
+    let typed_in = [ids[0], ids[1], crate::events::block_id(body), ids[2]];
+    for block in typed_in {
+        state.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "Typed at the head, long enough to push a line further on. ".repeat(3),
+        });
+        let reflowed = state.paginate(&[]).clone();
+        let full = shipped_paginator().full(state.document()).clone();
+        assert_eq!(placed(&reflowed), placed(&full), "{block:?}");
+        assert_eq!(reflowed.blocks, full.blocks, "{block:?}");
+    }
+}

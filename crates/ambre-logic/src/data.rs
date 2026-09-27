@@ -266,10 +266,10 @@ impl LogicState {
     }
 
     /// Fan an already-typed outcome out to the UI Thread (display events), to
-    /// Sync (`SendUpdate` / `SendEphemeral`), and to local persistence. The
-    /// snapshot is a full one, captured while the `state` borrow was live.
-    /// Shared by every `AppCommand` arm; the arm only decides which `AppEvent`
-    /// variant wraps the display events and whether a snapshot was taken.
+    /// Sync (`SendUpdate` / `SendEphemeral`), and to local persistence, which
+    /// logs the same delta. Shared by every `AppCommand` arm; the arm only
+    /// decides which `AppEvent` variant wraps the display events and whether
+    /// the delta is saved.
     fn dispatch_outcome(
         &mut self,
         document_id: DocumentId,
@@ -283,17 +283,19 @@ impl LogicState {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
         }
         if let Some(payload) = update {
-            tracing::info!(
+            tracing::debug!(
                 "[Logic->Sync] pushing SendUpdate doc={document_id} delta_size={}",
                 payload.len(),
             );
+            // The delta that leaves for the relay is the one saved: it holds
+            // every operation the command wrote.
+            if persist {
+                self.owe_delta(document_id, payload.clone());
+            }
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id,
                 payload,
             });
-        }
-        if persist {
-            self.owe_snapshot(document_id);
         }
         if let Some(payload) = ephemeral {
             self.send_to_sync(SyncCommand::SendEphemeral {
@@ -433,9 +435,9 @@ impl LogicState {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
         }
         if persist {
-            self.owe_snapshot(document_id);
+            self.owe_delta(document_id, payload.to_vec());
+            self.owe_layout(document_id);
         }
-        self.owe_layout(document_id);
     }
 
     /// Apply a batch of remote deltas (a server history replay on open) as one
@@ -471,8 +473,8 @@ impl LogicState {
         }
         if persist {
             self.owe_snapshot(document_id);
+            self.owe_layout(document_id);
         }
-        self.owe_layout(document_id);
     }
 
     /// Apply a remote ephemeral payload to a document and forward presence events.

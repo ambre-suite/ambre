@@ -272,6 +272,7 @@ impl ProseState {
         // flush them first. A commit with nothing pending writes nothing.
         self.doc.commit();
         dirty.extend(self.touched.take(&self.doc));
+        let structural = self.touched.take_structural();
         let faces = &self.faces;
         let paginator = self.paginator.get_or_insert_with(|| {
             let mut paginator = Paginator::new();
@@ -280,7 +281,11 @@ impl ProseState {
             }
             paginator
         });
-        let layout = paginator.reflow(&self.doc, &dirty);
+        let layout = if structural {
+            paginator.reflow(&self.doc, &dirty)
+        } else {
+            paginator.reflow_text(&self.doc, &dirty)
+        };
         self.word_count.pages = layout.page_count;
         layout
     }
@@ -723,9 +728,16 @@ impl ProseState {
     /// edit is a different set of operations from the one that came in. Nothing
     /// is re-broadcast (`PROSE-049`): the method answers display events alone.
     pub fn apply_remote(&mut self, payload: &[u8]) -> Vec<ProseEvent> {
+        let known = self.doc.oplog_vv();
         if let Err(e) = self.doc.import(payload) {
             tracing::warn!("Prose: a remote change could not be applied: {e:?}");
             return vec![Self::err_remote()];
+        }
+        // The relay echoes this peer's own changes back. An import that brought
+        // no operation changed nothing, so it answers nothing: no repaint, no
+        // layout, no save.
+        if self.doc.oplog_vv() == known {
+            return Vec::new();
         }
         self.absorb_imported();
         let mut events = vec![ProseEvent::DocUpdated {

@@ -160,6 +160,28 @@ impl DocState {
         }
     }
 
+    /// Import a batch of deltas, whichever application owns the document, and
+    /// answer its display events.
+    pub fn apply_remote_batch(&mut self, payloads: &[Vec<u8>]) -> Vec<AppEvent> {
+        match self {
+            DocState::Trame(state) => state
+                .apply_remote_batch(payloads)
+                .into_iter()
+                .map(AppEvent::Trame)
+                .collect(),
+            DocState::Toile(state) => state
+                .apply_remote_batch(payloads)
+                .into_iter()
+                .map(AppEvent::Toile)
+                .collect(),
+            DocState::Prose(state) => state
+                .apply_remote_batch(payloads)
+                .into_iter()
+                .map(AppEvent::Prose)
+                .collect(),
+        }
+    }
+
     /// The schema version this document carries (`SCHEMA-004`), whichever
     /// application owns it. Each declares its own number, so the value is only
     /// comparable against that application's own current version.
@@ -365,6 +387,12 @@ impl DocState {
 /// reject; the server remains the sole authority and re-checks every write.
 struct LiveDoc {
     state: DocState,
+    /// How many deltas local persistence holds past the snapshot this session
+    /// last saved. At [`DELTAS_PER_SNAPSHOT`] the next save is a snapshot.
+    /// `None` until this session saved one, since a delta only makes sense on
+    /// top of a snapshot. A document freshly seeded holds a root block of its
+    /// own, which a replay of deltas alone would duplicate.
+    logged: Option<usize>,
     /// Starts `Role::Owner` because a document is materialised optimistically at
     /// `OpenDocument`, before Sync has fetched the members response. Edits route
     /// immediately, exactly as they did before this gate existed. The real role
@@ -377,9 +405,26 @@ impl LiveDoc {
     fn new(state: DocState) -> Self {
         Self {
             state,
+            logged: None,
             role: Role::Owner,
         }
     }
+}
+
+/// How many deltas a document's local log holds before the next save folds
+/// them into a snapshot. A keystroke then costs a delta, not a whole export,
+/// while a restore never replays more than this many.
+const DELTAS_PER_SNAPSHOT: usize = 256;
+
+/// One write to local persistence, which the Main thread performs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PersistWrite {
+    /// The whole document. It replaces the stored one and every delta logged
+    /// since, which it holds.
+    Snapshot(Vec<u8>),
+    /// A change appended to the document's log, imported after the snapshot on
+    /// restore.
+    Delta(Vec<u8>),
 }
 
 // -----------------------------------------------------------------------------
@@ -393,11 +438,11 @@ struct LogicState {
     /// Outbound channel: Logic -> Sync (drained by the Main thread, relayed to
     /// the Sync worker via postMessage).
     to_sync: WorkerSender<SyncCommand>,
-    /// Outbound channel: Logic -> Main, carrying full document snapshots for
-    /// local persistence. The Main thread owns the IndexedDB store, whose
+    /// Outbound channel: Logic -> Main, carrying document snapshots and deltas
+    /// for local persistence. The Main thread owns the IndexedDB store, whose
     /// callbacks need a live event loop this blocking loop cannot offer. Here we
     /// only export the bytes and hand them over.
-    to_persist: WorkerSender<(DocumentId, Vec<u8>)>,
+    to_persist: WorkerSender<(DocumentId, PersistWrite)>,
     /// Live document state, keyed by `document_id`.
     ///
     /// Pre-seeded on `OpenDocument` (which carries the `doc_type`) so UI edits
@@ -454,19 +499,21 @@ struct LogicState {
 }
 
 /// The answers a document is owed at the end of a pass (`ARCH-017`).
-#[derive(Default, Clone, Copy)]
+#[derive(Default)]
 struct Owed {
     /// The view's layout, handed over when it changed.
     layout: bool,
-    /// A full snapshot for local persistence.
+    /// A full snapshot for local persistence, in place of any delta.
     snapshot: bool,
+    /// The changes the pass made, each logged as it came.
+    deltas: Vec<Vec<u8>>,
 }
 
 impl LogicState {
     fn new(
         to_ui: WorkerSender<UiEvent>,
         to_sync: WorkerSender<SyncCommand>,
-        to_persist: WorkerSender<(DocumentId, Vec<u8>)>,
+        to_persist: WorkerSender<(DocumentId, PersistWrite)>,
     ) -> Self {
         Self {
             to_ui,
@@ -503,34 +550,55 @@ impl LogicState {
         self.owed.entry(document_id).or_default().snapshot = true;
     }
 
+    /// Owe local persistence one change the pass made to a document.
+    fn owe_delta(&mut self, document_id: DocumentId, delta: Vec<u8>) {
+        self.owed.entry(document_id).or_default().deltas.push(delta);
+    }
+
     /// Hand every document the pass wrote its owed answers (`ARCH-017`).
     fn answer_pass(&mut self) {
         let owed: Vec<DocumentId> = self.owed.keys().copied().collect();
         for document_id in owed {
-            self.answer_document(document_id);
+            self.answer_document(document_id, false);
         }
     }
 
-    /// Hand one document what it is owed: its snapshot, then its layout
-    /// when that changed. A document already closed is owed nothing.
-    fn answer_document(&mut self, document_id: DocumentId) {
-        let Some(owed) = self.owed.remove(&document_id) else {
-            return;
-        };
+    /// Hand one document what it is owed: its layout when that changed, then
+    /// what local persistence needs. The view comes first, since the keystroke
+    /// waits on it and the save does not.
+    ///
+    /// The save is the pass's deltas. A snapshot takes their place when one
+    /// was asked for, once the log is long enough, or when `closing` finds
+    /// the log holding anything. A document already closed is owed nothing.
+    fn answer_document(&mut self, document_id: DocumentId, closing: bool) {
+        let owed = self.owed.remove(&document_id).unwrap_or_default();
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };
-        let snapshot = owed.snapshot.then(|| doc.state.export_snapshot());
-        let layout = if owed.layout {
-            doc.state.layout_event()
-        } else {
-            None
-        };
-        if let Some(snapshot) = snapshot {
-            self.send_to_persist(document_id, snapshot);
-        }
-        if let Some(event) = layout {
+        if owed.layout
+            && let Some(event) = doc.state.layout_event()
+        {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
+        }
+        let Some(doc) = self.docs.get_mut(&document_id) else {
+            return;
+        };
+        let logged = doc.logged.map(|n| n + owed.deltas.len());
+        let written = !owed.deltas.is_empty();
+        let compact = owed.snapshot
+            || match logged {
+                None => written,
+                Some(n) => n > DELTAS_PER_SNAPSHOT || (closing && n > 0),
+            };
+        if compact {
+            doc.logged = Some(0);
+            let snapshot = doc.state.export_snapshot();
+            self.send_to_persist(document_id, PersistWrite::Snapshot(snapshot));
+        } else {
+            doc.logged = logged;
+            for delta in owed.deltas {
+                self.send_to_persist(document_id, PersistWrite::Delta(delta));
+            }
         }
     }
 
@@ -540,12 +608,11 @@ impl LogicState {
         }
     }
 
-    /// Hand a full document snapshot to the Main thread for local persistence.
-    /// Best-effort: a dropped receiver only means no local save (the snapshot is
-    /// regenerated on the next edit), so it is non-fatal.
-    fn send_to_persist(&self, document_id: DocumentId, snapshot: Vec<u8>) {
-        if self.to_persist.send((document_id, snapshot)).is_err() {
-            tracing::warn!("[Logic->Persist] receiver dropped, snapshot not saved");
+    /// Hand one write to the Main thread for local persistence. Best-effort: a
+    /// dropped receiver only means no local save, so it is non-fatal.
+    fn send_to_persist(&self, document_id: DocumentId, write: PersistWrite) {
+        if self.to_persist.send((document_id, write)).is_err() {
+            tracing::warn!("[Logic->Persist] receiver dropped, write not saved");
         }
     }
 }
@@ -628,7 +695,7 @@ pub fn run(
     to_ui: WorkerSender<UiEvent>,
     to_sync: WorkerSender<SyncCommand>,
     from_sync: Receiver<LogicEvent>,
-    to_persist: WorkerSender<(DocumentId, Vec<u8>)>,
+    to_persist: WorkerSender<(DocumentId, PersistWrite)>,
 ) {
     tracing::info!("Ambre Logic thread starting");
     let Some(waiter) = bell.bind() else {
@@ -677,13 +744,31 @@ mod pass_tests {
     struct Rig {
         state: LogicState,
         ui: Receiver<UiEvent>,
-        persist: Receiver<(DocumentId, Vec<u8>)>,
+        persist: Receiver<(DocumentId, PersistWrite)>,
+        /// What local persistence was handed before the test began.
+        saved: Vec<PersistWrite>,
         _sync: Receiver<SyncCommand>,
         document_id: DocumentId,
         block: ambre_bus::app::prose::BlockId,
     }
 
+    /// A rig whose first save already went, so the next ones are deltas.
     fn rig() -> Rig {
+        let mut rig = Rig::fresh();
+        rig.state.handle_logic_command(keystroke(&rig, 0));
+        rig.state.answer_pass();
+        rig.ui.try_iter().for_each(drop);
+        rig.saved = rig.persist.try_iter().map(|(_, w)| w).collect();
+        rig
+    }
+
+    impl Rig {
+        fn fresh() -> Rig {
+            fresh_rig()
+        }
+    }
+
+    fn fresh_rig() -> Rig {
         let (to_ui, ui) = test_link();
         let (to_sync, sync) = test_link();
         let (to_persist, persist) = test_link();
@@ -703,6 +788,7 @@ mod pass_tests {
             state,
             ui,
             persist,
+            saved: Vec::new(),
             _sync: sync,
             document_id,
             block,
@@ -720,8 +806,54 @@ mod pass_tests {
         }
     }
 
+    /// The text of every top-level block of a Prose document, in order.
+    fn text(state: &DocState) -> String {
+        let DocState::Prose(prose) = state else {
+            unreachable!("a Prose document");
+        };
+        prose
+            .root_blocks()
+            .iter()
+            .map(|block| {
+                let runs = prose.resolved_runs(block).into_iter();
+                format!("[{}]", runs.map(|(run, _)| run).collect::<String>())
+            })
+            .collect()
+    }
+
+    /// The text of the rig's document.
+    fn dump(rig: &Rig) -> String {
+        text(&rig.state.docs[&rig.document_id].state)
+    }
+
+    /// The document a restore of `writes` rebuilds, in a state of its own.
+    fn restored(writes: Vec<PersistWrite>) -> String {
+        let mut snapshot = None;
+        let mut deltas = Vec::new();
+        for write in writes {
+            match write {
+                PersistWrite::Snapshot(bytes) => {
+                    snapshot = Some(bytes);
+                    deltas.clear();
+                }
+                PersistWrite::Delta(bytes) => deltas.push(bytes),
+            }
+        }
+        let (to_persist, _persist) = test_link();
+        let mut state = LogicState::new(test_link().0, test_link().0, to_persist);
+        let document_id = DocumentId::new();
+        state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
+            document_id,
+            doc_type: DocType::Prose,
+            snapshot,
+            deltas,
+        });
+        text(&state.docs[&document_id].state)
+    }
+
     /// `ARCH-017`: three keystrokes queued before the thread wakes cost one
-    /// layout and one snapshot, and the layout carries all three.
+    /// layout, and the layout carries all three. Each is logged as the delta
+    /// it wrote, and no snapshot is exported.
     #[test]
     fn a_burst_of_keystrokes_is_answered_once() {
         let mut rig = rig();
@@ -747,16 +879,45 @@ mod pass_tests {
             })
             .count();
         assert_eq!(layouts, 1, "one layout for the pass");
-        let snapshots: Vec<_> = rig.persist.try_iter().collect();
-        assert_eq!(snapshots.len(), 1, "one snapshot for the pass");
-        let DocState::Prose(prose) = &rig.state.docs[&rig.document_id].state else {
-            unreachable!("the rig opens Prose");
-        };
-        assert_eq!(
-            prose.export_snapshot(),
-            snapshots[0].1,
-            "the snapshot holds all three"
+        let writes: Vec<PersistWrite> = rig.persist.try_iter().map(|(_, w)| w).collect();
+        assert_eq!(writes.len(), 3, "one delta per keystroke");
+        assert!(writes.iter().all(|w| matches!(w, PersistWrite::Delta(_))));
+        let log = rig.saved.iter().cloned().chain(writes).collect();
+        assert_eq!(restored(log), dump(&rig), "the deltas hold all three");
+    }
+
+    /// The first save of a session is a snapshot, which every delta after it
+    /// builds on.
+    #[test]
+    fn the_first_save_is_a_snapshot() {
+        let mut rig = Rig::fresh();
+        rig.state.handle_logic_command(keystroke(&rig, 0));
+        rig.state.answer_pass();
+        let writes: Vec<PersistWrite> = rig.persist.try_iter().map(|(_, w)| w).collect();
+        assert!(
+            matches!(writes.as_slice(), [PersistWrite::Snapshot(_)]),
+            "{writes:?}"
         );
+        assert_eq!(restored(writes), dump(&rig));
+    }
+
+    /// Past [`DELTAS_PER_SNAPSHOT`] deltas the save is a snapshot, which the
+    /// restore reads with the deltas logged after it.
+    #[test]
+    fn a_long_log_is_folded_into_a_snapshot() {
+        let mut rig = rig();
+        let mut writes = rig.saved.clone();
+        for pos in 0..u32::try_from(DELTAS_PER_SNAPSHOT + 3).expect("small") {
+            rig.state.handle_logic_command(keystroke(&rig, pos));
+            rig.state.answer_pass();
+            writes.extend(rig.persist.try_iter().map(|(_, w)| w));
+        }
+        let snapshots = writes
+            .iter()
+            .filter(|w| matches!(w, PersistWrite::Snapshot(_)))
+            .count();
+        assert_eq!(snapshots, 2, "the first save and one fold");
+        assert_eq!(restored(writes), dump(&rig));
     }
 
     /// `ARCH-017`: an edit closed in the same pass is still saved, since the
@@ -773,8 +934,14 @@ mod pass_tests {
                 document_id: rig.document_id,
             })
             .expect("queued");
+        let before = dump(&rig);
         rig.state.drain_pass(&from_ui, &from_sync);
-        assert_eq!(rig.persist.try_iter().count(), 1, "the edit was saved");
+        let writes: Vec<PersistWrite> = rig.persist.try_iter().map(|(_, w)| w).collect();
+        assert!(
+            matches!(writes.as_slice(), [PersistWrite::Snapshot(_)]),
+            "the close folds the edit into a snapshot: {writes:?}"
+        );
         assert!(!rig.state.docs.contains_key(&rig.document_id));
+        assert_eq!(restored(writes).len(), before.len() + 1);
     }
 }

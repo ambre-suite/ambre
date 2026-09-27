@@ -41,6 +41,7 @@ leptos_icons = { workspace = true }
 icondata     = { workspace = true }
 tracing      = { workspace = true }
 tracing-wasm = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 # Encode SyncCommand / decode LogicEvent across the Sync-worker postMessage hop,
 # and the clipboard ClipboardPayload onto the OS clipboard (`trame-clipboard`).

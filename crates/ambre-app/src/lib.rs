@@ -455,14 +455,29 @@ impl ChromeStatus {
 #[cfg(not(test))]
 #[wasm_bindgen(start)]
 pub fn main() {
-    tracing_wasm::set_as_global_default_with_config(
+    // Our crates log at the build's level, and every dependency at WARN
+    // alone. Loro logs its encoding at INFO on each snapshot. The wasm layer
+    // turns every event into a console line and a timing mark. On the Logic
+    // thread, that was most of a keystroke's pass
+    // (`ambre-spec-budgets.md` section 1). Timing marks are a debug aid, so a
+    // release build does not stamp them.
+    let level = if cfg!(debug_assertions) {
+        tracing::Level::DEBUG
+    } else {
+        tracing::Level::INFO
+    };
+    let filter = tracing_subscriber::filter::Targets::new()
+        .with_target("ambre", level)
+        .with_default(tracing::Level::WARN);
+    let layer = tracing_wasm::WASMLayer::new(
         tracing_wasm::WASMLayerConfigBuilder::new()
-            .set_max_level(if cfg!(debug_assertions) {
-                tracing::Level::DEBUG
-            } else {
-                tracing::Level::INFO
-            })
+            .set_max_level(level)
+            .set_report_logs_in_timings(cfg!(debug_assertions))
             .build(),
+    );
+    use tracing_subscriber::layer::SubscriberExt as _;
+    let _ = tracing::subscriber::set_global_default(
+        tracing_subscriber::registry().with(layer).with(filter),
     );
     std::panic::set_hook(Box::new(|info| {
         console_error_panic_hook::hook(info);
@@ -506,11 +521,12 @@ pub fn main() {
         conduit::to_worker::<LogicEvent>(CHANNEL_CAPACITY, &logic_bell);
     // What the Sync -> Logic channel could not take yet, re-offered each frame.
     let sync_inbox: SyncInbox = Rc::new(RefCell::new(conduit::Backlog::new(sync_to_logic_tx)));
-    // Logic -> Main, carrying full document snapshots for local persistence. The
-    // Main thread owns the IndexedDB store (its callbacks need a live event loop,
-    // which the blocking Logic loop cannot offer). It drains this in `pre_frame`.
+    // Logic -> Main, carrying document snapshots and deltas for local
+    // persistence. The Main thread owns the IndexedDB store (its callbacks need a
+    // live event loop, which the blocking Logic loop cannot offer). It drains
+    // this in `pre_frame`.
     let (logic_to_persist_tx, logic_to_persist_rx) =
-        conduit::to_main::<(DocumentId, Vec<u8>)>(CHANNEL_CAPACITY, &logic_bell);
+        conduit::to_main::<(DocumentId, ambre_logic::PersistWrite)>(CHANNEL_CAPACITY, &logic_bell);
 
     // Dispatcher -> canvas view: the content event stream, forwarded after the
     // dispatcher has mirrored command-state events into the chrome.
@@ -978,28 +994,47 @@ pub fn main() {
     // is shared with the per-frame relay below, which saves snapshots Logic emits.
     let persist_store: Rc<RefCell<Option<ambre_logic::persistence::PersistenceStore>>> =
         Rc::new(RefCell::new(None));
+    // Set when the store will never open, so the writes waiting for it go.
+    let persist_gone = Rc::new(std::cell::Cell::new(false));
     {
         let store_slot = Rc::clone(&persist_store);
+        let gone = Rc::clone(&persist_gone);
         let restore_tx = ui_to_logic_tx.clone();
         wasm_bindgen_futures::spawn_local(async move {
             let store = match ambre_logic::persistence::PersistenceStore::open().await {
                 Ok(Ok(store)) => store,
                 Ok(Err(e)) => {
                     tracing::warn!("Persistence: store unavailable ({e})");
+                    gone.set(true);
                     return;
                 }
                 Err(_) => {
                     tracing::warn!("Persistence: open channel dropped");
+                    gone.set(true);
                     return;
                 }
             };
             if let Some((doc_type, document_id)) = boot_doc_typed {
-                if let Ok(Some(snapshot)) = store.load_snapshot(*document_id.as_bytes()).await {
-                    tracing::info!("Persistence: restoring doc ({} bytes)", snapshot.len());
+                let snapshot = store
+                    .load_snapshot(*document_id.as_bytes())
+                    .await
+                    .ok()
+                    .flatten();
+                let deltas = store
+                    .load_deltas(*document_id.as_bytes())
+                    .await
+                    .unwrap_or_default();
+                if snapshot.is_some() || !deltas.is_empty() {
+                    tracing::info!(
+                        "Persistence: restoring doc ({} snapshot bytes, {} deltas)",
+                        snapshot.as_ref().map_or(0, Vec::len),
+                        deltas.len(),
+                    );
                     let _ = restore_tx.try_send(LogicCommand::RestoreLocalSnapshot {
                         document_id,
                         doc_type,
                         snapshot,
+                        deltas,
                     });
                 }
             }
@@ -1016,6 +1051,8 @@ pub fn main() {
     let filter_open_pump = filter_open_pub.clone();
     let busy_pump = busy_pub.clone();
     let persist_store_frame = Rc::clone(&persist_store);
+    let persist_gone_frame = Rc::clone(&persist_gone);
+    let mut persist_waiting: Vec<(DocumentId, ambre_logic::PersistWrite)> = Vec::new();
     let mut last_anchor: Option<(f64, f64)> = None;
     let mut last_busy = false;
     let mut last_perf_push_ms: f64 = 0.0;
@@ -1110,11 +1147,23 @@ pub fn main() {
             last_title = Some(title);
         }
 
-        // Persist Logic -> local store: drain snapshots and save them once the
-        // store is open. Best-effort; the put() commits as the event loop idles.
-        while let Ok((document_id, snapshot)) = logic_to_persist_rx.try_recv() {
-            if let Some(store) = persist_store_frame.borrow().as_ref() {
-                store.save_snapshot(*document_id.as_bytes(), snapshot);
+        // Persist Logic -> local store. Writes wait here until the store is
+        // open: a delta dropped would be missing from every restore until the
+        // next snapshot. Best-effort; the put() commits as the event loop idles.
+        persist_waiting.extend(logic_to_persist_rx.try_iter());
+        if persist_gone_frame.get() {
+            persist_waiting.clear();
+        }
+        if let Some(store) = persist_store_frame.borrow().as_ref() {
+            for (document_id, write) in persist_waiting.drain(..) {
+                match write {
+                    ambre_logic::PersistWrite::Snapshot(bytes) => {
+                        store.save_snapshot(*document_id.as_bytes(), bytes);
+                    }
+                    ambre_logic::PersistWrite::Delta(bytes) => {
+                        store.save_delta(*document_id.as_bytes(), bytes);
+                    }
+                }
             }
         }
 

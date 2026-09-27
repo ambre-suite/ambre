@@ -71,6 +71,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-081` | `POST` | A partial reflow MUST resume placement at the edited block. | this spec section 2 | proptest -- `ambre_prose::layout::place::properties::a_resumed_walk_lands_where_the_full_one_did`; `ambre_prose::layout::reflow::tests::a_block_inserted_in_the_middle_reflows_the_whole_tail` | none | verified |
 | `PROSE-100` | `POST` | A partial reflow MUST stop at the first later block whose page and page-relative position are what they already were. | this spec section 2 | `ambre_prose::layout::reflow::tests::a_reflow_produces_what_a_full_recomputation_would_have` -- the tail it reuses past the stop is compared entry for entry with the tail a full run places | none | verified |
 | `PROSE-035` | `POST` | An edit that inserts or removes a footnote reference MUST force a full recomputation: the incremental path MUST NOT leave an ordinal or a page reservation stale. | this spec section 2 | `ambre_prose::layout::footnote_pages::a_call_added_or_removed_lays_out_what_a_full_recomputation_would` | none | verified |
+| `PROSE-127` | `POST` | A reflow after text typed alone MUST produce the layout a full recomputation would, the text typed in a note or in a block that calls one included. | this spec section 2 | `ambre_prose::layout::footnote_pages::text_typed_anywhere_lays_out_what_a_full_recomputation_would` | none | verified |
 | `PROSE-082` | `POST` | A change to the page box, to either band, to a document default, or a whole-document import MUST force a full recomputation. | this spec section 2 | `ambre_prose::layout::reflow::tests::a_page_box_change_forces_a_full_recomputation`; `ambre_prose::layout::reflow::tests::a_document_default_change_forces_a_full_recomputation`; `ambre_prose::logic::tests::a_snapshot_import_lays_the_document_out_again` | none | verified |
 | `PROSE-083` | `FRAME` | A partial reflow MUST NOT re-shape a block whose text and whose resolved style are both unchanged. | this spec section 2 | `ambre_prose::layout::reflow::tests::a_reflow_does_not_shape_a_block_it_was_not_told_about` -- it counts the runs shaped, so a reflow that re-shaped an untouched block fails it | none | verified |
 | `PROSE-123` | `POST` | A layout taken after an edit MUST re-shape the blocks the edit wrote, whether the edit is local or arrived from another peer, and whoever named them. | this spec section 2 | `ambre_prose::view::tests::a_block_not_edited_hands_the_view_the_run_it_was_measured_into`; `ambre_prose::view::tests::an_edit_from_another_peer_reshapes_the_block_it_wrote` | none | verified |
@@ -97,7 +98,7 @@ status values are normative in `ambre-spec-template.md`.
   the document at open. Shaping and placement are budgeted apart, and section 4 says why.
 * **Boundary.** none: pagination runs on the Logic thread, reads the document and returns a value.
   `PROSE-025` (`features/ambre-spec-prose-engine.md section 1`) bans a network call from this crate.
-* **Verification.** 48 `verified`, 1 `unimplemented`: `PROSE-112`. The five
+* **Verification.** 49 `verified`, 1 `unimplemented`: `PROSE-112`. The five
   footnote rows run through the engine, since a note is written by its command. Termination rests
   on `PROSE-078` and `PROSE-017`, which a property over generated documents holds together. Two
   bans are structural, held by a test that reads the module's own
@@ -297,6 +298,11 @@ instead: the page box, either band being enabled or disabled, and the document d
 full snapshot import and any edit that inserts or removes a footnote reference (`PROSE-035`).
 
 An edit to a note's text forces it too, since it changes the note's reservation.
+
+An edit that only types or erases body text moves no block, changes no setting and adds or removes
+no call. The paginator then keeps the note plan and the bands it measured last. It reads them
+again only when the edit wrote into a band, a note or a block that calls one (`PROSE-127`). Every
+other edit reads them on each reflow.
 
 **The same measurement on every device.** A layout is a function of the text, the page box and
 the faces it was measured on. The first two are shared through the CRDT and the third is not, so

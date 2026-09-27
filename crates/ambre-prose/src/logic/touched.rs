@@ -8,6 +8,7 @@
 //! wrote to, and the next layout re-measures those (`PROSE-123`).
 
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use loro::TextDelta;
@@ -34,6 +35,10 @@ pub(crate) struct TextMoves {
 pub(crate) struct Touched {
     seen: Seen,
     moved: Moved,
+    /// Set by any change beyond text typed or erased in a body. A tree move, a
+    /// map write, a mark set or cleared and a footnote call inserted all set
+    /// it. It starts set, since nothing is known of what came before.
+    structural: Arc<AtomicBool>,
     /// Held so the subscription lives as long as the document state.
     _subscription: Subscription,
 }
@@ -45,17 +50,23 @@ impl Touched {
         let moved: Moved = Arc::default();
         let sink = Arc::clone(&seen);
         let moves = Arc::clone(&moved);
+        let structural = Arc::new(AtomicBool::new(true));
+        let flag = Arc::clone(&structural);
         let subscription = document.subscribe_root(Arc::new(move |event: DiffEvent<'_>| {
             let mut blocks = sink.lock().unwrap_or_else(PoisonError::into_inner);
             let mut text = moves.lock().unwrap_or_else(PoisonError::into_inner);
             for change in &event.events {
                 note(change, &mut blocks);
                 record(change, &mut text);
+                if !plain_text(change) {
+                    flag.store(true, Ordering::Relaxed);
+                }
             }
         }));
         Self {
             seen,
             moved,
+            structural,
             _subscription: subscription,
         }
     }
@@ -95,6 +106,36 @@ impl Touched {
     pub(crate) fn take_moves(&self) -> TextMoves {
         std::mem::take(&mut *self.moved.lock().unwrap_or_else(PoisonError::into_inner))
     }
+
+    /// Whether anything but plain body text changed since the last call.
+    pub(crate) fn take_structural(&self) -> bool {
+        self.structural.swap(false, Ordering::Relaxed)
+    }
+}
+
+/// Whether one container change is text typed or erased in a body, and
+/// nothing else: no mark set or cleared, and no footnote call inserted.
+///
+/// Such a change leaves the tree, the settings and the note numbering as they
+/// were. It may still have written into a band or a note, which the paginator
+/// checks against the blocks it names.
+fn plain_text(change: &ContainerDiff<'_>) -> bool {
+    let Diff::Text(delta) = &change.diff else {
+        return false;
+    };
+    let ContainerID::Root { name, .. } = change.target else {
+        return false;
+    };
+    if doc::parse_body_key(name).is_none() {
+        return false;
+    }
+    delta.iter().all(|item| match item {
+        TextDelta::Retain { attributes, .. } => attributes.as_ref().is_none_or(|a| a.is_empty()),
+        TextDelta::Insert { attributes, .. } => attributes
+            .as_ref()
+            .is_none_or(|a| !a.contains_key(doc::K_FOOTNOTE)),
+        TextDelta::Delete { .. } => true,
+    })
 }
 
 /// The runs a body text gained or lost, and the blocks a change deleted or

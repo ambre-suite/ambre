@@ -994,6 +994,19 @@ pub struct Bands {
 }
 
 impl Bands {
+    /// Whether `block` is the text of one of the four bands.
+    #[must_use]
+    pub fn holds(&self, block: &TreeID) -> bool {
+        [
+            self.header,
+            self.footer,
+            self.header_first,
+            self.footer_first,
+        ]
+        .iter()
+        .any(|band| band.block.as_ref() == Some(block))
+    }
+
     /// The header and the footer drawn on one zero-based page. The first
     /// page's own pair while the setting is on, the regular pair otherwise
     /// (`PROSE-FEAT-169`, `PROSE-UI-133`). A hidden side draws nothing.

@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `architecture` | How the client is split, and why. | implemented | 26 | 14 |
+| `architecture` | How the client is split, and why. | implemented | 27 | 14 |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 | 4 |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 18 | 12 |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 | 5 |
@@ -56,4 +56,4 @@
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | design-only | 13 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**40 features: 23 implemented, 15 partial, 2 design-only. 624 contract rows, 320 loose.**
+**40 features: 23 implemented, 15 partial, 2 design-only. 625 contract rows, 320 loose.**

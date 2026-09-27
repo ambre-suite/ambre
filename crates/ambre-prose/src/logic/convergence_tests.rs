@@ -826,3 +826,18 @@ fn a_change_tells_the_view_what_it_did_to_the_text() {
     let (_, _, removed) = moved(&answered).expect("a block went");
     assert!(removed.contains(&block), "the deleted block is named");
 }
+
+#[test]
+fn an_echo_of_this_peers_own_change_answers_nothing() {
+    let (mut alice, _bob, block) = two_peers();
+    let own = alice
+        .handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: 0,
+            text: "hello".to_owned(),
+        })
+        .update
+        .expect("a delta");
+    // The relay hands the writer its own change back.
+    assert!(alice.apply_remote(&own).is_empty());
+}

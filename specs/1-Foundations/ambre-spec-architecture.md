@@ -35,6 +35,7 @@ prefix is `ARCH`.
 | `ARCH-014` | `INV` | The client MUST NOT rely on a channel disconnection to detect a thread failure. | this spec section 2 | none | unheld -- the panic hook fires before the abort, so the notice does not wait on a channel, and nothing refuses a second detection path that would. A disconnection arrives late, or never, because a wedged thread holds its end open; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-018` | `INV` | The launcher MUST hold integration and the shell alone: the logic of an application, what one of its commands does included, MUST live in that application's crate. | this spec section 2 | none | fails -- the shell decides what Trame's bold toggle and filter popover do, what Toile's embed and link dialogs send, and what Prose's save becomes; lands with the "The launcher holds no application logic" Story (`ambre-roadmap.md` E8) | failing |
 | `ARCH-017` | `INV` | The Logic thread MUST answer a view once per pass over the commands waiting on its inbound channels, not once per command. | this spec section 2 | `ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once` | none | verified |
+| `ARCH-027` | `INV` | The Logic thread MUST hand local persistence the delta an edit wrote, and a whole snapshot only when no snapshot of this session holds the log, the log grew past its bound, or the document closes. | this spec section 2 | `ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once`; `ambre_logic::pass_tests::the_first_save_is_a_snapshot`; `ambre_logic::pass_tests::a_long_log_is_folded_into_a_snapshot` | none | verified |
 | `ARCH-020` | `INV` | The Main thread MUST NOT take a lock on a channel it shares with the Logic thread. | this spec section 2 | cargo-deny -- `deny.toml` bans the channel crate that locks from every client crate; lint-wall -- `crates/ambre-bus/clippy.toml` refuses a mutex, a read-write lock, a condition variable and a barrier in the crate that holds the channels | none | verified |
 | `ARCH-021` | `INV` | A channel end the Main thread holds MUST NOT wait. | this spec section 2 | type-level -- `ambre_bus::conduit::Sender` and `ambre_bus::conduit::Receiver`, the two ends the launcher keeps, declare only operations that try, and the one end that parks goes to the Logic thread at spawn | none | verified |
 | `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | none | unheld -- convergence is covered per application by the two-peer belt, which drives two engines in one process. Nothing drives two tabs, and the two differ in exactly the place that matters: one relay, two sessions, one identity; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -76,7 +77,7 @@ The user types, then closes the document before the Logic thread has answered th
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 12 `verified`, 1 `failing`, 13 `untested`. What holds is what the build can
+* **Verification.** 13 `verified`, 1 `failing`, 13 `untested`. What holds is what the build can
   refuse. That is a cycle, a cryptographic dependency in the wrong crate, a missing atomics flag, or
   a lock on a client channel. Host tests hold the Logic loop's one answer per pass, and the
   wake, the full channel and the disconnection of each channel.
@@ -123,15 +124,15 @@ must either block its own stack to stay alive, or return and be collected.
 **What the page creates at boot**, in order:
 
 1. The Logic thread's doorbell, and six bounded channels, each of capacity 1024. Two run between
-   UI and Logic and two between Logic and Sync. One carries document snapshots from Logic to the
-   Main thread for the local store. One carries the content event stream on to the active view.
+   UI and Logic and two between Logic and Sync. One carries document snapshots and deltas from Logic
+   to the Main thread for the local store. One carries the content event stream on to the active view.
 2. The Logic thread, as a worker over the same heap, holding the doorbell, the two receivers and
    the three senders it owns. It binds the doorbell before it first looks at a channel.
 3. The Sync worker, as a separate artefact loaded through its own loader, so it is an ordinary
    browser worker rather than a thread.
 4. The render loop on the Main thread. Each frame, before drawing, it drains the Logic to Sync
    channel and posts each message to the worker. Then it drains the events for the views, drains the
-   snapshot channel into the local store, and polls the route.
+   persistence channel into the local store, and polls the route.
 
 An embedded child adds one more channel, so its event stream never reaches its parent's view.
 
@@ -157,11 +158,15 @@ drops a lossy message and holds a lossless one for a later frame. The two classe
 are `ambre-spec-message-bus.md`.
 
 **The Logic loop.** It parks until a message is queued, then applies every message already queued
-on both channels. Each document the pass wrote is owed its layout and its snapshot, and gets them once
+on both channels. Each document the pass wrote is owed its layout and its save, and gets them once
 when the pass ends (`ARCH-017`). A burst of keystrokes costs one layout, so the lag stays one pass
 whatever the typing rate. A pass takes only what waited when it began, so a sender that never
 pauses cannot hold the answer back. A document closed during the pass is answered first, so its
 last edit is saved (`ARCH-019`).
+
+**The save.** The layout leaves first, since the keystroke waits on it. The save is the delta each
+edit wrote, logged after the document's snapshot. A whole snapshot costs an export of the document.
+So it is taken only to start the log, to fold it past 256 deltas, and at close (`ARCH-027`).
 
 **Failure, in two paths.**
 
