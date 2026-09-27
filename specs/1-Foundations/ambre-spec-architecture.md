@@ -35,6 +35,8 @@ prefix is `ARCH`.
 | `ARCH-014` | `INV` | The client MUST NOT rely on a channel disconnection to detect a thread failure. | this spec section 2 | none | unheld -- the panic hook fires before the abort, so the notice does not wait on a channel, and nothing refuses a second detection path that would. A disconnection arrives late, or never, because a wedged thread holds its end open; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-018` | `INV` | The launcher MUST hold integration and the shell alone: the logic of an application, what one of its commands does included, MUST live in that application's crate. | this spec section 2 | none | fails -- the shell decides what Trame's bold toggle and filter popover do, what Toile's embed and link dialogs send, and what Prose's save becomes; lands with the "The launcher holds no application logic" Story (`ambre-roadmap.md` E8) | failing |
 | `ARCH-017` | `INV` | The Logic thread MUST answer a view once per pass over the commands waiting on its inbound channels, not once per command. | this spec section 2 | `ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once` | none | verified |
+| `ARCH-020` | `INV` | The Main thread MUST NOT take a lock on a channel it shares with the Logic thread. | this spec section 2 | cargo-deny -- `deny.toml` bans the channel crate that locks from every client crate; lint-wall -- `crates/ambre-bus/clippy.toml` refuses a mutex, a read-write lock, a condition variable and a barrier in the crate that holds the channels | none | verified |
+| `ARCH-021` | `INV` | A channel end the Main thread holds MUST NOT wait. | this spec section 2 | type-level -- `ambre_bus::conduit::Sender` and `ambre_bus::conduit::Receiver`, the two ends the launcher keeps, declare only operations that try, and the one end that parks goes to the Logic thread at spawn | none | verified |
 | `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | none | unheld -- convergence is covered per application by the two-peer belt, which drives two engines in one process. Nothing drives two tabs, and the two differ in exactly the place that matters: one relay, two sessions, one identity; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.2 A thread fails
@@ -48,7 +50,20 @@ that and a page that looks alive and answers nothing.
 | `ARCH-008` | `POST` | A thread failure MUST reach the user out of band. | this spec section 2 | none | unheld -- the panic hook calls the page's fatal hook before the abort, and the terminal screen on the drawing surface is wired to it, and no test drives either; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-015` | `FRAME` | A failing thread MUST NOT write to the document on its way out. | this spec section 2; derived | none | unheld -- the fatal path emits an event and stops, so a half-applied operation is not flushed today. Nothing holds it, and a thread failing mid-write is the one moment the document can be left in a state no peer will ever converge to; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 
-### 1.3 A document closes during a pass
+### 1.3 A message crosses a channel
+
+The UI thread sends a command while the Logic thread is parked. Or the Logic thread answers into a
+channel the relay has not drained yet, or the Sync worker awaits its own.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `ARCH-022` | `POST` | A message sent to the Logic thread MUST wake it when it is parked. | this spec section 2 | `ambre_bus::conduit::tests::a_send_wakes_the_parked_worker` | none | verified |
+| `ARCH-023` | `POST` | A send from the Logic thread on a full channel MUST complete once the Main thread takes a message, in order and with nothing dropped. | this spec section 2 | `ambre_bus::conduit::tests::a_full_send_resumes_when_the_receiver_takes_one` | none | verified |
+| `ARCH-024` | `POST` | The last sender of a channel into the Logic thread, once dropped, MUST wake it and read as a disconnection after the messages it queued. | this spec section 2 | `ambre_bus::conduit::tests::the_last_sender_dropped_wakes_the_parked_worker`; `::the_last_sender_dropped_disconnects_after_its_messages` | none | verified |
+| `ARCH-026` | `FRAME` | A message crossing a channel MUST NOT overtake one queued before it. | this spec section 2 | `ambre_bus::conduit::tests::messages_arrive_in_order` | none | verified |
+| `ARCH-025` | `POST` | A message pushed onto a channel of the Sync worker MUST wake the task awaiting it. | this spec section 2 | `ambre_bus::conduit::tests::a_push_wakes_the_awaiting_task` | none | verified |
+
+### 1.4 A document closes during a pass
 
 The user types, then closes the document before the Logic thread has answered the keystrokes.
 
@@ -61,9 +76,10 @@ The user types, then closes the document before the Logic thread has answered th
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 5 `verified`, 1 `failing`, 13 `untested`. What holds is what the build can
-  refuse: a cycle, a cryptographic dependency in the wrong crate, a missing atomics flag. A host test
-  holds the Logic loop's one answer per pass.
+* **Verification.** 12 `verified`, 1 `failing`, 13 `untested`. What holds is what the build can
+  refuse. That is a cycle, a cryptographic dependency in the wrong crate, a missing atomics flag, or
+  a lock on a client channel. Host tests hold the Logic loop's one answer per pass, and the
+  wake, the full channel and the disconnection of each channel.
   Everything else, the failure path and the tab model included, is held by the code having been
   written that way.
 
@@ -106,11 +122,11 @@ must either block its own stack to stay alive, or return and be collected.
 
 **What the page creates at boot**, in order:
 
-1. Six bounded channels, each of capacity 1024. Two run between UI and Logic and two between Logic
-   and Sync. One carries document snapshots from Logic to the Main thread for the local store. One
-   carries the content event stream on to the active view.
-2. The Logic thread, as a worker over the same heap, holding the two receivers and two senders it
-   owns.
+1. The Logic thread's doorbell, and six bounded channels, each of capacity 1024. Two run between
+   UI and Logic and two between Logic and Sync. One carries document snapshots from Logic to the
+   Main thread for the local store. One carries the content event stream on to the active view.
+2. The Logic thread, as a worker over the same heap, holding the doorbell, the two receivers and
+   the three senders it owns. It binds the doorbell before it first looks at a channel.
 3. The Sync worker, as a separate artefact loaded through its own loader, so it is an ordinary
    browser worker rather than a thread.
 4. The render loop on the Main thread. Each frame, before drawing, it drains the Logic to Sync
@@ -119,12 +135,29 @@ must either block its own stack to stay alive, or return and be collected.
 
 An embedded child adds one more channel, so its event stream never reaches its parent's view.
 
-**Backpressure.** The Logic thread may block on a full outbound channel, which is the intended
-signal. The UI thread never blocks: it drops a lossy message and reports a full channel for a
-lossless one. The two classes and what each owes are `ambre-spec-message-bus.md`.
+**The channels take no lock.** The browser refuses `Atomics.wait` on the page's main thread, and a
+lock that finds itself contended ends in one. So every channel of the Main instance stands on a
+bounded queue that takes no lock (`ARCH-020`), `crossbeam-queue`'s `ArrayQueue`. It is pure Rust,
+with no dependency but its own utilities. The ends the Main thread holds only try, to push or to pop
+(`ARCH-021`). A push that finds a slot still being written by the other thread spins for the few
+instructions that write takes, and never sleeps.
 
-**The Logic loop.** It waits for one message, then applies every message already queued on
-both channels. Each document the pass wrote is owed its layout and its snapshot, and gets them once
+**The Logic thread parks on a doorbell.** Every channel into it rings the bell on a push, and on
+the drop of its last sender (`ARCH-022`, `ARCH-024`). Ringing unparks the thread, which is an
+`Atomics.notify` and never waits. The thread parks only once both inbound channels are empty. A
+ring that lands between its last look and its park is not lost: the park returns at once.
+
+**The Sync worker awaits its channels.** It has one thread and an event loop, so it may not park. Its
+channels have no bound, `crossbeam-queue`'s `SegQueue`, and its loop awaits them as a task. A push
+wakes that task through an atomic waker, which takes no lock either (`ARCH-025`).
+
+**Backpressure.** The Logic thread may block on a full outbound channel, which is the intended
+signal: it parks, and the relay's next pop wakes it (`ARCH-023`). The UI thread never blocks: it
+drops a lossy message and holds a lossless one for a later frame. The two classes and what each owes
+are `ambre-spec-message-bus.md`.
+
+**The Logic loop.** It parks until a message is queued, then applies every message already queued
+on both channels. Each document the pass wrote is owed its layout and its snapshot, and gets them once
 when the pass ends (`ARCH-017`). A burst of keystrokes costs one layout, so the lag stays one pass
 whatever the typing rate. A pass takes only what waited when it began, so a sender that never
 pauses cannot hold the answer back. A document closed during the pass is answered first, so its
@@ -207,8 +240,9 @@ The stack has no control of its own. What a user meets is what it guarantees the
 | :--- | :--- | :--- |
 | Shared memory to the Logic thread, message passing to the Sync worker | one uniform transport, every link by message passing and no shared memory anywhere | the two links have different budgets. Scroll and typing cannot afford an encode and a copy; network traffic already waits on the network. Pushing the first link onto message passing would pay serialization on the one path where it is the whole budget. |
 | The Sync worker is its own instance | a shared-heap worker for the Sync side, with an asynchronous loop inside it | a shared-heap worker runs to completion: an asynchronous loop returns immediately, its handle is dropped and it is collected after the first poll. A worker cannot both block its stack to stay alive and keep an event loop free for a socket. A second instance has an ordinary event loop and no such conflict. |
-| The blocking channel path is used across the worker boundary | an asynchronous receive across a worker boundary | the asynchronous waker of the channel crate is scheduled on the sending worker, so it never wakes a consumer parked on another one. The blocking path is backed by atomics and crosses workers correctly, and inside the Sync worker every producer is local anyway. |
-| No channel crate of our own | a hand-written queue over atomics, duplicating the channel crate | one was written to work around the freeze above, and the freeze had a different cause. Once the Sync worker moved out, the only shared-memory link left is the one where the existing crate always worked. |
+| The Logic thread parks on a doorbell of its own | an asynchronous receive across a worker boundary | the asynchronous waker of a channel crate is scheduled on the sending worker, so it never wakes a consumer parked on another one. Parking the thread and unparking it from the sender crosses workers, and the main thread may unpark. |
+| Every client channel is our own, over a lock-free queue | `flume`, or any channel crate that wakes its receiver under a lock | its queue sits behind a `std::sync::Mutex`. On the page's main thread a contended one spins briefly, then calls `Atomics.wait`, which the browser refuses: one keystroke probe run in three died on it. Its `spin` feature swaps the wait for a busy loop, which trades the crash for a main thread that can burn a frame on a lock the Logic thread holds. |
+| The queues are `crossbeam-queue`'s `ArrayQueue` and `SegQueue` | a ring buffer written by hand over atomics | the bounded ring is the hard part, and it needs `unsafe`, which our code never carries. What is ours is the wake-up and the disconnection, which take atomics and `std::thread` alone. |
 | The launcher owns the frame driver and the closed view registry | the view registry in the content runtime, upstream of the applications | a closed registry naming an application view must sit downstream of every application crate, so putting it upstream is the cycle this resolves. |
 | One crate per application, deliberately monolithic | a crate per layer, with an application spread across three of them | the state, the view and the interface of one application share its whole vocabulary, and splitting them by layer is what produced the specification corpus this migration is undoing. |
 | The Logic runtime is pure Rust with no browser glue | a Logic runtime that reaches the browser directly for storage or timing | it forfeits the whole engine being testable on the host under an ordinary test run, with no browser and no worker. That is a first-order property of the split, not a side effect. |

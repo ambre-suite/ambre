@@ -61,10 +61,6 @@ unicode-segmentation = { workspace = true }
 # which its authors publish as unsupported and test-only.
 html5ever = { workspace = true }
 
-# The UI -> Logic channel the view sends on. Shared memory between the two
-# threads, so a command moves rather than serializes.
-flume = { workspace = true }
-
 # The Prose chrome -- the comment panel and the suggestion popover
 # (`PROSE-UI-050`, `PROSE-UI-052`) -- is wasm-only Leptos, as ambre-toile's and
 # ambre-trame's chrome are. Scoped to wasm32, so the host tests never build it.

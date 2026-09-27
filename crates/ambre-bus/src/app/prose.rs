@@ -651,7 +651,7 @@ pub struct TableOfContents {
 
 /// One thing to do to a Prose document.
 ///
-/// Values move on `flume` between the two threads, which share one linear
+/// Values move on a `conduit` channel between the two threads, which share one linear
 /// memory, so no shape here derives `serde`. Every offset is a count of Unicode
 /// code points into the body of the block the command names (`PROSE-045`).
 ///

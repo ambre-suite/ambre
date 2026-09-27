@@ -72,7 +72,7 @@ pub struct LandingSignals {
 /// thread without a page reload.
 pub fn landing_view(
     signals: LandingSignals,
-    to_logic: flume::Sender<LogicCommand>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
 ) -> impl IntoView {
     let LandingSignals {
         docs,
@@ -336,7 +336,7 @@ pub fn NewDocPicker(
 fn doc_card(
     d: DocItem,
     docs: RwSignal<Vec<DocItem>>,
-    to_logic: flume::Sender<LogicCommand>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     pending_delete: RwSignal<Option<(DocumentId, String)>>,
     dialog_ref: NodeRef<html::Dialog>,
     booted: DocType,
@@ -504,7 +504,7 @@ fn rel_time(updated_at_ms: u64) -> String {
 /// until `/api/auth/config` has answered.
 fn sign_in_panel(
     dev_mode: RwSignal<Option<bool>>,
-    to_logic: flume::Sender<LogicCommand>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
 ) -> impl IntoView {
     move || match dev_mode.get() {
         None => view! {

@@ -4,7 +4,7 @@
 //   - `handle_logic_command`: UI Thread -> Logic (content, control, service).
 //   - `handle_logic_event`:  Sync -> Logic (real-time push, service responses).
 // Both are pure Rust (no wasm glue). The whole routing layer is therefore
-// exercised on the host by the `tests` module at the bottom, with mock flume
+// exercised on the host by the `tests` module at the bottom, with test link
 // channels.
 // ============================================================================
 
@@ -440,7 +440,7 @@ impl LogicState {
 
 // -----------------------------------------------------------------------------
 // Tests -- the dispatcher is 100% pure Rust (no wasm glue), so the whole routing
-// layer is exercisable on the host with mock flume channels. These pin the
+// layer is exercisable on the host with test link channels. These pin the
 // command/event mapping that is otherwise hand-written boilerplate (see the
 // service plane of ambre-spec-message-bus.md).
 // -----------------------------------------------------------------------------
@@ -453,16 +453,12 @@ mod tests {
     use std::io::Cursor;
 
     /// A `LogicState` wired to two drainable receivers (UI-bound, Sync-bound).
-    fn harness() -> (
-        LogicState,
-        flume::Receiver<UiEvent>,
-        flume::Receiver<SyncCommand>,
-    ) {
-        let (to_ui, ui_rx) = flume::unbounded();
-        let (to_sync, sync_rx) = flume::unbounded();
+    fn harness() -> (LogicState, Receiver<UiEvent>, Receiver<SyncCommand>) {
+        let (to_ui, ui_rx) = test_link();
+        let (to_sync, sync_rx) = test_link();
         // The persist channel is drained by the Main thread in production; tests
         // keep the receiver alive so sends never fail.
-        let (to_persist, persist_rx) = flume::unbounded();
+        let (to_persist, persist_rx) = test_link();
         std::mem::forget(persist_rx);
         (LogicState::new(to_ui, to_sync, to_persist), ui_rx, sync_rx)
     }
@@ -625,7 +621,7 @@ mod tests {
             text: "typed".to_owned(),
         }));
         state.answer_pass();
-        let drain = |ui: &flume::Receiver<UiEvent>| -> Vec<ProseEvent> {
+        let drain = |ui: &Receiver<UiEvent>| -> Vec<ProseEvent> {
             std::iter::from_fn(|| ui.try_recv().ok())
                 .filter_map(|event| match event {
                     UiEvent::Viewport {
@@ -792,7 +788,7 @@ mod tests {
 
     /// Open a document and ask for a sealed `.ambre`, returning the state, the
     /// UI channel, and the service request the seal produced.
-    fn sealing(doc_type: DocType) -> (LogicState, flume::Receiver<UiEvent>, RequestId, Vec<u8>) {
+    fn sealing(doc_type: DocType) -> (LogicState, Receiver<UiEvent>, RequestId, Vec<u8>) {
         let document_id = DocumentId::new();
         let (mut state, ui, sync_rx) = harness();
         state.handle_logic_command(LogicCommand::OpenDocument {
@@ -822,7 +818,7 @@ mod tests {
     }
 
     /// The file bytes of the one export event on `ui`, if there is one.
-    fn export_bytes(ui: &flume::Receiver<UiEvent>) -> Option<Vec<u8>> {
+    fn export_bytes(ui: &Receiver<UiEvent>) -> Option<Vec<u8>> {
         std::iter::from_fn(|| ui.try_recv().ok()).find_map(|evt| match evt {
             UiEvent::Viewport {
                 event: AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. }),
@@ -1238,8 +1234,8 @@ mod tests {
         });
         assert_eq!(state.docs[&doc_id].role, Role::Viewer);
 
-        let _ = sync_rx.drain();
-        let _ = ui_rx.drain();
+        sync_rx.try_iter().for_each(drop);
+        ui_rx.try_iter().for_each(drop);
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: set_cell("nope"),
@@ -1271,9 +1267,9 @@ mod tests {
 
     /// Drain every `SendUpdate` and report which documents produced one -- which
     /// document a delta belongs to is exactly what these tests are about.
-    fn updated_docs(sync_rx: &flume::Receiver<SyncCommand>) -> Vec<DocumentId> {
+    fn updated_docs(sync_rx: &Receiver<SyncCommand>) -> Vec<DocumentId> {
         sync_rx
-            .drain()
+            .try_iter()
             .filter_map(|cmd| match cmd {
                 SyncCommand::SendUpdate { document_id, .. } => Some(document_id),
                 _ => None,
@@ -1419,7 +1415,7 @@ mod tests {
 
         // The request was lowered to a `RestCommand::UploadMedia` carrying the
         // document id the engine never holds, echoing Toile's own id.
-        let uploaded = sync_rx.drain().find_map(|cmd| match cmd {
+        let uploaded = sync_rx.try_iter().find_map(|cmd| match cmd {
             SyncCommand::Rest {
                 id: got,
                 cmd:
@@ -1442,7 +1438,7 @@ mod tests {
         let (mut state, ui_rx, _sync) = harness();
         let doc_id = live_toile(&mut state, Role::Owner);
         let id = import_one_image(&mut state, doc_id);
-        let _ = ui_rx.drain();
+        ui_rx.try_iter().for_each(drop);
 
         // The confirmation is routed into the engine, which applies the import.
         state.handle_logic_event(LogicEvent::Rest {
@@ -1456,7 +1452,7 @@ mod tests {
         // The route is consumed and the outcome surfaces as a viewport repaint,
         // never as a raw `Rest` event to the UI.
         assert!(state.rest_routes.is_empty());
-        let events: Vec<UiEvent> = ui_rx.drain().collect();
+        let events: Vec<UiEvent> = ui_rx.try_iter().collect();
         assert!(
             events.iter().any(|e| matches!(e, UiEvent::Viewport { .. })),
             "the applied import should repaint the board"
@@ -1484,7 +1480,7 @@ mod tests {
         let (mut state, ui_rx, _sync) = harness();
         let doc_id = live_toile(&mut state, Role::Owner);
         let id = import_one_image(&mut state, doc_id);
-        let _ = ui_rx.drain();
+        ui_rx.try_iter().for_each(drop);
 
         state.handle_logic_event(LogicEvent::ApiError {
             id: Some(id),
@@ -1496,7 +1492,7 @@ mod tests {
         // The route is dropped and the failure surfaces as an import failure on
         // the board, not as a stray `ApiError` to the UI.
         assert!(state.rest_routes.is_empty());
-        let events: Vec<UiEvent> = ui_rx.drain().collect();
+        let events: Vec<UiEvent> = ui_rx.try_iter().collect();
         assert!(
             !events.iter().any(|e| matches!(e, UiEvent::ApiError { .. })),
             "a correlated failure must not reach the UI as a raw ApiError"
@@ -1524,7 +1520,7 @@ mod tests {
         let (mut state, ui_rx, _sync) = harness();
         let doc_id = live_toile(&mut state, Role::Owner);
         let id = import_one_image(&mut state, doc_id);
-        let _ = ui_rx.drain();
+        ui_rx.try_iter().for_each(drop);
 
         // Closing the document drops its in-flight route so the response can no
         // longer reach a (now absent) engine, and cannot repaint the board.
@@ -1543,7 +1539,9 @@ mod tests {
         });
         // No panic, and above all no viewport for a document that no longer exists.
         assert!(
-            !ui_rx.drain().any(|e| matches!(e, UiEvent::Viewport { .. })),
+            !ui_rx
+                .try_iter()
+                .any(|e| matches!(e, UiEvent::Viewport { .. })),
             "a closed document must not repaint"
         );
     }
@@ -1574,7 +1572,7 @@ mod tests {
         // fetch delivered nothing (a missing face degrades text, not boot).
         state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
         assert!(state.export_cx.is_some(), "export context is seeded");
-        assert!(ui_rx.drain().next().is_none(), "no UI event");
+        assert!(ui_rx.try_iter().next().is_none(), "no UI event");
         assert!(sync_rx.try_recv().is_err(), "nothing forwarded to Sync");
 
         // A second delivery extends the same context rather than replacing it:
@@ -1686,18 +1684,18 @@ mod tests {
     /// Ask a live board for its deck, and report the Toile event that came back.
     fn export_pdf_answer(
         state: &mut LogicState,
-        ui_rx: &flume::Receiver<UiEvent>,
+        ui_rx: &Receiver<UiEvent>,
         doc_id: DocumentId,
     ) -> ambre_bus::app::toile::ToileEvent {
         // Whatever seeded the board has already spoken; the export's own answer
         // is the only event this reads.
-        let _ = ui_rx.drain().count();
+        ui_rx.try_iter().for_each(drop);
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: AppCommand::Toile(ToileCommand::ExportPdf),
         });
         ui_rx
-            .drain()
+            .try_iter()
             .find_map(|e| match e {
                 UiEvent::Viewport {
                     event: AppEvent::Toile(te),

@@ -211,8 +211,8 @@ impl TrameView {
                 // Other UiEvent variants (session, CRUD, channels...) are not yet
                 // consumed by the Trame view; ignore them for now.
                 Ok(_) => {}
-                Err(flume::TryRecvError::Empty) => break,
-                Err(flume::TryRecvError::Disconnected) => {
+                Err(ambre_bus::conduit::TryRecvError::Empty) => break,
+                Err(ambre_bus::conduit::TryRecvError::Disconnected) => {
                     self.signal_fatal("Logic thread disconnected");
                     break;
                 }

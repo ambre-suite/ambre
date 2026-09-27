@@ -32,7 +32,7 @@ pub(crate) fn client_anchor(anchor: Option<(f64, f64)>) -> (f64, f64) {
 pub(crate) fn dispatch_to_current(
     id: CommandId,
     current_doc: RwSignal<Option<DocumentId>>,
-    to_logic: &flume::Sender<LogicCommand>,
+    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
 ) {
     let Some(document_id) = current_doc.get_untracked() else {
         return;
@@ -50,7 +50,7 @@ pub(crate) fn dispatch_to_current(
 /// because the picker is one-shot and lives only until the user picks a file.
 pub(crate) fn open_csv_picker(
     document_id: DocumentId,
-    tx: flume::Sender<LogicCommand>,
+    tx: ambre_bus::conduit::Sender<LogicCommand>,
     toasts: Toasts,
 ) {
     let Some(document) = web_sys::window().and_then(|w| w.document()) else {
@@ -110,7 +110,7 @@ pub(crate) fn open_csv_picker(
 pub(crate) async fn paste_from_clipboard(
     read_promise: js_sys::Promise,
     clipboard: web_sys::Clipboard,
-    paste_tx: flume::Sender<host::ClipboardPaste>,
+    paste_tx: ambre_bus::conduit::Sender<host::ClipboardPaste>,
     toasts: Toasts,
     plain: bool,
 ) {
@@ -334,8 +334,15 @@ pub(crate) fn initials(name: Option<&str>) -> String {
     }
 }
 
+/// The main side of the Sync -> Logic channel. An event from the Sync worker
+/// is lossless (a CRDT delta, a service answer), and the main thread may not
+/// wait for room (`ARCH-021`). So what the channel cannot take waits in the
+/// backlog, and the relay offers it again each frame (`BUS-025`). Shared by
+/// the worker's `onmessage` and the relay, both on the main thread.
+pub(crate) type SyncInbox = Rc<RefCell<ambre_bus::conduit::Backlog<LogicEvent>>>;
+
 pub(crate) fn spawn_sync_worker(
-    to_logic: flume::Sender<LogicEvent>,
+    to_logic: SyncInbox,
     sync_ready: Rc<Cell<bool>>,
 ) -> web_sys::Worker {
     // Classic worker (the Trunk loader uses `importScripts`); not a module worker.
@@ -353,9 +360,7 @@ pub(crate) fn spawn_sync_worker(
                 return;
             }
             match postcard::from_bytes::<LogicEvent>(&bytes) {
-                Ok(event) => {
-                    let _ = to_logic.send(event);
-                }
+                Ok(event) => to_logic.borrow_mut().push(event),
                 Err(err) => tracing::error!("[Sync->UI] failed to decode LogicEvent: {err}"),
             }
         });
@@ -387,8 +392,8 @@ pub(crate) fn post_to_worker(worker: &web_sys::Worker, bytes: &[u8]) {
 pub(crate) fn dispatch_command(
     id: CommandId,
     document_id: DocumentId,
-    to_logic: &flume::Sender<LogicCommand>,
-) -> Result<(), flume::TrySendError<LogicCommand>> {
+    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
+) -> Result<(), ambre_bus::conduit::TrySendError<LogicCommand>> {
     let Some(command) = trame_chrome::command_to_app(id) else {
         tracing::warn!("no LogicCommand mapping for {id:?}");
         return Ok(());
@@ -589,7 +594,7 @@ fn target_is_editable(event: &web_sys::KeyboardEvent) -> bool {
 pub(crate) fn install_command_keys(
     keymap: Keymap,
     current_doc: RwSignal<Option<DocumentId>>,
-    to_logic: flume::Sender<LogicCommand>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     find_state: RwSignal<Option<trame_chrome::FindReplaceState>>,
     find_state_toile: RwSignal<bool>,
     active_tool_toile: RwSignal<ambre_toile::ui::Tool>,
@@ -781,10 +786,7 @@ async fn open_container_bytes(bytes: Vec<u8>, toasts: Toasts) {
         return;
     }
 
-    let store = match ambre_logic::persistence::PersistenceStore::open()
-        .recv_async()
-        .await
-    {
+    let store = match ambre_logic::persistence::PersistenceStore::open().await {
         Ok(Ok(store)) => store,
         _ => {
             toasts.error("Ambre could not open its local store for that file");
@@ -795,7 +797,6 @@ async fn open_container_bytes(bytes: Vec<u8>, toasts: Toasts) {
     // and an open transaction goes with it.
     let committed = store
         .save_snapshot_committed(*header.document_id.as_bytes(), header.payload)
-        .recv_async()
         .await;
     if committed != Ok(true) {
         toasts.error("Ambre could not store that file locally");

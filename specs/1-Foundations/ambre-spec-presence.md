@@ -100,7 +100,7 @@ identity rule: what a peer may assert about itself, and what the receiver has es
 
 The payload is postcard bytes inside an `Ephemeral` frame, so it is one of the few types in the
 suite that keeps `serde`. The resolved sample never leaves the process: it moves by value on
-`flume`, and carries none.
+an `ambre_bus::conduit` channel, and carries none.
 
 **The identity rule, stated once.** The payload carries no `user_id` (`PRESENCE-002`). The canonical
 one arrives out of band, on `LogicEvent::RemoteEphemeral { from_user_id }`, resolved by `ambre-sync`

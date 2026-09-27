@@ -12,7 +12,7 @@
 // in-memory session keys across a navigation.
 //
 //   - UI (this main thread) + Logic (a `wasm_thread` worker) share this Main
-//     wasm instance's memory and talk over `flume` channels.
+//     wasm instance's memory and talk over `ambre_bus::conduit` channels.
 //   - Sync is a SEPARATE wasm instance in its own Web Worker (own memory),
 //     spawned here via `web_sys::Worker` and reached over `postMessage`. The
 //     main thread relays Logic<->Sync traffic in the single per-frame relay.
@@ -35,6 +35,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
+use ambre_bus::conduit;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     AppCommand, AppEvent, DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand,
@@ -111,7 +112,7 @@ struct TofuPrompt {
 /// The child fan-out registry: every live view of a nested document, by
 /// document. A list rather than a slot -- two embeds of one document are two
 /// views (`TOILE-UI-097`).
-type ChildRoutes = Rc<RefCell<HashMap<DocumentId, Vec<flume::Sender<UiEvent>>>>>;
+type ChildRoutes = Rc<RefCell<HashMap<DocumentId, Vec<ambre_bus::conduit::Sender<UiEvent>>>>>;
 
 /// What a child's channel could not take yet, oldest first, by document
 /// (`TOILE-UI-340`).
@@ -160,8 +161,8 @@ fn offer_to_child(routes: &ChildRoutes, id: DocumentId, ev: &UiEvent) -> bool {
     senders.retain(|tx| match tx.try_send(ev.clone()) {
         Ok(()) => true,
         // The child view was dropped; reclaim its slot.
-        Err(flume::TrySendError::Disconnected(_)) => false,
-        Err(flume::TrySendError::Full(_)) => {
+        Err(ambre_bus::conduit::TrySendError::Disconnected(_)) => false,
+        Err(ambre_bus::conduit::TrySendError::Full(_)) => {
             all_took_it = false;
             true
         }
@@ -214,11 +215,11 @@ fn flush_child_backlog(routes: &ChildRoutes, backlog: &ChildBacklog) {
 
 #[derive(Clone)]
 struct Wiring {
-    to_logic: flume::Sender<LogicCommand>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     /// Clipboard reads the Paste button decoded, handed to the host so the
     /// active view services the paste (`UI-THREAD-024`). `Send`: it crosses the
     /// Router's Send boundary.
-    clipboard_paste: flume::Sender<ClipboardPaste>,
+    clipboard_paste: ambre_bus::conduit::Sender<ClipboardPaste>,
     raf: ambre_canvas::RafControl,
     theme_ctl: ambre_canvas::ThemeControl,
     /// The active app's command toggle signals (the store's reactive view,
@@ -482,28 +483,38 @@ pub fn main() {
         }
     }));
 
-    // Inter-thread channels (all `flume`, in this Main instance's shared heap).
+    // Inter-thread channels (`ambre_bus::conduit`, in this Main instance's shared heap).
     //   UI    --LogicCommand--> Logic      Logic --UiEvent--> UI
     //   Logic --SyncCommand---> [main relay] --postMessage--> Sync worker
     //   Sync worker --postMessage--> [main relay] --LogicEvent--> Logic
     //
-    // Bounded (backpressure). The UI runs on the page main thread and must never
-    // block, so its sends use `try_send` and drop on `Full`. Logic blocks on a
-    // `flume::Selector`. The Logic<->Sync halves on the main side (`logic_to_sync_rx`,
+    // Bounded (backpressure), and lock-free (`ARCH-020`). The UI runs on the page
+    // main thread, where the browser refuses `Atomics.wait`. So every end it holds
+    // only tries (`ARCH-021`): a lossy send drops on `Full`, a lossless one is held.
+    // Logic parks on `logic_bell`, which every channel into it rings (`ARCH-022`),
+    // and parks on a full outbound channel until the relay drains it (`ARCH-023`).
+    // The Logic<->Sync halves on the main side (`logic_to_sync_rx`,
     // `sync_to_logic_tx`) are owned by the per-frame relay below, NOT by a worker.
-    let (ui_to_logic_tx, ui_to_logic_rx) = flume::bounded::<LogicCommand>(CHANNEL_CAPACITY);
-    let (logic_to_ui_tx, logic_to_ui_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
-    let (logic_to_sync_tx, logic_to_sync_rx) = flume::bounded::<SyncCommand>(CHANNEL_CAPACITY);
-    let (sync_to_logic_tx, sync_to_logic_rx) = flume::bounded::<LogicEvent>(CHANNEL_CAPACITY);
+    let logic_bell = conduit::Doorbell::new();
+    let (ui_to_logic_tx, ui_to_logic_rx) =
+        conduit::to_worker::<LogicCommand>(CHANNEL_CAPACITY, &logic_bell);
+    let (logic_to_ui_tx, logic_to_ui_rx) =
+        conduit::to_main::<UiEvent>(CHANNEL_CAPACITY, &logic_bell);
+    let (logic_to_sync_tx, logic_to_sync_rx) =
+        conduit::to_main::<SyncCommand>(CHANNEL_CAPACITY, &logic_bell);
+    let (sync_to_logic_tx, sync_to_logic_rx) =
+        conduit::to_worker::<LogicEvent>(CHANNEL_CAPACITY, &logic_bell);
+    // What the Sync -> Logic channel could not take yet, re-offered each frame.
+    let sync_inbox: SyncInbox = Rc::new(RefCell::new(conduit::Backlog::new(sync_to_logic_tx)));
     // Logic -> Main, carrying full document snapshots for local persistence. The
     // Main thread owns the IndexedDB store (its callbacks need a live event loop,
     // which the blocking Logic loop cannot offer). It drains this in `pre_frame`.
     let (logic_to_persist_tx, logic_to_persist_rx) =
-        flume::bounded::<(DocumentId, Vec<u8>)>(CHANNEL_CAPACITY);
+        conduit::to_main::<(DocumentId, Vec<u8>)>(CHANNEL_CAPACITY, &logic_bell);
 
     // Dispatcher -> canvas view: the content event stream, forwarded after the
     // dispatcher has mirrored command-state events into the chrome.
-    let (view_tx, view_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
+    let (view_tx, view_rx) = conduit::local::<UiEvent>(CHANNEL_CAPACITY);
 
     // Per-document Logic->UI fan-out for nested `doc_embed` children. A child
     // view built by `make_child` (below) registers a demultiplexed sender here.
@@ -712,6 +723,7 @@ pub fn main() {
         .name("logic".to_owned())
         .spawn(move || {
             ambre_logic::run(
+                logic_bell,
                 ui_to_logic_rx,
                 logic_to_ui_tx,
                 logic_to_sync_tx,
@@ -768,7 +780,7 @@ pub fn main() {
     // this spawn, raced the bootstrap and was lost whenever the worker came up
     // slowly. The session key stayed unset and the document stuck hydrating.
     let sync_ready = Rc::new(Cell::new(false));
-    let sync_worker = spawn_sync_worker(sync_to_logic_tx, Rc::clone(&sync_ready));
+    let sync_worker = spawn_sync_worker(Rc::clone(&sync_inbox), Rc::clone(&sync_ready));
 
     // The canvas document-swap handle is created by `run_with` below (after the
     // chrome mounts the `<canvas>`); the route effect reads it through this slot.
@@ -807,7 +819,8 @@ pub fn main() {
     // The Paste-button channel: the shell decodes an async clipboard read and
     // hands the transport to the host, which routes it to the active view
     // (`UI-THREAD-024`). `Send`, so it crosses the Router's Send boundary.
-    let (paste_tx, paste_rx) = flume::unbounded::<ClipboardPaste>();
+    // Bounded like every link: one paste per gesture, drained each frame.
+    let (paste_tx, paste_rx) = conduit::local::<ClipboardPaste>(CHANNEL_CAPACITY);
 
     mount_shell(
         ui_to_logic_tx.clone(),
@@ -969,10 +982,7 @@ pub fn main() {
         let store_slot = Rc::clone(&persist_store);
         let restore_tx = ui_to_logic_tx.clone();
         wasm_bindgen_futures::spawn_local(async move {
-            let store = match ambre_logic::persistence::PersistenceStore::open()
-                .recv_async()
-                .await
-            {
+            let store = match ambre_logic::persistence::PersistenceStore::open().await {
                 Ok(Ok(store)) => store,
                 Ok(Err(e)) => {
                     tracing::warn!("Persistence: store unavailable ({e})");
@@ -984,11 +994,7 @@ pub fn main() {
                 }
             };
             if let Some((doc_type, document_id)) = boot_doc_typed {
-                if let Ok(Some(snapshot)) = store
-                    .load_snapshot(*document_id.as_bytes())
-                    .recv_async()
-                    .await
-                {
+                if let Ok(Some(snapshot)) = store.load_snapshot(*document_id.as_bytes()).await {
                     tracing::info!("Persistence: restoring doc ({} bytes)", snapshot.len());
                     let _ = restore_tx.try_send(LogicCommand::RestoreLocalSnapshot {
                         document_id,
@@ -1138,6 +1144,9 @@ pub fn main() {
         // Held back until the worker signals readiness (`sync_ready`): commands
         // stay buffered in `logic_to_sync_rx`. None is posted into the worker's
         // bootstrap window, where onmessage does not yet exist (order preserved).
+        // Sync -> Logic: re-offer what the channel refused on an earlier turn.
+        sync_inbox.borrow_mut().flush();
+
         if sync_ready.get() {
             while let Ok(cmd) = logic_to_sync_rx.try_recv() {
                 match postcard::to_allocvec(&cmd) {
@@ -1318,7 +1327,7 @@ pub fn main() {
                     let prompt_sig = tofu_prompt;
                     wasm_bindgen_futures::spawn_local(async move {
                         let pinned = match pin_rx {
-                            Some(rx) => rx.recv_async().await.ok().flatten(),
+                            Some(rx) => rx.await.ok().flatten(),
                             None => None,
                         };
                         match pinned {
@@ -1691,7 +1700,7 @@ pub fn main() {
           -> AppView {
         // Demultiplexed Logic->UI channel for this child (registered for the relay
         // fan-out; dropped with the child when its embed leaves the cull set).
-        let (child_tx, child_rx) = flume::bounded::<UiEvent>(CHANNEL_CAPACITY);
+        let (child_tx, child_rx) = conduit::local::<UiEvent>(CHANNEL_CAPACITY);
         child_routes_factory
             .borrow_mut()
             .entry(document_id)

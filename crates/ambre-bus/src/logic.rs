@@ -6,7 +6,7 @@
 //! [`crate::app`] (for example `crate::app::trame::TrameCommand`); `AppCommand` is a
 //! thin dispatch enum referencing them.
 //!
-//! Carried over a `flume` channel in shared memory -- typed Rust values by move,
+//! Carried over a `conduit` channel in shared memory -- typed Rust values by move,
 //! no serialization. The symmetric Logic -> UI direction (events) lives in
 //! [`crate::ui`].
 //!

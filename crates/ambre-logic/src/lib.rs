@@ -14,9 +14,9 @@
 //   - Cryptography, compression, network -- handled exclusively by ambre-sync.
 //   - Rendering -- handled by the UI Thread (wgpu + QuadRenderer + GlyphAtlas).
 //
-// Transport: UI <-> Logic uses `flume` channels in the shared memory of the
-// Main instance, carrying typed Rust values by move (no postcard, no `Any`).
-// Logic-bound `SyncCommand`s are sent to a `flume` channel whose receiver is on
+// Transport: UI <-> Logic uses `ambre_bus::conduit` channels in the shared memory
+// of the Main instance, carrying typed Rust values by move (no postcard, no
+// `Any`). Logic-bound `SyncCommand`s are sent to a link whose receiver is on
 // the Main thread, which relays them to the separate Sync worker via
 // `postMessage`. `LogicEvent`s arrive the same way in reverse.
 // ============================================================================
@@ -43,6 +43,7 @@ mod dispatch;
 #[cfg(feature = "fixtures")]
 pub mod fixtures;
 
+use ambre_bus::conduit::{Doorbell, Receiver, WorkerSender};
 use ambre_bus::{
     AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RequestId, RestCommand,
     RestEvent, Role, SyncCommand, UiEvent, UserId,
@@ -385,15 +386,15 @@ impl LiveDoc {
 /// All mutable state owned by the Logic thread.
 struct LogicState {
     /// Outbound channel: Logic -> UI Thread.
-    to_ui: flume::Sender<UiEvent>,
+    to_ui: WorkerSender<UiEvent>,
     /// Outbound channel: Logic -> Sync (drained by the Main thread, relayed to
     /// the Sync worker via postMessage).
-    to_sync: flume::Sender<SyncCommand>,
+    to_sync: WorkerSender<SyncCommand>,
     /// Outbound channel: Logic -> Main, carrying full document snapshots for
     /// local persistence. The Main thread owns the IndexedDB store, whose
     /// callbacks need a live event loop this blocking loop cannot offer. Here we
     /// only export the bytes and hand them over.
-    to_persist: flume::Sender<(DocumentId, Vec<u8>)>,
+    to_persist: WorkerSender<(DocumentId, Vec<u8>)>,
     /// Live document state, keyed by `document_id`.
     ///
     /// Pre-seeded on `OpenDocument` (which carries the `doc_type`) so UI edits
@@ -460,9 +461,9 @@ struct Owed {
 
 impl LogicState {
     fn new(
-        to_ui: flume::Sender<UiEvent>,
-        to_sync: flume::Sender<SyncCommand>,
-        to_persist: flume::Sender<(DocumentId, Vec<u8>)>,
+        to_ui: WorkerSender<UiEvent>,
+        to_sync: WorkerSender<SyncCommand>,
+        to_persist: WorkerSender<(DocumentId, Vec<u8>)>,
     ) -> Self {
         Self {
             to_ui,
@@ -482,11 +483,8 @@ impl LogicState {
     // -- Outbound --------------------------------------------------------------
 
     fn send_to_ui(&self, event: UiEvent) {
-        if let Err(flume::SendError(event)) = self.to_ui.send(event) {
-            tracing::warn!(
-                "[Logic->UI] UI receiver dropped, discarding {:?}",
-                std::mem::discriminant(&event),
-            );
+        if let Err(error) = self.to_ui.send(event) {
+            tracing::warn!("[Logic->UI] not delivered: {error:?}");
         }
     }
 
@@ -534,11 +532,8 @@ impl LogicState {
     }
 
     fn send_to_sync(&self, cmd: SyncCommand) {
-        if let Err(flume::SendError(cmd)) = self.to_sync.send(cmd) {
-            tracing::warn!(
-                "[Logic->Sync] receiver dropped, discarding {:?}",
-                std::mem::discriminant(&cmd),
-            );
+        if let Err(error) = self.to_sync.send(cmd) {
+            tracing::warn!("[Logic->Sync] not delivered: {error:?}");
         }
     }
 
@@ -557,11 +552,7 @@ impl LogicState {
     ///
     /// The pass takes only what waited when it began. A sender that never
     /// pauses therefore delays the answer by one queue's worth, not forever.
-    fn drain_pass(
-        &mut self,
-        from_ui: &flume::Receiver<LogicCommand>,
-        from_sync: &flume::Receiver<LogicEvent>,
-    ) {
+    fn drain_pass(&mut self, from_ui: &Receiver<LogicCommand>, from_sync: &Receiver<LogicEvent>) {
         for command in from_ui.try_iter().take(from_ui.len()) {
             self.handle_logic_command(command);
         }
@@ -614,68 +605,62 @@ fn stamp_pass(start: Option<f64>) {
 fn stamp_pass(_start: Option<f64>) {}
 
 // -----------------------------------------------------------------------------
-// Entry point: drain both inbound channels, then park on the shared Waker.
+// Entry point: drain both inbound channels, then park on the doorbell.
 // -----------------------------------------------------------------------------
 
 /// Run the Logic thread to completion.
 ///
-/// Blocks on `flume::Selector` waiting on both inbound channels at once. Once
-/// a message wakes it, it applies everything already queued, then answers each
-/// document it wrote once (`ARCH-017`). Exits when **both** inbound
-/// channels disconnect (the UI Thread and the Sync relay both gone).
+/// Binds `bell`, the doorbell both inbound channels ring, then loops. While
+/// nothing is queued it parks. Once a message is queued it applies every
+/// message waiting, then answers each document it wrote once (`ARCH-017`).
+/// Exits when **both** inbound channels are drained and disconnected (the UI
+/// thread and the Sync relay both gone).
 ///
-/// `Selector::wait` parks the worker via flume's Atomics-backed blocking path,
-/// which wakes correctly across the UI/Logic worker boundary. Only flume's
-/// *async* waker failed to cross workers, and that path is gone. The Sync worker
-/// is now a separate wasm instance reached over postMessage. Legal off the main
-/// thread; the Logic worker has no browser callbacks to keep alive.
+/// Parking is `Atomics.wait` on this worker, which the browser allows off the
+/// main thread. A send from the main thread unparks it with `Atomics.notify`,
+/// and never waits itself (`ARCH-022`).
 pub fn run(
-    from_ui: flume::Receiver<LogicCommand>,
-    to_ui: flume::Sender<UiEvent>,
-    to_sync: flume::Sender<SyncCommand>,
-    from_sync: flume::Receiver<LogicEvent>,
-    to_persist: flume::Sender<(DocumentId, Vec<u8>)>,
+    bell: Doorbell,
+    from_ui: Receiver<LogicCommand>,
+    to_ui: WorkerSender<UiEvent>,
+    to_sync: WorkerSender<SyncCommand>,
+    from_sync: Receiver<LogicEvent>,
+    to_persist: WorkerSender<(DocumentId, Vec<u8>)>,
 ) {
-    use flume::Selector;
-
     tracing::info!("Ambre Logic thread starting");
+    let Some(waiter) = bell.bind() else {
+        tracing::error!("Ambre Logic thread: the doorbell is bound to another thread");
+        return;
+    };
     let mut state = LogicState::new(to_ui, to_sync, to_persist);
 
-    /// What the selector picked: a command from the UI, or an event from Sync.
-    enum Inbound {
-        Command(Result<LogicCommand, flume::RecvError>),
-        Event(Result<LogicEvent, flume::RecvError>),
-    }
-
-    let mut ui_open = true;
-    let mut sync_open = true;
-    while ui_open || sync_open {
-        // Build a selector over only the still-open channels and block until one
-        // yields. A closed channel resolves immediately with `Err`, which we map
-        // to "mark closed" -- so a single open channel keeps the loop running.
-        let mut selector = Selector::new();
-        if ui_open {
-            selector = selector.recv(&from_ui, Inbound::Command);
+    loop {
+        while from_ui.is_empty() && from_sync.is_empty() {
+            if from_ui.is_disconnected() && from_sync.is_disconnected() {
+                // Re-check: a last message may have landed before the drop.
+                if from_ui.is_empty() && from_sync.is_empty() {
+                    tracing::info!(
+                        "Ambre Logic thread exiting (both inbound channels disconnected)"
+                    );
+                    // Dropping `state` closes the outbound senders, which the
+                    // UI thread and the Sync relay observe as `Disconnected`.
+                    return;
+                }
+                break;
+            }
+            waiter.wait();
         }
-        if sync_open {
-            selector = selector.recv(&from_sync, Inbound::Event);
-        }
-        let inbound = selector.wait();
         let start = pass_clock();
-        match inbound {
-            Inbound::Command(Ok(command)) => state.handle_logic_command(command),
-            Inbound::Command(Err(_)) => ui_open = false,
-            Inbound::Event(Ok(event)) => state.handle_logic_event(event),
-            Inbound::Event(Err(_)) => sync_open = false,
-        }
         state.drain_pass(&from_ui, &from_sync);
         stamp_pass(start);
     }
+}
 
-    tracing::info!("Ambre Logic thread exiting (both inbound channels disconnected)");
-    // Drop `state` here: document state is released, the outbound Senders are
-    // closed, which the UI thread and the Sync relay observe as `Disconnected`.
-    let _ = state;
+/// An outbound link for a test, wide enough that no test fills it. No thread
+/// binds its bell, so a full one hands the value back instead of parking.
+#[cfg(test)]
+fn test_link<T>() -> (WorkerSender<T>, Receiver<T>) {
+    ambre_bus::conduit::to_main(4096, &Doorbell::new())
 }
 
 #[cfg(test)]
@@ -688,17 +673,17 @@ mod pass_tests {
     /// whose opening answers are already drained.
     struct Rig {
         state: LogicState,
-        ui: flume::Receiver<UiEvent>,
-        persist: flume::Receiver<(DocumentId, Vec<u8>)>,
-        _sync: flume::Receiver<SyncCommand>,
+        ui: Receiver<UiEvent>,
+        persist: Receiver<(DocumentId, Vec<u8>)>,
+        _sync: Receiver<SyncCommand>,
         document_id: DocumentId,
         block: ambre_bus::app::prose::BlockId,
     }
 
     fn rig() -> Rig {
-        let (to_ui, ui) = flume::unbounded();
-        let (to_sync, sync) = flume::unbounded();
-        let (to_persist, persist) = flume::unbounded();
+        let (to_ui, ui) = test_link();
+        let (to_sync, sync) = test_link();
+        let (to_persist, persist) = test_link();
         let mut state = LogicState::new(to_ui, to_sync, to_persist);
         let document_id = DocumentId::new();
         state.handle_logic_command(LogicCommand::OpenDocument {
@@ -710,7 +695,7 @@ mod pass_tests {
             DocState::Prose(prose) => prose.root_blocks()[0],
             other => panic!("the registry opened {other:?}"),
         };
-        ui.drain().for_each(drop);
+        ui.try_iter().for_each(drop);
         Rig {
             state,
             ui,
@@ -737,16 +722,17 @@ mod pass_tests {
     #[test]
     fn a_burst_of_keystrokes_is_answered_once() {
         let mut rig = rig();
-        let (to_logic, from_ui) = flume::unbounded();
-        let (_to_logic_events, from_sync) = flume::unbounded::<LogicEvent>();
+        let (to_logic, from_ui) = ambre_bus::conduit::to_worker(64, &Doorbell::new());
+        let (_to_logic_events, from_sync) =
+            ambre_bus::conduit::to_worker::<LogicEvent>(64, &Doorbell::new());
         for pos in 0..3 {
-            to_logic.send(keystroke(&rig, pos)).expect("queued");
+            to_logic.try_send(keystroke(&rig, pos)).expect("queued");
         }
         rig.state.drain_pass(&from_ui, &from_sync);
 
         let layouts = rig
             .ui
-            .drain()
+            .try_iter()
             .filter(|event| {
                 matches!(
                     event,
@@ -758,7 +744,7 @@ mod pass_tests {
             })
             .count();
         assert_eq!(layouts, 1, "one layout for the pass");
-        let snapshots: Vec<_> = rig.persist.drain().collect();
+        let snapshots: Vec<_> = rig.persist.try_iter().collect();
         assert_eq!(snapshots.len(), 1, "one snapshot for the pass");
         let DocState::Prose(prose) = &rig.state.docs[&rig.document_id].state else {
             unreachable!("the rig opens Prose");
@@ -775,16 +761,17 @@ mod pass_tests {
     #[test]
     fn a_document_closed_in_the_pass_keeps_its_last_edit() {
         let mut rig = rig();
-        let (to_logic, from_ui) = flume::unbounded();
-        let (_to_logic_events, from_sync) = flume::unbounded::<LogicEvent>();
-        to_logic.send(keystroke(&rig, 0)).expect("queued");
+        let (to_logic, from_ui) = ambre_bus::conduit::to_worker(64, &Doorbell::new());
+        let (_to_logic_events, from_sync) =
+            ambre_bus::conduit::to_worker::<LogicEvent>(64, &Doorbell::new());
+        to_logic.try_send(keystroke(&rig, 0)).expect("queued");
         to_logic
-            .send(LogicCommand::CloseDocument {
+            .try_send(LogicCommand::CloseDocument {
                 document_id: rig.document_id,
             })
             .expect("queued");
         rig.state.drain_pass(&from_ui, &from_sync);
-        assert_eq!(rig.persist.drain().count(), 1, "the edit was saved");
+        assert_eq!(rig.persist.try_iter().count(), 1, "the edit was saved");
         assert!(!rig.state.docs.contains_key(&rig.document_id));
     }
 }

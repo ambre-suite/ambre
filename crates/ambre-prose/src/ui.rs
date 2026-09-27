@@ -486,7 +486,7 @@ impl SendResult {
 /// blocks (`PROSE-UI-003`), and the draft echo the view painted stays here
 /// (`PROSE-UI-150`): what crosses is the typed command alone.
 pub fn send_command(
-    to_logic: &flume::Sender<LogicCommand>,
+    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
     document_id: DocumentId,
     command: ProseCommand,
 ) -> SendResult {
@@ -496,11 +496,11 @@ pub fn send_command(
     };
     match to_logic.try_send(envelope) {
         Ok(()) => SendResult::Sent,
-        Err(flume::TrySendError::Full(_)) => {
+        Err(ambre_bus::conduit::TrySendError::Full(_)) => {
             tracing::warn!("Prose: the Logic channel is full, the command is dropped");
             SendResult::Dropped
         }
-        Err(flume::TrySendError::Disconnected(_)) => SendResult::Disconnected,
+        Err(ambre_bus::conduit::TrySendError::Disconnected(_)) => SendResult::Disconnected,
     }
 }
 
@@ -890,7 +890,7 @@ mod tests {
 
     #[test]
     fn a_full_channel_drops_the_command_rather_than_holding_the_frame() {
-        let (tx, _rx) = flume::bounded::<LogicCommand>(1);
+        let (tx, _rx) = ambre_bus::conduit::local::<LogicCommand>(1);
         assert_eq!(
             send_command(&tx, a_document(), ProseCommand::Noop),
             SendResult::Sent
@@ -905,7 +905,7 @@ mod tests {
 
     #[test]
     fn a_full_channel_holds_an_edit_rather_than_the_frame() {
-        let (tx, rx) = flume::bounded::<LogicCommand>(1);
+        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(1);
         let mut outbox = Outbox::new(tx);
         assert_eq!(
             send_edit(&mut outbox, a_document(), ProseCommand::Noop),
@@ -924,7 +924,7 @@ mod tests {
 
     #[test]
     fn a_closed_channel_is_told_apart_from_a_full_one() {
-        let (tx, rx) = flume::bounded::<LogicCommand>(1);
+        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(1);
         drop(rx);
         assert_eq!(
             send_command(&tx, a_document(), ProseCommand::Noop),
@@ -934,7 +934,7 @@ mod tests {
 
     #[test]
     fn the_draft_echo_never_reaches_the_wire() {
-        let (tx, rx) = flume::bounded::<LogicCommand>(4);
+        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(4);
         let block = BlockId::new(1, 0);
         let mut state = ProseUiState::default();
         state.draft.push_str(1, "hel", &block, 0);

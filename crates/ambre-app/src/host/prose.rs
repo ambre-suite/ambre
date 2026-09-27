@@ -87,11 +87,11 @@ fn rect_to_css(rect: ScreenRect) -> ScreenRect {
 /// One open Prose document on the canvas.
 pub struct ProseView {
     document_id: DocumentId,
-    to_logic: flume::Sender<LogicCommand>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     /// The edits' path out: a full channel holds them here (`BUS-011`).
     outbox: Outbox,
     busy_pub: BusyPublisher,
-    from_logic: flume::Receiver<UiEvent>,
+    from_logic: ambre_bus::conduit::Receiver<UiEvent>,
     state: ProseUiState,
     theme_ctl: ThemeControl,
     theme: Theme,
@@ -115,8 +115,8 @@ pub struct ProseView {
 impl ProseView {
     pub fn new(
         document_id: DocumentId,
-        to_logic: flume::Sender<LogicCommand>,
-        from_logic: flume::Receiver<UiEvent>,
+        to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+        from_logic: ambre_bus::conduit::Receiver<UiEvent>,
         width: f64,
         height: f64,
         theme_ctl: ThemeControl,
@@ -186,8 +186,8 @@ impl ProseView {
                 }
                 Ok(UiEvent::FatalError { message }) => self.signal_fatal(&message),
                 Ok(_) => {}
-                Err(flume::TryRecvError::Empty) => break,
-                Err(flume::TryRecvError::Disconnected) => {
+                Err(ambre_bus::conduit::TryRecvError::Empty) => break,
+                Err(ambre_bus::conduit::TryRecvError::Disconnected) => {
                     self.signal_fatal("Logic thread disconnected");
                     break;
                 }

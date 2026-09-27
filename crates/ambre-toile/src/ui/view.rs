@@ -74,19 +74,23 @@ use leptos::prelude::{GetUntracked, RwSignal, Set};
 /// `fatal` reports success on a send nobody made. The view is tearing down and
 /// no later frame will retry. A `false` here would keep a dead registry asking
 /// for ever instead of letting it go.
-fn send_session(to_logic: &flume::Sender<LogicCommand>, fatal: bool, cmd: LogicCommand) -> bool {
+fn send_session(
+    to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
+    fatal: bool,
+    cmd: LogicCommand,
+) -> bool {
     if fatal {
         return true;
     }
     match to_logic.try_send(cmd) {
         Ok(()) => true,
-        Err(flume::TrySendError::Full(_)) => {
+        Err(ambre_bus::conduit::TrySendError::Full(_)) => {
             // Neither an open nor a close is worth blocking the UI thread for.
             // Both are worth a warning, and both come back on a later frame.
             tracing::warn!("Toile: UI->Logic channel full, embed session command deferred");
             false
         }
-        Err(flume::TrySendError::Disconnected(_)) => {
+        Err(ambre_bus::conduit::TrySendError::Disconnected(_)) => {
             tracing::error!("Toile: UI->Logic channel disconnected");
             false
         }
@@ -209,8 +213,8 @@ fn trigger_download(_filename: &str, _data: &[u8]) {}
 
 pub struct ToileView {
     document_id: DocumentId,
-    to_logic: flume::Sender<LogicCommand>,
-    from_logic: flume::Receiver<UiEvent>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    from_logic: ambre_bus::conduit::Receiver<UiEvent>,
     /// The lossless send path: it keeps an edit a full channel could not take,
     /// and offers it again on a later frame (`BUS-011`).
     outbox: Outbox,
@@ -554,8 +558,8 @@ impl ToileView {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         document_id: DocumentId,
-        to_logic: flume::Sender<LogicCommand>,
-        from_logic: flume::Receiver<UiEvent>,
+        to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+        from_logic: ambre_bus::conduit::Receiver<UiEvent>,
         canvas_width: f64,
         canvas_height: f64,
         text_input: TextInput,
@@ -3202,8 +3206,8 @@ impl ToileView {
                 // Other UiEvent variants (session, CRUD, connection) are not yet
                 // consumed by the Toile view; ignore them for now.
                 Ok(_) => {}
-                Err(flume::TryRecvError::Empty) => break,
-                Err(flume::TryRecvError::Disconnected) => {
+                Err(ambre_bus::conduit::TryRecvError::Empty) => break,
+                Err(ambre_bus::conduit::TryRecvError::Disconnected) => {
                     self.signal_fatal("Logic thread disconnected");
                     break;
                 }

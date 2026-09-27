@@ -11,8 +11,8 @@ impl TrameView {
     /// measures every frame against a budget, so neither has a fallback.
     pub fn new(
         document_id: DocumentId,
-        to_logic: flume::Sender<LogicCommand>,
-        from_logic: flume::Receiver<UiEvent>,
+        to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+        from_logic: ambre_bus::conduit::Receiver<UiEvent>,
         canvas_width: f64,
         canvas_height: f64,
         text_input: TextInput,

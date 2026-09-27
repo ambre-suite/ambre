@@ -101,13 +101,13 @@ pub struct FrameHost {
     clip_published: Rc<std::cell::Cell<bool>>,
     /// Clipboard reads the Paste button hands over, already decoded by the shell.
     /// Drained once per frame and routed to the active view (`UI-THREAD-024`).
-    paste_rx: flume::Receiver<ClipboardPaste>,
+    paste_rx: ambre_bus::conduit::Receiver<ClipboardPaste>,
 
     /// The command channel to the Logic thread, held for one purpose. A font
     /// face fetched after boot has to reach the threads that measure on a
     /// context of their own (`CANVAS-068`). Only this thread can fetch, and
     /// Prose paginates on the Logic thread.
-    to_logic: flume::Sender<LogicCommand>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
 
     /// The live child views behind the top-level document's visible `doc_embed`s,
     /// keyed by the **board element** that carries each reference. Reconciled
@@ -158,8 +158,8 @@ impl FrameHost {
         perf: web_sys::Performance,
         make_child: Option<MakeChild>,
         clip_token: String,
-        paste_rx: flume::Receiver<ClipboardPaste>,
-        to_logic: flume::Sender<LogicCommand>,
+        paste_rx: ambre_bus::conduit::Receiver<ClipboardPaste>,
+        to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     ) -> Self {
         Self {
             gpu: None,

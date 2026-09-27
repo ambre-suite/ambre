@@ -14,8 +14,9 @@
 #     re-granting a capability becomes a deliberate, reviewable edit of this file
 #     instead of one silent line in a `Cargo.toml`.
 #
-# Invariants mechanised here: `ZK-002`, `ZK-003`, `ZK-004`, `SRV-012`, `SYNC-011`
-# (`ambre-spec-zero-knowledge.md`, `ambre-spec-server.md`, `ambre-spec-sync.md`).
+# Invariants mechanised here: `ZK-002`, `ZK-003`, `ZK-004`, `SRV-012`, `SYNC-011`,
+# `ARCH-020` (`ambre-spec-zero-knowledge.md`, `ambre-spec-server.md`,
+# `ambre-spec-sync.md`, `ambre-spec-architecture.md`).
 
 [graph]
 targets = [
@@ -119,6 +120,15 @@ wrappers = ["ambre-sync", "ambre-logic"]
 [[bans.deny]]
 name = "loro"
 wrappers = ["ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure"]
+
+# A channel crate that locks. flume's queue sits behind a `std::sync::Mutex`,
+# and on the page's main thread a contended one ends in `Atomics.wait`, which
+# the browser refuses (`ARCH-020`). Every client channel is
+# `ambre_bus::conduit`, the Sync worker's included. `goose`, the relay's
+# load-test tool, never reaches a browser.
+[[bans.deny]]
+name = "flume"
+wrappers = ["goose"]
 
 [sources]
 unknown-registry = "deny"

@@ -52,14 +52,17 @@ pub fn is_lossy_class(cmd: &LogicCommand) -> bool {
 /// Never blocks: the UI thread runs the frame. A full channel drops the
 /// command rather than holding it, because the next frame carries the same
 /// request over a state that has moved on.
-pub fn send_lossy(to_logic: &flume::Sender<LogicCommand>, cmd: LogicCommand) -> LossyOutcome {
+pub fn send_lossy(
+    to_logic: &crate::conduit::Sender<LogicCommand>,
+    cmd: LogicCommand,
+) -> LossyOutcome {
     if !is_lossy_class(&cmd) {
         return LossyOutcome::Refused;
     }
     match to_logic.try_send(cmd) {
         Ok(()) => LossyOutcome::Sent,
-        Err(flume::TrySendError::Full(_)) => LossyOutcome::Dropped,
-        Err(flume::TrySendError::Disconnected(_)) => LossyOutcome::Disconnected,
+        Err(crate::conduit::TrySendError::Full(_)) => LossyOutcome::Dropped,
+        Err(crate::conduit::TrySendError::Disconnected(_)) => LossyOutcome::Disconnected,
     }
 }
 
@@ -105,14 +108,14 @@ mod tests {
 
     #[test]
     fn an_open_channel_takes_a_request_that_changes_nothing() {
-        let (tx, rx) = flume::bounded(2);
+        let (tx, rx) = crate::conduit::local(2);
         assert_eq!(send_lossy(&tx, viewport()), LossyOutcome::Sent);
         assert_eq!(rx.len(), 1);
     }
 
     #[test]
     fn a_full_channel_drops_the_request_and_says_so() {
-        let (tx, rx) = flume::bounded(1);
+        let (tx, rx) = crate::conduit::local(1);
         assert_eq!(send_lossy(&tx, viewport()), LossyOutcome::Sent);
         assert_eq!(send_lossy(&tx, viewport()), LossyOutcome::Dropped);
         assert!(!LossyOutcome::Dropped.sent());
@@ -121,7 +124,7 @@ mod tests {
 
     #[test]
     fn a_command_that_changes_the_document_never_reaches_the_channel() {
-        let (tx, rx) = flume::bounded(8);
+        let (tx, rx) = crate::conduit::local(8);
         for cmd in mutations() {
             assert_eq!(send_lossy(&tx, cmd), LossyOutcome::Refused);
         }
@@ -130,7 +133,7 @@ mod tests {
 
     #[test]
     fn a_command_of_another_plane_is_refused_with_the_mutations() {
-        let (tx, rx) = flume::bounded(1);
+        let (tx, rx) = crate::conduit::local(1);
         let close = LogicCommand::CloseDocument {
             document_id: DocumentId::from_bytes([2; 16]),
         };
@@ -140,7 +143,7 @@ mod tests {
 
     #[test]
     fn a_gone_logic_thread_is_reported_not_dropped() {
-        let (tx, rx) = flume::bounded(1);
+        let (tx, rx) = crate::conduit::local(1);
         drop(rx);
         assert_eq!(send_lossy(&tx, viewport()), LossyOutcome::Disconnected);
     }

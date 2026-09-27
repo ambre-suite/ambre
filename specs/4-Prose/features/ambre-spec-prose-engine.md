@@ -176,7 +176,7 @@ converts at its own boundary, so the value is one identity and not two.
 | `ambre-core` | the identity and document types | `Uuid`, `DocType`, reached through the `ambre-bus` re-export |
 | `ambre-bus` | the typed IPC shapes | the two planes of sections 3.B and 3.C, and the envelopes that carry them |
 | `ambre-draw` | the `DrawSurface` trait and the geometry re-exports | one page-drawing path for the screen and for the exported page (`features/ambre-spec-prose-pdf-export.md`). The page painter draws through it, and a test drives it on the recording surface |
-| `flume` | the UI-to-Logic channel the view sends on | shared memory between the two threads, so a command moves rather than serializes (`PROSE-UI-002`, `PROSE-UI-149`) |
+| `ambre-bus` | the UI-to-Logic channel the view sends on, `ambre_bus::conduit` | shared memory between the two threads, so a command moves rather than serializes (`PROSE-UI-002`, `PROSE-UI-149`) |
 | `postcard` | the presence frame alone | the only Prose value serialized for the wire; a CRDT delta is already bytes |
 | `serde` | the derives that frame needs | on the wire types of section 3.D, and on nothing that travels between the two threads |
 | `thiserror` | the typed engine error | `ProseError` and `ProseRefusal` derive it, in `ambre-bus`, and the one error event of section 3.C carries them |
@@ -286,7 +286,8 @@ revoked member is not document content and never reaches this state at all.
 
 ### B. What a command carries
 
-The plane the UI thread writes on. Values move by `flume`, so no shape below derives `serde`.
+The plane the UI thread writes on. Values move on an `ambre_bus::conduit` channel, so no shape
+below derives `serde`.
 
 > **The offset unit is the Unicode code point.** Every `pos`, every `range` and every
 > `(TreeID, u32)` endpoint below is a count of code points into the target block's body text
@@ -300,7 +301,7 @@ this enum later, and so do the clipboard, the bands, the spell checker and the i
 arrives with the Story that builds it, and the whole list is `ambre-roadmap.md` E5.
 
 ```rust
-// ambre-prose/src/events.rs -- re-exported from `ambre_bus::app::prose`. Move on `flume`,
+// ambre-prose/src/events.rs -- re-exported from `ambre_bus::app::prose`. Move on a link,
 // no serde.
 #[derive(Debug, Clone)]
 pub enum ProseCommand {
@@ -495,7 +496,7 @@ two places and leave the dispatch with a hole. `PROSE-UI-001` bans the second mo
 side.
 
 ```rust
-// ambre-prose/src/events.rs -- the content plane, in `ambre-bus`. Move on `flume`, no serde.
+// ambre-prose/src/events.rs -- the content plane, in `ambre-bus`. Move on a link, no serde.
 #[derive(Debug, Clone)]
 pub enum ProseEvent {
     // -- Engine --
@@ -634,9 +635,9 @@ names identities and never positions, which is `PRESENCE-007`.
 
 ### E. The data flow
 
-Typed values by move on `flume` between the UI and the Logic threads -- shared memory, no
-serialization on either side of that hop. The dispatcher routes by document id and explodes what the
-state returns.
+Typed values move on an `ambre_bus::conduit` channel between the UI and the Logic threads. The
+memory is shared, so neither side of that hop serializes. The dispatcher routes by document id and
+explodes what the state returns.
 
 ```mermaid
 sequenceDiagram

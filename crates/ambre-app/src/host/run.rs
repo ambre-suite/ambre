@@ -33,8 +33,8 @@ pub fn run_with<F, C, P>(
     make_child_fn: C,
     mut pre_frame: P,
     raf: RafControl,
-    paste_rx: flume::Receiver<ClipboardPaste>,
-    to_logic: flume::Sender<LogicCommand>,
+    paste_rx: ambre_bus::conduit::Receiver<ClipboardPaste>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
 ) -> DocSwitcher
 where
     F: FnOnce(f64, f64, TextInput) -> AppView,

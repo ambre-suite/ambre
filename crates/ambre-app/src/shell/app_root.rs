@@ -1603,7 +1603,7 @@ fn exec_clipboard(copy: bool) {
 /// active view through the same ladder as Ctrl+V (`UI-THREAD-024`,
 /// `UI-THREAD-025`). `plain` keeps the text alone (`PROSE-UI-227`).
 fn read_clipboard(
-    paste_tx: flume::Sender<crate::host::ClipboardPaste>,
+    paste_tx: ambre_bus::conduit::Sender<crate::host::ClipboardPaste>,
     toasts: Toasts,
     plain: bool,
 ) {

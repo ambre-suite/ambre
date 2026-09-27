@@ -126,7 +126,7 @@ pub(crate) enum ScrollOutcome {
 }
 
 /// Backpressure outcome of a lossless UI->Logic send. Mirrors the two
-/// `flume::TrySendError` variants without carrying the (large) `LogicCommand`
+/// `ambre_bus::conduit::TrySendError` variants without carrying the (large) `LogicCommand`
 /// payload, so the `Err` path stays cheap (see `clippy::result_large_err`).
 pub(crate) enum SendError {
     /// The outbox took the command nowhere: the channel was full and the hold
@@ -215,7 +215,7 @@ pub struct TrameView {
     /// The document this view renders (from the active route).
     document_id: DocumentId,
     /// Outbound channel to the Logic thread, for the lossy class only.
-    to_logic: flume::Sender<LogicCommand>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     /// The lossless send path: it keeps a command a full channel could not take,
     /// and offers it again on a later frame (`BUS-011`).
     outbox: Outbox,
@@ -223,7 +223,7 @@ pub struct TrameView {
     /// (`BUS-016`).
     busy_pub: BusyPublisher,
     /// Inbound channel from the Logic thread, drained each frame in `update`.
-    from_logic: flume::Receiver<UiEvent>,
+    from_logic: ambre_bus::conduit::Receiver<UiEvent>,
 
     /// Grid navigation + cell cache.
     state: TrameUiState,

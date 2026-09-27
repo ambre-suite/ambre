@@ -190,15 +190,15 @@ console_error_panic_hook = "0.1"
 # the hood. Required for the shared-linear-memory threading model documented
 # in specs/1-Foundations/ambre-spec-architecture.md.
 wasm_thread = "0.3"
-# Inter-thread channels for the shared-memory UI <-> Logic link (both in the
-# Main wasm instance). Logic blocks on `flume::Selector` (Atomics-backed, works
-# across the UI/Logic worker boundary); the UI polls `try_recv` per frame. The
-# Logic <-> Sync link is NOT a channel anymore -- Sync is a separate wasm worker
-# reached via `postMessage`, so flume's async-waker limitation no longer applies.
-# `async` => `recv_async` (Sync worker select loop + IndexedDB oneshots);
-# `select` => `Selector` (Logic blocks on UI + Sync at once). `eventual-fairness`
-# (default) is dropped: it pulls `nanorand`, unneeded for our usage.
-flume = { version = "0.11", default-features = false, features = ["async", "select"] }
+# The queues under `ambre_bus::conduit`, the channels of every client thread. They
+# take no lock, where flume's `std::sync::Mutex` ends in `Atomics.wait` when the
+# page's main thread finds it contended, which the browser refuses (`ARCH-020`).
+crossbeam-queue = "0.3"
+# The lock-free wake-up behind `ambre_bus::conduit::Receiver::recv`, the one
+# `futures` itself uses. A plain `Waker` behind a `Mutex` is what `ARCH-020` bans.
+atomic-waker = "1.1"
+# The one-shot answers of the IndexedDB store, awaited on the main thread.
+futures-channel = "0.3"
 
 # Compression
 ruzstd = "0.8"

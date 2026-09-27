@@ -19,11 +19,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**2632 rows: 2365 shipped, of which 785 loose. 267 unbuilt.**
+**2641 rows: 2374 shipped, of which 785 loose. 267 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 240 | 221 | 542 | 577 | 1580 |
+| `verified` | 249 | 221 | 542 | 577 | 1589 |
 | `failing` | 39 | 46 | 22 |  | 107 |
 | `untested` | 268 | 144 | 237 | 5 | 654 |
 | `human-review` | 8 | 1 | 1 | 1 | 11 |
@@ -38,7 +38,7 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 13 | 3 | 10 | 2 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 0 | 7 | 1 |
-| `ambre-spec-architecture.md` | 19 | 19 | 5 | 14 |  |
+| `ambre-spec-architecture.md` | 26 | 26 | 12 | 14 |  |
 | `ambre-spec-broadcast.md` | 19 | 16 | 6 | 10 | 3 |
 | `ambre-spec-chrome.md` | 21 | 20 | 9 | 11 | 1 |
 | `ambre-spec-clipboard.md` | 18 | 17 | 2 | 15 | 1 |
@@ -57,7 +57,7 @@
 | `ambre-spec-launcher.md` | 17 | 17 | 7 | 10 |  |
 | `ambre-spec-media.md` | 11 | 11 | 0 | 11 |  |
 | `ambre-spec-membership.md` | 17 | 17 | 12 | 5 |  |
-| `ambre-spec-message-bus.md` | 24 | 24 | 11 | 13 |  |
+| `ambre-spec-message-bus.md` | 26 | 26 | 13 | 13 |  |
 | `ambre-spec-object-store.md` | 12 | 12 | 3 | 9 |  |
 | `ambre-spec-organizations.md` | 11 | 10 | 5 | 5 | 1 |
 | `ambre-spec-pdf-export.md` | 7 | 6 | 1 | 5 | 1 |
@@ -166,7 +166,7 @@
 | :--- | :--- |
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058 |
-| `ambre-spec-architecture.md` | ARCH-001..019 |
+| `ambre-spec-architecture.md` | ARCH-001..026 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..092 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..056 |
@@ -186,7 +186,7 @@
 | `ambre-spec-locale.md` | LOCALE-001..013 |
 | `ambre-spec-media.md` | SYNC-049..055,074..077 |
 | `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094 |
-| `ambre-spec-message-bus.md` | BUS-001..024 |
+| `ambre-spec-message-bus.md` | BUS-001..026 |
 | `ambre-spec-object-store.md` | SRV-002,004,052..059,078..079 |
 | `ambre-spec-organizations.md` | SRV-060..067,071,076..077 |
 | `ambre-spec-pdf-export.md` | PDF-001..007 |

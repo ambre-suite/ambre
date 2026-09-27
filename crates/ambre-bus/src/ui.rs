@@ -7,7 +7,7 @@
 //! A document type is therefore defined in one place, whichever direction the
 //! message travels.
 //!
-//! Carried over a `flume` channel in shared memory -- typed Rust values by move,
+//! Carried over a `conduit` channel in shared memory -- typed Rust values by move,
 //! no serialization. The symmetric UI -> Logic direction (commands) lives in
 //! [`crate::logic`].
 //!

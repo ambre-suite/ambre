@@ -20,8 +20,8 @@ use app_root::AppRoot;
 /// so the imperative engine wiring in `main` can read it back.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn mount_shell(
-    to_logic: flume::Sender<LogicCommand>,
-    clipboard_paste: flume::Sender<ClipboardPaste>,
+    to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+    clipboard_paste: ambre_bus::conduit::Sender<ClipboardPaste>,
     raf: ambre_canvas::RafControl,
     theme_ctl: ambre_canvas::ThemeControl,
     boot_doc: Option<DocumentId>,

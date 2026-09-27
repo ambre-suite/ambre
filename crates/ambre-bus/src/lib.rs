@@ -16,14 +16,15 @@
 //!   correlatable request/response family carried by `...::Rest { id, ... }` on all
 //!   four envelopes, defined once and forwarded verbatim.
 //!
-//! Transport split: `LogicCommand`/`UiEvent` travel UI <-> Logic over `flume` channels in
-//! shared memory (typed Rust values, no serialization). The `SyncCommand`/`LogicEvent`
+//! Transport split: `LogicCommand`/`UiEvent` travel UI <-> Logic over the [`conduit`] channels
+//! in shared memory (typed Rust values, no serialization). The `SyncCommand`/`LogicEvent`
 //! envelope crosses a `postMessage` boundary to the separate Sync worker. It, and the
 //! `Rest*` payloads it carries, derives `Serialize`/`Deserialize` and is postcard-encoded
 //! on that hop.
 
 pub mod app;
 pub mod command;
+pub mod conduit;
 pub mod event;
 pub mod logic;
 pub mod lossy;

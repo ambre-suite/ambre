@@ -54,9 +54,8 @@ serde_json      = { workspace = true, optional = true }
 # The corpus error taxonomy (`FixtureError`), which wraps `DocFileError` rather
 # than flattening it into a string.
 thiserror       = { workspace = true, optional = true }
-# UI <-> Logic channels in shared memory. Logic blocks on `flume::Selector`
-# (Atomics-backed, works across the UI/Logic worker boundary).
-flume           = { workspace = true }
+# The one-shot answers of the IndexedDB store, awaited on the main thread.
+futures-channel = { workspace = true }
 
 tracing       = { workspace = true }
 futures-util  = { workspace = true }

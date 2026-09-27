@@ -29,6 +29,8 @@
 | instance | one running copy of the application | | `1-Foundations/ambre-spec-architecture.md` |
 | worker | a browser worker hosting a thread | | `1-Foundations/ambre-spec-architecture.md` |
 | channel | a typed queue between two threads | | `1-Foundations/ambre-spec-architecture.md` |
+| conduit | the lock-free channel of the Main instance | | `1-Foundations/ambre-spec-architecture.md` |
+| doorbell | the wake-up signal of a parked thread | | `1-Foundations/ambre-spec-architecture.md` |
 | plane | a class of traffic on the bus | | `1-Foundations/ambre-spec-message-bus.md` |
 | content plane | the plane carrying document edits | | `1-Foundations/ambre-spec-message-bus.md` |
 | service plane | the plane carrying correlated requests and responses | | `1-Foundations/ambre-spec-message-bus.md` |

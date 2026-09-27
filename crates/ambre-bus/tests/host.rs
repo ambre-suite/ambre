@@ -7,7 +7,7 @@
 //   - postcard round-trips of the Logic <-> Sync envelopes. The contract:
 //     `SyncCommand` / `LogicEvent`, and the `Rest*` family they carry, survive the
 //     `postMessage` hop unchanged, while application payloads stay `Vec<u8>`.
-// No DOM, no serialization on the UI <-> Logic path (that link is `flume` by
+// No DOM, no serialization on the UI <-> Logic path (that link is `ambre_bus::conduit` by
 // move and intentionally carries no `Serialize` derive).
 // ============================================================================
 
@@ -127,24 +127,18 @@ fn request_id_is_strictly_monotonic() {
 #[test]
 fn request_id_is_unique_under_concurrency() {
     use std::collections::HashSet;
-    use std::sync::Arc;
-    use std::sync::Mutex;
 
-    let seen = Arc::new(Mutex::new(HashSet::new()));
-    let mut handles = Vec::new();
-    for _ in 0..8 {
-        let seen = Arc::clone(&seen);
-        handles.push(std::thread::spawn(move || {
-            for _ in 0..1000 {
-                let id = RequestId::next().0;
-                assert!(seen.lock().unwrap().insert(id), "duplicate id {id}");
-            }
-        }));
-    }
+    // Each thread keeps its own ids, so the test shares no lock with them.
+    let handles: Vec<_> = (0..8)
+        .map(|_| std::thread::spawn(|| (0..1000).map(|_| RequestId::next().0).collect::<Vec<_>>()))
+        .collect();
+    let mut seen = HashSet::new();
     for h in handles {
-        h.join().unwrap();
+        for id in h.join().unwrap() {
+            assert!(seen.insert(id), "duplicate id {id}");
+        }
     }
-    assert_eq!(seen.lock().unwrap().len(), 8 * 1000);
+    assert_eq!(seen.len(), 8 * 1000);
 }
 
 // -- Logic <-> Sync envelope round-trips (postcard, the postMessage codec) ----
