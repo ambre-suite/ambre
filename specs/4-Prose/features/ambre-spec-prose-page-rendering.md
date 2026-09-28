@@ -21,7 +21,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-UI-006` | `INV` | A full text layout or a table-of-contents recompute MUST NOT run in the UI thread: both arrive already computed. | this spec section 2; `features/ambre-spec-prose-pagination.md` | `ambre_logic::dispatch::tests::the_view_draws_a_layout_the_logic_thread_computed` | none | verified |
+| `PROSE-UI-006` | `INV` | A full text layout or a table-of-contents recompute MUST NOT run in the UI thread: both arrive already computed. | this spec section 2; `features/ambre-spec-prose-pagination.md` | none | unheld -- the mechanism test does not exist; the view receives a layout and draws it, but no test verifies that the layout is already computed and arrives from the Logic thread; lands with the `The shared document-tool belts` Story (`ambre-roadmap.md` E9) | untested |
 | `PROSE-UI-113` | `INV` | A shaped run handed from the side that shapes to the side that draws MUST NOT carry a GPU handle or any other handle bound to one thread. | this spec section 4 | `ambre_prose::layout::run::tests::a_shaped_layout_moves_to_another_thread_and_draws_there` | none | verified |
 | `PROSE-UI-114` | `INV` | Resolving the position under a pointer MUST read the runs already shaped, never shaping a block. | this spec section 4 | `ambre_prose::view::hit::tests::a_block_never_painted_resolves_a_point_off_its_shaped_runs` | none | verified |
 | `PROSE-UI-172` | `INV` | A block that was culled and never painted MUST resolve a position like any other. | this spec section 4 | `ambre_prose::view::hit::tests::a_block_never_painted_resolves_a_point_off_its_shaped_runs` | none | verified |
@@ -59,11 +59,11 @@ status values are normative in `ambre-spec-template.md`.
   exceeds the shared UI-thread total, and the register says so.
 * **Boundary.** none: this thread paints view state, where `UI-THREAD-004` bans a network, crypto
   or persistence path. What it draws arrives as an event and leaves as nothing.
-* **Verification.** 21 `verified`, 2 `unimplemented`. Every verified row is a host test in
-  `crates/ambre-prose`, painting through the recording surface of `ambre-draw`. `PROSE-UI-113` is
-  also compiler-held: the run type must be `Send`, `Sync` and `'static`. `PROSE-UI-006` is held in
-  `crates/ambre-logic`: the Logic thread shapes, and the view draws what the bus hands it.
-  `PROSE-UI-017` waits on the shared repaint contract.
+* **Verification.** 20 `verified`, 1 `untested`, 2 `unimplemented`. Every verified row is a host
+  test in `crates/ambre-prose`, painting through the recording surface of `ambre-draw`.
+  `PROSE-UI-113` is also compiler-held: the run type must be `Send`, `Sync` and `'static`.
+  `PROSE-UI-006` is held in `crates/ambre-logic`: the Logic thread shapes, and the view draws what
+  the bus hands it. `PROSE-UI-017` waits on the shared repaint contract.
 
 ---
 

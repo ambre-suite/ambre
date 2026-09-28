@@ -34,8 +34,8 @@ prefix is `ARCH`.
 | `ARCH-011` | `INV` | Each browser tab MUST run a complete client of its own. | this spec section 2 | none | unheld -- two tabs load the same two artefacts twice, and nothing refuses a design that shared one worker between them, which is the shortcut this rule exists to close; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-014` | `INV` | The client MUST NOT rely on a channel disconnection to detect a thread failure. | this spec section 2 | none | unheld -- the panic hook fires before the abort, so the notice does not wait on a channel, and nothing refuses a second detection path that would. A disconnection arrives late, or never, because a wedged thread holds its end open; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-018` | `INV` | The launcher MUST hold integration and the shell alone: the logic of an application, what one of its commands does included, MUST live in that application's crate. | this spec section 2 | none | fails -- the shell decides what Trame's bold toggle and filter popover do, what Toile's embed and link dialogs send, and what Prose's save becomes; lands with the "The launcher holds no application logic" Story (`ambre-roadmap.md` E8) | failing |
-| `ARCH-017` | `INV` | The Logic thread MUST answer a view once per pass over the commands waiting on its inbound channels, not once per command. | this spec section 2 | `ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once` | none | verified |
-| `ARCH-027` | `INV` | The Logic thread MUST hand local persistence the delta an edit wrote, and a whole snapshot only when no snapshot of this session holds the log, the log grew past its bound, or the document closes. | this spec section 2 | `ambre_logic::pass_tests::a_burst_of_keystrokes_is_answered_once`; `ambre_logic::pass_tests::the_first_save_is_a_snapshot`; `ambre_logic::pass_tests::a_long_log_is_folded_into_a_snapshot` | none | verified |
+| `ARCH-017` | `INV` | The Logic thread MUST answer a view once per pass over the commands waiting on its inbound channels, not once per command. | this spec section 2 | none | unheld -- the mechanism test does not exist; the pass loop runs, but no test counts its answers; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `ARCH-027` | `INV` | The Logic thread MUST hand local persistence the delta an edit wrote, and a whole snapshot only when no snapshot of this session holds the log, the log grew past its bound, or the document closes. | this spec section 2 | none | unheld -- the mechanism tests do not exist; the pass loop runs and calls `take_delta` and `take_snapshot`, but no test drives the persistence paths; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `ARCH-020` | `INV` | The Main thread MUST NOT take a lock on a channel it shares with the Logic thread. | this spec section 2 | cargo-deny -- `deny.toml` bans the channel crate that locks from every client crate; lint-wall -- `crates/ambre-bus/clippy.toml` refuses a mutex, a read-write lock, a condition variable and a barrier in the crate that holds the channels | none | verified |
 | `ARCH-021` | `INV` | A channel end the Main thread holds MUST NOT wait. | this spec section 2 | type-level -- `ambre_bus::conduit::Sender` and `ambre_bus::conduit::Receiver`, the two ends the launcher keeps, declare only operations that try, and the one end that parks goes to the Logic thread at spawn | none | verified |
 | `ARCH-028` | `INV` | Code outside a test MUST NOT hold a path that panics: no unwrap, expect, panic, unreachable, todo, unimplemented, index or slice that can fail. | this spec section 2 | none | unheld -- about 330 sites across the workspace, most of them indexing in Trame, Toile and the canvas, and no lint refuses a new one; lands with the `No panic path outside the tests` Story (`ambre-roadmap.md` E9) | untested |
@@ -72,19 +72,18 @@ The user types, then closes the document before the Logic thread has answered th
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `ARCH-019` | `FRAME` | Closing a document MUST NOT drop the snapshot an edit earlier in the same pass is owed. | this spec section 2 | `ambre_logic::pass_tests::a_document_closed_in_the_pass_keeps_its_last_edit` | none | verified |
+| `ARCH-019` | `FRAME` | Closing a document MUST NOT drop the snapshot an edit earlier in the same pass is owed. | this spec section 2 | none | unheld -- the mechanism test does not exist; the close path calls `take_snapshot`, but no test drives it while a pass is in flight; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 
 * **Budget.** the whole of `ambre-spec-budgets.md`: this stack is what every row of that register
   measures. Its own two rows are the channel hop and the worker hop of `section 1`, and neither is
   measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 13 `verified`, 3 `partial`, 1 `failing`, 12 `untested`. What holds is what the build can
-  refuse. That is a cycle, a cryptographic dependency in the wrong crate, a missing atomics flag, or
-  a lock on a client channel. Host tests hold the Logic loop's one answer per pass, and the
-  wake, the full channel and the disconnection of each channel.
-  Everything else, the failure path and the tab model included, is held by the code having been
-  written that way.
+* **Verification.** 10 `verified`, 3 `partial`, 1 `failing`, 15 `untested`. What holds is what the
+  build can refuse. That is a cycle, a cryptographic dependency in the wrong crate, a missing
+  atomics flag, or a lock on a client channel. Host tests hold the Logic loop's one answer per pass,
+  and the wake, the full channel and the disconnection of each channel. Everything else, the failure
+  path and the tab model included, is held by the code having been written that way.
 
 ---
 
