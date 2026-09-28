@@ -18,7 +18,7 @@ eight kinds and the status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-125` | `INV` | Every merge MUST designate the top-left cell of its rectangle as the master. | `ambre-spec-trame-schema.md` section 3 | `ambre_trame::logic::tests::group2::merge_marks_master_span_and_blanks_covered` | none | verified |
-| `TRAME-128` | `INV` | Every merge MUST span at least two cells. | this spec section 4 | `ambre_trame::logic::tests::group3::merge_selection_single_cell_is_noop` -- the local path, which writes no entry | partial -- nothing refuses an entry of one cell arriving from a peer; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-128` | `INV` | Every merge MUST span at least two cells. | this spec section 4 | `ambre_trame::logic::tests::group3::merge_selection_single_cell_is_noop` -- the local path, which writes no entry | partial -- nothing refuses an entry of one cell arriving from a peer; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TRAME-020` | `INV` | A merge-masked cell MUST NOT participate in any computation, on any sheet, whichever tab is active. | this spec section 4 | `ambre_trame::logic::tests::group3::masked_cell_excluded_across_sheets_regardless_of_active_tab` | none | verified |
 | `TRAME-029` | `CONC` | Every peer MUST hide the same set of cells, computed from the merges and the cell contents alone. | this spec section 2, row 1 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest whose op stream draws merges and unmerges, over an asserted grid carrying each cell's displayed text, so two peers hiding different cells fail the case | none | verified |
 | `TRAME-126` | `CONC` | Two overlapping merges MUST resolve to the same single merge on every peer. | this spec section 5 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest whose op stream draws 2x2 merges at arbitrary anchors, so overlapping pairs occur, over a compared window carrying each cell's merge span | none | verified |
@@ -99,7 +99,7 @@ one cell to both.
   `ambre-spec-budgets.md` budgets no merge operation.
 * **Boundary.** none of its own: the merge is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 24 `verified`, 13 `untested`, 1 `unimplemented`. The split into operations
+* **Verification.** 24 `verified`, 1 `partial`, 12 `untested`, 1 `unimplemented`. The split into operations
   exposed eleven of the thirteen loose rows. Three are frame conditions no test isolates
   (`TRAME-131`, `TRAME-142`, `TRAME-UI-115`), and three are guards no test refuses (`TRAME-137`,
   `TRAME-143`, `TRAME-148`). Four are rules the fill states and asserts nothing about

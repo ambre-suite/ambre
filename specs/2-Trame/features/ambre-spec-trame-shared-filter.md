@@ -45,7 +45,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-FEAT-045` | `POST` | Applying a filter MUST hide every row that fails the test and no other. | this spec section 3 | `ambre_trame::logic::tests::group4::shared_filter_by_values_hides_nonmatching`; `::shared_filter_condition_greater_than` -- both assert the hidden mark row by row, one per filter kind | none | verified |
 | `TRAME-FEAT-033` | `POST` | Applying a filter MUST report the number of rows it hid. | this spec section 4 | `ambre_trame::logic::tests::group4::shared_filter_by_values_hides_nonmatching`; `::shared_filter_condition_greater_than` -- both match `FilterApplied { hidden_row_count }` against the rows they hid | none | verified |
 | `TRAME-FEAT-007` | `POST` | An undo MUST remove a filter in one step, like any other change to the sheet. | this spec section 2, row 6 | `ambre_trame::logic::tests::group5::shared_filter_is_undoable`; `ambre_trame::logic::tests::group2::filtered_column_edit_is_one_undo_item` | none | verified |
-| `TRAME-FEAT-035` | `FRAME` | Applying a filter MUST NOT change any cell value. | this spec section 5 | `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum` -- it shows the filtered column's total unchanged | partial -- that test observes one column alone, and nothing watches the rest of the sheet; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-FEAT-035` | `FRAME` | Applying a filter MUST NOT change any cell value. | this spec section 5 | `ambre_trame::logic::tests::group5::shared_filter_does_not_affect_sum` -- it shows the filtered column's total unchanged | partial -- that test observes one column alone, and nothing watches the rest of the sheet; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TRAME-FEAT-036` | `FRAME` | An edit outside the filtered column MUST NOT rewrite the hidden set. | this spec section 3 | none | fails -- `finish_cell_writes` calls `recompute_active_filter` after every cell write, whatever its column, and that call clears and rewrites `filter_hidden_{sheet}` whole, so each keystroke on a filtered sheet broadcasts one delta per hidden row and grows the history for an unchanged result; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-FEAT-008` | `FAIL` | A filter that cannot apply MUST leave the sheet unchanged. | this spec section 4 | `ambre_trame::logic::tests::group5::shared_filter_noop_guards` -- a wrong sheet and a virtual column; `::clear_filter_unhides_and_noops_when_absent` | none | verified |
 | `TRAME-FEAT-044` | `FAIL` | A filter that cannot apply MUST reach no collaborator. | this spec section 4 | `ambre_trame::logic::tests::group5::shared_filter_noop_guards` -- it asserts `update.is_none()` on each guard | none | verified |
@@ -79,10 +79,10 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md` budgets no filter.
 * **Boundary.** none of its own: the filter is shared, so its definition is a document write, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 22 `verified`, 5 `failing`, 5 `untested`, 3 `unimplemented`. The definition is one
-  register, so a concurrent race converges whole (`TRAME-FEAT-025`) and a filter by values reads
-  back and re-tests correctly (`TRAME-FEAT-004`, `TRAME-FEAT-009`, `TRAME-FEAT-031`). The remaining
-  gaps are stated once in section 6.
+* **Verification.** 22 `verified`, 1 `partial`, 5 `failing`, 4 `untested`, 3 `unimplemented`. The
+  definition is one register, so a concurrent race converges whole (`TRAME-FEAT-025`) and a filter
+  by values reads back and re-tests correctly (`TRAME-FEAT-004`, `TRAME-FEAT-009`,
+  `TRAME-FEAT-031`). The remaining gaps are stated once in section 6.
 
 ---
 

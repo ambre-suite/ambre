@@ -47,7 +47,7 @@ is what a full channel means.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `BUS-007` | `FAIL` | The Logic dispatcher MUST drop a mutating command when the caller's role on that document is not writable. | `ambre-spec-membership.md`, `SYNC-016` | `ambre_logic::dispatch::tests::viewer_edit_is_dropped_and_emits_no_update` -- no UI event and no outbound update; `::viewer_read_only_command_still_passes`; `::editor_edit_passes_through` -- the two sides the gate must not confuse | none | verified |
-| `BUS-005` | `FAIL` | A command for a document absent from the registry MUST be dropped, never synthesised. | this spec section 2 | `ambre_logic::dispatch::tests::a_command_for_an_unopened_document_is_dropped` -- no update reaches Sync and no event reaches the UI; `::app_command_on_unknown_doc_is_dropped` -- the same for a read-only command | partial -- neither test asserts that the registry stayed empty, so the synthesis half is held by the drop alone: an arm that inserts an entry and then drops the command leaves both assertions green; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `BUS-005` | `FAIL` | A command for a document absent from the registry MUST be dropped, never synthesised. | this spec section 2 | `ambre_logic::dispatch::tests::a_command_for_an_unopened_document_is_dropped` -- no update reaches Sync and no event reaches the UI; `::app_command_on_unknown_doc_is_dropped` -- the same for a read-only command | partial -- neither test asserts that the registry stayed empty, so the synthesis half is held by the drop alone: an arm that inserts an entry and then drops the command leaves both assertions green; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | partial |
 | `BUS-008` | `POST` | The role the relay reports MUST supersede the role a freshly opened document assumed. | this spec section 2 | `ambre_logic::dispatch::tests::document_ready_supersedes_the_optimistic_owner_role` -- it reads the optimistic `Owner` off the slot, feeds a `DocumentReady` carrying `Viewer`, and asserts a following edit no longer reaches Sync | none | verified |
 | `BUS-010` | `FRAME` | A command handler MUST NOT send on a channel: it returns an outcome and the dispatcher fans it out. | this spec section 2 | none | unheld -- each engine holds it over its own handlers (`TOILE-089`, the Prose row being unbuilt). Nothing holds it for an engine added later: a handler that captures a sender compiles; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -67,7 +67,7 @@ is what a full channel means.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `BUS-003` | `POST` | The Logic to Sync hop MUST return every field it was given: the encode and the decode MUST agree. | this spec section 2 | `ambre_bus::host::sync_command_roundtrips_through_postcard`; `::logic_event_roundtrips_through_postcard` -- the `Debug` rendering is compared before and after | partial -- they cover 5 of the 12 `SyncCommand` variants and 4 of the 19 `LogicEvent` variants, so a variant added tomorrow is covered by nothing; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `BUS-003` | `POST` | The Logic to Sync hop MUST return every field it was given: the encode and the decode MUST agree. | this spec section 2 | `ambre_bus::host::sync_command_roundtrips_through_postcard`; `::logic_event_roundtrips_through_postcard` -- the `Debug` rendering is compared before and after | partial -- they cover 5 of the 12 `SyncCommand` variants and 4 of the 19 `LogicEvent` variants, so a variant added tomorrow is covered by nothing; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | partial |
 | `BUS-025` | `POST` | An event from the Sync worker MUST reach the Logic thread in arrival order. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-021` | `ambre_bus::conduit::tests::a_backlog_holds_past_a_full_channel_and_keeps_the_order`; `::a_backlog_never_lets_a_new_value_overtake_a_held_one` | none | verified |
 | `BUS-026` | `POST` | An event from the Sync worker MUST NOT be dropped on a full channel. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-021` | `ambre_bus::conduit::tests::a_backlog_holds_past_a_full_channel_and_keeps_the_order` | none | verified |
 | `BUS-021` | `FRAME` | The worker hop MUST NOT decode an application payload: a CRDT delta and a channel message MUST cross it as opaque bytes. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-002` | none | unheld -- the envelope types carry `Vec<u8>` and the round trip pins that the bytes come back identical, which says the codec does not touch them, and nothing refuses the arm that would decode one before forwarding; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -77,10 +77,10 @@ is what a full channel means.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 13 `verified`, 9 `untested`, 4 `qa-manual`. What holds is the Logic dispatcher,
-  driven on host through an unknown document, a viewer's edit and a child's role. A service round
-  trip, a late response, the lossy gate and the backlog behind a full channel are driven too.
-  Loose is the envelope discipline the other two threads owe.
+* **Verification.** 13 `verified`, 2 `partial`, 7 `untested`, 4 `qa-manual`. What holds is the Logic
+  dispatcher, driven on host through an unknown document, a viewer's edit and a child's role. A
+  service round trip, a late response, the lossy gate and the backlog behind a full channel are
+  driven too. Loose is the envelope discipline the other two threads owe.
 
   Five paths are loose because nobody drives them. Three sit in the codec and dispatcher: an encode
   no test names, a stale version, a handler capturing a sender. The fourth is the registry entry no

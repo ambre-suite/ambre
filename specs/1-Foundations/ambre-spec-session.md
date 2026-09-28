@@ -26,7 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-028` | `INV` | An address MUST resolve to exactly one account. | audit `N5` | `ambre_server::db::users::tests::create_user_duplicate_email_is_conflict` -- the first of the two collisions; `::verified_email_collision_is_conflict` -- the second; `::get_user_by_email_is_case_insensitive` -- the comparison that decides what counts as the same address | none | verified |
 | `SRV-029` | `INV` | A self-asserted address MUST NOT lock out the provider-verified holder of it. | audit `N3` | `ambre_server::db::users::tests::oidc_login_reclaims_email_from_unverified_squatter`; `::verified_email_cannot_be_squatted_by_setup`; `::oidc_relogin_keeps_its_own_email` | none | verified |
 | `SRV-024` | `INV` | Any instance MUST accept a token another instance minted. | `ambre-spec-server.md`, `SRV-021` | none | unheld -- the signing key comes from one seed the deployment shares, and the process refuses to start without it outside development mode; nothing boots two instances to exchange a token; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SRV-025` | `INV` | An access token MUST expire within fifteen minutes. | this spec section 3; `ZK-006` | `jwt::tests::expired_token_is_rejected` -- an expiry is enforced, never what it may be | partial -- the lifetime is one operational figure with a fifteen-minute default and no ceiling, so a deployment may set an hour with no code change, the same absence `ZK-008` states for a presigned link; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-025` | `INV` | An access token MUST expire within fifteen minutes. | this spec section 3; `ZK-006` | `jwt::tests::expired_token_is_rejected` -- an expiry is enforced, never what it may be | partial -- the lifetime is one operational figure with a fifteen-minute default and no ceiling, so a deployment may set an hour with no code change, the same absence `ZK-008` states for a presigned link; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | partial |
 | `SRV-027` | `INV` | A session MUST NOT be issued under a placeholder signing key. | this spec section 3; `SRV-007` | none | fails -- when the stored signing key does not parse, both sign-in paths fall back to an all-zero key and mint a session under it, so every account in that state shares one identity, section 5; lands with the `No session is minted under a fallback key` Story (`ambre-roadmap.md` E7) | failing |
 | `SRV-031` | `INV` | An access token MUST NOT reach a log, a proxy record or a browser history. | `ZK-006`; audit `M15` | none | unheld -- the rule holds only outside this process: the relay's own request span records the path and never the query, and the token still travels in the socket address, so the reverse proxy must strip it and the client logs it (`ambre-spec-sync.md`, `SYNC-061`); lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -62,10 +62,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   and sees none of the three secrets behind them (`ZK-003`, `SRV-091`). What it mints is its own
   token, and `SRV-012` refuses it every other cryptographic act. The one leak stated here is the
   token in the socket address (`SRV-031`).
-* **Verification.** 7 `verified`, 2 `failing`, 7 `untested`. What holds is what a request test can
-  drive: the token gate, the address namespace, the one-shot key write and the refresh race. What is
-  loose is every rule about a deployment rather than a request. The two failures are the token
-  check's ordering and an over-reaching logout.
+* **Verification.** 7 `verified`, 1 `partial`, 2 `failing`, 6 `untested`. What holds is what a
+  request test can drive: the token gate, the address namespace, the one-shot key write and the
+  refresh race. What is loose is every rule about a deployment rather than a request. The two
+  failures are the token check's ordering and an over-reaching logout.
 ---
 
 ## 2. WHAT EACH USER SEES

@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-049` | `INV` | An element MUST belong to at most one container: joining a frame MUST detach it from its group. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_detaches_from_a_group` -- both memberships are read back | none | verified |
 | `TOILE-051` | `CONC` | A frame's speaker-notes container MUST exist from its birth, so two peers editing it first MUST converge. | this spec section 3; `TOILE-029` | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` | none | verified |
 | `TOILE-252` | `CONC` | Two users naming one frame at once MUST converge on one writer's whole name. | this spec section 3; `TOILE-018` | `ambre_toile::logic::convergence_tests::concurrent_names_converge_on_one_whole_name` -- two peers naming one frame, converging on one of the two names entire | none | verified |
-| `TOILE-253` | `OBS` | A frame MUST show its title on the board, outside its own box so nothing inside it is covered. A frame nobody named MUST show a placeholder in its place. | this spec section 4 | `ambre_toile::ui::render::tests::a_named_frame_reserves_a_title_band_above_itself` -- the band above the frame's own top edge, starting at its corner, widening with the title; `ambre_toile::ui::render::tests::an_unnamed_frame_reads_as_a_placeholder` -- the placeholder standing in, and never empty | partial -- the glyphs themselves are asserted by nothing: a host shapes none without a font, which is the vacuous assertion `features/ambre-spec-toile-board-rendering.md section 5` records for the bodies beside them; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-253` | `OBS` | A frame MUST show its title on the board, outside its own box so nothing inside it is covered. A frame nobody named MUST show a placeholder in its place. | this spec section 4 | `ambre_toile::ui::render::tests::a_named_frame_reserves_a_title_band_above_itself` -- the band above the frame's own top edge, starting at its corner, widening with the title; `ambre_toile::ui::render::tests::an_unnamed_frame_reads_as_a_placeholder` -- the placeholder standing in, and never empty | partial -- the glyphs themselves are asserted by nothing: a host shapes none without a font, which is the vacuous assertion `features/ambre-spec-toile-board-rendering.md section 5` records for the bodies beside them; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TOILE-255` | `OBS` | A presentation MUST NOT paint a frame's title: a slide shows the board's content, not its structure. | this spec section 4; `TOILE-UI-083` | type-level -- the title pass has one call site, inside the content pass's `if !present`, so a slide cannot reach it | none | verified |
 
 ### 1.2 Add a selection to a frame
@@ -61,11 +61,11 @@ status values are normative in `ambre-spec-template.md`.
   child, so the figure is per child out of order and no bench measures it.
 * **Boundary.** none of its own: a frame and its membership live in the Logic thread's document and
   leave as bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 14 `verified`, 1 `failing`, 5 `untested`. What holds is membership as data, the
-  title beside it, and what a press on that title does. An element joins one frame, detaches from
-  its group and paints after it, and both the notes and the name converge. What is loose is what
-  the membership gesture refuses or skips, and the title's glyphs, which a host with no font shapes
-  none of. The failure is the two undo items a fired clamp produces (`TOILE-048`).
+* **Verification.** 14 `verified`, 1 `partial`, 1 `failing`, 4 `untested`. What holds is membership
+  as data, the title beside it, and what a press on that title does. An element joins one frame,
+  detaches from its group and paints after it, and both the notes and the name converge. What is
+  loose is what the membership gesture refuses or skips, and the title's glyphs, which a host with
+  no font shapes none of. The failure is the two undo items a fired clamp produces (`TOILE-048`).
 
 ---
 

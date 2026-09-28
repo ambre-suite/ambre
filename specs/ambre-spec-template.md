@@ -153,7 +153,7 @@ carries both:
 | `Sources` | where the rule comes from, `;` between one source and the next. Each source names its kind, its target and, where it has one, its section, in one of six forms: **a section** of this spec (`this spec section 3`); a **named `document.md`**, with the section it lands in and the rule ids it cites (`` `1-Foundations/ambre-spec-message-bus.md section 4` (`BUS-018`) ``); a **bare rule id**, which resolves through the ledger without naming the file that declares it (`` `ZK-001` ``); a **`README pillar "Zero-Knowledge"`**, the word `README` included, because a bare `pillar "..."` names something a reader cannot grep for; an **``audit `H9` ``** finding, by its number; or **`derived`**, which claims no source but the design. A source outside the six is refused on its own, whatever the sources beside it read. A row that closes a finding cites it, and the finding stops drifting from the code in silence |
 | `Mechanism` | the mechanism, and **nothing else**: one or more tokens of the closed set below, separated by `` ; ``. No argument. The cell answers one question -- what turns red when the rule breaks -- and that answer is a fact about CI, so it is finite and countable. The `Verification` answer under the table asks a different question, and section 5 says why the column is the cell that carries the mechanism's name |
 | `Gap` | what the mechanism does not hold: one of the six openers below, then the argument in prose. The cell answers the other question, which is a judgement and ages with the code. `none` is an answer and the only one that carries no prose |
-| `Status` | one of the six values below. An empty cell fails |
+| `Status` | one of the seven values below. An empty cell fails |
 
 **The mechanism tokens.** The closed set `Mechanism` draws on. Each token names a rung of the
 ladder in `1-Foundations/ambre-spec-testing.md section 2`. That document owns the method and wins
@@ -217,13 +217,17 @@ the one place in the row where an argument belongs.
   cell says what is loose, and one cell saying both says neither.
 * **A `verified` row with a gap fails.** A status saying something turns red, beside a cell saying
   which half is loose, is two answers to one question. Move the status or close the gap.
+* **A `partial` row names its mechanism and opens its gap on `partial -- `.** An `untested` row
+  opening on it fails. The rule is half held, and `untested` reads as a row nothing tests at all.
+  A gap that holds nothing opens on `unheld -- `.
 
-**The six status values.** `Owes` is what the row must carry beside the status, and
+**The seven status values.** `Owes` is what the row must carry beside the status, and
 `contracts.py` holds it.
 
 | Value | Means | Owes |
 | :--- | :--- | :--- |
 | `verified` | something goes red if the rule breaks: a test, the compiler, a lint, `cargo deny` | the mechanism |
+| `partial` | a mechanism holds part of the rule, and `Gap` says which part is left | the mechanism and a Story |
 | `failing` | **the code breaks the rule today.** A live defect, and the only status that reports one | a Story |
 | `untested` | the code exists, nothing holds it, and a mechanism could | a Story |
 | `human-review` | nothing goes red automatically, and a reviewer is expected to catch it. By decision | nothing |

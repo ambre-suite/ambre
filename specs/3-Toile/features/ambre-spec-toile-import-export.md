@@ -68,7 +68,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-021` | `POST` | A user MUST be able to take the board out as a file. | this spec section 4 | `ambre_toile::logic::state::export::tests::the_board_exports_as_an_svg_document` -- it walks the board into the serializer and reads the element back out of the file; `ambre_toile::logic::state::export::tests::an_empty_board_exports_an_empty_document`; `ambre_toile::tests::chrome_ui::a_finished_export_names_its_file` -- it holds the confirmation | none | verified |
 | `TOILE-IO-085` | `POST` | The exported bytes MUST reach the browser's download path. | this spec section 4 | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), a `Blob` behind an object URL, clicked through a detached anchor. The bytes it is handed are `TOILE-IO-021` | none | qa-manual |
 | `TOILE-IO-004` | `POST` | An export MUST be deterministic: the same board yields a byte-stable structure. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::export_is_deterministic`; `ambre_toile::logic::interop::svg_export::tests::rect_serializes_with_fixed_attrs`; `ambre_toile::logic::interop::svg_export::tests::text_body_is_escaped`; `ambre_toile::logic::interop::svg_export::tests::float_formatter_trims`; `ambre_toile::logic::interop::tests::round_trip_rect_is_stable`; `ambre_toile::logic::interop::tests::round_trip_path_geometry_survives` | none | verified |
-| `TOILE-IO-025` | `POST` | An element the SVG serializer cannot express MUST be reported, never dropped in silence. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::a_kind_the_writer_cannot_express_is_reported` -- a sticky, a group and a stroke each named, with the shape beside them still written; `ambre_toile::logic::interop::svg_export::tests::a_picture_without_pixels_is_reported` | partial -- a connector is not an element, so the board walk never offers one to the serializer and the file loses every arrow with nothing said; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-IO-025` | `POST` | An element the SVG serializer cannot express MUST be reported, never dropped in silence. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::a_kind_the_writer_cannot_express_is_reported` -- a sticky, a group and a stroke each named, with the shape beside them still written; `ambre_toile::logic::interop::svg_export::tests::a_picture_without_pixels_is_reported` | partial -- a connector is not an element, so the board walk never offers one to the serializer and the file loses every arrow with nothing said; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TOILE-IO-026` | `POST` | An exported element MUST carry its rotation. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::a_rotated_element_carries_its_angle` -- the transform a rotated element writes, and the wrapper an upright one does not | none | verified |
 | `TOILE-IO-086` | `POST` | An export MUST hold every element the board holds: one placed left of or above the origin MUST NOT fall outside the frame. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::the_frame_holds_an_element_placed_before_the_origin` -- the frame a board reaching before the origin writes, and the `0 0` one a board in the positive quadrant keeps | none | verified |
 | `TOILE-IO-087` | `POST` | An exported picture MUST leave with its pixels, never with an address no reader can resolve. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::a_picture_leaves_with_its_pixels` -- the inline data the file carries, and the address it no longer names | none | verified |
@@ -114,10 +114,11 @@ status values are normative in `ambre-spec-template.md`.
   the pixels an import produces reach the relay as ciphertext alone
   (`features/ambre-spec-toile-media.md section 1`, `TOILE-IO-013`). The showcase bundle is the one
   deliberate exit from the zero-knowledge boundary, and `TOILE-IO-096` makes it say so.
-* **Verification.** 35 `verified`, 1 `failing`, 3 `untested`, 12 `unimplemented`, 2 `qa-manual`. What
-  holds is the drop point, the reader's structure, the writer's own, and the report, each carrying a
-  test of its own. The two `qa-manual` rows are the DOM glue underneath, which no belt reaches. What
-  is loose is four rules: one the code answers with something else, three it holds in part.
+* **Verification.** 35 `verified`, 1 `partial`, 1 `failing`, 2 `untested`, 12 `unimplemented`, 2 `qa-manual`.
+  What holds is the drop point, the reader's structure, the writer's own, and the report, each
+  carrying a test of its own. The two `qa-manual` rows are the DOM glue underneath, which no belt
+  reaches. What is loose is four rules: one the code answers with something else, three it holds
+  in part.
 ---
 
 ## 2. WHAT EACH USER SEES

@@ -23,7 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-UI-064` | `OBS` | The handles MUST show the indents of the block the caret is in, whichever block that is. | this spec section 3 | `ambre_prose::view::ruler::tests::the_handles_show_the_caret_blocks_laid_out_indents` | none | verified |
 | `PROSE-UI-075` | `OBS` | The values the handles show MUST be the ones the page is laid out with, not the block's own stored keys. | this spec section 3; this spec section 5 | `ambre_prose::view::ruler::tests::the_handles_show_the_caret_blocks_laid_out_indents` | none | verified |
-| `PROSE-UI-065` | `OBS` | The scale MUST stay aligned with the page's content width, at any zoom and at any horizontal offset of the page column. | this spec section 3 | `ambre_prose::view::ruler::tests::the_scale_follows_the_column_at_any_zoom` -- the canvas coordinates | partial -- the conversion to CSS pixels and the element's placement are browser state, and no tier drives the page; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `PROSE-UI-065` | `OBS` | The scale MUST stay aligned with the page's content width, at any zoom and at any horizontal offset of the page column. | this spec section 3 | `ambre_prose::view::ruler::tests::the_scale_follows_the_column_at_any_zoom` -- the canvas coordinates | partial -- the conversion to CSS pixels and the element's placement are browser state, and no tier drives the page; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | partial |
 
 ### 1.2 Drag a handle
 
@@ -40,7 +40,7 @@ status values are normative in `ambre-spec-template.md`.
   no document write happens during the gesture.
 * **Boundary.** none: the ruler reads view state and emits one command on release. It holds no key
   and opens no socket (`PROSE-UI-002`).
-* **Verification.** 7 `verified`, 1 `untested`. Host tests hold every row on the view's state:
+* **Verification.** 7 `verified`, 1 `partial`, 0 `untested`. Host tests hold every row on the view's state:
   a drag of any length yields one command on release, and the motion writes nothing. The element
   has no command channel, so it cannot write during the gesture. `PROSE-UI-065` stays open in CSS
   pixels, a placement under a live zoom that lands in the wasm tier

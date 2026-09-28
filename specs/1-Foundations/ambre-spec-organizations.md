@@ -56,7 +56,7 @@ over an opaque blob.
 | `SRV-064` | `POST` | Every release of an escrowed key MUST be recorded. | this spec section 3 | none | unheld -- the release writes one row naming the organization, the subject, the caller and the instant, before it answers; no test reads that row back, and nothing refuses a release whose record failed to write; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 | `SRV-065` | `POST` | A release MUST require the quorum the organization declared. | audit `N1`; this spec section 3 | not built | unbuilt -- lands with the `Split-secret organization recovery` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `SRV-077` | `FRAME` | A release MUST NOT change the subject's key material. | this spec section 3, the escrow as designed; derived | none | unheld -- the route reads the sealed column and writes only the record, so a release is a read of the escrow and never a re-issue of it. Nothing asserts the column is unchanged afterwards, and a release that rewrote it would take the member's own recovery away; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
-| `SRV-063` | `FAIL` | Only an owner MUST be able to release a member's escrowed key. | this spec section 3; `SRV-062` | `ambre_server::routes::orgs::tests::integration::recovery_requires_auth` -- the caller with no session | partial -- nothing drives an administrator or an ordinary member against the route, which is the refusal that matters while the quorum is one; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SRV-063` | `FAIL` | Only an owner MUST be able to release a member's escrowed key. | this spec section 3; `SRV-062` | `ambre_server::routes::orgs::tests::integration::recovery_requires_auth` -- the caller with no session | partial -- nothing drives an administrator or an ordinary member against the route, which is the refusal that matters while the quorum is one; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | partial |
 
 * **Budget.** none. Nothing here is on a hot path: an organization is read when a person opens their
   settings, and a release is a rare deliberate act. No row of `ambre-spec-budgets.md` names one.
@@ -64,7 +64,7 @@ over an opaque blob.
   narrows what a **person** can reach, never what the **relay** can. The escrowed key is sealed
   to the organization's own public key, stored opaque and handed to an owner who decrypts it
   elsewhere (`SRV-067`). `SRV-066` keeps the relay unable to combine anything.
-* **Verification.** 5 `verified`, 1 `failing`, 4 `untested`, 1 `unimplemented`. What holds is the
+* **Verification.** 5 `verified`, 1 `partial`, 1 `failing`, 3 `untested`, 1 `unimplemented`. What holds is the
   membership: the last owner, the grant clamp, the removal clamp, and the quorum the relay cannot
   keep. What is loose is the release -- who may ask, and whether the record survives -- and the
   deposit, which no route performs.

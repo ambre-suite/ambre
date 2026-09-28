@@ -26,7 +26,7 @@ other five documents of the DOM side.
 | `CHROME-048` | `INV` | A fingerprint MUST be stable for a key. | this spec section 3; `ambre-spec-server.md` | `ambre_crypto::tests::fingerprint_is_stable_grouped_base32` -- the value is frozen for a known key, so any change to the tag, the hash variant, the truncation or the encoding fails | none | verified |
 | `CHROME-071` | `INV` | A fingerprint MUST differ for any other key. | this spec section 3; `ambre-spec-server.md` | `ambre_crypto::tests::fingerprint_distinguishes_keys` -- a one-bit change moves the string | none | verified |
 | `CHROME-072` | `OBS` | A fingerprint MUST be readable aloud. | this spec section 3 | `ambre_crypto::tests::fingerprint_is_stable_grouped_base32` -- its second assertion, the alphabet and the grouping into eight blocks of four being what a person reads over the phone | none | verified |
-| `CHROME-049` | `INV` | The fingerprint MUST be computed where the keys are: the chrome MUST NOT hash anything. | this spec section 3; `ambre-spec-zero-knowledge.md` (`ZK-001`) | crate-graph -- neither the launcher nor the shared toolkit declares the crypto crate, so the string arrives already formatted | partial -- no lint holds the next crate that would declare it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CHROME-049` | `INV` | The fingerprint MUST be computed where the keys are: the chrome MUST NOT hash anything. | this spec section 3; `ambre-spec-zero-knowledge.md` (`ZK-001`) | crate-graph -- neither the launcher nor the shared toolkit declares the crypto crate, so the string arrives already formatted | partial -- no lint holds the next crate that would declare it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | partial |
 | `CHROME-053` | `INV` | The stored key MUST survive a browser that already holds documents: adding it MUST NOT disturb them. | this spec section 3 | `ambre_logic::persistence::wasm_tests::upgrade_v1_to_v2_adds_trusted_keys_and_keeps_snapshots`; `::trusted_key_roundtrips_and_absent_is_none` -- wasm tier, a real browser database | none | verified |
 | `CHROME-054` | `OBS` | The prompt MUST state, in plain words, that without out-of-band comparison the protection reduces to trusting the server. | this spec section 3; `ambre-spec-server.md` | none | unheld -- the sentence is in the prompt beside the fingerprint and a copy action, and it is not a footnote. Nothing refuses its removal, which is the whole honesty of the step; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CHROME-077` | `OBS` | The prompt MUST offer the refusing action first. | this spec section 3, the prompt is a modal | none | unheld -- the two actions sit in that order in one view, and re-confirming a changed key is deliberately not the easy path. Nothing refuses a reordering, which is the half `CHROME-051` was carrying; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
@@ -70,10 +70,10 @@ Escape, the backdrop and the refusing action are three routes to one outcome.
 * **Boundary.** this is the boundary. The confirmed key is stored on the client and never sent, and
   the fingerprint is public by construction. The invitation carries the expected key so the wrapping
   thread can refuse. The keys never leave the Sync thread (`ambre-spec-zero-knowledge.md`).
-* **Verification.** 5 `verified`, 1 `failing`, 12 `untested`, 0 `unimplemented`. What holds is what
-  a tier reaches without a session: a type-level absence, three assertions over the fingerprint, and
-  a database upgrade. The rest is the flow itself, which needs a server, a second user and a
-  substituted key to observe. The mock relay models no invitation.
+* **Verification.** 5 `verified`, 1 `partial`, 1 `failing`, 11 `untested`, 0 `unimplemented`. What
+  holds is what a tier reaches without a session: a type-level absence, three assertions over the
+  fingerprint, and a database upgrade. The rest is the flow itself, which needs a server, a second
+  user and a substituted key to observe. The mock relay models no invitation.
 
 ---
 

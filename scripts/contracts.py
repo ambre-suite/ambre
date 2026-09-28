@@ -9,8 +9,11 @@ reads it.
 
 The rules it enforces, beyond generating the file:
 
-  * a status must be one of the six declared values;
-  * a `failing`, `untested` or `unimplemented` row must name the Story that closes
+  * a status must be one of the seven declared values;
+  * **a rule half held is `partial`, never `untested`.** The status names a
+    mechanism and a `Gap` opening on `partial -- `, so the ledger tells a row
+    whose wiring is loose from a row nothing tests;
+  * a `partial`, `failing`, `untested` or `unimplemented` row must name the Story that closes
     its gap ("lands with");
   * **that Story must resolve to an open row of `ambre-roadmap.md`.** The template
     says "that story is not `[x]` until the row's status has moved". Reading the
@@ -55,7 +58,7 @@ The rules it enforces, beyond generating the file:
     has its test. One test of the shared crate proved `KINETIC-002` while Toile
     broke it;
   * an id is never reused, and a prefix has no gap in its numbering;
-  * **every gap that can close names its Story.** A `failing`, `untested` or
+  * **every gap that can close names its Story.** A `partial`, `failing`, `untested` or
     `unimplemented` row lands with a Story of the roadmap, and that Story must
     resolve to one open row of it. A per-document ceiling on `unverified` sums
     three states nobody can compare: a rule the code breaks today reads as a
@@ -117,7 +120,7 @@ JOURNAL = "ambre-roadmap-journal.md"  # closed epics, cut there verbatim
 AUDIT = "audits/security-audit.md"  # numbered findings, cited by the rows that close them
 LOOSE = ("failing", "untested", "human-review", "qa-manual")  # built, nothing goes red
 # The three that are debt: each owes an open Story of the roadmap.
-OWES_STORY = ("failing", "untested", "unimplemented")
+OWES_STORY = ("partial", "failing", "untested", "unimplemented")
 APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose")
 
 # An id minted once, then withdrawn because the rule it carried left the
@@ -535,7 +538,7 @@ def per_application_defects(
         return [
             f"{where}: `verified` with no test in {', '.join(missing)} -- a rule "
             f"each application must hold is proven in each, so the row is "
-            f"`untested` until every declared application names its test"
+            f"`partial` until every declared application names its test"
         ]
     return []
 
@@ -604,6 +607,19 @@ def gap_defects(where: str, cell: str, mechanism: str, status: str) -> list[str]
         defects.append(
             f"{where}: `Mechanism` is {mechanism!r} and `Gap` is {cell!r} -- a row "
             f"with no mechanism and no gap claims a coverage it does not have"
+        )
+    held = mechanism.split(";")[0].partition(" -- ")[0].strip() not in BARE_TOKENS
+    half = cell.startswith("partial -- ")
+    if status == "partial" and not (half and held):
+        defects.append(
+            f"{where}: status is `partial` -- the row names the mechanism that "
+            f"holds half the rule, and `Gap` opens on 'partial -- ' to say which "
+            f"half is left"
+        )
+    if status == "untested" and half:
+        defects.append(
+            f"{where}: `untested` beside a `Gap` opening on 'partial -- ' -- a rule "
+            f"half held is `partial`, and one nothing holds opens on 'unheld -- '"
         )
     if status == "verified" and not bare:
         defects.append(
@@ -968,6 +984,11 @@ COUNT = re.compile(r"(?P<n>\d+)\s+`(?P<status>[a-z-]+)`")
 COUNT_SEP = re.compile(r",\s+(?:and\s+)?")
 
 
+def continues_bullet(line: str) -> bool:
+    """Whether a line carries on the bullet above it: indented, and not blank."""
+    return line[:1] in (" ", "\t") and bool(line.strip())
+
+
 def stated_counts(text: str) -> dict[str, int]:
     """The counts one `Verification` answer opens on, empty when it opens on none.
 
@@ -1150,13 +1171,15 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter, declared: dict[s
         "  split is the whole point: one number is a debt, the other is a plan.",
         "* **Loose** counts a shipped row that nothing would fail on: `failing`, `untested`,",
         "  `human-review`, `qa-manual`. That number is the coverage debt of the product.",
-        "* **Every gap that can close names its Story.** A `failing`, `untested` or",
+        "* **Partial** counts a shipped row a mechanism holds in part: `partial`.",
+        "* **Every gap that can close names its Story.** A `partial`, `failing`, `untested` or",
         "  `unimplemented` row lands with an open Story of `ambre-roadmap.md`, and",
         "  `contracts.py` fails when that Story does not resolve. The roadmap is the debt",
         "  register. `human-review` and `qa-manual` owe none: they are decisions, not debt.",
         "* How each layer is tested is `ambre-spec-testing.md`.",
         "",
-        f"**{sum(total.values())} rows: {shipped} shipped, of which {loose} loose. "
+        f"**{sum(total.values())} rows: {shipped} shipped, of which {total['partial']} partial "
+        f"and {loose} loose. "
         f"{total['unimplemented']} unbuilt.**",
         "",
         "| Status | " + " | ".join(a.split("-", 1)[-1] for a in APPS) + " | Total |",
@@ -1172,8 +1195,8 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter, declared: dict[s
         "",
         "> A document with no shipped row is omitted. `Loose` is the column to read.",
         "",
-        "| Document | Rows | Shipped | `verified` | Loose | Unbuilt |",
-        "| :--- | ---: | ---: | ---: | ---: | ---: |",
+        "| Document | Rows | Shipped | `verified` | Partial | Loose | Unbuilt |",
+        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for spec, counts in sorted(per_spec.items()):
         built = sum(counts[s] for s in STATUSES if s != "unimplemented")
@@ -1182,7 +1205,8 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter, declared: dict[s
         slack = sum(counts[s] for s in LOOSE)
         lines.append(
             f"| `{Path(spec).name}` | {sum(counts.values())} | {built} | "
-            f"{counts['verified']} | {slack or ''} | {counts['unimplemented'] or ''} |"
+            f"{counts['verified']} | {counts['partial'] or ''} | {slack or ''} | "
+            f"{counts['unimplemented'] or ''} |"
         )
 
     ids_by_spec: dict[str, list[str]] = defaultdict(list)
@@ -1229,6 +1253,7 @@ def main() -> int:
             continue
         counts: Counter = Counter()
         answer: tuple[int, str] | None = None
+        in_answer = False
         rel = str(path.relative_to(SPECS))
         # The table being read, and whether its header declares `Kind`. A table
         # ends where the pipes do, so a heading, a bullet or a blank line
@@ -1275,9 +1300,17 @@ def main() -> int:
             errors += loose_citation_defects(
                 line, f"{path.relative_to(SPECS)}:{lineno}", bound, schedule, closed
             )
+            # A bullet wraps onto indented lines, and a count cut at the end of
+            # the first line must still reach the parse: the continuation is
+            # joined to the text until the bullet ends.
             bullet = ANSWER.match(line)
             if bullet:
                 answer = (lineno, bullet["text"])
+                in_answer = True
+            elif in_answer and answer and continues_bullet(line):
+                answer = (answer[0], f"{answer[1]} {stripped}")
+            else:
+                in_answer = False
             if not m:
                 continue
             rid, status, rest = m["id"], m["status"], m["rest"]

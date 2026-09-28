@@ -34,9 +34,9 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 | `TOILE-FEAT-098` | `OBS` | A deck that changed under this viewer -- by a peer, a history step or a deleted frame -- MUST reach the open panel. | this spec section 3 | none | unheld -- the engine emits `DeckChanged` on each of the four paths and the view re-reads on it, and no test drives that round trip, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-086` | `OBS` | The presenter panel MUST show the active slide's rank, the deck's length and that slide's notes. | this spec section 4 | `ambre_toile::ui::presenter::tests::counter_label_is_one_based`; `ambre_toile::ui::presenter::tests::counter_label_empty_deck`; `ambre_toile::tests::chrome_ui::presenter_panel_counter_is_one_based`; `ambre_toile::tests::chrome_ui::presenter_panel_hidden_when_closed` | none | verified |
 | `TOILE-UI-089` | `OBS` | The panel MUST show the follow affordance exactly when the presenter signal names a peer. | this spec section 4 | `ambre_toile::tests::chrome_ui::presenter_follow_button_hidden_without_presenter` -- the signal naming no peer; `ambre_toile::tests::chrome_ui::presenter_follow_button_fires_with_peer` -- the signal naming one (both mount the panel with that signal set by hand, so they hold the component and never the relay that feeds it, which is `TOILE-UI-315`) | none | verified |
-| `TOILE-UI-315` | `OBS` | The presenter signal MUST name a peer only while that peer is broadcasting a slide. | this spec section 4 | `ambre_toile::logic::convergence_tests::stopping_a_broadcast_sends_a_frame_naming_no_slide` -- the frame a presenter sends when it stops, and the silence of a viewer that was not broadcasting | partial -- the shell reads the name off the whole live set, so a peer that left it or aged out of it names nobody (`PRESENCE-009`), and no test drives that relay; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-315` | `OBS` | The presenter signal MUST name a peer only while that peer is broadcasting a slide. | this spec section 4 | `ambre_toile::logic::convergence_tests::stopping_a_broadcast_sends_a_frame_naming_no_slide` -- the frame a presenter sends when it stops, and the silence of a viewer that was not broadcasting | partial -- the shell reads the name off the whole live set, so a peer that left it or aged out of it names nobody (`PRESENCE-009`), and no test drives that relay; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TOILE-UI-316` | `OBS` | The notes area MUST show a peer's edit to the note on screen. | this spec section 4 | `ambre_toile::logic::convergence_tests::a_peers_note_edit_reaches_the_slide_on_screen` -- the event a remote splice raises, and the silence of a remote change that leaves the note alone | none | verified |
-| `TOILE-UI-083` | `OBS` | Presentation mode MUST hide every editing surface. | this spec section 4 | `ambre_toile::ui::render::tests::overlay_paints_no_editing_surface_while_presenting` -- a selection and a find hit that draw nothing while the mode holds | partial -- the editing chrome stays mounted and the board stays live under the presentation, so a key that deletes still deletes, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-UI-083` | `OBS` | Presentation mode MUST hide every editing surface. | this spec section 4 | `ambre_toile::ui::render::tests::overlay_paints_no_editing_surface_while_presenting` -- a selection and a find hit that draw nothing while the mode holds | partial -- the editing chrome stays mounted and the board stays live under the presentation, so a key that deletes still deletes, section 6; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TOILE-UI-085` | `OBS` | An element the next slide drops MUST fade out over the whole transition. | this spec section 4 | `ambre_toile::ui::present::tests::the_covering_cull_holds_both_ends_of_the_glide` -- the cull a transition asks for covers the camera it starts on and the one it lands on, so neither slide's elements leave the visible set while the fade runs | none | verified |
 
 ### 1.2 Order the deck
@@ -110,10 +110,11 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 * **Boundary.** one outbound flow, and only while the presenter broadcasts: the slide index rides an
   ephemeral presence frame, which `ZK-005` seals with the `DocumentKey`. The deck and the notes are
   document data like any other, sealed by `ZK-001`.
-* **Verification.** 39 `verified`, 1 `failing`, 5 `untested`. What holds is the machinery, the best-covered
-  subject of the application: convergence, playback, follow, the solver endpoints, the camera and both panels.
-  What is loose is two rules the code holds and no test drives, the presenter relay and the board still
-  live under a presentation. One splice the panel owes itself is the failure (`TOILE-FEAT-088`).
+* **Verification.** 39 `verified`, 2 `partial`, 1 `failing`, 3 `untested`. What holds is the
+  machinery, the best-covered subject of the application: convergence, playback, follow, the solver
+  endpoints, the camera and both panels. What is loose is two rules the code holds and no test
+  drives, the presenter relay and the board still live under a presentation. One splice the panel
+  owes itself is the failure (`TOILE-FEAT-088`).
 
 ---
 

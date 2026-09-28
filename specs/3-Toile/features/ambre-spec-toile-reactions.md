@@ -27,7 +27,7 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 | `TOILE-FEAT-056` | `OBS` | Asking one deleted target for its tally MUST answer nothing, on the same terms. | this spec section 3 | `ambre_toile::logic::convergence_tests::tally_skips_a_deleted_target` -- it asks the single-target path after the delete. That path is a second guard, on the element map rather than on the visible set, and the only caller it has is that test (section 6) | none | verified |
 | `TOILE-FEAT-057` | `OBS` | The board's tallies MUST cover what is on screen, so a reacted target scrolled out of view costs nothing to derive. | this spec section 3; `ambre-spec-budgets.md section 1` | none | unheld -- the whole-board derivation routes each entry by its target and drops the ones the cull left out, so an off-screen target is skipped exactly as a deleted one is, and no test distinguishes the two; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-FEAT-058` | `INV` | The chips of one target MUST keep the same order from one read to the next, so a count does not shuffle under the reader. | this spec section 3 | none | unheld -- the order is a sorted map flushed into a vector, and no test ever puts two distinct emoji on one target: every reaction test uses a single glyph; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TOILE-FEAT-059` | `OBS` | Votes on a target MUST fold into one signed total and one voter count. | this spec section 3 | `ambre_toile::logic::convergence_tests::same_user_two_devices_is_one_entry` -- it reads the voter count for a single positive weight | partial -- nothing sums two weights, and nothing sums weights of opposite signs, which is the only case the signed total exists for; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TOILE-FEAT-059` | `OBS` | Votes on a target MUST fold into one signed total and one voter count. | this spec section 3 | `ambre_toile::logic::convergence_tests::same_user_two_devices_is_one_entry` -- it reads the voter count for a single positive weight | partial -- nothing sums two weights, and nothing sums weights of opposite signs, which is the only case the signed total exists for; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TOILE-UI-080` | `OBS` | A badge MUST keep one screen size through the whole zoom range. | this spec section 4 | none | unheld -- the chip metrics are logical pixels and only the element box is mapped to screen, so the size is fixed by construction, but no test paints the same tally at two zooms; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-UI-299` | `OBS` | A badge row MUST stay legible over whatever it sits on, in edit mode and in presentation alike. | this spec section 4 | none | unheld -- the row is painted after the content and after the presence overlay, and unconditionally on mode, but the order is two call sites and nothing holds it; lands with the `The Toile belts` Story (`ambre-roadmap.md` E9) | untested |
 | `TOILE-FEAT-022` | `OBS` | A user MUST be able to cast a vote. | this spec section 3 | not built | unbuilt -- lands with the `The facilitation layer` Story (`ambre-roadmap.md` post-V1) | unimplemented |
@@ -81,10 +81,11 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
   pass per element. It costs what the board has reacted to and not what it holds.
 * **Boundary.** none of its own: a reaction is written to the document, and `ZK-001` seals every
   payload before it leaves the client. The emoji is document data like any other.
-* **Verification.** 21 `verified`, 8 `untested`, 6 `unimplemented`. What holds is the convergence:
-  two devices, two users and a deleted target. Both refusals answer an error a test reads: a
-  deleted target, and a reaction that will not encode. What is loose is the painting: a chip size
-  nothing measures, a vote chip nothing can build. An emoji order is loose on the same terms.
+* **Verification.** 21 `verified`, 1 `partial`, 7 `untested`, 6 `unimplemented`. What holds is the
+  convergence: two devices, two users and a deleted target. Both refusals answer an error a test
+  reads: a deleted target, and a reaction that will not encode. What is loose is the painting: a
+  chip size nothing measures, a vote chip nothing can build. An emoji order is loose on the same
+  terms.
 
 ---
 

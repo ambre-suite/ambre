@@ -44,7 +44,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 |---|---|---|---|---|---|---|
 | `SYNC-016` | `POST` | The role carried on the ready signal MUST be this client's own row in the members answer. | this spec section 3; `ambre-spec-message-bus.md`, `BUS-008` | `ambre_sync::sharing::tests::own_role_reads_our_own_row` -- a peer holding owner does not raise ours; `::own_role_reads_writable_roles` -- the writable side; `ambre_sync::updates::tests::document_ready_carries_the_role_on_both_paths` -- both open paths carry it | none | verified |
 | `SYNC-017` | `FAIL` | A role that cannot be resolved MUST default to the read-only one, never to a writable one. | this spec section 3 | `ambre_sync::sharing::tests::own_role_falls_back_to_viewer_when_unresolvable` -- both unresolvable cases, no session identity yet and no row for us in the answer, answer the viewer role | none | verified |
-| `SYNC-034` | `POST` | A recipient MUST unwrap against the exchange key of whoever wrapped, never against its own. | this spec section 3 | `ambre_crypto::tests::ecdh_symmetric`; `::kek_binds_peer_identity` -- the primitive under the rule | partial -- the choice of which key to use is a branch in the client with a fallback for an older relay, and no test takes either side of it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
+| `SYNC-034` | `POST` | A recipient MUST unwrap against the exchange key of whoever wrapped, never against its own. | this spec section 3 | `ambre_crypto::tests::ecdh_symmetric`; `::kek_binds_peer_identity` -- the primitive under the rule | partial -- the choice of which key to use is a branch in the client with a fallback for an older relay, and no test takes either side of it; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | partial |
 | `SYNC-040` | `FAIL` | A transient failure of the members request MUST NOT be read as a document that does not exist. | this spec section 3 | none | fails -- a network failure and a genuine absence take the same branch, so the open generates a throwaway key, marks the document local and never hydrates, section 6; lands with the `A failed members request is not an absent document` Story (`ambre-roadmap.md` E7) | failing |
 | `SYNC-012` | `FRAME` | A failed unwrap of a document key MUST NOT be replaced by a freshly generated one. | derived (audit `H3`) | none | unheld -- the unwrap failure now stops the open and surfaces an authentication error, and no test drives an unwrappable key row to see it: the open path runs only in the browser. A generated key here forks the document in silence, every edit after it unreadable to every other member; lands with the `The Sync and relay belts` Story (`ambre-roadmap.md` E9) | untested |
 
@@ -63,10 +63,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 12 `verified`, 2 `failing`, 3 `untested`, 0 `unimplemented`. What holds is every
-  pure transform, extracted out of the browser and covered. Those are the wrap, the identity pair
-  it binds, the refusal of a weak key, the pin comparison, the directory build and the role. What
-  is loose is the branches that only run against a live relay.
+* **Verification.** 12 `verified`, 1 `partial`, 2 `failing`, 2 `untested`, 0 `unimplemented`. What
+  holds is every pure transform, extracted out of the browser and covered. Those are the wrap, the
+  identity pair it binds, the refusal of a weak key, the pin comparison, the directory build and the
+  role. What is loose is the branches that only run against a live relay.
 ---
 
 ## 2. WHAT EACH USER SEES

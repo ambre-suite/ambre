@@ -38,14 +38,14 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-144` | `POST` | A scroll MUST request every cell the user can see. | this spec section 2 | none | fails -- on the column axis the window is sized from the uniform metric, and a resized column can be a third of it, so a screen of narrow columns runs past the last one requested. Those columns are never asked for, and the same window evicts them if an earlier one had brought them in (section 5). The row axis survives by margin, not by rule; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | failing |
 | `TRAME-UI-025` | `POST` | At most one viewport request MUST leave the UI thread per frame. | this spec section 2 | `ambre_trame::ui::view::tests::the_viewport_queue_coalesces_to_one_request` -- every request source collapses to one drain; `::a_dropped_request_is_re_offered_not_doubled` -- a dropped request is re-offered, never doubled | none | verified |
 | `TRAME-UI-145` | `FRAME` | A scroll MUST NOT change which cell is active or which range is selected. | this spec section 2 | none | unheld -- `scroll_by` writes the origin and reads nothing else, but no test drives it: `scroll_by`, `scroll_viewport_cmd` and `accepted_version` are named by no test in the crate; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-175` | `POST` | A selection or a fill handle held past an edge of the cells MUST scroll the grid towards it, and the range MUST reach the nearest edge cell. | this spec section 3 | `ambre_trame::ui::grid::tests::kinetic::a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell` | partial -- the geometry is tested; the per-frame step of the view is not; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-175` | `POST` | A selection or a fill handle held past an edge of the cells MUST scroll the grid towards it, and the range MUST reach the nearest edge cell. | this spec section 3 | `ambre_trame::ui::grid::tests::kinetic::a_drag_held_at_an_edge_scrolls_and_keeps_its_edge_cell` | partial -- the geometry is tested; the per-frame step of the view is not; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | partial |
 
 ### 1.3 The wheel turns
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-147` | `POST` | A wheel notch, a line delta or a page delta MUST be applied once and in full, keeping the sub-cell remainder. | this spec section 3 | none | unheld -- `handle_wheel` classifies the sample and feeds the accumulator, and no test drives the wheel path at all (section 5); lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
-| `TRAME-UI-026` | `FRAME` | A single wheel notch MUST NOT start a momentum coast. | this spec section 3 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does` | partial -- the model is tested (`KINETIC-009`); `handle_wheel` passing the line and page modes to it is not; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
+| `TRAME-UI-026` | `FRAME` | A single wheel notch MUST NOT start a momentum coast. | this spec section 3 | `ambre_draw::kinetic::tests::a_glide_that_pauses_carries_on_and_a_notch_never_does` | partial -- the model is tested (`KINETIC-009`); `handle_wheel` passing the line and page modes to it is not; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | partial |
 | `TRAME-UI-146` | `FRAME` | The wheel held with `Ctrl` MUST NOT scroll the grid. | this spec section 3 | none | unheld -- `handle_wheel` returns before reading the delta, which is also what hands the gesture to the browser, and no test drives it; lands with the `The Trame belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 An answer arrives
@@ -68,10 +68,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the viewport is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What crosses is a request and a display slice, never
   document data (`TRAME-UI-001`).
-* **Verification.** 6 `verified`, 1 `failing`, 11 `untested`, 2 `unimplemented`. What holds is what is
-  drawn or hit-tested, and the one-slot queue that caps a frame at one request (`TRAME-UI-025`).
-  What is loose is every state machine: the window, the version guard, the eviction, the wheel, the
-  metric adoption. The one failure is the narrow-column window (`TRAME-UI-144`).
+* **Verification.** 6 `verified`, 2 `partial`, 1 `failing`, 9 `untested`, 2 `unimplemented`. What
+  holds is what is drawn or hit-tested, and the one-slot queue that caps a frame at one request
+  (`TRAME-UI-025`). What is loose is every state machine: the window, the version guard, the
+  eviction, the wheel, the metric adoption. The one failure is the narrow-column window
+  (`TRAME-UI-144`).
 
 ---
 

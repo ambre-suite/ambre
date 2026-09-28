@@ -55,9 +55,10 @@ class Vocabulary(unittest.TestCase):
 
     def test_loose_covers_every_built_status_but_verified(self):
         """The summary sums over `LOOSE`, so a status missing from it is a
-        silent under-count -- which is precisely what `unverified` was."""
+        silent under-count -- which is precisely what `unverified` was.
+        `partial` is counted on its own: a mechanism holds part of it."""
         self.assertEqual(
-            set(template_vocabulary.STATUSES) - {"verified", "unimplemented"},
+            set(template_vocabulary.STATUSES) - {"verified", "partial", "unimplemented"},
             set(contracts.LOOSE),
         )
 
@@ -264,8 +265,26 @@ class Gap(unittest.TestCase):
             with self.subTest(opener=opener):
                 self.assertEqual([], self.defects(opener))
         for opener in contracts.CARRIED_GAP_OPENERS:
+            status = "partial" if opener == "partial -- " else "untested"
             with self.subTest(opener=opener):
-                self.assertEqual([], self.defects(f"{opener}the belt is not written"))
+                self.assertEqual(
+                    [], self.defects(f"{opener}the belt is not written", status=status)
+                )
+
+    def test_a_rule_half_held_is_partial_never_untested(self):
+        """`untested` beside a half-held rule reads as a row nothing tests, and
+        the ledger could not tell the two apart."""
+        self.assertIn("is `partial`", self.defects("partial -- the wiring is loose")[0])
+        self.assertEqual([], self.defects("partial -- the wiring is loose", status="partial"))
+
+    def test_partial_names_its_mechanism_and_the_half_left(self):
+        self.assertIn(
+            "names the mechanism",
+            self.defects("partial -- half", mechanism="none", status="partial")[0],
+        )
+        self.assertIn(
+            "names the mechanism", self.defects("unheld -- nothing", status="partial")[0]
+        )
 
     def test_no_mechanism_and_no_gap_is_a_coverage_the_row_does_not_have(self):
         self.assertIn("claims a coverage", self.defects("none", mechanism="none")[0])
@@ -368,6 +387,16 @@ class Counts(unittest.TestCase):
         self.assertEqual(
             {"verified": 4},
             contracts.stated_counts("4 `verified`. Two of the four are held by 1 belt."),
+        )
+
+    def test_a_count_cut_at_the_end_of_a_line_is_still_read(self):
+        """The bullet wraps, and the gate once read its first line alone."""
+        self.assertTrue(contracts.continues_bullet("  `untested`."))
+        self.assertFalse(contracts.continues_bullet("   "))
+        self.assertFalse(contracts.continues_bullet("* next"))
+        self.assertEqual(
+            {"verified": 1, "untested": 1},
+            contracts.stated_counts("1 `verified`, 1 `untested`."),
         )
 
     def test_an_answer_opening_on_no_count_is_refused(self):

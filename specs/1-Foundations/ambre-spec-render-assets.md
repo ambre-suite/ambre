@@ -44,7 +44,7 @@ fetched, and the strings that were shaped without it are dropped.
 |---|---|---|---|---|---|---|
 | `CANVAS-006` | `POST` | A script-specific font MUST be fetched only when text needing it appears. | this spec section 2 | `ambre_canvas::fonts::tests::latin_and_symbols_never_trigger` -- every codepoint the base faces cover must classify to no lazy font, so a fetch armed for ordinary text fails | none | verified |
 | `CANVAS-052` | `POST` | A script-specific font MUST be fetched once. | this spec section 2 | `ambre_canvas::fonts::tests::observe_latches_each_script_once` -- it reads the request count back after repeated observations of the same script and asserts it stays at one | none | verified |
-| `CANVAS-053` | `FRAME` | Fetching a font MUST NOT block the frame that needed it. | this spec section 2; `ambre-spec-frame.md` | `ambre_canvas::fonts::tests::drain_is_empty_without_fetches` -- the empty case | partial -- the fetch is armed from the shaping path and the face is registered on a later frame, which is the whole reason the cache is cleared when one arrives, and nothing drives an arrival; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
+| `CANVAS-053` | `FRAME` | Fetching a font MUST NOT block the frame that needed it. | this spec section 2; `ambre-spec-frame.md` | `ambre_canvas::fonts::tests::drain_is_empty_without_fetches` -- the empty case | partial -- the fetch is armed from the shaping path and the face is registered on a later frame, which is the whole reason the cache is cleared when one arrives, and nothing drives an arrival; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | partial |
 | `CANVAS-068` | `POST` | A face fetched after startup MUST travel to the other threads by the same path a base face travels. | this spec section 2 | `ambre_canvas::fonts::tests::a_drained_face_comes_back_for_the_other_threads` -- the drain hands the registered bytes back; `ambre_logic::dispatch::tests::every_prose_document_takes_the_faces_whenever_it_was_opened` -- a later delivery reaches both documents; qa-manual -- the send site, one `try_send` on the frame loop of `ambre-app/src/host/frame.rs` | none | verified |
 
 ### 1.3 Overflow an atlas or a cache
@@ -64,7 +64,7 @@ keep the allocation where it is.
 * **Boundary.** the font fetch is the one network path this layer opens, same-origin by
   `CANVAS-018` and the single exception `UI-THREAD-004` names to the UI thread's ban. This layer
   holds no key and reaches no relay.
-* **Verification.** 6 `verified`, 8 `untested`, 3 `unimplemented`. What holds is what a pure
+* **Verification.** 6 `verified`, 1 `partial`, 7 `untested`, 3 `unimplemented`. What holds is what a pure
   function of a string decides, and the faces a sealed context refuses to find. Every gap is
   GPU-resident state a test cannot read back (`ambre-spec-testing.md section 8`).
 
