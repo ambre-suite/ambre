@@ -57,7 +57,7 @@
 | sync | the thread owning the network and the crypto | | `1-Foundations/ambre-spec-sync.md` |
 | relay | the server, which carries traffic it cannot read | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | boundary | the line between what the relay learns and what it never learns | | `1-Foundations/ambre-spec-zero-knowledge.md` |
-| channel | a Murmure conversation: public, private or direct | | `Todo/ambre-murmure.md` |
+| channel | a Murmure conversation: public, private or direct | | `5-Murmure/features/ambre-spec-murmure-channels.md` |
 | topic | a publish-subscribe address of the relay fan-out | | `1-Foundations/ambre-spec-broadcast.md` |
 | forum | a Murmure channel of titled, tagged posts, each with its thread | | `5-Murmure/features/ambre-spec-murmure-forums.md` |
 | space | a group of Murmure channels, itself a document | | `5-Murmure/ambre-spec-murmure-schema.md` |

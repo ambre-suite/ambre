@@ -18,7 +18,7 @@
 
 | Operation | Target (P95 mobile) | Ceiling | Thread | Method |
 |-----------|-------------------|---------|--------|---------|
-| channel send/receive UI <-> Logic (`ambre_bus::conduit`, shared heap, by move) | < 1 us | -- | UI <-> Logic | benchmark |
+| queue send/receive UI <-> Logic (`ambre_bus::conduit`, shared heap, by move) | < 1 us | -- | UI <-> Logic | benchmark |
 | Logic <-> Sync `postMessage` (postcard encode + structured clone / transfer) | < 1 ms | -- | Main <-> Sync | benchmark |
 | Scroll round-trip UI -> Logic -> UI (P1) | < 2 ms | -- | UI <-> Logic | benchmark e2e |
 | Outbound encryption 1 KB (compress+AEAD+HMAC+Ed25519) | < 200 us | < 500 us | Sync | criterion |
@@ -61,7 +61,7 @@
 | Prose pagination, partial reflow of 10 pages or fewer | < 3 ms | -- | Logic | the early exit converges inside the frame; an edit whose reflow does not converge is charged to the row above -- **none exists**, and no code either |
 | Prose cold shape, 10 dirty blocks | < 5 ms | -- | Logic | a glyph-level pass, an order of magnitude over placement -- **none exists**, and no code either |
 | Prose cold shape at document open, about 300 blocks | < 150 ms | -- | Logic | one-shot, off the interactive path -- **none exists**, and no code either |
-| Prose page-layout handoff, 100 pages | < 1 ms | -- | Logic -> UI | a typed value by move on an `ambre_bus::conduit` channel, no serialization -- **none exists**, and no code either |
+| Prose page-layout handoff, 100 pages | < 1 ms | -- | Logic -> UI | a typed value by move on an `ambre_bus::conduit` queue, no serialization -- **none exists**, and no code either |
 | Prose `export_snapshot()`, 100 pages | < 10 ms | -- | Logic | **none exists**, and no code either |
 | Prose table-of-contents build, 50 headings | < 1 ms | -- | Logic | **none exists**, and no code either |
 | Prose list ordinals, 100 items | < 500 us | -- | Logic | derived at read time, never stored (`PROSE-FEAT-002`) -- **none exists**, and no code either |
@@ -112,7 +112,7 @@
 | Phase | Budget | Thread | Notes |
 |:---|:---|:---|:---|
 | Keypress -> `beforeinput` -> dispatch | ~0.1 ms | UI | Negligible |
-| `AppView::update` (drain the `UiEvent` channel) | < 0.1 ms | UI | Inbound IPC, dirty flag mutations |
+| `AppView::update` (drain the `UiEvent` queue) | < 0.1 ms | UI | Inbound IPC, dirty flag mutations |
 | Content hit-test and input dispatch (in view) | < 0.2 ms | UI | `AppView::handle_input`, pointer and keyboard on the canvas area |
 | View state update | < 0.5 ms | UI | Internal state mutations, transition logic |
 | `LoroText::insert` | < 0.1 ms | Logic | Sequential insert, off the render frame |
@@ -131,7 +131,7 @@
 | `TextCache`, 100 distinct layouts, cold cache | < 1 ms | UI | Not a frame phase: the shape budget of the cache itself, off the critical path once warm |
 
 * **The scroll round-trip holds because the frame is a fifth of it.** Section 1 budgets the P1 scroll
-  round-trip at < 15 ms. Rendering consumes < 5 ms. Channel transport is negligible: < 1 us per
+  round-trip at < 15 ms. Rendering consumes < 5 ms. Queue transport is negligible: < 1 us per
   hop, no serialization, no boundary memcpy. Most of the budget is left to the Logic thread.
 * **Threats to the frame, and the countermeasure each takes.**
   1. **Parley has no incremental layout** -> atomicity at the **paragraph**, one `Layout` per

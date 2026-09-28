@@ -24,7 +24,7 @@ prefix is `BUS`.
 |---|---|---|---|---|---|---|
 | `BUS-002` | `INV` | A document command MUST reach the Logic thread as a variant of a closed sum, never as an opaque payload. | this spec section 2 | exhaustive-match -- `AppCommand` and `AppEvent` are closed enums, so a missing document type fails the exhaustive `match` in `ambre_logic::data::handle_app_command` | none | verified |
 | `BUS-006` | `INV` | The document registry MUST stay flat: an embedded child MUST be addressed by its own identity, in one lookup. | this spec section 2; `ambre-spec-toile-embeds.md`, `TOILE-084` | `ambre_logic::dispatch::tests::an_embedded_child_is_gated_by_its_own_role_not_the_boards`; `::owning_the_board_grants_nothing_on_a_document_embedded_in_it` -- each seeds a parent and a child side by side and asserts the child's role decides, which only holds if the child is its own entry | none | verified |
-| `BUS-001` | `INV` | A message on the UI to Logic path MUST travel as a typed Rust value by move: nothing on that path MUST be encoded. | this spec section 2; `ambre-spec-architecture.md section 2` | none | unheld -- the path is a `conduit` channel over the shared heap and `LogicCommand` derives no `Serialize`, so an encoder has nothing to call today. Nothing refuses the derive that would add one; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `BUS-001` | `INV` | A message on the UI to Logic path MUST travel as a typed Rust value by move: nothing on that path MUST be encoded. | this spec section 2; `ambre-spec-architecture.md section 2` | none | unheld -- the path is a `conduit` queue over the shared heap and `LogicCommand` derives no `Serialize`, so an encoder has nothing to call today. Nothing refuses the derive that would add one; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 | `BUS-027` | `INV` | A Murmure command MUST reach the Logic thread as a variant of the content plane, addressed to its channel. | this spec section 2; `BUS-002` | not built | unbuilt -- lands with the `ARCH P7` -- the Murmure engine core Story (`ambre-roadmap.md` E5) | unimplemented |
 | `BUS-028` | `INV` | No envelope MUST carry a channel message as opaque bytes. | this spec section 2 | not built | unbuilt -- lands with the `ARCH P7` -- the Murmure engine core Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -42,7 +42,7 @@ is what a full queue means.
 | `BUS-022` | `POST` | A view MUST stop accepting input while its outbox is busy. | this spec section 2; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), one early return at the head of each `handle_input`, reached by typing into a document whose Logic thread is saturated. The level it reads is `BUS-016` | none | qa-manual |
 | `BUS-024` | `POST` | A lossy command the queue dropped MUST be offered again on a later frame. | this spec section 2; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), each frame hook putting the dropped request back: Trame into `pending_viewport`, Toile into the same slot and into the set of media already asked for, reached by scrolling a document whose Logic thread is saturated | none | qa-manual |
 | `BUS-018` | `FRAME` | A command that failed to send MUST NOT be reflected in the view state. | this spec section 2; derived | qa-manual -- DOM glue held by using the application (`1-Foundations/ambre-spec-testing.md section 2`), one branch at each Trame commit path, read back off the cell after a refused send. The outcome it branches on is `BUS-011` or `BUS-023` | none | qa-manual |
-| `BUS-023` | `FRAME` | A command that changes the document MUST NOT travel on the lossy class. | this spec section 2; derived | `ambre_bus::lossy::tests::a_command_that_changes_the_document_never_reaches_the_channel` -- one insert, one move and one resize, and the channel stays empty; `::a_command_of_another_plane_is_refused_with_the_mutations`; `::an_open_channel_takes_a_request_that_changes_nothing` -- the other side of the gate | none | verified |
+| `BUS-023` | `FRAME` | A command that changes the document MUST NOT travel on the lossy class. | this spec section 2; derived | `ambre_bus::lossy::tests::a_command_that_changes_the_document_never_reaches_the_channel` -- one insert, one move and one resize, and the queue stays empty; `::a_command_of_another_plane_is_refused_with_the_mutations`; `::an_open_channel_takes_a_request_that_changes_nothing` -- the other side of the gate | none | verified |
 
 ### 1.3 Logic routes a content command
 
@@ -51,7 +51,7 @@ is what a full queue means.
 | `BUS-007` | `FAIL` | The Logic dispatcher MUST drop a mutating command when the caller's role on that document is not writable. | `ambre-spec-membership.md`, `SYNC-016` | `ambre_logic::dispatch::tests::viewer_edit_is_dropped_and_emits_no_update` -- no UI event and no outbound update; `::viewer_read_only_command_still_passes`; `::editor_edit_passes_through` -- the two sides the gate must not confuse | none | verified |
 | `BUS-005` | `FAIL` | A command for a document absent from the registry MUST be dropped, never synthesised. | this spec section 2 | `ambre_logic::dispatch::tests::a_command_for_an_unopened_document_is_dropped` -- no update reaches Sync and no event reaches the UI; `::app_command_on_unknown_doc_is_dropped` -- the same for a read-only command | partial -- neither test asserts that the registry stayed empty, so the synthesis half is held by the drop alone: an arm that inserts an entry and then drops the command leaves both assertions green; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | partial |
 | `BUS-008` | `POST` | The role the relay reports MUST supersede the role a freshly opened document assumed. | this spec section 2 | `ambre_logic::dispatch::tests::document_ready_supersedes_the_optimistic_owner_role` -- it reads the optimistic `Owner` off the slot, feeds a `DocumentReady` carrying `Viewer`, and asserts a following edit no longer reaches Sync | none | verified |
-| `BUS-010` | `FRAME` | A command handler MUST NOT send on a channel: it returns an outcome and the dispatcher fans it out. | this spec section 2 | none | unheld -- each engine holds it over its own handlers (`TOILE-089`, the Prose row being unbuilt). Nothing holds it for an engine added later: a handler that captures a sender compiles; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
+| `BUS-010` | `FRAME` | A command handler MUST NOT send on a queue: it returns an outcome and the dispatcher fans it out. | this spec section 2 | none | unheld -- each engine holds it over its own handlers (`TOILE-089`, the Prose row being unbuilt). Nothing holds it for an engine added later: a handler that captures a sender compiles; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 
 ### 1.4 A service request crosses the hops
 
@@ -71,18 +71,18 @@ is what a full queue means.
 |---|---|---|---|---|---|---|
 | `BUS-003` | `POST` | The Logic to Sync hop MUST return every field it was given: the encode and the decode MUST agree. | this spec section 2 | `ambre_bus::host::sync_command_roundtrips_through_postcard`; `::logic_event_roundtrips_through_postcard` -- the `Debug` rendering is compared before and after | partial -- they cover 5 of the 12 `SyncCommand` variants and 4 of the 19 `LogicEvent` variants, so a variant added tomorrow is covered by nothing; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | partial |
 | `BUS-025` | `POST` | An event from the Sync worker MUST reach the Logic thread in arrival order. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-021` | `ambre_bus::conduit::tests::a_backlog_holds_past_a_full_channel_and_keeps_the_order`; `::a_backlog_never_lets_a_new_value_overtake_a_held_one` | none | verified |
-| `BUS-026` | `POST` | An event from the Sync worker MUST NOT be dropped on a full channel. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-021` | `ambre_bus::conduit::tests::a_backlog_holds_past_a_full_channel_and_keeps_the_order` | none | verified |
+| `BUS-026` | `POST` | An event from the Sync worker MUST NOT be dropped on a full queue. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-021` | `ambre_bus::conduit::tests::a_backlog_holds_past_a_full_channel_and_keeps_the_order` | none | verified |
 | `BUS-021` | `FRAME` | The worker hop MUST NOT decode an application payload: a CRDT delta and a channel message MUST cross it as opaque bytes. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-002` | none | unheld -- the envelope types carry `Vec<u8>` and the round trip pins that the bytes come back identical, which says the codec does not touch them, and nothing refuses the arm that would decode one before forwarding; lands with the `The thread-separation belts` Story (`ambre-roadmap.md` E9) | untested |
 
-* **Budget.** two rows of `ambre-spec-budgets.md section 1`: the channel send and receive at
+* **Budget.** two rows of `ambre-spec-budgets.md section 1`: the queue send and receive at
   < 1 us, and the Logic to Sync `postMessage` hop at < 1 ms. Neither is measured.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 13 `verified`, 2 `partial`, 7 `untested`, 4 `qa-manual`. What holds is the Logic
-  dispatcher, driven on host through an unknown document, a viewer's edit and a child's role. A
-  service round trip, a late response, the lossy gate and the backlog behind a full queue are
-  driven too. Loose is the envelope discipline the other two threads owe.
+* **Verification.** 13 `verified`, 2 `partial`, 7 `untested`, 4 `qa-manual`, 2 `unimplemented`. What
+  holds is the Logic dispatcher, driven on host through an unknown document, a viewer's edit and a
+  child's role. A service round trip, a late response, the lossy gate and the backlog behind a full
+  queue are driven too. Loose is the envelope discipline the other two threads owe.
 
   Five paths are loose because nobody drives them. Three sit in the codec and dispatcher: an encode
   no test names, a stale version, a handler capturing a sender. The fourth is the registry entry no
@@ -174,7 +174,7 @@ not leave (`BUS-018`), and re-offers a dropped request (`BUS-024`).
 
 **The Sync events are lossless too.** A delta or a service answer arrives through the worker's
 `postMessage` handler on the Main thread, which may not wait for room (`ambre-spec-architecture.md`,
-`ARCH-021`). What the channel to the Logic thread refuses waits in a backlog, in arrival order
+`ARCH-021`). What the queue to the Logic thread refuses waits in a backlog, in arrival order
 (`BUS-025`, `BUS-026`). The relay offers it again each frame before anything newer. It has no bound:
 the network, not the user, sets its pace, and no busy signal could slow it.
 
