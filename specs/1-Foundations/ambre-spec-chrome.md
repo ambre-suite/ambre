@@ -30,6 +30,8 @@ the DOM side produces.
 | `CHROME-009` | `INV` | The content surface MUST be a cell of the chrome layout, so it is sized by the layout and never by the viewport. | this spec section 2 | `ambre_chrome::chrome_ui::app_shell_owns_the_named_canvas_cell` -- wasm tier, real `document` | none | verified |
 | `CHROME-004` | `INV` | Every popover and floating bar MUST take its placement, flip and keyboard model from one shell. | this spec section 2 | not built | unbuilt -- lands with the `One floating-menu shell` Story (`ambre-roadmap.md` E8). Four shells exist: the shared menu, Trame's filter popover, Trame's find panel and Toile's selection toolbar | unimplemented |
 | `CHROME-008` | `INV` | The command palette MUST search every command the active application declares, not the subset some menu happens to show. | this spec section 2; `ambre-spec-commands.md` | `ambre_chrome::palette::tests::an_empty_query_lists_every_declared_command`; `::a_query_matches_any_case_and_any_position`; `::a_query_that_answers_nothing_lists_nothing`; `::rows_keep_the_declaration_order`; `ambre_chrome::chrome_ui::palette_lists_every_declared_command` -- the DOM belt, all five over a table the test declares | partial -- the filter is held and the feed is not: `crates/ambre-app/src/shell/app_root.rs` passes the application's whole table today, and passing a menu's subset instead would leave every one of those assertions green; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | partial |
+| `CHROME-093` | `INV` | The palette MUST list the entries an application supplies before the commands it declares. | this spec section 2 | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CHROME-094` | `INV` | A palette query that starts with `>` MUST list the commands alone. | this spec section 2; `CHROME-008` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 A floating menu is placed
 
@@ -77,10 +79,10 @@ the DOM side produces.
 * **Boundary.** none: `UI-THREAD-004` and `UI-THREAD-049` ban a network, crypto and persistence
   path on this thread, and the toolkit adds no exception. Its manifest names no transport and no
   crypto crate, which is the crate-graph fact `CHROME-001` and `CHROME-002` are read off.
-* **Verification.** 9 `verified`, 1 `partial`, 10 `untested`, 1 `unimplemented`. What holds is a crate-graph
-  fact, placement arithmetic, or a component mounted in a headless document. Each asserts a first
-  render. What is loose is everything after that mount. A control writes its own state, a chip
-  re-renders live, a resume is missing, and a signal is left open.
+* **Verification.** 9 `verified`, 1 `partial`, 10 `untested`, 3 `unimplemented`. What holds is a
+  crate-graph fact, placement arithmetic, or a component mounted in a headless document. Each
+  asserts a first render. What is loose is everything after that mount. A control writes its own
+  state, a chip re-renders live, a resume is missing, and a signal is left open.
 ---
 
 ## 2. MODEL
@@ -96,12 +98,14 @@ whatever it is handed and names no application.
 | header | the title, the sync state, the share action, the account | no |
 | command bar | the contextual toolbar the application builds from its commands | no |
 | formula bar | a reference box and a content input | yes |
-| content | the canvas element, plus the input pipe of `ambre-spec-text-input.md` | no |
+| content | one canvas element, or several side by side, plus the input pipe of `ambre-spec-text-input.md` | no |
 | tab strip | a band of document tabs, such as a spreadsheet's sheets | yes |
-| status bar | the caption, the counters, the zoom chip and the frame chip | no |
+| status bar | the caption, the counters, the zoom chip and the frame chip | yes |
 
 The content row owns the canvas element, so the drawing buffer is sized to a grid cell rather than
-to the window (`CHROME-009`). An absent optional row collapses and costs no height.
+to the window (`CHROME-009`). A view that shows several lists, such as a channel and a thread in
+Murmure, puts one canvas in each cell of the row. Each canvas is sized by its own cell. An absent
+optional row collapses and costs no height.
 
 **What the toolkit ships.**
 
@@ -115,7 +119,7 @@ to the window (`CHROME-009`). An absent optional row collapses and costs no heig
 | the formatting controls | a toggle, a size select, a family picker, a colour popover, and a debouncer for a drag | built |
 | the keybinding half | a key event to a modelled chord, for a keymap to resolve | built |
 | the shortcut chip | one chord, rendered the same way in a menu, a tooltip and a palette | built |
-| the command palette | one overlay listing every command the application declares, filtered by a substring of the label | built |
+| the command palette | one overlay listing every command the application declares, filtered by a substring of the label | built; the entries of an application and the `>` prefix are design |
 | the sidebar and the panels | a resizable region beside the content | design |
 
 **The command path, and the one direction it runs.** A trigger names a command, and the command
@@ -180,6 +184,11 @@ that mounts them is `crates/ambre-app/src/shell/app_root.rs`, and the belt is
 in both applications. It lists the whole table of the booted application, and a substring of the
 label narrows the list (`CHROME-008`). The palette is why every command carries a label
 (`ambre-spec-commands.md`, `UI-THREAD-019`).
+
+**An application may add entries to the palette.** Murmure lists its channels and its direct
+messages there. The entries of the application come first, and the commands follow
+(`CHROME-093`). A query that starts with `>` drops the entries and lists the commands alone
+(`CHROME-094`). An application that adds no entry sees no change.
 
 ---
 

@@ -21,6 +21,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-063` | `INV` | A final snapshot MUST be shallow: it MUST hold no text deleted before the finalization. | this spec section 3 | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-222` | `INV` | An active segment MUST NOT hold more deltas past its latest snapshot than the budget register allows. | this spec section 3; `ambre-spec-budgets.md section 6`; `SRV-038` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-239` | `OBS` | A dropped snapshot MUST be shown to the members of the channel, with its author and its reporter. | this spec section 3; `AUTHOR-023` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-435` | `INV` | Every Murmure document MUST take the delta order and the quarantine of the document plane. | this spec section 3; `ambre-spec-delta-order.md` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Close the active segment
 
@@ -64,12 +65,18 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-076` | `POST` | A re-finalization MUST remove from the amendments document the entries it folded in. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-077` | `FRAME` | A re-finalization MUST NOT drop an amendment written after the fold began. | this spec section 3 | not built | unbuilt -- lands with the `Message edits and deletes` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.7 Fill a gap in a final segment
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-436` | `FAIL` | Given a gap in the deltas of a final segment, the client MUST load its final snapshot, never wait for the purged deltas. | this spec section 3; `SYNC-031`; `SRV-118` | not built | unbuilt -- lands with the `Channel segments and finalization` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** the grace period, the lease and the erasure delay are rows
   of `ambre-spec-budgets.md section 8`. The segment size row of section 6 bounds every snapshot here,
   and the row beside it bounds the deltas a cold open replays.
 * **Boundary.** a final snapshot is sealed like any snapshot (`ZK-001`). The relay learns the state
   of each segment and its finalization time (`ZK-015`).
-* **Verification.** 21 `unimplemented`: no segment exists in the code.
+* **Verification.** 23 `unimplemented`: no segment exists in the code.
 
 ---
 
@@ -115,6 +122,12 @@ until another member confirms it, as any snapshot does (`SRV-126`, `AUTHOR-016`)
 **A mismatch** drops the snapshot, and the deltas stay (`SRV-133`). Another member finalizes
 again (`MURMURE-238`). Every member sees who sealed the snapshot and who refused it
 (`MURMURE-239`). A member who refuses honest snapshots is named just as plainly.
+
+**Delta order.** A segment, a thread, `meta` and the amendments document are documents of the
+plane. Each takes the order and the quarantine of `ambre-spec-delta-order.md` (`MURMURE-435`). A
+final segment differs in one point: once a member confirms it, its deltas are gone. A client that
+misses some of them loads the final snapshot, which holds them all (`MURMURE-436`). The quarantine
+waits for no delta the relay has purged.
 
 **A re-finalization** runs rarely and in batches. It is what turns a delete into an erasure: the
 deleted text leaves the ciphertext only then.

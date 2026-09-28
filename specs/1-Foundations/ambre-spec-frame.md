@@ -30,6 +30,7 @@ one numbering over the four documents the rendering layer produces.
 | `CANVAS-057` | `INV` | A crate that needs `unsafe` MUST stay encapsulated behind the rendering layer, never reached from an application. | README pillar "Security"; this spec section 2 | none | unheld -- `wgpu` and `swash` are declared by the rendering crates, and no `deny.toml` entry refuses an application crate taking either directly, unlike the cryptography and CRDT bans, which do; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-009` | `INV` | The canvas element MUST NOT be the end of the accessibility tree: what it draws MUST also have a presence in the page. | this spec section 3; `ambre-spec-accessibility.md` | none | unheld -- a focusable input element and a hidden live region sit beside the canvas and carry the focused unit, which is the mechanism that replaced the platform tree this row used to name. One view of three writes to them, and nothing observes it; lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9) | untested |
 | `CANVAS-016` | `INV` | The frame read-out MUST be available in every application, not in one. | this spec section 3 | not built | unbuilt -- lands with the `One performance read-out` Story (`ambre-roadmap.md` E8). `PerfPublisher` ships and Trame is its only consumer | unimplemented |
+| `CANVAS-070` | `INV` | A frame MUST paint every canvas the active view shows, each under its own repaint plan. | this spec section 2; `ambre-spec-chrome.md section 2` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 The loop runs a frame
 
@@ -69,7 +70,7 @@ one numbering over the four documents the rendering layer produces.
 * **Boundary.** none: this loop opens no socket, holds no key and writes nothing. The one network
   path the layer opens is the same-origin font fetch of `ambre-spec-render-assets.md`, which
   `UI-THREAD-004` names as the single exception.
-* **Verification.** 3 `verified`, 13 `untested`, 1 `unimplemented`. The verified rules are the ones
+* **Verification.** 3 `verified`, 13 `untested`, 2 `unimplemented`. The verified rules are the ones
   a host tier can reach: a type-level `!Send` and a process-global latch. Every untested rule is a
   property of a frame already presented, and no headless browser reads a pixel back from a wgpu
   canvas. The gap is therefore the whole loop, rather than thirteen gaps.
@@ -125,6 +126,12 @@ application.
 A `Scroll` shifts the previous frame with `copy_texture_to_texture` and redraws the entering strip
 alone. `FrameStats` -- fps, frame, drain, draw, gpu -- is measured by the host and handed to
 `paint_overlay`.
+
+**Several canvases in one view.** A Murmure view shows a channel, a thread and a second pane, each
+in its own canvas (`ambre-spec-chrome.md section 2`). One GPU device serves them all, and each
+canvas has its own surface. The one `requestAnimationFrame` callback runs steps 3 to 6 once per
+canvas, each with its own plan (`CANVAS-070`). A canvas planned `Reuse` on both layers costs one
+present. Trame, Toile and Prose show one canvas, and the loop runs the steps once for them.
 
 **The GPU backend, and the two browser quirks that decide it.**
 

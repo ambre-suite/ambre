@@ -91,9 +91,9 @@ pub struct PaletteQuery(String);         // what the user typed, never sent
 pub enum PaletteEntry { Channel { channel: ChannelId, label: String, group: SidebarGroup }, Command(CommandId) }
 ```
 
-**One palette, two lists.** The palette of the suite opens on the channels and direct messages. A
-query that starts with `>` lists the commands instead, as in the other applications. The palette
-takes its size at each width
+**One palette, two lists.** The channels and the direct messages are entries Murmure supplies to
+the palette of the suite, so they come before the commands (`CHROME-093`). A query that starts with
+`>` lists the commands alone (`CHROME-094`). The palette takes its size at each width
 (`ambre-spec-adaptive-layout.md section 2`). A chord is not shown below the desktop width
 (`CHROME-057`).
 

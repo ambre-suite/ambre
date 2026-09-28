@@ -30,6 +30,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-150` | `POST` | A result MUST open its message in its channel. | this spec section 3 | not built | unbuilt -- lands with the `Search in loaded segments` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-151` | `FRAME` | A search MUST NOT load a segment that holds no match. | this spec section 3; `RESID-016` | not built | unbuilt -- lands with the `Search in loaded segments` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+**Frame:** `FIND-001`
+
 ### 1.3 Index a final segment
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
@@ -71,6 +73,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 **The words** are cut with diacritics folded.
 
+**The find of the suite, across channels.** The find chord opens this search (`MURMURE-213`). The
+search follows `ambre-spec-find.md` in two points. A search changes no document (`FIND-001`), and a
+result brings its message into view (`MURMURE-150`). The scope differs: a Murmure search covers
+every channel the member reads, not one document. A search offers no replace.
+
 **An index per final segment.** The finalizing client builds, seals, signs and uploads it beside
 the snapshot (`MURMURE-313`, `MURMURE-314`). Only a re-finalization replaces it (`MURMURE-319`).
 
@@ -102,6 +109,7 @@ The stack is `unicode-segmentation`, `fst` and `roaring`.
 | The client searches | a search on the relay | the relay would learn the query and the matches, which breaks the zero-knowledge pillar |
 | An index per final segment | searchable encryption on the relay | the relay would see which queries repeat and which documents match, and leakage-abuse attacks recover content from that |
 | An index per final segment | a full download and re-index on each device | a new device waits for the whole history, which is where Element Web still has no search |
+| Search without replace | the replace of `ambre-spec-find.md` | a message is changed by its author alone, one at a time. A replace across channels would rewrite what others read |
 | Pure Rust | SQLite with FTS5 compiled to WASM | a C library, against the Rust-first pillar |
 
 ---

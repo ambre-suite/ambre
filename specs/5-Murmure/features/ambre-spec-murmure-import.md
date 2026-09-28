@@ -1,9 +1,10 @@
-# AMBRE -- FEATURE: CHAT IMPORT
+# AMBRE -- FEATURE: CHAT IMPORT AND EXPORT
 **Type:** Vertical (feature)
 **Implementation:** design-only
 
 > A team moving from Slack or Discord brings its history along. The archive is read on the client,
-> and the relay never sees a line of it in the clear.
+> and the relay never sees a line of it in the clear. A member takes a channel out the same way, in
+> one `.ambre` file.
 
 ---
 
@@ -32,11 +33,18 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-372` | `FAIL` | Given an archive it cannot read, the import MUST stop before it creates anything. | this spec section 3 | not built | unbuilt -- lands with the `Chat import` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-373` | `FRAME` | An import MUST NOT change an existing channel. | this spec section 3 | not built | unbuilt -- lands with the `Chat import` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.3 Export a channel
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-438` | `POST` | An export MUST write every document of a channel the member reads into one `.ambre` file. | this spec section 3; `ambre-spec-docfile.md` | not built | unbuilt -- lands with the `Murmure export` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `MURMURE-439` | `FRAME` | An export MUST NOT change a document of the channel. | this spec section 3 | not built | unbuilt -- lands with the `Murmure export` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+
 * **Budget.** an import writes final segments of the segment size of `ambre-spec-budgets.md
   section 6`, so a long history lands as whole segments, never as a tail of deltas.
 * **Boundary.** the archive is read and sealed on the client (`MURMURE-365`). The relay receives
   sealed segments and sealed files, as for any channel.
-* **Verification.** 9 `unimplemented`: no import exists in the code.
+* **Verification.** 11 `unimplemented`: no import exists in the code.
 
 ---
 
@@ -66,6 +74,10 @@ so it confirms them itself (`AUTHOR-021`).
 **Formats.** The Slack export and the JSON export of Discord. The report follows the shared model
 of the `One interop vocabulary` Story (`ambre-roadmap.md` E8).
 
+**The way out.** The container of `ambre-spec-docfile.md` holds one document, and a channel is
+several. The `Murmure export` Story (`ambre-roadmap.md` post-V1) adds a container version that holds
+a list. A segment the member cannot open stays out of the file.
+
 **Code.** not built.
 
 ---
@@ -76,6 +88,7 @@ of the `One interop vocabulary` Story (`ambre-roadmap.md` E8).
 |---|---|
 | import, in the space menu, for a space admin | pick an archive, then the channels to bring |
 | the end of an import | the report of what was carried and what was not |
+| export, in the channel menu | one `.ambre` file of the channel, plaintext or sealed under a passphrase |
 
 ---
 

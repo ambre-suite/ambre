@@ -26,6 +26,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-164` | `OBS` | A channel to join MUST be shown apart from the joined channels. | this spec section 3; `features/ambre-spec-murmure-spaces.md` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-165` | `OBS` | A channel with activity MUST show a mark, and its count once the count is known. | this spec section 3; `features/ambre-spec-murmure-unread.md` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-382` | `INV` | A split view MUST exist at the desktop width alone. | this spec section 3; `ambre-spec-adaptive-layout.md section 2` | not built | unbuilt -- lands with the `Two channels side by side` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-428` | `OBS` | The command bar of the shell MUST hold the header of the current channel. | this spec section 3; `ambre-spec-chrome.md section 2` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-429` | `OBS` | Murmure MUST show no status bar. | this spec section 3; `ambre-spec-chrome.md section 2` | not built | unbuilt -- lands with the `The Murmure layout and keyboard` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Select a channel
 
@@ -53,7 +55,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** none of its own: the chrome regions are DOM, and the message list holds the frame
   budget of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the width of a window never leaves the client.
-* **Verification.** 17 `unimplemented`: no Murmure view exists.
+* **Verification.** 19 `unimplemented`: no Murmure view exists.
 
 ---
 
@@ -87,6 +89,17 @@ with its own list and composer (`MURMURE-383`). The window narrows, and the seco
 On a phone, the application switcher of the suite stays the drawer the adaptive layout declares.
 The channel list is a Murmure view inside it, not a second drawer.
 
+**The rows of the shell.** Murmure fills the grid of `ambre-spec-chrome.md section 2` as below.
+
+| Row | Murmure puts there |
+|---|---|
+| header | the space, the sync state and the account |
+| command bar | the header of the current channel: its name, its topic, the pins, the members, the call and the search (`MURMURE-428`) |
+| formula bar | nothing: the row is absent |
+| content | one canvas cell per list of messages, each with its composer under it. The sidebar is the sidebar region of the chrome, beside the content |
+| tab strip | nothing: the row is absent |
+| status bar | nothing: the row is absent (`MURMURE-429`). The frame read-out opens from the palette, in the overlay layer of the list (`CANVAS-016`) |
+
 **The view state.**
 
 ```rust
@@ -116,8 +129,8 @@ pub struct MentionCount(u32);
 | the back control on a phone or a tablet | the previous view |
 | the collapse control of the sidebar on a tablet | the sidebar folds to a strip, and stays reachable |
 
-The sidebar and the thread panel are DOM chrome, and the message list is canvas content
-(`ambre-spec-ui.md section 2`).
+The sidebar and the header of each pane are DOM chrome. Every list of messages is canvas content,
+in a cell of its own (`MURMURE-421`).
 
 ---
 
@@ -127,6 +140,8 @@ The sidebar and the thread panel are DOM chrome, and the message list is canvas 
 | :--- | :--- | :--- |
 | Three columns on a desktop | a rail of space icons before the sidebar | more permanent chrome, against the rule that the messaging view stays minimal |
 | Three columns on a desktop | the thread over the message list | the user loses the channel while reading the thread |
+| No zoom of its own | the zoom model of the editors, with its chip | Murmure is no editor, and a chat has no page or board to fit. The browser zoom scales the chrome and the lists together (`ambre-spec-high-density.md`) |
+| The channel header in the command bar | a status bar under the conversation | a chat has no count or mode to report, and the row costs a line of messages on a phone |
 | One view at a time on a phone | a drawer that slides the sidebar in | the edge gesture fights the back gesture of the browser |
 
 ---

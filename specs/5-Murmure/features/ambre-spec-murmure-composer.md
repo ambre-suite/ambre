@@ -24,6 +24,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-210` | `INV` | A draft MUST survive a reload of the page. | this spec section 3; `ambre-spec-launcher.md` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-211` | `INV` | A draft MUST NOT leave the device before it is sent. | this spec section 3; `ZK-007` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-214` | `INV` | Eviction from the local store MUST NOT drop a draft. | this spec section 3; `RESID-009` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-430` | `INV` | The composer MUST be canvas content, fed by the shared input pipe. | this spec section 3; `UI-THREAD-014`; `ambre-spec-text-input.md` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-431` | `INV` | A formatting chord of the composer MUST invoke the Prose command of the same mark. | this spec section 3; `UI-THREAD-019` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-432` | `OBS` | A selection in the composer MUST show the Prose format bar, with the Murmure marks alone. | this spec section 3; `MURMURE-194` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Type Markdown
 
@@ -58,10 +61,17 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-216` | `POST` | Signing out MUST delete every stored draft. | this spec section 3; `ambre-spec-session.md` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-217` | `FRAME` | Deleting the draft of one channel MUST NOT touch the draft of another. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.6 Undo while writing
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-433` | `POST` | An undo in the composer MUST revert the last edit of the draft. | this spec section 3; `UNDO-010` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-434` | `FRAME` | An undo in the composer MUST NOT reach a message already sent. | this spec section 3; `UNDO-001` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** a keystroke holds the input rows of `ambre-spec-budgets.md section 1`, as in Prose.
 * **Boundary.** none: a draft stays in the client until it is sent, and a sent message is sealed
   like any delta (`ZK-001`).
-* **Verification.** 20 `unimplemented`: no composer exists.
+* **Verification.** 25 `unimplemented`: no composer exists.
 
 ---
 
@@ -88,11 +98,23 @@ eviction drops it (`MURMURE-214`). It goes in three cases only.
 |---|---|
 | the message is sent | deleted (`MURMURE-212`) |
 | the user loses access to the channel: a leave, a revoke | deleted, since it names a channel the user may no longer read (`MURMURE-215`) |
-| the user signs out | every draft deleted, so the next person on the device finds none (`MURMURE-216`) | A sent
-message becomes a `content` text of `ambre-spec-murmure-schema.md section 3`.
+| the user signs out | every draft deleted, so the next person on the device finds none (`MURMURE-216`) |
+
+A sent message becomes a `content` text of `ambre-spec-murmure-schema.md section 3`.
 
 **The Prose editor, restricted.** The composer reuses the text editing of Prose, with the mark set
 of `MURMURE-194`. A mark outside the set is refused, and a paste keeps only the marks of the set.
+The composer is canvas content. It takes its keys, its input method and its clipboard events from
+the pipe of `ambre-spec-text-input.md`, like every editor of the suite (`MURMURE-430`).
+
+**The commands of Prose, for the marks they share.** A mark of the set that Prose declares keeps
+its Prose command, and so its chord: `Ctrl+B` bold, `Ctrl+I` italic, `Ctrl+E` inline code
+(`MURMURE-431`). A selection shows the format bar of Prose, with the controls of the set alone
+(`MURMURE-432`). The bar leaves with the selection, so nothing stays on screen (`MURMURE-196`).
+
+**Undo.** A draft is a Prose document, so it has the local history of `ambre-spec-undo.md`.
+`Ctrl+Z` and `Ctrl+Shift+Z` walk the edits of the draft (`MURMURE-433`). Sending ends that history:
+a sent message is changed by an edit or a delete, never by an undo (`MURMURE-434`).
 
 ```rust
 pub struct Draft { pub channel: ChannelId, pub text: LoroDoc, pub editing: Option<MessageRef> }
@@ -116,6 +138,9 @@ backticks, `>` and `-` at the start of a line. A link is written `[text](address
 | `:` then a name | the emoji list of `features/ambre-spec-murmure-emoji.md` |
 | a file dropped or pasted | an attachment (`features/ambre-spec-murmure-attachments.md`) |
 | Escape while editing | the edit is cancelled |
+| `Ctrl+Z`, `Ctrl+Shift+Z` | undo or redo the last edit of the draft |
+| `Ctrl+B`, `Ctrl+I`, `Ctrl+E` | bold, italic, inline code, as in Prose |
+| a selection | the format bar of Prose, with the Murmure marks |
 
 ---
 

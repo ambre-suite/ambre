@@ -66,8 +66,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 **CRDT containers.** none of its own: an emoji is text in `content`, or a key in `reactions`.
 
-**The font** is a colour emoji font served with the client, loaded on the first emoji to draw. The
-glyph pipeline draws it through the colour atlas the budget register already declares.
+**The font** is the colour emoji face of `ambre-spec-render-assets.md`, loaded on the first emoji
+to draw (`CANVAS-019`). The picker is a panel of the shared shell (`CHROME-004`).
 
 **Custom emoji belong to a space.** A space admin adds one: a name, and an image through the shared
 media flow, sealed under the space key (`MURMURE-374` to `MURMURE-376`). The `emoji` map of the space
@@ -106,4 +106,5 @@ and draws `:name:` as text (`MURMURE-380`).
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing is built.** No colour emoji is drawn.
-* **The font is not chosen.** Its size decides whether the fonts row still holds.
+* **The weight of the emoji face is not measured.** Its size decides whether the fonts row of
+  `ambre-spec-budgets.md section 6` still holds.

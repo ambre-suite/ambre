@@ -26,6 +26,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-188` | `INV` | The list MUST be canvas content, its text shaped by the shared text pipeline. | this spec section 3; `ambre-spec-ui.md section 2` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-207` | `OBS` | The focused message MUST be announced to a screen reader with its author, its time and its text. | this spec section 3; `ambre-spec-accessibility.md section 2`; `CHROME-023` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-208` | `OBS` | A new message MUST be announced to a screen reader when the user was at the bottom of the list. | this spec section 3; `ambre-spec-accessibility.md section 2` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-417` | `INV` | The list MUST scroll through the shared kinetic model, never through a speed or a decay of its own. | this spec section 3; `KINETIC-001` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-418` | `OBS` | The time of a message MUST show in the reader's own language and time zone. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-419` | `INV` | Every action on a message MUST be a command of the command table. | this spec section 3; `UI-THREAD-019` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-420` | `INV` | A thread MUST show its messages through the same list as a channel. | this spec section 3; `features/ambre-spec-murmure-threads.md` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-421` | `INV` | Each region that shows messages MUST be a canvas of its own, one cell of the chrome layout. | this spec section 3; `CHROME-009`; `CANVAS-070` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 A message arrives
 
@@ -59,11 +64,29 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-220` | `FAIL` | Given a segment that fails to open under the key it names, the list MUST show it as damaged, never as a missing key. | this spec section 3; `SYNC-045` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-221` | `FRAME` | A segment the client cannot open MUST NOT stop the list from loading the segments before it. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
 
+### 1.6 Act on a message
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-422` | `POST` | A right-click on a message MUST open its actions in the shared floating menu. | this spec section 3; `CHROME-004` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-423` | `POST` | A long press on a message MUST open its actions on a touch screen. | this spec section 3; `KINETIC-003` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-424` | `FRAME` | Opening the actions of a message MUST NOT change the message. | this spec section 3 | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+### 1.7 Select and copy text
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-425` | `POST` | A mouse drag across the messages MUST select their text, from one character to several messages. | this spec section 3; `CANVAS-037` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-426` | `POST` | Copying a selection MUST put its text on the clipboard, each message under its author and its time. | this spec section 3; `UI-THREAD-006` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-427` | `FRAME` | Selecting text MUST NOT move a read cursor. | this spec section 3; `MURMURE-206` | not built | unbuilt -- lands with the `The message list and the composer` Story (`ambre-roadmap.md` E5) | unimplemented |
+
+**Frame:** `UI-THREAD-044`
+
 * **Budget.** the frame budget of `ambre-spec-budgets.md section 2` holds the scroll, and the
   memory rows of section 6 hold the loaded segments.
 * **Boundary.** none: the list paints what the engine decrypted, and holds no key. A band shows
   only what `meta` already tells every member: the span and the count of a segment.
-* **Verification.** 20 `unimplemented`: no Murmure view exists.
+* **Verification.** 31 `unimplemented`: no Murmure view exists.
 
 ---
 
@@ -97,7 +120,40 @@ pub struct RowHeight(f32);
 
 **Canvas and DOM.** The messages are canvas content, shaped by the text pipeline every application
 uses (`ambre-spec-ui.md section 2`). An image and an animated GIF are painted in place
-(`features/ambre-spec-murmure-attachments.md`).
+(`features/ambre-spec-murmure-attachments.md`). The fonts, the colour emoji and the decoded images
+come from `ambre-spec-render-assets.md`. The list paints through the drawing surface of
+`ambre-spec-drawing-surface.md`, inside the frame loop of `ambre-spec-frame.md`.
+
+**One list, in every place a message shows.** A channel, a thread and the second pane of a split
+view each show one list (`MURMURE-420`). Each list is a canvas of its own, in its own cell of the
+chrome layout (`MURMURE-421`). A list owns its scroll, its hit-test and its repaint plan. A closed
+list costs nothing. The DOM around a list holds its header and its controls, never a message.
+
+**The scroll.** The list takes its pan, its flick, its wheel momentum and its edge scroll from
+`ambre-spec-kinetic-scroll.md` (`MURMURE-417`). The list owns step 4 of that model alone: it moves
+its anchor by the distance of each tick.
+
+**The time of a message.** The `ts` of a message is Unix milliseconds. The list formats it in the
+language and the time zone of the reader (`MURMURE-418`). A channel carries no locale: two members
+in two countries read one message at two local times.
+
+**The actions of a message.** Each action is a command of the table of `ambre-spec-commands.md`,
+with its label, its icon and its chord where it has one (`MURMURE-419`). The hover bar, the context
+menu, the long press and the palette read the same description. A long press is a press held
+inside the tap slop of `ambre-spec-kinetic-scroll.md`, past the delay of the platform.
+
+| Command | Offered on |
+|---|---|
+| react, reply, copy link, pin, bookmark, mark unread | every message the member can read |
+| edit, delete | a message of the member |
+| remove | a message of another member, for a moderator |
+| copy text | a message with text |
+
+**Selection.** A mouse drag across the list selects text through the selection model of
+`ambre-spec-text-editor.md` (`MURMURE-425`). On a touch screen a drag scrolls, so the copy text
+action takes the whole message. The text is read-only, so the model runs with no caret.
+A copy writes the `text/plain` mirror and the private type of `ambre-spec-clipboard.md`
+(`MURMURE-426`). The mirror puts each message under its author and its time.
 
 **A screen reader** reaches the list through the mirror of `ambre-spec-accessibility.md section 2`:
 the live region carries the focused message, with its author and its time (`MURMURE-207`). A new
@@ -133,8 +189,12 @@ A band is one row of the list, whatever the segment holds, so scrolling goes on 
 
 | Trigger | Behaviour |
 |---|---|
-| the wheel, a drag or a key | the list scrolls |
-| the pointer over a message | its actions: react, reply, edit and delete when the message is one's own |
+| the wheel, a finger or a key | the list scrolls, and coasts after a flick |
+| the pointer over a message | its main actions, in a bar over the message |
+| a right-click on a message | every action of the message, in the floating menu |
+| a long press on a message, on a touch screen | every action of the message, in the floating menu |
+| a mouse drag across the text | a selection, and the list scrolls when the drag reaches an edge |
+| the copy chord over a selection | the text on the clipboard, each message under its author and its time |
 | the new-messages separator | shown once, at the first unread message |
 | a band of unreadable messages | its cause and its remedy, read out to a screen reader as one row |
 
@@ -145,6 +205,9 @@ A band is one row of the list, whatever the segment holds, so scrolling goes on 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
 | Messages on the canvas | a DOM list | a DOM node per message breaks the frame budget on a channel of years, and the other applications already paint their content on the canvas |
+| Messages of a thread in the canvas list | a DOM thread panel | two renderers of one message drift, and each feature of a message would be written twice |
+| One canvas per list | one canvas for every list, cut into views | a canvas per cell keeps the chrome layout whole, and gives each list its own scroll and hit-test |
+| Text selection drawn by the list | a transparent DOM text layer over the list | two layouts of one text drift apart, and the layer costs the DOM node per message the canvas avoids |
 | A message as the scroll anchor | a pixel offset | a load above shifts every offset, and the reader loses the line |
 | A band per unreadable segment | one line per message that did not decrypt | the whole segment shares one key, so one cause covers it, and a thousand identical lines bury the readable ones |
 | A band that names cause and remedy | a bare "unable to decrypt" | Element users rank that state among their main complaints: it says nothing they can act on |

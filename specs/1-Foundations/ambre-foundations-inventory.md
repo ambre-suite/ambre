@@ -34,11 +34,11 @@
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 | 10 |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 | 7 |
 | `broadcast` | One connection per person, carrying every document they have open. | partial | 22 | 10 |
-| `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 21 | 10 |
+| `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 23 | 10 |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 18 | 13 |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | partial | 20 | 12 |
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 15 | 3 |
-| `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 17 | 13 |
+| `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 18 | 13 |
 | `high-density` | A screen with two or more physical pixels per CSS pixel. | partial | 9 | 5 |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 25 | 9 |
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 30 | 4 |
@@ -61,4 +61,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**45 features: 16 implemented, 22 partial, 7 design-only. 877 contract rows, 286 loose.**
+**45 features: 16 implemented, 22 partial, 7 design-only. 880 contract rows, 286 loose.**

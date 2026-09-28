@@ -74,7 +74,8 @@ section 3`: a media reference, a name, a media type and a size.
 The address defect of that flow must be fixed before or with this feature (`SYNC-050`).
 
 **An animated GIF** is an attachment like any other. The client decodes it off the render thread,
-and the canvas plays its frames while it is on screen.
+and the canvas plays its frames while it is on screen. The decoded images sit in the shared image
+cache of `ambre-spec-render-assets.md`, bounded like every image the renderer draws.
 
 **A delete takes the files with it** (`MURMURE-240`). The text leaves the ciphertext at the next
 re-finalization; the files leave object storage at once. An erase that fails, offline for

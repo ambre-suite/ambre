@@ -56,13 +56,14 @@ Grammar and status values are normative in `ambre-spec-template.md`.
 | `MURMURE-019` | `INV` | A Murmure document whose `schema_version` exceeds the compiled `SCHEMA_VERSION` MUST be refused whole. | this spec section 7; `ambre-spec-schema-version.md` | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5). The refusal is foundation code, held by `SCHEMA-008`; Murmure owes the call from its own entry points | unimplemented |
 | `MURMURE-157` | `INV` | The catalogue MUST hold each channel key sealed under the key of the space, so that no key material reaches the Logic thread. | this spec section 5; `SYNC-039`; `ambre-spec-zero-knowledge.md section 2` | not built | unbuilt -- lands with the `Spaces and the channel catalogue` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `MURMURE-020` | `INV` | A change to a container's key shape or value layout MUST raise `SCHEMA_VERSION` in the same commit. | this spec section 7; `ambre-spec-fixtures.md section 2` | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5). The rule binds a code change to a constant, the same argument as `SCHEMA-009` | unimplemented |
+| `MURMURE-437` | `INV` | The shape each Murmure `SCHEMA_VERSION` writes MUST be frozen in the shapes file of `ambre-murmure`, under the freeze gate. | this spec section 7; `SCHEMA-015`; `SCHEMA-018` | not built | unbuilt -- lands with the `ARCH P7` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** none: a format has no operation to budget. What a segment weighs, and what memory the
   documents take, are rows of `ambre-spec-budgets.md`, cited by the features that own them.
 * **Boundary.** none: every document here reaches the relay as ciphertext alone (`ZK-001`). What
   the relay learns of the grouping of these documents is `ZK-015`.
-* **Verification.** 21 `unimplemented`, nothing else: `crates/ambre-murmure` is a `lib.rs`. Four rows
-  state a merge result, and a convergence test reaches them once a channel exists.
+* **Verification.** 22 `unimplemented`, nothing else: `crates/ambre-murmure` is a `lib.rs`. Four
+  rows state a merge result, and a convergence test reaches them once a channel exists.
 
 ---
 
@@ -214,6 +215,7 @@ amendments document.
 | Read | a version past the compiled one is refused whole (`MURMURE-019`) |
 | Migration | the walk of `ambre-spec-schema-version.md`, per document kind |
 | Bump | `MURMURE-020` |
+| Freeze | the key set and the value types of each version, frozen as in the other applications and read by `scripts/schema_freeze.py` (`MURMURE-437`) |
 | Unknown field | a map key no build knows is ignored on read, so a key a newer client wrote is dropped rather than refused |
 | Delta format | a segment or thread delta is a Loro JSON update of schema version 1 (`MURMURE-227`). A change of that version is a bump (`MURMURE-020`) |
 | Size | a segment closes at the segment size row of `ambre-spec-budgets.md section 6` |

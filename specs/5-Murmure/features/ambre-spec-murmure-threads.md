@@ -73,6 +73,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 **CRDT containers.** the thread document of `ambre-spec-murmure-schema.md section 3`: its `header`
 names the root, and its `messages` list holds the replies.
 
+**On screen.** A thread shows its root and its replies through the message list of a channel, in a
+canvas of its own (`MURMURE-420`, `MURMURE-421`). Reactions, attachments, edits and selection work
+there as in the channel, with no second renderer.
+
 **The first reply.** The relay creates the thread document, as it creates the successor of a
 segment. Two first replies at once receive the same document (`MURMURE-108`).
 

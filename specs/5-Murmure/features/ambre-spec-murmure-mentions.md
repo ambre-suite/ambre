@@ -75,6 +75,9 @@ not a list of members (`MURMURE-230`), and each client counts it as its own ment
 it anyway. Past a member threshold, the composer asks first (`MURMURE-231`). Only moderation, a
 later Story, can restrict it by role.
 
+**The mention list** is a floating panel of the shared shell, placed at the caret. It takes its
+placement, its flip and its keyboard model from `ambre-spec-chrome.md` (`CHROME-004`).
+
 **What travels where.** The mark is the truth, and the summary is the hint that lets a client count
 with no document loaded. The loaded message always wins (`MURMURE-104`).
 
