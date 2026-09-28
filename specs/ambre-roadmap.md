@@ -18,7 +18,7 @@
 | **Epic** | a group of stories, one increment of value | one heading of this file |
 | **Milestone** | a release scope spanning epics | the `Milestone` column |
 
-**Six rules, and each one exists because it was broken.**
+**Seven rules, and each one exists because it was broken.**
 
 * **A story is one row, and it says what, never how.** A checkbox, a name, its milestone, the
   features it touches. The code says how it works and git says how it got there. A row that explains
@@ -33,6 +33,9 @@
   only when every story under it is `[x]`: the status is derived, never set. While the epic is open a
   finished story stays, ticked, because that is what lets a reader say "eight of eleven, these three
   remain".
+* **A story states when it is done.** Its `Touches` cell ends with `Done when` and a check
+  a reader can run. The check names rows that read `verified`, a gate that passes or a test. A story whose
+  check did not pass is not ticked; the delivered part is renamed and the rest becomes a new row.
 * **A milestone tags a story, never a feature.** A feature lives: it has an MVP form, then others.
   `--` means no release scope names the story, which is why transverse work waits.
 * **An epic holds no `post-V1` story.** One such row holds an epic open for ever, so section 8
@@ -297,7 +300,8 @@ owns the subsystem.
 | `[x]` The verification figures come from the tables | MVP | each spec's `Verification` line states its counts by hand, and the gate only reports them stale. The `human-review` table of `CONTRIBUTING.md` is kept by hand and already misses `FIXTURE-032`. Both are written from the rows, as the ledger is |
 | `[x]` A partial status | MVP | a row whose rule is tested and whose wiring is not reads `untested`, the same as a row with no test at all: the template refuses `verified` beside a `partial` gap. The ledger then cannot tell the two apart |
 | `[x]` A shared rule proven in each application | MVP | a rule binding every application is held by one test of the shared crate. `KINETIC-002` read `verified` while Toile broke it, and no gate saw. Such a row names one mechanism per application that runs it |
-| `[x]` The Trame and Toile views built off the browser | MVP | `TrameView` reads the browser clock and `ToileView` owns the text pipe, so neither is built in a native test, and every rule on their handlers stays `untested`. Both take the clock and the pipe as Prose's view does |
+| `[x]` The Trame and Toile view logic tested off the browser | MVP | the handler logic of `TrameView` and `ToileView` (the scroll glide, the coast, the double-click edit target) as pure functions a native test drives with a clock it sets. Done when `KINETIC-002`, `KINETIC-009` and `TOILE-261` read `verified` |
+| `[ ]` The Trame and Toile views built natively | -- | `TrameView` still reads the browser clock and `ToileView` still owns the DOM text pipe, so the wiring of every handler stays out of reach of a native test. Done when both take the clock and the pipe as Prose's view does, and a native test builds each one |
 | `[ ]` Visual tests of canvas content | -- | no canvas content is verifiable in CI: headless browsers read back a blank frame |
 | `[ ]` The Sync and relay belts | -- | the shipped rows no test would fail on, across the Sync worker, the sealed envelope, the delta order, the membership, the key rotation, the media transfer, the relay, its session, its sequencer and its stores |
 | `[ ]` The UI-thread belts | -- | the same debt on the frame, the chrome shell, the clipboard, the input pipe, the launcher, the key verification, the design tokens, the render assets and accessibility |

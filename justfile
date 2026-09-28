@@ -168,7 +168,9 @@ cov:
 
 # no implementation in the specs: fails on any function body in a ```rust fence,
 # on Rust shapes left in a non-rust fence, on a disallowed fence tag (lua, ...),
-# and on an unterminated fence (ambre-spec-template.md section 0, Fences rule).
+# on an unterminated fence (ambre-spec-template.md section 0, Fences rule), on a
+# rule cited outside its application, and on a test that cites a rule whose
+# `Mechanism` does not name it (the defects listed in spec_code_citations.allow aside).
 spec-code:
     python3 scripts/spec_code.py --check
 
